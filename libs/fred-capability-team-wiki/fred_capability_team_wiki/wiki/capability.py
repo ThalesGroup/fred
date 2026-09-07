@@ -94,17 +94,8 @@ _REREAD_NOTE = (
 )
 
 
-# Appended to a 404 from a slug-addressed tool. The model reaches one by
-# building a slug out of a title instead of copying the index's; naming where
-# the real one is turns a dead end into a one-step recovery.
-_SLUG_HINT = (
-    "Look the page up in the index in your instructions and use the slug "
-    'written there after "slug:", exactly as it appears.'
-)
-
-
 def _wiki_tool_failure(
-    *, action: str, exc: Exception, elapsed_s: float, hint: str | None = None
+    *, action: str, exc: Exception, elapsed_s: float
 ) -> tuple[str, ToolInvocationResult]:
     """Turn a wiki tool-call failure into an actionable message plus an
     ``is_error=True`` artifact (same doctrine as `platform_postgres`).
@@ -152,10 +143,6 @@ def _wiki_tool_failure(
     # status alone would have the model guess.
     detail = f" ({raw})" if raw and not timed_out else ""
     message = f"Could not {action}: {cause}{detail}."
-    # Only on the failure this can actually fix — a wrong slug is recoverable
-    # in one step if the model is told where the right one is.
-    if hint and status_code == 404:
-        message = f"{message} {hint}"
     # `blocks` carries the same diagnostic as `content` (CAPAB-02): a Graph
     # agent's plain-dict invocation keeps only the artifact half.
     return message, ToolInvocationResult(
@@ -165,17 +152,74 @@ def _wiki_tool_failure(
     )
 
 
+def _page_path(pages: Sequence[WikiPageRef], page: WikiPageRef) -> str:
+    """One page's address: its titles from the root, joined by " / "."""
+
+    by_slug = {p.slug: p for p in pages}
+    trail = [page.title]
+    seen = {page.slug}
+    parent = page.parent_slug
+    # Bounded: a cycle left by a bad row must not hang a tool call.
+    while parent and parent not in seen and len(trail) < 16:
+        node = by_slug.get(parent)
+        if node is None:
+            break
+        trail.append(node.title)
+        seen.add(node.slug)
+        parent = node.parent_slug
+    return " / ".join(reversed(trail))
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+class _AmbiguousPath(Exception):
+    """Several pages answer to the same short path."""
+
+    def __init__(self, candidates: Sequence[str]) -> None:
+        super().__init__("ambiguous path")
+        self.candidates = list(candidates)
+
+
+def resolve_path(pages: Sequence[WikiPageRef], path: str) -> WikiPageRef | None:
+    """The page a model means by `path`, or None.
+
+    Two ways in, because a model writes what it sees. A full path from the root
+    ("Accueil / Thales Italie") is unique — sibling titles are refused by the
+    control-plane, so no two pages share one. A bare title is accepted too,
+    since that is what a model usually types, and is unique often enough to be
+    worth resolving; when it is not, `_AmbiguousPath` carries the full paths so
+    the model can pick rather than guess.
+
+    Comparison folds case and collapses whitespace: the model is retyping a
+    title it read, not copying an identifier.
+    """
+
+    wanted = _norm(path.replace("/", " / "))
+    if not wanted:
+        return None
+    full = [p for p in pages if _norm(_page_path(pages, p)) == wanted]
+    if len(full) == 1:
+        return full[0]
+
+    leaf = _norm(path.rsplit("/", 1)[-1])
+    by_title = [p for p in pages if _norm(p.title) == leaf]
+    if len(by_title) == 1:
+        return by_title[0]
+    if len(by_title) > 1:
+        raise _AmbiguousPath([_page_path(pages, p) for p in by_title])
+    return None
+
+
 def _format_index(pages: Sequence[WikiPageRef]) -> str:
-    """The page list as an indented tree of `title (slug: <slug>)` lines.
+    """The page list as an indented tree of titles.
 
-    Slugs are in it on purpose: the model calls `wiki_read_page` by slug, and
-    an index that only names titles would have it guess the identifier.
-
-    Field evidence, 2026-09-07: the line used to read `Les Shinigamis —
-    sous-page-11`, and a model asked about shinigamis called `wiki_read_page`
-    with `les-shinigamis-sous-page-11` — it had slugified the whole line.
-    Slugs are themselves lowercase and hyphenated, so a dash cannot separate
-    one from a title. The label is what makes the boundary unguessable.
+    Titles only, deliberately: a page's slug is an opaque id, and a model that
+    can see one will sooner or later print it to the user, who has no use for
+    `6adb844e`. Asking it not to does not work — anything in the context can
+    come back out — so the identifier stays out of the context entirely and
+    pages are addressed by their path (`resolve_path`).
     """
 
     if not pages:
@@ -188,7 +232,7 @@ def _format_index(pages: Sequence[WikiPageRef]) -> str:
         parent_depth = depth_by_slug.get(page.parent_slug or "", -1)
         depth = parent_depth + 1 if page.parent_slug else 0
         depth_by_slug[page.slug] = depth
-        line = f"{'  ' * depth}- {page.title} (slug: {page.slug})"
+        line = f"{'  ' * depth}- {page.title}"
         if used + len(line) + 1 > INDEX_MAX_CHARS:
             omitted = len(pages) - len(lines)
             break
@@ -246,10 +290,11 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         parts.append(
             "The team's own knowledge base. Prefer it over your own assumptions "
             "for anything about how this team works, and cite the page you used. "
-            "The index below lists each page with the slug to read it by; pass "
-            "that slug to wiki_read_page exactly as written, never one built "
-            "from the title. Read a page before relying on it — a title is not "
-            "evidence of what a page says."
+            "Address a page by its path in the index below — its titles from "
+            'the top joined by " / ", as the indentation shows them — and '
+            "pass that to wiki_read_page. Read a page before relying on it: a "
+            "title is not evidence of what a page says. Pages have no other "
+            "name than their title, so never quote an identifier to the user."
         )
         # Field evidence, 2026-09-07: asked to add a fact to a page, an agent
         # read it, found no way to write, and answered "Mise à jour appliquée"
@@ -378,6 +423,11 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # way to act on a page it has read will otherwise call this again, and
         # again — six identical calls in one turn, in the field.
         already_read: set[str] = set()
+        # The tree, fetched at most once per turn and shared by every tool that
+        # has to turn a path into a page. Dropped after a publish, which is the
+        # only thing here that can add or rename one.
+        tree: list[WikiPageRef] | None = None
+        tree_lock = asyncio.Lock()
 
         def _require_port() -> TeamWikiPort:
             port = services.team_wiki
@@ -390,14 +440,64 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 )
             return port
 
+        async def _tree() -> list[WikiPageRef]:
+            nonlocal tree
+            async with tree_lock:
+                if tree is None:
+                    tree = list(await _require_port().list_pages())
+                return tree
+
+        def _resolution_failure(message: str) -> tuple[str, ToolInvocationResult]:
+            return message, ToolInvocationResult(
+                tool_ref=TEAM_WIKI_TOOL_REF,
+                is_error=True,
+                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+            )
+
+        async def _resolve(
+            path: str, *, action: str
+        ) -> WikiPageRef | tuple[str, ToolInvocationResult]:
+            """The page at `path`, or the result to hand back instead.
+
+            Returning the failure rather than raising keeps all three shapes —
+            the wiki being unreachable, no such page, several pages to pick
+            from — as ordinary tool output the model can act on.
+            """
+
+            started = time.monotonic()
+            try:
+                pages = await _tree()
+            except Exception as exc:
+                # Resolution needs the tree, so a wiki that cannot be reached
+                # fails here rather than at the call the model asked for.
+                return _wiki_tool_failure(
+                    action=action, exc=exc, elapsed_s=time.monotonic() - started
+                )
+            try:
+                page = resolve_path(pages, path)
+            except _AmbiguousPath as ambiguous:
+                listed = "; ".join(ambiguous.candidates)
+                return _resolution_failure(
+                    f"Several wiki pages are called '{path}': {listed}. Call "
+                    "again with the full path of the one you mean."
+                )
+            if page is None:
+                return _resolution_failure(
+                    f"There is no wiki page at '{path}'. Address a page by its "
+                    "path in the index in your instructions, parent first, "
+                    "like 'Parent page / Child page'."
+                )
+            return page
+
         @tool("wiki_list_pages", response_format="content_and_artifact")
         async def wiki_list_pages() -> tuple[str, ToolInvocationResult]:
             """List every page in the team's wiki, as an indented tree.
 
-            Each line reads `title — slug`; indentation is the page hierarchy.
-            Pass a slug to wiki_read_page to read one. The same index is
-            already in your instructions — call this only to refresh it after
-            a change, or when the instructions say pages were omitted.
+            Indentation is the hierarchy. A page's address is its titles from
+            the top joined by " / " — "Parent page / Child page" — and that is
+            what wiki_read_page takes. The same index is already in your
+            instructions: call this only to refresh it after a change, or when
+            the instructions say pages were omitted.
             """
 
             port = _require_port()
@@ -417,11 +517,12 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             )
 
         @tool("wiki_read_page", response_format="content_and_artifact")
-        async def wiki_read_page(slug: str) -> tuple[str, ToolInvocationResult]:
-            """Read one wiki page's full text, by the slug the index gives you.
+        async def wiki_read_page(path: str) -> tuple[str, ToolInvocationResult]:
+            """Read one wiki page's full text, by its path in the index.
 
-            Pass the slug exactly as the index writes it after "slug:". Do not
-            build one from the page's title, and do not join the two.
+            A path is the page's titles from the top, joined by " / ", as the
+            index's indentation shows them: "Parent page / Child page". The
+            page's own title alone works too when only one page has it.
 
             Use this before relying on anything the wiki says — a title in the
             index is not evidence of what the page contains.
@@ -435,15 +536,18 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             """
 
             port = _require_port()
+            found = await _resolve(path, action=f"read the wiki page '{path}'")
+            if not isinstance(found, WikiPageRef):
+                return found
+            slug = found.slug
             started = time.monotonic()
             try:
                 page = await port.read_page(slug, max_chars=PAGE_READ_MAX_CHARS)
             except Exception as exc:
                 return _wiki_tool_failure(
-                    action=f"read the wiki page '{slug}'",
+                    action=f"read the wiki page '{path}'",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
-                    hint=_SLUG_HINT,
                 )
             body = page.content_md.strip() or "(this page is empty)"
             text = f"# {page.title}\n\n{body}"
@@ -477,9 +581,12 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
         @tool("wiki_propose_edit", response_format="content_and_artifact")
         async def wiki_propose_edit(
-            slug: str, content_md: str
+            path: str, content_md: str
         ) -> tuple[str, ToolInvocationResult]:
-            """Suggest new content for an existing wiki page.
+            """Suggest new content for an existing wiki page, by its path.
+
+            A path is the page's titles from the top joined by " / ", the same
+            address wiki_read_page takes.
 
             Read the page first: `content_md` REPLACES it whole, so it must be
             the complete page as you want it to end up, not just your addition.
@@ -489,15 +596,19 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             """
 
             port = _require_port()
+            found = await _resolve(path, action=f"propose an edit to '{path}'")
+            if not isinstance(found, WikiPageRef):
+                return found
             started = time.monotonic()
             try:
-                proposal = await port.propose_edit(slug=slug, content_md=content_md)
+                proposal = await port.propose_edit(
+                    slug=found.slug, content_md=content_md
+                )
             except Exception as exc:
                 return _wiki_tool_failure(
-                    action=f"propose an edit to '{slug}'",
+                    action=f"propose an edit to '{path}'",
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
-                    hint=_SLUG_HINT,
                 )
             text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             return text, ToolInvocationResult(
@@ -507,18 +618,28 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
         @tool("wiki_propose_page", response_format="content_and_artifact")
         async def wiki_propose_page(
-            title: str, content_md: str, parent_slug: str | None = None
+            title: str, content_md: str, parent_path: str | None = None
         ) -> tuple[str, ToolInvocationResult]:
             """Suggest a NEW wiki page. Use wiki_propose_edit for one that exists.
 
-            `parent_slug` nests it under an existing page; omit it for a
-            top-level one. Check the index first — a second page on a topic the
-            wiki already covers is worse than a longer one.
+            `parent_path` nests it under an existing page, addressed the way
+            wiki_read_page addresses one; omit it for a top-level page. Check
+            the index first — a second page on a topic the wiki already covers
+            is worse than a longer one. Two pages under the same parent cannot
+            share a title, so pick one that is not already in that branch.
 
             This stores a suggestion and changes nothing in the wiki.
             """
 
             port = _require_port()
+            parent_slug: str | None = None
+            if parent_path:
+                found = await _resolve(
+                    parent_path, action=f"propose the page '{title}'"
+                )
+                if not isinstance(found, WikiPageRef):
+                    return found
+                parent_slug = found.slug
             started = time.monotonic()
             try:
                 proposal = await port.propose_page(
@@ -547,6 +668,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             declines, do not call it again with the same id.
             """
 
+            nonlocal tree
             port = _require_port()
             started = time.monotonic()
             try:
@@ -557,8 +679,14 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
+            # The tree just changed, and the cached copy would still be
+            # missing a page the model may go on to read this turn.
+            async with tree_lock:
+                tree = None
+            published = next((p for p in await _tree() if p.slug == slug), None)
+            where = f" '{_page_path(await _tree(), published)}'" if published else ""
             text = (
-                f"Published. The page is live at '{slug}' and carries the review "
+                f"Published. The page{where} is live and carries the review "
                 "mark every agent-written page gets until an editor clears it."
             )
             return text, ToolInvocationResult(

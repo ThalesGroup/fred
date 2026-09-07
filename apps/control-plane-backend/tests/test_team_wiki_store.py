@@ -6,9 +6,9 @@ import pytest
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
+    WikiPageConstraintError,
     WikiPageHasChildrenError,
     WikiRevisionConflictError,
-    WikiSlugAlreadyExistsError,
 )
 from fred_core.common import TeamId
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -144,7 +144,7 @@ async def test_slug_is_unique_within_a_team_but_free_across_teams(
         await store.create_page(
             team_id=TEAM_A, slug="p", title="P", content_md="a", author_user_id="alice"
         )
-        with pytest.raises(WikiSlugAlreadyExistsError):
+        with pytest.raises(WikiPageConstraintError):
             await store.create_page(
                 team_id=TEAM_A,
                 slug="p",

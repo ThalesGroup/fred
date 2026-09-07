@@ -148,31 +148,32 @@ def _page(slug: str, title: str, parent: str | None = None) -> WikiPageRef:
     return WikiPageRef(page_id=slug, slug=slug, title=title, parent_slug=parent)
 
 
-def test_index_shows_the_hierarchy_and_the_slug_to_call_back_with() -> None:
+def test_index_shows_the_hierarchy_and_no_identifier() -> None:
     port = _FakePort(
         pages=(
-            _page("onboarding", "Onboarding"),
-            _page("tooling", "Tooling", parent="onboarding"),
+            _page("6adb844e", "Onboarding"),
+            _page("21b89ad9", "Tooling", parent="6adb844e"),
         )
     )
     text = _call(port, "wiki_list_pages", {}).content
 
-    assert "- Onboarding (slug: onboarding)" in text
+    assert "- Onboarding" in text
     # Indented under its parent: an index that flattens the tree describes a
-    # different wiki than the one the team sees.
-    assert "  - Tooling (slug: tooling)" in text
+    # different wiki than the one the team sees, and the indentation IS the
+    # address now that there is no identifier to quote.
+    assert "  - Tooling" in text
 
 
-def test_the_index_keeps_the_slug_separable_from_the_title() -> None:
-    """Field evidence, 2026-09-07: written `Les Shinigamis — sous-page-11`, a
-    model called `wiki_read_page` with `les-shinigamis-sous-page-11`. Slugs are
-    themselves hyphenated, so a dash cannot mark where the title ends."""
+def test_the_index_never_shows_a_slug() -> None:
+    """A model that can see an opaque id prints it to a user who has no use for
+    it, and asking it not to does not hold — anything in the context can come
+    back out. So the id stays out of the context."""
 
-    port = _FakePort(pages=(_page("sous-page-11", "Les Shinigamis"),))
+    port = _FakePort(pages=(_page("2dc58e80", "Les Shinigamis"),))
     text = _call(port, "wiki_list_pages", {}).content
 
-    assert "Les Shinigamis (slug: sous-page-11)" in text
-    assert "Les Shinigamis — sous-page-11" not in text
+    assert "Les Shinigamis" in text
+    assert "2dc58e80" not in text
 
 
 def test_an_empty_wiki_says_so_rather_than_returning_nothing() -> None:
@@ -187,44 +188,72 @@ def test_a_refusal_carries_the_server_own_reason() -> None:
     reaches the model, not a guess made from the status."""
 
     port = _FakePort(
+        pages=(_page("s1", "X"),),
         raises=TeamWikiPortError(
             "The rules page cannot be changed by an agent.", status_code=403
-        )
+        ),
     )
-    message = _call(port, "wiki_read_page", {"slug": "x"})
+    message = _call(port, "wiki_read_page", {"path": "X"})
 
     assert message.artifact.is_error is True
     assert "not allowed" in message.content
     assert "rules page cannot be changed by an agent" in message.content
 
 
-def test_an_unknown_slug_is_an_error_not_an_empty_page() -> None:
+def test_an_unknown_path_is_an_error_not_an_empty_page() -> None:
     """Handing back an empty page would have the model report the topic as
     undocumented — a confident answer built on a page that does not exist."""
 
-    port = _FakePort(raises=TeamWikiPortError("gone", status_code=404))
-    message = _call(port, "wiki_read_page", {"slug": "ghost"})
+    port = _FakePort(pages=(_page("s1", "Onboarding"),))
+    message = _call(port, "wiki_read_page", {"path": "Ghost"})
 
     assert message.artifact.is_error is True
-    assert "no such wiki page" in message.content
-    # A wrong slug is the one 404 the model can fix by itself, so the message
-    # says where the right one is instead of ending the road.
-    assert 'after "slug:"' in message.content
+    assert "no wiki page at 'Ghost'" in message.content
+    # Says how to address one, since that is the mistake being made.
+    assert "Parent page / Child page" in message.content
 
 
-def test_only_a_missing_page_gets_the_slug_hint() -> None:
-    """A refusal or an outage is not a slug problem, and telling the model to
-    check the index would send it round a loop it cannot win."""
+def test_an_ambiguous_path_lists_the_candidates_instead_of_guessing() -> None:
+    """Sibling titles are refused, so a FULL path is unique — but a bare title
+    can still match two pages in different branches. Picking one silently would
+    have the model answer about a page the user did not mean."""
 
-    port = _FakePort(raises=TeamWikiPortError("nope", status_code=403))
-    message = _call(port, "wiki_read_page", {"slug": "x"})
+    port = _FakePort(
+        pages=(
+            _page("a", "Ventes"),
+            _page("b", "Achats"),
+            _page("c", "Espagne", parent="a"),
+            _page("d", "Espagne", parent="b"),
+        )
+    )
+    message = _call(port, "wiki_read_page", {"path": "Espagne"})
 
-    assert 'after "slug:"' not in message.content
+    assert message.artifact.is_error is True
+    assert "Ventes / Espagne" in message.content
+    assert "Achats / Espagne" in message.content
+
+
+def test_a_full_path_resolves_where_a_bare_title_is_ambiguous() -> None:
+    port = _FakePort(
+        pages=(
+            _page("a", "Ventes"),
+            _page("b", "Achats"),
+            _page("c", "Espagne", parent="a"),
+            _page("d", "Espagne", parent="b"),
+        ),
+        content="body",
+    )
+    message = _call(port, "wiki_read_page", {"path": "Ventes / Espagne"})
+
+    assert message.artifact.is_error is False
+    assert "body" in message.content
 
 
 def test_a_long_page_comes_back_cut_and_says_so() -> None:
-    port = _FakePort(content="x" * (PAGE_READ_MAX_CHARS + 500))
-    message = _call(port, "wiki_read_page", {"slug": "big"})
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="x" * (PAGE_READ_MAX_CHARS + 500)
+    )
+    message = _call(port, "wiki_read_page", {"path": "Big"})
 
     assert message.artifact.is_error is False
     assert "longer than what you were given" in message.content
@@ -242,13 +271,13 @@ def test_the_prompt_block_carries_the_rules_and_the_index() -> None:
     block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=False)._compose())
 
     assert "Never guess." in block
-    assert "- Onboarding (slug: onboarding)" in block
+    assert "- Onboarding" in block
     assert "never act against them" in block
     # The block used to tell the model the index carried titles only, which
     # stopped being true when slugs went into it — and a model that believes
     # it has no slug builds one out of the title.
     assert "titles only" not in block
-    assert "exactly as written" in block
+    assert "path in the index" in block
 
 
 def test_the_prompt_block_is_fetched_once_per_turn() -> None:
@@ -309,13 +338,13 @@ def test_reading_the_same_page_twice_in_a_turn_says_to_stop() -> None:
     the model a page it read — but the second answer says re-reading changes
     nothing, which is what the loop was waiting to hear."""
 
-    port = _FakePort(content="Some content.")
+    port = _FakePort(pages=(_page("s1", "Shinigami"),), content="Some content.")
     turn = _tools(port)
 
-    first = _call(port, "wiki_read_page", {"slug": "shinigami"}, turn).content
+    first = _call(port, "wiki_read_page", {"path": "Shinigami"}, turn).content
     assert "already read this page" not in first
 
-    second = _call(port, "wiki_read_page", {"slug": "shinigami"}, turn).content
+    second = _call(port, "wiki_read_page", {"path": "Shinigami"}, turn).content
     assert "Some content." in second
     assert "already read this page" in second
     assert "reading it again will not change it" in second
@@ -366,10 +395,11 @@ def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
     """The model has to know its work is not done, or it reports the change as
     made — which is exactly what happened before the write path existed."""
 
-    port = _FakePort()
-    message = _call(port, "wiki_propose_edit", {"slug": "s", "content_md": "new"})
+    port = _FakePort(pages=(_page("s1", "S"),))
+    message = _call(port, "wiki_propose_edit", {"path": "S", "content_md": "new"})
 
-    assert port.proposed == [("s", "new")]
+    # Addressed by path; the port still receives the slug it has always taken.
+    assert port.proposed == [("s1", "new")]
     assert port.published == []
     assert "Nothing is written yet" in message.content
     assert "wiki_publish_proposal" in message.content

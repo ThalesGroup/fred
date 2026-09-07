@@ -30,12 +30,12 @@ from control_plane_backend.team_wiki.schemas import (
 )
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
+    WikiPageConstraintError,
     WikiPageHasChildrenError,
     WikiPageNotFoundError,
     WikiPageRecord,
     WikiRevisionConflictError,
     WikiRevisionRecord,
-    WikiSlugAlreadyExistsError,
     _StaleBaseWrite,
 )
 from control_plane_backend.teams.service import require_team_access
@@ -130,6 +130,34 @@ async def _unique_slug(store: TeamWikiStore, team_id: TeamId) -> str:
         if candidate not in taken:
             return candidate
     raise WikiRequestError("Could not allocate a page identifier.", http_status=500)
+
+
+def _require_free_title(
+    pages: dict[str, WikiPageRecord] | list[WikiPageRecord],
+    *,
+    parent_page_id: str | None,
+    title: str,
+    ignoring: str | None = None,
+) -> None:
+    """Refuse a title a sibling already carries.
+
+    Two pages under one parent may not share a title, because an agent
+    addresses a page by its path — its titles from the root — and two identical
+    paths would make that address ambiguous. Folded to lower case and with
+    whitespace collapsed: "Réunions" and "réunions " are the same name to
+    everyone who reads them.
+    """
+
+    wanted = " ".join(title.split()).casefold()
+    siblings = pages.values() if isinstance(pages, dict) else pages
+    for page in siblings:
+        if page.page_id == ignoring or page.parent_page_id != parent_page_id:
+            continue
+        if " ".join(page.title.split()).casefold() == wanted:
+            raise WikiRequestError(
+                "A page with this title already exists at the same level.",
+                http_status=409,
+            )
 
 
 def _summary(page: WikiPageRecord) -> WikiPageSummary:
@@ -349,8 +377,11 @@ async def create_wiki_page(
     team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
 
+    # Fetched unconditionally: the sibling-title check below needs the tree
+    # even for a page going to the root, where there is no parent to look up.
+    pages = {p.page_id: p for p in await store.list_pages(team_id)}
+
     if request.parent_page_id is not None:
-        pages = {p.page_id: p for p in await store.list_pages(team_id)}
         parent = pages.get(request.parent_page_id)
         if parent is None:
             raise WikiRequestError("The parent page does not exist.", http_status=404)
@@ -364,6 +395,9 @@ async def create_wiki_page(
                 http_status=400,
             )
 
+    _require_free_title(
+        pages, parent_page_id=request.parent_page_id, title=request.title
+    )
     slug = await _unique_slug(store, team_id)
     try:
         created = await store.create_page(
@@ -375,9 +409,10 @@ async def create_wiki_page(
             position=request.position,
             author_user_id=user.uid,
         )
-    except WikiSlugAlreadyExistsError as exc:
+    except WikiPageConstraintError as exc:
         raise WikiRequestError(
-            "A page with this title already exists.", http_status=409
+            "A page with this title already exists at the same level.",
+            http_status=409,
         ) from exc
     return WikiPageDetail(
         page=_summary(created.page),
@@ -432,7 +467,7 @@ async def update_wiki_rules(
                 kind="rules",
                 author_user_id=user.uid,
             )
-        except WikiSlugAlreadyExistsError:
+        except WikiPageConstraintError:
             # Two editors saved the rules page for the first time at once. The
             # loser re-reads and takes the ordinary conflict path rather than
             # surfacing an integrity error as a 500.
@@ -538,6 +573,25 @@ async def update_wiki_page_metadata(
                 f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
                 http_status=400,
             )
+
+    # A rename and a move can each land the page next to a namesake, and a
+    # move carries the title with it — so both are checked against the
+    # destination, not against where the page sits today.
+    destination = (
+        None
+        if request.move_to_root
+        else (
+            request.parent_page_id
+            if request.parent_page_id is not None
+            else page.parent_page_id
+        )
+    )
+    _require_free_title(
+        pages,
+        parent_page_id=destination,
+        title=request.title if request.title is not None else page.title,
+        ignoring=page_id,
+    )
 
     updated = await store.update_page_metadata(
         team_id=team_id,
@@ -697,6 +751,14 @@ async def propose_wiki_page(
                 http_status=400,
             )
 
+    # Refused here rather than only at publish, so an agent learns the title is
+    # taken while it can still choose another — not after a human approved it.
+    _require_free_title(
+        pages,
+        parent_page_id=parent.page_id if parent else None,
+        title=request.title,
+    )
+
     proposal = await store.create_proposal(
         team_id=team_id,
         page_id=None,
@@ -827,6 +889,10 @@ async def publish_wiki_proposal(
             await store.reparent_proposal(
                 team_id=team_id, revision_id=proposal_id, parent_page_id=parent_id
             )
+        # Someone may have created that very page while the proposal waited.
+        _require_free_title(
+            pages, parent_page_id=parent_id, title=proposal.proposed_title
+        )
         slug = await _unique_slug(store, team_id)
     try:
         page = await store.publish_proposal(
@@ -849,12 +915,13 @@ async def publish_wiki_proposal(
         raise WikiRequestError(
             "The page this proposal targets no longer exists.", http_status=404
         ) from exc
-    except WikiSlugAlreadyExistsError as exc:
-        # The slug was free a moment ago. Someone else took it, or this same
-        # proposal is being published twice at once — either way the caller can
-        # act on a 409, where a 500 tells them nothing.
+    except WikiPageConstraintError as exc:
+        # Everything was free a moment ago. Someone took the title, or this
+        # same proposal is being published twice at once — either way the
+        # caller can act on a 409, where a 500 tells them nothing.
         raise WikiRequestError(
-            "A page with this title already exists.", http_status=409
+            "A page with this title already exists at the same level.",
+            http_status=409,
         ) from exc
     return WikiPageDetail(
         page=_summary(page),

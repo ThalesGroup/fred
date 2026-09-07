@@ -38,8 +38,11 @@ class WikiPageNotFoundError(Exception):
     """No page with that id or slug in this team."""
 
 
-class WikiSlugAlreadyExistsError(Exception):
-    """Another page in this team already uses that slug."""
+class WikiPageConstraintError(Exception):
+    """A page row collided with another: the same slug, or a sibling already
+    carrying the same title. Both are refused by a unique index, and both reach
+    the caller as a 409 — the service checks each before writing, so this is
+    the concurrent-write path rather than the ordinary one."""
 
 
 class _StaleBaseWrite(Exception):
@@ -328,7 +331,7 @@ class TeamWikiStore:
                 s.add(page_row)
                 s.add(revision_row)
         except IntegrityError as exc:
-            raise WikiSlugAlreadyExistsError(slug) from exc
+            raise WikiPageConstraintError(slug) from exc
 
         return WikiPageWithContent(
             page=_to_page(page_row), revision=_to_revision(revision_row)
@@ -791,7 +794,7 @@ class TeamWikiStore:
                 # decided it. Identity in this table is never the agent's.
                 row.author_user_id = approver_user_id
         except IntegrityError as exc:
-            raise WikiSlugAlreadyExistsError(slug) from exc
+            raise WikiPageConstraintError(slug) from exc
         refreshed = await self.get_page(team_id, row.page_id)
         if refreshed is None:  # pragma: no cover — created or updated just above
             raise WikiPageNotFoundError(row.page_id)

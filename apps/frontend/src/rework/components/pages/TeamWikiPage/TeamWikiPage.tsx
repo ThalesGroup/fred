@@ -99,6 +99,13 @@ function errorText(error: unknown): string {
   return detail ?? (error as { message?: string } | undefined)?.message ?? String(error);
 }
 
+/** Creating or renaming a page has one 409: a sibling already carries that
+ *  title. It is the only refusal here an ordinary user meets, so it gets a
+ *  translated sentence rather than the server's English `detail`. */
+function isDuplicateTitle(error: unknown): boolean {
+  return (error as { status?: number } | undefined)?.status === 409;
+}
+
 export default function TeamWikiPage() {
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -292,7 +299,10 @@ export default function TeamWikiPage() {
       closeCreate();
       goTo(created.page.slug);
     } catch (error) {
-      showError({ summary: t("rework.wiki.errors.create"), detail: errorText(error) });
+      showError({
+        summary: t("rework.wiki.errors.create"),
+        detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
+      });
     }
   };
 
@@ -311,7 +321,10 @@ export default function TeamWikiPage() {
       }).unwrap();
       setRenaming(false);
     } catch (error) {
-      showError({ summary: t("rework.wiki.errors.rename"), detail: errorText(error) });
+      showError({
+        summary: t("rework.wiki.errors.rename"),
+        detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
+      });
     }
   };
 

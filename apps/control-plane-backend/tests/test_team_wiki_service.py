@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -126,6 +127,112 @@ def test_is_descendant_detects_the_move_that_would_detach_a_subtree() -> None:
     assert _is_descendant(pages, "root", "grandchild") is False
 
 
+# ── sibling titles ───────────────────────────────────────────────────────────
+
+
+def _titled(page_id: str, title: str, parent: str | None = None) -> WikiPageRecord:
+    page = _page(page_id, parent)
+    page.title = title
+    return page
+
+
+@pytest.mark.asyncio
+async def test_two_pages_under_one_parent_cannot_share_a_title(
+    gate: _RecordingGate,
+) -> None:
+    """An agent addresses a page by its path — its titles from the root — so
+    two namesakes under one parent would give two pages the same address."""
+
+    store = _Store()
+    store.pages.append(_titled("p1", "Espagne"))
+
+    with pytest.raises(wiki_service.WikiRequestError) as refused:
+        await wiki_service.create_wiki_page(
+            _user(), TEAM, CreateWikiPageRequest(title="  espagne "), _deps(store)
+        )
+
+    assert refused.value.http_status == 409
+
+
+@pytest.mark.asyncio
+async def test_the_same_title_is_free_under_a_different_parent(
+    gate: _RecordingGate,
+) -> None:
+    """The rule is about siblings, not the whole wiki: "Espagne" under Ventes
+    and under Achats are two different addresses."""
+
+    store = _Store()
+    store.pages.append(_titled("ventes", "Ventes"))
+    store.pages.append(_titled("achats", "Achats"))
+    store.pages.append(_titled("p1", "Espagne", parent="ventes"))
+
+    await wiki_service.create_wiki_page(
+        _user(),
+        TEAM,
+        CreateWikiPageRequest(title="Espagne", parent_page_id="achats"),
+        _deps(store),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_rename_onto_a_sibling_title_is_refused(gate: _RecordingGate) -> None:
+    store = _Store()
+    store.pages.append(_titled("p1", "Espagne"))
+    store.pages.append(_titled("p2", "Italie"))
+
+    with pytest.raises(wiki_service.WikiRequestError) as refused:
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
+            TEAM,
+            "p2",
+            UpdateWikiPageMetadataRequest(title="Espagne"),
+            _deps(store),
+        )
+
+    assert refused.value.http_status == 409
+
+
+@pytest.mark.asyncio
+async def test_renaming_a_page_to_its_own_title_is_not_a_collision(
+    gate: _RecordingGate,
+) -> None:
+    """The page must not be compared against itself, or saving a page without
+    touching its title would refuse."""
+
+    store = _Store()
+    store.pages.append(_titled("p1", "Espagne"))
+
+    await wiki_service.update_wiki_page_metadata(
+        _user(),
+        TEAM,
+        "p1",
+        UpdateWikiPageMetadataRequest(title="Espagne"),
+        _deps(store),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_move_next_to_a_namesake_is_refused(gate: _RecordingGate) -> None:
+    """A move carries the title with it, so it is checked against where the
+    page is going, not where it is."""
+
+    store = _Store()
+    store.pages.append(_titled("ventes", "Ventes"))
+    store.pages.append(_titled("p1", "Espagne", parent="ventes"))
+    store.pages.append(_titled("p2", "Espagne"))
+
+    with pytest.raises(wiki_service.WikiRequestError) as refused:
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
+            TEAM,
+            "p2",
+            UpdateWikiPageMetadataRequest(parent_page_id="ventes"),
+            _deps(store),
+        )
+
+    assert refused.value.http_status == 409
+
+
 # ── authorization gates ──────────────────────────────────────────────────────
 
 
@@ -147,8 +254,8 @@ class _User:
 
 
 class _Store:
-    """Enough store for the gate tests: every write is refused before it runs,
-    so nothing here needs to behave."""
+    """Enough store for the service tests. Most writes are refused before they
+    reach it; the two that are meant to succeed record what they were given."""
 
     def __init__(self) -> None:
         self.pages: list[WikiPageRecord] = []
@@ -170,6 +277,24 @@ class _Store:
         self, _team_id: TeamId, revision_id: str
     ) -> WikiRevisionRecord | None:
         return self.revisions.get(revision_id)
+
+    async def create_page(self, **kwargs: Any) -> Any:
+        page = WikiPageRecord(
+            page_id=kwargs["slug"],
+            team_id=TEAM,
+            slug=kwargs["slug"],
+            title=kwargs["title"],
+            parent_page_id=kwargs.get("parent_page_id"),
+            current_revision_id="rev-1",
+        )
+        self.pages.append(page)
+        return SimpleNamespace(page=page, revision=_revision("rev-1", page.page_id))
+
+    async def update_page_metadata(self, **kwargs: Any) -> WikiPageRecord:
+        page = next(p for p in self.pages if p.page_id == kwargs["page_id"])
+        if kwargs.get("title") is not None:
+            page.title = kwargs["title"]
+        return page
 
     async def create_proposal(self, **kwargs: Any) -> WikiRevisionRecord:
         record = WikiRevisionRecord(
@@ -259,30 +384,42 @@ async def test_every_write_demands_the_editor_permission(gate: _RecordingGate) -
     deps = _deps(store)
     user = _user()
 
-    with pytest.raises(Exception):
-        await wiki_service.create_wiki_page(
+    # Each call only has to get PAST its gate; whether the partial fake can
+    # then carry the write out is not what is under test, so a failure after
+    # that point is ignored rather than asserted on.
+    async def reached(call: Any) -> None:
+        try:
+            await call
+        except Exception:
+            pass
+
+    await reached(
+        wiki_service.create_wiki_page(
             user, TEAM, CreateWikiPageRequest(title="T"), deps
         )
-    with pytest.raises(Exception):
-        await wiki_service.update_wiki_page_content(
+    )
+    await reached(
+        wiki_service.update_wiki_page_content(
             user, TEAM, "p1", UpdateWikiPageContentRequest(content_md="x"), deps
         )
-    with pytest.raises(Exception):
-        await wiki_service.update_wiki_page_metadata(
+    )
+    await reached(
+        wiki_service.update_wiki_page_metadata(
             user, TEAM, "p1", UpdateWikiPageMetadataRequest(title="T2"), deps
         )
-    with pytest.raises(Exception):
-        await wiki_service.update_wiki_rules(
+    )
+    await reached(
+        wiki_service.update_wiki_rules(
             user, TEAM, UpdateWikiRulesRequest(content_md="x"), deps
         )
-    with pytest.raises(Exception):
-        await wiki_service.set_wiki_page_needs_review(
+    )
+    await reached(
+        wiki_service.set_wiki_page_needs_review(
             user, TEAM, "p1", SetNeedsReviewRequest(needs_review=False), deps
         )
-    with pytest.raises(Exception):
-        await wiki_service.delete_wiki_page(user, TEAM, "p1", deps)
-    with pytest.raises(Exception):
-        await wiki_service.restore_wiki_revision(user, TEAM, "p1", "r1", deps)
+    )
+    await reached(wiki_service.delete_wiki_page(user, TEAM, "p1", deps))
+    await reached(wiki_service.restore_wiki_revision(user, TEAM, "p1", "r1", deps))
 
     assert gate.permissions == [[WIKI_WRITE_PERMISSION]] * 7
     assert WIKI_WRITE_PERMISSION.value == "can_update_resources"

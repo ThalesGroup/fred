@@ -3594,8 +3594,20 @@ that already has a revision is refused exactly like a stale one: a caller cannot
 opt out of the check by leaving the field off. It is absent only when creating
 the rules page for the first time.
 
+**Two pages under one parent cannot share a title** (2026-09-07, WIKI-05).
+An agent addresses a page by its path — its titles from the root — so two
+namesakes under one parent would give two pages the same address. Refused with
+409 on create, rename, move, propose and publish; enforced under concurrent
+writes by `uq_team_wiki_pages_sibling_title`, case-folded and
+whitespace-collapsed, `NULLS NOT DISTINCT` so the rule reaches root pages too.
+The migration renames existing collisions rather than failing. It is the one
+part of this change a user can see: a refusal when they pick a title a sibling
+already has.
+
 **A page's slug is an opaque identifier** (2026-09-07), eight random hex
-characters minted at creation. It is the page's URL and a rename never changes
+characters minted at creation. It never reaches an agent: the injected index
+carries titles only, and the capability resolves a path to a slug itself, so
+the HTTP API is unchanged. It is the page's URL and a rename never changes
 it — nothing maps an old slug to a page — so deriving it from the title would
 guarantee it goes stale on the first rename. Existing rows keep their slugs.
 

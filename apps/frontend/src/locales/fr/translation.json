@@ -3166,7 +3166,8 @@
         "save": "Impossible d'enregistrer cette page",
         "create": "Impossible de créer la page",
         "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
-        "delete": "Impossible de supprimer la page"
+        "delete": "Impossible de supprimer la page",
+        "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre."
       }
     }
   },

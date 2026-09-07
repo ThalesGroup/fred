@@ -4079,6 +4079,11 @@ back button walks the pages. A rename does not change the slug, so links
 survive it — nothing here maps an old slug to a page, so re-minting one would
 be a hard 404 for every link already shared.
 
+**Titles are unique among siblings** (2026-09-07): creating, renaming or
+moving a page onto a sibling's title is refused with a translated message. That
+is what makes a page's path — its titles from the root — a unique address, which
+is how an agent names one; the slug never reaches the model at all.
+
 **The slug is opaque** (2026-09-07): eight random hex characters, minted at
 creation and never derived from the title. Because a rename cannot change it, a
 title-derived slug outlives the title it was named for — a page renamed to "Les

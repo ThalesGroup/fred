@@ -3166,7 +3166,8 @@
         "save": "Could not save this page",
         "create": "Could not create the page",
         "rename": "Could not save the page’s title or location",
-        "delete": "Could not delete the page"
+        "delete": "Could not delete the page",
+        "duplicateTitle": "A page with this title already exists at the same level. Pick another one."
       }
     }
   },
