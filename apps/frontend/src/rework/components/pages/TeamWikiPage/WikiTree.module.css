@@ -21,12 +21,17 @@
   list-style: none;
 }
 
+/* 2rem regardless of what the row happens to contain. Both the chevron and the
+   "+" are 2rem icon buttons and were setting the height between them, so a leaf
+   row, or any row while a draft is open, came out ~5px shorter than its
+   neighbours. Matches `.spacer`, which stands in for the chevron. */
 .row {
   display: flex;
   align-items: center;
   gap: var(--spacing-3xs);
   border-radius: var(--radius-s);
   padding-right: var(--spacing-2xs);
+  min-height: 2rem;
 }
 
 .row:hover {
