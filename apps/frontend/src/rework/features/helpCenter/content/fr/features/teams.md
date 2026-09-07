@@ -7,13 +7,12 @@ icon: groups
 
 # Administrer son équipe
 
-Les réglages d'équipe sont accessibles à ses **administrateurs** depuis la page
-**Réglages**. Ils regroupent tout ce qui gouverne le fonctionnement de
-l'équipe.
+La page **Réglages** regroupe tout ce qui gouverne le fonctionnement de
+l'équipe. L'accès à chaque section dépend de votre rôle.
 
 ## Membres
 
-Invitez des personnes, changez leur **rôle** (Administrateur, Éditeur,
+Invitez des personnes, changez leur **rôle** (Admin, Éditeur,
 Analyste, Membre) ou retirez-les. Le rôle détermine ce que chacun peut faire
 (voir [les rôles](/help/fr/getting-started/join-create-team)).
 
@@ -22,19 +21,16 @@ Analyste, Membre) ou retirez-les. Le rôle détermine ce que chacun peut faire
 ## Paramètres
 
 Décrivez le rôle de l'équipe pour aider les autres utilisateurs à la situer,
-et réglez sa visibilité sur la marketplace et son mode d'adhésion.
+réglez sa visibilité sur la marketplace et son mode d'adhésion, et fixez le
+délai de **rétention** après lequel les conversations supprimées sont
+définitivement effacées (masquées immédiatement, puis purgées au terme du
+délai — laissé vide, l'effacement est immédiat).
 
 ## Routage des modèles
 
 Le **routage** choisit le profil de modèle utilisé par les agents de chat gérés
 de l'équipe. Vous pouvez définir un profil par défaut et des règles selon
 l'opération. Laissé vide, l'équipe utilise le profil par défaut du déploiement.
-
-## Rétention
-
-La **rétention** fixe le délai après lequel les conversations supprimées sont
-définitivement effacées. Elles sont masquées immédiatement, puis purgées au
-terme du délai. Laissé vide, l'effacement est immédiat.
 
 ## Évaluations
 

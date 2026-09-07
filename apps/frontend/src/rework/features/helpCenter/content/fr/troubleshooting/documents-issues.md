@@ -31,6 +31,7 @@ préparé. Si elle reste affichée très longtemps, ou si le document signale un
 
 ## Le format n'est pas accepté
 
-Les formats courants fonctionnent (PDF, texte, PowerPoint, Excel, CSV,
-Markdown). Un format inhabituel peut être refusé : convertissez alors le
-document dans un format courant avant de le déposer.
+Les formats courants fonctionnent (PDF, texte, Word, PowerPoint, Excel, CSV,
+Markdown), tout comme les images et les fichiers audio. Un format inhabituel
+peut être refusé : convertissez alors le document dans un format courant avant
+de le déposer.

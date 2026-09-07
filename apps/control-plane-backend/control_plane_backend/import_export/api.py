@@ -1,11 +1,8 @@
 """Import/export endpoints for platform configuration snapshots.
 
-The import endpoint accepts kea-format snapshot zips (the format produced by the
-kea admin `/admin/migration` export feature), but is designed to be the canonical
-configuration backup/restore mechanism for swift — not a one-shot migration tool.
+The canonical configuration backup/restore mechanism for swift.
 
 Typical use-cases:
-- Migrating business configuration from kea to swift (initial cutover)
 - Per-team configuration backup and restore
 - Copying an agent/prompt library between swift environments
 
@@ -54,7 +51,6 @@ from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.exporter import run_export
@@ -63,7 +59,6 @@ from control_plane_backend.import_export.stats import (
     PlatformStats,
     compute_platform_stats,
 )
-from control_plane_backend.import_export.teardown import run_teardown
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.task_models import TASK_RUN_TABLE
 from control_plane_backend.product.dependencies import (
@@ -127,19 +122,15 @@ def _get_engine(request: Request) -> AsyncEngine:
     return get_application_container(request).get_pg_async_engine()
 
 
-def _get_agent_instance_store(request: Request) -> AgentInstanceStore:
-    return get_application_container(request).get_agent_instance_store()
-
-
 def _get_rebac_engine(request: Request) -> RebacEngine:
     return get_application_container(request).get_rebac_engine()
 
 
 async def _reject_if_migration_task_active(task_service: TaskService) -> None:
-    """Refuse to start a migration op (import / reset / reset-rebac) while another
-    one is still running or pending (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) — an
-    import racing a teardown (or two teardowns) on the same instance is exactly
-    the scenario a cutover-day operator cannot safely reason about.
+    """Refuse to start a migration op (import / reset) while another one is
+    still running or pending (CONTROL-PLANE-PRODUCT-CONTRACT.md §27) — two
+    concurrent migration-affecting calls on the same instance is exactly the
+    scenario an operator cannot safely reason about.
 
     This is a fast-path optimization ONLY — it avoids doing upload/parsing work
     before failing, but it is a plain list-then-check and does not, by itself,
@@ -214,10 +205,8 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         summary="Import a configuration snapshot",
         description=(
             "Upload a configuration snapshot zip and import it into this swift instance.\n\n"
-            "**Accepted formats:**\n"
-            "- Kea snapshot v1 (produced by kea `/admin/migration` export)\n\n"
             "**What is imported:**\n"
-            "- Agent instances (kea agents mapped to their swift template equivalent)\n"
+            "- Agent instances\n"
             "- Declarative team/platform role provisioning from a top-level `users.json` "
             "entry (AUTHZ-07 Part 8 §40.2) — never creates a Keycloak identity; an "
             "unresolved username, or a team-role grant the calling platform admin "
@@ -226,10 +215,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             "- Document metadata (content/vectors not in the zip — mirror separately)\n"
             "- Tags (knowledge-flow import path not yet implemented)\n"
             "- MCP servers (re-seeded by deployment)\n\n"
-            "**Optional `realm_file`:** a standalone Keycloak realm export (`.json`), supplied "
-            "independently of the zip. Takes precedence over the zip's own "
-            "`keycloak/realm.json` when both are present — the practical workaround for kea's "
-            "`exportClients` export permission gap (PLATFORM-IMPORT-RFC.md §9.1).\n\n"
             "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
             "**Platform admin only.**"
         ),
@@ -240,9 +225,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         task_service: Annotated[TaskService, Depends(_get_task_service)],
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
-        agent_instance_store: Annotated[
-            AgentInstanceStore, Depends(_get_agent_instance_store)
-        ],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         team_deps: Annotated[
             TeamServiceDependencies, Depends(get_team_service_dependencies)
@@ -254,7 +236,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             ProductServiceDependencies, Depends(get_product_service_dependencies)
         ],
         label: Annotated[str | None, Form()] = None,
-        realm_file: UploadFile | None = None,
     ) -> ImportLaunchResponse:
         await rebac.check_user_permission_or_raise(
             user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
@@ -273,19 +254,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 detail=f"Snapshot exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
             )
 
-        external_realm_data: bytes | None = None
-        if realm_file is not None:
-            if not (realm_file.filename or "").endswith(".json"):
-                raise HTTPException(
-                    status_code=400, detail="realm_file must be a .json export"
-                )
-            external_realm_data = await realm_file.read(MAX_UPLOAD_BYTES + 1)
-            if len(external_realm_data) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"realm_file exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
-                )
-
         import_id = str(uuid.uuid4())
         target = _import_target(import_id, label, file.filename)
 
@@ -296,14 +264,13 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
 
         async def _run() -> None:
             try:
-                bundle = open_bundle(data, external_realm_data=external_realm_data)
+                bundle = open_bundle(data)
                 report = await run_import(
                     bundle=bundle,
                     import_id=import_id,
                     task_id=task_id,
                     task_service=task_service,
                     engine=engine,
-                    agent_instance_store=agent_instance_store,
                     platform_admin=user,
                     user_deps=user_deps,
                     team_deps=team_deps,
@@ -479,95 +446,6 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                 )
             except Exception as exc:
                 logger.exception("[import-export] reset failed: %s", exc)
-                await task_service.fail_task(task_id, str(exc))
-
-        background_tasks.add_task(_run)
-        return ResetLaunchResponse(task_id=task_id)
-
-    @router.post(
-        "/import-export/reset-rebac",
-        status_code=202,
-        response_model=ResetLaunchResponse,
-        summary="Teardown — reset platform data and OpenFGA (test-only, Keycloak untouched)",
-        description=(
-            "Delete all agent instances, knowledge tags, document metadata, team "
-            "metadata, and prompts from Postgres, and wipe every OpenFGA tuple — but "
-            "**never touches Keycloak users**. Object-store binaries and vector "
-            "embeddings are not touched either.\n\n"
-            "**Preserved, never touched:** the identity that completed root bootstrap "
-            "(`platformbootstrap.completed_by`) and the identity calling this endpoint.\n\n"
-            "Distinct from `POST /reset` (Postgres only, keeps OpenFGA — leaves stale "
-            "permission tuples behind across repeated test cycles). Use this one for "
-            "repeated import rehearsals where you want a clean permission graph on "
-            "every run but need Keycloak accounts (e.g. one created to exercise the "
-            "PENDING→RELINKED reconciliation path) to survive. Test/rehearsal tooling "
-            "only — never wipes identity.\n\n"
-            "Every step is safe to re-run — if this task itself fails partway through, "
-            "call it again; already-deleted tuples/rows are silently skipped.\n\n"
-            "Progress is streamed via `GET /tasks/{task_id}/events`.\n\n"
-            "**This action is irreversible. Platform admin only.**"
-        ),
-    )
-    async def reset_platform_rebac(
-        background_tasks: BackgroundTasks,
-        user: Annotated[KeycloakUser, Depends(get_current_user)],
-        task_service: Annotated[TaskService, Depends(_get_task_service)],
-        engine: Annotated[AsyncEngine, Depends(_get_engine)],
-        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
-        user_deps: Annotated[
-            UserServiceDependencies, Depends(get_user_service_dependencies)
-        ],
-    ) -> ResetLaunchResponse:
-        await rebac.check_user_permission_or_raise(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        )
-        await _reject_if_migration_task_active(task_service)
-
-        start_response = await _start_migration_task_or_409(
-            task_service, created_by=user.uid
-        )
-        task_id = start_response.task_id
-
-        async def _run() -> None:
-            try:
-                await task_service.record(
-                    MigrationTaskEvent(
-                        task_id=task_id,
-                        state=TaskState.running,
-                        seq=0,
-                        timestamp=datetime.now(timezone.utc),
-                        step="Teardown (données + OpenFGA) en cours…",
-                    )
-                )
-                report = await run_teardown(
-                    caller=user,
-                    engine=engine,
-                    rebac=rebac,
-                    user_deps=user_deps,
-                )
-                summary = (
-                    f"préservés: {', '.join(report.preserved_uids)} — "
-                    f"Keycloak conservé, "
-                    f"{report.team_ids_wiped} équipes désenchevêtrées (OpenFGA), "
-                    f"{report.agents_deleted} agents, {report.tags_deleted} tags, "
-                    f"{report.documents_deleted} documents, {report.teams_deleted} équipes, "
-                    f"{report.prompts_deleted} prompts supprimés"
-                )
-                await task_service.record(
-                    MigrationTaskEvent(
-                        task_id=task_id,
-                        state=TaskState.succeeded,
-                        seq=0,
-                        timestamp=datetime.now(timezone.utc),
-                        step=summary,
-                        progress=1.0,
-                    )
-                )
-                logger.warning(
-                    "[import-export] reset-rebac by %s: %s", user.uid, summary
-                )
-            except Exception as exc:
-                logger.exception("[import-export] reset-rebac failed: %s", exc)
                 await task_service.fail_task(task_id, str(exc))
 
         background_tasks.add_task(_run)

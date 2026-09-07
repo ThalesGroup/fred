@@ -63,11 +63,6 @@ export const HELP_SECTIONS: HelpSectionSpec[] = [
     icon: { category: "outlined", type: "quiz" },
   },
   {
-    id: "architecture",
-    titleKey: "rework.helpCenter.sections.architecture",
-    icon: { category: "outlined", type: "architecture" },
-  },
-  {
     id: "changelog",
     titleKey: "rework.helpCenter.sections.changelog",
     icon: { category: "outlined", type: "new_releases" },

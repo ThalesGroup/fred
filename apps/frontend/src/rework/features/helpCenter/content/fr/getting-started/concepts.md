@@ -19,7 +19,7 @@ contenu appartient à une équipe et n'est visible que par ses membres. Votre
 particulière, dont vous êtes le seul membre.
 
 Au sein d'une équipe, chacun a un **rôle** qui détermine ce qu'il peut faire :
-Administrateur, Éditeur, Analyste ou Membre (voir
+Admin, Éditeur, Analyste ou Membre (voir
 [Rejoindre ou créer une équipe](/help/fr/getting-started/join-create-team)).
 
 ## Agent

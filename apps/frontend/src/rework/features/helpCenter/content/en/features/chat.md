@@ -13,7 +13,9 @@ get answers grounded in your content.
 ## Conversations
 
 Each exchange with an agent is a **conversation** (or session). Your
-conversations are kept and **grouped by agent** in the left-hand list. You can:
+conversations are kept in the left-hand list, and a **"Group by agent"**
+toggle lets you switch it to grouped view whenever you want (it's off by
+default). You can:
 
 - **resume** a conversation to continue where you left off;
 - **start** a new conversation at any time;
@@ -28,10 +30,11 @@ duration of the conversation. Handy for a one-off document. For lasting, shared
 use, prefer the team's [resources](/help/en/features/resources), which the
 agent can consult across conversations.
 
-## Attached prompts
+## Using a prompt
 
-A conversation can rely on **attached prompts**: framing texts that steer the
-agent for the exchange. You can attach several (see the
+Instead of retyping a recurring request, you can insert a saved prompt's text
+straight into the composer and edit it before sending. It's a one-shot
+shortcut for that message, not a lasting setting on the conversation (see the
 [prompt library](/help/en/features/prompts)).
 
 ## Reading an answer
@@ -45,7 +48,7 @@ An answer can mix several elements:
   document search, a capability call, a computation…). Useful to understand
   _how_ the answer was built.
 - **Produced documents**: some agents generate files (a drafted document, a
-  table, a presentation) that you can open and download.
+  table, a presentation) that you can download.
 
 > **Verify** important answers using the cited sources. See
 > [AI answers](/help/en/faq/ai-answers).

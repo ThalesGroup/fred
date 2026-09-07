@@ -504,8 +504,8 @@ class RebacEngine(ABC):
         would otherwise enumerate ids from is already gone (a prior partial reset, a manual
         edit, drift between the two stores), the corresponding tuples never get asked for
         and become permanent orphans. This reads the live authorization store itself, so a
-        rehearsal reset (`import_export/teardown.py::run_teardown`) converges to zero
-        tuples of that type regardless of any such history. Returns the number deleted.
+        bulk reset converges to zero tuples of that type regardless of any such history.
+        Returns the number deleted.
         """
 
     async def add_relations(

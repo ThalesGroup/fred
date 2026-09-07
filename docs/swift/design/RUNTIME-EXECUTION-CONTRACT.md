@@ -5470,3 +5470,54 @@ in tool calls is not known until after the text has streamed, and buffering it
 would cost every real answer its time-to-first-token. A client that wants the
 frontend's behaviour drops content deltas preceding a `tool_calls` chunk in the
 same round; the `<think>` copy is the one carrying `fred.thought` metadata.
+
+### 8.74 ✅ ReAct tool-result classification and user-facing error text converge at one shared trust boundary (2026-09-07)
+
+**What.** `react_runtime.py`'s `is_error` derivation is a true OR of both
+signals a `ToolMessage` can carry, mirroring `ToolObservabilityMiddleware`'s
+rule:
+
+```python
+status_is_error = message.status == "error"
+artifact_is_error = artifact is not None and artifact.is_error
+is_error = status_is_error or artifact_is_error
+```
+
+The text shown to the user for a failed call comes from the same trust
+boundary and feeds both `ToolResultRuntimeEvent.content` and
+`FinalRuntimeEvent.content`:
+
+- A typed `is_error=True` `ToolInvocationResult` that reaches this boundary
+  is Fred-owned: its text is rendered fresh from the artifact via
+  `render_tool_result`, with Fred's `"Tool error:\n"` prefix removed — never
+  from `message.content`. Runtime-provider/MCP error artifacts are first
+  replaced at resolution by a generic Fred-owned result; provider blocks,
+  sources, UI parts, and paired content do not cross that boundary.
+- Every other failure (a bare `status == "error"`, or an artifact that
+  renders to no real text) is untrusted and collapses to one fixed, bounded
+  generic message; `message.content` is never read for this case.
+
+`react_tool_binding.py`'s per-tool tracing span reflects a returned
+`is_error=True` artifact, not only a raised exception.
+
+**Why.** The prior derivation never consulted `message.status`, so a tool
+call that raised without producing a Fred artifact was reported as
+`is_error=False` — confirmed of the built-in Workspace tools and of
+`_resolve_transport_declared_tool`. Once such a failure is correctly
+classified, its content must also never leak a raw exception, a wrapper's
+LLM-directed instructions, or other unvetted text to the user.
+
+**Known gap, not fixed here — no tracking issue exists yet.** `ppt_filler`,
+`html_artifact`, and `writable_document` build `is_error=True` results
+without populating `blocks`; their specific error text is lost to the
+generic message instead of shown (safe — nothing raw leaks — but a UX
+regression versus their intended message).
+
+**Scope.** `react_runtime.py`, `react_tool_binding.py`,
+`react_tool_rendering.py`, and the runtime-provider branch of
+`react_tool_resolution.py`; `ToolObservabilityMiddleware` is unchanged.
+
+**Tests.** `libs/fred-runtime/tests/test_react_tool_error_final_2244.py` and
+`libs/fred-runtime/tests/test_react_tool_binding_span_status.py`, plus
+`libs/fred-runtime/tests/test_react_tool_resolution.py` for provider-boundary
+sanitization.

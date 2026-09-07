@@ -17,10 +17,15 @@ icon: forum
 
 ## An agent is unavailable or suspended
 
-A **suspended** agent stays visible but unusable. The most common cause is a
-**disabled capability** the agent depends on for the team. A team administrator
-can re-enable the capability (see
-[Capabilities](/help/en/features/capabilities)), which restores the agent.
+A **suspended** agent stays visible but unusable. Common causes:
+
+- A capability the agent depends on was **removed or disabled**: only the
+  **platform administrator** can re-enable it, from the Admin console (see
+  [Capabilities](/help/en/features/capabilities)).
+- The team's **access** to that capability was **revoked**: same fix, the
+  platform administrator restores access from the Admin console.
+- The capability's **configuration** is **invalid**: untick the capability on
+  the agent, save, then re-tick it and save again.
 
 ## My attachment is rejected
 

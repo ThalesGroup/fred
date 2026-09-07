@@ -27,9 +27,16 @@ Sign-in uses your organization account. If it fails:
 
 ## I don't have access to an action
 
-Many actions depend on your **role** in the team. Creating an agent or a prompt
-requires the **Editor** or **Administrator** role; managing members requires
-**Administrator**. Ask a team administrator to adjust your role if needed.
+Many actions depend on your **role** in the team. The team roles are
+**Admin**, **Editor**, **Analyst**, and **Member**, and their
+permissions don't overlap: Admin and Editor are separate, independent
+grants, not tiers of the same ladder.
+
+Creating an agent or a prompt requires the **Editor** role — the
+**Admin** role alone does not grant this, since Admin and
+Editor are separate permissions. Managing members requires **Admin**.
+A user needs both roles to do both things. Ask a team admin to adjust
+your role if needed.
 
 The **platform administration** surfaces, meanwhile, are reserved for platform
 administrators — it's normal not to see them.

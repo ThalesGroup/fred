@@ -38,9 +38,10 @@ At creation, and whenever you like, an agent is tuned on several points:
 - **Duplicate**: start from an existing agent to create a variant, without
   redoing everything.
 - **Suspend**: an agent is sometimes paused — most often when a capability it
-  needs has been disabled for the team. It stays visible but can't be used until
-  that's restored.
+  needs has been disabled for the team, but also when the team's access to it
+  was revoked or its configuration is no longer valid. It stays visible but
+  can't be used until that's fixed.
 - **Delete**: permanently remove an agent you no longer need.
 
-> Creating and editing agents requires the **Editor** or **Administrator** role
+> Creating and editing agents requires the **Editor** or **Admin** role
 > (see [roles](/help/en/getting-started/join-create-team)).

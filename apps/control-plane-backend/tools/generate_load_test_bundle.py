@@ -133,8 +133,6 @@ def main() -> None:
         "source_platform": "swift",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "tables": {},
-        "tuple_count": 0,
-        "realm_exported": False,
         "content_keys": [],
     }
 

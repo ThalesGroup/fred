@@ -16,9 +16,13 @@ import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import NavigationMenuItem from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { helpPagePath, type HelpSectionTree } from "@rework/features/helpCenter/content";
 import type { HelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./HelpSidebar.module.scss";
+
+/** Public technical docs site — architecture/deployment content lives there, not in this end-user help center. */
+const TECHNICAL_DOCS_URL = "https://site.fredlab.dev";
 
 interface HelpSidebarProps {
   tree: HelpSectionTree[];
@@ -52,6 +56,10 @@ export default function HelpSidebar({ tree, lang, activeSectionId, activePageId 
           ))}
         </Fragment>
       ))}
+      <a href={TECHNICAL_DOCS_URL} target="_blank" rel="noopener noreferrer" className={styles.externalLink}>
+        <Icon category="outlined" type="open_in_new" />
+        {t("rework.helpCenter.externalDocsLink")}
+      </a>
     </aside>
   );
 }
