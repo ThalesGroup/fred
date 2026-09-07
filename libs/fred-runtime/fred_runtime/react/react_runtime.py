@@ -149,6 +149,9 @@ from .react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from .react_tool_loop import build_tool_loop_compiled_react_agent
+from .react_tool_rendering import (
+    GENERIC_TOOL_FAILURE_MESSAGE as _GENERIC_TOOL_FAILURE_MESSAGE,
+)
 from .react_tool_rendering import render_tool_result as _render_tool_result
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
@@ -166,12 +169,6 @@ __all__ = [
     "ReActToolCall",
     "_to_runnable_config",
 ]
-
-
-# Trust-boundary rationale and both branches: RUNTIME-EXECUTION-CONTRACT.md §8.74.
-_GENERIC_TOOL_FAILURE_MESSAGE = (
-    "This step failed unexpectedly and could not be completed."
-)
 
 
 def _user_facing_tool_error_text(artifact: ToolInvocationResult | None) -> str:

@@ -1,30 +1,44 @@
 ## Why
 
-GitHub issue [#2568](https://github.com/ThalesGroup/fred/issues/2568) reports a reliability gap, not a capability gap: given a precise, multi-step corpus prompt, a Fred agent can still fragment the work into unrequested "shall I continue?" turns, lose or skip steps while tools run, fail to resume coherently after a tool error or an approval pause, and — most seriously — claim a file or link was produced when nothing durable was actually written. Fred already owns most of the needed primitives (`WorkspaceFsPort`, `PublishedArtifact`/`LinkPart`, durable `ui_parts` in history, a hardened HITL claim mechanism); what is missing is one end-to-end product contract proving these parts compose into a reliable work-completion loop, plus one concrete correctness fix already found while investigating this gap.
+GitHub issue [#2568](https://github.com/ThalesGroup/fred/issues/2568) exposed a
+reliability gap around multi-step work and real file publication. Investigation found
+one independently mergeable runtime bug: a failed tool call could be reported as a
+success when LangGraph set `ToolMessage.status == "error"` without a Fred error artifact.
+The same path could also expose provider-controlled diagnostic content as user-facing
+error text.
+
+This OpenSpec change covers that completed runtime slice only. The remaining planning,
+Workspace, corpus, and optional Deep Agents work is tracked exclusively in GitHub issue
+#2568 and its linked dependencies, not in this repository checklist.
 
 ## What Changes
 
-- Adds an externally observable **agent-work-completion** contract: retain and complete an ordered user objective without premature "next step?" turns; continue or explicitly re-plan after a recoverable tool failure; persist private planning/working state durably (without exposing chain-of-thought as an acceptance oracle); publish only real user deliverables backed by a successful write and a durable `LinkPart`; behave truthfully (no fabricated filename/URL) when generation, write, or link fails; survive history/page-reload; ground answers in retrieved sources and report missing evidence honestly; hold for the existing supported ReAct runtime today, with identical black-box expectations reserved for Deep Agents once it is separately supported.
-- **Fixes a found correctness bug at the shared tool-result classification boundary:** `react_runtime.py` derives `RuntimeEvent.is_error` only from a typed artifact's `is_error` field, so any tool call that fails without producing one — confirmed true today of the built-in Workspace tools (`artifacts.publish_text`, `resources.fetch_text`) and, generically, of `_resolve_transport_declared_tool` (registered/MCP/generic declared tools) — is reported as `is_error=False`, a direct artifact-truth risk. The fix makes `react_runtime.py` classify a failure as either signal being true (`ToolMessage.status == "error"` OR a returned artifact's `is_error == True`), aligning it with `ToolObservabilityMiddleware`'s already-correct, already-shipped rule — one shared boundary fixed once, not a per-tool catch. The same fix also draws a trust boundary around tool-failure text: only Fred's own typed, user-facing error result (rendered fresh from the normalized artifact) may be shown to the user on failure; any untyped `status=="error"` failure (an uncaught exception, in whatever shape the underlying wrapper produces) is presented as one bounded generic message in both the per-call tool result and the final answer, never as raw exception or wrapper text, and never by reusing the tool message's raw content even in the trusted case. Independently mergeable on the current branch.
-- Does **not** implement #2498 (the four-operation, M2M-hardened Workspace vertical slice). #2498 is a separate, already-tracked prerequisite for durable/isolated Workspace persistence; this change treats it as an external blocking dependency for the persistence-bearing slice of this contract and must not absorb or re-specify its implementation.
-- Does **not** introduce a second planner, plan database, TODO domain, workflow engine, artifact/file registry, filesystem API, evaluator, or side-panel UI. Existing runtime planning traces, `WorkspaceFsPort`, `PublishedArtifact`/`LinkPart`, and the existing HITL mechanism are reused as-is.
-- Specifies (does not implement) the companion synthetic acceptance corpus for the sibling `fred-corpus` repository, reusing the existing `Evaluation`/`EvaluationCase` dataset schema — no new evaluator schema.
+- ReAct classifies a tool call as failed when either `ToolMessage.status == "error"` or
+  its Fred artifact has `is_error == true`.
+- Untyped failures expose one bounded generic message instead of raw wrapper or exception
+  text.
+- Runtime-provider/MCP error artifacts are sanitized at their source boundary into a new
+  Fred-owned generic error result; provider blocks, sources, UI parts, and paired content
+  are discarded on the error path.
+- Tool tracing spans report returned typed errors as failures, not only raised exceptions.
+
+No Workspace API, planner, HITL, runtime event, or OpenAPI shape changes.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `agent-work-completion`: the black-box, runtime-neutral contract for reliable completion of a precise multi-step prompt — objective retention, tool-failure continuation, durable private planning state, truthful artifact publication, history durability, and source-grounded honesty — verified first against the existing ReAct runtime.
+- `agent-work-completion`: establishes the first black-box reliability rule for #2568:
+  tool failures are classified truthfully and untrusted failure detail is never exposed.
 
 ### Modified Capabilities
 
-_None._ No existing `openspec/specs/` capability exists in this repository yet (`openspec/specs/` is currently empty); this is the first capability defined here. The built-in tool-error-classification fix is an implementation detail in service of `agent-work-completion`'s truthful-failure requirement, not a separate capability.
+None.
 
 ## Impact
 
-- **Code (this change, PR A):** `libs/fred-runtime/fred_runtime/react/react_runtime.py` (the `is_error` derivation becomes a true OR of `ToolMessage.status == "error"` and a returned artifact's `is_error`, per `design.md` Decision D1) and `libs/fred-runtime/fred_runtime/react/react_tool_binding.py` (a small, generally-applicable fix so a tool call's tracing span reflects a returned `is_error=True` artifact, not only a raised exception). `react_tool_resolution.py`'s built-in-tool `try`/`except` from the first implementation pass is reverted — superseded by the generic fix, since `_resolve_transport_declared_tool` (registered/MCP/generic declared tools) shares the same underlying gap and is fixed by the same one-line change with no code of its own.
-- **Code (blocked on #2498, PR B):** ReAct work-objective retention (`CheckpointHygieneMiddleware`/history-trimming behavior, `libs/fred-runtime/fred_runtime/react/middleware/checkpoint_hygiene.py`) and the private Workspace persistence needed for the black-box scenario.
-- **Out of scope for code changes here:** `WorkspaceFsPort`/`FredWorkspaceFs` M2M hardening (owned by #2498), Deep Agents `CompositeBackend`/`FredWorkspaceBackend` parity (later, optional slice), sub-agent (`#2529`) delegation, `writable_document` and `html_artifact` (distinct, already-correct representations — not folded into this contract's persisted-file path).
-- **Docs:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` (dated entry for the error-classification fix), `docs/swift/design/FILESYSTEM.md` (referenced, not amended, by PR B once #2498 lands).
-- **Tracking:** GitHub issue #2568 (this outcome), #2498 (blocking dependency, unchanged by this proposal), #2328 (parent convergence context, unchanged).
-- **fred-corpus:** a separate, unimplemented specification only (see `tasks.md`) — no code or dataset is created in this repository.
+- Runtime: `react_runtime.py`, `react_tool_binding.py`, `react_tool_rendering.py`, and the
+  runtime-provider branch of `react_tool_resolution.py`.
+- Tests: focused ReAct event, span-status, and provider-boundary regressions.
+- Contract: compact current-state entry in `RUNTIME-EXECUTION-CONTRACT.md` §8.74.
+- Tracking: all work beyond this slice remains solely in GitHub issue #2568.

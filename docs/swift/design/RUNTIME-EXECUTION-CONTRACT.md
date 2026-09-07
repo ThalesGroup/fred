@@ -5487,10 +5487,12 @@ The text shown to the user for a failed call comes from the same trust
 boundary and feeds both `ToolResultRuntimeEvent.content` and
 `FinalRuntimeEvent.content`:
 
-- A typed `is_error=True` `ToolInvocationResult` is Fred's own error
-  contract: its text is rendered fresh from the artifact via
-  `render_tool_result`, with Fred's `"Tool error:\n"` prefix removed —
-  never from `message.content`.
+- A typed `is_error=True` `ToolInvocationResult` that reaches this boundary
+  is Fred-owned: its text is rendered fresh from the artifact via
+  `render_tool_result`, with Fred's `"Tool error:\n"` prefix removed — never
+  from `message.content`. Runtime-provider/MCP error artifacts are first
+  replaced at resolution by a generic Fred-owned result; provider blocks,
+  sources, UI parts, and paired content do not cross that boundary.
 - Every other failure (a bare `status == "error"`, or an artifact that
   renders to no real text) is untrusted and collapses to one fixed, bounded
   generic message; `message.content` is never read for this case.
@@ -5511,8 +5513,11 @@ without populating `blocks`; their specific error text is lost to the
 generic message instead of shown (safe — nothing raw leaks — but a UX
 regression versus their intended message).
 
-**Scope.** `react_runtime.py` and `react_tool_binding.py` only —
-`react_tool_resolution.py` and `ToolObservabilityMiddleware` are unchanged.
+**Scope.** `react_runtime.py`, `react_tool_binding.py`,
+`react_tool_rendering.py`, and the runtime-provider branch of
+`react_tool_resolution.py`; `ToolObservabilityMiddleware` is unchanged.
 
 **Tests.** `libs/fred-runtime/tests/test_react_tool_error_final_2244.py` and
-`libs/fred-runtime/tests/test_react_tool_binding_span_status.py`.
+`libs/fred-runtime/tests/test_react_tool_binding_span_status.py`, plus
+`libs/fred-runtime/tests/test_react_tool_resolution.py` for provider-boundary
+sanitization.
