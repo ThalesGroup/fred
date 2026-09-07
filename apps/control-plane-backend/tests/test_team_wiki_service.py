@@ -416,7 +416,7 @@ async def test_every_write_demands_the_editor_permission(gate: _RecordingGate) -
         try:
             await call
         except Exception:
-            pass
+            pass  # only the gate matters here, see comment above
 
     await reached(
         wiki_service.create_wiki_page(
