@@ -44,6 +44,12 @@ export interface PromptEditorProps {
 /** Height a prompt field gets unless a caller asks for more. */
 export const PROMPT_EDITOR_ROWS = 15;
 
+// `editable` alone only takes the surface out of the tab order and off
+// contenteditable: CodeMirror's drop handler gates on `readOnly`, so without it
+// text dropped on a disabled field still edits the document and reports a
+// change the form believes it has locked.
+const editStateFor = (disabled: boolean) => [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
+
 // Marks a document change this component made to adopt an incoming `value`, so
 // it is not echoed back to the parent as if the user had typed it.
 const externalSync = Annotation.define<boolean>();
@@ -105,8 +111,12 @@ export function PromptEditor({
           placeholderRef.current.of(placeholder ? placeholderExtension(placeholder) : []),
           // The editing surface is a contenteditable, not a form control, so a
           // `<label for>` would not reach it — name it explicitly instead.
-          EditorView.contentAttributes.of({ "aria-labelledby": labelId }),
-          editableRef.current.of(EditorView.editable.of(true)),
+          // CodeMirror defaults .cm-content to spellcheck="false"; a prompt is
+          // prose and used to get the browser's checker from the textarea it
+          // replaced. Autocorrect and autocapitalize stay off — they rewrite
+          // text, and a prompt's XML tags must survive verbatim.
+          EditorView.contentAttributes.of({ "aria-labelledby": labelId, spellcheck: "true" }),
+          editableRef.current.of(editStateFor(false)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return;
             if (update.transactions.some((tr) => tr.annotation(externalSync))) return;
@@ -150,7 +160,7 @@ export function PromptEditor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: editableRef.current.reconfigure(EditorView.editable.of(!disabled)),
+      effects: editableRef.current.reconfigure(editStateFor(disabled)),
     });
   }, [disabled]);
 

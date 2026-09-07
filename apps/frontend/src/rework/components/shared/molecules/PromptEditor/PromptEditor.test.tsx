@@ -152,4 +152,21 @@ describe("PromptEditor", () => {
     render({ value: "text", disabled: true });
     expect(container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
   });
+
+  // CodeMirror's drop handler gates on readOnly, not on editable: without the
+  // former, text dropped on a disabled field still edits the document.
+  it("is read-only, not merely non-editable, when disabled", () => {
+    render({ value: "text", disabled: true });
+    const view = EditorView.findFromDOM(container.querySelector(".cm-editor") as HTMLElement);
+    expect(view?.state.readOnly).toBe(true);
+
+    render({ value: "text", disabled: false });
+    expect(view?.state.readOnly).toBe(false);
+  });
+
+  // A prompt is prose; the textarea this replaced had the browser's checker.
+  it("keeps browser spell-checking on", () => {
+    render({ value: "teh prompt" });
+    expect(container.querySelector(".cm-content")?.getAttribute("spellcheck")).toBe("true");
+  });
 });
