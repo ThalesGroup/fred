@@ -61,7 +61,10 @@ const promptHighlighting = HighlightStyle.define([
   { tag: [tags.tagName, tags.angleBracket], class: styles.tag },
   { tag: tags.attributeName, class: styles.attribute },
   { tag: [tags.attributeValue, tags.string], class: styles.value },
-  { tag: [tags.list, tags.processingInstruction], class: styles.marker },
+  // Marks only. `tags.list` is deliberately absent: lezer applies it to the
+  // whole list subtree, so styling it would tint every line of a bullet list
+  // differently from a paragraph. Untagged text inherits `.cm-content`.
+  { tag: tags.processingInstruction, class: styles.marker },
   { tag: tags.comment, class: styles.comment },
 ]);
 

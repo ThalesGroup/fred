@@ -126,6 +126,16 @@ describe("PromptEditor", () => {
     expect(docText()).toContain("seeded from the server");
   });
 
+  // lezer tags a bullet list's entire subtree as `tags.list`, so styling that
+  // tag tints the list's prose, not its dashes. The text of a list must read
+  // exactly like a paragraph; only the mark is set apart.
+  it("leaves bullet-list text the colour of ordinary prose", () => {
+    render({ value: "a paragraph\n\n- a bullet item\n" });
+    const spans = Array.from(container.querySelectorAll(".cm-content span"));
+    const itemSpan = spans.find((s) => s.textContent?.includes("a bullet item"));
+    expect(itemSpan).toBeUndefined();
+  });
+
   it("shows an error under the field", () => {
     render({ error: "Too long" });
     expect(container.textContent).toContain("Too long");
