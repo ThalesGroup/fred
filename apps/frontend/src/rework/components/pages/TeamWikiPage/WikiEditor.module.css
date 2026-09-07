@@ -61,6 +61,16 @@
   gap: var(--spacing-2xs);
 }
 
+/* Guidance for the person writing, deliberately outside the page's own text:
+   whatever lands in the page is read by every agent on every question. */
+.hint {
+  margin: 0;
+  border-left: 2px solid var(--outline-variant);
+  padding-left: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
 .tooLong {
   margin: 0;
   color: var(--error);

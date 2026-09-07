@@ -4096,6 +4096,27 @@ control stays rendered while the filter is ON even when the count reaches zero �
 clearing the last mark would otherwise remove the only way to turn the filter
 off and strand the reader on an empty rail.
 
+### The rules page's starting draft (2026-09-07, WIKI-05)
+
+Opening the rules page for the first time seeds the editor with a short
+outline: three empty headings for the team's own material, and two rules that
+are true for any team and that the capability's prompt block does not already
+say. Nothing is written until the editor saves, so a team that never opens the
+page keeps no rules — agents are told about rules the team actually wrote,
+never about a default nobody chose.
+
+**Emptiness is not the test** — `revision_id` is. A page saved empty was
+emptied on purpose, and handing the outline back would undo that decision every
+time it is reopened.
+
+**Placeholders would have been worse than nothing.** This page's text is
+injected verbatim into every agent's system prompt, under a heading saying to
+follow it and never act against it. A conventional template of the
+`_(describe your team here)_ ` kind would reach the model as a standing
+instruction on every question, for every team that never cleaned it up. That
+is why the guidance on how to fill the page sits in the editor UI
+(`rules.templateHint`) instead of in the page's own content.
+
 ### Version history (2026-09-07, WIKI-05)
 
 Each tile says in words what happened — `Édition manuelle`, `Édition par agent

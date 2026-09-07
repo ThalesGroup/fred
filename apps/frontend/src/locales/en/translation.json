@@ -3125,7 +3125,9 @@
       "rules": {
         "title": "Agent rules",
         "notice": "Every agent with wiki access reads this page before answering. Only editors can change it, and no agent can ever write to it.",
-        "empty": "No rules written yet. An editor can add the instructions every agent should follow."
+        "empty": "No rules written yet. An editor can add the instructions every agent should follow.",
+        "template": "## What this team does\n\n## Team vocabulary\n\n## How to answer\n\n- A wiki page can be out of date or wrong. If it contradicts what the conversation says, say so rather than silently picking one.\n- Never invent an acronym, a tool name or an internal process: if it is not in the wiki, say you do not know it.\n\n## Never do this\n",
+        "templateHint": "This page starts from an outline. Fill in the empty sections and delete the ones you do not need: every agent reads this text on every question, so keep it short and imperative, and spell out what a new colleague would have guessed on their own."
       },
       "proposal": {
         "newPage": "This agent proposes a new page “{{title}}” ({{added}} lines).",

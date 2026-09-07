@@ -3125,7 +3125,9 @@
       "rules": {
         "title": "Règles pour les agents",
         "notice": "Chaque agent ayant accès au wiki lit cette page avant de répondre. Seuls les éditeurs peuvent la modifier, et aucun agent ne peut jamais y écrire.",
-        "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre."
+        "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre.",
+        "template": "## Ce que fait cette équipe\n\n## Vocabulaire de l'équipe\n\n## Comment répondre\n\n- Une page du wiki peut être périmée ou fausse. Si elle contredit ce que dit la conversation, signale-le plutôt que de trancher en silence.\n- N'invente jamais un sigle, un nom d'outil ou un processus interne : s'il n'est pas dans le wiki, dis que tu ne le connais pas.\n\n## À ne jamais faire\n",
+        "templateHint": "Cette page démarre sur une trame. Remplissez les sections vides, supprimez celles qui ne servent pas : chaque agent lit ce texte à chaque question, alors écrivez court, à l'impératif, et dites ce qu'un nouveau collègue devinerait sans qu'on le lui dise."
       },
       "proposal": {
         "newPage": "Cet agent propose une nouvelle page « {{title}} » ({{added}} lignes).",

@@ -46,6 +46,9 @@ interface WikiEditorProps {
   saving: boolean;
   /** Set when the server refused the save because the page moved on. */
   conflict: { currentContentMd: string } | null;
+  /** Shown above the editor when it opened on a starting outline rather than on
+   *  text the team wrote — how to fill it in belongs here, not in the page. */
+  hint?: string;
   onSave: (contentMd: string) => void;
   onCancel: () => void;
   onTakeTheirs: (contentMd: string) => void;
@@ -64,6 +67,7 @@ export function WikiEditor({
   maxChars,
   saving,
   conflict,
+  hint,
   onSave,
   onCancel,
   onTakeTheirs,
@@ -111,6 +115,8 @@ export function WikiEditor({
           </div>
         </div>
       )}
+
+      {hint && <p className={styles.hint}>{hint}</p>}
 
       {tooLong && (
         <p className={styles.tooLong} role="alert">

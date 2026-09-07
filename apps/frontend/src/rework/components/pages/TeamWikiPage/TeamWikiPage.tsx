@@ -31,6 +31,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
+import { rulesDraft } from "@rework/features/teamWiki/rulesDraft";
 import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
 import {
   useCreateWikiPageMutation,
@@ -406,6 +407,7 @@ export default function TeamWikiPage() {
             maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
             saving={savingPage || savingRules}
             conflict={conflict}
+            hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
             onSave={handleSave}
             onCancel={leaveEditor}
             onTakeTheirs={(current) => {
@@ -442,7 +444,10 @@ export default function TeamWikiPage() {
               setEditingTarget({
                 pageId: detail.page.page_id,
                 title: isRules ? t("rework.wiki.rules.title") : detail.page.title,
-                content: detail.content_md,
+                // The rules page opens on a starting outline the first time, so
+                // an editor is not asked to invent the shape of the one page
+                // every agent reads. Nothing is stored until they save.
+                content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.content_md,
                 revisionId: detail.revision_id ?? null,
               });
             }}
