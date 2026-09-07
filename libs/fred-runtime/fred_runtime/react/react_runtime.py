@@ -44,6 +44,7 @@ from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
+    ToolInvocationResult,
     UiPart,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
@@ -148,6 +149,7 @@ from .react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from .react_tool_loop import build_tool_loop_compiled_react_agent
+from .react_tool_rendering import render_tool_result as _render_tool_result
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
 from .react_tool_utils import sanitize_tool_name as _sanitize_tool_name
@@ -164,6 +166,23 @@ __all__ = [
     "ReActToolCall",
     "_to_runnable_config",
 ]
+
+
+# Trust-boundary rationale and both branches: RUNTIME-EXECUTION-CONTRACT.md §8.74.
+_GENERIC_TOOL_FAILURE_MESSAGE = (
+    "This step failed unexpectedly and could not be completed."
+)
+
+
+def _user_facing_tool_error_text(artifact: ToolInvocationResult | None) -> str:
+    """Trust-boundary error text for a failed call — never `message.content`.
+    Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.74."""
+
+    if artifact is not None and artifact.is_error:
+        rendered = _render_tool_result(artifact).removeprefix("Tool error:\n")
+        if rendered:
+            return rendered
+    return _GENERIC_TOOL_FAILURE_MESSAGE
 
 
 def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
@@ -571,13 +590,19 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         collected_ui_parts = _merge_ui_parts(
                             collected_ui_parts, ui_parts
                         )
-                        is_error = artifact.is_error if artifact is not None else False
+                        # Either signal alone means failure — mirrors
+                        # ToolObservabilityMiddleware's already-correct rule.
+                        status_is_error = message.status == "error"
+                        artifact_is_error = artifact is not None and artifact.is_error
+                        is_error = status_is_error or artifact_is_error
+                        tool_result_content = (
+                            _user_facing_tool_error_text(artifact)
+                            if is_error
+                            else _stringify_content(message.content)
+                        )
                         if is_error:
                             if not round_had_tool_success:
-                                # Strip the "Tool error:\n" prefix added for the LLM's
-                                # benefit — the user-facing message should be clean.
-                                raw = _stringify_content(message.content)
-                                last_tool_error = raw.removeprefix("Tool error:\n")
+                                last_tool_error = tool_result_content
                                 suppress_assistant_deltas = True
                                 logger.debug(
                                     "[V2][REACT] tool error intercepted tool=%s — "
@@ -610,7 +635,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         yield ToolResultRuntimeEvent(
                             sequence=sequence,
                             call_id=message.tool_call_id,
-                            content=_stringify_content(message.content),
+                            content=tool_result_content,
                             tool_name=message.name,
                             is_error=is_error,
                             sources=sources,
