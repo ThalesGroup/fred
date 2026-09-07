@@ -322,6 +322,17 @@ applications:
     env:
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "http://localhost:8088"
+    # Deployment theme: branding assets fetched from the in-cluster seaweedfs at
+    # startup, so the stock image never needs a rebuild. Upload a zip laid out
+    # like apps/frontend/public/ to this key; with no bucket or object the pod
+    # logs one warning and serves the baked assets. See apps/frontend/README.md.
+    extraEnvVars:
+      - name: FRONTEND_THEME_URL
+        value: "http://seaweedfs:8333/fred-themes/theme.zip"
+      - name: FRONTEND_THEME_S3_ACCESS_KEY
+        value: "admin"
+      - name: FRONTEND_THEME_S3_SECRET_KEY
+        value: "Azerty123_" # pragma: allowlist secret
     ingress:
       enabled: true
       className: "traefik"
