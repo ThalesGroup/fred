@@ -16,7 +16,6 @@ import type { TFunction } from "i18next";
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import type { WikiPageDetail, WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -166,10 +165,7 @@ export function WikiArticle({
 
           <div className={styles.meta}>
             {detail.author_kind === "agent" && (
-              <span className={styles.agentBadge}>
-                <Icon category="outlined" type="smart_toy" filled />
-                {t("rework.wiki.article.writtenByAgent")}
-              </span>
+              <span className={styles.agentBadge}>{t("rework.wiki.article.writtenByAgent")}</span>
             )}
             {edited && <span>{edited}</span>}
             {page.needs_review && (
@@ -180,7 +176,6 @@ export function WikiArticle({
                 disabled={!canEdit}
                 title={canEdit ? t("rework.wiki.article.clearReviewHint") : undefined}
               >
-                <Icon category="outlined" type="reviews" filled />
                 {t(canEdit ? "rework.wiki.article.markReviewed" : "rework.wiki.article.awaitingReview")}
               </button>
             )}

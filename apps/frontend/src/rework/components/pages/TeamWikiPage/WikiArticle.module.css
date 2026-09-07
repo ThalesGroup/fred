@@ -117,10 +117,9 @@
 .agentBadge {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-3xs);
   border-radius: var(--radius-full);
   background: var(--tertiary-container);
-  padding: 2px var(--spacing-2xs);
+  padding: 2px var(--spacing-xs);
   color: var(--on-tertiary-container);
   font: var(--font-label-small);
 }
@@ -128,12 +127,11 @@
 .reviewChip {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-3xs);
   cursor: pointer;
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-full);
   background: none;
-  padding: 2px var(--spacing-2xs);
+  padding: 2px var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
 }
