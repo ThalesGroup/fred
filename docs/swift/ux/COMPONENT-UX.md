@@ -189,10 +189,13 @@ the former alone, so `editable` by itself still let a drop edit a locked field. 
 turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
 rewrite what is typed and a prompt's tags must survive verbatim.
 
-A copy button fades in over the top-right corner on hover, and on focus so it is reachable without
-a pointer. It copies the live CodeMirror document rather than the last `value` the parent rendered,
-and reports through the toast provider either way — a silent clipboard failure would look
-identical to success.
+A transparent (`variant="icon"`) copy button fades in over the top-right corner on hover, and on
+keyboard focus so it is reachable without a pointer. The reveal keys on `:focus-visible`, not
+`:focus-within`: a click leaves the button focused, which kept it on screen after the pointer had
+left. It copies the live CodeMirror document rather than the last `value` the parent rendered, and
+reports through the toast provider either way — a silent clipboard failure would look identical to
+success. On a successful copy the icon becomes a check for two seconds; a refused clipboard leaves
+it unchanged, so the icon never claims a copy that did not happen.
 
 `PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
 

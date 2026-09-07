@@ -16,8 +16,10 @@
   flex-direction: column;
 }
 
-/* Revealed on hover, and on focus so it is reachable without a pointer —
-   `opacity` rather than `display`, which would drop it out of the tab order. */
+/* Revealed on hover, and on keyboard focus so it is reachable without a
+   pointer — `opacity` rather than `display`, which would drop it out of the tab
+   order. `:focus-visible`, not `:focus-within`: a click leaves the button
+   focused, and matching that kept it on screen after the pointer had left. */
 .copyButton {
   position: absolute;
   top: var(--spacing-2xs);
@@ -27,7 +29,7 @@
 }
 
 .field:hover .copyButton,
-.copyButton:focus-within {
+.copyButton:has(:focus-visible) {
   opacity: 1;
 }
 

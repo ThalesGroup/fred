@@ -29,7 +29,7 @@ import { tags } from "@lezer/highlight";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import { type CSSProperties, useEffect, useId, useRef } from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PromptEditor.module.css";
 
@@ -95,6 +95,10 @@ export function PromptEditor({
   const viewRef = useRef<EditorView | null>(null);
   const editableRef = useRef(new Compartment());
   const placeholderRef = useRef(new Compartment());
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => clearTimeout(copiedTimer.current ?? undefined), []);
 
   // The listener reads the current onChange through a ref: rebuilding the
   // editor on every render would drop the selection on each keystroke.
@@ -183,8 +187,14 @@ export function PromptEditor({
   const handleCopy = async () => {
     const text = viewRef.current?.state.doc.toString() ?? value;
     const ok = await writeRichClipboard("", text);
-    if (ok) showSuccess({ summary: t("rework.promptEditor.copied") });
-    else showError({ summary: t("rework.promptEditor.copyFailed") });
+    if (!ok) {
+      showError({ summary: t("rework.promptEditor.copyFailed") });
+      return;
+    }
+    showSuccess({ summary: t("rework.promptEditor.copied") });
+    setCopied(true);
+    clearTimeout(copiedTimer.current ?? undefined);
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -201,9 +211,9 @@ export function PromptEditor({
         {value.trim() !== "" && (
           <div className={styles.copyButton}>
             <IconButton
-              variant="tonal"
+              variant="icon"
               size="medium"
-              icon={{ category: "outlined", type: "content_copy" }}
+              icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
               aria-label={t("rework.promptEditor.copy")}
               onClick={handleCopy}
             />

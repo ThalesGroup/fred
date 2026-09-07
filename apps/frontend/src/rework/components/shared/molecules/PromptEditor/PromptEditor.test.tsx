@@ -202,6 +202,18 @@ describe("PromptEditor", () => {
     expect(writeRichClipboard).toHaveBeenCalledWith("", "hello world");
     expect(showSuccess).toHaveBeenCalledWith({ summary: "rework.promptEditor.copied" });
     expect(showError).not.toHaveBeenCalled();
+    expect(copyButton()!.querySelector(".material-symbols-outlined")?.textContent).toBe("check");
+  });
+
+  it("keeps the copy icon when the clipboard refused", async () => {
+    writeRichClipboard.mockResolvedValue(false);
+    render({ value: "hello" });
+
+    await act(async () => {
+      copyButton()!.click();
+    });
+
+    expect(copyButton()!.querySelector(".material-symbols-outlined")?.textContent).toBe("content_copy");
   });
 
   it("reports a failed copy instead of claiming success", async () => {
