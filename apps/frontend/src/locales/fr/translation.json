@@ -3084,7 +3084,8 @@
         "pendingReview": "{{count}} page à relire",
         "pendingReview_other": "{{count}} pages à relire",
         "nothingToReview": "Rien à relire.",
-        "addChild": "Ajouter une sous-page à {{title}}"
+        "addChild": "Ajouter une sous-page à {{title}}",
+        "addChildTooltip": "Ajouter une sous-page"
       },
       "article": {
         "breadcrumb": "Fil d’Ariane",

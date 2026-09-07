@@ -3084,7 +3084,8 @@
         "pendingReview": "{{count}} page to review",
         "pendingReview_other": "{{count}} pages to review",
         "nothingToReview": "Nothing waiting for a review.",
-        "addChild": "Add a sub-page to {{title}}"
+        "addChild": "Add a sub-page to {{title}}",
+        "addChildTooltip": "Add a sub-page"
       },
       "article": {
         "breadcrumb": "Breadcrumb",

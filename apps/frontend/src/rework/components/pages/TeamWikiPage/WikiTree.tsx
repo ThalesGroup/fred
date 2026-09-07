@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { buildWikiTree, canHaveChild, visibleNodes } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiTree.module.css";
@@ -136,20 +137,25 @@ export function WikiTree({
                   no second field to fill, and nothing to get wrong. */}
               {canEdit && !reviewOnly && canHaveChild(depth) && (
                 <span className={styles.addChild}>
-                  <IconButton
-                    icon={{ category: "outlined", type: "add" }}
-                    variant="icon"
-                    size="small"
-                    onClick={() => {
-                      setCollapsed((current) => {
-                        const next = new Set(current);
-                        next.delete(page.page_id);
-                        return next;
-                      });
-                      onAddChild(page);
-                    }}
-                    aria-label={t("rework.wiki.tree.addChild", { title: page.title })}
-                  />
+                  {/* The tooltip stays generic while the accessible name keeps
+                      the page's title: a pointer already says which row it is
+                      on, a screen reader does not. */}
+                  <Tooltip text={t("rework.wiki.tree.addChildTooltip")}>
+                    <IconButton
+                      icon={{ category: "outlined", type: "add" }}
+                      variant="icon"
+                      size="small"
+                      onClick={() => {
+                        setCollapsed((current) => {
+                          const next = new Set(current);
+                          next.delete(page.page_id);
+                          return next;
+                        });
+                        onAddChild(page);
+                      }}
+                      aria-label={t("rework.wiki.tree.addChild", { title: page.title })}
+                    />
+                  </Tooltip>
                 </span>
               )}
             </div>
