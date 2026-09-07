@@ -38,10 +38,10 @@ import json
 import logging
 import os
 import re
-from urllib.parse import quote
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Protocol, TypedDict, cast
+from urllib.parse import quote
 
 import httpx
 from fred_core.common import OwnerFilter
