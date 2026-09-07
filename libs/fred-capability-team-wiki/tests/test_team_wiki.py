@@ -64,6 +64,10 @@ class _FakePort(TeamWikiPort):
         self.rules_calls = 0
         self.proposed: list[tuple[str, str]] = []
         self.published: list[str] = []
+        # What the next publish lands as, so a test can publish onto an
+        # existing page (an edit) or onto a new one (a creation).
+        self.publish_slug = "some-slug"
+        self.publish_title = "Some Page"
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         self.list_calls += 1
@@ -110,7 +114,15 @@ class _FakePort(TeamWikiPort):
         if self._raises is not None:
             raise self._raises
         self.published.append(proposal_id)
-        return "some-slug"
+        # A publish changes the tree, and the tools re-read it to name where
+        # the page ended up. A fake that published into nothing would let the
+        # "it is still at <path>" wording pass untested.
+        if all(page.slug != self.publish_slug for page in self._pages):
+            self._pages = (
+                *self._pages,
+                _page(self.publish_slug, self.publish_title),
+            )
+        return self.publish_slug
 
 
 def _ctx(port: TeamWikiPort | None, mode: str = "read") -> Any:
@@ -372,7 +384,7 @@ def test_read_write_mode_adds_proposing_and_publishing_only() -> None:
     assert names == {
         "wiki_list_pages",
         "wiki_read_page",
-        "wiki_propose_edit",
+        "wiki_propose_page_text",
         "wiki_propose_page",
         "wiki_publish_proposal",
     }
@@ -397,22 +409,38 @@ def test_publishing_an_edit_says_the_page_did_not_move() -> None:
     bare "Published" was all it had to go on. The result names what changed."""
 
     port = _FakePort(pages=(_page("s1", "S"),))
+    port.publish_slug = "s1"
     turn = _tools(port, "read_write")
-    _call(port, "wiki_propose_edit", {"path": "S", "content_md": "new"}, turn)
+    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
 
     assert "text was replaced" in message.content
-    assert "unchanged" in message.content
+    # The page's real path, not a general assurance: a belief that the page
+    # moved has to contradict a literal address to survive.
+    assert "still at 'S'" in message.content
+    assert "never moves a page" in message.content
 
 
 def test_publishing_a_new_page_says_it_was_created() -> None:
     port = _FakePort(pages=(_page("s1", "S"),))
+    port.publish_title = "T"
     turn = _tools(port, "read_write")
     _call(port, "wiki_propose_page", {"title": "T", "content_md": "x"}, turn)
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-1"}, turn)
 
-    assert "created" in message.content
+    assert "created at 'T'" in message.content
     assert "text was replaced" not in message.content
+
+
+def test_the_text_tool_is_named_for_its_scope() -> None:
+    """The tool name is read on every call decision, which makes it a stronger
+    channel than the prompt. `wiki_propose_edit` read as covering a
+    reorganisation, and in the field an agent used it for one."""
+
+    names = set(_tools(_FakePort(), "read_write"))
+
+    assert "wiki_propose_page_text" in names
+    assert "wiki_propose_edit" not in names
 
 
 def test_the_write_prompt_refuses_moving_and_orders_parent_before_child() -> None:
@@ -431,7 +459,7 @@ def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
     made — which is exactly what happened before the write path existed."""
 
     port = _FakePort(pages=(_page("s1", "S"),))
-    message = _call(port, "wiki_propose_edit", {"path": "S", "content_md": "new"})
+    message = _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"})
 
     # Addressed by path; the port still receives the slug it has always taken.
     assert port.proposed == [("s1", "new")]

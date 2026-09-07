@@ -364,8 +364,11 @@ platform admin grants it per team. Its `ConfigModel` carries a single field:
 Tools, built per turn in `tools()`:
 
 - always: `wiki_list_pages`, `wiki_read_page`
-- when `mode = read_write`: `wiki_propose_page`, `wiki_propose_edit`, both
-  declared with `HitlSpec(require=True)`
+- when `mode = read_write`: `wiki_propose_page`, `wiki_propose_page_text`
+  (2026-09-07: named for its scope — an agent read `wiki_propose_edit` as
+  covering a reorganisation and used it to "move" two pages by republishing
+  their own text), and `wiki_publish_proposal`, which carries
+  `HitlSpec(require=True)`
 
 No delete tool and no rename tool exist. That is the enforcement of §5.4's
 invariant — not a check that could be bypassed, but an absence.
@@ -436,7 +439,7 @@ shipping the risk without the mitigation.
 ### 8.6 The rules page
 
 One per team, at a fixed slug, `kind = "rules"`. Editable only by editors, and
-only in the UI. Excluded from `wiki_propose_edit` by its `kind`, so no agent can
+only in the UI. Excluded from `wiki_propose_page_text` by its `kind`, so no agent can
 modify it under any configuration. Capped at 4 000 characters.
 
 **What it is honestly worth.** A rules page in the prompt *orients strongly*; it

@@ -304,7 +304,7 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         if self._can_write:
             parts.append(
                 "\nYou can read this wiki and propose changes to it. A proposal "
-                "changes nothing on its own: prepare it with wiki_propose_edit "
+                "changes nothing on its own: prepare it with wiki_propose_page_text "
                 "or wiki_propose_page, then call wiki_publish_proposal, which "
                 "asks the user to approve it. Read a page before proposing an "
                 "edit — your text replaces it whole, so it must be the complete "
@@ -590,11 +590,17 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             "to ask the user to approve it."
         )
 
-        @tool("wiki_propose_edit", response_format="content_and_artifact")
-        async def wiki_propose_edit(
+        # Named for its scope, not for "editing": a model asked to reorganise
+        # the wiki reads `wiki_propose_edit` as covering that, and in the field
+        # one used it to "move" two pages by republishing their own text.
+        @tool("wiki_propose_page_text", response_format="content_and_artifact")
+        async def wiki_propose_page_text(
             path: str, content_md: str
         ) -> tuple[str, ToolInvocationResult]:
-            """Suggest new content for an existing wiki page, by its path.
+            """Suggest new TEXT for an existing wiki page, by its path.
+
+            This changes what the page says and nothing else. It cannot move,
+            rename or delete a page — no tool here can.
 
             A path is the page's titles from the top joined by " / ", the same
             address wiki_read_page takes.
@@ -632,7 +638,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         async def wiki_propose_page(
             title: str, content_md: str, parent_path: str | None = None
         ) -> tuple[str, ToolInvocationResult]:
-            """Suggest a NEW wiki page. Use wiki_propose_edit for one that exists.
+            """Suggest a NEW wiki page. Use wiki_propose_page_text for one that exists.
 
             `parent_path` nests it under an existing page, addressed the way
             wiki_read_page addresses one; omit it for a top-level page. Check
@@ -698,18 +704,20 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 tree = None
             published = next((p for p in await _tree() if p.slug == slug), None)
             where = f" '{_page_path(await _tree(), published)}'" if published else ""
-            # Named for what it did, not just that it worked. An agent that
-            # tried to MOVE a page through an edit read a bare "Published" as
-            # confirmation of the move, and told the user so.
+            # The page's ACTUAL path now, not a general assurance that nothing
+            # moved: an agent that believed it had moved a page restated a
+            # hierarchy that did not exist, and only a literal address gives
+            # that belief something specific to contradict.
+            at = where or " (its path could not be read back)"
             did = (
-                "Its text was replaced; where it sits in the tree is unchanged"
+                f"Its text was replaced. It is still at{at} — publishing new "
+                "text never moves a page."
                 if proposal_kind.get(proposal_id) == "edit"
-                else "It was created"
+                else f"The page was created at{at}."
             )
             text = (
-                f"Published. The page{where} is live. {did}. It carries the "
-                "review mark every agent-written page gets until an editor "
-                "clears it."
+                f"Published. {did} It carries the review mark every "
+                "agent-written page gets until an editor clears it."
             )
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
@@ -719,7 +727,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         return [
             wiki_list_pages,
             wiki_read_page,
-            wiki_propose_edit,
+            wiki_propose_page_text,
             wiki_propose_page,
             wiki_publish_proposal,
         ]
