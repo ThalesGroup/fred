@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -41,6 +50,18 @@ class TeamWikiPageRow(Base):
     __tablename__ = "team_wiki_pages"
     __table_args__ = (
         UniqueConstraint("team_id", "slug", name="uq_team_wiki_pages_team_slug"),
+        # Raw SQL in migration e4a71b9c6d38 creates the real index; this is its
+        # metadata twin, PostgreSQL-only via `ddl_if` — without it, `alembic
+        # check` sees a DB index with nothing in the ORM to match and proposes
+        # dropping it, and `create_all` (control-plane's SQLite test fixtures)
+        # would otherwise try `regexp_replace`, which SQLite does not have.
+        Index(
+            "uq_team_wiki_pages_sibling_title",
+            "team_id",
+            text("COALESCE(parent_page_id, '')"),
+            text("lower(btrim(regexp_replace(title, '[ \\t\\n\\r\\f\\v]+', ' ', 'g')))"),
+            unique=True,
+        ).ddl_if(dialect="postgresql"),
     )
 
     page_id: Mapped[str] = mapped_column(String, primary_key=True)
