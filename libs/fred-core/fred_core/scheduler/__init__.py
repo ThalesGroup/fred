@@ -17,11 +17,14 @@ from fred_core.scheduler.backend import (
     resolve_scheduler_backend,
 )
 from fred_core.scheduler.scheduler_structures import SchedulerInputArgsV1
+from fred_core.scheduler.schedules import delete_schedule_if_exists, ensure_schedule
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
 __all__ = [
     "SchedulerBackend",
     "TemporalClientProvider",
     "SchedulerInputArgsV1",
+    "delete_schedule_if_exists",
+    "ensure_schedule",
     "resolve_scheduler_backend",
 ]

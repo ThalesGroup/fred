@@ -15,9 +15,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
+from minio.error import S3Error
 
 from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
 
@@ -42,6 +46,19 @@ class _FakeMinio:
         payload = Path(file_path).read_bytes()
         self._objects[(bucket_name, object_name)] = payload
         self.fput_calls.append((bucket_name, object_name, file_path, content_type))
+
+    def put_object(self, bucket_name: str, object_name: str, data, length: int = -1, content_type: str | None = None, **kwargs) -> None:
+        del content_type, kwargs
+        self._objects[(bucket_name, object_name)] = data.read() if length < 0 else data.read(length)
+
+    def list_objects(self, bucket_name: str, prefix: str = "", recursive: bool = False):
+        del recursive
+        for (bucket, name), payload in sorted(self._objects.items()):
+            if bucket == bucket_name and name.startswith(prefix):
+                yield SimpleNamespace(object_name=name, size=len(payload), last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc), etag="etag-value")
+
+    def remove_object(self, bucket_name: str, object_name: str) -> None:
+        self._objects.pop((bucket_name, object_name), None)
 
     def stat_object(self, bucket_name: str, object_name: str) -> SimpleNamespace:
         payload = self._objects[(bucket_name, object_name)]
@@ -84,7 +101,7 @@ def test_put_file_uses_direct_minio_file_upload(monkeypatch, tmp_path):
     assert stored.file_name == "data.parquet"
 
 
-def test_get_preview_bytes_releases_connection(monkeypatch):
+def test_get_output_artifact_releases_connection(monkeypatch):
     # get_object returns a urllib3 response that must be released back to the pool;
     # without it every preview fetch leaks a connection and the pool is exhausted.
     monkeypatch.setattr("knowledge_flow_backend.core.stores.content.minio_content_store.Minio", _FakeMinio)
@@ -100,7 +117,7 @@ def test_get_preview_bytes_releases_connection(monkeypatch):
     resp.read.return_value = b"image-bytes"
     store.client.get_object = MagicMock(return_value=resp)
 
-    data = store.get_preview_bytes("doc-1/preview.png")
+    data = store.get_output_artifact("doc-1/preview.png")
 
     assert data == b"image-bytes"
     resp.close.assert_called_once()
@@ -125,3 +142,57 @@ def test_internal_presigned_url_uses_internal_minio_client(monkeypatch):
 
     assert public_url.startswith("https://public-minio.example/")
     assert internal_url.startswith("http://internal-minio:9000/")
+
+
+def _make_store(monkeypatch) -> MinioStorageBackend:
+    monkeypatch.setattr("knowledge_flow_backend.core.stores.content.minio_content_store.Minio", _FakeMinio)
+    return MinioStorageBackend(
+        endpoint="http://internal-minio:9000",
+        access_key="minio",
+        secret_key="minio-secret",  # pragma: allowlist secret
+        document_bucket="documents",
+        object_bucket="objects",
+        secure=False,
+    )
+
+
+def test_list_output_artifacts_filters_the_document_bucket_by_suffix(monkeypatch):
+    store = _make_store(monkeypatch)
+    store.put_output_artifact("doc-a/output/render.pdf", b"a", content_type="application/pdf")
+    store.put_output_artifact("doc-b/output/render.pdf", b"bb", content_type="application/pdf")
+    store.put_output_artifact("doc-b/output/output.md", b"# md", content_type="text/markdown")
+    store.put_output_artifact("doc-c/output/nested/render.pdf", b"c", content_type="application/pdf")
+    store.put_object("agents/render.pdf", BytesIO(b"other bucket"), content_type="application/pdf")
+
+    found = store.list_output_artifacts("render.pdf")
+
+    assert [(o.key, o.document_uid, o.size) for o in found] == [
+        ("doc-a/output/render.pdf", "doc-a", 1),
+        ("doc-b/output/render.pdf", "doc-b", 2),
+    ]
+    assert all(o.modified == datetime(2026, 1, 1, tzinfo=timezone.utc) for o in found)
+
+
+def test_delete_output_artifact_is_idempotent_and_scoped(monkeypatch):
+    store = _make_store(monkeypatch)
+    store.put_output_artifact("doc-a/output/render.pdf", b"a", content_type="application/pdf")
+    store.put_output_artifact("doc-a/output/output.md", b"# md", content_type="text/markdown")
+
+    store.delete_output_artifact("doc-a/output/render.pdf")
+    store.delete_output_artifact("doc-a/output/render.pdf")
+
+    assert store.list_output_artifacts("render.pdf") == []
+    assert [o.key for o in store.list_output_artifacts("output.md")] == ["doc-a/output/output.md"]
+
+
+def test_list_output_artifacts_wraps_a_listing_failure(monkeypatch):
+    store = _make_store(monkeypatch)
+
+    def _boom(*args, **kwargs):
+        raise S3Error(MagicMock(), "AccessDenied", "denied", "documents", "req", "host")
+        yield  # keep it a generator like the real client
+
+    store.client.list_objects = _boom
+
+    with pytest.raises(RuntimeError, match="list_output_artifacts failed"):
+        store.list_output_artifacts("render.pdf")

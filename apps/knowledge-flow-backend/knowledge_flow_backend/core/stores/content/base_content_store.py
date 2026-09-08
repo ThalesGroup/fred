@@ -85,9 +85,35 @@ class BaseContentStore(ABC):
         """
 
     @abstractmethod
-    def get_preview_bytes(self, doc_path: str) -> bytes:
+    def get_output_artifact(self, doc_path: str) -> bytes:
         """
-        Returns the preview image bytes (from preview/preview.png).
+        Return ONE derived artifact at a document-scoped path
+        (`{document_uid}/output/...`); raise FileNotFoundError if absent.
+        """
+
+    @abstractmethod
+    def put_output_artifact(self, doc_path: str, data: bytes, *, content_type: str) -> None:
+        """Store/replace ONE derived artifact at a document-scoped path.
+
+        The write counterpart of `get_output_artifact`: same address space
+        (`{document_uid}/output/...`), so what is written here is read back by
+        that method and deleted with the document by `delete_content`. Use this
+        rather than `save_output`, which replaces the whole output/ folder.
+        """
+
+    @abstractmethod
+    def delete_output_artifact(self, doc_path: str) -> None:
+        """
+        Delete the derived artifact at `doc_path` (e.g. "{uid}/output/render.pdf").
+        Deleting an artifact that is already gone is not an error.
+        """
+
+    @abstractmethod
+    def list_output_artifacts(self, artifact_name: str) -> List[StoredObjectInfo]:
+        """
+        Return every "{document_uid}/output/{artifact_name}" object in the document
+        tree, `document_uid` and `modified` filled in. Raise on a listing failure
+        rather than returning a partial list.
         """
 
     @abstractmethod
