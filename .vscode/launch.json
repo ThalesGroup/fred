@@ -14,15 +14,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8000",
+        "9512",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml"
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
@@ -44,16 +40,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8000",
+        "9512",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml",
-
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
@@ -75,16 +66,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8000",
+        "9512",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml",
-
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
@@ -106,15 +92,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8111",
+        "9825",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/knowledge-flow-backend/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml"
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend",
@@ -136,15 +118,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8111",
+        "9825",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/knowledge-flow-backend/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml"
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend",
@@ -166,16 +144,11 @@
         "--host",
         "0.0.0.0",
         "--port",
-        "8222",
+        "9996",
         "--log-level",
         "info",
         "--loop",
-        "asyncio",
-        "--reload",
-        "--reload-dir", "${workspaceFolder}/apps/control-plane-backend/config",
-        "--reload-include", "*.py",
-        "--reload-include", "*.yaml",
-
+        "asyncio"
       ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}/apps/control-plane-backend",
