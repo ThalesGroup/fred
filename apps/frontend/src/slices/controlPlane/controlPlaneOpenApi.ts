@@ -809,6 +809,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/revisions`,
+        params: {
+          cursor: queryArg.cursor,
+        },
       }),
     }),
     restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: build.mutation<
@@ -1877,6 +1880,8 @@ export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApi
 export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiArg = {
   teamId: string;
   pageId: string;
+  /** From a previous response's `next_cursor`, to fetch older revisions. */
+  cursor?: string | null;
 };
 export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiResponse =
   /** status 200 Successful Response */ WikiPageDetail;
@@ -3434,6 +3439,8 @@ export type WikiRevisionList = {
   contents?: {
     [key: string]: string;
   };
+  /** Opaque; pass back as `cursor` to fetch the next, older page. Null when `revisions` already reaches the oldest one. Not a frozen snapshot: a proposal keeps its original `created_at` when later approved, so approving one whose timestamp falls in a page already fetched will not surface it by continuing — reopen history from the top (omit `cursor`) to see it. */
+  next_cursor?: string | null;
 };
 export type WikiProposal = {
   proposal_id: string;

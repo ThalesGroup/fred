@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from control_plane_backend.models.base import Base as CPBase
+from control_plane_backend.models.team_wiki_models import TeamWikiRevisionRow
 from control_plane_backend.team_wiki.store import (
+    RevisionCursor,
     TeamWikiStore,
     WikiPageConstraintError,
     WikiPageDepthExceededError,
@@ -13,13 +16,16 @@ from control_plane_backend.team_wiki.store import (
     WikiPageNotFoundError,
     WikiPageRecord,
     WikiPageRulesParentError,
+    WikiPageWithContent,
     WikiRevisionConflictError,
+    WikiRevisionRecord,
     _child_depth_under,
     _is_descendant,
     _StaleBaseWrite,
     _subtree_height,
 )
 from fred_core.common import TeamId
+from sqlalchemy import event, update
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 TEAM_A = TeamId("team-a")
@@ -31,6 +37,21 @@ async def _make_store(tmp_path: Path, name: str) -> tuple[TeamWikiStore, AsyncEn
     async with engine.begin() as conn:
         await conn.run_sync(CPBase.metadata.create_all)
     return TeamWikiStore(engine=engine), engine
+
+
+async def _set_created_at(
+    store: TeamWikiStore, revision_id: str, when: datetime
+) -> None:
+    """Test-only backdoor to force a tie or an out-of-order timestamp: real
+    inserts always land at `_utcnow()`, so constructing either scenario
+    through the public API alone is impractical."""
+
+    async with store._sessions() as s, s.begin():  # noqa: SLF001
+        await s.execute(
+            update(TeamWikiRevisionRow)
+            .where(TeamWikiRevisionRow.revision_id == revision_id)
+            .values(created_at=when)
+        )
 
 
 @pytest.mark.asyncio
@@ -467,6 +488,460 @@ async def test_deleting_a_leaf_removes_its_revisions(tmp_path: Path) -> None:
 
         assert await store.get_page(TEAM_A, created.page.page_id) is None
         assert await store.list_revisions(TEAM_A, created.page.page_id) == []
+    finally:
+        await engine.dispose()
+
+
+# ── history pagination (WIKI-05) ──────────────────────────────────────────────
+
+
+async def _add_revisions(
+    store: TeamWikiStore, page_id: str, base: str | None, contents: list[str]
+) -> list[str]:
+    """Publishes `contents` in order, each on top of the last. Returns every
+    revision id created, oldest first."""
+
+    ids: list[str] = []
+    for content_md in contents:
+        revision = await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md=content_md,
+            base_revision_id=base,
+            author_user_id="alice",
+        )
+        base = revision.revision_id
+        ids.append(revision.revision_id)
+    return ids
+
+
+def _cursor_after(revision: WikiRevisionRecord) -> RevisionCursor:
+    """The keyset position just past `revision` — every real row has a
+    `created_at` once persisted; this is what narrows the type for the
+    `RevisionCursor` it builds."""
+
+    assert revision.created_at is not None
+    return RevisionCursor(
+        created_at=revision.created_at, revision_id=revision.revision_id
+    )
+
+
+def _first_revision_id(page: WikiPageWithContent) -> str:
+    """`create_page` always mints a first revision — `current_revision_id` is
+    only `None` in the ORM's own type for the instant between the page and
+    revision inserts, which this store method never observes."""
+
+    revision_id = page.page.current_revision_id
+    assert revision_id is not None
+    return revision_id
+
+
+@pytest.mark.asyncio
+async def test_list_revisions_bounds_the_query_in_sql(tmp_path: Path) -> None:
+    """Proof the LIMIT lives in the SQL, not a Python slice after loading
+    everything: reverting to that would still return the right COUNT here,
+    which is why this inspects the emitted statement instead of only len()."""
+
+    store, engine = await _make_store(tmp_path, "bounded.sqlite3")
+    captured: list[str] = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _capture(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        captured.append(statement)
+
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        await _add_revisions(
+            store,
+            page_id,
+            created.page.current_revision_id,
+            [f"v{i}" for i in range(1, 6)],
+        )
+
+        captured.clear()
+        revisions = await store.list_revisions(TEAM_A, page_id, limit=2)
+        assert len(revisions) == 2
+
+        selects = [
+            sql
+            for sql in captured
+            if "team_wiki_revisions" in sql and sql.strip().upper().startswith("SELECT")
+        ]
+        assert selects, "expected a SELECT against team_wiki_revisions"
+        assert "LIMIT" in selects[-1].upper()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_revisions_walks_more_than_a_page_without_gaps_or_duplicates(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "walk.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        total = 7
+        v0_id = _first_revision_id(created)
+        all_ids = [v0_id] + await _add_revisions(
+            store, page_id, v0_id, [f"v{i}" for i in range(1, total)]
+        )
+
+        walked: list[str] = []
+        cursor: RevisionCursor | None = None
+        page_size = 3
+        for _ in range(10):  # generous bound, never an endless loop
+            page = await store.list_revisions(
+                TEAM_A, page_id, limit=page_size, before=cursor
+            )
+            if not page:
+                break
+            walked.extend(r.revision_id for r in page)
+            cursor = _cursor_after(page[-1])
+            if len(page) < page_size:
+                break
+
+        assert walked == list(reversed(all_ids))
+        assert len(set(walked)) == total
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_revisions_cursor_is_exact_under_tied_timestamps(
+    tmp_path: Path,
+) -> None:
+    """Several revisions sharing one `created_at` is ordinary (an edit then a
+    restore inside the same second) — the walk must still be exact, broken
+    only by `revision_id`."""
+
+    store, engine = await _make_store(tmp_path, "ties.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = _first_revision_id(created)
+        all_ids = [v0_id] + await _add_revisions(
+            store, page_id, v0_id, [f"v{i}" for i in range(1, 5)]
+        )
+
+        same_instant = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        for revision_id in all_ids:
+            await _set_created_at(store, revision_id, same_instant)
+
+        walked: list[str] = []
+        cursor: RevisionCursor | None = None
+        for _ in range(10):
+            page = await store.list_revisions(TEAM_A, page_id, limit=1, before=cursor)
+            if not page:
+                break
+            walked.append(page[0].revision_id)
+            cursor = _cursor_after(page[0])
+
+        assert sorted(walked) == sorted(all_ids)
+        assert len(set(walked)) == len(all_ids)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_write_landing_mid_walk_does_not_shift_an_older_page(
+    tmp_path: Path,
+) -> None:
+    """New revisions land only at the newest end. A walk already anchored on
+    an older cursor must be unaffected by one appearing while it is in
+    progress — unlike an offset, which every such insert would shift."""
+
+    store, engine = await _make_store(tmp_path, "midwalk.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = _first_revision_id(created)
+        ids = [v0_id] + await _add_revisions(store, page_id, v0_id, ["v1", "v2", "v3"])
+
+        first_page = await store.list_revisions(TEAM_A, page_id, limit=2)
+        cursor = _cursor_after(first_page[-1])
+
+        # A concurrent write lands while the reader is mid-walk.
+        await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md="v-concurrent",
+            base_revision_id=ids[-1],
+            author_user_id="bob",
+        )
+
+        second_page = await store.list_revisions(
+            TEAM_A, page_id, limit=2, before=cursor
+        )
+        first_seen = {r.revision_id for r in first_page}
+        second_seen = {r.revision_id for r in second_page}
+        assert not (first_seen & second_seen)
+        assert all(r.content_md != "v-concurrent" for r in second_page)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sort_columns_never_change_after_insert(tmp_path: Path) -> None:
+    """`created_at` and `revision_id` are the keyset's watermark — if either
+    could change after insert, a cursor anchored on an earlier read would no
+    longer identify the same boundary."""
+
+    store, engine = await _make_store(tmp_path, "stable_sort.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="v0",
+            author_user_id="alice",
+            author_kind="agent",
+        )
+        revision_id = created.page.current_revision_id
+        assert revision_id is not None
+        before = await store.get_revision(TEAM_A, revision_id)
+        assert before is not None
+
+        await store.set_needs_review(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            needs_review=False,
+            reviewed_by="bob",
+        )
+
+        after = await store.get_revision(TEAM_A, revision_id)
+        assert after is not None
+        assert after.created_at == before.created_at
+        assert after.revision_id == before.revision_id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publishing_a_proposal_never_backdates_into_an_already_read_page(
+    tmp_path: Path,
+) -> None:
+    """A pending proposal's `created_at` is proposal time, not approval time —
+    in principle a later-approved revision could surface "behind" a cursor a
+    reader had already established. In practice this is closed by
+    `publish_proposal`'s own base-revision guard (CONTROL-PLANE-PRODUCT-
+    CONTRACT.md §49): a proposal can only be approved while its base is still
+    the page's current revision, i.e. nothing else was published since — so
+    the approved revision is always the newest thing on the page, never older
+    than anything a reader has already paged past.
+    """
+
+    store, engine = await _make_store(tmp_path, "proposal_ordering.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = created.page.current_revision_id
+        assert v0_id is not None
+
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md="proposed edit",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+
+        # A reader walks the page's history to its current end...
+        first_page = await store.list_revisions(TEAM_A, page_id, limit=10)
+        assert [r.revision_id for r in first_page] == [v0_id]
+        cursor = _cursor_after(first_page[-1])
+
+        # ...then the pending proposal is approved, with nothing else having
+        # touched the page in between: its base is still current, so this
+        # succeeds rather than conflicting.
+        await store.publish_proposal(
+            team_id=TEAM_A,
+            revision_id=proposal.revision_id,
+            slug="unused",
+            approver_user_id="bob",
+        )
+
+        # It shows up at the very front of a fresh read...
+        fresh = await store.list_revisions(TEAM_A, page_id, limit=10)
+        assert fresh[0].revision_id == proposal.revision_id
+
+        # ...and never behind the reader's already-established cursor.
+        continued = await store.list_revisions(TEAM_A, page_id, limit=10, before=cursor)
+        assert proposal.revision_id not in {r.revision_id for r in continued}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publishing_a_stale_proposal_is_refused_not_silently_backdated(
+    tmp_path: Path,
+) -> None:
+    """The other half of the guard above: if something DID land on the page
+    after the proposal was drafted, approving it is refused rather than
+    quietly inserting an old-timestamped revision into already-read history.
+    """
+
+    store, engine = await _make_store(tmp_path, "proposal_stale.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = created.page.current_revision_id
+        assert v0_id is not None
+
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md="proposed edit",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md="v1",
+            base_revision_id=v0_id,
+            author_user_id="alice",
+        )
+
+        with pytest.raises(_StaleBaseWrite):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="unused",
+                approver_user_id="bob",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_revisions_excludes_proposals_from_the_page_and_the_walk(
+    tmp_path: Path,
+) -> None:
+    """A pending proposal must not consume a slot in the page, nor shift where
+    the cursor lands — it is invisible to the query, not merely hidden by the
+    caller after the fact."""
+
+    store, engine = await _make_store(tmp_path, "proposals_excluded.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = created.page.current_revision_id
+        assert v0_id is not None
+        ids = [v0_id] + await _add_revisions(store, page_id, v0_id, ["v1", "v2"])
+
+        await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md="pending",
+            base_revision_id=ids[-1],
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+
+        page = await store.list_revisions(TEAM_A, page_id, limit=2)
+        assert [r.revision_id for r in page] == list(reversed(ids))[:2]
+        assert all(r.content_md != "pending" for r in page)
+
+        cursor = _cursor_after(page[-1])
+        rest = await store.list_revisions(TEAM_A, page_id, limit=2, before=cursor)
+        assert [r.revision_id for r in rest] == [ids[0]]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_an_older_paginated_revision_can_be_restored(tmp_path: Path) -> None:
+    """Acceptance: a revision reached only through `before` (not on the first
+    page) is a perfectly ordinary revision to restore — `restore` addresses a
+    revision by id, never by its position in a page."""
+
+    store, engine = await _make_store(tmp_path, "restore_paginated.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        page_id = created.page.page_id
+        v0_id = _first_revision_id(created)
+        ids = [v0_id] + await _add_revisions(store, page_id, v0_id, ["v1", "v2"])
+
+        first_page = await store.list_revisions(TEAM_A, page_id, limit=1)
+        cursor = _cursor_after(first_page[-1])
+        older_page = await store.list_revisions(TEAM_A, page_id, limit=1, before=cursor)
+        target = older_page[0]
+        assert target.revision_id == ids[1]  # "v1", reached only via `before`
+
+        page = await store.get_page(TEAM_A, page_id)
+        assert page is not None
+        restored = await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=page_id,
+            content_md=target.content_md,
+            base_revision_id=page.current_revision_id,
+            author_user_id="alice",
+        )
+
+        current = await store.get_page(TEAM_A, page_id)
+        assert current is not None
+        assert current.current_revision_id == restored.revision_id
+        assert restored.content_md == "v1"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_cursor_from_one_team_does_not_leak_another_teams_page(
+    tmp_path: Path,
+) -> None:
+    """The cursor is a position within one page's history, never a bypass for
+    the team/page scope the store filters on independently."""
+
+    store, engine = await _make_store(tmp_path, "cursor_cross_team.sqlite3")
+    try:
+        a = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="a0", author_user_id="alice"
+        )
+        b = await store.create_page(
+            team_id=TEAM_B, slug="p", title="P", content_md="b0", author_user_id="carol"
+        )
+        revision = await store.get_revision(TEAM_A, a.page.current_revision_id or "")
+        assert revision is not None
+        assert revision.created_at is not None
+        cursor = RevisionCursor(
+            created_at=revision.created_at + timedelta(seconds=10),
+            revision_id="f" * 32,
+        )
+
+        result = await store.list_revisions(
+            TEAM_B, b.page.page_id, limit=10, before=cursor
+        )
+        assert [r.revision_id for r in result] == [_first_revision_id(b)]
     finally:
         await engine.dispose()
 

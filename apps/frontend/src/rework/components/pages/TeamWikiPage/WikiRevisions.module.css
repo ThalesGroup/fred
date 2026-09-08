@@ -165,3 +165,13 @@ button.entryMain:hover .what {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
+
+/* The bottom of the list: "load older", a retry, or "that's everything" —
+   one of the three, centered, never stacked with the initial spinner above. */
+.pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) 0;
+}

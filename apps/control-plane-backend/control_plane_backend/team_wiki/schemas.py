@@ -81,6 +81,17 @@ class WikiRevisionList(BaseModel):
             f"{MAX_PAGE_CHARS} characters, which bounds this."
         ),
     )
+    next_cursor: str | None = Field(
+        default=None,
+        description=(
+            "Opaque; pass back as `cursor` to fetch the next, older page. "
+            "Null when `revisions` already reaches the oldest one. Not a "
+            "frozen snapshot: a proposal keeps its original `created_at` when "
+            "later approved, so approving one whose timestamp falls in a page "
+            "already fetched will not surface it by continuing — reopen "
+            "history from the top (omit `cursor`) to see it."
+        ),
+    )
 
 
 class CreateWikiPageRequest(BaseModel):

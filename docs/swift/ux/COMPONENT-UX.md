@@ -4150,6 +4150,33 @@ corner the current-version tag would otherwise occupy — the two never appear o
 the same tile. A row of text buttons under every entry cost more height than
 the history it was listing.
 
+### Paged history (2026-09-08, WIKI-05)
+
+`GET .../revisions` is bounded server-side (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49), so `WikiRevisions` owns the walk backward through it rather than
+receiving a finished list. Pagination logic is pulled into pure functions in
+`historyPages.ts` (`mergeHistoryPage`), matching this feature's existing
+convention (`historyEntries.ts`, `wikiTree.ts`) of testing the logic without
+rendering the component.
+
+**A base page (`cursor` omitted) always replaces the accumulated state
+outright**, never merges with an older tail. This is both the first load and
+every later re-arrival of that same query — a restore, an edit, another
+viewer's write invalidating the `HISTORY-*` tag while the reader is still
+parked on it. Replacing is what keeps a stale second/third page from surviving
+next to a freshly-invalidated first one. Restoring a revision additionally
+resets the panel's own cursor to the base page explicitly, rather than waiting
+on whichever page happens to be subscribed to quietly resolve: the reader
+should see what they just restored, not stay on the older page they restored
+from.
+
+**"Load older" is disabled while a request for it is in flight**, the
+codebase's usual guard against a second click firing a concurrent duplicate.
+Three terminal states share one area below the list: a `Réessayer` (`common.
+retry`) button on error, `Charger les versions antérieures` while
+`next_cursor` is non-null, and `Début de l'historique.` once it is null —
+never more than one at a time.
+
 ### Conflict handling in the editor
 
 A stale save returns 409 carrying the current text and revision. The editor

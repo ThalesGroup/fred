@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Path, Response, status
+from fastapi import APIRouter, Depends, FastAPI, Path, Query, Response, status
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
@@ -206,15 +206,21 @@ async def set_review_mark(
 @router.get(
     "/teams/{team_id}/wiki/pages/{page_id}/revisions",
     response_model=WikiRevisionList,
-    summary="List one wiki page's revisions (WIKI-01)",
+    summary="List one wiki page's revisions, newest first (WIKI-01)",
 )
 async def list_revisions(
     team_id: Annotated[TeamId, Path()],
     page_id: Annotated[str, Path()],
     deps: ProductDependencies,
+    cursor: Annotated[
+        str | None,
+        Query(
+            description="From a previous response's `next_cursor`, to fetch older revisions."
+        ),
+    ] = None,
     user: KeycloakUser = Depends(get_current_user),
 ) -> WikiRevisionList:
-    return await list_wiki_revisions(user, team_id, page_id, deps)
+    return await list_wiki_revisions(user, team_id, page_id, deps, cursor=cursor)
 
 
 @router.post(

@@ -3114,6 +3114,8 @@
         "empty": "No earlier versions.",
         "current": "Current",
         "restore": "Restore",
+        "loadMore": "Load older versions",
+        "end": "Beginning of history.",
         "event": {
           "humanEdit": "Manual edit",
           "agentEdit": "Edited by agent ({{agent}})",

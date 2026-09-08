@@ -3114,6 +3114,8 @@
         "empty": "Aucune version antérieure.",
         "current": "Actuelle",
         "restore": "Restaurer",
+        "loadMore": "Charger les versions antérieures",
+        "end": "Début de l'historique.",
         "event": {
           "humanEdit": "Édition manuelle",
           "agentEdit": "Édition par agent ({{agent}})",

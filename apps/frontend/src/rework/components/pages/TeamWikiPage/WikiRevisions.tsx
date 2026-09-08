@@ -12,35 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
+import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  type WikiRevisionList,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+  useRestoreWikiRevisionMutation,
+  useUsersByIdsQuery,
+  useWikiRevisionsQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import { historyEntries } from "@rework/features/teamWiki/historyEntries";
+import { emptyHistoryPages, mergeHistoryPage } from "@rework/features/teamWiki/historyPages";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiRevisions.module.css";
 
 interface WikiRevisionsProps {
   /** Kept mounted while closed so it can slide out rather than vanish. */
   open: boolean;
-  /** Resolves the agent that wrote a revision to its display name. */
   teamId: string;
-  history: WikiRevisionList | undefined;
-  loading: boolean;
+  pageId: string;
   currentRevisionId: string | null;
   canRestore: boolean;
-  restoring: boolean;
-  onRestore: (revisionId: string) => void;
   onClose: () => void;
 }
 
@@ -52,18 +51,11 @@ interface WikiRevisionsProps {
  * reversibility rather than restriction. It publishes a NEW revision carrying
  * the old text — the history is never rewritten, and the restore is itself in
  * it.
+ *
+ * History is bounded server-side (WIKI-05): this component owns the walk
+ * backward through it, accumulating pages client-side via `historyPages.ts`.
  */
-export function WikiRevisions({
-  open,
-  teamId,
-  history,
-  loading,
-  currentRevisionId,
-  canRestore,
-  restoring,
-  onRestore,
-  onClose,
-}: WikiRevisionsProps) {
+export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRestore, onClose }: WikiRevisionsProps) {
   const { t } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -76,8 +68,50 @@ export function WikiRevisions({
   }, [open, onClose]);
   useClickOutside(panelRef, closeOnOutsideClick);
 
-  const revisions = useMemo(() => history?.revisions ?? [], [history]);
-  const contents = history?.contents ?? {};
+  // Stays true after the panel closes: unsubscribing on close would drop the
+  // revisions and blank the panel out through its whole slide-out.
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
+  useEffect(() => {
+    if (open) setHasOpenedOnce(true);
+  }, [open]);
+
+  // `fetchCursor` is `undefined` for the base (newest) page. `pages` is
+  // everything accumulated so far by walking backward from it — reset
+  // whenever the page changes, since a walk through page A's history means
+  // nothing once the panel is looking at page B.
+  const [fetchCursor, setFetchCursor] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState(emptyHistoryPages);
+  useEffect(() => {
+    setFetchCursor(undefined);
+    setPages(emptyHistoryPages);
+  }, [pageId]);
+
+  const {
+    data: fetchedPage,
+    isFetching,
+    isError,
+    refetch,
+  } = useWikiRevisionsQuery({ teamId, pageId, cursor: fetchCursor }, { skip: !hasOpenedOnce || !pageId });
+
+  // Merging is keyed on the (cursor, page) pair that just arrived, not on
+  // `pages` itself — the functional update below reads it fresh regardless.
+  useEffect(() => {
+    if (!fetchedPage) return;
+    setPages((prev) => mergeHistoryPage(prev, fetchCursor, fetchedPage));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchedPage, fetchCursor]);
+
+  const revisions = pages.revisions;
+  const contents = pages.contents;
+  const isInitialLoad = isFetching && revisions.length === 0;
+  // Guards against a second "load older" firing while one is already in
+  // flight for the same cursor: the button below is disabled through this too.
+  const isLoadingMore = isFetching && revisions.length > 0;
+
+  const loadOlder = () => {
+    if (isFetching || pages.nextCursor === null) return;
+    setFetchCursor(pages.nextCursor);
+  };
 
   // A revision stores the author's uid. Showing it raw makes the history a
   // column of opaque strings, which is the opposite of what it is for — the
@@ -106,6 +140,20 @@ export function WikiRevisions({
 
   const nameOf = (userId: string) => userDisplayName(userId, authorById.get(userId));
 
+  const [restoreRevision, { isLoading: restoring }] = useRestoreWikiRevisionMutation();
+  const onRestore = async (revisionId: string) => {
+    try {
+      await restoreRevision({ teamId, pageId, revisionId }).unwrap();
+    } catch {
+      return; // A failed restore leaves the reader exactly where they were.
+    }
+    // The restored content is now the newest revision. Rather than wait for
+    // whichever page happens to be subscribed to silently re-resolve via tag
+    // invalidation, jump back to the top explicitly — the reader should see
+    // what they just did, not stay buried in the page they restored from.
+    setFetchCursor(undefined);
+  };
+
   return (
     <aside
       ref={panelRef}
@@ -126,13 +174,24 @@ export function WikiRevisions({
         />
       </header>
 
-      {loading && (
+      {isInitialLoad && (
         <div className={styles.loading}>
           <Spinner />
         </div>
       )}
 
-      {!loading && revisions.length === 0 && <p className={styles.empty}>{t("rework.wiki.history.empty")}</p>}
+      {!isInitialLoad && isError && revisions.length === 0 && (
+        <div className={styles.pagination}>
+          <p className={styles.empty}>{t("common.loadingError")}</p>
+          <Button color="primary" variant="text" size="small" onClick={() => void refetch()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      )}
+
+      {!isInitialLoad && !isError && revisions.length === 0 && (
+        <p className={styles.empty}>{t("rework.wiki.history.empty")}</p>
+      )}
 
       <ul className={styles.list}>
         {entries.map((entry) => {
@@ -196,7 +255,7 @@ export function WikiRevisions({
                         icon={{ category: "outlined", type: "history" }}
                         variant="icon"
                         size="small"
-                        onClick={() => onRestore(revision.revision_id)}
+                        onClick={() => void onRestore(revision.revision_id)}
                         disabled={restoring}
                         aria-label={t("rework.wiki.history.restore")}
                       />
@@ -214,6 +273,25 @@ export function WikiRevisions({
           );
         })}
       </ul>
+
+      {!isInitialLoad && revisions.length > 0 && (
+        <div className={styles.pagination}>
+          {isLoadingMore && <Spinner size={16} />}
+          {!isLoadingMore && isError && (
+            <Button color="primary" variant="text" size="small" onClick={() => void refetch()}>
+              {t("common.retry")}
+            </Button>
+          )}
+          {!isLoadingMore && !isError && pages.nextCursor !== null && (
+            <Button color="primary" variant="text" size="small" onClick={loadOlder}>
+              {t("rework.wiki.history.loadMore")}
+            </Button>
+          )}
+          {!isLoadingMore && !isError && pages.nextCursor === null && (
+            <p className={styles.empty}>{t("rework.wiki.history.end")}</p>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from control_plane_backend.models.team_wiki_models import RULES_PAGE_SLUG
+from control_plane_backend.models.team_wiki_models import (
+    MAX_REVISION_PAGE_SIZE,
+    RULES_PAGE_SLUG,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.team_wiki import service as wiki_service
 from control_plane_backend.team_wiki.schemas import (
@@ -23,6 +28,7 @@ from control_plane_backend.team_wiki.service import (
     _unique_slug,
 )
 from control_plane_backend.team_wiki.store import (
+    RevisionCursor,
     WikiPageDepthExceededError,
     WikiPageInvalidMoveError,
     WikiPageNotFoundError,
@@ -81,7 +87,11 @@ def _page(
 
 
 def _revision(
-    revision_id: str, page_id: str, *, status: str = "published"
+    revision_id: str,
+    page_id: str,
+    *,
+    status: str = "published",
+    created_at: datetime | None = None,
 ) -> WikiRevisionRecord:
     return WikiRevisionRecord(
         revision_id=revision_id,
@@ -89,6 +99,7 @@ def _revision(
         team_id=TEAM,
         content_md="body",
         status=status,
+        created_at=created_at,
     )
 
 
@@ -279,6 +290,35 @@ class _Store:
         self, _team_id: TeamId, revision_id: str
     ) -> WikiRevisionRecord | None:
         return self.revisions.get(revision_id)
+
+    async def list_revisions(
+        self,
+        _team_id: TeamId,
+        page_id: str,
+        *,
+        limit: int,
+        before: RevisionCursor | None = None,
+    ) -> list[WikiRevisionRecord]:
+        """Mirrors the real store's SQL enough for the service's own cursor
+        arithmetic (the `limit + 1` trick, `next_cursor` from the last
+        RETURNED row) to be tested without a database: same filter, same
+        `(created_at, revision_id)` descending order, same keyset condition.
+        """
+
+        matches = [
+            r
+            for r in self.revisions.values()
+            if r.page_id == page_id and r.status not in ("proposed", "rejected")
+        ]
+        matches.sort(key=lambda r: (r.created_at, r.revision_id), reverse=True)
+        if before is not None:
+            matches = [
+                r
+                for r in matches
+                if (r.created_at, r.revision_id)
+                < (before.created_at, before.revision_id)
+            ]
+        return matches[:limit]
 
     async def create_page(self, **kwargs: Any) -> Any:
         if self.raise_from_create_page is not None:
@@ -850,3 +890,185 @@ async def test_a_restore_cannot_launder_a_proposal_into_history(
     with pytest.raises(wiki_service.WikiRequestError) as caught:
         await wiki_service.restore_wiki_revision(_user(), TEAM, "p1", "draft-1", deps)
     assert caught.value.http_status == 404
+
+
+# ── history pagination (WIKI-05) ──────────────────────────────────────────────
+
+
+def _at(offset_seconds: int) -> datetime:
+    """A deterministic, tz-aware timestamp — real revisions are UTC and a
+    cursor round-trip that silently dropped the offset would misplace every
+    boundary condition below."""
+
+    return datetime(2026, 9, 1, tzinfo=timezone.utc) + timedelta(seconds=offset_seconds)
+
+
+def _hex_id(i: int) -> str:
+    """A 32-char lowercase hex id shaped like `_new_id()`'s — the cursor
+    validates against exactly that shape, so a test id must satisfy it too."""
+
+    return f"{i:032x}"
+
+
+@pytest.mark.asyncio
+async def test_a_cursor_round_trips_through_the_service(gate: _RecordingGate) -> None:
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    store.revisions = {
+        _hex_id(i): _revision(_hex_id(i), "p1", created_at=_at(i)) for i in range(3)
+    }
+
+    first = await wiki_service.list_wiki_revisions(_user(), TEAM, "p1", _deps(store))
+    assert [r.revision_id for r in first.revisions] == [
+        _hex_id(2),
+        _hex_id(1),
+        _hex_id(0),
+    ]
+    assert first.next_cursor is None  # fewer than one page — nothing further
+
+
+@pytest.mark.asyncio
+async def test_a_full_page_gets_a_next_cursor_from_the_last_returned_row(
+    gate: _RecordingGate,
+) -> None:
+    """The `limit + 1` trick: one extra row is fetched to learn there is more,
+    then dropped — `next_cursor` must anchor on the last row actually handed
+    back, not on that extra one, or a walk would silently skip a revision."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    total = MAX_REVISION_PAGE_SIZE + 5
+    store.revisions = {
+        _hex_id(i): _revision(_hex_id(i), "p1", created_at=_at(i)) for i in range(total)
+    }
+
+    first = await wiki_service.list_wiki_revisions(_user(), TEAM, "p1", _deps(store))
+    assert len(first.revisions) == MAX_REVISION_PAGE_SIZE
+    assert first.next_cursor is not None
+
+    oldest_on_first_page = first.revisions[-1]
+    decoded = wiki_service._decode_revision_cursor(first.next_cursor)
+    assert decoded.revision_id == oldest_on_first_page.revision_id
+    assert decoded.created_at == oldest_on_first_page.created_at
+
+    second = await wiki_service.list_wiki_revisions(
+        _user(), TEAM, "p1", _deps(store), cursor=first.next_cursor
+    )
+    assert len(second.revisions) == 5
+    assert second.next_cursor is None
+    seen = {r.revision_id for r in first.revisions} | {
+        r.revision_id for r in second.revisions
+    }
+    assert len(seen) == total  # every revision exactly once, no gap or repeat
+
+
+@pytest.mark.asyncio
+async def test_tied_created_at_does_not_destabilize_the_walk(
+    gate: _RecordingGate,
+) -> None:
+    """Several revisions sharing one timestamp is ordinary (an edit then a
+    restore inside the same second) — the walk must still be exact, broken
+    only by `revision_id`."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    same_instant = _at(0)
+    total = MAX_REVISION_PAGE_SIZE + 3
+    store.revisions = {
+        _hex_id(i): _revision(_hex_id(i), "p1", created_at=same_instant)
+        for i in range(total)
+    }
+
+    seen: list[str] = []
+    cursor: str | None = None
+    for _ in range(10):  # generous bound: two pages expected, never an endless loop
+        page = await wiki_service.list_wiki_revisions(
+            _user(), TEAM, "p1", _deps(store), cursor=cursor
+        )
+        if not page.revisions:
+            break
+        seen.extend(r.revision_id for r in page.revisions)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+
+    assert cursor is None
+    assert sorted(seen) == sorted(store.revisions.keys())
+    assert len(set(seen)) == total  # no duplicate despite the identical timestamp
+
+
+@pytest.mark.asyncio
+async def test_an_invalid_cursor_is_refused_not_500(gate: _RecordingGate) -> None:
+    store = _Store()
+    store.pages.append(_page("p1", None))
+
+    for bad in [
+        "not-base64!!",
+        "   ",
+        base64.urlsafe_b64encode(b"no-separator-here").decode(),
+    ]:
+        with pytest.raises(wiki_service.WikiRequestError) as caught:
+            await wiki_service.list_wiki_revisions(
+                _user(), TEAM, "p1", _deps(store), cursor=bad
+            )
+        assert caught.value.http_status == 400
+
+
+@pytest.mark.asyncio
+async def test_an_empty_cursor_is_treated_as_no_cursor(gate: _RecordingGate) -> None:
+    """An omitted `cursor` and an empty one both mean "start from the top" —
+    a query string can produce either depending on the client, and neither is
+    a malformed value worth a 400 for."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    store.revisions[_hex_id(1)] = _revision(_hex_id(1), "p1", created_at=_at(0))
+
+    result = await wiki_service.list_wiki_revisions(
+        _user(), TEAM, "p1", _deps(store), cursor=""
+    )
+    assert [r.revision_id for r in result.revisions] == [_hex_id(1)]
+
+
+@pytest.mark.asyncio
+async def test_a_well_formed_but_fabricated_cursor_is_refused(
+    gate: _RecordingGate,
+) -> None:
+    """Right shape, wrong content: a naive/timezone-less timestamp or a
+    revision id that isn't `_new_id()`'s hex format must not reach the store
+    as a query bound."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+
+    naive_cursor = base64.urlsafe_b64encode(
+        f"2026-09-01T00:00:00|{_hex_id(1)}".encode()
+    ).decode()
+    short_id_cursor = base64.urlsafe_b64encode(
+        f"{_at(0).isoformat()}|short-id".encode()
+    ).decode()
+
+    for cursor in (naive_cursor, short_id_cursor):
+        with pytest.raises(wiki_service.WikiRequestError) as caught:
+            await wiki_service.list_wiki_revisions(
+                _user(), TEAM, "p1", _deps(store), cursor=cursor
+            )
+        assert caught.value.http_status == 400
+
+
+@pytest.mark.asyncio
+async def test_a_cursor_never_crosses_a_page_boundary(gate: _RecordingGate) -> None:
+    """The cursor is a position within one page's history, not a bypass for
+    the page/team scope the store filters on independently."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None))
+    store.pages.append(_page("p2", None))
+    store.revisions[_hex_id(1)] = _revision(_hex_id(1), "p1", created_at=_at(0))
+    store.revisions[_hex_id(2)] = _revision(_hex_id(2), "p2", created_at=_at(1))
+
+    cursor = wiki_service._encode_revision_cursor(_at(5), _hex_id(9))
+    result = await wiki_service.list_wiki_revisions(
+        _user(), TEAM, "p2", _deps(store), cursor=cursor
+    )
+    assert [r.revision_id for r in result.revisions] == [_hex_id(2)]

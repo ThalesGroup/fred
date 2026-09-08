@@ -37,11 +37,9 @@ import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
-  useRestoreWikiRevisionMutation,
   useSetWikiReviewMarkMutation,
   useWikiPageQuery,
   useWikiPagesQuery,
-  useWikiRevisionsQuery,
   useWikiRulesQuery,
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
@@ -118,9 +116,6 @@ export default function TeamWikiPage() {
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const editing = editingTarget !== null;
   const [showHistory, setShowHistory] = useState(false);
-  // Stays set after the panel closes: unsubscribing on close would drop the
-  // revisions and blank the panel out through its whole slide-out.
-  const [historyOpened, setHistoryOpened] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -181,18 +176,12 @@ export default function TeamWikiPage() {
   );
   const detail = isRules ? rulesDetail : pageDetail;
 
-  const { data: history, isFetching: historyLoading } = useWikiRevisionsQuery(
-    { teamId, pageId: detail?.page.page_id ?? "" },
-    { skip: !historyOpened || !detail?.page.page_id },
-  );
-
   const [createPage, { isLoading: creatingPage }] = useCreateWikiPageMutation();
   const [writePage, { isLoading: savingPage }] = useWriteWikiPageMutation();
   const [writeRules, { isLoading: savingRules }] = useWriteWikiRulesMutation();
   const [patchPage] = usePatchWikiPageMutation();
   const [deletePage] = useDeleteWikiPageMutation();
   const [setReviewMark] = useSetWikiReviewMarkMutation();
-  const [restoreRevision, { isLoading: restoring }] = useRestoreWikiRevisionMutation();
 
   // The page stores its last author's uid; the meta line needs their name.
   const lastAuthorId = detail?.page.updated_by ?? null;
@@ -250,7 +239,6 @@ export default function TeamWikiPage() {
     setEditorSeed(null);
     setBaseOverride(null);
     setShowHistory(false);
-    setHistoryOpened(false);
   }, [slug]);
 
   const handleSave = async (contentMd: string) => {
@@ -474,10 +462,7 @@ export default function TeamWikiPage() {
                 revisionId: detail.revision_id ?? null,
               });
             }}
-            onOpenHistory={() => {
-              setHistoryOpened(true);
-              setShowHistory((shown) => !shown);
-            }}
+            onOpenHistory={() => setShowHistory((shown) => !shown)}
             onRename={() => {
               setRenameTitle(detail.page.title);
               const parentId = detail.page.parent_page_id;
@@ -501,12 +486,9 @@ export default function TeamWikiPage() {
           <WikiRevisions
             open={showHistory}
             teamId={teamId}
-            history={history}
-            loading={historyLoading}
+            pageId={detail.page.page_id}
             currentRevisionId={detail.revision_id ?? null}
             canRestore={canEdit}
-            restoring={restoring}
-            onRestore={(revisionId) => void restoreRevision({ teamId, pageId: detail.page.page_id, revisionId })}
             onClose={() => setShowHistory(false)}
           />
         )}

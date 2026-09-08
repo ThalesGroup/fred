@@ -3585,3 +3585,48 @@ is not editing. And the validation itself was recorded nowhere, which mattered
 because the person who approves an agent's text need not be the one it was
 written for. The frontend renders the stamp as its own entry in the page
 history, at its own time, next to the edit it approves.
+
+**History is paginated by keyset, not offset, and bounded in SQL** (2026-09-08,
+WIKI-05). `GET .../revisions` used to load every revision of a page — content
+included — before slicing to `MAX_REVISION_PAGE_SIZE` (50) in Python; a page
+edited a thousand times pulled a thousand Markdown bodies out of the database
+to return 50. `TeamWikiStore.list_revisions` now takes `limit` and an optional
+`before: RevisionCursor` and applies both as a real `WHERE`/`LIMIT`, still
+ordered `(created_at DESC, revision_id DESC)`. The endpoint accepts an optional
+`cursor` query parameter and `WikiRevisionList` gained `next_cursor`
+(`str | None`); the service fetches `limit + 1` rows to learn whether more
+remain without a second `COUNT` query, and builds `next_cursor` from the last
+row actually **returned**, never the extra one.
+
+The cursor is `base64(isoformat(created_at) + "|" + revision_id)` — opaque to
+the client, validated on decode (well-formed base64, both parts present, the
+timestamp timezone-aware, the id matching `_new_id()`'s 32-lowercase-hex
+shape) and refused with `400`, never left to reach the store or fail as a
+`500`. It is a keyset, not an offset: offset pagination on `ORDER BY created_at
+DESC` breaks the moment a new revision is inserted while a reader is mid-walk,
+since every row after it shifts by one position, producing exactly the
+duplicate/gap this fix exists to prevent — a keyset anchored on an
+already-seen `(created_at, revision_id)` is unaffected by inserts elsewhere,
+because it names a value, not a position. The same tuple that breaks ties in
+the `ORDER BY` is what the keyset condition compares on
+(`created_at < cursor.created_at OR (created_at = cursor.created_at AND
+revision_id < cursor.revision_id)`), so several revisions sharing one
+timestamp — an edit then a restore inside the same second, which `_utcnow()`'s
+own docstring already calls ordinary — do not destabilize a walk.
+
+**Not a frozen snapshot, and that is closed rather than merely documented for
+the one case that mattered.** A pending proposal's `created_at` is
+proposal-creation time, not approval time, so in principle an approved
+proposal could surface behind a cursor a reader had already established.
+`publish_proposal`'s existing base-revision guard (above) closes this for
+edit-proposals: a proposal can only be approved while its base is still the
+page's current revision, i.e. nothing else was published since it was
+proposed — which means the approved revision is always the newest thing on
+the page, never older than anything a reader has already paged past. A
+new-page proposal cannot exhibit this at all: the page does not exist, and so
+has no pre-existing history to page past, until the proposal is approved.
+
+**Restore is unaffected by pagination.** `restore` addresses a revision by id,
+returned from any page a reader has fetched — never by its position within
+one. `list_revisions` bounding the query changes what one response returns,
+never what a caller can act on.

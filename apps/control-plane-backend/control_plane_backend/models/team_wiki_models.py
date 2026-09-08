@@ -33,6 +33,11 @@ MAX_RULES_CHARS = 4_000
 #: Deepest a page may sit. The root is depth 0.
 MAX_PAGE_DEPTH = 3
 
+#: Revisions returned by one history request, newest first. Bounds a single
+#: request, not what remains reachable — `cursor`-based continuation walks
+#: older pages of the same size (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §49).
+MAX_REVISION_PAGE_SIZE = 50
+
 
 class TeamWikiPageRow(Base):
     """ORM model for the ``team_wiki_pages`` table.

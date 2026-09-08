@@ -8,13 +8,14 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import advisory_lock_key, make_session_factory, use_session
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import and_, delete, or_, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.team_wiki_models import (
     MAX_PAGE_DEPTH,
+    MAX_REVISION_PAGE_SIZE,
     TeamWikiPageRow,
     TeamWikiRevisionRow,
 )
@@ -123,6 +124,23 @@ class WikiRevisionRecord:
     # Who cleared the page's review mark while this revision was published.
     reviewed_at: datetime | None = None
     reviewed_by: str | None = None
+
+
+@dataclass(frozen=True)
+class RevisionCursor:
+    """Keyset position in one page's history: the `(created_at, revision_id)`
+    of the last revision the caller already has, exclusive.
+
+    Not an offset. History is only ever appended to at the newest end, and a
+    revision's own `(created_at, revision_id)` never changes after insert, so
+    walking strictly older than a fixed watermark is stable under concurrent
+    writes in a way a row-count offset is not — a write landing while the
+    caller is mid-walk cannot shift this boundary the way it would shift
+    every offset past it.
+    """
+
+    created_at: datetime
+    revision_id: str
 
 
 @dataclass
@@ -369,30 +387,60 @@ class TeamWikiStore:
             return _to_revision(row) if row is not None else None
 
     async def list_revisions(
-        self, team_id: TeamId, page_id: str, session: AsyncSession | None = None
+        self,
+        team_id: TeamId,
+        page_id: str,
+        session: AsyncSession | None = None,
+        *,
+        limit: int = MAX_REVISION_PAGE_SIZE,
+        before: RevisionCursor | None = None,
     ) -> list[WikiRevisionRecord]:
-        """One page's revisions, newest first. Content included — a wiki page is
-        small by construction (``MAX_PAGE_CHARS``) and the history view shows a
-        diff, which needs the text anyway."""
+        """Up to ``limit`` of one page's revisions, newest first, bounded in
+        SQL rather than loaded whole and sliced in Python: a page edited a
+        thousand times must not pull a thousand Markdown bodies out of the
+        database to return 50 of them.
+
+        ``before``, when given, is the ``(created_at, revision_id)`` of the
+        oldest revision the caller already has — the same tuple the ORDER BY
+        below breaks ties on, so a walk stays exact even when several
+        revisions share one timestamp (an edit then a restore inside the same
+        second is ordinary, see ``_utcnow``). Content included — a wiki page
+        is small by construction (``MAX_PAGE_CHARS``) and the history view
+        shows a diff, which needs the text anyway.
+        """
+
+        conditions = [
+            TeamWikiRevisionRow.team_id == str(team_id),
+            TeamWikiRevisionRow.page_id == page_id,
+            # History is what happened. A proposal awaiting a human, or one
+            # they refused, is not an edit of this page.
+            TeamWikiRevisionRow.status.notin_(("proposed", "rejected")),
+        ]
+        if before is not None:
+            conditions.append(
+                or_(
+                    TeamWikiRevisionRow.created_at < before.created_at,
+                    and_(
+                        TeamWikiRevisionRow.created_at == before.created_at,
+                        TeamWikiRevisionRow.revision_id < before.revision_id,
+                    ),
+                )
+            )
 
         async with use_session(self._sessions, session) as s:
             rows = (
                 await s.execute(
                     select(TeamWikiRevisionRow)
-                    .where(
-                        TeamWikiRevisionRow.team_id == str(team_id),
-                        TeamWikiRevisionRow.page_id == page_id,
-                        # History is what happened. A proposal awaiting a human,
-                        # or one they refused, is not an edit of this page.
-                        TeamWikiRevisionRow.status.notin_(("proposed", "rejected")),
-                    )
+                    .where(*conditions)
                     # `revision_id` only breaks a tie: it is a uuid and says
                     # nothing about time, but it makes the order deterministic
-                    # rather than whatever the engine returns.
+                    # rather than whatever the engine returns — and it is what
+                    # makes `before` an exact watermark under a tie.
                     .order_by(
                         TeamWikiRevisionRow.created_at.desc(),
                         TeamWikiRevisionRow.revision_id.desc(),
                     )
+                    .limit(limit)
                 )
             ).scalars()
             return [_to_revision(row) for row in rows]

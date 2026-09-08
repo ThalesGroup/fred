@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import re
 import secrets
+from datetime import datetime, timezone
 
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
@@ -10,6 +12,7 @@ from fred_core.security.rebac.rebac_engine import TeamPermission
 from control_plane_backend.capabilities.authz import can_team_use_capability
 from control_plane_backend.models.team_wiki_models import (
     MAX_PAGE_DEPTH,
+    MAX_REVISION_PAGE_SIZE,
     RULES_PAGE_SLUG,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -30,6 +33,7 @@ from control_plane_backend.team_wiki.schemas import (
     WikiRevisionSummary,
 )
 from control_plane_backend.team_wiki.store import (
+    RevisionCursor,
     TeamWikiStore,
     WikiPageConstraintError,
     WikiPageDepthExceededError,
@@ -66,8 +70,45 @@ WIKI_WRITE_PERMISSION = TeamPermission.CAN_UPDATE_RESOURCES
 #: the wiki back exactly as it was.
 TEAM_WIKI_CAPABILITY_ID = "team_wiki"
 
-#: Most revisions one history response returns, newest first.
-MAX_REVISIONS_RETURNED = 50
+#: `revision_id` is `uuid.uuid4().hex` (`store._new_id`) — 32 lowercase hex
+#: characters, never the separator below. A cursor failing this is either a
+#: client bug or someone probing the endpoint, not a value this API ever
+#: produced.
+_REVISION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_CURSOR_PART_SEP = "|"
+
+
+def _encode_revision_cursor(created_at: datetime, revision_id: str) -> str:
+    """The opaque `cursor` a history response's `next_cursor` carries.
+
+    Base64 rather than the raw `"<isoformat>|<id>"` text: a client is not
+    meant to construct or read one, and encoding it closes off the temptation
+    before it starts. `astimezone(UTC)` first so two cursors for the same
+    instant compare and round-trip identically regardless of which offset the
+    row happened to carry.
+    """
+
+    raw = f"{created_at.astimezone(timezone.utc).isoformat()}{_CURSOR_PART_SEP}{revision_id}"
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def _decode_revision_cursor(cursor: str) -> RevisionCursor:
+    """The inverse of `_encode_revision_cursor`, or a 400 — never a 500 or a
+    silently wrong query. A malformed cursor must not reach the store: it
+    would either raise deep inside SQLAlchemy or, worse, compare cleanly
+    against nothing and quietly return an empty or wrong page."""
+
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+        created_at_raw, revision_id = raw.split(_CURSOR_PART_SEP, 1)
+        created_at = datetime.fromisoformat(created_at_raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise WikiRequestError(
+            "This history cursor is invalid.", http_status=400
+        ) from exc
+    if created_at.tzinfo is None or not _REVISION_ID_RE.match(revision_id):
+        raise WikiRequestError("This history cursor is invalid.", http_status=400)
+    return RevisionCursor(created_at=created_at, revision_id=revision_id)
 
 
 async def _require_wiki_access(
@@ -272,15 +313,39 @@ async def get_wiki_page(
 
 
 async def list_wiki_revisions(
-    user: KeycloakUser, team_id: TeamId, page_id: str, deps: ProductServiceDependencies
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    deps: ProductServiceDependencies,
+    cursor: str | None = None,
 ) -> WikiRevisionList:
+    """One page of history, newest first, and a `next_cursor` to walk older.
+
+    This is a live walk, not a snapshot: a proposal keeps the `created_at` it
+    was given when proposed, so approving one after the caller has already
+    paged past that timestamp will not surface it, since `cursor` only ever
+    moves forward. Reopening history from the top is what surfaces it — see
+    CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
+    """
+
     team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
     store = deps.get_team_wiki_store()
     await _require_page(store, team_id, page_id)
-    # Bounded: one revision is capped, their NUMBER is not, so a page edited a
-    # thousand times would otherwise return a thousand full documents at once.
-    # Newest first, so the cut falls on the oldest history.
-    revisions = (await store.list_revisions(team_id, page_id))[:MAX_REVISIONS_RETURNED]
+    before = _decode_revision_cursor(cursor) if cursor else None
+
+    # One extra row, dropped below, is how "is there more?" is answered
+    # without a second COUNT query. `next_cursor` is built from the last row
+    # actually returned, never from this extra one.
+    fetched = await store.list_revisions(
+        team_id, page_id, limit=MAX_REVISION_PAGE_SIZE + 1, before=before
+    )
+    revisions = fetched[:MAX_REVISION_PAGE_SIZE]
+    next_cursor = None
+    if len(fetched) > MAX_REVISION_PAGE_SIZE:
+        oldest = revisions[-1]
+        assert oldest.created_at is not None  # always set once persisted
+        next_cursor = _encode_revision_cursor(oldest.created_at, oldest.revision_id)
+
     return WikiRevisionList(
         revisions=[
             WikiRevisionSummary(
@@ -297,6 +362,7 @@ async def list_wiki_revisions(
             for r in revisions
         ],
         contents={r.revision_id: r.content_md for r in revisions},
+        next_cursor=next_cursor,
     )
 
 
