@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from fred_core.common import TeamId
-from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, select, update
+from fred_core.sql import advisory_lock_key, make_session_factory, use_session
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.team_wiki_models import (
+    MAX_PAGE_DEPTH,
     TeamWikiPageRow,
     TeamWikiRevisionRow,
 )
@@ -66,6 +69,18 @@ class WikiRevisionConflictError(Exception):
 
 class WikiPageHasChildrenError(Exception):
     """Refusing to delete a page that still has children."""
+
+
+class WikiPageDepthExceededError(Exception):
+    """A create, move, or proposal publication would land past MAX_PAGE_DEPTH."""
+
+
+class WikiPageInvalidMoveError(Exception):
+    """A move would place a page under itself or one of its own descendants."""
+
+
+class WikiPageRulesParentError(Exception):
+    """The named parent is the rules page, which may not have children."""
 
 
 @dataclass
@@ -157,6 +172,100 @@ def _to_revision(row: TeamWikiRevisionRow) -> WikiRevisionRecord:
     )
 
 
+def _child_depth_under(
+    pages: dict[str, WikiPageRecord], parent_page_id: str | None
+) -> int:
+    """The depth a new child of `parent_page_id` would sit at.
+
+    A root page is depth 0, so a child of a root sits at 1, and `None` — no
+    parent — is 0. Named for what it returns: called it "depth of", the caller
+    reads it as the parent's own depth and the cap ends up one tier out.
+
+    The walk is bounded so a cycle left by an older bug cannot spin here.
+    """
+
+    depth = 0
+    cursor = parent_page_id
+    while cursor is not None and depth <= MAX_PAGE_DEPTH + 2:
+        parent = pages.get(cursor)
+        if parent is None:
+            break
+        cursor = parent.parent_page_id
+        depth += 1
+    return depth
+
+
+def _subtree_height(pages: dict[str, WikiPageRecord], page_id: str) -> int:
+    """How many levels sit BELOW `page_id` — 0 for a leaf.
+
+    Breadth-first over the team's pages, which is cheap: the depth cap keeps a
+    wiki tree small and this only runs on a move.
+    """
+
+    children: dict[str | None, list[str]] = {}
+    for page in pages.values():
+        children.setdefault(page.parent_page_id, []).append(page.page_id)
+
+    height = 0
+    level = children.get(page_id, [])
+    seen: set[str] = {page_id}
+    while level and height <= MAX_PAGE_DEPTH + 2:
+        height += 1
+        nxt: list[str] = []
+        for node in level:
+            if node in seen:
+                continue
+            seen.add(node)
+            nxt.extend(children.get(node, []))
+        level = nxt
+    return height
+
+
+def _is_descendant(
+    pages: dict[str, WikiPageRecord], candidate_id: str, ancestor_id: str
+) -> bool:
+    """True when `candidate_id` sits at or under `ancestor_id` — reflexive, so
+    passing a page's own id as both catches "its own parent" too. Guards a
+    move that would detach a subtree from the tree by making it its own
+    ancestor."""
+
+    cursor: str | None = candidate_id
+    seen: set[str] = set()
+    while cursor is not None and cursor not in seen:
+        if cursor == ancestor_id:
+            return True
+        seen.add(cursor)
+        node = pages.get(cursor)
+        cursor = node.parent_page_id if node else None
+    return False
+
+
+def _validate_new_parent(
+    pages: dict[str, WikiPageRecord],
+    *,
+    parent_page_id: str | None,
+    subtree_height: int = 0,
+) -> None:
+    """The parent-side checks every structural writer needs, run against a
+    snapshot read inside the structural lock: the parent exists, is not the
+    rules page, and the write would not land past MAX_PAGE_DEPTH.
+
+    `subtree_height` is 0 for a plain create (one new leaf); a move passes the
+    height of the subtree it carries, since the whole subtree lands under the
+    new parent, not just the page being moved.
+    """
+
+    if parent_page_id is None:
+        return
+    parent = pages.get(parent_page_id)
+    if parent is None:
+        raise WikiPageNotFoundError(parent_page_id)
+    if parent.kind == "rules":
+        raise WikiPageRulesParentError(parent_page_id)
+    if _child_depth_under(pages, parent_page_id) + subtree_height > MAX_PAGE_DEPTH:
+        raise WikiPageDepthExceededError(parent_page_id)
+
+
 class TeamWikiStore:
     """Storage for one platform's team wikis.
 
@@ -169,10 +278,36 @@ class TeamWikiStore:
     the page's pointer in one conditional UPDATE, so two concurrent edits
     cannot silently overwrite one another — the loser gets
     ``WikiRevisionConflictError`` carrying what it must rebase onto.
+
+    Every writer that can change the TREE's shape — create, move, delete, and
+    proposal publication — runs inside ``_structural_lock``: a single row of a
+    conditional UPDATE is not enough to keep the tree acyclic and within
+    ``MAX_PAGE_DEPTH`` under concurrent writers touching different rows (two
+    opposing moves, a child insert racing its parent's delete). The lock plus
+    a same-transaction re-read is what makes the validation authoritative
+    rather than a best-effort check against a snapshot taken before the write.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
         self._sessions = make_session_factory(engine)
+
+    @asynccontextmanager
+    async def _structural_lock(self, team_id: TeamId) -> AsyncIterator[AsyncSession]:
+        """Postgres advisory lock keyed per team, held for one structural
+        write's whole transaction (same primitive as
+        ``TeamMetadataStore.advisory_lock``; see CONTROL-PLANE-PRODUCT-
+        CONTRACT.md §49). No-op on SQLite — see the Postgres integration
+        tests for the guarantee this cannot prove offline.
+        """
+
+        async with self._sessions() as s, s.begin():
+            if self._engine.dialect.name == "postgresql":
+                await s.execute(
+                    text("SELECT pg_advisory_xact_lock(:key)"),
+                    {"key": advisory_lock_key(f"team_wiki_structure:{team_id}")},
+                )
+            yield s
 
     # ---- reads ------------------------------------------------------------
 
@@ -293,41 +428,50 @@ class TeamWikiStore:
         agent_instance_id: str | None = None,
         session_id: str | None = None,
     ) -> WikiPageWithContent:
-        """Insert a page and its first revision in one transaction."""
+        """Insert a page and its first revision in one transaction.
+
+        Parent existence, kind and depth are re-checked inside
+        ``_structural_lock`` against a fresh read, not the caller's snapshot.
+        """
 
         now = _utcnow()
         page_id = _new_id()
         revision_id = _new_id()
-        page_row = TeamWikiPageRow(
-            page_id=page_id,
-            team_id=str(team_id),
-            parent_page_id=parent_page_id,
-            slug=slug,
-            title=title,
-            kind=kind,
-            current_revision_id=revision_id,
-            needs_review=author_kind == "agent",
-            position=position,
-            created_at=now,
-            updated_at=now,
-            created_by=author_user_id,
-            updated_by=author_user_id,
-        )
-        revision_row = TeamWikiRevisionRow(
-            revision_id=revision_id,
-            page_id=page_id,
-            team_id=str(team_id),
-            content_md=content_md,
-            base_revision_id=None,
-            status="published",
-            author_user_id=author_user_id,
-            author_kind=author_kind,
-            agent_instance_id=agent_instance_id,
-            session_id=session_id,
-            created_at=now,
-        )
         try:
-            async with use_session(self._sessions) as s:
+            async with self._structural_lock(team_id) as s:
+                pages = {
+                    p.page_id: p for p in await self.list_pages(team_id, session=s)
+                }
+                _validate_new_parent(pages, parent_page_id=parent_page_id)
+
+                page_row = TeamWikiPageRow(
+                    page_id=page_id,
+                    team_id=str(team_id),
+                    parent_page_id=parent_page_id,
+                    slug=slug,
+                    title=title,
+                    kind=kind,
+                    current_revision_id=revision_id,
+                    needs_review=author_kind == "agent",
+                    position=position,
+                    created_at=now,
+                    updated_at=now,
+                    created_by=author_user_id,
+                    updated_by=author_user_id,
+                )
+                revision_row = TeamWikiRevisionRow(
+                    revision_id=revision_id,
+                    page_id=page_id,
+                    team_id=str(team_id),
+                    content_md=content_md,
+                    base_revision_id=None,
+                    status="published",
+                    author_user_id=author_user_id,
+                    author_kind=author_kind,
+                    agent_instance_id=agent_instance_id,
+                    session_id=session_id,
+                    created_at=now,
+                )
                 s.add(page_row)
                 s.add(revision_row)
         except IntegrityError as exc:
@@ -482,7 +626,12 @@ class TeamWikiStore:
         clear_parent: bool = False,
         updated_by: str,
     ) -> WikiPageRecord:
-        """Rename or move a page. Never touches content or the revision chain."""
+        """Rename or move a page. Never touches content or the revision chain.
+
+        A move's destination and cycle safety are re-checked inside
+        ``_structural_lock`` against a fresh read; a plain rename takes the
+        same lock but skips that check (see below).
+        """
 
         values: dict[str, object] = {"updated_at": _utcnow(), "updated_by": updated_by}
         if title is not None:
@@ -495,7 +644,27 @@ class TeamWikiStore:
             values["parent_page_id"] = parent_page_id
 
         try:
-            async with use_session(self._sessions) as s:
+            async with self._structural_lock(team_id) as s:
+                # A plain rename or a move-to-root changes nothing about the
+                # tree's shape, so it skips the team-wide read below: the
+                # UPDATE's own rowcount is enough to catch a missing page, and
+                # there is no parent, cycle or depth to check against.
+                if not clear_parent and parent_page_id is not None:
+                    pages = {
+                        p.page_id: p for p in await self.list_pages(team_id, session=s)
+                    }
+                    if page_id not in pages:
+                        raise WikiPageNotFoundError(page_id)
+                    # Reflexive: this also catches a page named as its own
+                    # parent, without a separate check.
+                    if _is_descendant(pages, parent_page_id, page_id):
+                        raise WikiPageInvalidMoveError(page_id)
+                    _validate_new_parent(
+                        pages,
+                        parent_page_id=parent_page_id,
+                        subtree_height=_subtree_height(pages, page_id),
+                    )
+
                 result: CursorResult = await s.execute(  # type: ignore[assignment]
                     update(TeamWikiPageRow)
                     .where(
@@ -573,14 +742,15 @@ class TeamWikiStore:
         return page
 
     async def delete_page(self, *, team_id: TeamId, page_id: str) -> None:
-        """Delete one leaf page and all of its revisions.
-
-        Refuses a page that still has children rather than cascading: an
-        accidental subtree deletion is the one thing revision history cannot
-        undo, since the pages themselves are gone.
+        """Delete one leaf page and all of its revisions. Refuses one with
+        children rather than cascading — the subtree loss revision history
+        cannot undo. ``_structural_lock`` makes one children-check enough: no
+        other writer can start while it is held, so nothing can insert a
+        child in the window a stale-snapshot version needed a late re-check
+        for.
         """
 
-        async with use_session(self._sessions) as s:
+        async with self._structural_lock(team_id) as s:
             children = (
                 await s.execute(
                     select(TeamWikiPageRow.page_id).where(
@@ -606,21 +776,6 @@ class TeamWikiStore:
                     TeamWikiRevisionRow.page_id == page_id,
                 )
             )
-            # Re-check inside the same transaction: a child committed between
-            # the check above and this delete would be left pointing at a page
-            # that no longer exists — unreachable from the tree but still
-            # holding its slug, which is the outcome the guard exists to
-            # prevent. Raising here rolls the whole delete back.
-            late_children = (
-                await s.execute(
-                    select(TeamWikiPageRow.page_id).where(
-                        TeamWikiPageRow.team_id == str(team_id),
-                        TeamWikiPageRow.parent_page_id == page_id,
-                    )
-                )
-            ).scalars()
-            if list(late_children):
-                raise WikiPageHasChildrenError(page_id)
 
     # ---- proposals (WIKI-04) ----------------------------------------------
 
@@ -681,27 +836,6 @@ class TeamWikiStore:
             ).scalar_one_or_none()
             return _to_revision(row) if row is not None else None
 
-    async def reparent_proposal(
-        self, *, team_id: TeamId, revision_id: str, parent_page_id: str | None
-    ) -> None:
-        """Re-point a pending proposal's parent, when the one it named is gone.
-
-        The only field of a proposal that may change before approval, and only
-        towards the root: a proposal is approved or refused as a whole
-        (RFC §8.2), never edited into something else.
-        """
-
-        async with use_session(self._sessions) as s:
-            await s.execute(
-                update(TeamWikiRevisionRow)
-                .where(
-                    TeamWikiRevisionRow.team_id == str(team_id),
-                    TeamWikiRevisionRow.revision_id == revision_id,
-                    TeamWikiRevisionRow.status == "proposed",
-                )
-                .values(proposed_parent_page_id=parent_page_id)
-            )
-
     async def publish_proposal(
         self,
         *,
@@ -712,14 +846,11 @@ class TeamWikiStore:
     ) -> WikiPageRecord:
         """Turn a pending proposal into the page's current revision.
 
-        One transaction: for a new page it creates the page row and points it
-        at the proposal; for an edit it moves `current_revision_id` under the
-        same base-revision guard `publish_revision` uses, so a proposal written
-        against text someone has since changed is refused rather than silently
-        overwriting them.
-
-        The page is left `needs_review=True` either way — the approval says the
-        change is wanted, not that the page has been read as a whole.
+        One transaction, under ``_structural_lock`` even for a content-only
+        edit: a new page's parent is re-resolved against a fresh read (gone
+        means publish at the root; too deep means refuse), and an edit uses
+        `publish_revision`'s own base-revision guard. `needs_review` is left
+        true either way — approval means the change is wanted, not read.
         """
 
         now = _utcnow()
@@ -727,7 +858,7 @@ class TeamWikiStore:
         # insert. Surfacing the named error lets the caller answer 409 rather
         # than a bare 500 the approver can do nothing with.
         try:
-            async with use_session(self._sessions) as s:
+            async with self._structural_lock(team_id) as s:
                 row = (
                     await s.execute(
                         select(TeamWikiRevisionRow).where(
@@ -753,10 +884,19 @@ class TeamWikiStore:
                     if row.proposed_title is None:
                         # An edit whose page was deleted while the proposal waited.
                         raise WikiPageNotFoundError(row.page_id)
+
+                    pages = {
+                        p.page_id: p for p in await self.list_pages(team_id, session=s)
+                    }
+                    parent_id = row.proposed_parent_page_id
+                    if parent_id is not None and parent_id not in pages:
+                        parent_id = None
+                    _validate_new_parent(pages, parent_page_id=parent_id)
+
                     page_row = TeamWikiPageRow(
                         page_id=row.page_id,
                         team_id=str(team_id),
-                        parent_page_id=row.proposed_parent_page_id,
+                        parent_page_id=parent_id,
                         slug=slug,
                         title=row.proposed_title,
                         kind="page",
@@ -769,6 +909,7 @@ class TeamWikiStore:
                         updated_by=approver_user_id,
                     )
                     s.add(page_row)
+                    row.proposed_parent_page_id = parent_id
                 else:
                     result: CursorResult = await s.execute(  # type: ignore[assignment]
                         update(TeamWikiPageRow)

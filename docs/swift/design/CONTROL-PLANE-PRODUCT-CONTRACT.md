@@ -3515,6 +3515,24 @@ The migration renames existing collisions rather than failing. It is the one
 part of this change a user can see: a refusal when they pick a title a sibling
 already has.
 
+**Every structural writer serializes per team** (2026-09-08, WIKI-05). Create,
+move, delete, and proposal publication each run inside
+`TeamWikiStore._structural_lock`: a Postgres transaction-scoped
+`pg_advisory_xact_lock` keyed on the team, held for the writer's whole
+transaction — same primitive as `TeamMetadataStore.advisory_lock`. Parent
+existence, the rules-page restriction, the depth cap and the cycle check all
+re-run inside that lock against a fresh read, not a snapshot taken before the
+write. Without it, two writers touching different rows (an opposing move on
+each side, or a child insert racing its parent's delete) could each pass
+validation and commit, since neither a bare transaction nor a lock on the
+moved row alone serializes across rows with no foreign key between them
+(`parent_page_id` deliberately carries none — §5.3). Content-only writes
+(`publish_revision`) do not take this lock: they cannot change the tree's
+shape, and are already serialized by their own conditional `UPDATE` on
+`current_revision_id`. No-op on SQLite, so the guarantee is proven only
+against a real PostgreSQL — see the `integration_postgres`-marked tests in
+`test_team_wiki_store_postgres_integration.py`.
+
 **A page's slug is an opaque identifier** (2026-09-07), eight random hex
 characters minted at creation. It never reaches an agent: the injected index
 carries titles only, and the capability resolves a path to a slug itself, so

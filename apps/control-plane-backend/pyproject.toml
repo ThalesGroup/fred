@@ -46,6 +46,7 @@ asyncio_default_fixture_loop_scope = "function"
 cache_dir = "/tmp/.pytest"
 markers = [
   "integration: mark integration tests",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
 ]
 
 [tool.uv.sources]

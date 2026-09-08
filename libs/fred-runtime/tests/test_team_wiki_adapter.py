@@ -51,10 +51,12 @@ class _RecordingClient:
     def __init__(self, response_payload: Any) -> None:
         self._response_payload = response_payload
         self.last_call: dict[str, Any] | None = None
+        self.call_count = 0
 
     async def request(
         self, method: str, url: str, *, headers: dict[str, str], json: Any = None
     ) -> _FakeResponse:
+        self.call_count += 1
         self.last_call = {
             "method": method,
             "url": url,
@@ -62,6 +64,19 @@ class _RecordingClient:
             "json": json,
         }
         return _FakeResponse(self._response_payload)
+
+
+class _ScriptedClient:
+    """Returns one queued payload per call, in order — for a test that needs
+    control-plane state to change between two calls on the same adapter."""
+
+    def __init__(self, payloads: list[Any]) -> None:
+        self._payloads = list(payloads)
+
+    async def request(
+        self, method: str, url: str, *, headers: dict[str, str], json: Any = None
+    ) -> _FakeResponse:
+        return _FakeResponse(self._payloads.pop(0))
 
 
 def _binding() -> BoundRuntimeContext:
@@ -79,7 +94,7 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
-def _adapter(client: _RecordingClient) -> TeamWikiAdapter:
+def _adapter(client: Any) -> TeamWikiAdapter:
     return TeamWikiAdapter(
         binding=_binding(),
         control_plane_url="https://control-plane.internal",
@@ -104,6 +119,120 @@ async def test_read_page_preserves_the_revision_id_exactly() -> None:
     page = await adapter.read_page("p")
 
     assert page.revision_id == "rev-abc123"
+
+
+async def test_read_page_slices_the_requested_window() -> None:
+    """The control-plane GET has no window parameters — it always returns the
+    page whole — so the adapter is the one place the `[offset:offset+max_chars]`
+    contract has to hold, same as `DocumentMarkdownPort`'s adapters."""
+
+    client = _RecordingClient(
+        {
+            "page": {"slug": "p", "title": "P"},
+            "content_md": "0123456789",
+            "revision_id": "rev-1",
+        }
+    )
+    adapter = _adapter(client)
+
+    page = await adapter.read_page("p", max_chars=4, offset=3)
+
+    assert page.content_md == "3456"
+    assert page.offset == 3
+    assert page.next_offset == 7
+    assert page.total_chars == 10
+    assert page.truncated is True
+
+
+async def test_read_page_reports_no_continuation_at_the_end() -> None:
+    client = _RecordingClient(
+        {
+            "page": {"slug": "p", "title": "P"},
+            "content_md": "0123456789",
+            "revision_id": "rev-1",
+        }
+    )
+    adapter = _adapter(client)
+
+    page = await adapter.read_page("p", max_chars=4, offset=8)
+
+    assert page.content_md == "89"
+    assert page.next_offset is None
+    assert page.truncated is False
+
+
+async def test_read_page_fetches_a_slug_once_per_turn() -> None:
+    """A long page read across several continuation calls must not re-fetch
+    and re-parse the whole page on every one of them — the same doctrine as
+    `DocumentMarkdownAdapter` (DOCREAD-01): one control-plane round trip per
+    slug per turn, not one per segment."""
+
+    client = _RecordingClient(
+        {
+            "page": {"slug": "p", "title": "P"},
+            "content_md": "0123456789",
+            "revision_id": "rev-1",
+        }
+    )
+    adapter = _adapter(client)
+
+    first = await adapter.read_page("p", max_chars=4, offset=0)
+    second = await adapter.read_page("p", max_chars=4, offset=4)
+
+    assert client.call_count == 1
+    assert first.content_md == "0123"
+    assert second.content_md == "4567"
+    assert second.revision_id == first.revision_id
+
+
+async def test_read_page_cache_is_cleared_on_rebind() -> None:
+    """A new turn must never see a page pinned by a previous one."""
+
+    client = _RecordingClient(
+        {
+            "page": {"slug": "p", "title": "P"},
+            "content_md": "0123456789",
+            "revision_id": "rev-1",
+        }
+    )
+    adapter = _adapter(client)
+    await adapter.read_page("p")
+
+    adapter.rebind(_binding())
+    await adapter.read_page("p")
+
+    assert client.call_count == 2
+
+
+async def test_publish_proposal_invalidates_the_page_cache() -> None:
+    """A same-turn re-read after this adapter's own publish must see what was
+    just written, not the snapshot `read_page` cached before the publish."""
+
+    client = _ScriptedClient(
+        [
+            {
+                "page": {"slug": "p", "title": "P"},
+                "content_md": "old",
+                "revision_id": "rev-1",
+            },
+            {"page": {"slug": "p"}},
+            {
+                "page": {"slug": "p", "title": "P"},
+                "content_md": "new",
+                "revision_id": "rev-2",
+            },
+        ]
+    )
+    adapter = _adapter(client)
+
+    before = await adapter.read_page("p")
+    slug = await adapter.publish_proposal("prop-1")
+    after = await adapter.read_page("p")
+
+    assert before.content_md == "old"
+    assert slug == "p"
+    assert after.content_md == "new"
+    assert after.revision_id == "rev-2"
 
 
 async def test_propose_edit_sends_the_base_revision_id_verbatim() -> None:

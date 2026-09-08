@@ -378,9 +378,11 @@ invariant — not a check that could be bypassed, but an absence.
 Through the capability's middleware, once per turn:
 
 - the **rules page** verbatim, capped at 4 000 characters;
-- a **compact index** of the wiki: `slug — title`, one per line, capped at
-  4 000 characters. Past the cap the index is replaced by a line telling the
-  model to call `wiki_list_pages`.
+- a **compact index** of the wiki: an indented tree of titles (no slug — an
+  opaque id in context eventually reaches the user), capped at 4 000
+  characters. Past the cap, a line tells the model `wiki_list_pages` — a
+  separate, offset-paginated tool, exhaustive over multiple calls — has the
+  rest.
 
 Both caps matter: the baseline system prompt already sits near 16 700 tokens
 (#2412), and this rides on every turn of every agent holding the capability.

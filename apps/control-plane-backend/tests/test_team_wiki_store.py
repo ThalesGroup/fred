@@ -7,9 +7,17 @@ from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
     WikiPageConstraintError,
+    WikiPageDepthExceededError,
     WikiPageHasChildrenError,
+    WikiPageInvalidMoveError,
+    WikiPageNotFoundError,
+    WikiPageRecord,
+    WikiPageRulesParentError,
     WikiRevisionConflictError,
+    _child_depth_under,
+    _is_descendant,
     _StaleBaseWrite,
+    _subtree_height,
 )
 from fred_core.common import TeamId
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -459,5 +467,404 @@ async def test_deleting_a_leaf_removes_its_revisions(tmp_path: Path) -> None:
 
         assert await store.get_page(TEAM_A, created.page.page_id) is None
         assert await store.list_revisions(TEAM_A, created.page.page_id) == []
+    finally:
+        await engine.dispose()
+
+
+# ── pure tree-shape helpers ──────────────────────────────────────────────────
+#
+# The structural validators every writer below relies on. Moved here from
+# `test_team_wiki_service.py` along with the functions themselves: they back
+# the checks that now run inside `_structural_lock`, not the service.
+
+
+def _page(page_id: str, parent: str | None) -> WikiPageRecord:
+    return WikiPageRecord(
+        page_id=page_id,
+        team_id=TEAM_A,
+        slug=page_id,
+        title=page_id,
+        parent_page_id=parent,
+        current_revision_id=f"rev-{page_id}",
+    )
+
+
+def test_child_depth_is_the_depth_the_child_would_sit_at() -> None:
+    """A root page is depth 0, so a child of a root is 1. The helper is named
+    for what it returns: read as "depth of the parent", the cap lands a tier
+    out."""
+
+    pages = {"a": _page("a", None), "b": _page("b", "a"), "c": _page("c", "b")}
+    assert _child_depth_under(pages, None) == 0
+    assert _child_depth_under(pages, "a") == 1
+    assert _child_depth_under(pages, "c") == 3
+
+
+def test_child_depth_terminates_on_a_cycle() -> None:
+    """A cycle should be impossible, but a bounded walk means a corrupted row
+    cannot hang a request while someone works out why."""
+
+    pages = {"a": _page("a", "b"), "b": _page("b", "a")}
+    assert _child_depth_under(pages, "a") <= 10
+
+
+def test_subtree_height_is_zero_for_a_leaf_and_counts_levels_below() -> None:
+    pages = {
+        "root": _page("root", None),
+        "child": _page("child", "root"),
+        "grandchild": _page("grandchild", "child"),
+    }
+    assert _subtree_height(pages, "grandchild") == 0
+    assert _subtree_height(pages, "child") == 1
+    assert _subtree_height(pages, "root") == 2
+
+
+def test_is_descendant_detects_the_move_that_would_detach_a_subtree() -> None:
+    pages = {
+        "root": _page("root", None),
+        "child": _page("child", "root"),
+        "grandchild": _page("grandchild", "child"),
+    }
+    assert _is_descendant(pages, "grandchild", "root") is True
+    assert _is_descendant(pages, "root", "grandchild") is False
+
+
+def test_is_descendant_is_reflexive_and_catches_a_self_parent() -> None:
+    """A page named as its own parent is the degenerate cycle: `candidate_id`
+    equal to `ancestor_id` must read as true without a special case."""
+
+    pages = {"p": _page("p", None)}
+    assert _is_descendant(pages, "p", "p") is True
+
+
+# ── structural validation, offline (SQLite: the lock is a documented no-op —
+# these prove the checks fire on a single writer, not the serialization
+# guarantee under concurrency; see the Postgres integration suite for that) ──
+
+
+@pytest.mark.asyncio
+async def test_create_page_under_a_nonexistent_parent_is_refused(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "create-no-parent.sqlite3")
+    try:
+        with pytest.raises(WikiPageNotFoundError):
+            await store.create_page(
+                team_id=TEAM_A,
+                slug="p",
+                title="P",
+                content_md="",
+                parent_page_id="does-not-exist",
+                author_user_id="alice",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_create_page_under_the_rules_page_is_refused(tmp_path: Path) -> None:
+    store, engine = await _make_store(tmp_path, "create-under-rules.sqlite3")
+    try:
+        rules = await store.create_page(
+            team_id=TEAM_A,
+            slug="__rules__",
+            title="Rules",
+            content_md="",
+            kind="rules",
+            author_user_id="alice",
+        )
+        with pytest.raises(WikiPageRulesParentError):
+            await store.create_page(
+                team_id=TEAM_A,
+                slug="p",
+                title="P",
+                content_md="",
+                parent_page_id=rules.page.page_id,
+                author_user_id="alice",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_create_page_past_the_depth_cap_is_refused(tmp_path: Path) -> None:
+    """MAX_PAGE_DEPTH is 3: root `a`(0)-`b`(1)-`c`(2)-`d`(3) is the deepest legal
+    chain — `d` itself is fine — so a child of `d` would sit at 4."""
+
+    store, engine = await _make_store(tmp_path, "create-too-deep.sqlite3")
+    try:
+        a = await store.create_page(
+            team_id=TEAM_A, slug="a", title="a", content_md="", author_user_id="x"
+        )
+        b = await store.create_page(
+            team_id=TEAM_A,
+            slug="b",
+            title="b",
+            content_md="",
+            parent_page_id=a.page.page_id,
+            author_user_id="x",
+        )
+        c = await store.create_page(
+            team_id=TEAM_A,
+            slug="c",
+            title="c",
+            content_md="",
+            parent_page_id=b.page.page_id,
+            author_user_id="x",
+        )
+        d = await store.create_page(
+            team_id=TEAM_A,
+            slug="d",
+            title="d",
+            content_md="",
+            parent_page_id=c.page.page_id,
+            author_user_id="x",
+        )
+        with pytest.raises(WikiPageDepthExceededError):
+            await store.create_page(
+                team_id=TEAM_A,
+                slug="e",
+                title="e",
+                content_md="",
+                parent_page_id=d.page.page_id,
+                author_user_id="x",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_moving_a_page_under_its_own_child_is_refused(tmp_path: Path) -> None:
+    store, engine = await _make_store(tmp_path, "move-under-child.sqlite3")
+    try:
+        root = await store.create_page(
+            team_id=TEAM_A, slug="root", title="root", content_md="", author_user_id="x"
+        )
+        child = await store.create_page(
+            team_id=TEAM_A,
+            slug="child",
+            title="child",
+            content_md="",
+            parent_page_id=root.page.page_id,
+            author_user_id="x",
+        )
+        with pytest.raises(WikiPageInvalidMoveError):
+            await store.update_page_metadata(
+                team_id=TEAM_A,
+                page_id=root.page.page_id,
+                parent_page_id=child.page.page_id,
+                updated_by="x",
+            )
+        # Refused, not partially applied.
+        untouched = await store.get_page(TEAM_A, root.page.page_id)
+        assert untouched is not None
+        assert untouched.parent_page_id is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_page_cannot_be_moved_under_itself(tmp_path: Path) -> None:
+    store, engine = await _make_store(tmp_path, "move-self.sqlite3")
+    try:
+        p = await store.create_page(
+            team_id=TEAM_A, slug="p", title="p", content_md="", author_user_id="x"
+        )
+        with pytest.raises(WikiPageInvalidMoveError):
+            await store.update_page_metadata(
+                team_id=TEAM_A,
+                page_id=p.page.page_id,
+                parent_page_id=p.page.page_id,
+                updated_by="x",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_move_accounts_for_the_subtree_it_carries(tmp_path: Path) -> None:
+    """Checking only the destination's depth lets create-then-move defeat the
+    cap: the pages are shallow one at a time, deep once attached. `a` carries
+    `b` and `c` with it (height 2); `dest-child` already sits at depth 2, so
+    landing `a` there would push `c` to depth 4."""
+
+    store, engine = await _make_store(tmp_path, "move-subtree.sqlite3")
+    try:
+        a = await store.create_page(
+            team_id=TEAM_A, slug="a", title="a", content_md="", author_user_id="x"
+        )
+        b = await store.create_page(
+            team_id=TEAM_A,
+            slug="b",
+            title="b",
+            content_md="",
+            parent_page_id=a.page.page_id,
+            author_user_id="x",
+        )
+        await store.create_page(
+            team_id=TEAM_A,
+            slug="c",
+            title="c",
+            content_md="",
+            parent_page_id=b.page.page_id,
+            author_user_id="x",
+        )
+        dest = await store.create_page(
+            team_id=TEAM_A, slug="dest", title="dest", content_md="", author_user_id="x"
+        )
+        dest_child = await store.create_page(
+            team_id=TEAM_A,
+            slug="dest-child",
+            title="dest-child",
+            content_md="",
+            parent_page_id=dest.page.page_id,
+            author_user_id="x",
+        )
+
+        with pytest.raises(WikiPageDepthExceededError):
+            await store.update_page_metadata(
+                team_id=TEAM_A,
+                page_id=a.page.page_id,
+                parent_page_id=dest_child.page.page_id,
+                updated_by="x",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_rename_with_no_parent_change_is_unaffected_by_the_structural_checks(
+    tmp_path: Path,
+) -> None:
+    """A plain rename still takes the structural lock (one discipline for
+    every writer that can touch this row), but with no parent in play the
+    cycle/depth/rules checks are no-ops."""
+
+    store, engine = await _make_store(tmp_path, "rename-only.sqlite3")
+    try:
+        p = await store.create_page(
+            team_id=TEAM_A, slug="p", title="Old", content_md="", author_user_id="x"
+        )
+        updated = await store.update_page_metadata(
+            team_id=TEAM_A, page_id=p.page.page_id, title="New", updated_by="x"
+        )
+        assert updated.title == "New"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publishing_a_new_page_proposal_falls_back_to_root_when_its_parent_is_gone(
+    tmp_path: Path,
+) -> None:
+    """The parent named when the proposal was written may since have been
+    deleted. Publishing at the root rather than dangling is the documented
+    behaviour (§WIKI-04) — this proves it still holds once the resolution
+    moved inside the structural lock."""
+
+    store, engine = await _make_store(tmp_path, "proposal-parent-gone.sqlite3")
+    try:
+        parent = await store.create_page(
+            team_id=TEAM_A,
+            slug="parent",
+            title="Parent",
+            content_md="",
+            author_user_id="alice",
+        )
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=None,
+            content_md="drafted by an agent",
+            base_revision_id=None,
+            proposed_title="New page",
+            proposed_parent_page_id=parent.page.page_id,
+            author_user_id="alice",
+            agent_instance_id="inst-1",
+            session_id="sess-1",
+        )
+        # Nothing points at the proposal yet, so the parent can be deleted.
+        await store.delete_page(team_id=TEAM_A, page_id=parent.page.page_id)
+
+        page = await store.publish_proposal(
+            team_id=TEAM_A,
+            revision_id=proposal.revision_id,
+            slug="new-page",
+            approver_user_id="alice",
+        )
+
+        assert page.parent_page_id is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publishing_a_new_page_proposal_past_the_depth_cap_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The named parent (`p`) is still there, but a second structural writer —
+    a plain move, legal on its own — pushed `p` itself deeper while the
+    proposal waited for a human. Publishing the proposal re-reads `p`'s depth
+    as it stands now, not as it stood when the proposal was written, and
+    refuses rather than land its new page at depth 4."""
+
+    store, engine = await _make_store(tmp_path, "proposal-too-deep.sqlite3")
+    try:
+        p = await store.create_page(
+            team_id=TEAM_A, slug="p", title="p", content_md="", author_user_id="x"
+        )
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=None,
+            content_md="drafted by an agent",
+            base_revision_id=None,
+            proposed_title="Too deep",
+            proposed_parent_page_id=p.page.page_id,
+            author_user_id="alice",
+            agent_instance_id="inst-1",
+            session_id="sess-1",
+        )
+
+        # An independent chain reaching depth 2, unrelated to `p`.
+        anchor = await store.create_page(
+            team_id=TEAM_A,
+            slug="anchor",
+            title="anchor",
+            content_md="",
+            author_user_id="x",
+        )
+        mid1 = await store.create_page(
+            team_id=TEAM_A,
+            slug="mid1",
+            title="mid1",
+            content_md="",
+            parent_page_id=anchor.page.page_id,
+            author_user_id="x",
+        )
+        mid2 = await store.create_page(
+            team_id=TEAM_A,
+            slug="mid2",
+            title="mid2",
+            content_md="",
+            parent_page_id=mid1.page.page_id,
+            author_user_id="x",
+        )
+
+        # `p` has no children of its own yet (the proposal hasn't published),
+        # so moving it under `mid2` (depth 2) is itself legal: `p` lands at
+        # depth 3, exactly the cap.
+        await store.update_page_metadata(
+            team_id=TEAM_A,
+            page_id=p.page.page_id,
+            parent_page_id=mid2.page.page_id,
+            updated_by="x",
+        )
+
+        with pytest.raises(WikiPageDepthExceededError):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="too-deep",
+                approver_user_id="alice",
+            )
     finally:
         await engine.dispose()

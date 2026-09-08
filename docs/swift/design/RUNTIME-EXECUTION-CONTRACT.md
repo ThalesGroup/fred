@@ -5521,3 +5521,88 @@ regression versus their intended message).
 `libs/fred-runtime/tests/test_react_tool_binding_span_status.py`, plus
 `libs/fred-runtime/tests/test_react_tool_resolution.py` for provider-boundary
 sanitization.
+
+---
+
+### 8.75 ✅ `wiki_read_page` gets bounded continuation; a whole-page replacement now requires a whole-page read (2026-09-08)
+
+**What.** A wiki page can hold up to 100 KB (§8.1 of `TEAM-WIKI-RFC.md`), but
+`wiki_read_page` returned only the first
+`PAGE_READ_MAX_CHARS` (8 000) with no way to see the rest — while
+`wiki_propose_page_text` REPLACES a page whole. A page past the cut was
+readable only in part, yet nothing stopped a proposal being built as if that
+part were the whole page: the tail an agent never saw could be silently
+deleted by its own "edit". `TeamWikiPort.read_page` gains the same
+`offset`/`next_offset`/`total_chars` pagination contract §8.43 gave
+`DocumentMarkdownPort` — `WikiPageContent` now mirrors
+`DocumentMarkdownResult`'s shape. `TeamWikiAdapter.read_page` slices a page it
+fetches whole from control-plane (no new control-plane endpoint; the REST
+route was already unbounded, just never windowed before the capability), and
+**memoises that fetch per slug on the per-turn adapter instance**, cleared on
+`rebind` — exactly `DocumentMarkdownAdapter`'s pattern (§8.43), sharing that
+adapter's `_slice_window` clamp logic rather than a second copy of it. A first
+draft of this fix re-fetched the whole page on every continuation call;
+caught in performance review before merge, since a 100 KB page would
+otherwise cost up to ~13 full-page control-plane round trips (and ~1.3 MB of
+re-parsed JSON) to read once, on the tool-call hot path. That same review
+also caught two correctness gaps the cache introduced: `_page_cache` is now
+guarded by a lock (a ReAct round can dispatch several tool calls from one
+model turn concurrently — confirmed via LangGraph's `ToolNode` gathering
+them — so an unlocked check-then-fetch could race two first reads of one slug
+into two different snapshots), and `publish_proposal` now invalidates its own
+slug's cache entry on success, so a same-turn re-read after this agent's own
+publish sees what it just wrote rather than the pre-publish snapshot.
+
+**The write-side gate is the actual fix, not the pagination alone.**
+Continuation only lets the text be *retrieved*; `TeamWikiCapability.tools()`
+now tracks, per slug, per turn (under its own `read_state_lock`, same
+concurrency reasoning as the adapter's): `read_coverage` (how far a
+contiguous chain of reads has reached, offset 0 forward) and `complete_reads`
+(slugs read start to end at one consistent revision). `wiki_read_page`
+refuses a continuation call whose `offset` skips past that covered frontier —
+re-reading or replaying an already-covered offset is allowed (a retry of the
+exact last call must not be refused), only advancing past unread text is —
+so a model cannot "read" past a segment it never saw. `wiki_propose_page_text`
+now refuses outright when the target slug is not in `complete_reads`, even
+though `read_revisions` — the base a proposal anchors to, populated from the
+first segment — is already set. The two checks answer different questions:
+which revision to anchor to, versus whether the whole of it was actually
+seen.
+
+**Mid-read edits are handled through an immutable-revision read, checked
+defensively too.** The reference `TeamWikiAdapter` pins one page's content for
+the whole turn (the caching above), so every segment of one read slices the
+SAME fetch and can never disagree on revision — a real edit landing meanwhile
+is only ever seen at `propose_edit`'s existing `base_revision_id` conflict
+check (already tested, already the mechanism for "someone edited this since
+you read it"), never mid-read. The port contract does not *require* pinning,
+though: `TeamWikiCapability.tools()` also compares `revision_id` across
+continuation calls itself and discards a slug's session on a mismatch,
+independent of which adapter is behind the port. No naive concatenation of
+read segments is attempted anywhere — the model still authors the full
+replacement text itself; the correction only gates *when* that replacement is
+accepted, matching the doctrine that already governs `document_extract`'s
+exhaustive accumulation (§8.44) and `document_verbatim`'s pagination footer
+(§8.43).
+
+**Retained limitation.** `read_rules` (§7.3, RFC) is untouched: its
+4 000-char cap has no replace-whole workflow behind it, so the mismatch this
+entry closes does not apply there. And pinning a page for the whole turn
+means a proposal built from it can be rejected as stale at publish time by an
+edit that landed anywhere in that window, not just during the read itself —
+the existing, already-understood trade-off of anchoring to a `base_revision_id`
+at all, just now stretched over a longer read. Separately, and pre-existing —
+not touched or introduced by this entry — `wiki_list_pages`' own `next_offset`
+is a raw index into a tree re-fetched on every call, so a page inserted or
+removed between two of its pagination calls can shift what that index means;
+noted here for the next person to touch that tool, not fixed in this change.
+
+**Scope.** `fred-sdk/fred_sdk/contracts/runtime.py` (`WikiPageContent`,
+`TeamWikiPort.read_page`), `fred-runtime/.../adapters.py`
+(`TeamWikiAdapter.read_page`), `fred-capability-team-wiki/wiki/capability.py`
+(`wiki_read_page`, `wiki_propose_page_text`).
+
+**Tests.** `test_team_wiki_adapter.py` (window slicing, end-of-page),
+`test_team_wiki.py` (continuation reaching the end, an out-of-sequence offset
+refused, a mid-read revision change refused and the write gate staying shut,
+a partial read refused at propose time, a full cross-segment read accepted).

@@ -1807,6 +1807,27 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
 DEFAULT_MARKDOWN_PAGE_CHARS = 8000
 
 
+def _slice_window(
+    text: str, *, offset: int, max_chars: int
+) -> tuple[str, int, int | None, int]:
+    """Pure `[start:start+max_chars]` slice of `text`, shared by every port
+    that paginates a whole-text fetch (`DocumentMarkdownPort`, `TeamWikiPort`).
+    Clamped defensively: a negative offset starts at 0, a non-positive
+    `max_chars` falls back to `DEFAULT_MARKDOWN_PAGE_CHARS`, and an offset past
+    the end yields an empty final slice with `next_offset=None` (never an
+    exception). Returns `(slice, actual_start, next_offset, total_chars)`.
+    """
+
+    if offset < 0:
+        offset = 0
+    if max_chars <= 0:
+        max_chars = DEFAULT_MARKDOWN_PAGE_CHARS
+    total = len(text)
+    start = min(offset, total)
+    end = min(start + max_chars, total)
+    return text[start:end], start, (end if end < total else None), total
+
+
 def paginate_markdown(
     *, document_uid: str, full: str, offset: int, max_chars: int
 ) -> DocumentMarkdownResult:
@@ -1814,24 +1835,17 @@ def paginate_markdown(
 
     Pure function (no I/O) so the pagination contract — clamped bounds and the
     `next_offset` end-of-document signal — is unit-testable without a live
-    Knowledge Flow. `offset`/`max_chars` are clamped defensively: a negative
-    offset starts at 0, a non-positive `max_chars` falls back to the default,
-    and an offset past the end yields an empty final page with `next_offset`
-    None (never an exception).
+    Knowledge Flow.
     """
 
-    if offset < 0:
-        offset = 0
-    if max_chars <= 0:
-        max_chars = DEFAULT_MARKDOWN_PAGE_CHARS
-    total = len(full)
-    start = min(offset, total)
-    end = min(start + max_chars, total)
+    text, start, next_offset, total = _slice_window(
+        full, offset=offset, max_chars=max_chars
+    )
     return DocumentMarkdownResult(
         document_uid=document_uid,
-        text=full[start:end],
+        text=text,
         offset=start,
-        next_offset=end if end < total else None,
+        next_offset=next_offset,
         total_chars=total,
     )
 
@@ -2850,6 +2864,20 @@ class TeamWikiAdapter(TeamWikiPort):
     membership on every call, and refuses the whole wiki when an admin has not
     enabled the `team_wiki` capability for the team — so an agent whose
     selection survived a revoke gets a clean refusal rather than a stale read.
+
+    `read_page` memoises one page's content per slug on this per-turn instance
+    (cleared on `rebind`, same doctrine as `DocumentMarkdownAdapter`), guarded
+    by `_page_cache_lock` — a ReAct round can dispatch several tool calls from
+    one model turn concurrently, and an unlocked check-then-fetch could still
+    race two first reads of the same slug into two different snapshots. A long
+    page read across several continuation calls costs one control-plane round
+    trip, not one per segment, and every segment slices the SAME snapshot, so
+    they can never disagree on revision. A real edit landing while that
+    snapshot is held is caught later, at `propose_edit`'s existing
+    `base_revision_id` conflict check — EXCEPT this adapter's own successful
+    `publish_proposal`, which invalidates the published slug's cache entry
+    directly, so a same-turn re-read after publishing sees what was just
+    written rather than the pre-publish snapshot.
     """
 
     def __init__(
@@ -2865,6 +2893,8 @@ class TeamWikiAdapter(TeamWikiPort):
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
+        self._page_cache: dict[str, dict[str, Any]] = {}
+        self._page_cache_lock = asyncio.Lock()
 
     def _base(self) -> str:
         if not self._control_plane_url:
@@ -2922,18 +2952,39 @@ class TeamWikiAdapter(TeamWikiPort):
         ]
         return tuple(_ordered_wiki_refs(refs))
 
-    async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
-        payload = await self._get(f"/pages/{quote(slug, safe='')}")
-        page = payload.get("page") or {}
-        content = payload.get("content_md") or ""
-        truncated = len(content) > max_chars
+    async def read_page(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        # Control-plane's own GET has no window parameters — it always returns
+        # the page whole. Fetched once per slug per turn and memoised under a
+        # lock (class docstring): unlocked, two concurrent first reads of the
+        # same slug could each fetch and cache a different snapshot.
+        async with self._page_cache_lock:
+            cached = self._page_cache.get(slug)
+            if cached is None:
+                payload = await self._get(f"/pages/{quote(slug, safe='')}")
+                page = payload.get("page") or {}
+                cached = {
+                    "slug": page.get("slug") or slug,
+                    "title": page.get("title") or slug,
+                    "content": payload.get("content_md") or "",
+                    "updated_at": page.get("updated_at"),
+                    "revision_id": payload.get("revision_id"),
+                }
+                self._page_cache[slug] = cached
+        text, start, next_offset, total_chars = _slice_window(
+            cached["content"], offset=offset, max_chars=max_chars
+        )
         return WikiPageContent(
-            slug=page.get("slug") or slug,
-            title=page.get("title") or slug,
-            content_md=content[:max_chars] if truncated else content,
-            updated_at=page.get("updated_at"),
-            truncated=truncated,
-            revision_id=payload.get("revision_id"),
+            slug=cached["slug"],
+            title=cached["title"],
+            content_md=text,
+            updated_at=cached["updated_at"],
+            truncated=next_offset is not None,
+            revision_id=cached["revision_id"],
+            offset=start,
+            next_offset=next_offset,
+            total_chars=total_chars,
         )
 
     async def read_rules(self) -> str:
@@ -3011,7 +3062,12 @@ class TeamWikiAdapter(TeamWikiPort):
             "POST", f"/proposals/{quote(proposal_id, safe='')}/publish"
         )
         page = (payload or {}).get("page") or {}
-        return page.get("slug") or ""
+        slug = page.get("slug") or ""
+        # The write just landed: a same-turn re-read of this slug must see it,
+        # not the pre-publish snapshot `read_page` may have cached.
+        async with self._page_cache_lock:
+            self._page_cache.pop(slug, None)
+        return slug
 
 
 def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:

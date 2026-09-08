@@ -1212,8 +1212,18 @@ class WikiPageRef(FrozenModel):
 
 
 class WikiPageContent(FrozenModel):
-    """One page's Markdown, with the identity needed to cite it and to anchor
-    a later edit to the exact text this read returned."""
+    """One bounded page of a wiki page's Markdown (`[offset : offset+max_chars]`
+    of `revision_id`'s content), with the identity needed to cite it and to
+    anchor a later edit to the exact text this read returned.
+
+    Pagination mirrors `DocumentMarkdownResult` (DOCREAD-01): `next_offset` is
+    the offset to pass to keep reading, or `None` once this segment reaches
+    the end of the page — the same explicit-completion shape, because a wiki
+    page can also exceed what one call should return (up to 100 000 chars,
+    control-plane's own cap) and a caller must be able to tell "the whole page
+    fit in this read" from "this is merely where the read was cut off".
+    `truncated` is kept as a convenience equal to `next_offset is not None`.
+    """
 
     slug: str
     title: str
@@ -1221,6 +1231,9 @@ class WikiPageContent(FrozenModel):
     updated_at: str | None = None
     truncated: bool = False
     revision_id: str | None = None
+    offset: int = 0
+    next_offset: int | None = None
+    total_chars: int = 0
 
 
 class WikiProposalRef(FrozenModel):
@@ -1284,8 +1297,22 @@ class TeamWikiPort(ABC):
         """
 
     @abstractmethod
-    async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
-        """One page's Markdown, truncated to `max_chars` (`truncated` says so).
+    async def read_page(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        """One bounded window `[offset : offset+max_chars]` of a page's
+        Markdown. `next_offset` on the result is the offset to pass to read
+        the following window, or `None` once the end of the page has been
+        reached — the same continuation contract as `DocumentMarkdownPort`.
+
+        An implementation MAY pin the content across calls within one turn
+        (the reference `TeamWikiAdapter` does, to avoid re-fetching a long
+        page whole on every continuation call) or MAY re-read fresh each
+        time — this contract does not require either. Callers reading a page
+        across several calls MUST therefore still compare `revision_id`
+        across them and treat a change as reason to discard the partial read
+        and start over from `offset=0`: content from two different revisions
+        must never be presented as one page.
 
         Raises `TeamWikiPortError` with `status_code=404` when no page carries
         this slug — an agent that guessed must be told, not handed an empty

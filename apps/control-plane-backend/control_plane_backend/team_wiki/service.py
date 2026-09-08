@@ -32,11 +32,15 @@ from control_plane_backend.team_wiki.schemas import (
 from control_plane_backend.team_wiki.store import (
     TeamWikiStore,
     WikiPageConstraintError,
+    WikiPageDepthExceededError,
     WikiPageHasChildrenError,
+    WikiPageInvalidMoveError,
     WikiPageNotFoundError,
     WikiPageRecord,
+    WikiPageRulesParentError,
     WikiRevisionConflictError,
     WikiRevisionRecord,
+    _child_depth_under,
     _StaleBaseWrite,
 )
 from control_plane_backend.teams.service import require_team_access
@@ -176,6 +180,13 @@ def _require_free_title(
             )
 
 
+def _rules_parent_error() -> WikiRequestError:
+    """The one `WikiPageRulesParentError` translation, shared by every
+    structural writer that can name a parent (create, move, publish)."""
+
+    return WikiRequestError("The rules page cannot have children.", http_status=400)
+
+
 def _summary(page: WikiPageRecord) -> WikiPageSummary:
     return WikiPageSummary(
         page_id=page.page_id,
@@ -188,72 +199,6 @@ def _summary(page: WikiPageRecord) -> WikiPageSummary:
         updated_at=page.updated_at,
         updated_by=page.updated_by,
     )
-
-
-def _child_depth_under(
-    pages: dict[str, WikiPageRecord], parent_page_id: str | None
-) -> int:
-    """The depth a new child of `parent_page_id` would sit at.
-
-    A root page is depth 0, so a child of a root sits at 1, and `None` — no
-    parent — is 0. Named for what it returns: called it "depth of", the caller
-    reads it as the parent's own depth and the cap ends up one tier out.
-
-    The walk is bounded so a cycle left by an older bug cannot spin here.
-    """
-
-    depth = 0
-    cursor = parent_page_id
-    while cursor is not None and depth <= MAX_PAGE_DEPTH + 2:
-        parent = pages.get(cursor)
-        if parent is None:
-            break
-        cursor = parent.parent_page_id
-        depth += 1
-    return depth
-
-
-def _subtree_height(pages: dict[str, WikiPageRecord], page_id: str) -> int:
-    """How many levels sit BELOW `page_id` — 0 for a leaf.
-
-    Breadth-first over the team's pages, which is cheap: the depth cap keeps a
-    wiki tree small and this only runs on a move.
-    """
-
-    children: dict[str | None, list[str]] = {}
-    for page in pages.values():
-        children.setdefault(page.parent_page_id, []).append(page.page_id)
-
-    height = 0
-    level = children.get(page_id, [])
-    seen: set[str] = {page_id}
-    while level and height <= MAX_PAGE_DEPTH + 2:
-        height += 1
-        nxt: list[str] = []
-        for node in level:
-            if node in seen:
-                continue
-            seen.add(node)
-            nxt.extend(children.get(node, []))
-        level = nxt
-    return height
-
-
-def _is_descendant(
-    pages: dict[str, WikiPageRecord], candidate_id: str, ancestor_id: str
-) -> bool:
-    """True when `candidate_id` sits under `ancestor_id`. Guards a move that
-    would detach a subtree from the tree by making it its own parent."""
-
-    cursor: str | None = candidate_id
-    seen: set[str] = set()
-    while cursor is not None and cursor not in seen:
-        if cursor == ancestor_id:
-            return True
-        seen.add(cursor)
-        node = pages.get(cursor)
-        cursor = node.parent_page_id if node else None
-    return False
 
 
 async def _require_page(
@@ -393,24 +338,10 @@ async def create_wiki_page(
     team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
 
-    # Fetched unconditionally: the sibling-title check below needs the tree
-    # even for a page going to the root, where there is no parent to look up.
+    # Fetched for the sibling-title check below, a best-effort pre-check like
+    # the DB's own index behind it. Parent existence, kind and depth are the
+    # store's job now, re-validated inside its structural lock.
     pages = {p.page_id: p for p in await store.list_pages(team_id)}
-
-    if request.parent_page_id is not None:
-        parent = pages.get(request.parent_page_id)
-        if parent is None:
-            raise WikiRequestError("The parent page does not exist.", http_status=404)
-        if parent.kind == "rules":
-            raise WikiRequestError(
-                "The rules page cannot have children.", http_status=400
-            )
-        if _child_depth_under(pages, request.parent_page_id) > MAX_PAGE_DEPTH:
-            raise WikiRequestError(
-                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
-                http_status=400,
-            )
-
     _require_free_title(
         pages, parent_page_id=request.parent_page_id, title=request.title
     )
@@ -429,6 +360,17 @@ async def create_wiki_page(
         raise WikiRequestError(
             "A page with this title already exists at the same level.",
             http_status=409,
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "The parent page does not exist.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+            http_status=400,
         ) from exc
     return WikiPageDetail(
         page=_summary(created.page),
@@ -475,6 +417,9 @@ async def update_wiki_rules(
     page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
     if page is None:
         try:
+            # No `parent_page_id`: the rules page always lands at the root, so
+            # `create_page`'s parent-existence/rules/depth exceptions cannot
+            # fire here — only the slug collision below is reachable.
             created = await store.create_page(
                 team_id=team_id,
                 slug=RULES_PAGE_SLUG,
@@ -570,37 +515,9 @@ async def update_wiki_page_metadata(
             "The rules page cannot be renamed or moved.", http_status=400
         )
 
-    if request.parent_page_id is not None and not request.move_to_root:
-        if request.parent_page_id == page_id:
-            raise WikiRequestError("A page cannot be its own parent.", http_status=400)
-        parent = pages.get(request.parent_page_id)
-        if parent is None:
-            raise WikiRequestError("The parent page does not exist.", http_status=404)
-        if parent.kind == "rules":
-            raise WikiRequestError(
-                "The rules page cannot have children.", http_status=400
-            )
-        # Moving a page under its own descendant would cut that whole subtree
-        # off the tree — it would still exist in the table and be unreachable
-        # from the root, which reads as data loss.
-        if _is_descendant(pages, request.parent_page_id, page_id):
-            raise WikiRequestError(
-                "A page cannot be moved under one of its own children.",
-                http_status=400,
-            )
-        # The destination's depth is not enough: a move carries the whole
-        # subtree with it, so a shallow-looking move can push a grandchild past
-        # the cap. Without this, create-then-move defeats it entirely.
-        new_depth = _child_depth_under(pages, request.parent_page_id)
-        if new_depth + _subtree_height(pages, page_id) > MAX_PAGE_DEPTH:
-            raise WikiRequestError(
-                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
-                http_status=400,
-            )
-
-    # A rename and a move can each land the page next to a namesake, and a
-    # move carries the title with it — so both are checked against the
-    # destination, not against where the page sits today.
+    # A move carries the title with it, so this checks the destination, not
+    # where the page sits today — best-effort, like `create_wiki_page`'s.
+    # Everything else about the destination is the store's job now.
     destination = (
         None
         if request.move_to_root
@@ -631,6 +548,26 @@ async def update_wiki_page_metadata(
         raise WikiRequestError(
             "A page with this title already exists at the same level.",
             http_status=409,
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        if exc.args and exc.args[0] == page_id:
+            raise WikiRequestError(
+                "This wiki page does not exist.", http_status=404
+            ) from exc
+        raise WikiRequestError(
+            "The parent page does not exist.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageInvalidMoveError as exc:
+        raise WikiRequestError(
+            "A page cannot be moved under itself or one of its own descendants.",
+            http_status=400,
+        ) from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+            http_status=400,
         ) from exc
     return _summary(updated)
 
@@ -922,25 +859,12 @@ async def publish_wiki_proposal(
 
     slug = ""
     if proposal.proposed_title is not None:
-        # Re-run what proposing checked. A proposal can wait, and the tree can
-        # move under it: the parent may be gone (publish at the root rather than
-        # dangle) or have been pushed deeper (refuse rather than break the cap).
+        # Best-effort, like `create_wiki_page`'s: this snapshot only picks the
+        # slug and gives a fast title-collision message in the ordinary case.
         pages = {p.page_id: p for p in await store.list_pages(team_id)}
         parent_id = proposal.proposed_parent_page_id
         if parent_id is not None and parent_id not in pages:
             parent_id = None
-        if _child_depth_under(pages, parent_id) > MAX_PAGE_DEPTH:
-            raise WikiRequestError(
-                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels. "
-                "The page this one would go under has moved since it was "
-                "proposed.",
-                http_status=409,
-            )
-        if parent_id != proposal.proposed_parent_page_id:
-            await store.reparent_proposal(
-                team_id=team_id, revision_id=proposal_id, parent_page_id=parent_id
-            )
-        # Someone may have created that very page while the proposal waited.
         _require_free_title(
             pages, parent_page_id=parent_id, title=proposal.proposed_title
         )
@@ -965,6 +889,15 @@ async def publish_wiki_proposal(
     except WikiPageNotFoundError as exc:
         raise WikiRequestError(
             "The page this proposal targets no longer exists.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels. "
+            "The page this one would go under has moved since it was "
+            "proposed.",
+            http_status=409,
         ) from exc
     except WikiPageConstraintError as exc:
         # Everything was free a moment ago. Someone took the title, or this

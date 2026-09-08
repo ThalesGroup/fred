@@ -20,12 +20,16 @@ from control_plane_backend.team_wiki.service import (
     WIKI_READ_PERMISSION,
     WIKI_WRITE_PERMISSION,
     WikiRequestError,
-    _child_depth_under,
-    _is_descendant,
-    _subtree_height,
     _unique_slug,
 )
-from control_plane_backend.team_wiki.store import WikiPageRecord, WikiRevisionRecord
+from control_plane_backend.team_wiki.store import (
+    WikiPageDepthExceededError,
+    WikiPageInvalidMoveError,
+    WikiPageNotFoundError,
+    WikiPageRecord,
+    WikiPageRulesParentError,
+    WikiRevisionRecord,
+)
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from pydantic import ValidationError
@@ -88,44 +92,9 @@ def _revision(
     )
 
 
-def test_child_depth_is_the_depth_the_child_would_sit_at() -> None:
-    """A root page is depth 0, so a child of a root is 1. The helper is named
-    for what it returns: read as "depth of the parent", the cap lands a tier
-    out."""
-
-    pages = {"a": _page("a", None), "b": _page("b", "a"), "c": _page("c", "b")}
-    assert _child_depth_under(pages, None) == 0
-    assert _child_depth_under(pages, "a") == 1
-    assert _child_depth_under(pages, "c") == 3
-
-
-def test_child_depth_terminates_on_a_cycle() -> None:
-    """A cycle should be impossible, but a bounded walk means a corrupted row
-    cannot hang a request while someone works out why."""
-
-    pages = {"a": _page("a", "b"), "b": _page("b", "a")}
-    assert _child_depth_under(pages, "a") <= 10
-
-
-def test_subtree_height_is_zero_for_a_leaf_and_counts_levels_below() -> None:
-    pages = {
-        "root": _page("root", None),
-        "child": _page("child", "root"),
-        "grandchild": _page("grandchild", "child"),
-    }
-    assert _subtree_height(pages, "grandchild") == 0
-    assert _subtree_height(pages, "child") == 1
-    assert _subtree_height(pages, "root") == 2
-
-
-def test_is_descendant_detects_the_move_that_would_detach_a_subtree() -> None:
-    pages = {
-        "root": _page("root", None),
-        "child": _page("child", "root"),
-        "grandchild": _page("grandchild", "child"),
-    }
-    assert _is_descendant(pages, "grandchild", "root") is True
-    assert _is_descendant(pages, "root", "grandchild") is False
+# `_child_depth_under`, `_subtree_height` and `_is_descendant` moved to
+# `store.py` along with the structural validation they back — covered in
+# `test_team_wiki_store.py` now, against the real store under its lock.
 
 
 # ── sibling titles ───────────────────────────────────────────────────────────
@@ -287,6 +256,13 @@ class _Store:
         self.pages: list[WikiPageRecord] = []
         self.revisions: dict[str, WikiRevisionRecord] = {}
         self.proposals: list[WikiRevisionRecord] = []
+        # The structural checks these two calls guard (parent existence, kind,
+        # depth, cycle) now run inside the real store's locked transaction —
+        # this fake has no tree to validate against, so a test that wants to
+        # see the service translate one of those failures sets the exception
+        # to raise here instead of re-implementing the check.
+        self.raise_from_create_page: Exception | None = None
+        self.raise_from_update_page_metadata: Exception | None = None
 
     async def list_pages(self, _team_id: TeamId) -> list[WikiPageRecord]:
         return self.pages
@@ -305,6 +281,8 @@ class _Store:
         return self.revisions.get(revision_id)
 
     async def create_page(self, **kwargs: Any) -> Any:
+        if self.raise_from_create_page is not None:
+            raise self.raise_from_create_page
         page = WikiPageRecord(
             page_id=kwargs["slug"],
             team_id=TEAM,
@@ -317,6 +295,8 @@ class _Store:
         return SimpleNamespace(page=page, revision=_revision("rev-1", page.page_id))
 
     async def update_page_metadata(self, **kwargs: Any) -> WikiPageRecord:
+        if self.raise_from_update_page_metadata is not None:
+            raise self.raise_from_update_page_metadata
         page = next(p for p in self.pages if p.page_id == kwargs["page_id"])
         if kwargs.get("title") is not None:
             page.title = kwargs["title"]
@@ -499,62 +479,129 @@ async def test_the_rules_page_is_not_editable_deletable_or_movable_as_a_page(
     assert removed.value.http_status == 400
 
 
+# The cycle, depth, parent-existence and rules-parent checks a move or a
+# create can fail now run inside the store's structural lock (real-tree
+# behaviour covered in `test_team_wiki_store.py`, against the real store).
+# What is left to prove here is that the service translates each of the
+# store's structural exceptions into the right `WikiRequestError` — so these
+# tests inject the exception the real store would raise, rather than
+# re-implementing the tree checks in the fake.
+
+
 @pytest.mark.asyncio
-async def test_a_page_cannot_be_moved_under_its_own_child(gate: _RecordingGate) -> None:
+async def test_an_invalid_move_from_the_store_becomes_a_400(
+    gate: _RecordingGate,
+) -> None:
     store = _Store()
-    store.pages.extend([_page("root", None), _page("child", "root")])
+    store.pages.append(_page("p", None))
+    store.raise_from_update_page_metadata = WikiPageInvalidMoveError("p")
     deps = _deps(store)
 
     with pytest.raises(WikiRequestError) as caught:
         await wiki_service.update_wiki_page_metadata(
-            _user(),
-            TEAM,
-            "root",
-            UpdateWikiPageMetadataRequest(parent_page_id="child"),
-            deps,
-        )
-    assert caught.value.http_status == 400
-    assert "children" in str(caught.value)
-
-
-@pytest.mark.asyncio
-async def test_a_page_cannot_be_its_own_parent(gate: _RecordingGate) -> None:
-    store = _Store()
-    store.pages.append(_page("p", None))
-    deps = _deps(store)
-
-    with pytest.raises(WikiRequestError):
-        await wiki_service.update_wiki_page_metadata(
             _user(), TEAM, "p", UpdateWikiPageMetadataRequest(parent_page_id="p"), deps
         )
+    assert caught.value.http_status == 400
+    assert "descendant" in str(caught.value)
 
 
 @pytest.mark.asyncio
-async def test_a_move_accounts_for_the_subtree_it_carries(gate: _RecordingGate) -> None:
-    """Checking only the destination's depth lets create-then-move defeat the
-    cap: the pages are shallow one at a time, deep once attached."""
-
+async def test_a_depth_exceeded_move_from_the_store_becomes_a_400(
+    gate: _RecordingGate,
+) -> None:
     store = _Store()
-    # A three-level stack, plus a destination already one level down.
-    store.pages.extend(
-        [
-            _page("a", None),
-            _page("b", "a"),
-            _page("c", "b"),
-            _page("dest", None),
-            _page("dest-child", "dest"),
-        ]
-    )
+    store.pages.extend([_page("a", None), _page("dest", None)])
+    store.raise_from_update_page_metadata = WikiPageDepthExceededError("dest")
     deps = _deps(store)
 
-    # Moving "a" (height 2) under "dest-child" (child depth 2) would land "c" at
-    # depth 4, past MAX_PAGE_DEPTH.
     with pytest.raises(WikiRequestError) as caught:
         await wiki_service.update_wiki_page_metadata(
             _user(),
             TEAM,
             "a",
-            UpdateWikiPageMetadataRequest(parent_page_id="dest-child"),
+            UpdateWikiPageMetadataRequest(parent_page_id="dest"),
+            deps,
+        )
+    assert caught.value.http_status == 400
+    assert "deeper" in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_a_move_under_a_since_deleted_parent_becomes_a_404(
+    gate: _RecordingGate,
+) -> None:
+    """The parent looked present in the service's own snapshot; the store's
+    fresh, lock-protected read is what actually decides."""
+
+    store = _Store()
+    store.pages.append(_page("p", None))
+    store.raise_from_update_page_metadata = WikiPageNotFoundError("gone-parent")
+    deps = _deps(store)
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
+            TEAM,
+            "p",
+            UpdateWikiPageMetadataRequest(parent_page_id="gone-parent"),
+            deps,
+        )
+    assert caught.value.http_status == 404
+    assert "parent" in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_a_move_under_the_rules_page_from_the_store_becomes_a_400(
+    gate: _RecordingGate,
+) -> None:
+    store = _Store()
+    store.pages.append(_page("p", None))
+    store.raise_from_update_page_metadata = WikiPageRulesParentError("rules-1")
+    deps = _deps(store)
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.update_wiki_page_metadata(
+            _user(),
+            TEAM,
+            "p",
+            UpdateWikiPageMetadataRequest(parent_page_id="rules-1"),
+            deps,
+        )
+    assert caught.value.http_status == 400
+    assert "have children" in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_a_create_under_a_since_deleted_parent_becomes_a_404(
+    gate: _RecordingGate,
+) -> None:
+    store = _Store()
+    store.raise_from_create_page = WikiPageNotFoundError("gone-parent")
+    deps = _deps(store)
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.create_wiki_page(
+            _user(),
+            TEAM,
+            CreateWikiPageRequest(title="New", parent_page_id="gone-parent"),
+            deps,
+        )
+    assert caught.value.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_a_create_past_the_depth_cap_from_the_store_becomes_a_400(
+    gate: _RecordingGate,
+) -> None:
+    store = _Store()
+    store.raise_from_create_page = WikiPageDepthExceededError("deep-parent")
+    deps = _deps(store)
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.create_wiki_page(
+            _user(),
+            TEAM,
+            CreateWikiPageRequest(title="New", parent_page_id="deep-parent"),
             deps,
         )
     assert caught.value.http_status == 400

@@ -32,6 +32,12 @@ Doctrine summary:
   and carries only a truncated argument preview — too little to diff a page
   against. There is no delete, rename or move tool, and the rules page is
   refused server-side whatever the configuration.
+- **A whole-page replacement requires a whole-page read.** A page can hold up
+  to 100 000 chars and `wiki_read_page` returns `PAGE_READ_MAX_CHARS` at a
+  time, so `tools()` tracks contiguous, revision-consistent coverage per slug
+  and `wiki_propose_page_text` — which REPLACES a page whole — refuses until
+  a slug has been read start to end this turn (RUNTIME-EXECUTION-CONTRACT.md
+  §8.75).
 """
 
 from __future__ import annotations
@@ -73,15 +79,26 @@ logger = logging.getLogger(__name__)
 # The tool-result `tool_ref` stamped on this capability's artifacts.
 TEAM_WIKI_TOOL_REF = "team_wiki"
 
-# How much of one page a read returns. A wiki page is a synthesis, and the
-# control-plane caps it at 100 000 characters — but a page near that cap would
-# swallow the context window, so a read is cut here and says so.
+# How much of one page a single wiki_read_page call returns. A wiki page is a
+# synthesis, and the control-plane caps it at 100 000 characters — far more
+# than one call should hand the model at once, so a read returns it in bounded
+# segments (offset-based continuation, same shape as DocumentMarkdownPort)
+# rather than a single silent cut.
 PAGE_READ_MAX_CHARS = 8_000
 
 # The index injected into the prompt. Titles only: the point is that the model
 # knows what the team has written down and can ask for it by slug, not that it
 # reads the wiki every turn.
 INDEX_MAX_CHARS = 4_000
+
+# One call to wiki_list_pages. Independent of INDEX_MAX_CHARS on purpose: the
+# injected index repeats on every model call this turn, so its budget favors
+# staying small; this tool is called on demand, once per page of results, so
+# it can afford more — and unlike the index it must be a COMPLETE discovery
+# mechanism on its own (WIKI-05: the index used to point an omitted-pages
+# model here for "the rest", and this tool returned the identical truncated
+# prefix — the omitted pages were unreachable by any tool).
+LIST_PAGES_MAX_CHARS = 8_000
 
 # Appended when the same page is read twice in one turn. The content is still
 # returned — a trimmed history can legitimately cost the model a page it read —
@@ -244,7 +261,9 @@ def resolve_path(pages: Sequence[WikiPageRef], path: str) -> WikiPageRef | None:
 
 
 def _format_index(pages: Sequence[WikiPageRef]) -> str:
-    """The page list as an indented tree of titles.
+    """The page list as an indented tree of titles — a compact PREVIEW, not a
+    complete discovery mechanism. `wiki_list_pages` (`_format_page_batch`) is
+    that: paginated, so it can promise completeness this cannot.
 
     Titles only, deliberately: a page's slug is an opaque id, and a model that
     can see one will sooner or later print it to the user, who has no use for
@@ -270,8 +289,41 @@ def _format_index(pages: Sequence[WikiPageRef]) -> str:
         used += len(line) + 1
         lines.append(line)
     if omitted:
-        lines.append(f"  …[{omitted} more pages — call wiki_list_pages for the rest]")
+        lines.append(
+            f"  …[{omitted} more pages not shown here — call wiki_list_pages to "
+            "browse the complete, addressable list page by page]"
+        )
     return "\n".join(lines)
+
+
+def _format_page_batch(
+    pages: Sequence[WikiPageRef], *, offset: int
+) -> tuple[str, int | None]:
+    """One bounded, self-contained slice of the full page list, starting at
+    `offset`. Each line is a page's FULL PATH, not an indented title: unlike
+    `_format_index`, a slice does not start at the root, so a page's
+    ancestors are not necessarily in the same slice to lean on for context —
+    the path carries that on every line regardless of where a boundary falls.
+
+    Returns the slice's text and the offset to pass next, or None once the
+    slice reaches the end of the list. Always includes at least one page when
+    `offset` still has pages left, even one whose own path alone exceeds the
+    budget, so a pathologically long title cannot stall pagination forever.
+    """
+
+    by_slug = {p.slug: p for p in pages}
+    lines: list[str] = []
+    used = 0
+    index = offset
+    for page in pages[offset:]:
+        line = f"- {_page_path(pages, page, by_slug)}"
+        if lines and used + len(line) + 1 > LIST_PAGES_MAX_CHARS:
+            break
+        used += len(line) + 1
+        lines.append(line)
+        index += 1
+    next_offset = index if index < len(pages) else None
+    return "\n".join(lines), next_offset
 
 
 class _TeamWikiPromptMiddleware(AgentMiddleware):
@@ -339,8 +391,10 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
                 "or wiki_propose_page, then call wiki_publish_proposal, which "
                 "asks the user to approve it. Read a page before proposing an "
                 "edit — your text replaces it whole, so it must be the complete "
-                "page as it should end up. Say a page was written only after a "
-                "publish call has come back successful."
+                "page as it should end up. A long page comes back in more than "
+                "one wiki_read_page call; keep reading to the end before "
+                "proposing, or the tool will refuse. Say a page was written "
+                "only after a publish call has come back successful."
                 "\nContent is the ONLY thing you can change. You cannot move, "
                 "rename or delete a page, and editing its text will not move "
                 "it — if the user asks for any of those, say plainly that you "
@@ -457,15 +511,25 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         """
 
         services = ctx.services
-        # Slugs already read this turn. The closure is rebuilt per turn, so this
-        # never leaks across conversations. See `_REREAD_NOTE`: a model with no
-        # way to act on a page it has read will otherwise call this again, and
-        # again — six identical calls in one turn, in the field.
-        already_read: set[str] = set()
-        # The revision each slug was last read at, this turn — what a propose
-        # call anchors its base to. Never crosses the HITL gate: only
-        # wiki_publish_proposal is gated, and it needs none of this.
+        # (slug, offset) segments already read this turn — see `_REREAD_NOTE`:
+        # a model with no way to act on a page it has read will otherwise call
+        # this again, and again, in the field.
+        already_read: set[tuple[str, int]] = set()
+        # The revision each slug was last read at — a propose call's base, and
+        # what a continuation read checks to catch the page changing mid-read.
         read_revisions: dict[str, str] = {}
+        # How far each slug's reads have contiguously covered from offset 0 —
+        # a continuation quoting an offset beyond this would skip unseen text.
+        read_coverage: dict[str, int] = {}
+        # Slugs read start-to-finish this turn, at one consistent revision —
+        # the only grounds wiki_propose_page_text accepts for replacing a page
+        # whole (a page under PAGE_READ_MAX_CHARS qualifies after one read).
+        complete_reads: set[str] = set()
+        # Guards all four structures above: a ReAct round can dispatch several
+        # tool calls from one model turn concurrently (LangGraph gathers them),
+        # so two reads of the same slug could otherwise interleave their
+        # updates and leave this bookkeeping inconsistent.
+        read_state_lock = asyncio.Lock()
         # The tree, fetched at most once per turn and shared by every tool that
         # has to turn a path into a page. Dropped after a publish, which is the
         # only thing here that can add or rename one.
@@ -533,26 +597,34 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             return page
 
         @tool("wiki_list_pages", response_format="content_and_artifact")
-        async def wiki_list_pages() -> tuple[str, ToolInvocationResult]:
-            """List every page in the team's wiki, as an indented tree.
+        async def wiki_list_pages(offset: int = 0) -> tuple[str, ToolInvocationResult]:
+            """List every page in the team's wiki, exhaustively and page by page.
 
-            Indentation is the hierarchy. A page's address is its titles from
-            the top joined by " / " — "Parent page / Child page" — and that is
-            what wiki_read_page takes. The same index is already in your
-            instructions: call this only to refresh it after a change, or when
-            the instructions say pages were omitted.
+            Each line is one page's full path — its titles from the top
+            joined by " / ", e.g. "Parent page / Child page" — the same
+            address wiki_read_page takes. Call with no argument for the
+            first page of results, to see the complete list from the start
+            or to refresh it after a change. Each call returns ONE page and
+            a `total` count; when it ends with "... N more — call again
+            with offset=N to continue", call again with that offset. NEVER
+            tell the user you have listed every page after one call without
+            checking for that line — the index already in your
+            instructions is a compact preview, and this tool's own output
+            can also span more than one call.
             """
 
             nonlocal tree
             # Before the try: a missing port is a wiring fault and must stay
             # loud, not degrade into "the wiki could not be reached".
             _require_port()
+            effective_offset = max(offset, 0)
             started = time.monotonic()
             try:
-                # Through the cache, and refreshing it: the docstring tells the
-                # model to call this after a change, and a refresh that did not
-                # reach the resolver left it reading a tree from earlier in the
-                # turn — "there is no wiki page at X" for a page just listed.
+                # Always refreshed, continuation calls included: reusing the
+                # cache across a pagination sequence would misalign a later
+                # offset against a list a same-turn wiki_publish_proposal
+                # already reordered underneath it (its own refresh runs
+                # regardless of what this tool does).
                 async with tree_lock:
                     tree = None
                 pages = await _tree()
@@ -562,15 +634,40 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            text = _format_index(pages) or "This wiki has no pages yet."
+            if not pages:
+                text = "This wiki has no pages yet."
+                return text, ToolInvocationResult(
+                    tool_ref=TEAM_WIKI_TOOL_REF,
+                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+                )
+            if effective_offset >= len(pages):
+                text = (
+                    f"total={len(pages)}. There are no more pages after the "
+                    "ones you already listed."
+                )
+                return text, ToolInvocationResult(
+                    tool_ref=TEAM_WIKI_TOOL_REF,
+                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+                )
+            body, next_offset = _format_page_batch(pages, offset=effective_offset)
+            lines = [f"total={len(pages)} offset={effective_offset}", body]
+            if next_offset is not None:
+                lines.append(
+                    f"... {len(pages) - next_offset} more — call again with "
+                    f"offset={next_offset} to continue."
+                )
+            text = "\n".join(lines)
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
             )
 
         @tool("wiki_read_page", response_format="content_and_artifact")
-        async def wiki_read_page(path: str) -> tuple[str, ToolInvocationResult]:
-            """Read one wiki page's full text, by its path in the index.
+        async def wiki_read_page(
+            path: str, offset: int = 0
+        ) -> tuple[str, ToolInvocationResult]:
+            """Read one wiki page's text, one bounded segment at a time, by its
+            path in the index.
 
             A path is the page's titles from the top, joined by " / ", as the
             index's indentation shows them: "Parent page / Child page". The
@@ -578,10 +675,15 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
             Use this before relying on anything the wiki says — a title in the
             index is not evidence of what the page contains.
-            You get the whole page unless the text ends with an explicit cut
-            marker; no marker means nothing was withheld, so do not call this
-            again hoping for more. When the answer comes from a page, name that
-            page so the user can check it.
+
+            Leave `offset` unset to read from the start. A page longer than
+            one segment says so and gives you the `offset` to call again with;
+            keep calling until it says you have reached the end before you
+            conclude you have seen the whole page — a segment that does not
+            reach the end is NOT the whole page, even if it looks complete.
+            wiki_propose_page_text refuses to replace a page you have not read
+            all the way to the end this turn, so do not skip ahead. When the
+            answer comes from a page, name that page so the user can check it.
 
             This tool READS. There is no tool here that writes to the wiki, so
             re-reading a page will never let you change it.
@@ -592,28 +694,74 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             if not isinstance(found, WikiPageRef):
                 return found
             slug = found.slug
-            started = time.monotonic()
-            try:
-                page = await port.read_page(slug, max_chars=PAGE_READ_MAX_CHARS)
-            except Exception as exc:
-                return _wiki_tool_failure(
-                    action=f"read the wiki page '{path}'",
-                    exc=exc,
-                    elapsed_s=time.monotonic() - started,
+            offset = max(offset, 0)
+            async with read_state_lock:
+                expected_offset = read_coverage.get(slug, 0)
+                if offset != 0 and offset > expected_offset:
+                    return _resolution_failure(
+                        f"'{path}' was not read up to offset {offset} this turn. "
+                        f"Call wiki_read_page('{path}') to read it from the "
+                        f"start, or wiki_read_page('{path}', "
+                        f"offset={expected_offset}) to continue where your "
+                        "last read of it left off."
+                    )
+                started = time.monotonic()
+                try:
+                    page = await port.read_page(
+                        slug, max_chars=PAGE_READ_MAX_CHARS, offset=offset
+                    )
+                except Exception as exc:
+                    return _wiki_tool_failure(
+                        action=f"read the wiki page '{path}'",
+                        exc=exc,
+                        elapsed_s=time.monotonic() - started,
+                    )
+                prior_revision = read_revisions.get(slug)
+                if (
+                    offset > 0
+                    and prior_revision is not None
+                    and page.revision_id != prior_revision
+                ):
+                    # A port that does not pin content for the turn could hand
+                    # back a later revision mid-read; discard rather than
+                    # splice two revisions together (offset=0 restarts fresh).
+                    read_coverage.pop(slug, None)
+                    complete_reads.discard(slug)
+                    read_revisions.pop(slug, None)
+                    return _resolution_failure(
+                        f"'{path}' changed while you were reading it, so "
+                        f"continuing from offset {offset} would mix two "
+                        "different versions of the page into one. Start "
+                        f"again with wiki_read_page('{path}')."
+                    )
+                body = page.content_md.strip() or (
+                    "(this page is empty)" if offset == 0 else "(no more text)"
                 )
-            body = page.content_md.strip() or "(this page is empty)"
-            text = f"# {page.title}\n\n{body}"
-            if page.truncated:
-                text += (
-                    f"\n\n…[cut at {PAGE_READ_MAX_CHARS} characters — this page "
-                    "is longer than what you were given]"
-                )
-            if page.slug in already_read or slug in already_read:
-                text += _REREAD_NOTE
-            already_read.update({slug, page.slug})
-            if page.revision_id:
-                read_revisions[slug] = page.revision_id
-                read_revisions[page.slug] = page.revision_id
+                text = f"# {page.title}\n\n{body}" if offset == 0 else body
+                read_key = (slug, offset)
+                if read_key in already_read or (page.slug, offset) in already_read:
+                    text += _REREAD_NOTE
+                already_read.update({read_key, (page.slug, offset)})
+                if page.revision_id is not None:
+                    read_revisions[slug] = page.revision_id
+                    read_revisions[page.slug] = page.revision_id
+                if page.next_offset is not None:
+                    read_coverage[slug] = max(expected_offset, page.next_offset)
+                    complete_reads.discard(slug)
+                    text += (
+                        f"\n\n[Read chars {page.offset}-"
+                        f"{page.offset + len(page.content_md)} of "
+                        f"{page.total_chars}. MORE TEXT REMAINS — you have NOT "
+                        f"seen the whole page yet. Call wiki_read_page('{path}', "
+                        f"offset={page.next_offset}) to keep reading before "
+                        "relying on or replacing its content.]"
+                    )
+                else:
+                    read_coverage[slug] = max(expected_offset, page.total_chars)
+                    complete_reads.add(slug)
+                    text += (
+                        f"\n\n[End of page reached ({page.total_chars} chars total).]"
+                    )
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
@@ -649,10 +797,12 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             A path is the page's titles from the top joined by " / ", the same
             address wiki_read_page takes.
 
-            Read the page with wiki_read_page THIS TURN first — required, not
-            just advice: `content_md` REPLACES it whole, so it must be the
-            complete page as you want it to end up, not just your addition.
-            Keep what was already there unless the user asked to remove it.
+            Read the page with wiki_read_page THIS TURN first, all the way to
+            its end — required, not just advice: `content_md` REPLACES it
+            whole, so it must be the complete page as you want it to end up,
+            not just your addition, and this is refused until wiki_read_page
+            has told you that you reached the end. Keep what was already
+            there unless the user asked to remove it.
 
             This stores a suggestion and changes nothing in the wiki.
             """
@@ -661,7 +811,17 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             found = await _resolve(path, action=f"propose an edit to '{path}'")
             if not isinstance(found, WikiPageRef):
                 return found
-            base_revision_id = read_revisions.get(found.slug)
+            async with read_state_lock:
+                is_complete = found.slug in complete_reads
+                base_revision_id = read_revisions.get(found.slug)
+            if not is_complete:
+                return _resolution_failure(
+                    f"You have not read all of '{path}' this turn — it is "
+                    "longer than one wiki_read_page call returns, and "
+                    "content_md would replace text you have not seen. Call "
+                    "wiki_read_page again with the offset it gave you until "
+                    "it says you have reached the end, then propose your edit."
+                )
             if base_revision_id is None:
                 return _resolution_failure(
                     f"Read '{path}' with wiki_read_page in this turn before "

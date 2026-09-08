@@ -23,6 +23,7 @@ takes the turn down; a tool that lies about an empty wiki is worse.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 import pytest
@@ -30,6 +31,7 @@ from fred_capability_team_wiki.wiki.capability import (
     PAGE_READ_MAX_CHARS,
     TeamWikiCapability,
     TeamWikiConfig,
+    _format_page_batch,
     _TeamWikiPromptMiddleware,
 )
 from fred_sdk.contracts.capability import (
@@ -88,16 +90,31 @@ class _FakePort(TeamWikiPort):
 
         self._pages = pages
 
-    async def read_page(self, slug: str, *, max_chars: int = 8_000) -> WikiPageContent:
+    def set_content(self, content: str, *, revision_id: str) -> None:
+        """A page edited — by a human, or another turn — between two
+        continuation reads of the same slug in this turn."""
+
+        self._content = content
+        self._revision_id = revision_id
+
+    async def read_page(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
         if self._raises is not None:
             raise self._raises
-        truncated = len(self._content) > max_chars
+        total = len(self._content)
+        start = max(offset, 0)
+        end = min(start + max_chars, total)
+        next_offset = end if end < total else None
         return WikiPageContent(
             slug=slug,
             title=slug.title(),
-            content_md=self._content[:max_chars] if truncated else self._content,
-            truncated=truncated,
+            content_md=self._content[start:end],
+            truncated=next_offset is not None,
             revision_id=self._revision_id,
+            offset=start,
+            next_offset=next_offset,
+            total_chars=total,
         )
 
     async def read_rules(self) -> str:
@@ -177,7 +194,12 @@ def _page(slug: str, title: str, parent: str | None = None) -> WikiPageRef:
     return WikiPageRef(page_id=slug, slug=slug, title=title, parent_slug=parent)
 
 
-def test_index_shows_the_hierarchy_and_no_identifier() -> None:
+def test_listing_shows_full_paths_and_no_identifier() -> None:
+    """`wiki_list_pages` renders full paths, not indentation (WIKI-05): a
+    paginated slice does not always start at the root, so a page's ancestors
+    are not necessarily in the same slice to lean on for hierarchy — the
+    path carries that on every line regardless of where a boundary falls."""
+
     port = _FakePort(
         pages=(
             _page("6adb844e", "Onboarding"),
@@ -187,10 +209,9 @@ def test_index_shows_the_hierarchy_and_no_identifier() -> None:
     text = _call(port, "wiki_list_pages", {}).content
 
     assert "- Onboarding" in text
-    # Indented under its parent: an index that flattens the tree describes a
-    # different wiki than the one the team sees, and the indentation IS the
-    # address now that there is no identifier to quote.
-    assert "  - Tooling" in text
+    assert "- Onboarding / Tooling" in text
+    assert "6adb844e" not in text
+    assert "21b89ad9" not in text
 
 
 def test_the_index_never_shows_a_slug() -> None:
@@ -209,6 +230,153 @@ def test_an_empty_wiki_says_so_rather_than_returning_nothing() -> None:
     text = _call(_FakePort(), "wiki_list_pages", {}).content
 
     assert "no pages yet" in text
+
+
+# ── pagination (WIKI-05): the index's own truncation used to send the model to
+# wiki_list_pages for "the rest", and that tool returned the identical
+# truncated prefix — the omitted pages were unreachable by any tool. ─────────
+
+
+def test_finite_calls_discover_every_page_with_no_skip_or_repeat() -> None:
+    """Follow the offset the tool hands back, call after call, until it says
+    there is nothing more. Every page must be seen, none twice."""
+
+    pages = tuple(_page(f"s{i}", f"Page {i}") for i in range(1_000))
+    port = _FakePort(pages=pages)
+    turn = _tools(port)
+
+    seen: list[str] = []
+    offset = 0
+    calls = 0
+    while True:
+        calls += 1
+        assert calls <= len(pages) + 2, "pagination did not terminate"
+        text = _call(port, "wiki_list_pages", {"offset": offset}, turn).content
+        body_lines = text.splitlines()[1:]
+        seen.extend(
+            line.removeprefix("- ") for line in body_lines if line.startswith("- ")
+        )
+        match = re.search(r"offset=(\d+) to continue", text)
+        if match is None:
+            break
+        offset = int(match.group(1))
+
+    assert seen == [p.title for p in pages]
+    assert calls > 1, "the fixture should not fit in a single call"
+
+
+def test_an_out_of_range_offset_says_there_is_nothing_more() -> None:
+    port = _FakePort(pages=(_page("a", "A"),))
+    text = _call(port, "wiki_list_pages", {"offset": 50}).content
+
+    assert "no more pages" in text
+    assert "total=1" in text
+
+
+def test_a_negative_offset_is_treated_as_the_start() -> None:
+    port = _FakePort(pages=(_page("a", "A"), _page("b", "B")))
+    text = _call(port, "wiki_list_pages", {"offset": -5}).content
+
+    assert "- A" in text
+    assert "offset=0" in text
+
+
+def test_every_call_refreshes_the_tree() -> None:
+    """A continuation call re-fetches too, not only offset 0: caching a slice
+    across calls once meant a same-turn publish (which always refreshes)
+    could reorder the list underneath an old offset, silently skipping or
+    duplicating pages — see the regression test below."""
+
+    pages = tuple(_page(f"s{i}", f"Page {i}") for i in range(200))
+    port = _FakePort(pages=pages)
+    turn = _tools(port)
+
+    _call(port, "wiki_list_pages", {"offset": 0}, turn)
+    assert port.list_calls == 1
+    _call(port, "wiki_list_pages", {"offset": 50}, turn)
+    assert port.list_calls == 2
+
+
+def test_a_publish_between_pagination_calls_does_not_hide_the_new_page() -> None:
+    """List page 1, publish a new page, then continue with the offset page 1
+    handed back. The new page must still turn up somewhere in the rest of
+    the listing, not fall into a gap the stale offset skips over."""
+
+    pages = tuple(_page(f"s{i}", f"Page {i}") for i in range(1_000))
+    port = _FakePort(pages=pages)
+    port.publish_title = "New Page"
+    turn = _tools(port, "read_write")
+
+    first = _call(port, "wiki_list_pages", {"offset": 0}, turn)
+    match = re.search(r"offset=(\d+) to continue", first.content)
+    assert match is not None, "the fixture should not fit in a single call"
+    next_offset = int(match.group(1))
+
+    _call(port, "wiki_propose_page", {"title": "New Page", "content_md": "x"}, turn)
+    _call(port, "wiki_publish_proposal", {"proposal_id": "prop-1"}, turn)
+
+    seen: list[str] = []
+    offset = next_offset
+    while True:
+        text = _call(port, "wiki_list_pages", {"offset": offset}, turn).content
+        body_lines = text.splitlines()[1:]
+        seen.extend(
+            line.removeprefix("- ") for line in body_lines if line.startswith("- ")
+        )
+        match = re.search(r"offset=(\d+) to continue", text)
+        if match is None:
+            break
+        offset = int(match.group(1))
+
+    assert "New Page" in seen
+
+
+def test_a_single_pathologically_long_title_still_advances() -> None:
+    """A page whose own path alone exceeds the per-call budget must still be
+    returned, and the offset must still move past it — otherwise pagination
+    stalls forever on that one page."""
+
+    huge_title = "X" * 20_000
+    pages = (_page("a", huge_title), _page("b", "Short"))
+    body, next_offset = _format_page_batch(pages, offset=0)
+
+    assert huge_title in body
+    assert next_offset == 1
+    # And the second call reaches the end cleanly.
+    body2, next_offset2 = _format_page_batch(pages, offset=next_offset)
+    assert "Short" in body2
+    assert next_offset2 is None
+
+
+def test_pagination_boundary_is_exact_when_pages_fit_precisely() -> None:
+    """When the last page in a slice lands exactly on the budget, there must
+    be no phantom continuation offered, and no page dropped either."""
+
+    pages = (_page("a", "A"), _page("b", "B"))
+    line_len = len(f"- {pages[1].title}") + 1
+    budget = len(f"- {pages[0].title}") + 1 + line_len
+
+    import fred_capability_team_wiki.wiki.capability as cap_module
+
+    original = cap_module.LIST_PAGES_MAX_CHARS
+    cap_module.LIST_PAGES_MAX_CHARS = budget
+    try:
+        body, next_offset = _format_page_batch(pages, offset=0)
+    finally:
+        cap_module.LIST_PAGES_MAX_CHARS = original
+
+    assert "- A" in body and "- B" in body
+    assert next_offset is None
+
+
+def test_a_page_whose_parent_was_shown_in_an_earlier_call_stays_addressable() -> None:
+    """A later slice must not lose the hierarchy just because the parent was
+    only shown in an earlier call: the full path carries it on every line."""
+
+    pages = (_page("a", "Parent"), _page("b", "Child", parent="a"))
+    body, _ = _format_page_batch(pages, offset=1)
+
+    assert body == "- Parent / Child"
 
 
 def test_a_refusal_carries_the_server_own_reason() -> None:
@@ -278,14 +446,113 @@ def test_a_full_path_resolves_where_a_bare_title_is_ambiguous() -> None:
     assert "body" in message.content
 
 
-def test_a_long_page_comes_back_cut_and_says_so() -> None:
+def test_a_long_page_comes_back_cut_and_says_more_remains() -> None:
     port = _FakePort(
         pages=(_page("s1", "Big"),), content="x" * (PAGE_READ_MAX_CHARS + 500)
     )
     message = _call(port, "wiki_read_page", {"path": "Big"})
 
     assert message.artifact.is_error is False
-    assert "longer than what you were given" in message.content
+    assert "MORE TEXT REMAINS" in message.content
+    assert f"offset={PAGE_READ_MAX_CHARS}" in message.content
+
+
+def test_continuation_reaches_the_end_and_says_so() -> None:
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="a" * PAGE_READ_MAX_CHARS + "TAIL"
+    )
+    turn = _tools(port)
+
+    first = _call(port, "wiki_read_page", {"path": "Big"}, turn).content
+    assert "TAIL" not in first
+
+    second = _call(
+        port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn
+    ).content
+
+    assert "TAIL" in second
+    assert "End of page reached" in second
+
+
+def test_replaying_the_last_completed_offset_is_not_refused() -> None:
+    """A retry of the exact call that just finished the read (e.g. after a
+    dropped tool result) must succeed, not be treated as skipping ahead."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="a" * PAGE_READ_MAX_CHARS + "TAIL"
+    )
+    turn = _tools(port)
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+    _call(port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn)
+
+    replay = _call(
+        port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn
+    )
+
+    assert replay.artifact.is_error is False
+    assert "TAIL" in replay.content
+
+
+def test_an_overlapping_offset_within_covered_range_is_not_refused() -> None:
+    """An offset that re-reads ground already covered — not a skip-ahead — is
+    allowed; only skipping past the covered frontier is refused."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="a" * PAGE_READ_MAX_CHARS + "TAIL"
+    )
+    turn = _tools(port)
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+
+    overlap = _call(
+        port,
+        "wiki_read_page",
+        {"path": "Big", "offset": PAGE_READ_MAX_CHARS - 10},
+        turn,
+    )
+
+    assert overlap.artifact.is_error is False
+
+
+def test_a_continuation_offset_that_does_not_match_is_refused() -> None:
+    """A model guessing at an offset it never earned — too far, or on a page
+    it never started reading — must not be handed an arbitrary slice."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="x" * (PAGE_READ_MAX_CHARS + 500)
+    )
+    message = _call(port, "wiki_read_page", {"path": "Big", "offset": 500})
+
+    assert message.artifact.is_error is True
+    assert "was not read up to offset 500" in message.content
+
+
+def test_a_revision_change_mid_read_is_detected_and_refused() -> None:
+    """The tail of a page changed under the model between two continuation
+    calls. Handing over the new tail as if it continued the old head would
+    silently splice two different revisions into one document."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),),
+        content="a" * PAGE_READ_MAX_CHARS + "OLD-TAIL",
+        revision_id="rev-1",
+    )
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+
+    port.set_content("b" * PAGE_READ_MAX_CHARS + "NEW-TAIL", revision_id="rev-2")
+    second = _call(
+        port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn
+    )
+
+    assert second.artifact.is_error is True
+    assert "changed while you were reading it" in second.content
+
+    # The half-read session is discarded — proposing must still be refused.
+    refusal = _call(
+        port, "wiki_propose_page_text", {"path": "Big", "content_md": "new"}, turn
+    )
+    assert refusal.artifact.is_error is True
+    assert port.proposed == []
 
 
 def test_a_missing_port_fails_loud() -> None:
@@ -581,6 +848,45 @@ def test_proposing_anchors_to_the_revision_just_read() -> None:
     _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
 
     assert port.propose_bases == ["rev-42"]
+
+
+def test_proposing_after_only_a_partial_read_is_refused() -> None:
+    """A truncated read must never be mistaken for the whole page — the exact
+    mismatch this correction closes: content_md replaces a page whole, and a
+    model that only saw the first segment has not seen what it would delete."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),), content="x" * (PAGE_READ_MAX_CHARS + 500)
+    )
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+
+    message = _call(
+        port, "wiki_propose_page_text", {"path": "Big", "content_md": "new"}, turn
+    )
+
+    assert message.artifact.is_error is True
+    assert "have not read all of" in message.content
+    assert port.proposed == []
+
+
+def test_proposing_after_reading_to_the_end_across_segments_succeeds() -> None:
+    port = _FakePort(
+        pages=(_page("s1", "Big"),),
+        content="a" * PAGE_READ_MAX_CHARS + "TAIL",
+        revision_id="rev-9",
+    )
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+    _call(port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn)
+
+    message = _call(
+        port, "wiki_propose_page_text", {"path": "Big", "content_md": "new"}, turn
+    )
+
+    assert message.artifact.is_error is False
+    assert port.proposed == [("s1", "new")]
+    assert port.propose_bases == ["rev-9"]
 
 
 def test_proposing_without_reading_first_is_refused_locally() -> None:
