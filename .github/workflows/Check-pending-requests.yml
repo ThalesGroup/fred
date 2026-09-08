@@ -21,6 +21,7 @@ jobs:
     # Those outputs are variables that will be shared to the check
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
+      frontend-packages: ${{ steps.changes.outputs.frontend-packages }}
       agentic: ${{ steps.changes.outputs.agentic }}
       knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
       deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
@@ -44,6 +45,25 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+            frontend-packages:
+              - 'libs/frontend/**'
+              - 'apps/frontend/src/styles/color-ramps.css'
+              - 'apps/frontend/src/styles/colors-semantic-light.css'
+              - 'apps/frontend/src/styles/colors-semantic-dark.css'
+              - 'apps/frontend/src/styles/colors-state-semantic.css'
+              - 'apps/frontend/src/styles/shadow-light.css'
+              - 'apps/frontend/src/styles/shadow-dark.css'
+              - 'apps/frontend/src/styles/spacings.css'
+              - 'apps/frontend/src/styles/radius.css'
+              - 'apps/frontend/src/styles/motion.css'
+              - 'apps/frontend/src/styles/gradients.css'
+              - 'apps/frontend/src/styles/typography.css'
+              - 'apps/frontend/src/styles/index.css'
+              - 'apps/frontend/src/assets/fonts/Geist.woff2'
+              - 'apps/frontend/src/assets/fonts/Geist-Italic.woff2'
+              - 'LICENSE'
+              - 'Makefile'
+              - '.github/workflows/Check-pending-requests.yml'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
@@ -200,6 +220,50 @@ jobs:
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
+
+  frontend-package-checks:
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-packages == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Install producer dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Provision Chromium
+        run: make browser-install
+        working-directory: libs/frontend
+
+      - name: Check producer quality
+        run: make code-quality
+        working-directory: libs/frontend
+
+      - name: Run producer unit tests
+        run: make test
+        working-directory: libs/frontend
+
+      - name: Validate packed archive
+        run: make pack-check
+        working-directory: libs/frontend
+
+      - name: Build isolated consumer offline
+        run: make isolated-consumer
+        working-directory: libs/frontend
+
+      - name: Run browser smoke offline
+        run: make browser-smoke
+        working-directory: libs/frontend
 
   # Job to run code quality checks on the frontend
   frontend-code-quality:
