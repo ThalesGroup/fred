@@ -11,6 +11,17 @@ A knowledge base type (its pipeline kind, push/pull mode, and — for pull — i
 - **WHEN** two different teams are each authorized to use the same registered knowledge base type
 - **THEN** both observe identical `kind`/`mode`/`connector_kind` values for that type — neither team can define its own variant
 
+### Requirement: A knowledge base type accepts only an implemented knowledge base kind
+Configuring a knowledge base type SHALL fail validation if its `kind` names an execution/indexation strategy that has no implemented pipeline, rather than accepting it as though it were usable.
+
+#### Scenario: An implemented kind is accepted
+- **WHEN** a knowledge base type is configured with a `kind` value of `rag_sql`
+- **THEN** the configuration is accepted
+
+#### Scenario: An unimplemented kind is rejected
+- **WHEN** a knowledge base type is configured with a kind that has no implemented pipeline (for example `llm_wiki`, `graphrag`, or `sql_live`)
+- **THEN** configuration validation fails and no knowledge base type is registered with that value
+
 ### Requirement: A team may create a knowledge base instance only of a knowledge base type it is authorized to use
 Creating a knowledge base instance SHALL fail closed unless the knowledge base type is registered and enabled in the deployment, and the requesting team is explicitly authorized to use that knowledge base type.
 
