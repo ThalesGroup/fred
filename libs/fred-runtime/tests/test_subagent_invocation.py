@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Annotated, Any, TypedDict, cast
 
 import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
@@ -55,7 +56,12 @@ from fred_sdk.contracts.models import (
     ReActAgentDefinition,
 )
 from fred_sdk.graph.runtime import GraphNodeResult
-from langchain_core.messages import AIMessage
+from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.runnables.config import RunnableConfig, var_child_runnable_config
+from langgraph.graph import START, StateGraph
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 from test_agent_app import _build_test_config, _EchoAgent
 
@@ -63,6 +69,10 @@ OTHER_AGENT_ID = "rags.sample.other"
 
 
 GRAPH_AGENT_ID = "rags.sample.graph"
+
+
+class _StreamState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
 
 
 class _OtherAgent(_EchoAgent):
@@ -213,6 +223,9 @@ def _record_turn(monkeypatch, payloads: list[dict] | None = None) -> dict:
         seen["reasoning_enabled_model_ids"] = reasoning_enabled_model_ids
         seen["use_checkpointer"] = use_checkpointer
         seen["usable_model_ids"] = usable_model_ids
+        # A child must not run under its caller's runnable config — see
+        # `test_a_child_turn_does_not_inherit_the_caller_config`.
+        seen["ambient_runnable_config"] = var_child_runnable_config.get()
         seen.update(kwargs)
         for payload in payloads or [{"kind": "final", "sequence": 0, "content": "ok"}]:
             yield payload
@@ -921,3 +934,110 @@ def test_closing_event_stream_closes_a_generator_and_tolerates_one_that_is_not()
     asyncio.run(_scenario())
 
     assert closed == ["runtime-stream"]
+
+
+def test_a_child_turn_does_not_inherit_the_caller_config(monkeypatch) -> None:
+    """A child runs as a new root run, detached from its caller's config.
+
+    LangGraph merges the ambient config's callbacks into every nested run, so a
+    child inheriting it streams its own model chunks into the PARENT's
+    `stream_mode="messages"` output — the sub-agent's reasoning then renders
+    inside its caller's turn.
+    """
+
+    seen = _record_turn(monkeypatch)
+    invoker = _invoker(_parent_turn(agent_id=_EchoAgent().agent_id))
+    caller_config: RunnableConfig = {"callbacks": [BaseCallbackHandler()]}
+
+    async def _scenario():
+        token = var_child_runnable_config.set(caller_config)
+        try:
+            await invoker.invoke(_child_request(_EchoAgent().agent_id))
+            return var_child_runnable_config.get()
+        finally:
+            var_child_runnable_config.reset(token)
+
+    restored = asyncio.run(_scenario())
+
+    assert seen["ambient_runnable_config"] is None
+    # The caller's own config survives the child: the parent turn continues.
+    assert restored is caller_config
+
+
+@pytest.mark.parametrize("detached", [True, False])
+def test_a_child_turn_s_model_chunks_stay_out_of_the_calling_stream(
+    monkeypatch, detached: bool
+) -> None:
+    """The symptom the detachment prevents: reasoning shown on the wrong turn.
+
+    The caller streams with `stream_mode="messages"`, which LangGraph implements
+    as a callback handler, and a nested run inherits the ambient config. The
+    child here runs through `invoke()` itself, so removing the detachment from
+    the invoker fails this too. `detached=False` is the negative control: the
+    leak is real, so a green `detached=True` means the detachment worked and not
+    that nothing streamed at all.
+    """
+
+    def _model_node(text: str):
+        model = GenericFakeChatModel(messages=iter([AIMessage(content=text)] * 4))
+
+        async def _call_model(state: _StreamState) -> dict[str, Any]:
+            chunks = [chunk async for chunk in model.astream(state["messages"])]
+            return {"messages": chunks[-1:]}
+
+        return _call_model
+
+    child_builder = StateGraph(_StreamState)
+    child_builder.add_node("model", _model_node("CHILD-REASONING"))
+    child_builder.add_edge(START, "model")
+    child = child_builder.compile()
+
+    async def _child_turn(definition, request, access_token=None, **kwargs):
+        """Stand in for the child's turn: the runtime streams, then answers."""
+
+        del definition, request, access_token, kwargs
+        async for _ in child.astream(
+            {"messages": [HumanMessage(content="delegated")]},
+            # The turn path's own config shape: a thread id, no callbacks.
+            config={"configurable": {"thread_id": "child"}},
+            stream_mode=["messages", "updates"],
+        ):
+            pass
+        yield {"kind": "final", "sequence": 0, "content": "done"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _child_turn
+    )
+    if not detached:
+        monkeypatch.setattr(agent_app_module, "_detached_runnable_config", nullcontext)
+    invoker = _invoker(_parent_turn(agent_id=_EchoAgent().agent_id))
+
+    async def _tools(state: _StreamState) -> dict[str, Any]:
+        del state
+        result = await invoker.invoke(_child_request(_EchoAgent().agent_id))
+        return {"messages": [AIMessage(content=result.content)]}
+
+    parent_builder = StateGraph(_StreamState)
+    parent_builder.add_node("model", _model_node("PARENT-ANSWER"))
+    parent_builder.add_node("tools", _tools)
+    parent_builder.add_edge(START, "model")
+    parent_builder.add_edge("model", "tools")
+    parent = parent_builder.compile()
+
+    async def _scenario() -> list[str]:
+        streamed: list[str] = []
+        async for mode, payload in parent.astream(
+            {"messages": [HumanMessage(content="hi")]},
+            config={"configurable": {"thread_id": "parent"}},
+            stream_mode=["messages", "updates"],
+        ):
+            if mode == "messages":
+                chunk, _meta = cast(tuple[BaseMessage, dict[str, Any]], payload)
+                streamed.append(str(chunk.content))
+        return streamed
+
+    streamed = asyncio.run(_scenario())
+
+    assert "PARENT-ANSWER" in streamed
+    leaked = any("CHILD-REASONING" in chunk for chunk in streamed)
+    assert leaked is not detached

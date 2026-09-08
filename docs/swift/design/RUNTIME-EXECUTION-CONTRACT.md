@@ -4951,3 +4951,49 @@ parent where the trace list reads it.
 depth apart still means reading the tree, not a field. `invocation_depth` is
 threaded through the invoker and would have to reach `PortableContext.baggage`
 to land on the span; that is a contract change, deliberately not bundled here.
+
+### 8.70 ✅ A child turn runs detached from its caller's runnable config — issue #2525 follow-up (2026-09-07)
+
+**A sub-agent's reasoning was rendered as its caller's.** Observed live in the
+chat UI while a parent was fanning out `run_subagent` calls: the thought lane
+showed the children's model reasoning ("L'utilisateur me demande d'agir en tant
+que sous-agent…") interleaved with the parent's own, indistinguishable from it.
+
+**Cause — LangGraph's `stream_mode="messages"` is a callback handler, and a
+nested run inherits the ambient callbacks.** `StreamMessagesHandler` is attached
+to the caller's run and writes into the caller's stream. A capability tool runs
+inside that run, so `var_child_runnable_config` still holds the caller's config
+when `LocalRegistryAgentInvoker.invoke` starts the child; LangGraph's
+`ensure_config` seeds itself from that var and *merges* callbacks across
+configs, so the child's every model chunk was also emitted to the parent's
+stream. `ReActRuntime` reads those chunks and promotes model-native reasoning to
+`THOUGHT_*` events — the child's reasoning on the parent's turn.
+
+Two properties made it invisible to the existing guards: passing `callbacks: []`
+does **not** opt out (an empty list is treated as absent, and a non-empty one is
+merged, not substituted), and the child's chunks are not caught by the
+`langgraph_node == "tools"` filter in `decode_stream_chunk` — that filter drops
+what it matches, and inside the child the chunks come from its own `model` node.
+The child also passes an explicit `thread_id`, which resets the inherited
+`configurable` and gives it a *root* checkpoint namespace — so the parent's
+handler, built with `subgraphs=False`, treats it as a top-level run and keeps it
+instead of filtering it out.
+
+**The invoker now clears `var_child_runnable_config` for the duration of the
+child turn** (`_detached_runnable_config`, held across the iteration, not just
+the generator's creation — the generator body runs in the caller's context on
+every `__anext__`). A child is a new root run, not a step of its caller: every
+value it needs is passed explicitly (§8.63), so nothing else is lost by
+detaching. This covers `context.invoke_agent` and `run_subagent` alike, at any
+depth. Fred's own tracing is unaffected — it hangs off `active_agent_span`, a
+separate contextvar, so the nesting §8.69 established still holds.
+
+**Still open:** only the agent-invoker boundary is detached. The same
+inheritance applies to any capability tool that calls a model directly inside a
+turn — its chunks would likewise surface as the turn's own reasoning — and to a
+Deep agent's `deepagents`-native `task` sub-agents, which are nested runs of the
+same root run rather than invoker calls (not reproduced; the namespace filter
+may already cover them). Suppression is also all this does: the developer's ask
+was "for a sub-agent it should not be displayed **for now**", so showing a
+child's reasoning *attributed to the child* remains a UI question this does not
+answer — the events no longer exist on the parent's stream to attribute.

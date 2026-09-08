@@ -128,6 +128,7 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
+from langchain_core.runnables.config import var_child_runnable_config
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
@@ -668,6 +669,22 @@ def _child_context_from_parent(parent: _ParentTurn) -> dict[str, Any]:
     return child
 
 
+@asynccontextmanager
+async def _detached_runnable_config() -> AsyncIterator[None]:
+    """Run a child turn outside the calling turn's LangChain runnable config.
+
+    A child is a new root run, not a step of its caller, and clearing the var is
+    the only way out: LangGraph MERGES the ambient callbacks into a nested run.
+    Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.70.
+    """
+
+    token = var_child_runnable_config.set(None)
+    try:
+        yield
+    finally:
+        var_child_runnable_config.reset(token)
+
+
 class LocalRegistryAgentInvoker(AgentInvokerPort):
     """
     In-process AgentInvokerPort for pod-local agent execution.
@@ -814,27 +831,30 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # `aclosing` is load-bearing: every branch below returns mid-iteration,
         # and an abandoned generator never runs the child turn's own cleanup.
         # Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.69.
-        async with aclosing(
-            _iterate_runtime_event_payloads(
-                definition,
-                execute_request,
-                access_token=self._access_token,
-                team_id=request.context.team_id,
-                registry=self._registry,
-                # Private trusted propagation (see __init__): the child inherits
-                # the parent turn's platform chat binding, never the request's
-                # own `context` — that dict has no field for it at all.
-                platform_chat_model_binding=self._platform_chat_model_binding,
-                # Depth counts call stack, not identity: it rises on EVERY
-                # re-entry, so an A -> B -> A cycle is bounded too.
-                invocation_depth=(parent.invocation_depth if parent else 0) + 1,
-                # Public, caller-supplied, and deliberately NOT part of the
-                # trusted `_ParentTurn` state: it replaces the callee's
-                # template layer only.
-                system_prompt_override=request.system_prompt,
-                **inherited_turn,
-            )
-        ) as payloads:
+        async with (
+            _detached_runnable_config(),
+            aclosing(
+                _iterate_runtime_event_payloads(
+                    definition,
+                    execute_request,
+                    access_token=self._access_token,
+                    team_id=request.context.team_id,
+                    registry=self._registry,
+                    # Private trusted propagation (see __init__): the child inherits
+                    # the parent turn's platform chat binding, never the request's
+                    # own `context` — that dict has no field for it at all.
+                    platform_chat_model_binding=self._platform_chat_model_binding,
+                    # Depth counts call stack, not identity: it rises on EVERY
+                    # re-entry, so an A -> B -> A cycle is bounded too.
+                    invocation_depth=(parent.invocation_depth if parent else 0) + 1,
+                    # Public, caller-supplied, and deliberately NOT part of the
+                    # trusted `_ParentTurn` state: it replaces the callee's
+                    # template layer only.
+                    system_prompt_override=request.system_prompt,
+                    **inherited_turn,
+                )
+            ) as payloads,
+        ):
             async for payload in payloads:
                 kind = payload.get("kind")
                 if kind == "final":
