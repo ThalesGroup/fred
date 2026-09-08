@@ -1,5 +1,8 @@
 :root {
   --font-family-base: "Geist", sans-serif;
+  /* Code-like surfaces only (prompt editing). Geist has no monospace cut, so
+     this falls back to the platform stack rather than shipping a second font. */
+  --font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Menlo", "Consolas", monospace;
 
   --font-headline-large-emphasized: 600 2rem / 1.25 var(--font-family-base);
   --font-headline-large: 400 2rem / 1.25 var(--font-family-base);
