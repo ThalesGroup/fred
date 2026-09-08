@@ -61,12 +61,8 @@ async def reject_stale_wiki_proposal(
     sweep, only nothing left to do.
     """
 
-    # Lazy import: `fred_core.common` pulls in `httpx`/`anyio`, which the
-    # Temporal sandbox forbids at workflow-module load time — this module is
-    # reachable from `workflow.py` via `activities.py` (see the identical
-    # note in `lifecycle_actions.py`). Deferred here, it only runs when this
-    # function actually executes, which is always as an activity, outside
-    # the sandbox.
+    # Lazy: `fred_core.common` pulls in httpx/anyio, sandbox-forbidden at
+    # workflow-module load time (same reason as `lifecycle_actions.py`).
     from fred_core.common import TeamId
 
     store = deps.get_team_wiki_store()

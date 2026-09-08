@@ -1009,16 +1009,8 @@ class TeamWikiStore:
         return refreshed
 
     # ---- proposal lifecycle (WIKI-05) --------------------------------------
-    #
-    # A proposal a human never acts on is not a special case: it is the
-    # ordinary outcome of a decline (invisible to this service — the runtime
-    # never runs the tool, see CONTROL-PLANE-PRODUCT-CONTRACT.md §49) and of
-    # simple abandonment, which today are indistinguishable. Both close the
-    # same way: `status` flips to `rejected` via a single conditional UPDATE,
-    # the same compare-and-swap idiom `_publish_in_transaction` already uses.
-    # `publish_proposal`'s own `WHERE status == "proposed"` lookup is what
-    # then makes a rejected proposal behave exactly like one that never
-    # existed — no change to the publish path was needed for that.
+    # Decline and abandonment both resolve as `status="rejected"`. Full
+    # rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
 
     async def list_stale_proposals(
         self, *, older_than: datetime, limit: int

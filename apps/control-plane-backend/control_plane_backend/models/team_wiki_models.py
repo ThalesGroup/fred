@@ -120,11 +120,8 @@ class TeamWikiRevisionRow(Base):
 
     __tablename__ = "team_wiki_revisions"
     __table_args__ = (
-        # Backs the lifecycle sweep's cross-team `WHERE status='proposed' AND
-        # created_at < cutoff` (CONTROL-PLANE-PRODUCT-CONTRACT.md §49) — a
-        # plain composite rather than a Postgres-only partial index, so it
-        # behaves identically under the SQLite fixtures these tests run
-        # against.
+        # Backs the lifecycle sweep's `WHERE status='proposed' AND created_at
+        # < cutoff` (§49). Plain, not Postgres-only-partial, for SQLite parity.
         Index("ix_team_wiki_revisions_status_created_at", "status", "created_at"),
     )
 
