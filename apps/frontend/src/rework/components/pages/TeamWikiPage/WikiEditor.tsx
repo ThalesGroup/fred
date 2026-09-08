@@ -12,30 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  BlockTypeSelect,
-  BoldItalicUnderlineToggles,
-  CreateLink,
-  headingsPlugin,
-  InsertTable,
-  linkDialogPlugin,
-  linkPlugin,
-  listsPlugin,
-  ListsToggle,
-  markdownShortcutPlugin,
-  MDXEditor,
-  quotePlugin,
-  Separator,
-  tablePlugin,
-  thematicBreakPlugin,
-  toolbarPlugin,
-  UndoRedo,
-} from "@mdxeditor/editor";
+import { markdownShortcutPlugin, MDXEditor, toolbarPlugin } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider";
 import Button from "@shared/atoms/Button/Button";
+import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import styles from "./WikiEditor.module.css";
 
 interface WikiEditorProps {
@@ -142,28 +125,10 @@ export function WikiEditor({
           className={`mdxeditor-full-height${darkMode ? " dark-theme dark-editor" : ""}`}
           contentEditableClassName="fred-writable-document"
           plugins={[
-            headingsPlugin(),
-            listsPlugin(),
-            quotePlugin(),
-            linkPlugin(),
-            linkDialogPlugin(),
-            thematicBreakPlugin(),
-            tablePlugin(),
+            ...proseMdxPlugins(),
             markdownShortcutPlugin(),
             toolbarPlugin({
-              toolbarContents: () => (
-                <>
-                  <UndoRedo />
-                  <Separator />
-                  <BoldItalicUnderlineToggles />
-                  <Separator />
-                  <BlockTypeSelect />
-                  <ListsToggle />
-                  <Separator />
-                  <CreateLink />
-                  <InsertTable />
-                </>
-              ),
+              toolbarContents: () => <ProseToolbarButtons />,
             }),
           ]}
         />
