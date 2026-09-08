@@ -50,6 +50,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
+| Build distributable frontend packages                | [`../../libs/frontend/README.md`](../../libs/frontend/README.md)   |
 | See what the team is working on now                   | GitHub Issues/Milestones                                            |
 | Understand the migration backlog                      | [`backlog/`](#backlog--project-state-and-sequencing)               |
 | Check UX status of a chat component                   | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)                         |
