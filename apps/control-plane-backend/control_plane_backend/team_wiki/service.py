@@ -831,6 +831,13 @@ async def propose_wiki_edit(
         if page.current_revision_id
         else None
     )
+    # Best-effort, not the atomic guarantee (that's the store's own
+    # compare-and-swap at publish time): CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
+    if request.base_revision_id != page.current_revision_id:
+        raise WikiConflictError(
+            page.current_revision_id or "", current.content_md if current else ""
+        )
+
     # A proposal that would change nothing is refused rather than stored.
     # Field evidence, 2026-09-07: asked to MOVE two pages, an agent used the
     # only write tool it had and re-proposed each page's existing text
@@ -849,7 +856,7 @@ async def propose_wiki_edit(
         team_id=team_id,
         page_id=page.page_id,
         content_md=request.content_md,
-        base_revision_id=page.current_revision_id,
+        base_revision_id=request.base_revision_id,
         proposed_title=None,
         proposed_parent_page_id=None,
         author_user_id=user.uid,

@@ -1212,13 +1212,15 @@ class WikiPageRef(FrozenModel):
 
 
 class WikiPageContent(FrozenModel):
-    """One page's Markdown, with the identity needed to cite it."""
+    """One page's Markdown, with the identity needed to cite it and to anchor
+    a later edit to the exact text this read returned."""
 
     slug: str
     title: str
     content_md: str = ""
     updated_at: str | None = None
     truncated: bool = False
+    revision_id: str | None = None
 
 
 class WikiProposalRef(FrozenModel):
@@ -1310,12 +1312,17 @@ class TeamWikiPort(ABC):
         """
 
     @abstractmethod
-    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
-        """Store a suggestion replacing one page's whole content.
+    async def propose_edit(
+        self, *, slug: str, content_md: str, base_revision_id: str
+    ) -> WikiProposalRef:
+        """Store a suggestion replacing one page's whole content, anchored to
+        the revision it was read from.
 
-        Changes nothing until published. Raises `TeamWikiPortError` with
-        `status_code=403` for the rules page, which no agent may touch under
-        any configuration.
+        `base_revision_id` must be the `revision_id` a prior `read_page` call
+        on this exact slug returned. Changes nothing until published. Raises
+        `TeamWikiPortError` with `status_code=409` when the page has already
+        moved past that revision, and `status_code=403` for the rules page,
+        which no agent may touch under any configuration.
         """
 
     @abstractmethod

@@ -111,13 +111,12 @@ def _wiki_tool_failure(
     raw = str(exc).strip()
 
     if status_code == 409:
-        # A conflict is the one failure the model can fix by itself: someone
-        # changed the page while the proposal waited. Without this branch it
-        # read as "could not be reached" and the model retried unchanged.
-        cause = (
-            "the page changed while your proposal was waiting. Read it again "
-            "and redo your edit on the new text"
-        )
+        # A conflict is the one failure the model can fix by itself: the page
+        # changed since it was read — either just now, refusing the proposal
+        # outright, or while an already-stored proposal waited to be
+        # published. Without this branch it read as "could not be reached"
+        # and the model retried unchanged.
+        cause = "the page changed since you read it. Read it again and redo your edit"
     elif status_code in (401, 403):
         # 403 is also how the server refuses the rules page, so the reason it
         # sent is kept below rather than replaced by a guess.
@@ -463,6 +462,10 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # way to act on a page it has read will otherwise call this again, and
         # again — six identical calls in one turn, in the field.
         already_read: set[str] = set()
+        # The revision each slug was last read at, this turn — what a propose
+        # call anchors its base to. Never crosses the HITL gate: only
+        # wiki_publish_proposal is gated, and it needs none of this.
+        read_revisions: dict[str, str] = {}
         # The tree, fetched at most once per turn and shared by every tool that
         # has to turn a path into a page. Dropped after a publish, which is the
         # only thing here that can add or rename one.
@@ -608,6 +611,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             if page.slug in already_read or slug in already_read:
                 text += _REREAD_NOTE
             already_read.update({slug, page.slug})
+            if page.revision_id:
+                read_revisions[slug] = page.revision_id
+                read_revisions[page.slug] = page.revision_id
             return text, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
@@ -643,8 +649,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             A path is the page's titles from the top joined by " / ", the same
             address wiki_read_page takes.
 
-            Read the page first: `content_md` REPLACES it whole, so it must be
-            the complete page as you want it to end up, not just your addition.
+            Read the page with wiki_read_page THIS TURN first — required, not
+            just advice: `content_md` REPLACES it whole, so it must be the
+            complete page as you want it to end up, not just your addition.
             Keep what was already there unless the user asked to remove it.
 
             This stores a suggestion and changes nothing in the wiki.
@@ -654,10 +661,21 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             found = await _resolve(path, action=f"propose an edit to '{path}'")
             if not isinstance(found, WikiPageRef):
                 return found
+            base_revision_id = read_revisions.get(found.slug)
+            if base_revision_id is None:
+                return _resolution_failure(
+                    f"Read '{path}' with wiki_read_page in this turn before "
+                    "proposing an edit to it — a proposal must be anchored to "
+                    "the exact text you read, and a change to the page since "
+                    "your last read of it (in an earlier turn, or by someone "
+                    "else) makes that anchor stale."
+                )
             started = time.monotonic()
             try:
                 proposal = await port.propose_edit(
-                    slug=found.slug, content_md=content_md
+                    slug=found.slug,
+                    content_md=content_md,
+                    base_revision_id=base_revision_id,
                 )
             except Exception as exc:
                 return _wiki_tool_failure(

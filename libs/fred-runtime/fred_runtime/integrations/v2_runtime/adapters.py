@@ -2933,6 +2933,7 @@ class TeamWikiAdapter(TeamWikiPort):
             content_md=content[:max_chars] if truncated else content,
             updated_at=page.get("updated_at"),
             truncated=truncated,
+            revision_id=payload.get("revision_id"),
         )
 
     async def read_rules(self) -> str:
@@ -2985,13 +2986,16 @@ class TeamWikiAdapter(TeamWikiPort):
         )
         return self._proposal_ref(payload, verb="create")
 
-    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
+    async def propose_edit(
+        self, *, slug: str, content_md: str, base_revision_id: str
+    ) -> WikiProposalRef:
         payload = await self._request(
             "POST",
             "/proposals/edit",
             {
                 "slug": slug,
                 "content_md": content_md,
+                "base_revision_id": base_revision_id,
                 "agent_instance_id": getattr(
                     self._binding.runtime_context, "agent_instance_id", None
                 ),

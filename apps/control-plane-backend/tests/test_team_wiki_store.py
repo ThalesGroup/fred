@@ -9,6 +9,7 @@ from control_plane_backend.team_wiki.store import (
     WikiPageConstraintError,
     WikiPageHasChildrenError,
     WikiRevisionConflictError,
+    _StaleBaseWrite,
 )
 from fred_core.common import TeamId
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -330,6 +331,108 @@ async def test_deleting_a_page_with_children_is_refused(tmp_path: Path) -> None:
         with pytest.raises(WikiPageHasChildrenError):
             await store.delete_page(team_id=TEAM_A, page_id=parent.page.page_id)
         assert await store.get_page(TEAM_A, parent.page.page_id) is not None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publish_proposal_refused_when_the_page_moved_since_the_read(
+    tmp_path: Path,
+) -> None:
+    """Read A, propose from A, someone else publishes B, publish the proposal:
+    the proposal's base (A) no longer matches the page's current revision (B),
+    so the approval must not silently overwrite B."""
+
+    store, engine = await _make_store(tmp_path, "propose-stale.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="A",
+            author_user_id="alice",
+        )
+        revision_a = created.page.current_revision_id
+        assert revision_a is not None
+
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="agent's edit of A",
+            base_revision_id=revision_a,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id="inst-1",
+            session_id="sess-1",
+        )
+
+        await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="B",
+            base_revision_id=revision_a,
+            author_user_id="bob",
+        )
+
+        with pytest.raises(_StaleBaseWrite):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="p",
+                approver_user_id="alice",
+            )
+
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        current = await store.get_revision(TEAM_A, page.current_revision_id or "")
+        assert current is not None
+        assert current.content_md == "B"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_publish_proposal_succeeds_when_nothing_moved(tmp_path: Path) -> None:
+    """Read A, propose from A, publish the proposal with nothing else having
+    written in between: the happy path this correction must not break."""
+
+    store, engine = await _make_store(tmp_path, "propose-ok.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="A",
+            author_user_id="alice",
+        )
+        revision_a = created.page.current_revision_id
+        assert revision_a is not None
+
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="agent's edit of A",
+            base_revision_id=revision_a,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id="inst-1",
+            session_id="sess-1",
+        )
+
+        page = await store.publish_proposal(
+            team_id=TEAM_A,
+            revision_id=proposal.revision_id,
+            slug="p",
+            approver_user_id="alice",
+        )
+
+        assert page.current_revision_id == proposal.revision_id
+        current = await store.get_revision(TEAM_A, page.current_revision_id or "")
+        assert current is not None
+        assert current.content_md == "agent's edit of A"
+        assert current.status == "published"
     finally:
         await engine.dispose()
 

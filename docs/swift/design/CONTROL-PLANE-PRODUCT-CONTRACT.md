@@ -3463,6 +3463,18 @@ Declining an approval leaves the proposal pending rather than marking it
 refused — the runtime never runs the tool, so nothing reports the decision back.
 A queue of pending proposals for editors stays deferred (RFC §12.2).
 
+**A proposal's base is caller-supplied and checked twice (2026-09-08).**
+`POST .../proposals/edit` requires `base_revision_id` — the `revision_id` a
+prior read of the page returned — rather than assuming "whatever is current
+now". It is refused with the same 409 shape as publishing (`current_revision_id`
++ `current_content_md`) unless it matches the page's current revision at that
+instant, catching a stale read before a proposal is even stored. The store's
+existing compare-and-swap at publish time is the atomic guarantee for a write
+landing after the proposal is created; this is the earlier, best-effort half —
+neither replaces the other. Before this, the server derived the base from
+`current_revision_id` itself, so a write racing between an agent's read and its
+propose call went undetected and could be silently overwritten.
+
 **Content is append-only.** An edit inserts a revision and moves the page's
 `current_revision_id`; it never updates content in place. History, restore and
 conflict detection are consequences of that shape, not features layered on it —

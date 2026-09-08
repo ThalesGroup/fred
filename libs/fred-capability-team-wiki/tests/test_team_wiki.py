@@ -54,15 +54,18 @@ class _FakePort(TeamWikiPort):
         pages: tuple[WikiPageRef, ...] = (),
         content: str = "",
         rules: str = "",
+        revision_id: str = "rev-1",
         raises: Exception | None = None,
     ) -> None:
         self._pages = pages
         self._content = content
         self._rules = rules
+        self._revision_id = revision_id
         self._raises = raises
         self.list_calls = 0
         self.rules_calls = 0
         self.proposed: list[tuple[str, str]] = []
+        self.propose_bases: list[str] = []
         self.published: list[str] = []
         # What the next publish lands as, so a test can publish onto an
         # existing page (an edit) or onto a new one (a creation).
@@ -94,6 +97,7 @@ class _FakePort(TeamWikiPort):
             title=slug.title(),
             content_md=self._content[:max_chars] if truncated else self._content,
             truncated=truncated,
+            revision_id=self._revision_id,
         )
 
     async def read_rules(self) -> str:
@@ -112,10 +116,13 @@ class _FakePort(TeamWikiPort):
             proposal_id="prop-1", title=title, summary=f"create “{title}”"
         )
 
-    async def propose_edit(self, *, slug: str, content_md: str) -> WikiProposalRef:
+    async def propose_edit(
+        self, *, slug: str, content_md: str, base_revision_id: str
+    ) -> WikiProposalRef:
         if self._raises is not None:
             raise self._raises
         self.proposed.append((slug, content_md))
+        self.propose_bases.append(base_revision_id)
         return WikiProposalRef(
             proposal_id="prop-2", title=slug, slug=slug, summary=f"rewrite “{slug}”"
         )
@@ -421,6 +428,7 @@ def test_publishing_an_edit_says_the_page_did_not_move() -> None:
     port = _FakePort(pages=(_page("s1", "S"),))
     port.publish_slug = "s1"
     turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
     _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
 
@@ -451,8 +459,13 @@ def test_publishing_tells_an_edit_from_a_creation_across_the_approval_gate() -> 
     port = _FakePort(pages=(_page("s1", "S"),))
     port.publish_slug = "s1"
 
-    # Propose on one binding, publish on another: the resume's fresh closure.
-    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"})
+    # Read and propose share one binding; publish gets the resume's fresh
+    # closure, same as the gate actually does.
+    propose_turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, propose_turn)
+    _call(
+        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, propose_turn
+    )
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
 
     assert "text was replaced" in message.content
@@ -494,6 +507,7 @@ def test_a_failed_read_back_after_publishing_is_not_reported_as_a_failure() -> N
     port = _FakePort(pages=(_page("s1", "S"),))
     port.publish_slug = "s1"
     turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
     _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
     port.raise_on_list = TeamWikiPortError("down", status_code=503)
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
@@ -544,13 +558,42 @@ def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
     made — which is exactly what happened before the write path existed."""
 
     port = _FakePort(pages=(_page("s1", "S"),))
-    message = _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"})
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+    message = _call(
+        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn
+    )
 
     # Addressed by path; the port still receives the slug it has always taken.
     assert port.proposed == [("s1", "new")]
     assert port.published == []
     assert "Nothing is written yet" in message.content
     assert "wiki_publish_proposal" in message.content
+
+
+def test_proposing_anchors_to_the_revision_just_read() -> None:
+    """The base sent to the port must be what this turn's read actually
+    returned, never guessed or omitted — the fix this correction makes."""
+
+    port = _FakePort(pages=(_page("s1", "S"),), revision_id="rev-42")
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
+
+    assert port.propose_bases == ["rev-42"]
+
+
+def test_proposing_without_reading_first_is_refused_locally() -> None:
+    """A model that never read the page this turn has no revision to anchor
+    on. Refusing here — before the port is even called — is what stops a
+    proposal being silently created against "whatever is current"."""
+
+    port = _FakePort(pages=(_page("s1", "S"),))
+    message = _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"})
+
+    assert message.artifact.is_error is True
+    assert "wiki_read_page" in message.content
+    assert port.proposed == []
 
 
 def test_publishing_reports_the_review_mark() -> None:
@@ -570,7 +613,7 @@ def test_a_stale_proposal_tells_the_model_what_to_do_about_it() -> None:
     message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
 
     assert message.artifact.is_error is True
-    assert "changed while your proposal was waiting" in message.content
+    assert "changed since you read it" in message.content
     assert "redo your edit" in message.content
 
 

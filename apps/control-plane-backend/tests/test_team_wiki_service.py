@@ -28,6 +28,7 @@ from control_plane_backend.team_wiki.service import (
 from control_plane_backend.team_wiki.store import WikiPageRecord, WikiRevisionRecord
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
+from pydantic import ValidationError
 
 TEAM = TeamId("team-a")
 
@@ -249,7 +250,7 @@ async def test_a_proposal_that_changes_nothing_is_refused(gate: _RecordingGate) 
         await wiki_service.propose_wiki_edit(
             _user(),
             TEAM,
-            ProposeEditRequest(slug="p1", content_md="body"),
+            ProposeEditRequest(slug="p1", content_md="body", base_revision_id="rev-p1"),
             _deps(store),
         )
 
@@ -674,7 +675,9 @@ async def test_an_agent_can_never_propose_an_edit_to_the_rules_page(
         await wiki_service.propose_wiki_edit(
             _user(),
             TEAM,
-            ProposeEditRequest(slug="__rules__", content_md="anything"),
+            ProposeEditRequest(
+                slug="__rules__", content_md="anything", base_revision_id="whatever"
+            ),
             deps,
         )
     assert caught.value.http_status == 403
@@ -691,12 +694,79 @@ async def test_proposing_writes_nothing_to_the_page(gate: _RecordingGate) -> Non
     deps = _deps(store)
 
     result = await wiki_service.propose_wiki_edit(
-        _user(), TEAM, ProposeEditRequest(slug="notes", content_md="new text"), deps
+        _user(),
+        TEAM,
+        ProposeEditRequest(
+            slug="notes", content_md="new text", base_revision_id="rev-p1"
+        ),
+        deps,
     )
 
     assert result.kind == "edit"
     assert store.proposals[0].status == "proposed"
+    assert store.proposals[0].base_revision_id == "rev-p1"
     assert page.current_revision_id == "rev-p1"
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_from_a_stale_read_is_refused(gate: _RecordingGate) -> None:
+    """The bug this correction fixes: an agent reads revision A, another
+    writer publishes B, and the agent's proposal must not be silently rebased
+    onto B — it must be refused so the agent knows to reread."""
+
+    store = _Store()
+    page = _page("p1", None, slug="notes")
+    page.current_revision_id = "rev-B"
+    store.pages.append(page)
+    store.revisions["rev-B"] = _revision("rev-B", "p1")
+
+    with pytest.raises(wiki_service.WikiConflictError) as caught:
+        await wiki_service.propose_wiki_edit(
+            _user(),
+            TEAM,
+            ProposeEditRequest(
+                slug="notes", content_md="edited from A", base_revision_id="rev-A"
+            ),
+            _deps(store),
+        )
+
+    assert caught.value.current_revision_id == "rev-B"
+    assert store.proposals == []
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_cannot_bind_to_another_page_s_revision(
+    gate: _RecordingGate,
+) -> None:
+    """`base_revision_id` is only ever compared against THIS page's current
+    revision, so a caller cannot anchor a proposal to a revision id it read
+    off a different page (or a different team's page reusing the same id)."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None, slug="notes"))
+    store.pages.append(_page("p2", None, slug="other"))
+
+    with pytest.raises(wiki_service.WikiConflictError):
+        await wiki_service.propose_wiki_edit(
+            _user(),
+            TEAM,
+            ProposeEditRequest(slug="notes", content_md="x", base_revision_id="rev-p2"),
+            _deps(store),
+        )
+
+    assert store.proposals == []
+
+
+@pytest.mark.asyncio
+async def test_omitting_the_base_is_a_validation_error_not_an_overwrite(
+    gate: _RecordingGate,
+) -> None:
+    """There is no implicit "use whatever is current" default — the field is
+    required, so a caller that forgot to read first fails before the service
+    is even reached."""
+
+    with pytest.raises(ValidationError):
+        ProposeEditRequest(slug="notes", content_md="x")  # type: ignore[call-arg]
 
 
 @pytest.mark.asyncio

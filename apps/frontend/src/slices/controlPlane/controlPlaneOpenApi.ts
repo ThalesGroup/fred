@@ -3457,6 +3457,8 @@ export type ProposePageRequest = {
 export type ProposeEditRequest = {
   slug: string;
   content_md: string;
+  /** The revision_id a prior read of this page returned. Refused with 409 when it no longer matches the page's current revision — read the page again and redo the edit against the current text. There is no unconditional proposal: a stale or fabricated base is refused rather than silently rebased onto whatever is current. */
+  base_revision_id: string;
   agent_instance_id?: string | null;
   session_id?: string | null;
 };

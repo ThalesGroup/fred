@@ -163,6 +163,17 @@ class ProposeEditRequest(BaseModel):
 
     slug: str = Field(min_length=1)
     content_md: str = Field(max_length=MAX_PAGE_CHARS)
+    base_revision_id: str = Field(
+        min_length=1,
+        description=(
+            "The revision_id a prior read of this page returned. Refused "
+            "with 409 when it no longer matches the page's current revision "
+            "— read the page again and redo the edit against the current "
+            "text. There is no unconditional proposal: a stale or fabricated "
+            "base is refused rather than silently rebased onto whatever is "
+            "current."
+        ),
+    )
     agent_instance_id: str | None = None
     session_id: str | None = None
 
