@@ -44,7 +44,7 @@ for (const assetKind of ["font", "image", "icon"]) {
         const cssPath = path.join(packageRoot, "dist/tokens.css");
         await writeFile(
           cssPath,
-          `${await readFile(cssPath, "utf8")}\n.missing { src: url("./missing.${assetKind}"); }\n`,
+          `${await readFile(cssPath, "utf8")}\n:root { --missing-${assetKind}: url("./missing.${assetKind}"); }\n`,
         );
       },
     );
@@ -52,6 +52,54 @@ for (const assetKind of ["font", "image", "icon"]) {
       () => validateArchive(archive),
       new RegExp(`missing\\.${assetKind}`),
     );
+  });
+}
+
+for (const importName of ["import", "ImPoRt", "IMPORT"]) {
+  test(`rejects packed @${importName}`, async (context) => {
+    const archive = await mutateArchive(
+      archivePath,
+      context,
+      async (packageRoot) => {
+        const cssPath = path.join(packageRoot, "dist/tokens.css");
+        await writeFile(
+          cssPath,
+          `${await readFile(cssPath, "utf8")}\n@${importName} "./missing.css";\n`,
+        );
+      },
+    );
+    await assert.rejects(
+      () => validateArchive(archive),
+      /must not contain @import/,
+    );
+  });
+}
+
+for (const shellRule of [
+  {
+    name: "ordinary shell declarations",
+    css: ":root { overflow: hidden; user-select: none; }",
+    error: /may declare only custom properties/,
+  },
+  {
+    name: "an unreviewed compound selector",
+    css: "html body { overflow: hidden; }",
+    error: /selector is not permitted: html body/,
+  },
+]) {
+  test(`rejects ${shellRule.name} in packed tokens`, async (context) => {
+    const archive = await mutateArchive(
+      archivePath,
+      context,
+      async (packageRoot) => {
+        const cssPath = path.join(packageRoot, "dist/tokens.css");
+        await writeFile(
+          cssPath,
+          `${await readFile(cssPath, "utf8")}\n${shellRule.css}\n`,
+        );
+      },
+    );
+    await assert.rejects(() => validateArchive(archive), shellRule.error);
   });
 }
 
@@ -122,6 +170,57 @@ test("rejects an incomplete Geist notice", async (context) => {
   );
   await assert.rejects(() => validateArchive(archive), /notice omits/);
 });
+
+for (const license of [
+  {
+    name: "FRED Apache license",
+    path: "LICENSE",
+    marker: "Apache License",
+    replacement: "Apache Licence",
+  },
+  {
+    name: "Geist OFL",
+    path: "licenses/Geist-OFL-1.1.txt",
+    marker: "SIL OPEN FONT LICENSE",
+    replacement: "SIL OPEN FONT LICENCE",
+  },
+]) {
+  test(`rejects a truncated ${license.name}`, async (context) => {
+    const archive = await mutateArchive(
+      archivePath,
+      context,
+      async (packageRoot) => {
+        const licensePath = path.join(packageRoot, license.path);
+        const content = await readFile(licensePath, "utf8");
+        await writeFile(licensePath, content.slice(0, 160));
+      },
+    );
+    await assert.rejects(
+      () => validateArchive(archive),
+      /differs from its approved complete content/,
+    );
+  });
+
+  test(`rejects a modified ${license.name}`, async (context) => {
+    const archive = await mutateArchive(
+      archivePath,
+      context,
+      async (packageRoot) => {
+        const licensePath = path.join(packageRoot, license.path);
+        const content = await readFile(licensePath, "utf8");
+        assert(content.includes(license.marker));
+        await writeFile(
+          licensePath,
+          content.replace(license.marker, license.replacement),
+        );
+      },
+    );
+    await assert.rejects(
+      () => validateArchive(archive),
+      /differs from its approved complete content/,
+    );
+  });
+}
 
 test("rejects a runtime dependency", async (context) => {
   const archive = await mutateArchive(

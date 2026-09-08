@@ -8,8 +8,12 @@ import path from "node:path";
 import postcss from "postcss";
 import valueParser from "postcss-value-parser";
 
-import { FONT_SOURCES } from "./package-inputs.mjs";
+import { FONT_SOURCES, LICENSE_FILES } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
+import {
+  assertNoCssImports,
+  assertTokenCssContract,
+} from "./token-css-contract.mjs";
 
 export const expectedArchiveFiles = [
   "LICENSE",
@@ -69,6 +73,11 @@ async function validateCssAssets(packageRoot, relativePath) {
   const root = postcss.parse(await readFile(absolutePath, "utf8"), {
     from: absolutePath,
   });
+  if (relativePath === "dist/tokens.css") {
+    assertTokenCssContract(root, relativePath);
+  } else {
+    assertNoCssImports(root, relativePath);
+  }
   const assets = [];
   root.walkDecls((declaration) => {
     valueParser(declaration.value).walk((node) => {
@@ -272,17 +281,19 @@ export async function validateArchive(archivePath) {
         `notice omits ${source.packedName} hash`,
       );
     }
-    const fontLicense = await readFile(
-      path.join(packageRoot, "licenses/Geist-OFL-1.1.txt"),
-      "utf8",
-    );
-    assert.match(fontLicense, /SIL OPEN FONT LICENSE Version 1\.1/);
-    assert.match(fontLicense, /Copyright 2024 The Geist Project Authors/);
-    const fredLicense = await readFile(
-      path.join(packageRoot, "LICENSE"),
-      "utf8",
-    );
-    assert.match(fredLicense, /Apache License\s+Version 2\.0/);
+    const licenseHashes = {};
+    for (const license of LICENSE_FILES) {
+      const content = await readFile(
+        path.join(packageRoot, license.packedPath),
+      );
+      const actualHash = sha256(content);
+      assert.equal(
+        actualHash,
+        license.sha256,
+        `${license.packedPath} differs from its approved complete content`,
+      );
+      licenseHashes[license.packedPath] = actualHash;
+    }
 
     return {
       archive,
@@ -292,6 +303,7 @@ export async function validateArchive(archivePath) {
       fontHashes: Object.fromEntries(
         FONT_SOURCES.map((source) => [source.packedName, source.sha256]),
       ),
+      licenseHashes,
     };
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

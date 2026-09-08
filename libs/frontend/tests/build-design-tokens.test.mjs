@@ -154,6 +154,56 @@ test("reflects a canonical token edit without a package-side source copy", async
   assert(!generated.includes("--spacing-m: 16px"));
 });
 
+for (const importName of ["import", "ImPoRt", "IMPORT"]) {
+  test(`rejects canonical @${importName}`, async (context) => {
+    const fixture = await createFixture();
+    context.after(() =>
+      rm(fixture.fixtureRoot, { recursive: true, force: true }),
+    );
+    const sourcePath = path.join(
+      fixture.repositoryRoot,
+      "apps/frontend/src/styles/spacings.css",
+    );
+    await writeFile(
+      sourcePath,
+      `${await readFile(sourcePath, "utf8")}\n@${importName} "./missing.css";\n`,
+    );
+    await assert.rejects(
+      () => buildDesignTokens(fixture),
+      /must not contain @import/,
+    );
+  });
+}
+
+for (const shellRule of [
+  {
+    name: "ordinary shell declarations",
+    css: ":root { overflow: hidden; user-select: none; }",
+    error: /may declare only custom properties/,
+  },
+  {
+    name: "an unreviewed compound selector",
+    css: "html body { overflow: hidden; }",
+    error: /selector is not permitted: html body/,
+  },
+]) {
+  test(`rejects ${shellRule.name} in canonical tokens`, async (context) => {
+    const fixture = await createFixture();
+    context.after(() =>
+      rm(fixture.fixtureRoot, { recursive: true, force: true }),
+    );
+    const sourcePath = path.join(
+      fixture.repositoryRoot,
+      "apps/frontend/src/styles/spacings.css",
+    );
+    await writeFile(
+      sourcePath,
+      `${await readFile(sourcePath, "utf8")}\n${shellRule.css}\n`,
+    );
+    await assert.rejects(() => buildDesignTokens(fixture), shellRule.error);
+  });
+}
+
 test("rejects a missing canonical Geist asset", async (context) => {
   const fixture = await createFixture();
   context.after(() =>

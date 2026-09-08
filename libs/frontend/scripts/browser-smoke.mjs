@@ -73,6 +73,7 @@ async function createObservedPage(browser, origin) {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const requests = [];
   const blockedRequests = [];
+  const requestFailures = [];
   const responses = [];
   await context.route("**/*", async (route) => {
     const request = route.request();
@@ -87,13 +88,42 @@ async function createObservedPage(browser, origin) {
     await route.continue();
   });
   const page = await context.newPage();
-  page.on("response", (response) => {
-    responses.push({ status: response.status(), url: response.url() });
+  page.on("requestfailed", (request) => {
+    requestFailures.push({
+      errorText: request.failure()?.errorText ?? "unknown failure",
+      type: request.resourceType(),
+      url: request.url(),
+    });
   });
-  return { context, page, requests, blockedRequests, responses };
+  page.on("response", (response) => {
+    responses.push({
+      status: response.status(),
+      type: response.request().resourceType(),
+      url: response.url(),
+    });
+  });
+  return {
+    context,
+    page,
+    requests,
+    blockedRequests,
+    requestFailures,
+    responses,
+  };
+}
+
+export function assertSuccessfulBrowserRequests(observation) {
+  assert.deepEqual(observation.requestFailures, [], "browser request failed");
+  for (const response of observation.responses) {
+    assert(
+      response.status >= 200 && response.status < 300,
+      `browser received unsuccessful HTTP ${response.status} for ${response.url}`,
+    );
+  }
 }
 
 function assertLocalRequests(observation, origin) {
+  assertSuccessfulBrowserRequests(observation);
   assert.deepEqual(
     observation.blockedRequests,
     [],
@@ -164,7 +194,12 @@ async function verifyTokens(browser, origin) {
       "fresh tokens-only consumer requested a font",
     );
     assertLocalRequests(observation, origin);
-    return { themes, requests: observation.requests };
+    return {
+      themes,
+      requests: observation.requests,
+      requestFailures: observation.requestFailures,
+      responses: observation.responses,
+    };
   } finally {
     await observation.context.close();
   }
@@ -217,7 +252,13 @@ async function verifyFonts(browser, origin) {
       );
     }
     assertLocalRequests(observation, origin);
-    return { loaded, fontRequests, requests: observation.requests };
+    return {
+      loaded,
+      fontRequests,
+      requests: observation.requests,
+      requestFailures: observation.requestFailures,
+      responses: observation.responses,
+    };
   } finally {
     await observation.context.close();
   }

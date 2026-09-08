@@ -30,6 +30,16 @@ export const FONT_SOURCES = [
 ];
 
 export const ROOT_LICENSE_PATH = "LICENSE";
+export const LICENSE_FILES = [
+  {
+    packedPath: "LICENSE",
+    sha256: "c4f0580f5e58f572f41c1985ac9920c227c166f09d25cba1a01ace86409c6e5c",
+  },
+  {
+    packedPath: "licenses/Geist-OFL-1.1.txt",
+    sha256: "942560b236adfa83745b2c64e5fc09ebaf91cb331751b1157eb92187e5d6e930",
+  },
+];
 export const PACKAGE_WORKSPACE_PATTERN = "libs/frontend/**";
 export const WORKFLOW_PATH = ".github/workflows/Check-pending-requests.yml";
 

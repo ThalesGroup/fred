@@ -46,15 +46,16 @@ make browser-smoke
 - `make test` runs offline generator, archive, filter-selection, and isolated
   consumer tests.
 - `make pack-check` validates the files in the actual `npm pack` tarball,
-  including exports, CSS asset closure, dependency protocols, source-path
-  leakage, and license/notice material.
+  including exports, import-free token structure, CSS asset closure, dependency
+  protocols, source-path leakage, and complete license/notice content.
 - `make isolated-consumer` copies only the tarball and neutral fixture to a new
   OS temporary directory, installs with npm offline and without save, lock, or
   scripts, then builds standalone output without workspace links.
 - `make browser-smoke` repeats that staging and uses the already installed
   Chromium against a loopback-only server. Fresh contexts verify light/dark
   computed styles, explicit regular/italic Geist loading, no tokens-only font
-  requests, and no non-loopback or FRED-checkout asset requests.
+  requests, successful stylesheet/resource responses, and no non-loopback or
+  FRED-checkout asset requests.
 
 Machine-readable review evidence is retained under `target/review-evidence/`.
 Generated package files, tarballs, installed dependencies, browsers, and evidence

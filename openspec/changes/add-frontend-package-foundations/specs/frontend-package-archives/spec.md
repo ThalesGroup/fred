@@ -46,6 +46,13 @@ names, values, and light/dark theme selectors and MUST NOT apply FRED shell layo
 scrolling, selection, or document-root mutations. The package MUST NOT require React,
 the iframe SDK, authentication code, application state, or network access.
 
+Generated and accepted token CSS MUST reject `@import` case-insensitively and MUST use
+only the reviewed token structure: comments; `:root`, `[data-theme="light"]`, and
+`[data-theme="dark"]` rules containing custom-property declarations; the matching
+`color-scheme` declaration on each theme selector; and the canonical spectrum-angle
+property registration and forced-colors override. Any other selector, ordinary property,
+or at-rule MUST fail validation.
+
 #### Scenario: A non-React consumer imports tokens only
 
 - **WHEN** a plain consumer imports the token stylesheet and selects each supported
@@ -64,6 +71,20 @@ the iframe SDK, authentication code, application state, or network access.
 - **WHEN** a consumer imports only the token stylesheet
 - **THEN** no font file is loaded and the consumer remains responsible for its chosen
   font policy
+
+#### Scenario: Token CSS attempts to import another stylesheet
+
+- **WHEN** a canonical or packed token stylesheet contains an `@import` using any letter
+  casing
+- **THEN** generation or archive validation fails instead of relying on an unvalidated
+  transitive stylesheet
+
+#### Scenario: Token CSS introduces shell behavior
+
+- **WHEN** a canonical or packed token stylesheet contains an unreviewed selector or an
+  ordinary declaration such as `overflow` or `user-select`
+- **THEN** generation or archive validation fails before the shell behavior can enter the
+  package
 
 ### Requirement: Every archive is complete and bounded
 
@@ -99,6 +120,13 @@ dependencies, `workspace:` references, or local `file:` dependencies.
   metadata inventory
 - **THEN** archive validation fails instead of silently widening the distributable
   artifact
+
+#### Scenario: A packed license is incomplete or modified
+
+- **WHEN** a packed FRED or third-party license differs from its approved complete
+  content, including by truncation or modification
+- **THEN** archive validation fails even if the remaining text still contains the
+  license title, version, or copyright line
 
 ### Requirement: Archive validation uses an isolated consumer
 
@@ -151,8 +179,16 @@ checkout and external font services.
 #### Scenario: Browser assets remain local to the staged consumer
 
 - **WHEN** either browser smoke page loads and its requests are recorded
-- **THEN** every asset request is served by the local staged consumer and no request uses
-  a FRED checkout path, a `file:` URL, or an external font-service origin
+- **THEN** every asset request is served successfully by the local staged consumer, every
+  HTTP response is successful, and no request uses a FRED checkout path, a `file:` URL,
+  or an external font-service origin
+
+#### Scenario: A browser stylesheet request fails
+
+- **WHEN** either smoke page has a failed stylesheet request or receives an unsuccessful
+  HTTP response
+- **THEN** browser smoke validation fails rather than accepting partial computed-style
+  evidence
 
 #### Scenario: Browser prerequisites are provisioned separately
 

@@ -86,3 +86,23 @@ and OpenSpec changes rather than this checklist.
 - [x] 5.4 Run strict OpenSpec validation and an independent review of the implementation
       diff; verify application sources, iframe/auth code, publication workflows, and
       RAGS remain untouched before handing later sequencing back to GitHub Issues.
+
+## 6. Review hardening follow-up
+
+- [x] 6.1 Reject CSS imports case-insensitively during canonical generation and packed
+      archive validation, add lowercase/mixed/uppercase negative fixtures for both
+      surfaces, and make browser smoke fail on request failures or unsuccessful HTTP
+      responses.
+- [x] 6.2 Enforce one shared reviewed token-CSS structure for generator and archive
+      validation, preserving current canonical tokens, theme selectors, spectrum
+      property registration, and forced-colors override while rejecting ordinary shell
+      declarations and unreviewed selectors in disposable fixtures.
+- [x] 6.3 Verify the complete packed Apache and Geist OFL license files against approved
+      SHA-256 digests and add archive mutations proving truncation and modification of
+      either license fail validation.
+- [x] 6.4 Run producer quality/tests, archive validation, isolated-consumer and browser
+      gates, plus the existing frontend protocol, request, path, host-page, and proxy
+      regression checks; retain updated review evidence.
+- [x] 6.5 Run strict OpenSpec validation and independent implementation review, resolve
+      all in-scope findings, and verify RAGS, application sources, iframe/auth code,
+      publication, and migration remain unchanged.

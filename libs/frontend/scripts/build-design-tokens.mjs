@@ -12,6 +12,10 @@ import {
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
 } from "./package-inputs.mjs";
+import {
+  assertNoCssImports,
+  assertTokenCssContract,
+} from "./token-css-contract.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const defaultRepositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -19,15 +23,6 @@ export const defaultPackageRoot = path.resolve(
   scriptDirectory,
   "../design-tokens",
 );
-
-const shellSelectors = new Set([
-  "*",
-  "html",
-  "body",
-  "input",
-  "textarea",
-  "[contenteditable]",
-]);
 
 function normalizeCssString(value) {
   return value.trim().replace(/^(['"])(.*)\1$/, "$2");
@@ -70,35 +65,16 @@ function rewriteSingleUrl(value, packedName, sourceDescription) {
   return parsed.toString();
 }
 
-function assertNeutralSelectors(root) {
-  root.walkRules((rule) => {
-    for (const selector of rule.selectors ?? []) {
-      if (
-        shellSelectors.has(selector.trim()) ||
-        selector.includes("::-webkit-scrollbar")
-      ) {
-        throw new Error(
-          `Shell selector is not allowed in tokens.css: ${selector}`,
-        );
-      }
-    }
-  });
-}
-
 async function buildTokens(repositoryRoot) {
   const output = postcss.root();
   for (const sourcePath of TOKEN_SOURCE_PATHS) {
     const absolutePath = path.join(repositoryRoot, sourcePath);
     const css = await readFile(absolutePath, "utf8");
     const parsed = postcss.parse(css, { from: absolutePath });
-    parsed.walkAtRules("import", () => {
-      throw new Error(
-        `Canonical token input must not contain @import: ${sourcePath}`,
-      );
-    });
+    assertNoCssImports(parsed, sourcePath);
     output.append(parsed.nodes.map((node) => node.clone()));
   }
-  assertNeutralSelectors(output);
+  assertTokenCssContract(output, "generated tokens.css");
   return `${output.toString().trim()}\n`;
 }
 

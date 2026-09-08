@@ -69,6 +69,14 @@ motion, gradients, and typography. It emits a self-contained `tokens.css` while
 preserving declarations and theme selectors. It does not consume `index.css` wholesale,
 because doing so would publish its shell and document-root rules.
 
+Generation and archive validation apply the same reviewed token-CSS structure. Imports
+are forbidden regardless of at-rule casing. Rules may use only `:root`,
+`[data-theme="light"]`, or `[data-theme="dark"]`; declarations must be custom
+properties except for the matching `color-scheme` declaration on a theme selector. The
+only other accepted structures are the canonical `@property --angle` registration and
+its forced-colors media override. A new selector, ordinary CSS property, or at-rule must
+therefore be reviewed as a contract change instead of silently adding shell behavior.
+
 The optional `fonts.css` is generated from the canonical Geist `@font-face` declarations
 in the existing style entry, with URLs rewritten to package-relative copies of the two
 canonical Geist binaries. Use a CSS parser for extraction and URL validation rather
@@ -98,11 +106,14 @@ Before accepting an archive, validation expands the tarball and checks:
 - the package identity is an individual workspace member, not the private root;
 - every exported target exists and remains inside the package;
 - the actual file list matches the allowed public/metadata inventory;
-- every local CSS `url(...)` resolves to a packed file;
+- exported stylesheets contain no `@import` in any casing, every local CSS `url(...)`
+  resolves to a packed file, and `tokens.css` satisfies the reviewed token-only
+  structure;
 - dependency fields contain no `workspace:`, `file:`, or undeclared runtime dependency;
 - text outputs contain no FRED aliases, repository-relative source references, absolute
   checkout paths, or links back to the workspace; and
-- required license and notice entries are present for every packaged asset family.
+- required license and notice entries are present for every packaged asset family, and
+  each packed license matches its approved full-content SHA-256 digest.
 
 The asset-license inventory is a blocking implementation audit: the implementer must
 establish the source and applicable text for both Geist files rather than guessing from
@@ -150,8 +161,9 @@ The harness opens two fresh browser contexts with caches and service workers dis
   successfully.
 
 Request recording rejects `file:` URLs, checkout-path references, non-loopback requests,
-and external font-service origins. This both detects accidental producer access and
-ensures the browser result is backed only by the staged installed archive.
+external font-service origins, failed stylesheet requests, and every unsuccessful HTTP
+response. This both detects accidental producer access and ensures the browser result is
+backed only by the staged installed archive.
 
 Dependency installation and `playwright install chromium` browser acquisition are
 explicit provisioning operations and may use their normal package/browser sources. The
