@@ -16,7 +16,7 @@ def _setup_test_schema() -> None:
     models, even when new columns are added between test runs.
     """
     import control_plane_backend.models.agent_instance_models  # noqa: F401
-    import control_plane_backend.models.corpus_models  # noqa: F401
+    import control_plane_backend.models.knowledge_base_models  # noqa: F401
     import control_plane_backend.models.model_reasoning_models  # noqa: F401
     import control_plane_backend.models.platform_model_binding_models  # noqa: F401
     import control_plane_backend.models.prompt_models  # noqa: F401

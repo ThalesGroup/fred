@@ -53,13 +53,6 @@ from .context import (
     LinkPart,
     RuntimeContext,
 )
-from .corpus import (
-    Corpus,
-    CorpusKind,
-    CorpusMode,
-    CorpusScope,
-    CorpusType,
-)
 from .execution import (
     ActorContext,
     ExecutionGrantAction,
@@ -68,6 +61,13 @@ from .execution import (
     TeamContext,
     TeamType,
     TraceContext,
+)
+from .knowledge_base import (
+    KnowledgeBase,
+    KnowledgeBaseKind,
+    KnowledgeBaseMode,
+    KnowledgeBaseScope,
+    KnowledgeBaseType,
 )
 from .openai_compat import (
     OpenAIModelCard,
@@ -129,12 +129,12 @@ __all__ = [
     "OpenAIToolCallFunction",
     # Prompt template token registry
     "PROMPT_SAFE_TOKENS",
-    # Indexed corpus contract (CORPUS-01, draft — docs/swift/rfc/INDEXED-CORPUS-RFC.md)
-    "Corpus",
-    "CorpusKind",
-    "CorpusMode",
-    "CorpusScope",
-    "CorpusType",
+    # Knowledge base contract (KNOWLEDGE-BASE-01, draft — docs/swift/rfc/KNOWLEDGE-BASE-RFC.md)
+    "KnowledgeBase",
+    "KnowledgeBaseKind",
+    "KnowledgeBaseMode",
+    "KnowledgeBaseScope",
+    "KnowledgeBaseType",
     "ChangeKind",
     "SourceChange",
     "SourceConnector",

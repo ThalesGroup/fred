@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-`fred_core.security.rebac.corpus_type_authz` (docs/swift/rfc/INDEXED-CORPUS-RFC.md
+`fred_core.security.rebac.knowledge_base_type_authz` (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md
 §6) — mirrors `test_capability_authz.py`'s `can_team_use_capability` coverage
-on the separate `corpus_type` object type.
+on the separate `knowledge_base_type` object type.
 """
 
 from __future__ import annotations
@@ -23,10 +23,12 @@ from __future__ import annotations
 import pytest
 
 from fred_core.security.models import Resource
-from fred_core.security.rebac.corpus_type_authz import can_team_use_corpus_type
+from fred_core.security.rebac.knowledge_base_type_authz import (
+    can_team_use_knowledge_base_type,
+)
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
-    CorpusTypePermission,
+    KnowledgeBaseTypePermission,
     RebacReference,
     RelationType,
 )
@@ -34,18 +36,22 @@ from fred_core.tests.security.rebac_fakes import FakeRebacEngine
 
 
 @pytest.mark.asyncio
-async def test_can_team_use_corpus_type_is_a_single_check_with_team_context() -> None:
+async def test_can_team_use_knowledge_base_type_is_a_single_check_with_team_context() -> (
+    None
+):
     rebac = FakeRebacEngine(permitted=True)
 
     assert (
-        await can_team_use_corpus_type(rebac, "team-1", corpus_type_id="local_fs_rag")
+        await can_team_use_knowledge_base_type(
+            rebac, "team-1", knowledge_base_type_id="local_fs_rag"
+        )
         is True
     )
     assert rebac.checked == [
         (
             RebacReference(type=Resource.TEAM, id="team-1"),
-            CorpusTypePermission.CAN_USE,
-            RebacReference(type=Resource.CORPUS_TYPE, id="local_fs_rag"),
+            KnowledgeBaseTypePermission.CAN_USE,
+            RebacReference(type=Resource.KNOWLEDGE_BASE_TYPE, id="local_fs_rag"),
         )
     ]
     assert [
@@ -54,20 +60,22 @@ async def test_can_team_use_corpus_type_is_a_single_check_with_team_context() ->
 
 
 @pytest.mark.asyncio
-async def test_can_team_use_corpus_type_reports_denial() -> None:
+async def test_can_team_use_knowledge_base_type_reports_denial() -> None:
     rebac = FakeRebacEngine(permitted=False)
 
     assert (
-        await can_team_use_corpus_type(rebac, "team-1", corpus_type_id="local_fs_rag")
+        await can_team_use_knowledge_base_type(
+            rebac, "team-1", knowledge_base_type_id="local_fs_rag"
+        )
         is False
     )
 
 
 @pytest.mark.asyncio
-async def test_can_team_use_corpus_type_allows_when_rebac_is_disabled() -> None:
+async def test_can_team_use_knowledge_base_type_allows_when_rebac_is_disabled() -> None:
     assert (
-        await can_team_use_corpus_type(
-            NoopRebacEngine(), "team-1", corpus_type_id="local_fs_rag"
+        await can_team_use_knowledge_base_type(
+            NoopRebacEngine(), "team-1", knowledge_base_type_id="local_fs_rag"
         )
         is True
     )

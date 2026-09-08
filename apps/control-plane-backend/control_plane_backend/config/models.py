@@ -19,7 +19,7 @@ from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
-from control_plane_backend.corpus_types.catalog import CorpusTypeConfig
+from control_plane_backend.knowledge_base_types.catalog import KnowledgeBaseTypeConfig
 
 
 class AppConfig(BaseModel):
@@ -81,7 +81,7 @@ class FrontendFeatureFlags(BaseModel):
     )
     enableAllResourceSpaces: bool = Field(
         default=False,
-        description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
+        description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Base de connaissances d'équipe.",
     )
     enableInformationSystems: bool = Field(
         default=False,
@@ -373,10 +373,10 @@ class PlatformConfig(BaseModel):
         ),
     )
     # Model defined next to its catalog projection in
-    # `control_plane_backend.corpus_types.catalog`.
-    corpus_type_sources: list[CorpusTypeConfig] = Field(
+    # `control_plane_backend.knowledge_base_types.catalog`.
+    knowledge_base_type_sources: list[KnowledgeBaseTypeConfig] = Field(
         default_factory=list,
-        description="Corpus types this deployment offers (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6).",
+        description="Knowledge base types this deployment offers (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §6).",
     )
 
     @model_validator(mode="after")

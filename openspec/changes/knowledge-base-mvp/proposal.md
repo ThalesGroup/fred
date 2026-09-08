@@ -1,0 +1,30 @@
+## Why
+
+FRED can only grow its knowledge today through manual push (upload); pull — continuously or periodically drawing documents in from external systems (shared folders, GitHub, Jira, Sphere, ...) — exists only as dead or half-built code. Every prior attempt at this in FRED's own history (see design.md's Sphere connector post-mortem) failed the same way: full remote rescans forever, no stable change identity, and no protection against overlapping sync runs. This change replaces `docs/swift/rfc/KNOWLEDGE-BASE-RFC.md` as the durable record for that work going forward, and continues an MVP already partly built and merged on this feature's development branch — many more increments are expected after this one.
+
+## What Changes
+
+- Introduces **`KnowledgeBaseType`**: a platform-wide, registered kind of knowledge base (`kind` × `mode` × `connector_kind`) — what a developer contributes and a platform admin enables per team, mirroring FRED's existing agent-template/agent-instance split.
+- Introduces **`KnowledgeBase`**: a team-scoped instance of an enabled `KnowledgeBaseType` (`scope` = team + tags, `connector_ref` = instance config) — what a team creates once its type is enabled.
+- Introduces **`SourceConnector`**: a narrow, pipeline-agnostic discover/fetch contract with stable `source_item_id`/`revision` identity, kept deliberately too fine-grained to be the developer-facing unit on its own — internal plumbing a `KnowledgeBaseType` uses, never itself registered or gated.
+- Introduces a dedicated OpenFGA object type `knowledge_base_type` for team usage-enablement — not a namespaced `capability` id, since `capability` is reserved for "something an agent uses." Mirrors a parallel, in-progress move a teammate (Adrian) is making for `app`; this change's schema addition is provisional and must not diverge from whatever shape his lands with.
+- **Already built and merged** (this change's `tasks.md` records these as done, not proposed): the `fred-sdk` contracts, a first `SourceConnector` implementation (local filesystem), the sync path wiring a connector into the existing push ingestion pipeline, the `knowledge_base_type` ReBAC relations, `KnowledgeBaseType` as deployment configuration, the `knowledge_base` instance table, and the fail-closed `create_knowledge_base` creation gate.
+- **Not yet built**: the M2M read path so `knowledge-flow-backend` can fetch a `KnowledgeBase`/`KnowledgeBaseType` from `control-plane-backend` once per sync cycle, and `knowledge-flow-backend`'s own small durable sync-state table.
+- **Explicitly out of scope for this change**: admin Features-tab UI, team Resources-tab UI, any scheduler/trigger for the sync function, a second `KnowledgeBaseType` (Sphere, GitHub, Minio), `graphrag`/`llm_wiki` kinds, reconciling with the older, unrelated RFC `#2240` (external-pod processor/connector design), deleting/retiring a `KnowledgeBase` instance (only `create_knowledge_base` exists — see design.md D18), and any wiring from a knowledge base type/instance to an agent capability or MCP server (RAG/SQL exposure stays entirely the existing, separate agent-instance capability configuration, keyed only on the tag a knowledge base stamps its documents with — see design.md D11).
+
+## Capabilities
+
+### New Capabilities
+
+- `knowledge-base`: the `KnowledgeBaseType`/`KnowledgeBase` model, the `SourceConnector` contract, and the knowledge-base-type usage-enablement gate — the first capability defined in this repository's `openspec/specs/` (currently empty).
+
+### Modified Capabilities
+
+_None._ No `openspec/specs/` capability exists yet in this repository.
+
+## Impact
+
+- **Code, already merged (this feature's development branch):** `libs/fred-sdk/fred_sdk/contracts/{knowledge_base,connector}.py`; `libs/fred-core/fred_core/security/{models.py,rebac/{schema.fga,rebac_engine.py,knowledge_base_type_authz.py}}`; `apps/control-plane-backend/control_plane_backend/{knowledge_base_types/,knowledge_base/,models/knowledge_base_models.py}` plus one Alembic migration; `apps/knowledge-flow-backend/knowledge_flow_backend/{core/connectors/local_filesystem_connector.py,features/scheduler/pull_knowledge_base_sync.py}`; a prior cleanup removing dead pull-mode scaffolding that predated this design.
+- **Code, not yet built:** a new `DocumentIngestionPort` in `fred-sdk` and its local adapter in `knowledge-flow-backend` (design.md D8-D9), with the *existing* manual-upload path (`ingestion_controller.py`) retrofitted to call it alongside `pull_knowledge_base_sync.py` — proving push and pull share one ingestion hand-off, not two; a documented (not implemented) wire contract for a future remote adapter (D10); a control-plane-backend M2M read endpoint for `KnowledgeBase`/`KnowledgeBaseType`; a knowledge-flow-backend `knowledge_base_sync_state` table; `pull_knowledge_base_sync.py` updated to read config via that endpoint instead of receiving it as a plain argument.
+- **Docs:** `docs/swift/rfc/KNOWLEDGE-BASE-RFC.md` is superseded by this change once archived; it is not deleted immediately (see design.md).
+- **Coordination dependency:** the `knowledge_base_type` ReBAC schema addition tracks Adrian's separate, in-progress `app`-kind ReBAC convention — do not implement independently past what is already merged.

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Offline unit tests for LocalFilesystemConnector (docs/swift/rfc/INDEXED-CORPUS-RFC.md).
+Offline unit tests for LocalFilesystemConnector (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md).
 
 Covers the exact failure modes the connector contract was written against:
 content-based change detection (not mtime), delete detection, and a stable

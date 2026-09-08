@@ -13,18 +13,19 @@
 # limitations under the License.
 
 """
-Team-subject `can_use` corpus-type query (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6).
+Team-subject `can_use` knowledge-base-type query (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §6).
 
 Mirrors `capability_authz.py`'s `can_team_use_capability`, on the separate
-`corpus_type` object type — not merged into that module because a corpus
-type is not "something an agent uses" (same reasoning as the equivalent,
-in-progress move for `app`). No personal-space class overlay here: unlike
-`capability`, `corpus_type` defines no `personal_on`/`personal_disabled`
-relations (schema.fga), so there is nothing for a `organization#personal_team`
-contextual edge to resolve against.
+`knowledge_base_type` object type — not merged into that module because a
+knowledge base type is not "something an agent uses" (same reasoning as the
+equivalent, in-progress move for `app`). No personal-space class overlay
+here: unlike `capability`, `knowledge_base_type` defines no
+`personal_on`/`personal_disabled` relations (schema.fga), so there is
+nothing for a `organization#personal_team` contextual edge to resolve
+against.
 
-The check SUBJECT IS THE TEAM creating/operating the corpus instance, never
-the browsing user — same reasoning as `capability_authz.py`.
+The check SUBJECT IS THE TEAM creating/operating the knowledge base
+instance, never the browsing user — same reasoning as `capability_authz.py`.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from __future__ import annotations
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
-    CorpusTypePermission,
+    KnowledgeBaseTypePermission,
     RebacEngine,
     RebacReference,
     Relation,
@@ -40,10 +41,10 @@ from fred_core.security.rebac.rebac_engine import (
 )
 
 
-async def can_team_use_corpus_type(
-    rebac: RebacEngine, team_id: str, *, corpus_type_id: str
+async def can_team_use_knowledge_base_type(
+    rebac: RebacEngine, team_id: str, *, knowledge_base_type_id: str
 ) -> bool:
-    """One team, one corpus type: may `team_id` create/operate an instance of it?
+    """One team, one knowledge base type: may `team_id` create/operate an instance of it?
 
     With ReBAC disabled the engine answers `True`, matching an unfiltered catalog.
     """
@@ -53,7 +54,7 @@ async def can_team_use_corpus_type(
     context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
     return await rebac.has_permission(
         team_ref,
-        CorpusTypePermission.CAN_USE,
-        RebacReference(type=Resource.CORPUS_TYPE, id=corpus_type_id),
+        KnowledgeBaseTypePermission.CAN_USE,
+        RebacReference(type=Resource.KNOWLEDGE_BASE_TYPE, id=knowledge_base_type_id),
         contextual_relations=context,
     )

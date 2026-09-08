@@ -278,15 +278,15 @@ class CapabilityPermission(str, Enum):
     CAN_MANAGE = "can_manage"
 
 
-class CorpusTypePermission(str, Enum):
-    """Actions allowed on one corpus type (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6).
+class KnowledgeBaseTypePermission(str, Enum):
+    """Actions allowed on one knowledge base type (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §6).
 
-    Same shape as `CapabilityPermission`, on the separate `corpus_type` object
-    type — a corpus type is not "something an agent uses". The target is
-    always ``corpus_type:<id>``.
+    Same shape as `CapabilityPermission`, on the separate `knowledge_base_type`
+    object type — a knowledge base type is not "something an agent uses". The
+    target is always ``knowledge_base_type:<id>``.
 
-    - `CAN_USE`: may a team create/operate an instance of this corpus type?
-      The check SUBJECT IS THE TEAM, never a user, same reasoning as
+    - `CAN_USE`: may a team create/operate an instance of this knowledge base
+      type? The check SUBJECT IS THE TEAM, never a user, same reasoning as
       `CapabilityPermission.CAN_USE`.
     - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
       default-on marker? Org admin only.
@@ -304,7 +304,7 @@ RebacPermission = (
     | AgentPermission
     | OrganizationPermission
     | CapabilityPermission
-    | CorpusTypePermission
+    | KnowledgeBaseTypePermission
 )
 
 
@@ -329,8 +329,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.ORGANIZATION
     if isinstance(permission, CapabilityPermission):
         return Resource.CAPABILITY
-    if isinstance(permission, CorpusTypePermission):
-        return Resource.CORPUS_TYPE
+    if isinstance(permission, KnowledgeBaseTypePermission):
+        return Resource.KNOWLEDGE_BASE_TYPE
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 

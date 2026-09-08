@@ -22,27 +22,27 @@ from sqlalchemy.orm import Mapped, mapped_column
 from control_plane_backend.models.base import Base, utcnow
 
 
-class CorpusRow(Base):
-    """ORM model for the ``corpus`` table.
+class KnowledgeBaseRow(Base):
+    """ORM model for the ``knowledge_base`` table.
 
-    Stores DB-backed corpus instance records — a team's instantiation of an
-    enabled ``CorpusType`` (docs/swift/rfc/INDEXED-CORPUS-RFC.md §2/§4/§6).
-    Never populated from deployment YAML — instance creation is operational
-    data, same distinction as ``agent_instance`` vs. capability/app
-    deployment config.
+    Stores DB-backed knowledge base instance records — a team's
+    instantiation of an enabled ``KnowledgeBaseType``
+    (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §2/§4/§6). Never populated from
+    deployment YAML — instance creation is operational data, same
+    distinction as ``agent_instance`` vs. capability/app deployment config.
     """
 
-    __tablename__ = "corpus"
+    __tablename__ = "knowledge_base"
 
-    corpus_id: Mapped[str] = mapped_column(String, primary_key=True)
-    corpus_type_id: Mapped[str] = mapped_column(String, nullable=False)
+    knowledge_base_id: Mapped[str] = mapped_column(String, primary_key=True)
+    knowledge_base_type_id: Mapped[str] = mapped_column(String, nullable=False)
     team_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     tag_ids_json: Mapped[str] = mapped_column(
         Text,
         nullable=False,
         default="[]",
-        comment="JSON-serialized list[str] — CorpusScope.tag_ids",
+        comment="JSON-serialized list[str] — KnowledgeBaseScope.tag_ids",
     )
     connector_ref: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

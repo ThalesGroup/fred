@@ -13,13 +13,14 @@
 # limitations under the License.
 
 """
-Offline unit tests for the indexed corpus contract (CORPUS-01, draft).
+Offline unit tests for the knowledge base contract (KNOWLEDGE-BASE-01, draft).
 
 Tests cover:
-- CorpusType construction and its mode <-> connector_kind exclusivity
+- KnowledgeBaseType construction and its mode <-> connector_kind exclusivity
   invariant (RFC §2/§4/§7)
-- CorpusScope / Corpus (instance) construction — no cross-validation against
-  a CorpusType, by design (RFC §4: a service-layer concern)
+- KnowledgeBaseScope / KnowledgeBase (instance) construction — no
+  cross-validation against a KnowledgeBaseType, by design (RFC §4: a
+  service-layer concern)
 - SourceItem / SourceChange construction
 - a minimal in-memory fake proving SourceConnector is actually implementable
 
@@ -32,118 +33,118 @@ from pathlib import Path
 
 import pytest
 from fred_sdk.contracts.connector import ChangeKind, SourceChange, SourceItem
-from fred_sdk.contracts.corpus import (
-    Corpus,
-    CorpusKind,
-    CorpusMode,
-    CorpusScope,
-    CorpusType,
+from fred_sdk.contracts.knowledge_base import (
+    KnowledgeBase,
+    KnowledgeBaseKind,
+    KnowledgeBaseMode,
+    KnowledgeBaseScope,
+    KnowledgeBaseType,
 )
 
 # ---------------------------------------------------------------------------
-# CorpusType
+# KnowledgeBaseType
 # ---------------------------------------------------------------------------
 
 
-def test_push_corpus_type_requires_no_connector_kind() -> None:
-    corpus_type = CorpusType(
-        corpus_type_id="rag_sql",
-        name="Team RAG corpus",
-        kind=CorpusKind.RAG_SQL,
-        mode=CorpusMode.PUSH,
+def test_push_knowledge_base_type_requires_no_connector_kind() -> None:
+    knowledge_base_type = KnowledgeBaseType(
+        knowledge_base_type_id="rag_sql",
+        name="Team RAG knowledge base",
+        kind=KnowledgeBaseKind.RAG_SQL,
+        mode=KnowledgeBaseMode.PUSH,
     )
-    assert corpus_type.connector_kind is None
+    assert knowledge_base_type.connector_kind is None
 
 
-def test_push_corpus_type_rejects_connector_kind() -> None:
+def test_push_knowledge_base_type_rejects_connector_kind() -> None:
     with pytest.raises(Exception):
-        CorpusType(
-            corpus_type_id="rag_sql",
-            name="Team RAG corpus",
-            kind=CorpusKind.RAG_SQL,
-            mode=CorpusMode.PUSH,
+        KnowledgeBaseType(
+            knowledge_base_type_id="rag_sql",
+            name="Team RAG knowledge base",
+            kind=KnowledgeBaseKind.RAG_SQL,
+            mode=KnowledgeBaseMode.PUSH,
             connector_kind="local_fs",
         )
 
 
-def test_pull_corpus_type_requires_connector_kind() -> None:
+def test_pull_knowledge_base_type_requires_connector_kind() -> None:
     with pytest.raises(Exception):
-        CorpusType(
-            corpus_type_id="local_fs_rag",
-            name="Local filesystem corpus",
-            kind=CorpusKind.RAG_SQL,
-            mode=CorpusMode.PULL,
+        KnowledgeBaseType(
+            knowledge_base_type_id="local_fs_rag",
+            name="Local filesystem knowledge base",
+            kind=KnowledgeBaseKind.RAG_SQL,
+            mode=KnowledgeBaseMode.PULL,
         )
 
 
-def test_pull_corpus_type_with_connector_kind_is_valid() -> None:
-    corpus_type = CorpusType(
-        corpus_type_id="local_fs_rag",
-        name="Local filesystem corpus",
-        kind=CorpusKind.RAG_SQL,
-        mode=CorpusMode.PULL,
+def test_pull_knowledge_base_type_with_connector_kind_is_valid() -> None:
+    knowledge_base_type = KnowledgeBaseType(
+        knowledge_base_type_id="local_fs_rag",
+        name="Local filesystem knowledge base",
+        kind=KnowledgeBaseKind.RAG_SQL,
+        mode=KnowledgeBaseMode.PULL,
         connector_kind="local_fs",
     )
-    assert corpus_type.connector_kind == "local_fs"
+    assert knowledge_base_type.connector_kind == "local_fs"
 
 
-def test_corpus_type_is_frozen() -> None:
-    corpus_type = CorpusType(
-        corpus_type_id="rag_sql",
-        name="Team RAG corpus",
-        kind=CorpusKind.RAG_SQL,
-        mode=CorpusMode.PUSH,
+def test_knowledge_base_type_is_frozen() -> None:
+    knowledge_base_type = KnowledgeBaseType(
+        knowledge_base_type_id="rag_sql",
+        name="Team RAG knowledge base",
+        kind=KnowledgeBaseKind.RAG_SQL,
+        mode=KnowledgeBaseMode.PUSH,
     )
     with pytest.raises(Exception):
-        corpus_type.name = "renamed"  # type: ignore[misc]
+        knowledge_base_type.name = "renamed"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
-# CorpusScope / Corpus (instance)
+# KnowledgeBaseScope / KnowledgeBase (instance)
 # ---------------------------------------------------------------------------
 
 
-def test_corpus_scope_requires_team_id() -> None:
+def test_knowledge_base_scope_requires_team_id() -> None:
     with pytest.raises(Exception):
-        CorpusScope(team_id="")  # type: ignore[call-arg]
+        KnowledgeBaseScope(team_id="")  # type: ignore[call-arg]
 
 
-def test_corpus_scope_defaults_to_no_tags() -> None:
-    scope = CorpusScope(team_id="team-1")
+def test_knowledge_base_scope_defaults_to_no_tags() -> None:
+    scope = KnowledgeBaseScope(team_id="team-1")
     assert scope.tag_ids == []
 
 
-def test_corpus_instance_without_connector_ref_is_valid() -> None:
-    corpus = Corpus(
-        corpus_id="c-1",
-        name="Team RAG corpus",
-        corpus_type_id="rag_sql",
-        scope=CorpusScope(team_id="team-1"),
+def test_knowledge_base_instance_without_connector_ref_is_valid() -> None:
+    knowledge_base = KnowledgeBase(
+        knowledge_base_id="c-1",
+        name="Team RAG knowledge base",
+        knowledge_base_type_id="rag_sql",
+        scope=KnowledgeBaseScope(team_id="team-1"),
     )
-    assert corpus.connector_ref is None
+    assert knowledge_base.connector_ref is None
 
 
-def test_corpus_instance_with_connector_ref_is_valid() -> None:
-    corpus = Corpus(
-        corpus_id="c-2",
-        name="Team pull corpus",
-        corpus_type_id="local_fs_rag",
-        scope=CorpusScope(team_id="team-1", tag_ids=["tag-a"]),
+def test_knowledge_base_instance_with_connector_ref_is_valid() -> None:
+    knowledge_base = KnowledgeBase(
+        knowledge_base_id="c-2",
+        name="Team pull knowledge base",
+        knowledge_base_type_id="local_fs_rag",
+        scope=KnowledgeBaseScope(team_id="team-1", tag_ids=["tag-a"]),
         connector_ref="/home/team/docs",
     )
-    assert corpus.connector_ref == "/home/team/docs"
-    assert corpus.scope.tag_ids == ["tag-a"]
+    assert knowledge_base.connector_ref == "/home/team/docs"
+    assert knowledge_base.scope.tag_ids == ["tag-a"]
 
 
-def test_corpus_instance_is_frozen() -> None:
-    corpus = Corpus(
-        corpus_id="c-1",
-        name="Team RAG corpus",
-        corpus_type_id="rag_sql",
-        scope=CorpusScope(team_id="team-1"),
+def test_knowledge_base_instance_is_frozen() -> None:
+    knowledge_base = KnowledgeBase(
+        knowledge_base_id="c-1",
+        name="Team RAG knowledge base",
+        knowledge_base_type_id="rag_sql",
+        scope=KnowledgeBaseScope(team_id="team-1"),
     )
     with pytest.raises(Exception):
-        corpus.name = "renamed"  # type: ignore[misc]
+        knowledge_base.name = "renamed"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------

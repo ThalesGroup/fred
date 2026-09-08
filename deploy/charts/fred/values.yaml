@@ -276,11 +276,6 @@ x-kf-document-sources: &kf-document-sources
   fred:
     type: push
     description: "Documents manually uploaded by users"
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
 
 x-kf-embedding-model: &kf-embedding-model
   provider: openai           # CUSTOMIZE: openai | azure | ollama

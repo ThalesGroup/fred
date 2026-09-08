@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Local filesystem `SourceConnector` (docs/swift/rfc/INDEXED-CORPUS-RFC.md) —
+Local filesystem `SourceConnector` (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md) —
 the first proof-of-concept pull connector, chosen for having no external
 dependency to stand up.
 

@@ -11046,7 +11046,7 @@
                             },
                             "enableAllResourceSpaces": {
                               "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
+                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Base de connaissances d'\u00e9quipe.",
                               "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
@@ -11319,6 +11319,70 @@
                         "type": "object"
                       },
                       "title": "Application Sources",
+                      "type": "array"
+                    },
+                    "knowledge_base_type_sources": {
+                      "description": "Knowledge base types this deployment offers (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md \u00a76).",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "A `KnowledgeBaseType` registered as deployment configuration.\n\nAdds only `enabled` to the underlying contract \u2014 `False` parks a type\nwithout removing its registration, same convention as\n`ApplicationSourceConfig.enabled`.",
+                        "properties": {
+                          "knowledge_base_type_id": {
+                            "minLength": 1,
+                            "title": "Knowledge Base Type Id",
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "title": "Name",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "rag_sql",
+                              "graphrag",
+                              "llm_wiki",
+                              "sql_live"
+                            ],
+                            "title": "KnowledgeBaseKind",
+                            "type": "string"
+                          },
+                          "mode": {
+                            "enum": [
+                              "push",
+                              "pull"
+                            ],
+                            "title": "KnowledgeBaseMode",
+                            "type": "string"
+                          },
+                          "connector_kind": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "title": "Connector Kind"
+                          },
+                          "enabled": {
+                            "default": true,
+                            "title": "Enabled",
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "knowledge_base_type_id",
+                          "name",
+                          "kind",
+                          "mode"
+                        ],
+                        "title": "KnowledgeBaseTypeConfig",
+                        "type": "object"
+                      },
+                      "title": "Knowledge Base Type Sources",
                       "type": "array"
                     }
                   },
@@ -13169,7 +13233,7 @@
                             },
                             "enableAllResourceSpaces": {
                               "default": false,
-                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
+                              "description": "Show Mon espace/Espace d'\u00e9quipe/Agents tabs on the Resources page, not just Base de connaissances d'\u00e9quipe.",
                               "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
@@ -13442,6 +13506,70 @@
                         "type": "object"
                       },
                       "title": "Application Sources",
+                      "type": "array"
+                    },
+                    "knowledge_base_type_sources": {
+                      "description": "Knowledge base types this deployment offers (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md \u00a76).",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "A `KnowledgeBaseType` registered as deployment configuration.\n\nAdds only `enabled` to the underlying contract \u2014 `False` parks a type\nwithout removing its registration, same convention as\n`ApplicationSourceConfig.enabled`.",
+                        "properties": {
+                          "knowledge_base_type_id": {
+                            "minLength": 1,
+                            "title": "Knowledge Base Type Id",
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "title": "Name",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "rag_sql",
+                              "graphrag",
+                              "llm_wiki",
+                              "sql_live"
+                            ],
+                            "title": "KnowledgeBaseKind",
+                            "type": "string"
+                          },
+                          "mode": {
+                            "enum": [
+                              "push",
+                              "pull"
+                            ],
+                            "title": "KnowledgeBaseMode",
+                            "type": "string"
+                          },
+                          "connector_kind": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "title": "Connector Kind"
+                          },
+                          "enabled": {
+                            "default": true,
+                            "title": "Enabled",
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "knowledge_base_type_id",
+                          "name",
+                          "kind",
+                          "mode"
+                        ],
+                        "title": "KnowledgeBaseTypeConfig",
+                        "type": "object"
+                      },
+                      "title": "Knowledge Base Type Sources",
                       "type": "array"
                     }
                   },

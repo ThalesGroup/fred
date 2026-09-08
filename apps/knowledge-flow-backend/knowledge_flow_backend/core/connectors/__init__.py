@@ -14,7 +14,7 @@
 
 """
 Concrete `fred_sdk.contracts.connector.SourceConnector` implementations for
-pull-mode Corpus sources (docs/swift/rfc/INDEXED-CORPUS-RFC.md).
+pull-mode Knowledge Base sources (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md).
 
 This package is deliberately separate from the deleted `core/stores/content/`
 loader hierarchy: a connector here owns only discover/fetch against one

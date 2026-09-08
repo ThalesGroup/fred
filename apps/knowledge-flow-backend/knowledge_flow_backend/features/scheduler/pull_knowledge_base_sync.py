@@ -13,15 +13,15 @@
 # limitations under the License.
 
 """
-Pull-corpus sync (docs/swift/rfc/INDEXED-CORPUS-RFC.md §6/§7/§10 plan step 2)
-— proof of concept only.
+Pull-knowledge-base sync (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §6/§7/§10 plan
+step 2) — proof of concept only.
 
 Reuses the exact same ingestion primitives a manual push upload calls
 (`IngestionService.extract_metadata`/`save_input`, `push_input_process`,
 `output_process`) rather than a parallel pull-specific pipeline: per the RFC,
-a `rag_sql` corpus is the existing pipeline, just fed by a connector instead
-of an HTTP upload. Called in-process (no Temporal) — the same style already
-used by `InMemoryScheduler` for push.
+a `rag_sql` knowledge base is the existing pipeline, just fed by a connector
+instead of an HTTP upload. Called in-process (no Temporal) — the same style
+already used by `InMemoryScheduler` for push.
 
 State this function owns (distinct from the connector's own opaque cursor,
 which it never parses): a `{source_item_id: document_uid}` map, because
@@ -35,12 +35,14 @@ over verbatim from the RFC's own design notes, not a new one.
 
 Not addressed here (RFC §7 — deliberately not decided by this POC): what
 calls this on what cadence, and serializing concurrent calls for the same
-corpus. Calling this function twice concurrently for the same `corpus.corpus_id`
-is the caller's responsibility to prevent, not this function's.
+knowledge base. Calling this function twice concurrently for the same
+`knowledge_base.knowledge_base_id` is the caller's responsibility to
+prevent, not this function's.
 
-`Corpus` (instance) and `CorpusType` (registered kind) are two objects
-since the RFC's 2026-09-06 revision (§2/§4) — `mode` lives on `CorpusType`,
-not on the instance, so this function takes both rather than just `corpus`.
+`KnowledgeBase` (instance) and `KnowledgeBaseType` (registered kind) are two
+objects since the RFC's 2026-09-06 revision (§2/§4) — `mode` lives on
+`KnowledgeBaseType`, not on the instance, so this function takes both rather
+than just `knowledge_base`.
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ from typing import Any
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import SourceType
 from fred_sdk.contracts.connector import ChangeKind, SourceConnector
-from fred_sdk.contracts.corpus import Corpus, CorpusMode, CorpusType
+from fred_sdk.contracts.knowledge_base import KnowledgeBase, KnowledgeBaseMode, KnowledgeBaseType
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
@@ -66,11 +68,11 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import FileT
 logger = logging.getLogger(__name__)
 
 
-async def sync_pull_corpus(
+async def sync_pull_knowledge_base(
     *,
     user: KeycloakUser,
-    corpus: Corpus,
-    corpus_type: CorpusType,
+    knowledge_base: KnowledgeBase,
+    knowledge_base_type: KnowledgeBaseType,
     connector: SourceConnector,
     state: str | None,
     profile: IngestionProcessingProfile = IngestionProcessingProfile.medium,
@@ -79,20 +81,20 @@ async def sync_pull_corpus(
     push-shaped pipeline, return the next opaque `state` to pass back in.
 
     `user` performs every ingestion/delete call and must be authorized for
-    `corpus.scope.tag_ids` — this function makes no authorization decision
-    of its own, including the connector-kind usage-enablement check the RFC
-    describes (§6, not yet implemented).
+    `knowledge_base.scope.tag_ids` — this function makes no authorization
+    decision of its own, including the connector-kind usage-enablement check
+    the RFC describes (§6, not yet implemented).
     """
-    if corpus.corpus_type_id != corpus_type.corpus_type_id:
-        raise ValueError(f"corpus.corpus_type_id ({corpus.corpus_type_id!r}) does not match corpus_type ({corpus_type.corpus_type_id!r})")
-    if corpus_type.mode is not CorpusMode.PULL:
-        raise ValueError(f"sync_pull_corpus requires a pull-mode corpus type, got {corpus_type.mode}")
+    if knowledge_base.knowledge_base_type_id != knowledge_base_type.knowledge_base_type_id:
+        raise ValueError(f"knowledge_base.knowledge_base_type_id ({knowledge_base.knowledge_base_type_id!r}) does not match knowledge_base_type ({knowledge_base_type.knowledge_base_type_id!r})")
+    if knowledge_base_type.mode is not KnowledgeBaseMode.PULL:
+        raise ValueError(f"sync_pull_knowledge_base requires a pull-mode knowledge base type, got {knowledge_base_type.mode}")
 
     parsed: dict[str, Any] = json.loads(state) if state else {}
     documents: dict[str, str] = dict(parsed.get("documents", {}))
 
     changes, next_connector_cursor = connector.discover_changes(parsed.get("connector_cursor"))
-    tags = list(corpus.scope.tag_ids)
+    tags = list(knowledge_base.scope.tag_ids)
 
     for change in changes:
         item = change.item
@@ -107,7 +109,7 @@ async def sync_pull_corpus(
             # Changed content: delete + recreate — see module docstring.
             await MetadataService().delete_document_and_artifacts(user, existing_uid)
 
-        with tempfile.TemporaryDirectory(prefix="pull-corpus-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="pull-knowledge-base-") as tmpdir:
             input_dir = pathlib.Path(tmpdir) / "input"
             fetched_path = connector.fetch(item, input_dir)
 
@@ -116,12 +118,13 @@ async def sync_pull_corpus(
                 user,
                 file_path=fetched_path,
                 tags=tags,
-                source_tag=corpus.corpus_id,
+                source_tag=knowledge_base.knowledge_base_id,
                 profile=profile,
             )
             # `extract_metadata`'s own pull-detection reads `document_sources`
-            # config, which this corpus is not registered in (RFC §6/§10) — set
-            # explicitly rather than relying on that unrelated mechanism.
+            # config, which this knowledge base is not registered in (RFC
+            # §6/§10) — set explicitly rather than relying on that unrelated
+            # mechanism.
             metadata.source.source_type = SourceType.PULL
             metadata.source.pull_location = item.display_path
 
@@ -130,7 +133,7 @@ async def sync_pull_corpus(
 
             file_to_process = FileToProcess(
                 document_uid=metadata.document_uid,
-                source_tag=corpus.corpus_id,
+                source_tag=knowledge_base.knowledge_base_id,
                 tags=tags,
                 profile=profile,
                 processed_by=user,

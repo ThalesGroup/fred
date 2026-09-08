@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Team-scoped corpus instances (docs/swift/rfc/INDEXED-CORPUS-RFC.md §2/§4)."""
+"""Registered knowledge-base-type catalog (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §6)."""

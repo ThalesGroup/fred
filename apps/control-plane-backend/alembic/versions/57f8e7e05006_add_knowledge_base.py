@@ -1,8 +1,9 @@
-"""add corpus table
+"""add knowledge_base table
 
-DB-backed corpus instance records — a team's instantiation of an enabled
-CorpusType (docs/swift/rfc/INDEXED-CORPUS-RFC.md §2/§4/§6). Same shape as
-agent_instance: operational data, never populated from deployment YAML.
+DB-backed knowledge base instance records — a team's instantiation of an
+enabled KnowledgeBaseType (docs/swift/rfc/KNOWLEDGE-BASE-RFC.md §2/§4/§6).
+Same shape as agent_instance: operational data, never populated from
+deployment YAML.
 
 Revision ID: 57f8e7e05006
 Revises: a1c3e5f70b21
@@ -27,9 +28,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table(
-        "corpus",
-        sa.Column("corpus_id", sa.String(), nullable=False),
-        sa.Column("corpus_type_id", sa.String(), nullable=False),
+        "knowledge_base",
+        sa.Column("knowledge_base_id", sa.String(), nullable=False),
+        sa.Column("knowledge_base_type_id", sa.String(), nullable=False),
         sa.Column("team_id", sa.String(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("tag_ids_json", sa.Text(), nullable=False),
@@ -46,11 +47,11 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
-        sa.PrimaryKeyConstraint("corpus_id"),
+        sa.PrimaryKeyConstraint("knowledge_base_id"),
     )
     op.create_index(
-        op.f("ix_corpus_team_id"),
-        "corpus",
+        op.f("ix_knowledge_base_team_id"),
+        "knowledge_base",
         ["team_id"],
         unique=False,
     )
@@ -58,5 +59,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(op.f("ix_corpus_team_id"), table_name="corpus")
-    op.drop_table("corpus")
+    op.drop_index(op.f("ix_knowledge_base_team_id"), table_name="knowledge_base")
+    op.drop_table("knowledge_base")

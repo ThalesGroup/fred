@@ -13,14 +13,15 @@
 # limitations under the License.
 
 """
-Source connector contract (CORPUS-01, draft — see docs/swift/rfc/INDEXED-CORPUS-RFC.md).
+Source connector contract (KNOWLEDGE-BASE-01, draft — see docs/swift/rfc/KNOWLEDGE-BASE-RFC.md).
 
 Why this module exists:
 - A connector's job is narrow and deliberately kept that way: discover
   changes at a remote source, and fetch the artifact for one of them. Nothing
-  else. It must never know which `CorpusKind` (corpus.py) consumes its
-  output, and it must never decide batching, scheduling, or reprocessing
-  granularity — that is entirely the corpus pipeline's decision.
+  else. It must never know which `KnowledgeBaseKind` (knowledge_base.py)
+  consumes its output, and it must never decide batching, scheduling, or
+  reprocessing granularity — that is entirely the knowledge base pipeline's
+  decision.
 - `source_item_id` and `revision` are two distinct, provider-defined, stable
   fields — never derived from a display path or a mutable timestamp. This is
   the direct fix for the concrete failure mode this RFC was written against:
@@ -77,7 +78,7 @@ class SourceChange(FrozenModel):
 
 class SourceConnector(Protocol):
     """
-    Discover/fetch surface a corpus in pull mode is fed through.
+    Discover/fetch surface a knowledge base in pull mode is fed through.
 
     Implementations own the credentials and remote API calls; they own
     nothing about how a change is applied downstream.
