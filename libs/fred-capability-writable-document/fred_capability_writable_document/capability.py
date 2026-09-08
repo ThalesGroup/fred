@@ -49,6 +49,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from fred_capability_session_workspace import (
+    resolve_in_workspace,
+    session_workspace_root,
+)
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -135,7 +139,10 @@ _WRITE_INSTRUCTIONS = (
     "'write_document' tool; never write the deliverable itself in the chat. "
     "The tool opens the document in a side-by-side editor where the user can "
     "review, edit, and export it. In the chat, reply only with a short "
-    "summary of what you put in the document."
+    "summary of what you put in the document. "
+    "When the finished document already exists as a file in the session "
+    "workspace, call 'open_document_from_file' with that path instead of "
+    "re-typing its content into 'write_document'."
 )
 
 
@@ -152,26 +159,15 @@ class _WritableDocumentMiddleware(AgentMiddleware):
         session_id = identity.session_id
         user_id = identity.user_id
 
-        @tool("write_document", response_format="content_and_artifact")
-        async def write_document(
+        async def _save(
             title: str,
             content_markdown: str,
-            document_id: str | None = None,
+            document_id: str | None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Create or update a collaborative document shown to the user in the editor panel.
+            """The one save path: de-dup by title, revise in place, emit the part.
 
-            Use this whenever you are producing a deliverable document (report, email, memo,
-            meeting notes) so the document is separated from the conversation and the user can
-            edit it and export it to various formats (Word and Markdown).
-
-            IMPORTANT - revise in place, never duplicate: to modify, correct, extend, shorten,
-            reformat, or otherwise change a document that ALREADY exists, you MUST pass its
-            existing document_id (returned as "saved (id=...)" by the previous call, and listed
-            in the session's open-documents reminder). Omit document_id ONLY when the user
-            clearly wants a brand-new, separate document.
-
-            Provide the full document each time as Markdown in content_markdown (it replaces the
-            previous content, it is not appended).
+            Shared by `write_document` and `open_document_from_file` so the two
+            tools cannot drift on de-dup, artifact shape, or return wording.
             """
 
             if not session_id:
@@ -237,7 +233,67 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             )
             return f"Document '{title}' saved (id={doc_id}).", artifact
 
-        tools: Sequence[BaseTool] = [write_document]
+        @tool("write_document", response_format="content_and_artifact")
+        async def write_document(
+            title: str,
+            content_markdown: str,
+            document_id: str | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Create or update a collaborative document shown to the user in the editor panel.
+
+            Use this whenever you are producing a deliverable document (report, email, memo,
+            meeting notes) so the document is separated from the conversation and the user can
+            edit it and export it to various formats (Word and Markdown).
+
+            IMPORTANT - revise in place, never duplicate: to modify, correct, extend, shorten,
+            reformat, or otherwise change a document that ALREADY exists, you MUST pass its
+            existing document_id (returned as "saved (id=...)" by the previous call, and listed
+            in the session's open-documents reminder). Omit document_id ONLY when the user
+            clearly wants a brand-new, separate document.
+
+            Provide the full document each time as Markdown in content_markdown (it replaces the
+            previous content, it is not appended).
+            """
+
+            return await _save(title, content_markdown, document_id)
+
+        @tool("open_document_from_file", response_format="content_and_artifact")
+        async def open_document_from_file(
+            path: str,
+            title: str,
+            document_id: str | None = None,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Open a Markdown file from the session workspace as a collaborative document.
+
+            Use this when the finished document already exists as a file — for instance one
+            you assembled with concat_files from your sub-agents' parts. It reads the file
+            and opens it in the side-by-side editor exactly as write_document would, without
+            you having to re-type a single line of it.
+
+            path is relative to the session workspace root. document_id follows the same
+            revise-in-place rule as write_document.
+            """
+
+            if not session_id:
+                return (
+                    "Cannot save the document: no active session.",
+                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                )
+            root = session_workspace_root(session_id)
+            target = resolve_in_workspace(root, path)
+            if target is None:
+                return (
+                    f"Refused: '{path}' points outside the session workspace.",
+                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                )
+            if not target.is_file():
+                return (
+                    f"No such file in the session workspace: '{path}'.",
+                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                )
+            return await _save(title, target.read_text(encoding="utf-8"), document_id)
+
+        tools: Sequence[BaseTool] = [write_document, open_document_from_file]
         self.tools = tools
         self._session_id = session_id
 

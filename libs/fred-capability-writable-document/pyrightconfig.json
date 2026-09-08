@@ -9,6 +9,7 @@
   "extraPaths": [
     "../fred-core",
     "../fred-sdk",
-    "../fred-runtime"
+    "../fred-runtime",
+    "../fred-capability-session-workspace"
   ]
 }

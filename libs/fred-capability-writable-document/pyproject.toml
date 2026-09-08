@@ -12,6 +12,9 @@ dependencies = [
   # fred-runtime supplies the pod config loader the store + Alembic env read to
   # build their async engine (`load_agent_pod_config().storage.postgres`).
   "fred-runtime>=3.4.2",
+  # `open_document_from_file` reads the session scratch filesystem this
+  # capability shares with sub-agents.
+  "fred-capability-session-workspace>=0.1.0",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
@@ -65,6 +68,7 @@ testpaths = ["tests"]
 fred-core = { path = "../fred-core", editable = true }
 fred-sdk = { path = "../fred-sdk", editable = true }
 fred-runtime = { path = "../fred-runtime", editable = true }
+fred-capability-session-workspace = { path = "../fred-capability-session-workspace", editable = true }
 
 [tool.alembic]
 # This capability owns its own migration tree (#1905, RFC §7.1). At deploy time
