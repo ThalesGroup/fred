@@ -8,7 +8,7 @@ reusable tokens and fonts with shell-only global rules.
 This first independently reviewable slice establishes the design-token package boundary
 and proves its packed artifact can be consumed without a FRED checkout. The broader
 architecture and sequencing remain in
-[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
+[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 Implementation is tracked by
 [ThalesGroup/fred#2583](https://github.com/ThalesGroup/fred/issues/2583).
 

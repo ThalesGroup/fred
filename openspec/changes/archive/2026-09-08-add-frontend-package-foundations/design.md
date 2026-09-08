@@ -1,7 +1,7 @@
 ## Context
 
 See `proposal.md` for motivation and
-[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md)
+[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md)
 for the broader package and external-application architecture.
 
 FRED currently has one private application package at `apps/frontend/` and no
