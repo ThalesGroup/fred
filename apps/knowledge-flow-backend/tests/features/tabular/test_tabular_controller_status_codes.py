@@ -36,7 +36,7 @@ from knowledge_flow_backend.features.tabular.execution import (
     TabularExecutionTimeoutError,
     register_tabular_exception_handlers,
 )
-from knowledge_flow_backend.features.tabular.service import TabularQueryError
+from knowledge_flow_backend.features.tabular.service import TabularQueryError, forbidden_datasets_message
 
 
 def _user() -> KeycloakUser:
@@ -77,6 +77,23 @@ def test_read_query_maps_each_failure_to_its_own_status(tabular_client, raised, 
     response = client.post("/tabular/query", json={"sql": "SELECT 1"})
 
     assert response.status_code == expected_status
+
+
+def test_read_query_403_body_names_the_document_listing_tool(tabular_client):
+    """The 403 detail is what an LLM caller reads. It must keep naming the tool
+    that returns valid uids, otherwise a wrong identifier looks like an identity
+    failure and the agent retries variants instead of listing documents."""
+    client, controller = tabular_client
+
+    async def _raise(*_args, **_kwargs):
+        raise PermissionError(forbidden_datasets_message(["exigences.xlsx"]))
+
+    controller.service.query_read = _raise
+
+    response = client.post("/tabular/query", json={"sql": "SELECT 1"})
+
+    assert response.status_code == 403
+    assert "list_tabular_documents" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(

@@ -669,6 +669,48 @@ async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_a
 
 
 @pytest.mark.asyncio
+async def test_tabular_service_denial_points_a_wrong_identifier_at_the_listing_tool(tmp_path, metadata_store):
+    """
+    Vérifie que le refus 403 reste exploitable par un agent.
+
+    Pourquoi : un identifiant inventé (nom de fichier, alias SQL) n'existe pas
+    côté ReBAC, donc il est refusé comme un document interdit ; sans mention de
+    `list_tabular_documents` l'agent lit une erreur d'identité et réessaie des
+    variantes au lieu de demander les vrais `document_uid`.
+    """
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac({"doc-sales"})
+
+    with pytest.raises(PermissionError) as query_error:
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(
+                sql="SELECT 1",
+                dataset_uids=["sales.csv"],
+            ),
+        )
+    assert "sales.csv" in str(query_error.value)
+    assert "list_tabular_documents" in str(query_error.value)
+
+    with pytest.raises(PermissionError, match="list_tabular_documents"):
+        await service.describe_documents(_user(), ["sales.csv"])
+
+    with pytest.raises(PermissionError, match="list_tabular_documents"):
+        await service.get_document_markdown(_user(), "sales.csv")
+
+
+@pytest.mark.asyncio
 async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_lookup(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
