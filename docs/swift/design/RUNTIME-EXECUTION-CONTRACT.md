@@ -5555,19 +5555,21 @@ publish sees what it just wrote rather than the pre-publish snapshot.
 
 **The write-side gate is the actual fix, not the pagination alone.**
 Continuation only lets the text be *retrieved*; `TeamWikiCapability.tools()`
-now tracks, per slug, per turn (under its own `read_state_lock`, same
-concurrency reasoning as the adapter's): `read_coverage` (how far a
-contiguous chain of reads has reached, offset 0 forward) and `complete_reads`
-(slugs read start to end at one consistent revision). `wiki_read_page`
-refuses a continuation call whose `offset` skips past that covered frontier —
-re-reading or replaying an already-covered offset is allowed (a retry of the
-exact last call must not be refused), only advancing past unread text is —
-so a model cannot "read" past a segment it never saw. `wiki_propose_page_text`
-now refuses outright when the target slug is not in `complete_reads`, even
-though `read_revisions` — the base a proposal anchors to, populated from the
-first segment — is already set. The two checks answer different questions:
-which revision to anchor to, versus whether the whole of it was actually
-seen.
+now tracks, per slug, per turn (one `_SlugReadState` per slug in a
+`read_state` dict, under its own `read_state_lock`, same concurrency
+reasoning as the adapter's): `covered_to` (how far a contiguous chain of
+reads has reached, offset 0 forward), `complete` (read start to end at one
+consistent revision), and `revision` (see below) — one object per slug, not
+three parallel dicts, because a revision change invalidates all three at
+once. `wiki_read_page` refuses a continuation call whose `offset` skips past
+that covered frontier — re-reading or replaying an already-covered offset is
+allowed (a retry of the exact last call must not be refused), only advancing
+past unread text is — so a model cannot "read" past a segment it never saw.
+`wiki_propose_page_text` now refuses outright when the target slug's state is
+missing or not `complete`, even though `revision` — the base a proposal
+anchors to, populated from the first segment — may already be set. The two
+checks answer different questions: which revision to anchor to, versus
+whether the whole of it was actually seen.
 
 **Mid-read edits are handled through an immutable-revision read, checked
 defensively too.** The reference `TeamWikiAdapter` pins one page's content for
@@ -5585,6 +5587,40 @@ accepted, matching the doctrine that already governs `document_extract`'s
 exhaustive accumulation (§8.44) and `document_verbatim`'s pagination footer
 (§8.43).
 
+**Follow-up, same day: a conflict must renew the pinned snapshot, and
+coverage must not survive a revision change at offset zero.** The mechanism
+above closed how much of a page had to be read; it left two gaps in what
+counted as the SAME read. (1) `propose_edit`'s existing 409 told the caller
+to re-read from the start, but `TeamWikiAdapter._page_cache` kept the
+pre-conflict snapshot pinned, so that re-read replayed the same superseded
+content instead of reaching the server — no adapter-level recovery existed
+from a conflict at all. `propose_edit` now evicts its slug's cache entry on a
+409, the same eviction `publish_proposal` already does on success, so the
+next offset-0 read is a real GET. (2) a slug's `covered_to`/`complete` were
+carried forward via `max(expected_offset, ...)` on every read including a
+fresh offset-0 one, so a restart landing on a new revision (server-side, or
+recovering from the conflict above) still had the OLD revision's coverage —
+a page read whole at revision A, replaced by a longer revision B, then
+restarted at offset 0, could see offset 0 report A's already-covered range
+and let a later call skip straight past unread text in B, or let a stale
+`complete` authorize `wiki_propose_page_text` before B was actually read to
+the end. `wiki_read_page` now detects a revision change at offset zero (not
+only mid-read, which was already refused) and resets that base to zero
+instead of inheriting it, and `wiki_propose_page_text` drops its slug's
+tracking on a 409 from `propose_edit` so a retry without a fresh read is
+refused locally rather than reaching the port again. Deliberately minimal:
+no new port method, parameter, or second cache — both fixes reuse the
+eviction/reset mechanisms already in this entry, scoped to the slug that
+actually conflicted or changed revision. This same follow-up also collapsed
+the three parallel per-slug dicts (`read_revisions`/`read_coverage`/
+`complete_reads`) into the one `_SlugReadState` dataclass named above: the
+409 handler needed to clear all three together, which is exactly the "must
+always evolve together" signal for one representation instead of three, per
+`CLAUDE.md`'s consolidation bias. Concurrent reads/proposals on the SAME slug
+still serialize on the existing single locks (adapter's `_page_cache_lock`,
+capability's `read_state_lock`); that is an accepted, unaltered trade-off,
+not a gap this entry closes.
+
 **Retained limitation.** `read_rules` (§7.3, RFC) is untouched: its
 4 000-char cap has no replace-whole workflow behind it, so the mismatch this
 entry closes does not apply there. And pinning a page for the whole turn
@@ -5597,12 +5633,22 @@ is a raw index into a tree re-fetched on every call, so a page inserted or
 removed between two of its pagination calls can shift what that index means;
 noted here for the next person to touch that tool, not fixed in this change.
 
-**Scope.** `fred-sdk/fred_sdk/contracts/runtime.py` (`WikiPageContent`,
-`TeamWikiPort.read_page`), `fred-runtime/.../adapters.py`
-(`TeamWikiAdapter.read_page`), `fred-capability-team-wiki/wiki/capability.py`
-(`wiki_read_page`, `wiki_propose_page_text`).
+**Scope.** `fred-runtime/.../adapters.py` (`TeamWikiAdapter.read_page`,
+`.propose_edit`), `fred-capability-team-wiki/wiki/capability.py`
+(`wiki_read_page`, `wiki_propose_page_text`). The follow-up needed no change
+to `fred-sdk/fred_sdk/contracts/runtime.py` — `read_page`'s docstring already
+required callers to compare `revision_id` and discard a mismatch; the gap was
+in the two consumers, not the contract.
 
-**Tests.** `test_team_wiki_adapter.py` (window slicing, end-of-page),
-`test_team_wiki.py` (continuation reaching the end, an out-of-sequence offset
-refused, a mid-read revision change refused and the write gate staying shut,
-a partial read refused at propose time, a full cross-segment read accepted).
+**Tests.** `test_team_wiki_adapter.py` (window slicing, end-of-page, a 409 on
+`propose_edit` evicting only the conflicting slug's cache entry so the next
+read renews it), `test_team_wiki.py` (continuation reaching the end, an
+out-of-sequence offset refused, a mid-read revision change refused and the
+write gate staying shut, a partial read refused at propose time, a full
+cross-segment read accepted, a restart landing on a new revision not
+inheriting the old one's coverage, a propose conflict forcing a fresh read
+before a retry), `apps/fred-agents/tests/
+test_team_wiki_capability_via_adapter.py` (the same conflict-recovery
+sequence through the real adapter and capability together, against a
+scripted HTTP client, asserting the actual `base_revision_id` values and GET
+count on the wire).

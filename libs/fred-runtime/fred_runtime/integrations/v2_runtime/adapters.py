@@ -2874,10 +2874,13 @@ class TeamWikiAdapter(TeamWikiPort):
     trip, not one per segment, and every segment slices the SAME snapshot, so
     they can never disagree on revision. A real edit landing while that
     snapshot is held is caught later, at `propose_edit`'s existing
-    `base_revision_id` conflict check — EXCEPT this adapter's own successful
-    `publish_proposal`, which invalidates the published slug's cache entry
-    directly, so a same-turn re-read after publishing sees what was just
-    written rather than the pre-publish snapshot.
+    `base_revision_id` conflict check. Two calls evict a slug's cache entry so
+    the next offset-0 read renews it rather than replaying the pinned
+    snapshot: this adapter's own successful `publish_proposal` (a same-turn
+    re-read must see what was just written), and a 409 from `propose_edit`
+    (the snapshot the rejected proposal was anchored to is now known stale —
+    without eviction, "read again from the start" would still be handed the
+    same superseded content).
     """
 
     def __init__(
@@ -3040,21 +3043,30 @@ class TeamWikiAdapter(TeamWikiPort):
     async def propose_edit(
         self, *, slug: str, content_md: str, base_revision_id: str
     ) -> WikiProposalRef:
-        payload = await self._request(
-            "POST",
-            "/proposals/edit",
-            {
-                "slug": slug,
-                "content_md": content_md,
-                "base_revision_id": base_revision_id,
-                "agent_instance_id": getattr(
-                    self._binding.runtime_context, "agent_instance_id", None
-                ),
-                "session_id": getattr(
-                    self._binding.runtime_context, "session_id", None
-                ),
-            },
-        )
+        try:
+            payload = await self._request(
+                "POST",
+                "/proposals/edit",
+                {
+                    "slug": slug,
+                    "content_md": content_md,
+                    "base_revision_id": base_revision_id,
+                    "agent_instance_id": getattr(
+                        self._binding.runtime_context, "agent_instance_id", None
+                    ),
+                    "session_id": getattr(
+                        self._binding.runtime_context, "session_id", None
+                    ),
+                },
+            )
+        except TeamWikiPortError as exc:
+            if exc.status_code == 409:
+                # base_revision_id is already stale server-side: the cached
+                # snapshot it came from must not be replayed to a caller who
+                # re-reads this slug from the start to recover.
+                async with self._page_cache_lock:
+                    self._page_cache.pop(slug, None)
+            raise
         return self._proposal_ref(payload, verb="rewrite")
 
     async def publish_proposal(self, proposal_id: str) -> str:

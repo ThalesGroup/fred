@@ -46,6 +46,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -455,6 +456,19 @@ class TeamWikiConfig(BaseModel):
     mode: str = "read"
 
 
+@dataclass(slots=True)
+class _SlugReadState:
+    """One slug's read progress this turn — kept as one object, not three
+    parallel dicts, because a revision change invalidates `revision`,
+    `covered_to` and `complete` together; splitting them risks an update to
+    one without the other two (see `wiki_read_page`/`wiki_propose_page_text`).
+    """
+
+    revision: str | None = None
+    covered_to: int = 0
+    complete: bool = False
+
+
 class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyModel]):
     """Read access to the calling team's wiki, through
     `RuntimeServices.team_wiki` (see the module docstring for the doctrine)."""
@@ -515,20 +529,19 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # a model with no way to act on a page it has read will otherwise call
         # this again, and again, in the field.
         already_read: set[tuple[str, int]] = set()
-        # The revision each slug was last read at — a propose call's base, and
-        # what a continuation read checks to catch the page changing mid-read.
-        read_revisions: dict[str, str] = {}
-        # How far each slug's reads have contiguously covered from offset 0 —
-        # a continuation quoting an offset beyond this would skip unseen text.
-        read_coverage: dict[str, int] = {}
-        # Slugs read start-to-finish this turn, at one consistent revision —
-        # the only grounds wiki_propose_page_text accepts for replacing a page
-        # whole (a page under PAGE_READ_MAX_CHARS qualifies after one read).
-        complete_reads: set[str] = set()
-        # Guards all four structures above: a ReAct round can dispatch several
-        # tool calls from one model turn concurrently (LangGraph gathers them),
-        # so two reads of the same slug could otherwise interleave their
-        # updates and leave this bookkeeping inconsistent.
+        # Per-slug read progress this turn: which revision, how far a
+        # contiguous chain of reads has covered from offset 0 (a continuation
+        # quoting an offset beyond this would skip unseen text), and whether
+        # it was read start-to-finish at one consistent revision — the only
+        # grounds wiki_propose_page_text accepts for replacing a page whole.
+        # One dict of one small object per slug, not three parallel ones: a
+        # revision change invalidates all three together, and the 409 handler
+        # below only has to drop one entry, not remember to clear three.
+        read_state: dict[str, _SlugReadState] = {}
+        # Guards `read_state` above: a ReAct round can dispatch several tool
+        # calls from one model turn concurrently (LangGraph gathers them), so
+        # two reads of the same slug could otherwise interleave their updates
+        # and leave this bookkeeping inconsistent.
         read_state_lock = asyncio.Lock()
         # The tree, fetched at most once per turn and shared by every tool that
         # has to turn a path into a page. Dropped after a publish, which is the
@@ -696,7 +709,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             slug = found.slug
             offset = max(offset, 0)
             async with read_state_lock:
-                expected_offset = read_coverage.get(slug, 0)
+                state = read_state.get(slug)
+                expected_offset = state.covered_to if state is not None else 0
                 if offset != 0 and offset > expected_offset:
                     return _resolution_failure(
                         f"'{path}' was not read up to offset {offset} this turn. "
@@ -716,24 +730,28 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                         exc=exc,
                         elapsed_s=time.monotonic() - started,
                     )
-                prior_revision = read_revisions.get(slug)
-                if (
-                    offset > 0
-                    and prior_revision is not None
-                    and page.revision_id != prior_revision
-                ):
+                prior_revision = state.revision if state is not None else None
+                revision_changed = (
+                    prior_revision is not None and page.revision_id != prior_revision
+                )
+                if offset > 0 and revision_changed:
                     # A port that does not pin content for the turn could hand
                     # back a later revision mid-read; discard rather than
                     # splice two revisions together (offset=0 restarts fresh).
-                    read_coverage.pop(slug, None)
-                    complete_reads.discard(slug)
-                    read_revisions.pop(slug, None)
+                    read_state.pop(slug, None)
                     return _resolution_failure(
                         f"'{path}' changed while you were reading it, so "
                         f"continuing from offset {offset} would mix two "
                         "different versions of the page into one. Start "
                         f"again with wiki_read_page('{path}')."
                     )
+                if revision_changed:
+                    # offset == 0 here: a fresh start landed on a different
+                    # revision than the one this slug's state was tracked
+                    # against. That progress belongs to a page that no longer
+                    # exists server-side — coverage for THIS read starts at
+                    # zero, never inherited via max() below.
+                    expected_offset = 0
                 body = page.content_md.strip() or (
                     "(this page is empty)" if offset == 0 else "(no more text)"
                 )
@@ -742,12 +760,13 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 if read_key in already_read or (page.slug, offset) in already_read:
                     text += _REREAD_NOTE
                 already_read.update({read_key, (page.slug, offset)})
+                state = read_state.setdefault(slug, _SlugReadState())
+                read_state[page.slug] = state
                 if page.revision_id is not None:
-                    read_revisions[slug] = page.revision_id
-                    read_revisions[page.slug] = page.revision_id
+                    state.revision = page.revision_id
                 if page.next_offset is not None:
-                    read_coverage[slug] = max(expected_offset, page.next_offset)
-                    complete_reads.discard(slug)
+                    state.covered_to = max(expected_offset, page.next_offset)
+                    state.complete = False
                     text += (
                         f"\n\n[Read chars {page.offset}-"
                         f"{page.offset + len(page.content_md)} of "
@@ -757,8 +776,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                         "relying on or replacing its content.]"
                     )
                 else:
-                    read_coverage[slug] = max(expected_offset, page.total_chars)
-                    complete_reads.add(slug)
+                    state.covered_to = max(expected_offset, page.total_chars)
+                    state.complete = True
                     text += (
                         f"\n\n[End of page reached ({page.total_chars} chars total).]"
                     )
@@ -812,8 +831,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             if not isinstance(found, WikiPageRef):
                 return found
             async with read_state_lock:
-                is_complete = found.slug in complete_reads
-                base_revision_id = read_revisions.get(found.slug)
+                state = read_state.get(found.slug)
+                is_complete = state is not None and state.complete
+                base_revision_id = state.revision if state is not None else None
             if not is_complete:
                 return _resolution_failure(
                     f"You have not read all of '{path}' this turn — it is "
@@ -838,6 +858,13 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     base_revision_id=base_revision_id,
                 )
             except Exception as exc:
+                if getattr(exc, "status_code", None) == 409:
+                    # base_revision_id is already stale server-side. Drop this
+                    # slug's "read to the end" state so it cannot authorize
+                    # another proposal before a fresh wiki_read_page — an
+                    # unread retry must be refused, not just this one.
+                    async with read_state_lock:
+                        read_state.pop(found.slug, None)
                 return _wiki_tool_failure(
                     action=f"propose an edit to '{path}'",
                     exc=exc,

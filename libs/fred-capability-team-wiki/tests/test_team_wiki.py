@@ -76,6 +76,10 @@ class _FakePort(TeamWikiPort):
         # Fails only `list_pages`, so a test can break the tree read back
         # AFTER a write has already landed.
         self.raise_on_list: Exception | None = None
+        # Fails only the next `propose_edit`, so a test can simulate the
+        # server's 409 (base_revision_id went stale) without also breaking
+        # the reads that lead up to it.
+        self.raise_on_propose_edit: Exception | None = None
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         self.list_calls += 1
@@ -138,6 +142,9 @@ class _FakePort(TeamWikiPort):
     ) -> WikiProposalRef:
         if self._raises is not None:
             raise self._raises
+        if self.raise_on_propose_edit is not None:
+            exc, self.raise_on_propose_edit = self.raise_on_propose_edit, None
+            raise exc
         self.proposed.append((slug, content_md))
         self.propose_bases.append(base_revision_id)
         return WikiProposalRef(
@@ -555,6 +562,48 @@ def test_a_revision_change_mid_read_is_detected_and_refused() -> None:
     assert port.proposed == []
 
 
+def test_a_restart_on_a_new_revision_does_not_inherit_stale_coverage() -> None:
+    """A2: A (16 000 chars = two 8 000-char segments) is read whole, then B
+    (24 000 chars) replaces it before a restart read at offset 0. The restart
+    landing on B must not let A's leftover coverage (16 000) let a later call
+    skip straight past the [8 000, 16 000) segment of B that was never read."""
+
+    port = _FakePort(
+        pages=(_page("s1", "Big"),),
+        content="a" * (2 * PAGE_READ_MAX_CHARS),
+        revision_id="rev-A",
+    )
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)
+    _call(port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn)
+
+    port.set_content("b" * (3 * PAGE_READ_MAX_CHARS), revision_id="rev-B")
+    _call(port, "wiki_read_page", {"path": "Big"}, turn)  # offset=0 restart, lands on B
+
+    jump = _call(
+        port,
+        "wiki_read_page",
+        {"path": "Big", "offset": 2 * PAGE_READ_MAX_CHARS},
+        turn,
+    )
+    assert jump.artifact.is_error is True
+
+    # Only after actually reading the missing middle segment of B does
+    # completion — and therefore a propose — become legitimate.
+    _call(port, "wiki_read_page", {"path": "Big", "offset": PAGE_READ_MAX_CHARS}, turn)
+    _call(
+        port,
+        "wiki_read_page",
+        {"path": "Big", "offset": 2 * PAGE_READ_MAX_CHARS},
+        turn,
+    )
+    ok = _call(
+        port, "wiki_propose_page_text", {"path": "Big", "content_md": "new"}, turn
+    )
+    assert ok.artifact.is_error is False
+    assert port.propose_bases == ["rev-B"]
+
+
 def test_a_missing_port_fails_loud() -> None:
     """A bare harness must not look like an empty wiki."""
 
@@ -887,6 +936,38 @@ def test_proposing_after_reading_to_the_end_across_segments_succeeds() -> None:
     assert message.artifact.is_error is False
     assert port.proposed == [("s1", "new")]
     assert port.propose_bases == ["rev-9"]
+
+
+def test_a_conflict_on_propose_forces_a_fresh_read_before_a_retry() -> None:
+    """A1: the server 409s a propose because the page moved since this turn's
+    read. That stale "read to the end" state must not survive the conflict —
+    an unread retry has to be refused too, not just the one that 409'd."""
+
+    port = _FakePort(pages=(_page("s1", "S"),), content="old", revision_id="rev-1")
+    port.raise_on_propose_edit = TeamWikiPortError("stale", status_code=409)
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+
+    conflict = _call(
+        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn
+    )
+    assert conflict.artifact.is_error is True
+    assert port.proposed == []
+
+    # No re-read yet: retrying on the same (now-invalidated) session must be
+    # refused locally, not sent to the port a second time.
+    retry = _call(
+        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn
+    )
+    assert retry.artifact.is_error is True
+    assert port.proposed == []
+
+    # Only a fresh read of the new revision can authorize a proposal again.
+    port.set_content("new-base", revision_id="rev-2")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+    ok = _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
+    assert ok.artifact.is_error is False
+    assert port.propose_bases == ["rev-2"]
 
 
 def test_proposing_without_reading_first_is_refused_locally() -> None:

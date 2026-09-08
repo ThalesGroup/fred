@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 from fred_runtime.integrations.v2_runtime.adapters import TeamWikiAdapter
 from fred_sdk.contracts.context import (
@@ -31,6 +32,7 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.runtime import TeamWikiPortError
 
 pytestmark = pytest.mark.asyncio
 
@@ -68,15 +70,38 @@ class _RecordingClient:
 
 class _ScriptedClient:
     """Returns one queued payload per call, in order — for a test that needs
-    control-plane state to change between two calls on the same adapter."""
+    control-plane state to change between two calls on the same adapter.
+
+    A queued `httpx.Response` is returned as-is rather than wrapped, so its
+    own `raise_for_status()` raises a real `httpx.HTTPStatusError` — for a
+    test that needs a genuine server error (e.g. a 409) partway through a
+    scripted sequence.
+    """
 
     def __init__(self, payloads: list[Any]) -> None:
         self._payloads = list(payloads)
 
     async def request(
         self, method: str, url: str, *, headers: dict[str, str], json: Any = None
-    ) -> _FakeResponse:
-        return _FakeResponse(self._payloads.pop(0))
+    ) -> Any:
+        item = self._payloads.pop(0)
+        if isinstance(item, httpx.Response):
+            return item
+        return _FakeResponse(item)
+
+
+def _conflict_response(
+    *, current_revision_id: str, current_content_md: str
+) -> httpx.Response:
+    return httpx.Response(
+        409,
+        json={
+            "detail": "the page changed since you read it",
+            "current_revision_id": current_revision_id,
+            "current_content_md": current_content_md,
+        },
+        request=httpx.Request("POST", "https://control-plane.internal/x"),
+    )
 
 
 def _binding() -> BoundRuntimeContext:
@@ -249,3 +274,67 @@ async def test_propose_edit_sends_the_base_revision_id_verbatim() -> None:
     assert client.last_call is not None
     assert client.last_call["json"]["base_revision_id"] == "rev-abc123"
     assert client.last_call["url"].endswith("/proposals/edit")
+
+
+async def test_a_conflict_on_propose_edit_evicts_the_cache_so_the_next_read_renews_it() -> (
+    None
+):
+    """A1: GET A, propose against A, server 409s (B landed meanwhile). A
+    caller told to "read again from the start" must reach the server, not
+    replay the pinned snapshot the rejected proposal was anchored to."""
+
+    client = _ScriptedClient(
+        [
+            {
+                "page": {"slug": "p", "title": "P"},
+                "content_md": "A",
+                "revision_id": "rev-A",
+            },
+            _conflict_response(current_revision_id="rev-B", current_content_md="B"),
+            {
+                "page": {"slug": "p", "title": "P"},
+                "content_md": "B",
+                "revision_id": "rev-B",
+            },
+        ]
+    )
+    adapter = _adapter(client)
+
+    first = await adapter.read_page("p")
+    assert first.revision_id == "rev-A"
+
+    with pytest.raises(TeamWikiPortError) as excinfo:
+        await adapter.propose_edit(
+            slug="p", content_md="based on A", base_revision_id="rev-A"
+        )
+    assert excinfo.value.status_code == 409
+
+    second = await adapter.read_page("p")
+    assert second.revision_id == "rev-B"
+    assert second.content_md == "B"
+
+
+async def test_a_conflict_on_a_different_slug_leaves_this_ones_cache_alone() -> None:
+    """Eviction on 409 is scoped to the slug that conflicted — a sibling
+    page's already-cached snapshot must survive it untouched. Only two
+    responses are queued: a third real fetch (were "other" wrongly evicted
+    too) would raise on the empty queue rather than silently pass."""
+
+    client = _ScriptedClient(
+        [
+            {
+                "page": {"slug": "other", "title": "Other"},
+                "content_md": "unrelated",
+                "revision_id": "rev-1",
+            },
+            _conflict_response(current_revision_id="rev-2", current_content_md="p2"),
+        ]
+    )
+    adapter = _adapter(client)
+
+    cached = await adapter.read_page("other")
+    with pytest.raises(TeamWikiPortError):
+        await adapter.propose_edit(slug="p", content_md="new", base_revision_id="rev-1")
+
+    again = await adapter.read_page("other")
+    assert again.content_md == cached.content_md
