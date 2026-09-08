@@ -2344,10 +2344,16 @@ export type PolicyResolutionRequest = {
   trigger?: LifecycleTrigger;
 };
 export type SchedulerBackend = "temporal" | "memory";
+export type WikiProposalLifecycleResult = {
+  scanned?: number;
+  rejected?: number;
+  dry_run_actions?: number;
+};
 export type LifecycleManagerResult = {
   scanned?: number;
   deleted?: number;
   dry_run_actions?: number;
+  wiki_proposals?: WikiProposalLifecycleResult;
 };
 export type WorkflowStartResponse = {
   status?: "queued" | "completed";

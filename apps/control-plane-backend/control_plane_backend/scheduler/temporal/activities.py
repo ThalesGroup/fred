@@ -14,12 +14,22 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationCandidateBatch,
     DeleteConversationInput,
     ListConversationCandidatesInput,
+    ListWikiProposalCandidatesInput,
+    RejectWikiProposalInput,
+    WikiProposalActionResult,
+    WikiProposalCandidateBatch,
+)
+from control_plane_backend.scheduler.wiki_proposal_actions import (
+    list_due_wiki_proposal_candidates,
+    reject_stale_wiki_proposal,
 )
 
 logger = logging.getLogger(__name__)
 
 LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME = "list_conversation_candidates"
 DELETE_CONVERSATION_ACTIVITY_NAME = "delete_conversation"
+LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME = "list_wiki_proposal_candidates"
+REJECT_WIKI_PROPOSAL_ACTIVITY_NAME = "reject_wiki_proposal"
 
 
 def _activity_logger():
@@ -98,6 +108,65 @@ async def delete_conversation(
     )
 
 
+async def list_wiki_proposal_candidates(
+    input_data: ListWikiProposalCandidatesInput,
+    deps: LifecycleActionDependencies | None = None,
+) -> WikiProposalCandidateBatch:
+    """
+    List stale wiki proposal candidates through the shared activity code path.
+
+    Why this function exists:
+    - memory mode and Temporal execution intentionally share the same activity
+      implementation so lifecycle behavior stays aligned (WIKI-05)
+
+    How to use it:
+    - Temporal calls it with `input_data` only
+    - in-memory code may optionally pass explicit lifecycle dependencies
+
+    Example:
+    - `batch = await list_wiki_proposal_candidates(input_data, deps=deps)`
+    """
+    if deps is None:
+        raise RuntimeError(
+            "LifecycleActionDependencies are required for listing wiki proposal candidates."
+        )
+    candidates = await list_due_wiki_proposal_candidates(
+        limit=input_data.limit,
+        deps=deps,
+    )
+    _activity_logger().info(
+        "[LIFECYCLE][WIKI] list due candidates limit=%s returned=%s",
+        input_data.limit,
+        len(candidates.candidates),
+    )
+    return candidates
+
+
+async def reject_wiki_proposal(
+    input_data: RejectWikiProposalInput,
+    deps: LifecycleActionDependencies | None = None,
+) -> WikiProposalActionResult:
+    """
+    Reject one stale wiki proposal through the shared lifecycle activity path.
+
+    Why this function exists:
+    - memory mode and Temporal execution should reuse the same rejection
+      logic and logging behavior (WIKI-05)
+
+    How to use it:
+    - Temporal calls it with `input_data` only
+    - in-memory code may optionally pass explicit lifecycle dependencies
+
+    Example:
+    - `result = await reject_wiki_proposal(input_data, deps=deps)`
+    """
+    if deps is None:
+        raise RuntimeError(
+            "LifecycleActionDependencies are required for rejecting wiki proposals."
+        )
+    return await reject_stale_wiki_proposal(candidate=input_data.candidate, deps=deps)
+
+
 class LifecycleActivities:
     """
     Bind lifecycle Temporal activities to one explicit dependency bundle.
@@ -172,3 +241,39 @@ class LifecycleActivities:
         - `activities=[activities.delete_conversation]`
         """
         return await delete_conversation(input_data, deps=self._deps)
+
+    @activity.defn(name=LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME)
+    async def list_wiki_proposal_candidates(
+        self,
+        input_data: ListWikiProposalCandidatesInput,
+    ) -> WikiProposalCandidateBatch:
+        """
+        Run the list-wiki-proposal-candidates activity with the bound
+        dependency bundle (WIKI-05).
+
+        How to use it:
+        - register the bound method on a `LifecycleActivities` instance
+        - Temporal passes `input_data` at execution time
+
+        Example:
+        - `activities=[activities.list_wiki_proposal_candidates]`
+        """
+        return await list_wiki_proposal_candidates(input_data, deps=self._deps)
+
+    @activity.defn(name=REJECT_WIKI_PROPOSAL_ACTIVITY_NAME)
+    async def reject_wiki_proposal(
+        self,
+        input_data: RejectWikiProposalInput,
+    ) -> WikiProposalActionResult:
+        """
+        Run the reject-wiki-proposal activity with the bound dependency
+        bundle (WIKI-05).
+
+        How to use it:
+        - register the bound method on a `LifecycleActivities` instance
+        - Temporal passes `input_data` at execution time
+
+        Example:
+        - `activities=[activities.reject_wiki_proposal]`
+        """
+        return await reject_wiki_proposal(input_data, deps=self._deps)

@@ -3174,6 +3174,28 @@ class _FakeKPIStore:
         return self.updated
 
 
+class _FakeTeamWikiStore:
+    """In-memory stand-in for `TeamWikiStore` (WIKI-05's erasure hook).
+
+    `reject_proposals_for_session` records the calls and returns a fixed
+    count, or raises when `fail` is set (to exercise per-store isolation) —
+    same shape as `_FakeKPIStore` above.
+    """
+
+    def __init__(self, *, rejected: int = 0, fail: bool = False) -> None:
+        self.rejected = rejected
+        self.fail = fail
+        self.calls: list[tuple[str, str]] = []
+
+    async def reject_proposals_for_session(
+        self, *, team_id: Any, session_id: str
+    ) -> int:
+        self.calls.append((str(team_id), session_id))
+        if self.fail:
+            raise RuntimeError("wiki store unavailable")
+        return self.rejected
+
+
 def _build_erasure_deps(
     session_store: _FakeSessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
@@ -3185,6 +3207,7 @@ def _build_erasure_deps(
     team_metadata_store: Any = None,
     purge_queue_store: Any = None,
     task_service: Any = None,
+    team_wiki_store: Any = None,
 ) -> ProductServiceDependencies:
     """Minimal deps bundle wiring only the collaborators erase_session uses.
 
@@ -3192,6 +3215,8 @@ def _build_erasure_deps(
     resolve a session's runtime; A1 callers omit them (runtime stays
     unresolved, recorded ok=false). `kpi_store` is the A3 addition; when omitted
     the KPI store is absent (a no-op ok entry, nothing to anonymise).
+    `team_wiki_store` is the WIKI-05 addition; defaults to a fake that rejects
+    nothing rather than `None`, since that step now runs unconditionally.
     """
     return ProductServiceDependencies(
         configuration=configuration,  # type: ignore[arg-type]
@@ -3207,7 +3232,7 @@ def _build_erasure_deps(
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_prompt_category_store=lambda: None,  # type: ignore[arg-type,return-value]
-        get_team_wiki_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_team_wiki_store=lambda: team_wiki_store or _FakeTeamWikiStore(),  # type: ignore[arg-type,return-value]
         get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
@@ -4112,6 +4137,98 @@ async def test_erase_session_kpi_failure_isolated_others_still_erased(
     assert by_store["session_metadata"].ok is False
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_rejects_its_pending_wiki_proposals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WIKI-05: erasing a session immediately rejects any still-`proposed`
+    wiki proposal it authored, rather than waiting out the retention window —
+    the conversation is gone, so nothing will ever approve it."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_WIKI_PROPOSALS,
+        ConversationErasureService,
+    )
+
+    wiki_store = _FakeTeamWikiStore(rejected=2)
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        team_wiki_store=wiki_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert wiki_store.calls == [("personal", "session-1")]
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store[STORE_WIKI_PROPOSALS].ok is True
+    assert by_store[STORE_WIKI_PROPOSALS].deleted_count == 2
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_wiki_proposal_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WIKI-05: a failing wiki-proposal rejection records ok=false for that
+    store only — the rest of the erase still completes, retryable, matching
+    every other isolated store here."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_WIKI_PROPOSALS,
+        ConversationErasureService,
+    )
+
+    wiki_store = _FakeTeamWikiStore(fail=True)
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        team_wiki_store=wiki_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store[STORE_WIKI_PROPOSALS].ok is False
+    assert by_store[STORE_WIKI_PROPOSALS].error is not None
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    # Metadata retained (deleted last, only on full success) — the failed
+    # wiki-proposal step alone is enough to make the whole erase retryable.
+    assert by_store["session_metadata"].ok is False
     assert receipt.ok is False
 
 
@@ -6083,7 +6200,15 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
         "backend": "memory",
         "workflow_id": None,
         "run_id": None,
-        "result": {"scanned": 2, "deleted": 2, "dry_run_actions": 0},
+        "result": {
+            "scanned": 2,
+            "deleted": 2,
+            "dry_run_actions": 0,
+            # WIKI-05: the fake above returns a bare `LifecycleManagerResult`,
+            # so this is the field's own default — the endpoint itself needed
+            # no change to carry it.
+            "wiki_proposals": {"scanned": 0, "rejected": 0, "dry_run_actions": 0},
+        },
     }
 
 

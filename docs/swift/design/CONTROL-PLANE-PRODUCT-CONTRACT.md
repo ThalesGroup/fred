@@ -3630,3 +3630,56 @@ has no pre-existing history to page past, until the proposal is approved.
 returned from any page a reader has fetched — never by its position within
 one. `list_revisions` bounding the query changes what one response returns,
 never what a caller can act on.
+
+**A proposal a human never acts on resolves after 30 days, not never**
+(2026-09-08, WIKI-05). Declining a HITL approval card is invisible to
+control-plane: the runtime jumps back to `model` on cancel and
+`wiki_publish_proposal`'s body never runs, so nothing reports the decision
+back — a decline and simple abandonment are indistinguishable today, and both
+left the proposal at `status="proposed"` forever, publishable by any later
+retry that reused its id.
+
+The platform HITL epic (issue #1080) confirms this is not settled anywhere
+else either — "maximum age of an unanswered prompt" is explicitly listed as
+an unresolved, platform-wide gap. `PolicyConfig.wiki_policies.proposal.
+retention` (`conversation_policy_catalog.yaml`, default `P30D`, an ISO-8601
+duration parsed the same way as every other retention value in that file) is
+the platform-wide answer for wiki proposals specifically — not a team
+override, since nothing asked for one.
+
+**The lifecycle sweep reuses the existing Temporal `LifecycleManagerWorkflow`
+tick — no second scheduled entrypoint.** The same 10-minute `Schedule`, the
+same worker, the same `POST /lifecycle/run-once` manual trigger now also list
+`status="proposed"` rows older than the retention cutoff
+(`scheduler/wiki_proposal_actions.py`) and reject each with a single
+conditional `UPDATE ... WHERE status = 'proposed'` — the identical
+compare-and-swap idiom `store.py` already uses for every other proposal
+transition. `LifecycleManagerResult.wiki_proposals` carries that sweep's own
+`scanned`/`rejected`/`dry_run_actions` counts alongside the conversation
+sweep's.
+
+**This closes the retry hole for free.** `publish_proposal`'s own `WHERE
+status == "proposed"` lookup already existed; once a row is rejected, that
+lookup finds nothing and the caller gets the pre-existing
+`WikiRequestError("This proposal is no longer pending.", 404)` — no change to
+the publish path was needed. The same guard is what makes the sweep safe
+against a concurrent approval: whichever of {reject, publish} commits first
+is the only one that changes anything, proven under real concurrency in
+`test_publication_and_lifecycle_expiry_race_to_a_consistent_outcome`
+(`test_team_wiki_store_postgres_integration.py`).
+
+**Erasing a session rejects its still-pending proposals immediately**, rather
+than waiting out the retention window: `team_wiki_revisions.session_id`
+already existed but `ConversationErasureService.erase_session` never looked
+at it. A proposal from a conversation that no longer exists is unambiguously
+abandoned. This runs as its own isolated store step (`wiki_proposals` in the
+erase receipt), matching every other store there — a failure there alone
+makes the whole erase retryable, never destructive.
+
+**Not built here, and why.** A synchronous decline→reject callback would mean
+teaching `HitlSpec` an on-cancel hook that reaches back into a specific
+capability's owning service — a new cross-stack contract surface belonging to
+the HITL epic (#1080), not this fix. An editor review inbox for pending
+proposals (RFC §12.2) stays deferred; retention does not need it, and building
+one only to solve retention would be solving a smaller problem with a bigger
+one.

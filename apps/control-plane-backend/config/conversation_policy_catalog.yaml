@@ -38,3 +38,10 @@ conversation_policies:
           trigger: member_removed
         action:
           retention: PT120S
+
+# WIKI-05: how long an agent's wiki proposal may sit un-answered before the
+# lifecycle sweep rejects it (CONTROL-PLANE-PRODUCT-CONTRACT.md §49).
+# Platform-wide only — no per-team override.
+wiki_policies:
+  proposal:
+    retention: P30D

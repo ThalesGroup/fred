@@ -369,3 +369,77 @@ async def test_concurrent_structural_writes_never_exceed_the_depth_cap(
 
     assert not (moved_result == "moved" and published_result == "published")
     await _assert_committed_tree_is_sound(store, pg.team_id)
+
+
+@pytest.mark.asyncio
+async def test_publication_and_lifecycle_expiry_race_to_a_consistent_outcome(
+    pg: _Fixture,
+) -> None:
+    """WIKI-05's required invariant, proven under real concurrency: the
+    lifecycle sweep's `reject_stale_proposal` and a human's `publish_proposal`
+    landing at the same instant must never both win. Whichever commits first
+    is the only one that changes anything — the page never ends up pointing
+    at a revision that the sweep then deletes out from under it, and a
+    rejected proposal never gets silently published anyway.
+    """
+
+    store = pg.store
+    created = await store.create_page(
+        team_id=pg.team_id,
+        slug="race-target",
+        title="Race target",
+        content_md="v0",
+        author_user_id="alice",
+    )
+    v0_id = created.page.current_revision_id
+    assert v0_id is not None
+    proposal = await store.create_proposal(
+        team_id=pg.team_id,
+        page_id=created.page.page_id,
+        content_md="proposed edit",
+        base_revision_id=v0_id,
+        proposed_title=None,
+        proposed_parent_page_id=None,
+        author_user_id="alice",
+        agent_instance_id="inst-1",
+        session_id="sess-1",
+    )
+
+    async def _expire() -> bool:
+        return await store.reject_stale_proposal(
+            team_id=pg.team_id, revision_id=proposal.revision_id
+        )
+
+    async def _publish() -> WikiPageRecord | None:
+        try:
+            return await store.publish_proposal(
+                team_id=pg.team_id,
+                revision_id=proposal.revision_id,
+                slug="race-target-published",
+                approver_user_id="bob",
+            )
+        except WikiPageNotFoundError:
+            return None
+
+    expired, published = await asyncio.gather(_expire(), _publish())
+
+    # Exactly one side actually changed anything — never both, never neither.
+    assert expired != (published is not None)
+
+    page = await store.get_page(pg.team_id, created.page.page_id)
+    assert page is not None
+    revision = await store.get_revision(pg.team_id, proposal.revision_id)
+    assert revision is not None
+
+    if published is not None:
+        # Publication won: the page points at the now-published revision,
+        # and the sweep's own conditional UPDATE found nothing to change.
+        assert page.current_revision_id == proposal.revision_id
+        assert revision.status == "published"
+        assert expired is False
+    else:
+        # Expiry won: the page is untouched, and the proposal is rejected,
+        # never silently published.
+        assert page.current_revision_id == v0_id
+        assert revision.status == "rejected"
+        assert expired is True

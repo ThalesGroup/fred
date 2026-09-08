@@ -119,6 +119,14 @@ class TeamWikiRevisionRow(Base):
     """
 
     __tablename__ = "team_wiki_revisions"
+    __table_args__ = (
+        # Backs the lifecycle sweep's cross-team `WHERE status='proposed' AND
+        # created_at < cutoff` (CONTROL-PLANE-PRODUCT-CONTRACT.md §49) — a
+        # plain composite rather than a Postgres-only partial index, so it
+        # behaves identically under the SQLite fixtures these tests run
+        # against.
+        Index("ix_team_wiki_revisions_status_created_at", "status", "created_at"),
+    )
 
     revision_id: Mapped[str] = mapped_column(String, primary_key=True)
     page_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -142,8 +150,9 @@ class TeamWikiRevisionRow(Base):
     )
     agent_instance_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # The conversation an agent revision came from — the audit trail back to the
-    # context that produced it.
-    session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # context that produced it, and how an erased session's still-pending
+    # proposals are found and rejected immediately (§49).
+    session_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     # Set only on a proposal for a page that does not exist yet (WIKI-04). The
     # page row is created at approval, not at proposal: an unapproved page must
     # not appear in the team's rail, and a page with no content is not a page.

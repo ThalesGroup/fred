@@ -336,8 +336,15 @@ read_page(team_id, slug)                             -> title, content_md, revis
 propose_page(team_id, parent_slug, title, content)   -> proposal_id, diff summary
 propose_edit(team_id, slug, content, base_revision)  -> proposal_id, diff summary
 publish_proposal(team_id, proposal_id)               -> published revision, or a conflict error
-reject_proposal(team_id, proposal_id)                -> ()
+reject_proposal(team_id, proposal_id)                -> () [not built — settled differently, see below]
 ```
+
+*Settled (2026-09-08, WIKI-05):* `reject_proposal` above was never built as a
+port method — declining a HITL approval card never reaches the runtime's
+tool code at all (the graph replans instead of executing it), so no
+capability call site exists to invoke it from. The proposal lifecycle is
+resolved by time-based retention instead, on the control-plane side only:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §49.
 
 `team_id` is passed by the adapter from the verified runtime context, never by
 capability code and never by the model.

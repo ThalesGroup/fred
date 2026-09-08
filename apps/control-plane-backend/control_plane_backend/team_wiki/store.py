@@ -143,6 +143,18 @@ class RevisionCursor:
     revision_id: str
 
 
+@dataclass(frozen=True)
+class StaleProposalCandidate:
+    """One `status="proposed"` row old enough for the lifecycle sweep to act
+    on — just enough to log and to run the conditional reject against
+    (§49). Not a `WikiRevisionRecord`: the sweep never needs the content."""
+
+    revision_id: str
+    team_id: TeamId
+    page_id: str
+    created_at: datetime
+
+
 @dataclass
 class WikiPageWithContent:
     """One page and the content currently published on it."""
@@ -995,3 +1007,97 @@ class TeamWikiStore:
         if refreshed is None:  # pragma: no cover — created or updated just above
             raise WikiPageNotFoundError(row.page_id)
         return refreshed
+
+    # ---- proposal lifecycle (WIKI-05) --------------------------------------
+    #
+    # A proposal a human never acts on is not a special case: it is the
+    # ordinary outcome of a decline (invisible to this service — the runtime
+    # never runs the tool, see CONTROL-PLANE-PRODUCT-CONTRACT.md §49) and of
+    # simple abandonment, which today are indistinguishable. Both close the
+    # same way: `status` flips to `rejected` via a single conditional UPDATE,
+    # the same compare-and-swap idiom `_publish_in_transaction` already uses.
+    # `publish_proposal`'s own `WHERE status == "proposed"` lookup is what
+    # then makes a rejected proposal behave exactly like one that never
+    # existed — no change to the publish path was needed for that.
+
+    async def list_stale_proposals(
+        self, *, older_than: datetime, limit: int
+    ) -> list[StaleProposalCandidate]:
+        """Every team's `proposed` rows older than `older_than`, oldest first.
+
+        Cross-team on purpose: the lifecycle sweep is a platform service
+        action, not a request scoped to one authenticated team, so this is
+        the one read in this store that does not take `team_id` — callers are
+        the scheduler's own lifecycle action, never the HTTP API.
+        """
+
+        async with use_session(self._sessions) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        TeamWikiRevisionRow.revision_id,
+                        TeamWikiRevisionRow.team_id,
+                        TeamWikiRevisionRow.page_id,
+                        TeamWikiRevisionRow.created_at,
+                    )
+                    .where(
+                        TeamWikiRevisionRow.status == "proposed",
+                        TeamWikiRevisionRow.created_at < older_than,
+                    )
+                    .order_by(TeamWikiRevisionRow.created_at)
+                    .limit(limit)
+                )
+            ).all()
+            return [
+                StaleProposalCandidate(
+                    revision_id=row.revision_id,
+                    team_id=TeamId(row.team_id),
+                    page_id=row.page_id,
+                    created_at=row.created_at,
+                )
+                for row in rows
+            ]
+
+    async def reject_stale_proposal(self, *, team_id: TeamId, revision_id: str) -> bool:
+        """Flip one proposal to `rejected` — but only if it is still
+        `proposed`. Returns whether it actually changed a row.
+
+        The `WHERE status == "proposed"` guard is the whole safety story: if
+        a human approved it between the sweep's list step and this UPDATE,
+        this simply matches nothing and returns `False` rather than
+        clobbering a page that now points at a `published` revision. No lock
+        is needed — a revision's own status is not a tree-shape invariant.
+        """
+
+        async with use_session(self._sessions) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(TeamWikiRevisionRow)
+                .where(
+                    TeamWikiRevisionRow.team_id == str(team_id),
+                    TeamWikiRevisionRow.revision_id == revision_id,
+                    TeamWikiRevisionRow.status == "proposed",
+                )
+                .values(status="rejected")
+            )
+            return result.rowcount > 0
+
+    async def reject_proposals_for_session(
+        self, *, team_id: TeamId, session_id: str
+    ) -> int:
+        """Reject every still-`proposed` row from one session, immediately —
+        used when the session is erased. A proposal whose conversation no
+        longer exists is unambiguously abandoned; there is no reason to make
+        it wait out the ordinary retention window. Returns the count changed.
+        """
+
+        async with use_session(self._sessions) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(TeamWikiRevisionRow)
+                .where(
+                    TeamWikiRevisionRow.team_id == str(team_id),
+                    TeamWikiRevisionRow.session_id == session_id,
+                    TeamWikiRevisionRow.status == "proposed",
+                )
+                .values(status="rejected")
+            )
+            return result.rowcount

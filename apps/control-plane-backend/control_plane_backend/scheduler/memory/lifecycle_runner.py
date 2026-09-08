@@ -4,10 +4,15 @@ import logging
 from functools import partial
 
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
-from control_plane_backend.scheduler.lifecycle_runner import run_lifecycle_manager_once
+from control_plane_backend.scheduler.lifecycle_runner import (
+    run_lifecycle_manager_once,
+    run_wiki_proposal_lifecycle_once,
+)
 from control_plane_backend.scheduler.temporal.activities import (
     delete_conversation,
     list_conversation_candidates,
+    list_wiki_proposal_candidates,
+    reject_wiki_proposal,
 )
 from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
@@ -47,10 +52,32 @@ async def run_lifecycle_manager_once_in_memory(
         else delete_conversation
     )
 
-    return await run_lifecycle_manager_once(
+    result = await run_lifecycle_manager_once(
         input_data=input_data,
         list_candidates=list_candidates_executor,
         delete_conversation=delete_conversation_executor,
         logger=logger,
         log_prefix="[LIFECYCLE][IN_MEMORY]",
     )
+
+    list_wiki_candidates_executor = (
+        partial(list_wiki_proposal_candidates, deps=deps)
+        if deps is not None
+        else list_wiki_proposal_candidates
+    )
+    reject_wiki_proposal_executor = (
+        partial(reject_wiki_proposal, deps=deps)
+        if deps is not None
+        else reject_wiki_proposal
+    )
+
+    # Same tick as the conversation sweep above (WIKI-05) — no second
+    # scheduled entrypoint for memory-mode either.
+    result.wiki_proposals = await run_wiki_proposal_lifecycle_once(
+        input_data=input_data,
+        list_candidates=list_wiki_candidates_executor,
+        reject_proposal=reject_wiki_proposal_executor,
+        logger=logger,
+        log_prefix="[LIFECYCLE][IN_MEMORY]",
+    )
+    return result

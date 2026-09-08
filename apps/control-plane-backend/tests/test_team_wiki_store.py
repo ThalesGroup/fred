@@ -946,6 +946,292 @@ async def test_a_cursor_from_one_team_does_not_leak_another_teams_page(
         await engine.dispose()
 
 
+# ── proposal lifecycle (WIKI-05) ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_stale_proposals_finds_only_old_pending_ones(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "stale_list.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+
+        old_proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="stale",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        recent_proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="fresh",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+
+        old_instant = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        await _set_created_at(store, old_proposal.revision_id, old_instant)
+        recent_instant = datetime.now(timezone.utc)
+        await _set_created_at(store, recent_proposal.revision_id, recent_instant)
+
+        cutoff = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        stale = await store.list_stale_proposals(older_than=cutoff, limit=10)
+
+        assert [c.revision_id for c in stale] == [old_proposal.revision_id]
+        assert stale[0].team_id == TEAM_A
+        assert stale[0].page_id == created.page.page_id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_stale_proposals_never_returns_published_or_rejected_rows(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "stale_exclude.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+        old_instant = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+        published_proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="will publish",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        await _set_created_at(store, published_proposal.revision_id, old_instant)
+        await store.publish_proposal(
+            team_id=TEAM_A,
+            revision_id=published_proposal.revision_id,
+            slug="unused",
+            approver_user_id="bob",
+        )
+
+        already_rejected = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="already rejected",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        await _set_created_at(store, already_rejected.revision_id, old_instant)
+        assert await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=already_rejected.revision_id
+        )
+
+        cutoff = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        stale = await store.list_stale_proposals(older_than=cutoff, limit=10)
+        assert stale == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_stale_proposals_covers_new_page_proposals_too(
+    tmp_path: Path,
+) -> None:
+    """A new-page proposal never creates a page row until approved — the
+    sweep must still find and reject the orphaned revision row itself."""
+
+    store, engine = await _make_store(tmp_path, "stale_new_page.sqlite3")
+    try:
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=None,
+            content_md="a whole new page",
+            base_revision_id=None,
+            proposed_title="New Page",
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        await _set_created_at(
+            store, proposal.revision_id, datetime(2020, 1, 1, tzinfo=timezone.utc)
+        )
+
+        cutoff = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        stale = await store.list_stale_proposals(older_than=cutoff, limit=10)
+
+        assert [c.revision_id for c in stale] == [proposal.revision_id]
+        # No page was ever created for it — confirms cleanup never touches a
+        # page tree that was never materialized.
+        assert await store.get_page(TEAM_A, proposal.page_id) is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_stale_proposal_prevents_a_later_publish(
+    tmp_path: Path,
+) -> None:
+    """Acceptance: rejection/expiry prevents later publication. Once rejected,
+    `publish_proposal`'s own `status == "proposed"` lookup finds nothing —
+    the existing "not found" path, unchanged, is what makes this an
+    actionable terminal result rather than a 500."""
+
+    store, engine = await _make_store(tmp_path, "reject_then_publish.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="proposed edit",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+
+        assert await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=proposal.revision_id
+        )
+
+        with pytest.raises(WikiPageNotFoundError):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="unused",
+                approver_user_id="bob",
+            )
+
+        # The page itself is untouched: still on v0, still nothing but v0 in
+        # its history.
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        assert page.current_revision_id == v0_id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_stale_proposal_is_a_no_op_once_already_published(
+    tmp_path: Path,
+) -> None:
+    """The other direction of the same race: the sweep must never undo an
+    approval that already landed. `reject_stale_proposal`'s own `WHERE
+    status == "proposed"` guard is what this test exercises directly."""
+
+    store, engine = await _make_store(tmp_path, "publish_then_reject.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="proposed edit",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+        await store.publish_proposal(
+            team_id=TEAM_A,
+            revision_id=proposal.revision_id,
+            slug="unused",
+            approver_user_id="bob",
+        )
+
+        changed = await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=proposal.revision_id
+        )
+        assert changed is False
+
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        assert page.current_revision_id == proposal.revision_id
+        published = await store.get_revision(TEAM_A, proposal.revision_id)
+        assert published is not None
+        assert published.status == "published"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_proposals_for_session_only_touches_that_session(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "session_reject.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+
+        target = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="from the erased session",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id="session-erased",
+        )
+        other = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="from a different session",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id="session-other",
+        )
+
+        count = await store.reject_proposals_for_session(
+            team_id=TEAM_A, session_id="session-erased"
+        )
+        assert count == 1
+
+        rejected = await store.get_revision(TEAM_A, target.revision_id)
+        assert rejected is not None
+        assert rejected.status == "rejected"
+
+        untouched = await store.get_revision(TEAM_A, other.revision_id)
+        assert untouched is not None
+        assert untouched.status == "proposed"
+    finally:
+        await engine.dispose()
+
+
 # ── pure tree-shape helpers ──────────────────────────────────────────────────
 #
 # The structural validators every writer below relies on. Moved here from
