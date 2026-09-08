@@ -25,6 +25,8 @@ strong evidence that the installed artifact is independent of the producer check
   second maintained token or font source tree.
 - Make archive completeness and isolated consumption executable gates rather than a
   reviewer checklist.
+- Add real-browser evidence for theme styles, opt-in fonts, tokens-only behavior, and
+  local-only asset loading without weakening the dependency-free neutral consumer.
 - Provide the same `make code-quality` and `make test` entry points as other repository
   projects and integrate them into existing pull-request change detection.
 
@@ -117,12 +119,12 @@ created temporary directory outside the repository, clears workspace-related npm
 environment, installs the tarball in offline mode, and rejects linked package entries or
 paths back to the checkout.
 
-The fixture imports both public stylesheet entry points, verifies light and dark token
-resolution, resolves the packaged Geist URLs, and produces a standalone output directory
-using a dependency-free Node build step. The test then checks that the output contains
-only fixture files and installed-package assets. Keeping this first consumer free of
-React and external build dependencies demonstrates the tokens-only contract and keeps
-unit tests offline after the workspace dependencies are installed.
+The fixture imports both public stylesheet entry points and produces a standalone output
+directory using a dependency-free Node build step. Static checks verify that both theme
+selectors and packaged Geist assets reach that output, which contains only fixture files
+and installed-package assets. Keeping this first consumer free of React and external
+build dependencies demonstrates the tokens-only contract and keeps archive installation
+and build offline after producer dependencies are provisioned.
 
 Alternative: use npm workspace links or test only FRED's Vite build. Rejected because
 both can hide absent exports and assets. Alternative: require Docker for the unit test.
@@ -130,19 +132,64 @@ Rejected because staging only the tarball and fixture, combined with path/link s
 provides the required isolation without adding a container-runtime dependency to
 `make test`.
 
-### D5 — Reuse repository quality and pull-request orchestration
+### D5 — Add separate real-browser evidence over staged consumer output
+
+Add a small Playwright smoke harness with lockfile-pinned `@playwright/test` and Chromium
+to the package-validation workspace because the application's current Vitest
+`happy-dom`/`jsdom` tooling cannot prove computed CSS, actual font loading, or browser
+network behavior. Use the repository's Node baseline, a local static server, and pages
+built by the isolated consumer rather than serving package sources from the checkout.
+
+The harness opens two fresh browser contexts with caches and service workers disabled:
+
+- a tokens-only page that switches between supported light and dark themes and asserts
+  representative computed color, spacing, radius, and typography values while recording
+  zero font requests; and
+- an opt-in typography page that imports `fonts.css`, applies the Geist families, waits
+  on the Font Loading API, and proves the regular and italic package-owned resources load
+  successfully.
+
+Request recording rejects `file:` URLs, checkout-path references, non-loopback requests,
+and external font-service origins. This both detects accidental producer access and
+ensures the browser result is backed only by the staged installed archive.
+
+Dependency installation and `playwright install chromium` browser acquisition are
+explicit provisioning operations and may use their normal package/browser sources. The
+smoke target never installs or downloads a browser; after provisioning it runs with
+network egress denied except for the loopback static server. CI represents these as
+separate setup and execution steps, and local documentation does the same.
+
+Alternative: rely on `happy-dom`, `jsdom`, or CSS text inspection. Rejected because they
+cannot demonstrate browser font fetches and computed style behavior. Alternative: put a
+browser bundler into the neutral fixture. Rejected because it would compromise the
+fixture's dependency-free archive proof; the browser harness is producer-owned test
+tooling and observes only the fixture's standalone output.
+
+### D6 — Reuse repository quality and select every package-validation input
 
 Provide `libs/frontend/Makefile` targets for build, type/format checks, tests, packing,
-and the isolated archive check. Add `libs/frontend` to the root quality/test project
-lists. Extend the existing `Check-pending-requests.yml` path filter with a distinct
-frontend-packages output and job that runs the producer gates with the pinned Node/npm
-baseline. Do not create a publication workflow in this change.
+the isolated archive check, explicit browser provisioning, and the browser smoke. Add
+`libs/frontend` to the root quality/test project lists. Extend the existing
+`Check-pending-requests.yml` path filter with a distinct frontend-packages output and job
+that runs the producer gates with the pinned Node/npm baseline.
+
+The filter includes `libs/frontend/**`; every canonical token stylesheet in the D2
+allowlist; `apps/frontend/src/styles/index.css`, from which Geist declarations are read;
+the two canonical Geist binaries; the root `LICENSE`; and the root Makefile, workflow,
+and any setup/action files that orchestrate this validation. A filter-contract test uses
+representative changed-file sets to prove each input category selects the job and an
+unrelated application-only change does not. Keeping the CSS list synchronized with the
+generator allowlist is part of the test contract, so adding or removing a consumed input
+without changing the filter fails validation. Do not create a publication workflow in
+this change.
 
 This keeps frontend-package validation separate from the application, Python package,
 and Docker jobs while reusing the repository's existing pull-request workflow instead
-of adding another orchestration surface.
+of adding another orchestration surface. Application frontend checks may still run for
+canonical application inputs according to their existing broad filter; the package job
+is selected independently from its actual producer inputs.
 
-### D6 — Document the shipped boundary next to its owner
+### D7 — Document the shipped boundary next to its owner
 
 Add `libs/frontend/README.md` for producer commands, canonical-source inputs, archive
 acceptance, and the distinction between workspace privacy and member publication. Add a
@@ -168,8 +215,14 @@ migration, and external-adopter work are unimplemented.
   no checkout paths, and defer ownership transfer until FRED can consume a released
   package without dual-maintained sources.
 - **A synthetic consumer cannot prove compatibility with every bundler.** → Limit this
-  slice's claim to standards-based CSS/archive independence; add bundler and React
-  matrices with the UI package rather than pulling them into this foundation.
+  slice's claim to standards-based CSS/archive independence and real-browser CSS/font
+  behavior; add bundler and React matrices with the UI package rather than pulling them
+  into this foundation.
+- **Browser dependencies can blur the offline archive guarantee.** → Keep them in the
+  producer validation workspace, provision them explicitly before execution, retain a
+  dependency-free consumer, and reject every non-loopback request during the smoke run.
+- **CI path filters can drift from generated inputs.** → Test representative input
+  categories and compare the consumed CSS/asset allowlists with the filter contract.
 
 ## Migration Plan
 
@@ -177,9 +230,10 @@ migration, and external-adopter work are unimplemented.
    Make targets without changing `apps/frontend`.
 2. Add the design-token package generator and complete the Geist license/notice audit.
 3. Add archive inspection tests, negative fixtures, and the isolated neutral consumer.
-4. Wire the producer into root and pull-request validation, then run its quality, test,
-   pack, and isolated-consumer gates.
-5. Document the implemented package boundary and record strict OpenSpec validation.
+4. Add the separately provisioned browser smoke harness over staged consumer output.
+5. Wire all producer inputs into root and pull-request validation, then run quality,
+   test, pack, isolated-consumer, and browser-smoke gates.
+6. Document the implemented package boundary and record strict OpenSpec validation.
 
 No runtime deployment or data migration occurs. Rollback removes the producer workspace
 and its root/CI wiring; FRED continues using its unchanged canonical styles and host.

@@ -9,6 +9,8 @@ This first independently reviewable slice establishes the design-token package b
 and proves its packed artifact can be consumed without a FRED checkout. The broader
 architecture and sequencing remain in
 [`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
+Implementation is tracked by
+[ThalesGroup/fred#2583](https://github.com/ThalesGroup/fred/issues/2583).
 
 ## What Changes
 
@@ -22,12 +24,18 @@ architecture and sequencing remain in
 - Produce a bounded npm tarball containing every file its public exports require,
   including CSS, fonts, license material, and applicable third-party notices.
 - Add deterministic archive validation and a neutral isolated consumer that installs the
-  tarball and build using only files and dependencies available outside the FRED
+  tarball and builds using only files and dependencies available outside the FRED
   checkout. Workspace links, local `file:` dependencies, source aliases, and fallback
   access to repository files are forbidden.
-- Add package-foundation quality and CI entry points so archive validation is a required
-  check when the producer workspace changes. Publication credentials and release jobs
-  remain out of scope.
+- Add a separate real-browser smoke harness over the staged consumer output to verify
+  representative computed styles in light and dark themes, opt-in packaged Geist font
+  loading, the absence of font requests for a fresh tokens-only consumer, and the
+  absence of requests to the FRED checkout or external font services. Dependency and
+  browser provisioning are separate from offline validation execution.
+- Add package-foundation quality and CI entry points so validation is required when the
+  producer workspace, consumed canonical CSS, Geist assets, applicable license inputs,
+  or relevant validation orchestration changes. Unrelated application changes may skip
+  the package job. Publication credentials and release jobs remain out of scope.
 - Preserve the existing iframe protocol, authenticated request broker, application host,
   and external-consumer ownership boundary without modification.
 
@@ -47,9 +55,13 @@ None.
 
 - New producer and validation surface under `libs/frontend/`, including the workspace
   manifest and lockfile, design-token package metadata/build inputs, archive checks, and
-  neutral consumer fixture.
-- Pull-request validation will recognize `libs/frontend/**` and run its package quality,
-  tests, pack, and isolated-consumer gates.
+  neutral consumer and browser fixtures.
+- Pull-request validation will recognize the producer plus every consumed canonical
+  stylesheet, Geist asset, license input, and relevant root/workflow orchestration file,
+  then run package quality, tests, pack, isolated-consumer, and browser-smoke gates.
+- The package-validation workspace gains a real-browser test dependency and an explicit
+  browser-provisioning command; validation itself uses the already provisioned browser
+  and local staged consumer output without downloading dependencies or assets.
 - The implementation reads current canonical token CSS and Geist assets from
   `apps/frontend/src/styles/` and `apps/frontend/src/assets/fonts/`; those application
   sources are not copied or otherwise changed by this slice.

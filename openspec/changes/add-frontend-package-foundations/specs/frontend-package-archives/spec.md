@@ -121,6 +121,88 @@ dependencies, package-manager links, or workspace links from the FRED checkout.
   or workspace relationship from the FRED checkout
 - **THEN** the isolated-consumer check fails
 
+### Requirement: Browser smoke evidence is local and behavior-based
+
+Archive acceptance SHALL include a real-browser smoke test that is separate from the
+dependency-free neutral consumer build and runs against that consumer's staged output.
+The smoke test MUST use an already provisioned browser, MUST NOT install or download
+dependencies or browsers during execution, and MUST reject asset access to the FRED
+checkout and external font services.
+
+#### Scenario: Representative styles resolve in both themes
+
+- **WHEN** the browser loads the staged tokens-only consumer and selects the supported
+  light and dark themes
+- **THEN** representative computed color, spacing, radius, and typography styles match
+  the packaged token values in each theme
+
+#### Scenario: A browser opts into packaged Geist fonts
+
+- **WHEN** a staged consumer explicitly imports the packaged font stylesheet and uses
+  its regular and italic Geist faces
+- **THEN** the browser reports those faces loaded successfully from package-owned files
+
+#### Scenario: A fresh browser consumes tokens only
+
+- **WHEN** a fresh browser context with no cache or service-worker state loads a staged
+  consumer that imports only the token stylesheet
+- **THEN** the browser records no font requests
+
+#### Scenario: Browser assets remain local to the staged consumer
+
+- **WHEN** either browser smoke page loads and its requests are recorded
+- **THEN** every asset request is served by the local staged consumer and no request uses
+  a FRED checkout path, a `file:` URL, or an external font-service origin
+
+#### Scenario: Browser prerequisites are provisioned separately
+
+- **WHEN** package-validation dependencies and the pinned browser have been provisioned
+  before the smoke target starts
+- **THEN** the smoke target uses those installed prerequisites without performing a
+  package installation, browser download, or external network request
+
+### Requirement: CI selection covers every package-validation input
+
+Pull-request validation SHALL select the frontend-package job when the producer
+workspace, a consumed canonical stylesheet, a packaged Geist asset, an applicable
+license or notice input, or relevant validation orchestration changes. It MAY skip that
+job for application changes that do not affect any package-validation input.
+
+#### Scenario: The producer workspace changes
+
+- **WHEN** a pull request changes a file in the frontend package producer workspace
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: Consumed canonical CSS changes
+
+- **WHEN** a pull request changes a canonical FRED stylesheet consumed by package
+  generation, including the source of packaged Geist declarations
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: A packaged Geist asset changes
+
+- **WHEN** a pull request changes either canonical Geist font binary packaged by this
+  slice
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: An applicable license input changes
+
+- **WHEN** a pull request changes a license or notice input applicable to the generated
+  archive
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: Validation orchestration changes
+
+- **WHEN** a pull request changes a root command, workflow, setup action, or validation
+  script that controls the frontend-package gates
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: An unrelated application file changes
+
+- **WHEN** a pull request changes only application files that are not consumed by or
+  responsible for frontend-package validation
+- **THEN** CI may skip the frontend-package validation job
+
 ### Requirement: The foundation remains application-agnostic
 
 The design-token artifact and its validation SHALL accept consumers without embedding a
