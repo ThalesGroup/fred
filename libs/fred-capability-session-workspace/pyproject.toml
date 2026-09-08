@@ -1,0 +1,75 @@
+[project]
+name = "fred-capability-session-workspace"
+version = "0.1.0"
+description = "Fred agent capability: a session-scoped scratch filesystem shared by an agent and its sub-agents."
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
+dependencies = [
+  "fred-sdk>=3.3.0",
+  "pydantic>=2.7.0,<3.0.0",
+  "langchain-core>=0.3.0",
+  "langchain>=0.3.0",
+  # The filesystem tools (`ls`, `read_file`, `write_file`, …) come from
+  # deepagents' FilesystemMiddleware; only the merge tool is written here.
+  "deepagents>=0.6.12",
+]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+]
+urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
+
+# Installing this package IS the registration (AGENT-CAPABILITY-RFC §4/§7):
+# the fred-agents pod auto-discovers the capability at boot via this entry point.
+[project.entry-points."fred.capabilities"]
+session_workspace = "fred_capability_session_workspace.capability:SessionWorkspaceCapability"
+
+[project.optional-dependencies]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  # fred-runtime supplies the capability registry the registration test drives.
+  "fred-runtime>=3.4.2",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_capability_session_workspace*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+markers = ["integration: marks tests that require external services"]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+# Local path overrides for mono-repo development only. Ignored when the package
+# is built and published.
+fred-core = { path = "../fred-core", editable = true }
+fred-sdk = { path = "../fred-sdk", editable = true }
+fred-runtime = { path = "../fred-runtime", editable = true }
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "fred-runtime>=3.4.2",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]
