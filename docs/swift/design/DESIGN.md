@@ -355,6 +355,342 @@ cannot unblock a stalled read; the bound is `httpfs`'s own retry defaults
 (~2 min worst case against a 30s `query_timeout_seconds`), not a deployment
 setting, since the remote path can't be exercised offline to tighten it.
 
+### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
+
+CSV files attached directly to a chat conversation (`POST /fast/ingest`) get
+a real `tabular_v1` artifact **instead of** the text-chunked vector preview
+every other attachment type gets — not alongside it. A truncated Markdown
+table (20 rows × 10 cols default) is exactly the kind of imprecise answer
+source this feature exists to move away from for CSV, and leaving it in
+place would give the agent two competing ways to answer a question about
+the same file — a fuzzy, incomplete one (vector search over the preview)
+and an exact one (SQL over the full data) — with nothing forcing it toward
+the correct one. `fast_ingest` skips building/storing vectors entirely for
+`.csv` (`chunks: 0` in the response); the fast-text extraction step still
+runs, but only to produce `summary_md` for the frontend's attachment preview
+card — that text never reaches the agent's context or the vector index.
+Excel/XLSX attachments are not covered by the SQL path yet; they keep both
+the text-chunk preview and the "text only" prompt guidance below until a
+follow-up increment generalizes this to `tabular_multi_v1`. That follow-up
+must also extend `_resolve_owned_attachment_dataset` (or add a
+`tabular_multi_v1` sibling) to `TabularService.get_document_markdown` —
+untouched in this increment since it is scoped to spreadsheet documents,
+which no CSV attachment ever produces, so wiring it in now would be dead
+code.
+
+**Ingestion.** `fast_ingest` builds a `DocumentMetadata` for the attachment
+directly (`identity.document_uid` = the same uuid used elsewhere for this
+attachment, so the one bracketed id the agent is given works for the
+tabular/SQL tools; `source.source_tag = "fast_ingest"`, mirroring the
+convention non-CSV attachments' vector chunks use; **no tags**) —
+deliberately not via `IngestionService.extract_metadata()`/
+`process_metadata()`, both built for corpus documents: the former's
+versioning step scans the whole metadata catalog for a same-named document
+and raises if one exists (wrong semantics for a session-scoped attachment,
+and would collide across unrelated users sharing a common filename like
+"sales.csv"), and the latter requires `source_tag` to resolve against the
+operator-configured `document_sources` registry, which an attachment was
+never meant to join. The Parquet conversion itself is fully reused —
+`TabularProcessor.process()` (DuckDB CSV→Parquet via the same
+`CsvTabularProcessor` delimiter/encoding detection, `tabular_v1` extension),
+exactly as corpus CSV ingestion does.
+
+**Why this creates no ReBAC tuple.** `_persist_metadata_and_follow_up` only
+writes a ReBAC parent link when `metadata.tags.tag_ids` is non-empty (see
+`features/metadata/service.py`). An attachment record carries no tags, so
+persisting it through the ordinary path is sufficient by construction — no
+bespoke "trusted, tagless" write path was needed. Storage-quota adjustment
+and tag-timestamp updates are likewise no-ops for a tagless record; the
+`document.created_total` KPI still fires, which is fine.
+
+**Artifact-then-metadata ordering isn't atomic, so a metadata-save failure
+compensates rather than orphans (P2, codex review).**
+`TabularProcessor.process()` — unchanged, shared with corpus ingestion —
+uploads the Parquet object to `content_store` and only updates
+`metadata.extensions["tabular_v1"]` in memory before returning; persisting
+that metadata is a separate step `_build_attachment_tabular_dataset` does
+afterward, and it can fail on its own (a metadata-store outage) after the
+artifact already durably exists. Every cleanup path — delete, corpus audit
+— is metadata-driven, so an artifact with no row pointing at it can never
+be found again on its own. `_build_attachment_tabular_dataset` now deletes
+the just-uploaded artifact directly (`_delete_tabular_artifact_objects`,
+shared with the normal delete path) before re-raising, rather than leaving
+a permanent orphan; a failure in that compensating delete itself is logged
+and swallowed so it never masks the original metadata-save error.
+
+**Authorization — no OpenFGA tuple, ever.** Fast-ingested attachments are
+deliberately "resource-less" in ReBAC: no tuple, ownership proven via chunk
+metadata instead (`_authorize_fast_ingest_delete`,
+`ingestion_controller.py:112-127`). `TabularService` stays consistent with
+that design rather than reversing it for this one surface. `describe_documents`,
+`_select_query_datasets`, and `_get_dataset_or_raise` each already have a
+"requested uid not in the ReBAC-authorized set" fallback (used today to
+decide `403` vs `404`); every one of them gained one more step, tried first:
+a single indexed `metadata_store.get_metadata_by_uid(document_uid)` lookup
+(`_resolve_owned_attachment_dataset`, batched as
+`_resolve_owned_attachment_datasets` for the two multi-uid call sites),
+treated as authorized when `source_tag == "fast_ingest"` and
+`identity.uploaded_by == user.uid` (the same equality check
+`is_own_session_chunk` already applies to vector chunks). Only if that
+doesn't match does the existing ReBAC check decide the `403`.
+
+This is deliberately **not** wired into `_resolve_authorized_datasets`
+itself, which enumerates every document the caller can read (used by
+`list_documents`/`list_datasets`) — `get_all_metadata()` filters in Python
+over every row in the metadata table (`PostgresDocumentMetadataStore.
+get_all_metadata`), so folding attachment resolution in there would add an
+unbounded table scan to every tabular listing call. The narrower fix costs
+one indexed lookup, and only when a document_uid is actually named. Attachment
+datasets consequently never appear in a blind `list_documents`/`list_datasets`
+enumeration — harmless, since the agent is already handed the uid directly in
+the attachment prompt suffix and has no need to "discover" it.
+
+**Exception: `_resolve_authorized_datasets` does exclude attachments in one
+specific branch, on purpose (P1, codex review).** When ReBAC is globally
+*disabled* — a deployment mode predating ATTACH-TAB-01, where
+`lookup_user_resources` returns `RebacDisabledResult` and the method falls
+back to listing every metadata row unfiltered — that branch now filters out
+`source_tag == "fast_ingest"` records before returning them. Without this,
+a ReBAC-disabled deployment would enumerate every user's session-scoped
+attachment to every other user through the same blind
+`list_documents`/`list_datasets` path the paragraph above says attachments
+never appear in — true for the normal, ReBAC-enabled case (no tuple means
+`lookup_user_resources` never includes them), false for this one branch,
+which bypasses per-user filtering entirely rather than resolving it to
+"none." The ownership fallback above is unaffected either way: it never
+reads `self.rebac` at all, so an owner's own explicit-uid access keeps
+working whether ReBAC is enabled or disabled, and a non-owner's explicit-uid
+request still fails the ownership check regardless of what the final
+403-vs-404 branch's `has_user_permission` call would answer in that mode
+(it only picks the error type, never authorizes access on its own — see
+`_select_query_datasets`/`describe_documents`).
+
+**Pointer chunks stay off for attachments, unconditionally.**
+`TabularProcessor._emit_pointer_chunk` (§5 below) writes into the *shared*
+vector store using `flat_metadata_from(metadata)` — a corpus-oriented
+projection with no `scope`/`user_id` fields. A pointer chunk emitted that way
+for an attachment would not carry the `scope="session"`/`user_id` markers
+every other fast-ingest chunk relies on for isolation, i.e. it could surface
+in another user's search. `TabularProcessor.process()` takes an explicit
+`emit_pointer_chunk: bool = True` parameter; the attachment path passes
+`False` regardless of the deployment's `pointer_chunks_enabled` setting.
+Corpus ingestion is unaffected (default unchanged).
+
+**Deletion — re-verifies ownership itself, but honors the same bypass its
+caller already got.** `DELETE /fast/delete/{document_uid}` deletes the
+Parquet artifact (`content_store`, same prefix corpus re-ingestion pruning
+already uses) and the metadata record (`metadata_store.delete_metadata`, a
+raw store-level call) alongside the vector cleanup, when a `tabular_v1`
+artifact was produced. `_delete_attachment_tabular_dataset` re-checks
+`source_tag == "fast_ingest"` and `identity.uploaded_by == user.uid` before
+touching anything — the same test `_resolve_owned_attachment_dataset` uses,
+not a rubber stamp of the endpoint's upstream authorization. That upstream
+check (`_authorize_fast_ingest_delete` → `may_delete_session_document`) was
+designed for an idempotent vector-only delete and treats "zero vector
+chunks" as safe-to-retry; since a CSV attachment now *always* has zero
+chunks by construction (see above), that upstream check alone would let any
+authenticated user pass it for any CSV attachment uid, corpus or not —
+`_delete_attachment_tabular_dataset`'s own check is what actually stops a
+cross-tenant delete, not merely an extra safety net.
+
+`_authorize_fast_ingest_delete` also has its own platform-admin bypass
+(`can_manage_platform`, e.g. scheduled conversation erasure authenticating
+as a minted service bearer, never as the document's own uploader — CTRLP-12)
+— its return value (`is_platform_bypass: bool`) must be threaded into
+`_delete_attachment_tabular_dataset`'s own check too, or the two checks
+disagree: the endpoint lets the service account in, but the tabular cleanup
+then re-derives ownership independently, finds no `uploaded_by` match, and
+silently no-ops — HTTP 200, receipt marked `ok`, and the Parquet
+artifact/metadata row orphaned with no queue entry left to retry it (P1,
+caught in review before merge). `source_tag == "fast_ingest"` stays a hard
+requirement regardless of the bypass — this endpoint must never touch a
+corpus tabular dataset even for a platform caller.
+
+**Both delete-side checks also require no tags — not just matching
+`source_tag` and `uploaded_by` (P1, codex review).** The read-side ownership
+check (`_resolve_owned_attachment_dataset`) already required this; the two
+delete-side checks didn't, and the gap was wider than a source_tag
+collision: the chunk-based fallback in `_authorize_fast_ingest_delete`
+(`may_delete_session_document`) doesn't inspect `source_tag` at all, so
+*any* tagged document with zero vector chunks — the default for every
+CSV/tabular corpus document platform-wide — would have passed this
+endpoint's authorization for *any* authenticated user before this fix, tags
+notwithstanding. `_authorize_fast_ingest_delete` now refuses a tagged
+document outright, before either its tabular-ownership branch or the
+chunk-based fallback ever runs; `_delete_attachment_tabular_dataset` gained
+the identical check as its own defense-in-depth. Combined with an
+operator-configured `document_sources` entry literally named "fast_ingest"
+(nothing reserves that string), the narrower version of this gap would
+otherwise have let a tagged document's original uploader delete it even
+after losing their real ReBAC `DocumentPermission.DELETE` on it (e.g.
+removed from the owning team) — a tagged document already has its own
+ReBAC-based protection this endpoint doesn't check, and must never be
+treated as the resource-less fast-ingest document class however its
+`source_tag` happens to read.
+
+**The platform-admin bypass classifies before it bypasses (P1, codex
+review).** The check above closed the gap for the non-bypass path, but the
+bypass itself still returned `True` on its very first line — before ever
+resolving metadata — so a platform-driven delete (scheduled conversation
+erasure, CTRLP-12) skipped the tags check and every other classification
+entirely. Control-plane never verifies server-side that a session
+attachment's `document_uid` (client-supplied at `create_session_attachment`
+time) actually names something the calling user fast-ingested, so a forged
+or merely mistaken value can name a real, tagged corpus document; the old
+bypass would have deleted its vectors outright for the service principal.
+`_authorize_fast_ingest_delete` now resolves metadata and evaluates the tags
+check and the tabular-ownership branch unconditionally, admin or not — the
+bypass (`is_platform_admin`, computed once up front) only ever waives the
+*ownership* half of a check, never the *classification* half. For the
+metadata-less case (every non-CSV attachment: fast_ingest never writes a
+metadata row for them), classification for a service principal can't reuse
+`may_delete_session_document` — its per-user match can never be satisfied by
+a service account, since the chunks belong to whichever end user actually
+uploaded the attachment. `BaseVectorStore.is_session_scoped_document` is the
+caller-agnostic sibling: true when the document has no chunks at all (same
+retry-safety reasoning as `may_delete_session_document`) or every chunk it
+does have carries the `scope="session"` marker, false — refusing the bypass
+— the moment one chunk lacks it (a real corpus document, chunks included).
+
+**A vector-store lookup failure must not read as "no chunks, therefore
+safe."** `is_session_scoped_document`/`may_delete_session_document` both
+treat an empty `get_chunks_for_document` result as "genuinely nothing there"
+(the retry-safety case). Every concrete vector store's `get_chunks_for_document`
+used to catch its own client's exceptions and return `[]` — meaning a real
+backend outage during a classification call was indistinguishable from "the
+vectors are already gone," and the platform-admin bypass would be granted on
+a document nobody actually classified. All five backends (OpenSearch,
+PGVector, ChromaDB, ClickHouse, in-memory) now raise instead of swallowing
+on a genuine fetch failure — only `NotImplementedError` (the backend never
+supports the capability) still resolves to a plain `False`/`""`. The
+exception then propagates out of `_authorize_fast_ingest_delete` uncaught
+into the app's generic exception handler (`fred_core.common.register_exception_handlers`),
+producing a 500 rather than a false authorization.
+
+**Vector deletion must be truthful too, the same way tabular cleanup now
+is.** `_delete_fast_vectors` calls `delete_vectors_for_document`; OpenSearch
+and ClickHouse already raised `RuntimeError` on failure, but PGVector and the
+in-memory store caught the exception and returned normally — silently
+leaving the vectors in place while `_delete_fast_ingest_artifacts` (and the
+route) reported success, the same false-erasure shape the tabular-cleanup
+fix above closes. Both now raise like their siblings.
+
+Reusing `MetadataService.delete_document_and_artifacts_trusted` here was
+considered and rejected: it also runs storage-quota release
+(`_delete_and_release`),
+which requires a live Postgres engine even to determine there is nothing to
+release for a tagless, quota-exempt attachment — infrastructure this narrow
+cleanup has no other reason to depend on.
+
+**Tabular cleanup failure must not report a successful erasure (P1, codex
+review).** `_delete_attachment_tabular_dataset` used to catch every
+exception from the actual delete work and log-and-return, so a Parquet or
+metadata-store failure left the dataset behind while the route still
+returned HTTP 200 — control-plane's `ConversationErasureService.erase_session`
+would then record the attachment store `ok=True`, delete its own attachment
+row, and (for a full session erasure) go on to delete the session metadata
+row too, with nothing left pointing at the orphaned dataset to make it
+retryable. The classification early-returns ("nothing to clean up") stay
+silent — those are not failures — but the actual artifact/metadata delete
+now raises on error like every sibling cleanup step in this file. No
+control-plane change was needed for this: `_delete_knowledge_flow_attachment`
+already turns any non-2xx into `SessionAttachmentRequestError`, and
+`erase_session` already isolates each store's failure, retains its record,
+and skips deleting the session metadata row until every store reports
+`ok=True` (RFC §2.1 retry-safety) — this Knowledge Flow fix is what makes
+that existing control-plane machinery actually see the failure instead of a
+false 200.
+
+**Known open gap — the attachment-ownership predicate is hand-rolled three
+times.** `_authorize_fast_ingest_delete`'s tabular-ownership branch,
+`_delete_attachment_tabular_dataset`'s re-check, and
+`TabularService._as_owned_attachment_dataset` each independently test
+`source_tag == "fast_ingest"` + no tags + `uploaded_by` + artifact-present;
+`is_session_scoped_document` is also a near-duplicate of
+`may_delete_session_document` (chunk-scope check, minus the `user_id`
+match). A code-review pass on the classify-before-bypass fix flagged both as
+real drift risk (a future change to either predicate must be applied
+everywhere it's copied or silently diverges — as already happened once, per
+the tags-check history above) but judged consolidating either one too broad
+a change to bundle into a security fix. Deliberately left as-is here;
+revisit as a standalone simplification pass.
+
+**The ReBAC-disabled listing exclusion needs the same tags check as every
+other classifier here.** `_resolve_authorized_datasets`'s `RebacDisabledResult`
+branch excluded any metadata row whose `source_tag == "fast_ingest"` from an
+otherwise-unfiltered listing — but, like every other attachment check in
+this file, `source_tag` alone can't tell a genuine attachment from a tagged
+corpus document that happens to share the same operator-configured source
+name. Fixed to also require the document be untagged before excluding it,
+matching `_as_owned_attachment_dataset`/`_authorize_fast_ingest_delete`.
+
+**Orphaned artifacts when the control-plane persist step fails after a
+successful `/fast/ingest`.** The frontend's upload flow calls Knowledge
+Flow's `/fast/ingest` (creating real vectors, and for CSV a `tabular_v1`
+dataset) and only then persists a `SessionAttachmentSummary` row in
+control-plane. If that second call fails, the attachment never gets a
+persisted record — so neither drawer deletion nor session-expiry erasure,
+both of which iterate persisted records, can ever find and clean up the
+Knowledge Flow artifacts, which are otherwise permanently orphaned.
+`useChatAttachments.ts`'s upload handler now calls `DELETE
+/fast/delete/{document_uid}` directly on this failure path, the same
+KF-facing route the frontend already calls for a normal, persisted delete.
+Best-effort: a cleanup failure here doesn't mask the original upload error
+already shown to the user. Known residual gap, not addressed: `fastIngest`
+and `readImageContext` run under one `Promise.all`, so if fast-ingest
+succeeds but the sibling image-preview read rejects (a `FileReader` error on
+an image file), the same orphan can still occur — narrower and rarer than
+the persist-failure path this fix targets. No automated test covers this
+fix; this repo has no existing pattern for testing a hook's async
+orchestration against mocked RTK Query mutations, and building one was
+judged out of scope for this fix.
+
+**Prompt suffix.** `build_attachment_context_suffix`
+(`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents
+`.csv` attachments are SQL-queryable *only* — not indexed for search at all,
+so the conversation search tool must never be called for one (it would find
+nothing, since no vector chunk exists). `.xlsx`/`.xls`/`.xlsm` keep the
+original "text only, not SQL-queryable" wording, unaffected, until Excel
+gets the same treatment as CSV.
+
+The suffix only promises SQL-queryability when the calling agent instance
+actually has the tabular MCP server bound: `general_assistant` (#2429) ships
+with zero default capabilities, so a CSV attachment can carry a real
+`tabular_v1` dataset while the agent that sees it has no `read_query`/
+`search_tabular_values` tool to call. `compose_system_prompt` now takes a
+required `tabular_tools_available` flag, computed by each runtime
+(`react_runtime.py`, `deep_runtime.py`) via
+`react_tool_binding.tabular_tools_bound(bound_tools)` — checking
+`BoundTool.mcp_server_id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR` against the
+tools actually resolved for this run, the same bound-tool list the tool
+listing suffix and Deep's filesystem-availability notice
+(`_allows_standard_filesystem_tools`) already derive their own
+availability signals from. When the server isn't bound, both the per-line
+CSV annotation and the paragraph's CSV sentence switch to telling the model
+the dataset cannot be queried at all in this session, instead of pointing it
+at tools it doesn't have.
+
+**Known open gap.** The agent isn't guaranteed to call schema-discovery
+(`get_tabular_documents_schemas`) before its first `read_query` on an
+attachment — live-testing hit exactly this (a guessed SQL alias, `400`,
+self-corrected retry). `list_tabular_documents` can't help here since it
+deliberately never enumerates attachment datasets (see above). Tracked as
+open in `TABULAR-DATA-AGENTIC-ANALYSIS-RFC.md`, alongside a related,
+not-yet-designed pattern for per-row agentic analysis over a resolved row
+set — not solved here since neither has a decided direction yet.
+
+**Known open gap — no storage quota.** `POST /fast/ingest` performs no
+quota check for any attachment type; the tabular path specifically
+converts the entire uploaded CSV to Parquet with no size cap, unlike the
+text/vector path's bounded `FastTextOptions.max_chars`. `_evaluate_quota`
+(issue #2150) could gate it, but `MetadataService._resolve_storage_deltas`
+deliberately excludes every untagged document from accounting — a
+rationale ("no route can ever release the charge") that doesn't actually
+hold for this document class, which has a real delete path
+(`DELETE /fast/delete/{document_uid}`). Tracked in issue #2543, scoped to
+every fast-ingest attachment type, not CSV-specific — deliberately not
+fixed in this increment (resource accounting is its own unit of work).
+
 ## 3. Tabular Reads on GCS — Signed URLs
 
 Backend-internal tabular reads (DuckDB mounting Parquet, §2) need a

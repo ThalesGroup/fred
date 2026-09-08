@@ -30,6 +30,43 @@ from fred_agents.mindmap.graph_steps import (
     resolve_selected_documents_step,
 )
 from fred_sdk import GraphNodeContext, load_agent_prompt_markdown
+from fred_sdk.contracts.runtime import DocumentMarkdownResult
+
+
+class _FakeMarkdownPort:
+    """
+    Character-paginated `document_markdown` stand-in.
+
+    Serves the configured page texts in order and chains `next_offset` on real
+    character counts, so the step under test derives its line bounds from the
+    same arithmetic a live port would produce.
+    """
+
+    def __init__(self, pages: list[str]) -> None:
+        self._pages = list(pages)
+        self.calls: list[tuple[str, int, int]] = []
+
+    async def fetch_markdown(
+        self,
+        document_uid: str,
+        *,
+        offset: int = 0,
+        max_chars: int = 8000,
+    ) -> DocumentMarkdownResult:
+        self.calls.append((document_uid, offset, max_chars))
+        index = len([c for c in self.calls]) - 1
+        if index >= len(self._pages):
+            raise AssertionError("No fake markdown page configured.")
+        text = self._pages[index]
+        consumed = offset + len(text)
+        is_last = index == len(self._pages) - 1
+        return DocumentMarkdownResult(
+            document_uid=document_uid,
+            text=text,
+            offset=offset,
+            next_offset=None if is_last else consumed,
+            total_chars=sum(len(p) for p in self._pages),
+        )
 
 
 class _FakeContext:
@@ -51,7 +88,7 @@ class _FakeContext:
         *,
         selected_document_uids: list[str] | None = None,
         tuning_values: dict[str, object] | None = None,
-        runtime_tool_pages: list[object] | None = None,
+        markdown_pages: list[str] | None = None,
     ) -> None:
         self.binding = SimpleNamespace(
             runtime_context=SimpleNamespace(
@@ -60,8 +97,8 @@ class _FakeContext:
         )
         self.tuning_values = dict(tuning_values or {})
         self.model = None
-        self._runtime_tool_pages = list(runtime_tool_pages or [])
-        self.runtime_tool_calls: list[tuple[str, dict[str, object]]] = []
+        self.markdown_port = _FakeMarkdownPort(markdown_pages or [])
+        self.services = SimpleNamespace(document_markdown=self.markdown_port)
         self.statuses: list[tuple[str, str | None]] = []
 
     def emit_status(self, status: str, detail: str | None = None) -> None:
@@ -72,10 +109,9 @@ class _FakeContext:
         tool_name: str,
         arguments: dict[str, object],
     ) -> object:
-        self.runtime_tool_calls.append((tool_name, dict(arguments)))
-        if not self._runtime_tool_pages:
-            raise AssertionError("No fake runtime tool payload configured.")
-        return self._runtime_tool_pages.pop(0)
+        raise AssertionError(
+            f"Unexpected runtime tool invocation in this test: {tool_name} {arguments}"
+        )
 
     async def invoke_tool(self, tool_ref: str, payload: dict[str, object]):
         raise AssertionError(
@@ -168,28 +204,7 @@ async def test_read_selected_documents_uses_paginated_preview_reads() -> None:
     )
     fake_context = _FakeContext(
         selected_document_uids=["doc-1"],
-        runtime_tool_pages=[
-            {
-                "path": "/corpus/documents/doc-1/preview.md",
-                "content": "1 | intro\n2 | agenda",
-                "start_line": 1,
-                "end_line": 2,
-                "total_lines": 4,
-                "has_more": True,
-                "next_offset": 2,
-                "truncated": False,
-            },
-            {
-                "path": "/corpus/documents/doc-1/preview.md",
-                "content": "3 | decision\n4 | action",
-                "start_line": 3,
-                "end_line": 4,
-                "total_lines": 4,
-                "has_more": False,
-                "next_offset": None,
-                "truncated": False,
-            },
-        ],
+        markdown_pages=["intro\nagenda\n", "decision\naction\n"],
     )
     context = cast(GraphNodeContext, fake_context)
 
@@ -207,26 +222,49 @@ async def test_read_selected_documents_uses_paginated_preview_reads() -> None:
     assert summaries[1].line_range == "L3-L4"
     assert len(source_refs) == 2
     assert result.state_update["done_reason"] is None
-    assert fake_context.runtime_tool_calls == [
-        (
-            "read_file_page",
-            {
-                "path": "/corpus/documents/doc-1/preview.md",
-                "offset": 0,
-                "limit": 120,
-                "max_chars": 18000,
-            },
-        ),
-        (
-            "read_file_page",
-            {
-                "path": "/corpus/documents/doc-1/preview.md",
-                "offset": 2,
-                "limit": 120,
-                "max_chars": 18000,
-            },
-        ),
+    # Character offsets chain on the port's own `next_offset`; the fs pack's
+    # line-based `limit` argument is gone.
+    assert fake_context.markdown_port.calls == [
+        ("doc-1", 0, 18000),
+        ("doc-1", len("intro\nagenda\n"), 18000),
     ]
+
+
+@pytest.mark.asyncio
+async def test_page_line_bounds_track_a_line_split_across_two_windows() -> None:
+    """
+    Verify line labelling when a character window ends mid-line.
+
+    Why this test exists:
+    - the port paginates on characters while the digest labels segments as
+      `Lx-Ly`, so the line bounds are derived here rather than reported by the
+      backend
+    - a window that cuts a line in half must count that partial line for its own
+      label and hand the same line number to the next window, otherwise every
+      later segment drifts by one
+    """
+
+    state = MindmapState(
+        latest_user_text="build a transcript mindmap",
+        selected_document_uids=["doc-1"],
+    )
+    # "agenda" is split: the first window stops inside it, the second finishes it.
+    fake_context = _FakeContext(
+        selected_document_uids=["doc-1"],
+        markdown_pages=["intro\nage", "nda\nclose\n"],
+    )
+    context = cast(GraphNodeContext, fake_context)
+
+    result = await read_selected_documents_step(state, context)
+
+    summaries = [
+        DocumentSegmentSummary.model_validate(raw)
+        for raw in cast(list[object], result.state_update["document_segment_summaries"])
+    ]
+    # Window 1 shows lines 1-2 (line 2 only partially); window 2 resumes ON line
+    # 2 and ends on line 3.
+    assert summaries[0].line_range == "L1-L2"
+    assert summaries[1].line_range == "L2-L3"
 
 
 @pytest.mark.asyncio

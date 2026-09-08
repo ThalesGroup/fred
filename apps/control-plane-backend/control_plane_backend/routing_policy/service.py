@@ -36,7 +36,7 @@ from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import ModelBinding, resolve_effective_chat_profile
 
 from control_plane_backend.capabilities.authz import (
-    can_use_capability,
+    can_team_use_capability,
     usable_capability_ids,
 )
 from control_plane_backend.capabilities.catalog import (
@@ -211,7 +211,9 @@ async def _validate_write(
         if capability_id in checked_capability_ids:
             continue
         checked_capability_ids.add(capability_id)
-        if not await can_use_capability(rebac, team_id, capability_id):
+        if not await can_team_use_capability(
+            rebac, team_id, capability_id=capability_id
+        ):
             not_usable.append(profile_id)
     if not_usable:
         raise ProfileNotUsableError(team_id=team_id, profile_ids=sorted(not_usable))

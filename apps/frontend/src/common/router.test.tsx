@@ -18,9 +18,11 @@
 // component), and unknown paths must still resolve to the catch-all
 // PageError rather than a hard crash.
 
+import type { ReactElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
 // throws unless loadConfig() already ran — stub it the same way the real
@@ -77,4 +79,22 @@ describe("router", () => {
     expect(catchAll).toBeDefined();
     expect(catchAll?.element).toEqual(<PageError />);
   });
+
+  it("registers one generic team application index and wildcard host", () => {
+    expect(allPaths.filter((path) => path === "team/:teamId/apps")).toHaveLength(1);
+    expect(allPaths.filter((path) => path === "team/:teamId/apps/:appId/*")).toHaveLength(1);
+  });
+
+  it.each(["team/:teamId/apps", "team/:teamId/apps/:appId/*"])(
+    "gates the application route %s on the deployment switch",
+    (path) => {
+      const mainLayout = routes.find((route) => route.path === "/");
+      const applicationRoute = mainLayout?.children?.find((route) => route.path === path);
+      const element = applicationRoute?.element as ReactElement<{ flag: string; fallback: ReactElement }>;
+
+      expect(element.type).toBe(FrontendFeatureGate);
+      expect(element.props.flag).toBe("enableApplications");
+      expect(element.props.fallback.type).toBe(PageError);
+    },
+  );
 });

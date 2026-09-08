@@ -34,6 +34,9 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, get_args, get_origin
 
+from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..models import FieldSpec, TeamScopePolicy
@@ -52,13 +55,17 @@ CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 # entries are likewise a projection — no `CapabilityManifest` of kind
 # "model" is ever authored — but unlike "agent" they are advertised BY the
 # runtime pod (`GET /agents/models-catalog`), not synthesized from data
-# control-plane already has. Both the runtime (id generation,
-# `model_capability_id` below) and control-plane (the same
-# reserved-prefix collision guard `aggregate_capability_catalog` already
-# applies to `agent__`) need this exact prefix, so it lives here in
-# fred-sdk — the one package both already depend on — rather than being
-# duplicated by convention in two places.
+# control-plane already has. It lives in fred-sdk because both the runtime
+# (id generation, `model_capability_id` below) and control-plane read it.
+# The flat `capability:<id>` namespace has three reserved prefixes, each
+# beside the code deriving that kind's ids: `model__` here, `app__` in
+# fred-core (`security.rebac.capability_authz`), `agent__` in control-plane
+# (`product.service`). `aggregate_capability_catalog` guards all three.
 MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
+
+# Compatibility import for consumers of the former fred-sdk-owned constant.
+# fred-core remains the single source of truth for application capability ids.
+APPLICATION_CAPABILITY_NAMESPACE_PREFIX = _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
 
 
 def model_capability_id(provider: str, name: str) -> str:
@@ -352,8 +359,10 @@ class CapabilityCatalogEntry(BaseModel):
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
     # or "model" (pod-advertised projection of one models_catalog.yaml
     # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
-    # `CapabilityManifest.kind`.
-    kind: Literal["tool", "agent", "model"] = "tool"
+    # `CapabilityManifest.kind`. "app" is a control-plane-side projection of
+    # a registered product application; no CapabilityManifest of kind "app"
+    # is authorable.
+    kind: Literal["tool", "agent", "model", "app"] = "tool"
     # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
     # future catalog/UI filter can hide a ReAct-only capability from a Graph
     # template's picker instead of only failing loud at selection time.

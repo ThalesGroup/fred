@@ -54,6 +54,7 @@ from fred_sdk.contracts.runtime import (
     DocumentMarkdownPort,
     DocumentMarkdownResult,
     DocumentPortCallError,
+    DocumentScopeRefusedError,
     RuntimeServices,
 )
 
@@ -416,6 +417,47 @@ async def test_403_failure_teaches_uid_recovery() -> None:
     assert "document_uid=cahier.pdf" in msg.content
     # The recovery hint must also land in the artifact blocks (Graph agent path).
     assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
+async def test_scope_refusal_is_not_told_as_a_service_failure() -> None:
+    """A refused uid must not read as a broken service, or the model retries it
+    (and, worse, may report the document as empty)."""
+
+    port = _FakeMarkdownPort(
+        error=DocumentScopeRefusedError("out of scope", requested_uids=["u-42"])
+    )
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+    assert msg.artifact.is_error is True
+    assert "restricted this conversation" in msg.content
+    assert "Knowledge Flow" not in msg.content
+    assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
+async def test_extract_scope_refusal_is_not_told_as_a_service_failure() -> None:
+    port = _FakeExtractionPort(
+        error=DocumentScopeRefusedError("out of scope", requested_uids=["u-42"])
+    )
+    cap = DocumentExtractCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_extract_services(port), config={}
+    )
+
+    msg = await _invoke(
+        cap,
+        ctx,
+        "extract_from_document",
+        {"document_uid": "u-42", "what_to_extract": "every risk"},
+    )
+    assert msg.artifact.is_error is True
+    assert "restricted this conversation" in msg.content
+    assert "Knowledge Flow" not in msg.content
 
 
 @pytest.mark.asyncio

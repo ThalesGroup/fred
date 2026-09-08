@@ -16,9 +16,21 @@ import { describe, expect, it } from "vitest";
 import { resolveTraceExpanded } from "./useTraceExpansion";
 
 describe("resolveTraceExpanded", () => {
-  it("opens while the turn streams and collapses once it is done (no user input yet)", () => {
+  it("opens while the turn streams, and a block that never streamed opens collapsed", () => {
     expect(resolveTraceExpanded(null, null, false)).toBe(true);
+    // A history row: mounted already finished, so it stays out of the way.
     expect(resolveTraceExpanded(null, null, true)).toBe(false);
+  });
+
+  // Collapsing on `done` contracted the layout by tens of pixels just as the
+  // reader started on the answer, every turn.
+  it("keeps a block open after its own turn ends", () => {
+    expect(resolveTraceExpanded(null, null, true, true)).toBe(true);
+  });
+
+  it("still lets an explicit collapse win over having streamed here", () => {
+    expect(resolveTraceExpanded(false, null, true, true)).toBe(false);
+    expect(resolveTraceExpanded(null, false, true, true)).toBe(false);
   });
 
   it("lets the stored preference override the auto behaviour in both directions", () => {

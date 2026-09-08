@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
+  applicationsEnabled: false,
   list: { data: undefined, isLoading: false, isError: false } as {
     data?: { items?: CapabilityEnablementItem[] };
     isLoading: boolean;
@@ -71,6 +72,9 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
+vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
+  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
+}));
 
 // Isolate the page from the drawer's own internals (TuningFieldRenderer, tri-state
 // mutations, search) — but still render the props CapabilitiesPage passes it, so a
@@ -102,6 +106,10 @@ function render(): string {
   h.tKeys = [];
   return renderToStaticMarkup(<CapabilitiesPage />);
 }
+
+beforeEach(() => {
+  h.applicationsEnabled = false;
+});
 
 describe("CapabilitiesPage states", () => {
   beforeEach(() => {
@@ -416,6 +424,7 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-0
           cap({ id: "web_search", kind: "tool" }),
           cap({ id: "sentinel", kind: "agent" }),
           cap({ id: "gpt5_1", kind: "model" }),
+          cap({ id: "example", kind: "app" }),
         ],
       },
       isLoading: false,
@@ -425,6 +434,7 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-0
     expect(html).toContain("cap.web_search");
     expect(html).not.toContain("cap.sentinel");
     expect(html).not.toContain("cap.gpt5_1");
+    expect(html).not.toContain("cap.example");
   });
 
   it("treats a capability with no kind as a tool (backward-compatible default)", () => {
@@ -432,12 +442,25 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-0
     expect(render()).toContain("cap.legacy_cap");
   });
 
-  it("renders the Tools/Agents/Models filter toggle", () => {
+  it("hides the Apps filter by default, even if a stale app capability is cached", () => {
+    h.list = {
+      data: { items: [cap({ id: "example", kind: "app" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const html = render();
+    expect(html).not.toContain("rework.admin.capabilities.kindFilter.app");
+    expect(html).not.toContain("cap.example");
+  });
+
+  it("renders the Apps filter only when the deployment switch is enabled", () => {
+    h.applicationsEnabled = true;
     h.list = { data: { items: [] }, isLoading: false, isError: false };
     const html = render();
     expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
     expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
     expect(html).toContain("rework.admin.capabilities.kindFilter.model");
+    expect(html).toContain("rework.admin.capabilities.kindFilter.app");
   });
 });
 

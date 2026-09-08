@@ -17,13 +17,12 @@ import logging
 import time
 from typing import List, Optional
 
-from fred_core import AuthorizationError, KeycloakUser
+from fred_core import KeycloakUser
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
-from knowledge_flow_backend.core.stores.vector.base_vector_store import is_own_session_chunk
 
 logger = logging.getLogger(__name__)
 
@@ -72,77 +71,12 @@ class SummarizeService:
             splitter=self.context.get_text_splitter(),
         )
 
-    async def get_document_text(self, user: KeycloakUser, document_uid: str) -> str:
-        """Public accessor for the resolved document text (corpus preview or
-        reconstructed session-attachment text), reused by the extraction service
-        so the security-sensitive resolution lives in exactly one place."""
-        return await self._get_document_markdown(user, document_uid)
-
-    async def _get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
-        """Resolve the document's text for summarization, uniformly across both
-        document sources Fred exposes to agents:
-
-        - Corpus documents have a stored markdown preview (the normal path).
-        - Session attachments (chat uploads) are fast-ingested as vectors only --
-          no metadata record, no preview artifact, and no ReBAC tuple. On Swift
-          the corpus lookup therefore fails with AuthorizationError (the ReBAC
-          check runs before the store lookup and fails closed on an unknown
-          resource) rather than FileNotFoundError -- both are handled: we
-          reconstruct the attachment text from the session vectors instead.
-
-        This mirrors vector search, which already queries corpus + session scopes
-        and merges them: the agent uses one document_uid and never has to know
-        which source it came from.
-        """
-        try:
-            return await self.content_service.get_markdown_preview(user, document_uid)
-        except (FileNotFoundError, AuthorizationError):
-            # Not a readable corpus document -- try the session-attachment
-            # vectors. Safe on a denied corpus uid too: reconstruction only
-            # joins chunks whose own user_id matches the requesting user.
-            text = await asyncio.to_thread(self._reconstruct_attachment_text, user, document_uid)
-            if text:
-                return text
-            # Genuinely unknown uid, someone else's attachment, or a corpus
-            # document the user cannot read: surface the original 404/403
-            # rather than summarizing empty text.
-            raise
-
-    def _reconstruct_attachment_text(self, user: KeycloakUser, document_uid: str) -> str:
-        """Rebuild a session attachment's text from its vector chunks.
-
-        Security: attachments have no metadata-store ReBAC record, so the vectors'
-        own metadata is the access gate — a chunk is joined ONLY when it is a
-        genuine session-scoped chunk (``scope == "session"``, the same marker
-        the vector-search attachment branch filters on) AND owned by the
-        requesting user (``user_id``). The scope gate matters because this
-        fallback also runs after a ReBAC *denial* on a corpus document: corpus
-        chunks (``scope != session``) must never be reconstructable here, or a
-        user denied READ on a document could still read it back through its
-        vectors. Chunks are ordered by page (fast-ingest stores one chunk per
-        page) so the reconstructed text reads in order.
-        """
-        store = self.context.get_create_vector_store(self.context.get_embedder())
-        try:
-            chunks = store.get_chunks_for_document(document_uid)
-        except NotImplementedError:
-            # Backend can't fetch chunks by document -- nothing we can do here.
-            return ""
-
-        owned = [c for c in chunks if is_own_session_chunk(c, user.uid)]
-        if not owned:
-            return ""
-
-        def _page(chunk: dict) -> int:
-            page = (chunk.get("metadata") or {}).get("page")
-            return page if isinstance(page, int) else 0
-
-        owned.sort(key=_page)
-        return "\n\n".join((c.get("text") or "") for c in owned).strip()
-
     async def summarize_document(self, user: KeycloakUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
         started = time.monotonic()
-        markdown = await self._get_document_markdown(user, document_uid)
+        # ContentService resolves both document sources under one uid (corpus
+        # preview, or a session attachment rebuilt from its vectors), so the
+        # agent never has to know which one it named.
+        markdown = await self.content_service.get_markdown_preview(user, document_uid)
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 

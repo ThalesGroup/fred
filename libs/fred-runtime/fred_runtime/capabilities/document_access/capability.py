@@ -54,9 +54,12 @@ Doctrine (RFC §3.5, §3.8, §10):
   identity reach the tool through the middleware closure, never the tool schema
 
 Scoping precedence (`turn_option ⊆ capability_config ⊆ session_binding`):
-- HERE the tool narrows its stored-config scope (`config.library_tag_ids` /
+- HERE both tools narrow their stored-config scope (`config.library_tag_ids` /
   `config.document_uids`) by the per-turn `document_scope` selection
-  (`turn_options`), enforcing `turn_option ⊆ capability_config`;
+  (`turn_options`), enforcing `turn_option ⊆ capability_config`; a library pick
+  and a document pick each narrow on their own, and UNION when both are made -
+  "that library, plus that file", the rule Knowledge Flow already applies to
+  search hits;
 - the runtime adapter then bounds the result by the session binding's own scope,
   enforcing `⊆ session_binding` (see `DocumentSearchAdapter`).
 
@@ -614,13 +617,13 @@ class DocumentAccessCapability(
             question: str,
             top_k: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Search the selected document libraries using semantic similarity (RAG).
+            """Search the selected document libraries using semantic similarity
+            (RAG) — call this BEFORE answering any factual, technical, or
+            domain-specific question.
 
-            Call this tool BEFORE answering any factual, technical, or
-            domain-specific question — the corpus may hold more specific or more
-            recent information than you already know. Skip it only for purely
-            conversational exchanges (greetings, thanks, clarifying what was just
-            said).
+            The corpus may hold more specific or more recent information than
+            you already know. Skip this tool only for purely conversational
+            exchanges (greetings, thanks, clarifying what was just said).
 
             Covers prose/text documents. If a hit describes a structured/tabular
             dataset (a "dataset pointer"), do not answer from it directly — pivot
@@ -742,6 +745,7 @@ class DocumentAccessCapability(
                 result: DocumentTreeResult = await port.tree(
                     working_directory=working_directory,
                     library_tag_ids=scoped_library_tag_ids,
+                    document_uids=scoped_document_uids,
                     max_chars=effective_max_chars,
                 )
             except Exception as exc:

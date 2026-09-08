@@ -169,9 +169,9 @@ A session cannot resolve a prompt owned by an unrelated team by id.
 At execution the runtime folds `context_prompt_text` into the final system prompt.
 `fred_runtime.react.react_prompting.compose_system_prompt` is the single composer
 shared by the ReAct and Deep runtimes; it appends `build_context_prompt_suffix`
-after the guardrail and global-base output contract, so a selected prompt such as
-"respond in Spanish" reaches the model but stays subordinate to the agent's
-guardrails. The suffix is rendered through the same safe token renderer as agent
+after the platform blocks and the global-base output contract, so a selected
+prompt such as "respond in Spanish" reaches the model but stays subordinate to
+the platform instructions. The suffix is rendered through the same safe token renderer as agent
 templates (`render_prompt_template`), so a library prompt may use the validated
 `PROMPT_SAFE_TOKENS` (`{today}`, `{response_language}`, …). Before `PROMPT-08` the
 scalar reached the agent binding but no runtime appended it, so selected prompts
@@ -192,8 +192,9 @@ The shipped prompt UI has two parts:
 
 - `PromptsPage`: prompt-library CRUD, plus category management
   (`ManageCategoriesDialog`: Créer/Éditer/Supprimer)
-- chat composer prompt picker: `SearchConfig` opens `ContextPromptPicker`, and
-  selected prompts render as removable `ContextPromptChips`
+- chat composer prompt picker: the add menu's "Prompt library" row opens
+  `PromptSelectionChatPanel`, a right-side panel with a space picker, a search
+  field and category chips; picking a prompt inserts its text into the draft
 
 The context picker reads
 `GET /control-plane/v1/teams/{team_id}/prompts/context`, which returns only

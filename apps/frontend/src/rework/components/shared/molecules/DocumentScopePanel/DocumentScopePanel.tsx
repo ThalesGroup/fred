@@ -22,9 +22,8 @@
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
+import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel.tsx";
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
-import styles from "./DocumentScopePanel.module.css";
 
 interface DocumentScopePanelProps {
   open: boolean;
@@ -67,14 +66,11 @@ export function DocumentScopePanel({
   const effectiveLibraryIds = hasBound ? boundLibraryIds : selectedLibraryIds;
 
   return (
-    <InlineDrawer
+    <ChatSidePanel
       open={open}
       onClose={onClose}
       title={t("chatbot.documentScopePanel.title")}
-      layout="push"
-      floating
-      flushBody
-      resizable={{ persistKey: "document-scope-panel" }}
+      persistKey="document-scope-panel"
       headerActions={
         <Tooltip text={t("chatbot.documentScopePanel.resetTooltip")}>
           <IconButton
@@ -88,22 +84,20 @@ export function DocumentScopePanel({
         </Tooltip>
       }
     >
-      <div className={styles.body}>
-        {/* Mount the picker only while open so its tag/document queries don't
+      {/* Mount the picker only while open so its tag/document queries don't
             fire for every chat that merely exposes the control. The InlineDrawer
             shell still animates; the body is briefly empty during the close
             transition, which is imperceptible. */}
-        {open && (
-          <DocumentLibraryScopePicker
-            teamId={teamId}
-            selectedTagIds={effectiveLibraryIds}
-            onChange={onSelectedLibraryIdsChange}
-            selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
-            onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
-            disableLibrarySelection={hasBound || !showLibraries}
-          />
-        )}
-      </div>
-    </InlineDrawer>
+      {open && (
+        <DocumentLibraryScopePicker
+          teamId={teamId}
+          selectedTagIds={effectiveLibraryIds}
+          onChange={onSelectedLibraryIdsChange}
+          selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
+          onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
+          disableLibrarySelection={hasBound || !showLibraries}
+        />
+      )}
+    </ChatSidePanel>
   );
 }

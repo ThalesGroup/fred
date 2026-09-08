@@ -64,7 +64,7 @@ Example `config/configuration.yaml`:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
@@ -367,6 +367,7 @@ class AgentPodConfig(BaseModel):
 
     _models_catalog_path: str | None = PrivateAttr(default=None)
     _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
+    _platform_prompt_file: Any | None = PrivateAttr(default=None)
 
     app: PodAppConfig = Field(default_factory=PodAppConfig)
     security: SecurityConfiguration
@@ -377,6 +378,45 @@ class AgentPodConfig(BaseModel):
     storage: PodStorageConfig = Field(default_factory=PodStorageConfig)
     scheduler: PodSchedulerConfig = Field(default_factory=PodSchedulerConfig)
     platform: PodPlatformConfig = Field(default_factory=PodPlatformConfig)
+
+    def set_platform_prompt_file(self, file: Any) -> None:
+        """
+        Attach the parsed `config/platform_prompt.json` as internal runtime data.
+
+        Why this exists:
+        - the two head blocks of every system prompt are pod-shipped config, like
+          the two catalogs, and should not appear as public fields in
+          `configuration.yaml` where an operator could set them by hand and
+          diverge from the file the admin UI reads.
+        - typed `Any` rather than `PlatformPromptFile`: `_catalogs` imports this
+          module, so naming its type here would be a cycle. Same dodge as
+          `_mcp_configuration`.
+
+        How to use it:
+        - call only from internal config bootstrap helpers.
+
+        Example:
+        - `config.set_platform_prompt_file(load_platform_prompt_file(path))`
+        """
+
+        self._platform_prompt_file = file
+
+    def get_platform_prompt_file(self) -> Any | None:
+        """
+        Return the parsed platform-prompt file attached during pod bootstrap.
+
+        Why this exists:
+        - the prompt composer needs both blocks, and `GET /agents/platform-prompt`
+          needs to hand the same two to control-plane.
+
+        How to use it:
+        - call from internal runtime wiring only.
+
+        Example:
+        - `file = config.get_platform_prompt_file()`
+        """
+
+        return self._platform_prompt_file
 
     def set_models_catalog_path(self, path: str) -> None:
         """

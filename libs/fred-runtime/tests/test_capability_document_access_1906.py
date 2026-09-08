@@ -187,12 +187,14 @@ class _FakeTreePort(DocumentTreePort):
         *,
         working_directory: str | None = None,
         library_tag_ids=None,
+        document_uids=None,
         max_chars: int = 6000,
     ) -> DocumentTreeResult:
         self.calls.append(
             {
                 "working_directory": working_directory,
                 "library_tag_ids": library_tag_ids,
+                "document_uids": document_uids,
                 "max_chars": max_chars,
             }
         )
@@ -769,6 +771,27 @@ def test_attachments_only_drops_the_tree_tool() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tree_tool_carries_the_turn_document_selection() -> None:
+    """A document-level pick must prune the listing too - not only the search.
+    Selecting one file and being handed the whole corpus is what sent the model
+    back to asking which document was meant."""
+
+    tree_port = _FakeTreePort()
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_full_services(tree=tree_port),
+        config={},
+        turn_options={"document_uids": ["u1"]},
+    )
+
+    await _invoke_named_tool(cap, ctx, "list_document_tree", {})
+
+    assert tree_port.calls[0]["document_uids"] == ["u1"]
+
+
+@pytest.mark.asyncio
 async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
     tree_port = _FakeTreePort()
     cap = DocumentAccessCapability()
@@ -790,6 +813,8 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
     assert call["working_directory"] == "Sales"
     # Hard binding flows to the port as the capability-side scope.
     assert call["library_tag_ids"] == ["A", "B"]
+    # No document narrowing configured or ticked: the tree stays library-scoped.
+    assert call["document_uids"] is None
     # 50 is under the endpoint's floor — clamped, not 422ed.
     assert call["max_chars"] == 500
     assert message.content == "Sales/\n  doc-a [u1]"

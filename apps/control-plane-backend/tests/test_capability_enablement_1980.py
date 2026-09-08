@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from control_plane_backend.applications.catalog import ApplicationSourceConfig
 from control_plane_backend.capabilities import enablement, seeding
 from control_plane_backend.capabilities.enablement import (
     AgentCapabilityDependencyNotSatisfied,
@@ -62,6 +63,20 @@ from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 from fred_sdk.contracts.models import FieldSpec
 from test_main import _FakeAgentInstanceStore, _make_record
+
+_EXAMPLE_APPLICATION = ApplicationSourceConfig(
+    app_id="example",
+    ui_prefix="/apps/example",
+    version="1.0.0",
+    display_name={"en": "Example"},
+    description={"en": "An application served from its own container."},
+)
+
+
+def _installed_app_capability_ids() -> set[str]:
+    """Application projections are always present beside pod projections."""
+
+    return {_EXAMPLE_APPLICATION.capability_id}
 
 
 class _NoReasoningEnabledStore:
@@ -1133,18 +1148,22 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access"}
+    assert set(catalog) == {"doc_access"} | _installed_app_capability_ids()
 
 
 @pytest.mark.asyncio
@@ -1212,11 +1231,15 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1224,7 +1247,15 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     catalog = await aggregate_capability_catalog(deps)
 
     sentinel_id = product_service.template_capability_id("runtime-a", "sentinel")
-    assert set(catalog) == {"doc_access", sentinel_id, "model__openai__gpt-5.1"}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            sentinel_id,
+            "model__openai__gpt-5.1",
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[sentinel_id].kind == "agent"
     assert catalog["doc_access"].kind == "tool"
     assert catalog["model__openai__gpt-5.1"].kind == "model"
@@ -1283,11 +1314,15 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
@@ -1296,7 +1331,14 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
 
     # The tool entry is refused; the real agent entry (fetched second) wins
     # the id, never overwritten — the collision this prefix exists to prevent.
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "agent"
 
 
@@ -1350,18 +1392,29 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod", runtime_id="runtime-a"
                     )
-                ]
+                ],
             )
         )
     )
 
     catalog = await aggregate_capability_catalog(deps)
 
-    assert set(catalog) == {"doc_access", colliding_tool_id}
+    assert (
+        set(catalog)
+        == {
+            "doc_access",
+            colliding_tool_id,
+        }
+        | _installed_app_capability_ids()
+    )
     assert catalog[colliding_tool_id].kind == "model"
 
 
@@ -1421,6 +1474,10 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
     deps = SimpleNamespace(
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=True)
+                ),
+                application_sources=[_EXAMPLE_APPLICATION],
                 runtime_catalog_sources=[
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-a", runtime_id="runtime-a"
@@ -1428,7 +1485,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
                     SimpleNamespace(
                         enabled=True, base_url="http://pod-b", runtime_id="runtime-b"
                     ),
-                ]
+                ],
             )
         )
     )
@@ -2460,13 +2517,15 @@ async def test_authz_injects_personal_team_edge_only_for_personal_teams() -> Non
     """A personal-space subject gets BOTH the `team` and `personal_team`
     contextual edges; a regular team gets only `team` (RFC §8.4)."""
 
-    from control_plane_backend.capabilities.authz import _team_subject_and_context
+    from fred_core.security.rebac.capability_authz import (
+        team_capability_subject_and_context,
+    )
 
-    _, personal_ctx = _team_subject_and_context("personal-u1")
+    _, personal_ctx = team_capability_subject_and_context("personal-u1")
     relations = {r.relation.value for r in personal_ctx}
     assert relations == {"team", "personal_team"}
 
-    _, regular_ctx = _team_subject_and_context("team-a")
+    _, regular_ctx = team_capability_subject_and_context("team-a")
     assert {r.relation.value for r in regular_ctx} == {"team"}
 
 
@@ -2570,16 +2629,20 @@ async def test_catalog_filter_disabled_rebac_keeps_everything() -> None:
 
 
 @pytest.mark.asyncio
-async def test_can_use_capability_check() -> None:
-    from control_plane_backend.capabilities.authz import can_use_capability
+async def test_can_team_use_capability_check() -> None:
+    from control_plane_backend.capabilities.authz import can_team_use_capability
 
     rebac = _FilterRebac({"team-a": {"doc_access", "bank_core"}})
-    assert await can_use_capability(rebac, "team-a", "doc_access") is True
-    assert await can_use_capability(rebac, "team-a", "corp_drive") is False
-    # #1988: MCP-backed capabilities are gated like any other id — a granted
-    # MCP capability passes, a non-granted one is rejected.
-    assert await can_use_capability(rebac, "team-a", "bank_core") is True
-    assert await can_use_capability(rebac, "team-a", "market_data") is False
+    assert await can_team_use_capability(rebac, "team-a", capability_id="doc_access")
+    assert not await can_team_use_capability(
+        rebac, "team-a", capability_id="corp_drive"
+    )
+    # MCP-backed capabilities are gated like any other id — a granted MCP
+    # capability passes, a non-granted one is rejected.
+    assert await can_team_use_capability(rebac, "team-a", capability_id="bank_core")
+    assert not await can_team_use_capability(
+        rebac, "team-a", capability_id="market_data"
+    )
 
 
 @pytest.mark.asyncio
@@ -2588,13 +2651,15 @@ async def test_can_use_is_scoped_to_the_team_context() -> None:
     # usable while operating in team-b, even when the SAME user belongs to
     # both teams (the check subject is the team, not the user).
     from control_plane_backend.capabilities.authz import (
-        can_use_capability,
+        can_team_use_capability,
         usable_capability_ids,
     )
 
     rebac = _FilterRebac({"team-a": {"doc_access"}})
-    assert await can_use_capability(rebac, "team-a", "doc_access") is True
-    assert await can_use_capability(rebac, "team-b", "doc_access") is False
+    assert await can_team_use_capability(rebac, "team-a", capability_id="doc_access")
+    assert not await can_team_use_capability(
+        rebac, "team-b", capability_id="doc_access"
+    )
     assert await usable_capability_ids(rebac, team_id="team-b") == set()
 
 
@@ -2609,6 +2674,14 @@ class _FakeReasoningStore:
 
     async def list_enabled_model_ids(self) -> set[str]:
         return set(self._enabled_model_ids)
+
+
+class _FakeNoPlatformPromptStore:
+    """No platform-prompt row saved — `get_runtime_binding_for_team` must then
+    carry `platform_prompt=None`, i.e. "fall back to the pod default"."""
+
+    async def get(self):
+        return None
 
 
 class _FakeNoPlatformModelBindingStore:
@@ -2650,6 +2723,7 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_team_capability_settings_store=lambda: settings,
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2679,6 +2753,7 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
             {"model__openai__gpt-5.1", "model__mistral__small"}
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2941,3 +3016,54 @@ async def test_aggregate_list_surfaces_agent_default_capability_ids(
     ]
     # A tool has no defaults by construction — the UI must not gate on it.
     assert by_id["mcp-knowledge-flow-mcp-tabular"].default_capability_ids == []
+
+
+@pytest.mark.asyncio
+async def test_disable_without_agent_store_writes_no_tuples() -> None:
+    """The store a revoke suspends dependents with is resolved before the tuple
+    writes: refusing afterwards would leave access revoked and the dependents
+    that relied on it still running."""
+
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await disable_capability_for_team(
+            rebac=rebac,
+            settings_store=None,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_reset_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await reset_capability_for_team(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            team_id="team-a",
+            default_on=False,
+        )
+
+    assert rebac.write_log == []
+
+
+@pytest.mark.asyncio
+async def test_default_off_without_agent_store_writes_no_tuples() -> None:
+    rebac = _FakeRebac()
+
+    with pytest.raises(RuntimeError):
+        await enablement.set_capability_default_on(
+            rebac=rebac,
+            agent_instance_store=None,
+            catalog_entry=_entry(),
+            on=False,
+        )
+
+    assert rebac.write_log == []

@@ -23,10 +23,10 @@ d'exemple) que vous faites ensuite évoluer.
 
 ## Créer et consulter un prompt
 
-Un prompt porte un titre, un contenu, éventuellement un emoji et des tags pour
-le retrouver. Depuis sa fiche, vous pouvez le **consulter** et le **copier**
-d'un clic. Un compteur indique combien de fois il a été utilisé — un repère
-utile pour identifier les prompts qui rendent service.
+Un prompt porte un titre et un contenu. Cliquez sur sa fiche pour le
+**consulter**, puis **copiez**-le depuis cette vue. Un compteur indique
+combien de fois il a été utilisé — un repère utile pour identifier les
+prompts qui rendent service.
 
 ![TODO: capture — la bibliothèque de prompts et une fiche](assets/prompts-library.png)
 

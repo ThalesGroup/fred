@@ -1,5 +1,9 @@
 /* One tool step of the trace: ● [n] label · discriminator ....... latency */
 .row {
+  /* A one-line row, so its marker is its vertical centre — read by ThoughtTrace
+     to trim the rail when this row opens or closes the sequence. */
+  --trace-marker-y: 50%;
+
   display: flex;
   position: relative;
   align-items: center;
@@ -16,7 +20,9 @@
    segment is exactly as tall as its own row. Static regardless of step status
    — "tool in progress" is signalled by the dot alone, never by the rail
    blinking or changing colour. Rows are gapless, so the segments read as one
-   continuous line. */
+   continuous line. Trimming the sequence's two ends is ThoughtTrace's job:
+   only it knows which row is first and last, now that reasoning rows sit in
+   the same list. */
 .row::before {
   position: absolute;
   top: 0;
@@ -26,11 +32,6 @@
   background: var(--outline-retreat);
   width: 1px;
   content: "";
-}
-
-/* The line stops at the last marker instead of overshooting past it. */
-.row:last-child::before {
-  bottom: 50%;
 }
 
 .row:hover,
@@ -118,15 +119,6 @@
   color: var(--on-surface);
   font: var(--font-label-medium);
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Phase badge — size/layout only; colours come from the shared phaseBadge.module.css
-   applied alongside this class (disjoint properties, no cascade conflict). */
-.phaseBadge {
-  flex-shrink: 0;
-  padding: 1px var(--spacing-2xs);
-  font: 600 0.6rem/1.2 sans-serif;
   white-space: nowrap;
 }
 

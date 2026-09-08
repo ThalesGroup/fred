@@ -50,6 +50,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
+| Build distributable frontend packages                | [`../../libs/frontend/README.md`](../../libs/frontend/README.md)   |
 | See what the team is working on now                   | GitHub Issues/Milestones                                            |
 | Understand the migration backlog                      | [`backlog/`](#backlog--project-state-and-sequencing)               |
 | Check UX status of a chat component                   | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)                         |
@@ -191,6 +192,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`CAPABILITY-EXECUTION-FLOW-RFC.md`](rfc/CAPABILITY-EXECUTION-FLOW-RFC.md)           | Vocabulary (Agent / Capability execution flow / Application Workflow) + a durable Temporal-backed tier for capability-internal orchestration (e.g. `document_extract`'s map phase) — open design question, extends TEMPORAL.md and #2240's pattern |
 | [`DELEGATED-DOWNSTREAM-AUTH-RFC.md`](rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md)           | AUTH-TX — token exchange at admission so the pod stops forwarding a fixed-lifetime user bearer for an unbounded turn; follow-up to #2125, multi-repo (realm templates), design only                     |
 | [`DOCUMENT-VIEWER-AI-PANEL-RFC.md`](rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md)             | "Ask the assistant" side panel next to the document viewer — blocked on an agent-picker product decision                                                                                                |
+| [`FRED-APPLICATION-HOSTING-RFC.md`](rfc/FRED-APPLICATION-HOSTING-RFC.md)     | Team-scoped applications shipped as their owner's container images: two browser-facing prefixes, registration split between catalog and gateway, a message-passing frame contract, and capability-based admission           |
 | [`FRED-TEAM-CONFIG-RFC.md`](rfc/FRED-TEAM-CONFIG-RFC.md)                             | Team configuration: ownership, objects, and authorization boundaries                                                                                                                                     |
 | [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)     | Multi-agent memory hardening: checkpoint isolation, remote/local execution convergence, TeamAgent history cap, invocation depth/cycle limit                                                            |
 | [`PROMPT-SYSTEM-HARDENING-RFC.md`](rfc/PROMPT-SYSTEM-HARDENING-RFC.md)               | Prompt-system completion and hardening: agent-form prompt UX, scoped resolution, promotion metadata, marketplace, token KPIs                                                     |
@@ -208,7 +210,6 @@ Runbooks and operational guides for the platform.
 | -------------------------------------------------------------------- | --------------------------------------------- |
 | [`AGENT_POD_RUNTIME_PROTOCOL.md`](ops/AGENT_POD_RUNTIME_PROTOCOL.md) | Runtime pod protocol and operational contract |
 | [`DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md)               | Database migration runbook                    |
-| [`KEA_SWIFT_CUTOVER.md`](ops/KEA_SWIFT_CUTOVER.md)                   | Kea to Swift cutover order, topic boundaries, and implementation state |
 
 ---
 

@@ -453,8 +453,8 @@ class OpenFgaRebacEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> list[bool]:
         """Check several permissions for one subject/resource pair with one
-        native OpenFGA `BatchCheck` HTTP call (14 permissions fit in a single
-        request — the SDK's default `max_batch_size` is 50).
+        native OpenFGA `BatchCheck` HTTP call (the whole `TeamPermission` enum
+        fits in one request - the SDK's default `max_batch_size` is 50).
 
         Explicit `correlation_id`s (the check's index) are set on every item
         so the result can be reordered from `response.result` regardless of

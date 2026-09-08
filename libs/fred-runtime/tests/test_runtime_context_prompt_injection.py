@@ -71,7 +71,6 @@ class _FakePolicy:
 
     def __init__(self) -> None:
         self.system_prompt_template = "BASE-TEMPLATE"
-        self.guardrails: list[object] = []
         self.tool_approval = SimpleNamespace(enabled=False)
         self.tool_selection = SimpleNamespace(
             max_tool_calls_per_turn=None, allow_parallel_calls=False
@@ -143,7 +142,13 @@ async def test_react_build_executor_injects_context_prompt_into_compiled_agent(
     # #1915: the selected chat-context prompt must reach the compiled agent, not
     # just the agent binding.
     assert _CTX_MARKER in captured["system_prompt"]
-    assert captured["system_prompt"].startswith("BASE-TEMPLATE")
+    # #2412 item 3 (2026-08-27): the agent template is the last STATIC block
+    # — general instructions and tools precede it — but still ahead of the
+    # volatile per-turn tail the selected context prompt belongs to.
+    assert "BASE-TEMPLATE" in captured["system_prompt"]
+    assert captured["system_prompt"].index("BASE-TEMPLATE") < captured[
+        "system_prompt"
+    ].index(_CTX_MARKER)
 
 
 @pytest.mark.asyncio
@@ -168,7 +173,13 @@ async def test_deep_build_executor_injects_context_prompt_into_compiled_agent(
 
     # The Deep runtime shares the canonical composer, so the same guarantee holds.
     assert _CTX_MARKER in captured["system_prompt"]
-    assert captured["system_prompt"].startswith("BASE-TEMPLATE")
+    # #2412 item 3 (2026-08-27): the agent template is the last STATIC block
+    # — general instructions and tools precede it — but still ahead of the
+    # volatile per-turn tail the selected context prompt belongs to.
+    assert "BASE-TEMPLATE" in captured["system_prompt"]
+    assert captured["system_prompt"].index("BASE-TEMPLATE") < captured[
+        "system_prompt"
+    ].index(_CTX_MARKER)
 
 
 @pytest.mark.asyncio

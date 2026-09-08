@@ -18,6 +18,7 @@ Runtime support utilities for Fred v2 agents.
 from .request_context_helpers import (
     RuntimeContextProvider,
     get_access_token,
+    get_attachment_uids,
     get_chat_context_libraries_ids,
     get_deep_search_enabled,
     get_document_library_tags_ids,
@@ -45,6 +46,7 @@ __all__ = [
     "set_attachments_markdown",
     "get_document_library_tags_ids",
     "get_search_policy",
+    "get_attachment_uids",
     "get_document_uids",
     "get_rag_knowledge_scope",
     "get_vector_search_scopes",

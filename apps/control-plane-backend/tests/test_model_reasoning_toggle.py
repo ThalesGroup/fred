@@ -178,7 +178,7 @@ def _stub_gate_and_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     """The `can_manage` gate has its own suite; stub it so these tests exercise
     the aptitude rule rather than a second copy of the authorization tests."""
 
-    async def _no_op_gate(rebac, user, capability_id):  # noqa: ANN001
+    async def _no_op_gate(rebac, user, capability_id, *, deps=None):  # noqa: ANN001
         return None
 
     catalog = {

@@ -23,14 +23,6 @@
   max-width: 760px;
 }
 
-/* KEA CUTOVER 2026 — delete with the link in MigrationPage.tsx. */
-.keaLink {
-  align-self: flex-start;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-  text-decoration: underline;
-}
-
 .overview {
   display: flex;
   flex-direction: column;

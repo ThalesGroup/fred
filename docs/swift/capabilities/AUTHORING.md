@@ -109,7 +109,7 @@ only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is t
   guess.
 - **`ctx.invocation_depth`** — how many agent-to-agent invocations deep this turn
   runs; `0` for a user's own turn, `d+1` for a child invoked from a turn at depth
-  `d` (`RUNTIME-EXECUTION-CONTRACT.md` §8.63). It comes from a counter carried
+  `d` (`RUNTIME-EXECUTION-CONTRACT.md` §8.75). It comes from a counter carried
   privately on the invoker, **never from the request**, so a capability may
   bound recursion on it. Its own field rather than part of `CapabilityIdentity`,
   which answers "who", not "how deep". Enforcement belongs in `tools()`: return
@@ -123,7 +123,7 @@ only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is t
 `ctx.services.kpi_writer` is the only sanctioned sink — never a logger, a store,
 or an HTTP call of your own (`docs/CONVENTIONS.md` §Performance & concurrency).
 Three rules, all of which `subagent`'s `agent.subagent_turn_completed` follows
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.68):
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.80):
 
 - **The port is optional and abstract.** Skip when it is `None`, and wrap the
   `emit(...)` in `try/except`: fail-open is a property of the platform's writer,
@@ -196,7 +196,7 @@ ReAct **and** Graph agents; every other row is `middleware()`-only — ReAct age
 | Edit conversation state (edit notice, attachment note) | `before_model` returning a state-update dict `[T2]` |
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
-| Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4). Inside a sub-agent (`ctx.invocation_depth` ≥ 1) no human can be reached: a `require` spec hides the tool from the model and anything else that would gate is refused with an error tool result, never an interrupt (RUNTIME-EXECUTION-CONTRACT.md §8.64) |
+| Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4). Inside a sub-agent (`ctx.invocation_depth` ≥ 1) no human can be reached: a `require` spec hides the tool from the model and anything else that would gate is refused with an error tool result, never an interrupt (RUNTIME-EXECUTION-CONTRACT.md §8.76) |
 
 Chat-time controls: return `ChatControlSpec`s from `chat_controls(config)` (computed at
 session-prep, never persisted — RFC §3.3, §3.7). Chat parts: extend the `UiPart` union

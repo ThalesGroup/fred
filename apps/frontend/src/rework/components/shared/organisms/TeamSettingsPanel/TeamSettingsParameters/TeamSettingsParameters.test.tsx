@@ -33,7 +33,8 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  updateTeam: vi.fn(),
+  // The rename path awaits `.unwrap()`; every other PATCH here fires and forgets.
+  updateTeam: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -227,5 +228,126 @@ describe("TeamSettingsParameters avatar preview", () => {
     const img = container.querySelector("img");
     expect(img?.getAttribute("src")).toBe("https://example.com/banner.png");
     expect(container.textContent).not.toContain("rework.teamSettings.parameters.teamAvatar.noAvatar");
+  });
+});
+
+describe("TeamSettingsParameters rename", () => {
+  function nameInput(): HTMLInputElement {
+    return container.querySelector('input[name="name"]') as HTMLInputElement;
+  }
+
+  function renameButton(): HTMLButtonElement {
+    return Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("rework.teamSettings.parameters.name.save"),
+    ) as HTMLButtonElement;
+  }
+
+  // The input is React-controlled, so the value has to go through the native
+  // setter for React to pick the change up.
+  function type(value: string) {
+    const input = nameInput();
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setValue.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  it("shows the current name with the rename button disabled", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    expect(nameInput().value).toBe("Team One");
+    expect(renameButton().disabled).toBe(true);
+  });
+
+  it("PATCHes the trimmed name once it differs from the team's own", async () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("  Team Two  ");
+    expect(renameButton().disabled).toBe(false);
+
+    await act(async () => {
+      renameButton().click();
+    });
+
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { name: "Team Two" },
+    });
+  });
+
+  it("keeps the button disabled for a blank name or the name the team already has", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("   ");
+    expect(renameButton().disabled).toBe(true);
+
+    type("Team One");
+    expect(renameButton().disabled).toBe(true);
+  });
+
+  it("surfaces a taken name without discarding what the user typed", async () => {
+    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409 }) });
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("Team Two");
+    await act(async () => {
+      renameButton().click();
+    });
+
+    expect(container.textContent).toContain("rework.teamSettings.parameters.name.alreadyTaken");
+    expect(nameInput().value).toBe("Team Two");
+  });
+
+  it("falls back to a generic message on any other failure", async () => {
+    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 500 }) });
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("Team Two");
+    await act(async () => {
+      renameButton().click();
+    });
+
+    expect(container.textContent).toContain("rework.teamSettings.parameters.name.saveError");
+    expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.alreadyTaken");
+  });
+
+  it("keeps a typed-but-unsaved name when the team refetches with a new description", () => {
+    // Saving the description invalidates the team, so the component re-renders
+    // with a new `team` object while the rename is still only typed.
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("Team Two");
+    act(() => {
+      root.render(<TeamSettingsParameters team={{ ...baseTeam("invite_only"), description: "Edited" }} />);
+    });
+
+    expect(nameInput().value).toBe("Team Two");
+    expect(renameButton().disabled).toBe(false);
+  });
+
+  it("adopts the new name once the rename itself lands", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("Team Two");
+    act(() => {
+      root.render(<TeamSettingsParameters team={{ ...baseTeam("invite_only"), name: "Team Two" }} />);
+    });
+
+    expect(nameInput().value).toBe("Team Two");
+    expect(renameButton().disabled).toBe(true);
+  });
+
+  it("clears the error as soon as the name is edited again", async () => {
+    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409 }) });
+    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
+
+    type("Team Two");
+    await act(async () => {
+      renameButton().click();
+    });
+    type("Team Three");
+
+    expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.alreadyTaken");
   });
 });

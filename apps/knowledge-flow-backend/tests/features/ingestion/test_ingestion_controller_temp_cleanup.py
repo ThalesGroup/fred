@@ -84,7 +84,6 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
-        timer_dims={},
     )
 
     events = [event async for event in event_stream]

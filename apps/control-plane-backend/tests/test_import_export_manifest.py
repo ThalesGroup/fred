@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.import_export.bundle import (
     UnsupportedBundleFormatError,
     open_bundle,
@@ -79,6 +78,18 @@ def test_open_bundle_rejects_unsupported_users_schema_version() -> None:
         open_bundle(data)
 
 
+def test_open_bundle_rejects_non_swift_source_platform() -> None:
+    """A matching format/schema version is not enough: this importer only ever
+    reads Swift table names, so a bundle from anywhere else (or a stale kea
+    bundle that happens to share these version numbers) must be rejected here
+    rather than silently mis-imported."""
+    data = _minimal_bundle_bytes(
+        {"format_version": 1, "users_schema_version": 1, "source_platform": "kea"}
+    )
+    with pytest.raises(UnsupportedBundleFormatError):
+        open_bundle(data)
+
+
 def test_open_bundle_accepts_a_conformant_manifest() -> None:
     data = _minimal_bundle_bytes(
         {
@@ -87,8 +98,6 @@ def test_open_bundle_accepts_a_conformant_manifest() -> None:
             "source_platform": "swift",
             "created_at": "2026-07-16T00:00:00Z",
             "tables": {},
-            "tuple_count": 0,
-            "realm_exported": False,
             "content_keys": [],
         }
     )
@@ -131,7 +140,6 @@ async def _import(bundle_bytes: bytes, engine: AsyncEngine) -> MigrationReport:
         task_id=start.task_id,
         task_service=task_service,
         engine=engine,
-        agent_instance_store=AgentInstanceStore(engine),
     )
 
 

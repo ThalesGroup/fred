@@ -18,7 +18,6 @@ How to use it:
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     FieldSpec,
-    GuardrailDefinition,
     MCPServerRef,
     UIHints,
     load_agent_prompt_markdown,
@@ -71,32 +70,6 @@ class SqlExpertReActDefinition(ReActAgentDefinition):
             system_prompt_template=self.system_prompt_template,
             # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
             tool_selection=REASONING_SAFE_TOOL_SELECTION,
-            guardrails=(
-                GuardrailDefinition(
-                    guardrail_id="read_only_sql",
-                    title="Use read-only SQL only",
-                    description=(
-                        "Only generate safe read-only SQL queries. "
-                        "Never propose INSERT, UPDATE, DELETE, DROP, ALTER, or TRUNCATE."
-                    ),
-                ),
-                GuardrailDefinition(
-                    guardrail_id="no_invented_schema",
-                    title="Do not invent schema elements",
-                    description=(
-                        "Do not invent tables, databases, or columns that are not present "
-                        "in the surfaced tabular context."
-                    ),
-                ),
-                GuardrailDefinition(
-                    guardrail_id="clarify_ambiguity",
-                    title="Clarify ambiguous scope",
-                    description=(
-                        "If several databases or tables could match the request and the "
-                        "correct scope is unclear, ask the user for clarification."
-                    ),
-                ),
-            ),
         )
 
 

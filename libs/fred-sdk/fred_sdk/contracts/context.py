@@ -817,10 +817,10 @@ class AgentInvocationRequest(FrozenModel):
     system_prompt: str | None = None
     """Replace the callee's rendered agent template for this call. Optional.
 
-    That layer ONLY: the runtime-owned tool descriptions, guardrails, output
-    contract and recovery notice are still appended and a caller cannot remove
-    them. ReAct-family callees only — a Graph callee composes no system prompt,
-    so the invoker refuses rather than ignoring the field.
+    That block ONLY: the runtime-owned platform blocks, output contract, tool
+    descriptions and per-turn context are still composed around it and a caller
+    cannot remove them. ReAct-family callees only — a Graph callee composes no
+    system prompt, so the invoker refuses rather than ignoring the field.
     """
 
 
@@ -987,5 +987,25 @@ class BoundRuntimeContext(FrozenModel):
             "which is every deployment before this feature — routing falls "
             "through to `agent_profile_overrides`/team policy/pod default "
             "exactly as before."
+        ),
+    )
+    platform_prompt: str | None = Field(
+        default=None,
+        description=(
+            "Platform-wide platform prompt — the FIRST block of every composed "
+            "system prompt (`react_prompting.compose_system_prompt`). Set by a platform "
+            "admin in the admin UI and stored as a single control-plane row; "
+            "like `platform_chat_model_binding` above it is trusted and "
+            "resolved fresh on every managed turn from the caller's "
+            "`ManagedAgentRuntimeBinding` lookup, never a client-forwarded "
+            "field — a client that could set this could prepend arbitrary "
+            "instructions ahead of every agent on the deployment.\n\n"
+            "`None` means no admin has saved one, which is every deployment "
+            "before this feature and every direct (non-managed) execution: "
+            "the pod then falls back to the `platform_prompt` field of its "
+            "shipped `config/platform_prompt.json`, the same "
+            "text control-plane serves to the admin editor. An admin who saves "
+            "an empty string deliberately suppresses the block entirely — "
+            "that is distinct from `None`, which means 'never set'."
         ),
     )

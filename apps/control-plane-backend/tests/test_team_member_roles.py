@@ -145,6 +145,7 @@ class _FakeRebac:
             TeamPermission.CAN_ADMINISTER_ADMINS: is_admin,
             TeamPermission.CAN_READ_CONVERSATIONS: is_member,
             TeamPermission.CAN_USE_TEAM_AGENTS: is_member,
+            TeamPermission.CAN_USE_TEAM_APPLICATIONS: is_member,
             TeamPermission.CAN_RUN_EVALUATIONS: is_analyst or is_admin,
             TeamPermission.CAN_MANAGE_EVALUATION_CORPUS: is_analyst or is_admin,
             TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION: is_analyst,

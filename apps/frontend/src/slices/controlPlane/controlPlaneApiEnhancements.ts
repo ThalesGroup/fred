@@ -16,6 +16,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlanePlatformPrompt",
     "ControlPlanePlatformRole",
   ],
   endpoints: {
@@ -40,6 +41,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
     // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    // The team application catalog is another projection of capability
+    // enablement. Reusing the LIST tag makes a local admin toggle remove or add
+    // an open app immediately; focus + bounded polling cover other sessions.
+    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
@@ -381,6 +388,17 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
       invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
     },
+    // Platform-wide platform prompt — a single row, so one LIST tag covers it,
+    // same shape as the platform model binding above.
+    getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
+      providesTags: [{ type: "ControlPlanePlatformPrompt" as const, id: "LIST" }],
+    },
+    putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
+    },
+    // Read-only and shipped with the platform: it can only change on deploy, so
+    // it carries no cache tag — nothing in this app can invalidate it.
+    getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
   },
 });
 
@@ -464,9 +482,10 @@ export const {
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
-  useResetPlatformRebacControlPlaneV1ImportExportResetRebacPostMutation: useResetPlatformRebacMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  // Team-scoped native applications catalog.
+  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
     useEnableTeamCapabilityMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:
@@ -486,4 +505,9 @@ export const {
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
+  // Platform-wide platform prompt — the first block of every agent's system prompt.
+  useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
+  usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Read-only platform operating instructions, shown under the editable prompt.
+  useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
 } = enhancedControlPlaneApi;

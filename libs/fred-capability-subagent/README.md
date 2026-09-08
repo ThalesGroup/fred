@@ -5,7 +5,7 @@ A Fred agent capability (`subagent`) that gives an agent one tool,
 itself** and get the answer back on an ordinary tool-result line.
 
 What the runtime does for it, and why: `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
-§8.63-§8.69. What is still open: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`.
+§8.75-§8.82. What is still open: `docs/swift/rfc/SUBAGENT-CAPABILITY-RFC.md`.
 
 ## What it ships
 
@@ -64,7 +64,7 @@ Local/POC surface today:
   reachable inside a child, so approval-gated tools are hidden from its model
   and anything else that would gate is refused with an error tool result. Not a
   hang risk, but a real limit on what a child can be asked to do
-  (`RUNTIME-EXECUTION-CONTRACT.md` §8.64).
+  (`RUNTIME-EXECUTION-CONTRACT.md` §8.76).
 
 ## Dev
 

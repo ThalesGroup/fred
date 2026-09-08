@@ -139,7 +139,10 @@ export default function MultiSeriesLineChart({
                 fontSize: 10,
                 fontFamily: css["--font-family-base"],
                 color: css["--on-surface-retreat"],
-                maxHeight: 44,
+                // A cap, not a height: charts with a couple of series render
+                // one row either way. Sized for the top-agents ranking, whose
+                // ten labels each carry a team name and no longer fit in 44px.
+                maxHeight: 88,
                 overflowY: "auto",
                 paddingTop: 4,
               }}

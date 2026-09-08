@@ -92,6 +92,9 @@ platform:
   #     messages:
   #       en: "Do not upload sensitive or classified documents."
   #       fr: "Ne téléversez pas de documents sensibles ou classifiés."
+  frontend:
+    feature_flags:
+      enableInformationSystems: true # local dev — unused now the in-repo SI UI is gone, kept for the standalone rags-services page
   #   info_banner:
   #     color: "#00BBDD"
   #     auto_hide_seconds: 30 # omit for a persistent banner (the default)
@@ -125,3 +128,19 @@ platform:
       base_url: http://127.0.0.1:8020/dt/agents/v2
       enabled: true
       ingress_prefix: /dt/agents/v2
+  # Applications deployed alongside Fred, each serving its own UI (and
+  # optionally its own API) container. This half owns the catalog and the
+  # app__<app_id> capability only; the proxy upstreams live in the frontend
+  # gateway's FRONTEND_APPLICATIONS_JSON. `ui_prefix` is what the browser
+  # loads in the application frame — exactly /apps/<app_id> while the UI is
+  # served from Fred's origin, an absolute https URL once it moves to its own.
+  # application_sources:
+  #   - app_id: example
+  #     ui_prefix: /apps/example
+  #     version: 1.0.0
+  #     icon: extension
+  #     display_name:
+  #       en: "Example"
+  #       fr: "Exemple"
+  #     description:
+  #       en: "An application served from its own container."

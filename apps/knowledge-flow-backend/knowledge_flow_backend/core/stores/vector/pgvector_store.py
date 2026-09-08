@@ -268,6 +268,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 "[VECTOR][PGVECTOR] failed to delete vectors for document_uid=%s",
                 document_uid,
             )
+            raise RuntimeError("Failed to delete vectors from PGVector.")
 
     def set_document_name(self, *, document_uid: str, document_name: str) -> None:
         """
@@ -424,7 +425,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
             return out
         except Exception:
             logger.exception("[VECTOR][PGVECTOR] failed to fetch chunks for document_uid=%s", document_uid)
-            return []
+            raise RuntimeError("Failed to fetch chunks from PGVector.")
 
     # ---------- BaseVectorStore: ANN search ----------
 

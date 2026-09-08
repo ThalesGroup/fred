@@ -14,6 +14,9 @@
 
 export type ChatAttachmentStatus = "uploading" | "ready" | "ingesting" | "error";
 
+/** Composer entry point a file came from. */
+export type AttachmentSource = "picker" | "drop" | "paste";
+
 export interface ChatImageContext {
   name: string;
   mime: string;

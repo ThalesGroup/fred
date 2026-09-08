@@ -1,0 +1,36 @@
+{
+  "name": "@fred/frontend-packages-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.13.0 <23",
+    "npm": ">=10.9.2 <11"
+  },
+  "workspaces": [
+    "design-tokens"
+  ],
+  "scripts": {
+    "build": "node scripts/build-design-tokens.mjs",
+    "lint": "eslint eslint.config.mjs scripts tests fixtures",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
+    "pack": "node scripts/pack-design-tokens.mjs",
+    "pack:check": "node scripts/pack-design-tokens.mjs --validate --evidence target/review-evidence/archive-inventory.json",
+    "test:consumer": "node scripts/isolated-consumer.mjs --evidence target/review-evidence/isolated-consumer.json",
+    "browser:install": "PLAYWRIGHT_BROWSERS_PATH=target/playwright playwright install --with-deps chromium",
+    "test:browser": "PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/browser-smoke.mjs --evidence target/review-evidence/browser-smoke.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "postcss": "8.5.28",
+    "postcss-value-parser": "4.2.0",
+    "prettier": "3.9.6",
+    "yaml": "2.9.0"
+  }
+}

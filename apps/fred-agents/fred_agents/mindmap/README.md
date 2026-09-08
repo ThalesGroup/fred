@@ -19,8 +19,8 @@ flowchart TD
 ## What it does
 
 - Uses the Fred **Documents** picker and reads `runtime_context.selected_document_uids`
-- Reads each selected document through bounded Knowledge Flow filesystem pagination
-  on `/corpus/documents/{document_uid}/preview.md`
+- Reads each selected document through the bounded `document_markdown` port,
+  paginating on characters by document uid
 - Summarizes transcript pages incrementally instead of concatenating full
   document previews into one prompt
 - Merges page summaries into a global digest that preserves concrete transcript
@@ -34,7 +34,7 @@ flowchart TD
 ## Runtime dependencies
 
 - `MCP_SERVER_KNOWLEDGE_FLOW_TEXT`
-- `MCP_SERVER_KNOWLEDGE_FLOW_FS`
+- the `document_markdown` runtime port (`context.services.document_markdown`)
 
 `knowledge.search` is kept only as an explicit fallback path and is disabled by
 default. The normal mode is strict selected-document reading.
@@ -44,8 +44,8 @@ default. The normal mode is strict selected-document reading.
 1. The user selects one or more transcript/script documents with the
    **Documents** picker.
 2. The runtime passes those ids in `selected_document_uids`.
-3. The agent reads the selected document previews page by page with
-   `read_file_page`.
+3. The agent reads each selected document page by page through
+   `document_markdown`, deriving `Lx-Ly` segment labels from the returned text.
 4. The agent summarizes pages, merges the summaries into one digest, and
    generates the final mindmap with concrete transcript branches instead of
    generic labels whenever the source supports them.

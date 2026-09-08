@@ -16,9 +16,7 @@ import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPag
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
-// KEA CUTOVER 2026 — temporary, delete this import and its route below a few
-// weeks after the S3NS cutover completes (see kea_reconciliation.py, backend).
-import KeaMigrationPage from "@components/pages/admin/KeaMigrationPage/KeaMigrationPage.tsx";
+import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -38,12 +36,15 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
@@ -126,6 +127,24 @@ export const routes: RouteObject[] = [
         element: <TeamResourcesPage />,
       },
       {
+        path: "team/:teamId/apps",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationsPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
+        // Every deeper segment belongs to the selected build-time application.
+        // The host resolves the team catalog before touching its local loader.
+        path: "team/:teamId/apps/:appId/*",
+        element: (
+          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
+            <TeamApplicationHostPage />
+          </FrontendFeatureGate>
+        ),
+      },
+      {
         path: "team/:teamId/usage",
         element: <TeamUsagePage />,
       },
@@ -157,6 +176,17 @@ export const routes: RouteObject[] = [
       {
         path: "admin",
         element: <AdminIndexRoute />,
+      },
+      {
+        // Platform-wide platform prompt: the first block of every agent's system
+        // prompt. Org-admin only, matching the backend's
+        // `require_manage_any` gate on both routes.
+        path: "admin/platform-prompt",
+        element: (
+          <Protected requires="admin">
+            <PlatformPromptPage />
+          </Protected>
+        ),
       },
       {
         path: "admin/teams",
@@ -229,18 +259,6 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <MigrationPage />
-          </Protected>
-        ),
-      },
-      {
-        // KEA CUTOVER 2026 — temporary, deliberately NOT linked from any nav
-        // menu (reached by direct URL only, mirroring kea's own
-        // /admin/kea-migration) so it never gets mistaken for the permanent
-        // export/import tool above. Delete with KeaMigrationPage/.
-        path: "admin/kea-migration",
-        element: (
-          <Protected requires="admin">
-            <KeaMigrationPage />
           </Protected>
         ),
       },

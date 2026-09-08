@@ -74,7 +74,7 @@ This is **Mon espace** for one user inside one team.
 | --- | --- |
 | Read | allowed only for the authenticated user whose uid appears in the path |
 | Write/delete/mkdir | allowed only for that same user |
-| Team gate | caller must have team `CAN_READ` before entering the team box |
+| Team gate | caller must have team `CAN_ACCESS_FILES` (real membership) before entering the team box |
 | Provenance | files derive as `origin=uploaded`, `producer=human`, `created_by={uid}` |
 
 This area is private per user and per team. Another team member cannot list,
@@ -86,7 +86,7 @@ This is **Espace d'equipe**.
 
 | Property | Behaviour |
 | --- | --- |
-| Read | team `CAN_READ` |
+| Read | team `CAN_ACCESS_FILES` |
 | Write/delete/mkdir | team `CAN_UPDATE_RESOURCES` |
 | Provenance | direct files derive as `origin=uploaded`, `producer=human`, `created_by=None` |
 

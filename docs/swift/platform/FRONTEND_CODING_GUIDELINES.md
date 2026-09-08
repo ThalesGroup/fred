@@ -46,6 +46,22 @@ package inside `src/rework/`. Use existing design system atoms:
 MUI is only permitted in the legacy `src/components/` tree, which is being
 retired.
 
+### Trusted application boundary
+
+Applications are the one supported product extension outside `src/`, and they
+are not in this repository at all. Each ships as its own container image, built
+and released by the team that owns it, and the deployment registers it (see
+[`FORKING_GUIDE.md`](FORKING_GUIDE.md)). Nothing about an application enters
+Fred's build, so none of the rules in this document apply to application code.
+
+The boundary is a `postMessage` handshake with a frame served from a configured
+prefix — never a shared build, a compiled module, or same-origin DOM access.
+Fred code on this side of it must keep it that way: reaching into the frame,
+or handing it anything beyond the plain cloneable context in
+`features/applications/applicationHost.ts`, is a defect even while the frame
+happens to be same-origin. An application never receives a bearer token; the
+authenticated request stays on the host side of the channel.
+
 ---
 
 ## 2. CSS Rules — Non-Negotiable

@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
-import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
+import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
 import { formatBytes as formatBytesUnit } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
@@ -67,14 +67,15 @@ export function SessionAttachmentsDrawer({
 
   return (
     <>
-      <InlineDrawer
+      <ChatSidePanel
         open={open}
         onClose={onClose}
         title={t("chatbot.sessionAttachments.title")}
+        persistKey="session-attachments-panel"
         width="460px"
-        layout="push"
+        fill
       >
-        <UploadWarningBanner className={styles.uploadWarning} />
+        <UploadWarningBanner />
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
@@ -85,40 +86,40 @@ export function SessionAttachmentsDrawer({
               const sizeLabel = formatBytes(attachment.sizeBytes);
               const timestampLabel = formatTimestamp(attachment.createdAt);
               const metaLabel = [attachment.mime, sizeLabel, timestampLabel].filter(Boolean).join(" · ");
+              // A <button> cannot nest another, so the delete control sits beside
+              // the preview target instead of inside it.
               return (
-                <button
-                  key={attachment.attachmentId}
-                  type="button"
-                  className={styles.row}
-                  onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
-                >
-                  <span className={styles.rowIcon} aria-hidden>
-                    <Icon category="outlined" type="attach_file" />
-                  </span>
-                  <span className={styles.rowBody}>
-                    <span className={styles.rowName} title={attachment.name}>
-                      {attachment.name}
+                <div key={attachment.attachmentId} className={styles.row}>
+                  <button
+                    type="button"
+                    className={styles.rowPreview}
+                    onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
+                  >
+                    <span className={styles.rowIcon} aria-hidden>
+                      <Icon category="outlined" type="attach_file" />
                     </span>
-                    <span className={styles.rowMeta}>{metaLabel}</span>
-                  </span>
+                    <span className={styles.rowBody}>
+                      <span className={styles.rowName} title={attachment.name}>
+                        {attachment.name}
+                      </span>
+                      <span className={styles.rowMeta}>{metaLabel}</span>
+                    </span>
+                  </button>
                   <span className={styles.rowButtons}>
                     <IconButton
                       variant="icon"
                       size="2xs"
                       icon={{ category: "outlined", type: "delete" }}
                       aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete(attachment.attachmentId);
-                      }}
+                      onClick={() => onDelete(attachment.attachmentId)}
                     />
                   </span>
-                </button>
+                </div>
               );
             })
           )}
         </div>
-      </InlineDrawer>
+      </ChatSidePanel>
       <MarkdownPreviewModal
         open={previewAttachment != null}
         onClose={() => setPreviewAttachmentId(null)}

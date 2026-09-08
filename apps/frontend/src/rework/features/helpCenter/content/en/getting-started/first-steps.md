@@ -23,21 +23,23 @@ If you can't sign in, see
 ## Choosing your language
 
 The interface is available in French and English. To switch languages, open the
-**profile menu** (your name, at the bottom of the navigation panel) and pick the
-language you want. This help center follows the same choice — you can also
-switch its language with the **FR / EN** selector at the top right.
+**profile menu** (your name, at the bottom of the navigation panel), choose
+**Profile**, then pick your language on the **Settings** page. This help
+center follows the same choice — you can also switch its language with the
+**FR / EN** selector at the top right.
 
 ## Finding your way around
 
 Three areas make up the screen:
 
 - **The navigation panel**, on the left: it gives access to your personal
-  space, the team marketplace, and — once a team is selected — its agents,
+  space, the team marketplace, a top-level **Help Center** icon (opens this
+  help center in a new tab), and — once a team is selected — its agents,
   prompts, resources, and settings.
 - **The workspace**, in the center: this is where the current page or
   conversation appears.
-- **The profile menu**, at the bottom left: your language, access to this help
-  center, and sign-out.
+- **The profile menu**, at the bottom left: your Profile, Contact support, and
+  sign-out.
 
 ![TODO: screenshot — annotated interface overview](assets/first-steps-overview.png)
 

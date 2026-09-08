@@ -110,3 +110,17 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* The save button sits on its own row under the field rather than beside it:
+ * the input grows a validation message when a rename is refused, and a
+ * side-by-side button would jump with it. */
+.team-name-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.team-name-actions {
+  display: flex;
+  justify-content: flex-end;
+}

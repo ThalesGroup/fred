@@ -33,6 +33,7 @@ Covers:
 #   test_capability_enablement_1980.py).
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import control_plane_backend.product.service as service
@@ -44,6 +45,7 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import FieldSpec, TeamScopePolicy
 from httpx import ASGITransport, AsyncClient
@@ -282,6 +284,75 @@ def test_runtime_template_payload_parses_default_capability_ids() -> None:
         "document_access",
         "mcp-knowledge-flow-fs",
     ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_templates_quarantine_product_application_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Product apps never become agent-picker or execution capabilities."""
+
+    ordinary = _DEMO_ENTRY.model_dump(mode="json")
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "sample-agent",
+            "title": "Sample Agent",
+            "description": "Synthetic runtime template",
+            "kind": "assistant",
+            "available_capabilities": [
+                ordinary,
+                ordinary | {"id": "product-app", "kind": "app"},
+                ordinary | {"id": "app__forged", "kind": "tool"},
+            ],
+            "default_capability_ids": [
+                "demo_echo",
+                "product-app",
+                "app__forged",
+                "legacy-missing",
+            ],
+        }
+    )
+    assert [entry.id for entry in payload.available_capabilities] == ["demo_echo"]
+    assert payload.default_capability_ids == ["demo_echo", "legacy-missing"]
+
+    async def _fake_fetch(
+        _base_url: str, include_non_public: bool = False
+    ) -> list[service._RuntimeTemplatePayload]:
+        return [payload]
+
+    monkeypatch.setattr(service, "_fetch_runtime_templates", _fake_fetch)
+    source = RuntimeCatalogSourceConfig(
+        runtime_id="runtime-a",
+        base_url="http://runtime-a/pod/v1",
+        enabled=True,
+        ingress_prefix="/runtime/runtime-a",
+    )
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=_FilterRebac(None)),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(runtime_catalog_sources=[source])
+        ),
+    )
+
+    templates = await service.list_agent_templates(TeamId("team-a"), deps)  # type: ignore[arg-type]
+    assert [entry.id for entry in templates[0].available_capabilities] == ["demo_echo"]
+
+    execution_entries, _limit = await service._runtime_execution_metadata_for_source(
+        source.base_url
+    )
+    assert [entry.id for entry in execution_entries] == ["demo_echo"]
+
+    available_by_source = await service._available_capability_ids_by_source(deps)  # type: ignore[arg-type]
+    assert available_by_source == {"runtime-a": frozenset({"demo_echo"})}
+
+    agent_entries = await service._agent_capabilities_for_source(
+        source.base_url, source.runtime_id
+    )
+    assert agent_entries is not None
+    assert agent_entries[0].default_capability_ids == (
+        "demo_echo",
+        "legacy-missing",
+    )
 
 
 # ---------------------------------------------------------------------------

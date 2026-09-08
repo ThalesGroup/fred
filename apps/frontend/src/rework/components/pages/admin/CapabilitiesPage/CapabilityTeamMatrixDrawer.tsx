@@ -235,7 +235,7 @@ export function CapabilityTeamMatrixDrawer({
   // The pinned class row is not a team, so it stays out of name filtering and
   // out of the registry-empty/search-empty status below; it is simply hidden
   // while a search query is active.
-  const showPersonalRow = !hasQuery;
+  const showPersonalRow = capability?.kind !== "app" && !hasQuery;
   // `teams`, not the sorted snapshot: the registry-empty check must reflect
   // the live query result immediately, not wait for the sort effect to
   // re-run — otherwise a freshly-loaded roster can flash "no teams" for a

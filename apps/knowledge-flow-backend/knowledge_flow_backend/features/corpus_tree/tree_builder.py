@@ -120,6 +120,20 @@ def build_tree(
     return root
 
 
+def prune_empty_folders(node: TreeNode) -> bool:
+    """Drop every branch holding no document, and report whether `node` keeps one.
+
+    Only used when the caller narrowed the listing to specific documents: an
+    empty folder is meaningful information in a full listing ("this folder
+    exists and holds nothing"), but under a document scope it is just the
+    unselected corpus rendered as a skeleton.
+    """
+    for name, child in list(node.children.items()):
+        if not prune_empty_folders(child):
+            del node.children[name]
+    return bool(node.docs or node.children)
+
+
 def _format_leaf(doc: DocLeaf) -> str:
     when = doc.created.date().isoformat() if doc.created else "unknown date"
     return f"{doc.document_name} [{doc.document_uid}] (uploaded {when})"

@@ -192,6 +192,7 @@ class KfDocumentClient(KfBaseClient):
         *,
         working_directory: Optional[str] = None,
         tag_ids: Optional[Sequence[str]] = None,
+        document_uids: Optional[Sequence[str]] = None,
         max_chars: int = 6000,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
@@ -202,6 +203,7 @@ class KfDocumentClient(KfBaseClient):
           {
             "working_directory": str?,
             "tag_ids": [str]?,
+            "document_uids": [str]?,
             "max_chars": int,
             "owner_filter": str?,
             "team_id": str?
@@ -212,6 +214,8 @@ class KfDocumentClient(KfBaseClient):
             payload["working_directory"] = working_directory
         if tag_ids:
             payload["tag_ids"] = list(tag_ids)
+        if document_uids:
+            payload["document_uids"] = list(document_uids)
         if owner_filter:
             payload["owner_filter"] = owner_filter.value
         if team_id:

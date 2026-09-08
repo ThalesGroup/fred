@@ -4,11 +4,11 @@
 still genuinely open: the prompt-mode evaluation (§2), the fan-out bound (§3),
 one POC observation (§4), and the unspecified tiers 2-3 (§8). Everything tier 1
 built is recorded in the compact docs, not here —
-`../design/RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.69 and §14 (contract
+`../design/RUNTIME-EXECUTION-CONTRACT.md` §8.75-§8.82 and §14 (contract
 surface), `../capabilities/AUTHORING.md` (what a capability author needs),
 `../platform/OBSERVABILITY-AND-AUDIT.md` §3.1 (the per-child metric), and
 `libs/fred-capability-subagent/README.md` (the package itself).
-Throughout, a `§8.6x` or `§14` reference is to the execution contract; a bare
+Throughout, a `§8.7x` or `§14` reference is to the execution contract; a bare
 single-digit `§N` is a section of this RFC.
 **Author:** Florian Muller
 **Date:** 2026-09-03 (trimmed 2026-09-04)
@@ -60,7 +60,7 @@ are unavailable or will refuse.
 
 Both modes ship, selectable per agent on the capability's `prompt_mode` config
 (`append` = mode A, the default; `replace` = mode R, which uses the
-`AgentInvocationRequest.system_prompt` override, §8.67). **The evaluation itself
+`AgentInvocationRequest.system_prompt` override, §8.79). **The evaluation itself
 is what remains open**, on #2527.
 
 - **Mode R — replace.** Layer 1 becomes framing + the parent's `prompt`. A
@@ -98,15 +98,15 @@ same shape: it caps each child, and does not compose across the fan.
 
 **Decision: unbounded for the POC, to be settled with POC data on
 [#2531](https://github.com/ThalesGroup/fred/issues/2531).** Two later findings
-are data points for it rather than answers: retrying provider 429s (§8.65) buys
+are data points for it rather than answers: retrying provider 429s (§8.77) buys
 patience, not headroom, and every child's `ui_parts` now cross the SSE stream
-twice (§8.66), which multiplies by fan-out width.
+twice (§8.78), which multiplies by fan-out width.
 
 ## 4. Open — one POC observation to confirm
 
 A child renders into the parent's turn. Code analysis predicts each part renders
 once and persists once, under the parent's exchange, with a latent double-render
-if anything ever renders parts on a tool-result row (§8.66 states both). That is
+if anything ever renders parts on a tool-result row (§8.78 states both). That is
 a prediction about behaviour, settled only by watching it happen; the POC's
 answer belongs on [#2529](https://github.com/ThalesGroup/fred/issues/2529).
 Nothing to decide here until then.
@@ -127,7 +127,7 @@ Nothing to decide here until then.
   metric, so the per-child metric is blind to exactly the pathology it would be
   most useful for.
 - **A child cannot do work that needs a human decision.** Not a hang risk any
-  more (§8.64), but a capability limit that only §6.1's resumable children would
+  more (§8.76), but a capability limit that only §6.1's resumable children would
   lift.
 - **MEMORY-02 / MEMORY-06 stay open** for Graph and `TeamAgent` callers, which
   reach `invoke_agent` directly and have no bound of their own (§14).
@@ -146,7 +146,7 @@ tool for the parent to message a running or finished child — asking for
 precision rather than re-running it.
 
 That requires the state tier 1 deliberately drops: a child that can be messaged
-must be resumable, so the checkpointer-free decision (§8.63) must be revisited —
+must be resumable, so the checkpointer-free decision (§8.75) must be revisited —
 either a fresh session id per child, or MEMORY-02's `checkpoint_ns` done
 properly. It also reopens what happens when a user sends a message while
 children are still working.
@@ -221,6 +221,6 @@ cut — §6 records direction, not design.
 
 | Tier | Content | Spec status | Tickets |
 | ---- | ------- | ----------- | ------- |
-| 1 — playable POC | the tool, same-agent children, depth, HITL, prompt mode, token accounting, `sources` / `ui_parts` | shipped; recorded in `RUNTIME-EXECUTION-CONTRACT.md` §8.63-§8.69 | #2525 → #2526, #2527, #2528, #2529 |
+| 1 — playable POC | the tool, same-agent children, depth, HITL, prompt mode, token accounting, `sources` / `ui_parts` | shipped; recorded in `RUNTIME-EXECUTION-CONTRACT.md` §8.75-§8.82 | #2525 → #2526, #2527, #2528, #2529 |
 | 2 — observability UI | SSE keepalive during child runs (§5); child activity nested under the parent's tool-call line, which needs a forwarded child-event shape; sub-agent spend on the analytics page (§6.3) | not written | none until spec'd |
 | 3 — async and kinds | background children with completion notification and follow-up messaging (§6.1, reopens child state); admin-defined sub-agent kinds such as a "searcher" (§6.2's schema rule), which depends on the prompt-mode decision of §2; per-child model choice (§6.2) | not written (§6.1 and §6.2 give direction only) | none until spec'd |

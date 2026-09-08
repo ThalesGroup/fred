@@ -36,8 +36,9 @@ How to use:
 
   `middleware()` has a default that wraps `tools()` for `create_agent()`
   (ReAct); override `middleware()` directly only for ReAct-loop-specific hooks
-  a plain tool cannot express (prompt injection, model-call wrapping — see
-  `McpCapability`).
+  a plain tool cannot express (dynamic per-turn prompt injection, model-call
+  wrapping). Static, per-turn-identical prompt text has a cheaper path — see
+  `McpCapability.prompt_group()`.
 
 - installing the package IS the registration: declare a `fred.capabilities`
   entry point pointing at the subclass (RFC §4, §7)
@@ -204,8 +205,12 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
         Default: wraps `tools()` in one generic tool-carrier middleware, which
         is correct for every capability whose only runtime need is exposing
-        tools. Override directly only for hooks `tools()` cannot express (see
-        `McpCapability.middleware`, a prompt-fragment-only override).
+        tools. Override directly only for a genuine ReAct-loop hook `tools()`
+        cannot express (prompt injection outside the static prompt, model-call
+        wrapping) — a capability that only needs to contribute static,
+        per-turn-identical prompt text has a cheaper path than this hook: see
+        `McpCapability.prompt_group()`, consumed by whatever assembles the
+        static system prompt, not by a per-model-call middleware.
         """
 
         tools = self.tools(ctx)
@@ -239,6 +244,7 @@ class ToolCarrierMiddleware(AgentMiddleware):
         # `create_agent` rejects a middleware list with duplicate `.name`s
         # ("Please remove duplicate middleware instances."), and the base
         # default is the shared class name. Keying on the capability id keeps
-        # every instance distinct (mirrors `_McpInstructionsMiddleware`,
-        # `fred_runtime/capabilities/mcp.py`, which hit this exact bug first).
+        # every instance distinct (mirrors the now-removed
+        # `_McpInstructionsMiddleware`, `fred_runtime/capabilities/mcp.py`,
+        # which hit this exact bug first, before #2455 removed it entirely).
         return f"ToolCarrier[{self._capability_id}]"

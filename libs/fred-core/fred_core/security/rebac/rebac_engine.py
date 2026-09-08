@@ -158,6 +158,15 @@ class TeamPermission(str, Enum):
     # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
     # also admits `public`) — gates seeing/using the team's agents.
     CAN_USE_TEAM_AGENTS = "can_use_team_agents"
+    # Product applications are collaborative-team-only in V1. Keep this
+    # separate from CAN_READ (which admits public non-members) and from the
+    # agent-specific permission above.
+    CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
+
+    # Box-entry gate for the team's filesystem (`/teams/{id}/...`). Separate from
+    # CAN_READ on purpose: a PUBLIC team carries `public`, so CAN_READ would let
+    # any connected user list and read that team's files.
+    CAN_ACCESS_FILES = "can_access_files"
 
     # Team-scoped evaluation capabilities (RFC §6.2/§3.2).
     CAN_RUN_EVALUATIONS = "can_run_evaluations"
@@ -474,8 +483,8 @@ class RebacEngine(ABC):
         would otherwise enumerate ids from is already gone (a prior partial reset, a manual
         edit, drift between the two stores), the corresponding tuples never get asked for
         and become permanent orphans. This reads the live authorization store itself, so a
-        rehearsal reset (`import_export/teardown.py::run_teardown`) converges to zero
-        tuples of that type regardless of any such history. Returns the number deleted.
+        bulk reset converges to zero tuples of that type regardless of any such history.
+        Returns the number deleted.
         """
 
     async def add_relations(
@@ -1030,10 +1039,11 @@ class RebacEngine(ABC):
         no tuple until the owner's first permission check touches one — this
         lazily provisions exactly one (`user:<uid> team_editor team:personal-
         <uid>`), matching `build_personal_team`'s hardcoded permission set
-        (`can_read`, `can_update_resources`, `can_update_agents` — all implied
-        by `team_editor`). Runs before every `check_user_permission_or_raise`/
-        `has_user_permission` call so it applies uniformly across every backend,
-        with no per-caller special-casing.
+        (`can_read`, `can_update_resources`, `can_update_agents`,
+        `can_access_files` - all implied by `team_editor`). Runs before every
+        `check_user_permission_or_raise`/`has_user_permission` call so it
+        applies uniformly across every backend, with no per-caller
+        special-casing.
 
         Never provisions for another user's personal team — `add_relation`'s own
         write-guard would refuse that shape regardless, but this check avoids
@@ -1079,8 +1089,14 @@ class RebacEngine(ABC):
         *,
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
+        actor_uid: str | None = None,
     ) -> None:
         """Raise `AuthorizationError` when access is denied.
+
+        `actor_uid` names the acting user in the error when the checked subject
+        is not a user (for example, a team-subject capability check). The
+        legacy `AuthorizationError.user_id` remains a string and falls back to
+        the checked subject id when no user actor is available.
 
         Example:
         - Raises if Bob tries to update a team where he is only a member.
@@ -1100,11 +1116,17 @@ class RebacEngine(ABC):
                 resource.type.value,
                 resource.id,
             )
+            denied_actor_uid = actor_uid
+            if denied_actor_uid is None and subject.type == Resource.USER:
+                denied_actor_uid = subject.id
             raise AuthorizationError(
-                subject.id,
+                denied_actor_uid if denied_actor_uid is not None else subject.id,
                 permission.value,
                 resource.type,
                 f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
+                actor_uid=denied_actor_uid,
+                subject_type=subject.type,
+                subject_id=subject.id,
             )
 
     async def check_user_permission_or_raise(

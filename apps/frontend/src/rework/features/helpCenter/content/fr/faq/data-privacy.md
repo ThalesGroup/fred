@@ -24,7 +24,15 @@ par l'équipe. Si aucun délai n'est défini, l'effacement est immédiat.
 
 Les documents que vous déposez servent à répondre à vos questions au sein de
 votre équipe : ils sont préparés pour que les agents puissent s'y référer et
-vous montrer les passages utilisés. Ils restent dans le périmètre de l'équipe.
+vous montrer les passages utilisés. L'accès à ces documents reste dans le
+périmètre de l'équipe — cela concerne qui, parmi vos collègues, peut les voir.
+
+Pour générer une réponse, les extraits pertinents sont envoyés au modèle de
+langage configuré pour votre équipe, qui peut être un fournisseur externe (voir
+[Quels modèles sont utilisés ?](/help/fr/faq/ai-answers)). Le fournisseur
+utilisé dépend du [routage des modèles](/help/fr/features/teams) de votre
+déploiement — adressez-vous à l'administrateur de votre plateforme pour les
+modalités qui vous concernent.
 
 ## Export et conformité
 

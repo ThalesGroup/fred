@@ -68,6 +68,29 @@ function activeDescendantLabel(options: OptionModel<string>[]): string | undefin
   return options.find((o) => String(o.value) === value)?.label;
 }
 
+describe("Select accessible name", () => {
+  const OPTS: OptionModel<string>[] = [
+    { value: "a", key: "a", label: "Alphabetical" },
+    { value: "b", key: "b", label: "Recently created" },
+  ];
+
+  it("names the trigger from ariaLabel when no visible label is rendered", () => {
+    // Without it the button falls back to its own content, so a screen reader
+    // announces the current value with no hint of what the control does.
+    render(<Select<string> size="small" options={OPTS} value="a" onChange={() => {}} ariaLabel="Sort" />);
+
+    expect(container.querySelector("label")).toBeNull();
+    expect(trigger().getAttribute("aria-label")).toBe("Sort");
+  });
+
+  it("sets no aria-label when the prop is omitted, leaving a visible label to name it", () => {
+    render(<Select<string> size="small" options={OPTS} value="a" onChange={() => {}} label="Sort" />);
+
+    expect(trigger().hasAttribute("aria-label")).toBe(false);
+    expect(container.querySelector("label")?.getAttribute("for")).toBe(trigger().id);
+  });
+});
+
 describe("Select keyboard navigation — disabled options", () => {
   it("Home selects the first enabled option when the literal first option is disabled", () => {
     const options: OptionModel<string>[] = [

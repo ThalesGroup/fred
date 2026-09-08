@@ -127,3 +127,33 @@
     --btn-border: var(--state-on-surface-disabled);
   }
 }
+
+/* Badge (M3 large badge). Wraps the button rather than nesting inside it:
+   `.btn` clips to its circle, so a child badge would be cut off. */
+.badgeAnchor {
+  display: inline-flex;
+  position: relative;
+}
+
+/* M3: 16dp min box, full radius, 4dp side padding, Label Small. Overlaps the
+   button's top-right corner. `line-height: 1` or the digit sits low in the pill.
+   Primary, not the error role M3 defaults to: this is a neutral count, and a red
+   pill would read as something to fix. */
+.badge {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  justify-content: center;
+  align-items: center;
+  transform: translate(35%, -35%);
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  padding: 0 var(--spacing-2xs);
+  min-width: var(--spacing-m);
+  height: var(--spacing-m);
+  pointer-events: none;
+  color: var(--on-primary);
+  font: var(--font-label-small);
+  line-height: 1;
+}

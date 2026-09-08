@@ -34,6 +34,7 @@ from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
 from fred_runtime.common.mcp_interceptors import ExpiredTokenRetryInterceptor
 from fred_runtime.common.mcp_toolkit import McpToolkit
 from fred_runtime.common.mcp_utils import (
+    MCP_SERVER_ID_METADATA_KEY,
     MCPConnectionError,
     get_connected_mcp_client_for_agent,
 )
@@ -78,7 +79,7 @@ MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
 # which would serialize concurrent turns for the same user; not worth it.
 # Sub-agents make that race the NORMAL case, not a rare one, and a miss an N-wide
 # connect stampede: same-agent children share this key with their parent and
-# siblings (RUNTIME-EXECUTION-CONTRACT.md §8.63).
+# siblings (RUNTIME-EXECUTION-CONTRACT.md §8.75).
 MCP_CLIENT_CACHE_TTL_SECS = 300.0
 _mcp_client_cache: dict[
     Tuple[str, Tuple[str, ...], str], Tuple[MultiServerMCPClient, List[BaseTool], float]
@@ -216,7 +217,7 @@ class MCPRuntime:
 
         self.mcp_client: Optional[MultiServerMCPClient] = None
         self.toolkit: Optional[McpToolkit] = None
-        self._inprocess_toolkits: list[Any] = []
+        self._inprocess_toolkits: list[tuple[str, Any]] = []
 
         # Lifecycle orchestration so enter/exit happen in the SAME task
         self._lifecycle_task: Optional[asyncio.Task] = None
@@ -481,7 +482,7 @@ class MCPRuntime:
                     server.id,
                 )
                 continue
-            self._inprocess_toolkits.append(toolkit)
+            self._inprocess_toolkits.append((server.id, toolkit))
             logger.info(
                 "[MCP] agent=%s enabled inprocess provider=%s via server=%s",
                 self._agent_id,
@@ -491,7 +492,7 @@ class MCPRuntime:
 
     def _get_inprocess_tools(self) -> list[BaseTool]:
         tools: list[BaseTool] = []
-        for toolkit in self._inprocess_toolkits:
+        for server_id, toolkit in self._inprocess_toolkits:
             provider = getattr(toolkit, "tools", None)
             if not callable(provider):
                 logger.warning(
@@ -503,7 +504,21 @@ class MCPRuntime:
             try:
                 toolkit_tools = cast(Iterable[BaseTool] | None, provider())
                 if toolkit_tools:
-                    tools.extend(list(toolkit_tools))
+                    # Tag with the originating server id, same convention as
+                    # the remote-MCP fetch path in `mcp_utils.py` (#2455), so
+                    # the ReAct prompt can group the tool listing by server
+                    # regardless of transport.
+                    tools.extend(
+                        tool.model_copy(
+                            update={
+                                "metadata": {
+                                    **(tool.metadata or {}),
+                                    MCP_SERVER_ID_METADATA_KEY: server_id,
+                                }
+                            }
+                        )
+                        for tool in toolkit_tools
+                    )
             except Exception:
                 logger.warning(
                     "[MCP] agent=%s failed loading inprocess tools from %s",
@@ -514,7 +529,7 @@ class MCPRuntime:
         return tools
 
     async def _aclose_inprocess_toolkits(self) -> None:
-        for toolkit in self._inprocess_toolkits:
+        for _server_id, toolkit in self._inprocess_toolkits:
             aclose = getattr(toolkit, "aclose", None)
             if callable(aclose):
                 try:

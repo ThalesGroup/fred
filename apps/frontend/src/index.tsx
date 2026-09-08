@@ -31,6 +31,7 @@ import "@fontsource/inter/300.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
+import { reportCaughtReactError } from "./rework/features/applications/ApplicationErrorBoundary.tsx";
 
 // <html> is deliberately `overflow: hidden` (styles/index.css) — every real
 // scroll in this app happens inside a purpose-built internal container, so
@@ -62,7 +63,7 @@ const startApp = async () => {
     await loadConfig(); // <-- await config loading FIRST
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(() => {
-      const root = createRoot(document.getElementById("root"));
+      const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });
       root.render(
         <StrictMode>
           <Provider store={store}>

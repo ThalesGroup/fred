@@ -4,6 +4,10 @@
 
 {{- $persistenceEnabled := .root.Values.global.persistence.enabled }}   # we will use it in a loop
 {{- $applicationName := .app.applicationName }}                         # we will use it in a loop
+{{- $isFrontend := eq .app.applicationName "frontend" }}
+{{- /* The control-plane flag is the sole chart input; its derived frontend env is emitted after env/extraEnvVars so it remains authoritative. */}}
+{{- $controlPlane := (index .root.Values.applications "control-plane-backend") | default dict }}
+{{- $enableApplications := dig "configuration" "platform" "frontend" "feature_flags" "enableApplications" false $controlPlane }}
 
 ---
 apiVersion: apps/v1
@@ -83,13 +87,17 @@ spec:
 {{ toYaml .app.command.data | nindent 12 }}
           {{- end }}
 
-          {{- if or .app.env .app.extraEnvVars }}
+          {{- if or .app.env .app.extraEnvVars $isFrontend }}
           env:
             {{- if .app.env }}
 {{ toYaml .app.env | nindent 12 }}
             {{- end }}
             {{- if .app.extraEnvVars }}
 {{ toYaml .app.extraEnvVars | nindent 12 }}
+            {{- end }}
+            {{- if $isFrontend }}
+            - name: FRONTEND_ENABLE_APPLICATIONS
+              value: {{ ternary "true" "false" $enableApplications | quote }}
             {{- end }}
           {{- end }}
 

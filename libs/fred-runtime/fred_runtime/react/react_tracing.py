@@ -24,11 +24,12 @@ of landing beside its parent as a second root.
 `tool_span` is the one place a ReAct tool call becomes a span. Two call sites
 open one — `ReActToolBinder` for resolver-bound tools, `ToolObservabilityMiddleware`
 for everything else reaching the tool node — and both need identical parenting,
-status and end semantics. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.69.
+status and end semantics. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.81.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
@@ -80,14 +81,23 @@ async def tool_span(
     # A tool that runs a whole agent (`run_subagent`) must contain that agent's
     # spans, not sit next to them — so this span is the parent while it runs.
     token = active_agent_span.set(span)
+    # Set optimistically, before the body runs, so a caller that detects a
+    # failure the CM cannot see (a tool returning an `is_error` artifact rather
+    # than raising) can overwrite it — last write wins on every backend.
+    span.set_attribute("status", "ok")
     try:
         yield span
+    except asyncio.CancelledError:
+        # A stopped turn is not a failed one, and `CancelledError` is a
+        # BaseException — without this clause the pre-set `ok` above would
+        # survive and the trace would contradict the audit stream's
+        # `outcome="cancelled"` (OBSERVABILITY-AND-AUDIT.md §5).
+        span.set_attribute("status", "cancelled")
+        raise
     except Exception as exc:
         span.set_attribute("status", "error")
         span.set_attribute("error_type", type(exc).__name__)
         raise
-    else:
-        span.set_attribute("status", "ok")
     finally:
         # End before resetting: a token created in another context makes
         # `reset` raise, and an unended span is never exported at all.

@@ -1,0 +1,87 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ */
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+  min-height: 0;
+}
+
+.status,
+.error {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.error {
+  color: var(--error);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--spacing-m);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-l);
+  background-color: var(--surface-container-low);
+  padding: var(--spacing-m);
+  min-height: 7rem;
+  color: var(--on-surface);
+  text-decoration: none;
+}
+
+a.card:hover {
+  background-color: var(--surface-container);
+}
+
+a.card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.icon,
+.chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 1.75rem;
+}
+
+.copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.name {
+  color: inherit;
+  font: var(--font-title-medium);
+}
+
+.description {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.chevron {
+  align-self: center;
+  color: var(--on-surface-retreat);
+}

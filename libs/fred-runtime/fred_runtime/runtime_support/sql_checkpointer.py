@@ -118,6 +118,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     _FRED_MSGPACK_ALLOWLIST: tuple[tuple[str, str], ...] = (
         ("agentic_backend.core.agents.v2.contracts.context", "ToolContentKind"),
+        ("fred_sdk.contracts.context", "ToolContentKind"),
     )
 
     # Default lease duration for the 'claimed' (pre-invocation) state only

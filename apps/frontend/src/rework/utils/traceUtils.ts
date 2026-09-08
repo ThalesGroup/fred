@@ -620,29 +620,127 @@ export function totalLatencyMs(entries: TraceEntry[]): number {
   }, 0);
 }
 
-// ── Trace lanes: reasoning vs tool steps ─────────────────────────────────────
+// ── Trace rows: one chronological sequence ───────────────────────────────────
 //
-// Reasoning and tool execution are two different species and must not be
-// rendered as one flat pile of look-alike rows (#2172). The model-native
-// reasoning block is opened on the first reasoning token and closed only when
-// the first answer delta arrives (react_runtime.py), so it holds the lowest
-// rank and stays "streaming" for the whole turn — as one more row in the tool
-// list it permanently squats the top of the pile and reads like a stuck tool.
-// Splitting it out is what makes the distinction visible.
+// A turn is reasoning, then a tool, then more reasoning, then another tool. The
+// trace shows it in that order: `groupTraceEntries` already returns entries by
+// rank, which is stream arrival order, and a thought keeps the rank of its
+// `thought_start` — so the sequence below is the real chronology, not a
+// reconstruction.
+//
+// Reasoning and tool steps still render differently (a card vs a numbered row),
+// because they remain two different species (#2172) — but they are no longer
+// hoisted into two separate lanes, which put every thought above every tool and
+// reported an order that never happened.
 
 /** A tool call paired with its result (or still awaiting one). */
 export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
-/** One row of the step lane. `index` is the 1-based tool step number, null for
- *  notes and errors — they are sequenced with the tools but are not steps. */
-export type TraceStep = { entry: TraceEntry; index: number | null };
-
-export type TraceLanes = {
-  /** Reasoning entries (thought / plan / observation) — rendered as cards. */
-  reasoning: TraceEntry[];
-  /** Tool executions, plus system notes and errors, in arrival order. */
-  steps: TraceStep[];
+/** One row of the trace. `index` is the 1-based tool step number — null for
+ *  reasoning, notes and errors, which are sequenced but are not steps.
+ *  `reasoningText` is the row's display text, null on a step row. */
+export type TraceRow = {
+  entry: TraceEntry;
+  lane: "reasoning" | "step";
+  index: number | null;
+  reasoningText: string | null;
 };
+
+/**
+ * `text` with the leading run of whole sentences `previousText` already carried
+ * removed — the repeated preamble, not a prefix of it.
+ *
+ * Reasoning models restate the task from scratch at every round: two blocks of
+ * one turn commonly share hundreds of identical leading characters and differ
+ * only at the end, so consecutive rows read as the same row twice.
+ *
+ * Only COMPLETE sentences are dropped, which is what keeps this safe. Two blocks
+ * that merely open on the same few words ("The user asked ") share no whole
+ * sentence, so nothing is removed and no line is ever cut mid-thought. Compared
+ * against the previous block's FULL text, not its trimmed display text, so the
+ * rows still tile the whole reasoning between them with nothing lost.
+ *
+ * Errs towards keeping text: a missed boundary repeats a preamble, a wrong one
+ * opens a row mid-sentence — which is the failure this whole function exists to
+ * avoid. See {@link isSentenceEnd}.
+ */
+export function stripRepeatedPreamble(text: string, previousText: string | null): string {
+  if (!previousText) return text;
+
+  let shared = 0;
+  while (shared < text.length && shared < previousText.length && text[shared] === previousText[shared]) shared++;
+
+  let cut = 0;
+  for (let i = 0; i < shared; i++) if (isSentenceEnd(text, i)) cut = i + 1;
+  // A block wholly contained in its predecessor keeps its text: an empty row
+  // would read as a rendering bug, and dropping it would lose the block itself.
+  if (cut === 0 || cut >= text.length) return text;
+
+  return text.slice(cut).trimStart();
+}
+
+/**
+ * Abbreviations that end in `.` and are commonly followed by a capitalised word,
+ * where {@link isSentenceEnd}'s other rules would not catch them. Lowercase,
+ * internal dots kept ("e.g"), trailing dot dropped.
+ *
+ * Short on purpose: an abbreviation followed by a lowercase word or a digit
+ * ("e.g. the audit log", "Fig. 2") is already rejected without being listed, so
+ * only the ones that read like the start of a sentence need naming.
+ */
+const SENTENCE_ABBREVIATIONS = new Set([
+  "cf",
+  "e.g",
+  "eg",
+  "i.e",
+  "ie",
+  "vs",
+  "fig",
+  "no",
+  "dr",
+  "mr",
+  "mrs",
+  "ms",
+  "st",
+  "al",
+  "m",
+  "mme",
+]);
+
+/**
+ * Whether `text[i]` ends a sentence.
+ *
+ * A `.` alone is not enough. Reasoning text is full of "e.g. ", "cf. ", "Fig. 2",
+ * "No. 3" and numbered lists ("1. Read the file"), and cutting on one of those
+ * opens a row mid-sentence — the mangled line this module exists to avoid. Three
+ * rules, each covering a shape the others miss:
+ *
+ * - a new sentence begins on a capital, which rejects "e.g. the audit log";
+ * - a list marker is all digits, which rejects "1. Read the file";
+ * - the rest are named in {@link SENTENCE_ABBREVIATIONS}.
+ *
+ * Deliberately asymmetric: a missed boundary only repeats a preamble, a wrong
+ * one mutilates a line.
+ */
+function isSentenceEnd(text: string, i: number): boolean {
+  const ch = text[i];
+  if (ch !== "." && ch !== "!" && ch !== "?") return false;
+  // Must be followed by whitespace or the end of the text.
+  if (i + 1 >= text.length) return true;
+  if (!/\s/.test(text[i + 1])) return false;
+
+  // What follows has to look like a new sentence: a capital letter, or nothing.
+  let j = i + 1;
+  while (j < text.length && /\s/.test(text[j])) j++;
+  if (j < text.length && !/\p{Lu}/u.test(text[j])) return false;
+  if (ch !== ".") return true;
+
+  let start = i;
+  while (start > 0 && /[\p{L}\p{N}.]/u.test(text[start - 1])) start--;
+  const word = text.slice(start, i).toLowerCase();
+  if (/^\d+$/.test(word)) return false;
+  return !SENTENCE_ABBREVIATIONS.has(word);
+}
 
 function isStepEntry(entry: TraceEntry): boolean {
   // Orphan tool_results (call never seen) land here too: they are tool activity.
@@ -655,24 +753,48 @@ function isReasoningEntry(entry: TraceEntry): boolean {
   return channel === "thought" || channel === "plan" || channel === "observation";
 }
 
-/** Splits a flat trace into its reasoning lane and its numbered step lane. */
-export function splitTraceEntries(entries: TraceEntry[]): TraceLanes {
-  const reasoning: TraceEntry[] = [];
-  const steps: TraceStep[] = [];
+// Flattened preview text, keyed on the message object itself.
+//
+// `toThreadMessages` rebuilds every exchange's `traceMessages` array on each SSE
+// frame, so this fold re-runs for every OPEN trace in the conversation on every
+// token — and a turn that streamed in this session stays open. The message
+// objects inside those arrays are the same ones, though: only the block still
+// streaming is rebuilt, and it is the only one that misses.
+const previewTextCache = new WeakMap<ChatMessage, string>();
+
+function previewTextForEntry(entry: TraceEntry): string {
+  if (entry.kind !== "solo") return "";
+  const cached = previewTextCache.get(entry.message);
+  if (cached !== undefined) return cached;
+  const text = plainPreviewText(detailTextForEntry(entry));
+  previewTextCache.set(entry.message, text);
+  return text;
+}
+
+/** The trace as one chronological list, each row tagged with how it renders. */
+export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
+  // Each reasoning row is trimmed against the previous one's FULL text — see
+  // stripRepeatedPreamble. Only this function sees the sequence, so it is the
+  // only place that can do it.
+  let previousReasoning: string | null = null;
 
-  for (const entry of entries) {
+  return entries.map((entry) => {
     if (isReasoningEntry(entry)) {
-      reasoning.push(entry);
-    } else if (isStepEntry(entry)) {
-      steps.push({ entry, index: ++toolIndex });
-    } else {
-      // system_note / error — sequenced with the steps, but unnumbered.
-      steps.push({ entry, index: null });
+      const text = previewTextForEntry(entry);
+      const row = {
+        entry,
+        lane: "reasoning" as const,
+        index: null,
+        reasoningText: stripRepeatedPreamble(text, previousReasoning),
+      };
+      previousReasoning = text;
+      return row;
     }
-  }
-
-  return { reasoning, steps };
+    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null };
+    // system_note / error — sequenced with the steps, but unnumbered.
+    return { entry, lane: "step" as const, index: null, reasoningText: null };
+  });
 }
 
 // Tool slugs whose result volume IS a row count. A completed call to one of
@@ -720,25 +842,31 @@ export type TraceSummary = {
  * Structured summary for the trace header. Returns data, not a string, so the
  * component formats it through i18n.
  *
- * `reasoningMs` is the MAX of the reasoning blocks' durations, not their sum:
- * the model-native block brackets the tool calls (and any nested reasoning), so
- * summing would count the same wall-clock twice. The former
- * `thoughtSummaryLabel()` had the opposite flaw — it advertised "Thought for
- * 856ms" while summing tool latencies only, next to a 16.4s reasoning row.
+ * `reasoningMs` is the SUM of the reasoning blocks' durations. It used to be
+ * their MAX, because one model-native block spanned the whole turn and bracketed
+ * the tool calls, so summing double-counted the same wall-clock. The runtime now
+ * closes that block at every tool round, making the blocks disjoint — a max
+ * would report only the longest stretch and hide the rest of the thinking.
+ * Authored blocks are disjoint too, since `context.thinking()` is entered and
+ * left in sequence; nesting two would inflate this figure, and there is no way
+ * to tell from a `duration_ms` alone, so it is left as a known limit of the
+ * header rather than guessed at.
  *
  * `pendingToolCallIds` — see {@link statusForEntry}.
  */
 export function traceSummary(entries: TraceEntry[], pendingToolCallIds?: readonly string[] | null): TraceSummary {
-  const { reasoning, steps } = splitTraceEntries(entries);
-
+  // Classifies entries directly rather than going through `traceRows`: the
+  // header needs lanes and durations, never display text, and this runs on
+  // every streamed delta — flattening markdown and diffing preambles here
+  // would put that cost on the per-token path for nothing.
   let reasoningMs: number | null = null;
-  for (const entry of reasoning) {
-    if (entry.kind !== "solo") continue;
+  for (const entry of entries) {
+    if (!isReasoningEntry(entry) || entry.kind !== "solo") continue;
     const duration = thoughtExtras(entry.message).duration_ms;
-    if (duration != null && (reasoningMs === null || duration > reasoningMs)) reasoningMs = duration;
+    if (duration != null) reasoningMs = (reasoningMs ?? 0) + duration;
   }
 
-  const toolCount = steps.filter((s) => s.entry.kind === "combo").length;
+  const toolCount = entries.filter((e) => e.kind === "combo").length;
   const statuses = entries.map((e) => statusForEntry(e, pendingToolCallIds));
   const running = statuses.some((s) => s === "streaming" || s === "pending" || s === "awaiting_confirmation");
   const awaitingConfirmation = statuses.some((s) => s === "awaiting_confirmation");

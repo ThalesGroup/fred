@@ -840,6 +840,23 @@ async def test_public_team_read_access(
         consistency_token=token,
     ), "Stranger should not be able to update public team's document"
 
+    # Test stranger CANNOT enter the public team's filesystem box. `public`
+    # exists so the marketplace can list every team, so `can_read` passes here
+    # for a non-member; `can_access_files` must not.
+    assert await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_READ,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should still discover a public team (marketplace visibility)"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_ACCESS_FILES,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should not reach a public team's filesystem"
+
     # ~~~~~~~~~~~~~~~~~~~~
     # Public team cannot be modified by strangers
 
@@ -904,6 +921,12 @@ async def test_public_team_read_access(
         public_team,
         consistency_token=token,
     ), "Team admin should use team agents as a super team_member"
+    assert await rebac_engine.has_permission(
+        team_admin,
+        TeamPermission.CAN_ACCESS_FILES,
+        public_team,
+        consistency_token=token,
+    ), "Team admin should reach the team filesystem as a super team_member"
 
 
 @pytest.mark.integration

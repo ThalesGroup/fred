@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.features.corpus_tree.structure import DocumentTreeRequest, DocumentTreeResponse
-from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, render_tree
+from knowledge_flow_backend.features.corpus_tree.tree_builder import build_tree, prune_empty_folders, render_tree
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
@@ -82,17 +82,38 @@ class CorpusTreeService:
             team_id=request.team_id,
         )
 
+        scoped = tags
         if request.tag_ids:
             allowed_ids = set(request.tag_ids)
             allowed_paths = {t.full_path for t in tags if t.id in allowed_ids}
-            tags = [t for t in tags if t.id in allowed_ids or any(t.full_path == p or t.full_path.startswith(p + "/") for p in allowed_paths)]
+            scoped = [t for t in tags if t.id in allowed_ids or any(t.full_path == p or t.full_path.startswith(p + "/") for p in allowed_paths)]
 
-        folders: List[Tuple[str, List[str], str]] = [(t.full_path, t.item_ids, t.id) for t in tags]
+        # A library scope and a document scope UNION, they do not intersect -- the
+        # same semantics vector search applies (`vector_search_service`: library
+        # hits and document hits are merged). Ticking a library and one document
+        # elsewhere means "that library, plus that document", never "the document
+        # only if it happens to sit in that library".
+        selected_uids = set(request.document_uids or ())
+        in_scope_uids: Optional[set] = None
+        if selected_uids:
+            scoped_ids = {t.id for t in scoped}
+            in_scope_uids = selected_uids
+            if request.tag_ids:
+                in_scope_uids = in_scope_uids | {uid for t in scoped for uid in t.item_ids}
+            scoped = [t for t in tags if t.id in scoped_ids or (selected_uids & set(t.item_ids))]
+
+        folders: List[Tuple[str, List[str], str]] = [(t.full_path, t.item_ids, t.id) for t in scoped]
 
         all_uids = sorted({uid for _, item_ids, _ in folders for uid in item_ids})
+        if in_scope_uids is not None:
+            # Narrowing the resolved leaves narrows the tree on its own:
+            # `build_tree` skips any uid it cannot resolve to a name.
+            all_uids = [uid for uid in all_uids if uid in in_scope_uids]
         leaves_by_uid = await self._resolve_leaves(user, all_uids)
 
         root = build_tree(folders=folders, leaves_by_uid=leaves_by_uid)
+        if in_scope_uids is not None:
+            prune_empty_folders(root)
         text, truncated = render_tree(root, max_chars=request.max_chars)
         return DocumentTreeResponse(tree=text, truncated=truncated)
 

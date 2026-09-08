@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import pytest
 from langchain_community.embeddings import FakeEmbeddings
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
+
+
+class _BrokenStore:
+    """Stands in for `self.vectorstore.store` to simulate a genuine backend
+    failure (a real store's client raising, e.g. a connection drop) rather
+    than the store legitimately holding zero matching chunks."""
+
+    def items(self):
+        raise RuntimeError("simulated backend outage")
 
 
 def _make_store() -> InMemoryLangchainVectorStore:
@@ -54,3 +64,27 @@ def test_add_documents_distinct_chunk_uids_are_both_kept():
     chunks = store.get_chunks_for_document("doc-1")
     assert len(chunks) == 2
     assert {c["chunk_uid"] for c in chunks} == {"doc-1::chunk::0", "doc-1::chunk::1"}
+
+
+def test_get_chunks_for_document_raises_on_a_genuine_backend_failure():
+    """A caught-and-swallowed failure here was indistinguishable from "no
+    chunks found", which the fast-ingest delete authorizer treats as an
+    idempotent-retry-safe empty result -- a lookup failure must propagate
+    instead of silently authorizing a delete."""
+    store = _make_store()
+    store.vectorstore.store = _BrokenStore()
+
+    with pytest.raises(RuntimeError):
+        store.get_chunks_for_document("doc-1")
+
+
+def test_delete_vectors_for_document_raises_on_a_genuine_backend_failure():
+    """A caught-and-swallowed failure here let `_delete_fast_vectors`
+    report success while the vectors were never actually removed --
+    control-plane would then treat the erasure as done. Must raise
+    instead."""
+    store = _make_store()
+    store.vectorstore.store = _BrokenStore()
+
+    with pytest.raises(RuntimeError):
+        store.delete_vectors_for_document(document_uid="doc-1")

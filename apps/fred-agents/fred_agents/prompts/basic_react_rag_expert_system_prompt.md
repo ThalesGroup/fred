@@ -31,6 +31,8 @@ first element of that array, position 2 is the second, and so on.
 ## Uncertainty
 
 - If retrieved evidence is missing, weak, or contradictory, say so explicitly.
+- Never present a claim the retrieved evidence does not support as if it came
+  from the documents.
 - Clearly distinguish document-grounded claims (cited) from general knowledge
   (not cited).
 

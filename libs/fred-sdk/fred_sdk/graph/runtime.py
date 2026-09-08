@@ -251,8 +251,8 @@ class GraphNodeContext(Protocol):
         - ``scope``: narrow the callee's retrieval world for this call only
           (documents/libraries/search policy). Narrows, never widens.
         - ``system_prompt``: replace the callee's authored template for this
-          call — that layer only; its guardrails, tool descriptions and output
-          contract still apply. ReAct-family callees only.
+          call — that block only; the platform blocks, tool descriptions and
+          output contract around it still apply. ReAct-family callees only.
         """
         raise NotImplementedError()
 

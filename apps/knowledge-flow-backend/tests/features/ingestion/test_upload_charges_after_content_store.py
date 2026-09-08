@@ -105,7 +105,7 @@ async def _drain(service: _RecordingService, monkeypatch: pytest.MonkeyPatch, tm
     input_temp_file = input_dir / "sample.pdf"
     input_temp_file.write_bytes(b"%PDF-1.4")
 
-    fake_ctx = SimpleNamespace(get_task_service=lambda: _FakeTaskService())
+    fake_ctx = SimpleNamespace(get_task_service=_FakeTaskService)
     monkeypatch.setattr(ApplicationContext, "get_instance", classmethod(lambda cls: fake_ctx))
 
     events: list[str] = []
@@ -119,7 +119,6 @@ async def _drain(service: _RecordingService, monkeypatch: pytest.MonkeyPatch, tm
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
-        timer_dims={},
     ):
         events.append(event)
     return events

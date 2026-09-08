@@ -31,7 +31,6 @@ Example:
 from fred_sdk import (
     TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
-    GuardrailDefinition,
     ToolRefRequirement,
     UIHints,
     load_agent_prompt_markdown,
@@ -61,8 +60,8 @@ class RagExpertReActDefinition(ReActAgentDefinition):
     Key design choices:
     - `declared_tool_refs` declares `knowledge.search` — the Fred built-in
       retrieval tool — so the runtime can bind it at execution time
-    - guardrails are kept inside `policy()`, not on the class, because they are
-      operating constraints that the runtime enforces, not authoring metadata
+    - grounding and uncertainty rules live in the prompt Markdown, where an
+      operator can read and override them
     - no MCP servers are declared: RAG grounding is a Fred first-class concern
 
     How to use it:
@@ -117,8 +116,6 @@ class RagExpertReActDefinition(ReActAgentDefinition):
 
         Why this function exists:
         - `ReActRuntime` drives standalone pod agents through a pure `ReActPolicy`
-        - guardrails are declared here because they are runtime operating
-          constraints, not agent authoring metadata
 
         How to use it:
         - call indirectly through `ReActRuntime`; authors set class fields and
@@ -132,24 +129,6 @@ class RagExpertReActDefinition(ReActAgentDefinition):
             system_prompt_template=self.system_prompt_template,
             # REASON-01 §9 precondition 1 — see fred_agents.tool_pacing.
             tool_selection=REASONING_SAFE_TOOL_SELECTION,
-            guardrails=(
-                GuardrailDefinition(
-                    guardrail_id="grounding",
-                    title="Ground claims in corpus evidence",
-                    description=(
-                        "Do not present unsupported claims as if they came from "
-                        "the retrieved corpus."
-                    ),
-                ),
-                GuardrailDefinition(
-                    guardrail_id="uncertainty",
-                    title="State uncertainty explicitly",
-                    description=(
-                        "When retrieval is missing or inconclusive, say so clearly "
-                        "instead of over-claiming."
-                    ),
-                ),
-            ),
         )
 
 

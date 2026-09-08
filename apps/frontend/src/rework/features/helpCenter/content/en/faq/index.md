@@ -19,9 +19,9 @@ See [Key concepts](/help/en/getting-started/concepts).
 
 ## What's the difference between a template and an agent?
 
-A **template** is a blueprint provided by the platform; the **agent** (or
-instance) is the concrete version your team creates and configures from that
-template. See [Agents](/help/en/features/agents).
+A **template** is a blueprint provided by the platform; the **agent** is the
+concrete version your team creates and configures from that template. See
+[Agents](/help/en/features/agents).
 
 ## Why doesn't my agent use my documents?
 

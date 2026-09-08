@@ -18,3 +18,8 @@ src/rework/features/capabilities/**/api/openapi.json
 # Every other backend's raw openapi.json lives outside apps/frontend, so this
 # is the only one prettier's `.` scan would otherwise reach.
 src/slices/evaluation/openapi.json
+
+# Same reason as evaluation's above: rags-services (#2307) lives in the
+# sibling fred-rags repo, so its OpenAPI spec is copied into a local snapshot
+# here for codegen — see src/slices/rags/README.md.
+src/slices/rags/openapi.json

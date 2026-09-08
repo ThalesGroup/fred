@@ -23,14 +23,13 @@ class MindmapInput(BaseModel):
 
 class DocumentPage(BaseModel):
     document_uid: str
-    path: str
     page_index: int
+    # Line bounds are derived while paging: `document_markdown` windows on
+    # characters, and the digest labels segments as `Lx-Ly`.
     start_line: int | None = None
     end_line: int | None = None
-    total_lines: int | None = None
     has_more: bool = False
     next_offset: int | None = None
-    truncated: bool = False
     content: str = ""
 
 

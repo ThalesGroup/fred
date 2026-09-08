@@ -20,6 +20,7 @@ import type {
   ContextPromptSummary,
   PromptCategorySummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import styles from "./PromptPicker.module.css";
 
 type PromptPickerProps = {
@@ -28,10 +29,6 @@ type PromptPickerProps = {
   disabled?: boolean;
   onSelect: (id: string) => void;
 };
-
-// Sentinel filter value for "prompts with no category" — distinct from `null`,
-// which means "no filter active" (the "Tous" chip). Mirrors PromptsPage.
-const NO_CATEGORY_FILTER_ID = "__no_category__";
 
 export function PromptPicker({ prompts, categories, disabled, onSelect }: PromptPickerProps) {
   const { t } = useTranslation();
@@ -56,13 +53,15 @@ export function PromptPicker({ prompts, categories, disabled, onSelect }: Prompt
     return { byId, noCategory };
   }, [prompts, categoryNameById]);
 
-  const filtered = useMemo(() => {
-    if (!activeCategory) return prompts;
-    if (activeCategory === NO_CATEGORY_FILTER_ID) {
-      return prompts.filter((p) => !p.category_id || !categoryNameById.has(p.category_id));
-    }
-    return prompts.filter((p) => p.category_id === activeCategory);
-  }, [prompts, activeCategory, categoryNameById]);
+  const filtered = useMemo(
+    () =>
+      filterPrompts(prompts, {
+        search: "",
+        categoryId: activeCategory,
+        knownCategoryIds: new Set(categoryNameById.keys()),
+      }),
+    [prompts, activeCategory, categoryNameById],
+  );
 
   return (
     <div className={styles.wrapper}>

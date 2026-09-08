@@ -18,6 +18,8 @@ from fred_core.scheduler import SchedulerBackend
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, model_validator
 
+from control_plane_backend.applications.catalog import ApplicationSourceConfig
+
 
 class AppConfig(BaseModel):
     name: str = "Control Plane Backend"
@@ -68,9 +70,21 @@ class FrontendFeatureFlags(BaseModel):
 
     enableK8Features: bool = False
     enableElecWarfare: bool = False
+    enableApplications: bool = Field(
+        default=False,
+        description=(
+            "Enable Fred's integrated Apps surface deployment-wide. When false, "
+            "application discovery, application capability administration, and "
+            "the frontend Apps experience stay disabled."
+        ),
+    )
     enableAllResourceSpaces: bool = Field(
         default=False,
         description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
+    )
+    enableInformationSystems: bool = Field(
+        default=False,
+        description="Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
     )
 
 
@@ -347,6 +361,27 @@ class PlatformConfig(BaseModel):
     runtime_catalog_sources: list[RuntimeCatalogSourceConfig] = Field(
         default_factory=list
     )
+    # Model defined next to its catalog projection in
+    # `control_plane_backend.applications.catalog`.
+    application_sources: list[ApplicationSourceConfig] = Field(
+        default_factory=list,
+        description=(
+            "Applications this deployment serves. Each entry names the "
+            "browser-facing prefix Fred frames at /apps/<app_id>/ and, "
+            "optionally, the server-side upstream behind /app-services/<app_id>/."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_unique_application_ids(self) -> "PlatformConfig":
+        app_ids = [source.app_id for source in self.application_sources]
+        duplicates = sorted({app_id for app_id in app_ids if app_ids.count(app_id) > 1})
+        if duplicates:
+            raise ValueError(
+                f"Duplicate application_sources app_id: {duplicates}. "
+                "A duplicate id silently shadows an application route."
+            )
+        return self
 
 
 class SchedulerConfig(BaseModel):
