@@ -35,7 +35,7 @@ hardcoded slide indices):
    bytes through ``services.document_content``.
 3. **Deliver** — write the filled deck to the agent workspace
    (``services.workspace_fs``), best-effort convert to PDF
-   (:func:`fred_core.convert_pptx_bytes_to_pdf`) and return either a
+   (:func:`fred_core.convert_office_bytes_to_pdf`) and return either a
    :class:`PptPreviewPart` (preview pane + download) or a plain download
    :class:`LinkPart` fallback.
 
@@ -55,7 +55,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
-from fred_core import convert_pptx_bytes_to_pdf
+from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -866,7 +866,7 @@ def build_fill_tools(
         #    upload error) degrades to the plain download chip so a preview
         #    problem never costs the user the deck.
         pdf_download_url: Optional[str] = None
-        pdf_bytes = await convert_pptx_bytes_to_pdf(filled_bytes)
+        pdf_bytes = await convert_office_bytes_to_pdf(filled_bytes, suffix=".pptx")
         if pdf_bytes is not None:
             try:
                 pdf_artifact = await workspace.write(

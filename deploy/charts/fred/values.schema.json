@@ -3382,6 +3382,13 @@
                       "default": null,
                       "description": "Maximum resources storage size in bytes for a personal space",
                       "title": "Personal Max Resources Storage Size"
+                    },
+                    "pdf_render_ttl_days": {
+                      "default": 30,
+                      "description": "Days a cached Word/PowerPoint PDF render is kept before the nightly sweep deletes it. 0 disables the sweep.",
+                      "minimum": 0,
+                      "title": "Pdf Render Ttl Days",
+                      "type": "integer"
                     }
                   },
                   "title": "AppConfig",
@@ -7955,6 +7962,13 @@
                       "default": null,
                       "description": "Maximum resources storage size in bytes for a personal space",
                       "title": "Personal Max Resources Storage Size"
+                    },
+                    "pdf_render_ttl_days": {
+                      "default": 30,
+                      "description": "Days a cached Word/PowerPoint PDF render is kept before the nightly sweep deletes it. 0 disables the sweep.",
+                      "minimum": 0,
+                      "title": "Pdf Render Ttl Days",
+                      "type": "integer"
                     }
                   },
                   "title": "AppConfig",

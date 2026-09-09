@@ -32,6 +32,7 @@ import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
+import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
@@ -125,6 +126,16 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/wiki",
+        element: <TeamWikiPage />,
+      },
+      {
+        // Same page: the slug selects which article is open, so a wiki page is
+        // deep-linkable and the browser's back button walks the pages.
+        path: "team/:teamId/wiki/:slug",
+        element: <TeamWikiPage />,
       },
       {
         path: "team/:teamId/apps",

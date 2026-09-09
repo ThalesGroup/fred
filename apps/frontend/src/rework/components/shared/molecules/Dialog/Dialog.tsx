@@ -19,6 +19,20 @@ import { ColorTheme } from "@shared/utils/Type";
 import { Portal } from "@shared/utils/Portal";
 import styles from "./Dialog.module.css";
 
+// `<input>` types with no "Enter submits" convention — a checkbox or file
+// picker inside a dialog body should not implicitly confirm it.
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
 interface DialogProps {
   open: boolean;
   /** Heading shown at the top of the dialog. */
@@ -75,11 +89,37 @@ export function Dialog({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") {
+        onCancel();
+        return;
+      }
+      // Enter confirms — a dialog whose body is one field should not need a
+      // trip to the mouse. Never while composing an IME candidate, never past
+      // a disabled confirm button (which would submit exactly what the caller
+      // judged invalid), and never over a key some descendant already acted
+      // on (`preventDefault` with no `stopPropagation`, e.g. a field that
+      // commits its own Enter) — that would run the same action twice.
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || confirmDisabled || e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      // Enter already has a meaning here: a focused BUTTON/A fires its own
+      // click natively, a native SELECT opens its own dropdown, and a
+      // role="button"/"link" control is expected to run its own handler.
+      // Forcing onConfirm on top would run both — or, focused on Cancel, run
+      // the wrong one instead of the native click's onCancel.
+      if (tag === "BUTTON" || tag === "A" || tag === "SELECT") return;
+      const role = target?.getAttribute("role");
+      if (role === "button" || role === "link") return;
+      if (tag === "TEXTAREA" || target?.isContentEditable) return;
+      // Implicit submission is for a single-line text field, not any input —
+      // Enter has no such convention on a checkbox, radio, or file picker.
+      if (tag === "INPUT" && NON_TEXT_INPUT_TYPES.has((target as HTMLInputElement).type)) return;
+      e.preventDefault();
+      onConfirm();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+  }, [open, onCancel, onConfirm, confirmDisabled]);
 
   if (!open) return null;
 

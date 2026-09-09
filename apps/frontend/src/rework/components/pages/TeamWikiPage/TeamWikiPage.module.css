@@ -1,0 +1,140 @@
+/* The wiki is one card floating in the content area: an inset on every side
+   separates it from the app frame and the navigation panel, so the three
+   columns inside read as one object rather than as page furniture.
+   `box-sizing: border-box` is what keeps the inset from pushing the card past
+   the bottom of the shell.
+   Height is 100%, never a viewport unit — the app shell owns the viewport
+   (FRONTEND_CODING_GUIDELINES §2.5). */
+.frame {
+  --wiki-inset: 16px;
+
+  box-sizing: border-box;
+  padding: var(--wiki-inset);
+  width: 100%;
+  height: 100%;
+}
+
+/* Two columns — the tree and the page — with the history panel laid over the
+   page's right edge when it is open. */
+.page {
+  display: flex;
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid var(--outline-muted);
+  border-radius: 16px;
+  background: var(--surface-container);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  /* Clips the rail's and history panel's own edges to the card's corners —
+     without it a scrolled column paints over the rounding. */
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.railColumn {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The same grip idiom as the chat's resizable panels: a slim col-resize strip
+   straddling the rail's edge, with a bar that lights up while hovered or
+   dragged. Centred on the divider, so the target is the line the user sees. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: calc(var(--spacing-s) / -2);
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color var(--duration-short-3),
+    height var(--duration-short-3);
+  border-radius: var(--radius-s);
+  background: transparent;
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.railColumn[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+  height: 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resizeHandle::before {
+    transition: none;
+  }
+}
+
+/* A fixed 48px, not a min-height: the "New page" button is hidden for a member
+   and while a draft is open, and a header that changed height as it came and
+   went would shift the whole tree under it. Vertical centring replaces the
+   vertical padding — the button is 32px and would not fit inside it. */
+.railHeader {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-right: 1px solid var(--outline-muted);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-m);
+  width: 100%;
+  height: 48px;
+}
+
+.railTitleGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.railTitle {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+/* `.tooltip-content-rich` zeroes the atom's own padding and hands spacing to
+ * the content, so this panel owns both. Width is capped because this is a
+ * prose sentence, not the short label/value rows the atom's nowrap default
+ * was sized for. */
+.betaTooltip {
+  display: block;
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 22rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.state {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-l);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+/* Two fields in a dialog are one group, and the Dialog molecule hands its body
+   no spacing of its own. */
+.formFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}

@@ -720,6 +720,146 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/model-bindings`, method: "DELETE" }),
     }),
+    wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet: build.query<
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse,
+      WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/availability` }),
+    }),
+    listPagesControlPlaneV1TeamsTeamIdWikiPagesGet: build.query<
+      ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse,
+      ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages` }),
+    }),
+    createPageControlPlaneV1TeamsTeamIdWikiPagesPost: build.mutation<
+      CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiResponse,
+      CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages`,
+        method: "POST",
+        body: queryArg.createWikiPageRequest,
+      }),
+    }),
+    readRulesControlPlaneV1TeamsTeamIdWikiRulesGet: build.query<
+      ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiResponse,
+      ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/rules` }),
+    }),
+    writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: build.mutation<
+      WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiResponse,
+      WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/rules`,
+        method: "PUT",
+        body: queryArg.updateWikiRulesRequest,
+      }),
+    }),
+    readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet: build.query<
+      ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiResponse,
+      ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.slug}` }),
+    }),
+    writePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPut: build.mutation<
+      WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiResponse,
+      WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/content`,
+        method: "PUT",
+        body: queryArg.updateWikiPageContentRequest,
+      }),
+    }),
+    patchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatch: build.mutation<
+      PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiResponse,
+      PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}`,
+        method: "PATCH",
+        body: queryArg.updateWikiPageMetadataRequest,
+      }),
+    }),
+    deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete: build.mutation<
+      DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiResponse,
+      DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}`,
+        method: "DELETE",
+      }),
+    }),
+    setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost: build.mutation<
+      SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiResponse,
+      SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/review`,
+        method: "POST",
+        body: queryArg.setNeedsReviewRequest,
+      }),
+    }),
+    listRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGet: build.query<
+      ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiResponse,
+      ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/revisions`,
+        params: {
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: build.mutation<
+      RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiResponse,
+      RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/pages/${queryArg.pageId}/revisions/${queryArg.revisionId}/restore`,
+        method: "POST",
+      }),
+    }),
+    proposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePost: build.mutation<
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse,
+      ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/page`,
+        method: "POST",
+        body: queryArg.proposePageRequest,
+      }),
+    }),
+    proposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPost: build.mutation<
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse,
+      ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/edit`,
+        method: "POST",
+        body: queryArg.proposeEditRequest,
+      }),
+    }),
+    readProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGet: build.query<
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse,
+      ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}`,
+      }),
+    }),
+    publishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPost: build.mutation<
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse,
+      PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        method: "POST",
+      }),
+    }),
     getPlatformPromptControlPlaneV1AdminPlatformPromptGet: build.query<
       GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse,
       GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg
@@ -1676,6 +1816,104 @@ export type PutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutAp
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiResponse =
   /** status 200 Successful Response */ PlatformModelBinding;
 export type DeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteApiArg = void;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiResponse =
+  /** status 200 Successful Response */ WikiAvailability;
+export type WikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetApiArg = {
+  teamId: string;
+};
+export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiResponse =
+  /** status 200 Successful Response */ WikiPageTree;
+export type ListPagesControlPlaneV1TeamsTeamIdWikiPagesGetApiArg = {
+  teamId: string;
+};
+export type CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiResponse =
+  /** status 201 Successful Response */ WikiPageDetail;
+export type CreatePageControlPlaneV1TeamsTeamIdWikiPagesPostApiArg = {
+  teamId: string;
+  createWikiPageRequest: CreateWikiPageRequest;
+};
+export type ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type ReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetApiArg = {
+  teamId: string;
+};
+export type WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type WriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutApiArg = {
+  teamId: string;
+  updateWikiRulesRequest: UpdateWikiRulesRequest;
+};
+export type ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type ReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetApiArg = {
+  teamId: string;
+  slug: string;
+};
+export type WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type WritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutApiArg = {
+  teamId: string;
+  pageId: string;
+  updateWikiPageContentRequest: UpdateWikiPageContentRequest;
+};
+export type PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiResponse =
+  /** status 200 Successful Response */ WikiPageSummary;
+export type PatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchApiArg = {
+  teamId: string;
+  pageId: string;
+  updateWikiPageMetadataRequest: UpdateWikiPageMetadataRequest;
+};
+export type DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiResponse = unknown;
+export type DeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteApiArg = {
+  teamId: string;
+  pageId: string;
+};
+export type SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiResponse =
+  /** status 200 Successful Response */ WikiPageSummary;
+export type SetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostApiArg = {
+  teamId: string;
+  pageId: string;
+  setNeedsReviewRequest: SetNeedsReviewRequest;
+};
+export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiResponse =
+  /** status 200 Successful Response */ WikiRevisionList;
+export type ListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetApiArg = {
+  teamId: string;
+  pageId: string;
+  /** From a previous response's `next_cursor`, to fetch older revisions. */
+  cursor?: string | null;
+};
+export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type RestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostApiArg = {
+  teamId: string;
+  pageId: string;
+  revisionId: string;
+};
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostApiArg = {
+  teamId: string;
+  proposePageRequest: ProposePageRequest;
+};
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiResponse =
+  /** status 201 Successful Response */ WikiProposal;
+export type ProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostApiArg = {
+  teamId: string;
+  proposeEditRequest: ProposeEditRequest;
+};
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiResponse =
+  /** status 200 Successful Response */ WikiProposal;
+export type ReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetApiArg = {
+  teamId: string;
+  proposalId: string;
+};
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiResponse =
+  /** status 200 Successful Response */ WikiPageDetail;
+export type PublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostApiArg = {
+  teamId: string;
+  proposalId: string;
+};
 export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPrompt;
 export type GetPlatformPromptControlPlaneV1AdminPlatformPromptGetApiArg = void;
@@ -2106,10 +2344,16 @@ export type PolicyResolutionRequest = {
   trigger?: LifecycleTrigger;
 };
 export type SchedulerBackend = "temporal" | "memory";
+export type WikiProposalLifecycleResult = {
+  scanned?: number;
+  rejected?: number;
+  dry_run_actions?: number;
+};
 export type LifecycleManagerResult = {
   scanned?: number;
   deleted?: number;
   dry_run_actions?: number;
+  wiki_proposals?: WikiProposalLifecycleResult;
 };
 export type WorkflowStartResponse = {
   status?: "queued" | "completed";
@@ -3133,6 +3377,111 @@ export type PlatformModelBinding = {
 export type SetPlatformModelBindingRequest = {
   binding: ModelBinding;
 };
+export type WikiAvailability = {
+  enabled: boolean;
+};
+export type WikiPageSummary = {
+  page_id: string;
+  slug: string;
+  title: string;
+  /** "page", or "rules" for the reserved rules page. */
+  kind: string;
+  parent_page_id?: string | null;
+  position?: number;
+  /** An agent wrote the current revision and no editor has cleared the mark yet. This is the editors' review queue. */
+  needs_review?: boolean;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type WikiPageTree = {
+  pages?: WikiPageSummary[];
+};
+export type WikiPageDetail = {
+  page: WikiPageSummary;
+  content_md?: string;
+  revision_id?: string | null;
+  author_kind?: string;
+};
+export type CreateWikiPageRequest = {
+  title: string;
+  content_md?: string;
+  parent_page_id?: string | null;
+  position?: number;
+};
+export type WikiConflictResponse = {
+  detail: string;
+  current_revision_id: string;
+  current_content_md: string;
+};
+export type UpdateWikiRulesRequest = {
+  content_md: string;
+  base_revision_id?: string | null;
+};
+export type UpdateWikiPageContentRequest = {
+  content_md: string;
+  /** The revision the author started from — read it from the page first. The write is refused with 409 if the page has moved on since, so the last writer cannot silently erase the one before. Omitting it on a page that already has a revision is refused the same way: there is no unconditional overwrite. */
+  base_revision_id?: string | null;
+};
+export type UpdateWikiPageMetadataRequest = {
+  title?: string | null;
+  parent_page_id?: string | null;
+  move_to_root?: boolean;
+  position?: number | null;
+};
+export type SetNeedsReviewRequest = {
+  needs_review: boolean;
+  /** The revision displayed when this decision was made — read it from the page first. Refused with 409 if the page has moved on since, so a validation can never certify text the reviewer did not actually see. */
+  base_revision_id: string;
+};
+export type WikiRevisionSummary = {
+  revision_id: string;
+  status: string;
+  author_user_id: string;
+  /** "human" or "agent". */
+  author_kind: string;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+  created_at?: string | null;
+  /** When an editor cleared the review mark while this revision was published. The history shows it as its own entry: the person who validates an agent's text is not always the one it was written for. */
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+};
+export type WikiRevisionList = {
+  revisions?: WikiRevisionSummary[];
+  /** Revision id to its Markdown, so the history view can diff without one request per revision. Pages are capped at 100000 characters, which bounds this. */
+  contents?: {
+    [key: string]: string;
+  };
+  /** Opaque; pass back as `cursor` to fetch the next, older page. Null when `revisions` already reaches the oldest one. Not a frozen snapshot: a proposal keeps its original `created_at` when later approved, so approving one whose timestamp falls in a page already fetched will not surface it by continuing — reopen history from the top (omit `cursor`) to see it. */
+  next_cursor?: string | null;
+};
+export type WikiProposal = {
+  proposal_id: string;
+  kind: "page" | "edit";
+  title: string;
+  slug?: string | null;
+  parent_slug?: string | null;
+  content_md: string;
+  current_content_md?: string;
+  created_at?: string | null;
+  author_user_id?: string;
+  agent_instance_id?: string | null;
+};
+export type ProposePageRequest = {
+  title: string;
+  content_md: string;
+  parent_slug?: string | null;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
+export type ProposeEditRequest = {
+  slug: string;
+  content_md: string;
+  /** The revision_id a prior read of this page returned. Refused with 409 when it no longer matches the page's current revision — read the page again and redo the edit against the current text. There is no unconditional proposal: a stale or fabricated base is refused rather than silently rebased onto whatever is current. */
+  base_revision_id: string;
+  agent_instance_id?: string | null;
+  session_id?: string | null;
+};
 export type PlatformPrompt = {
   /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
   text: string;
@@ -3617,6 +3966,28 @@ export const {
   useLazyGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation,
+  useWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
+  useLazyWikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGetQuery,
+  useListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
+  useLazyListPagesControlPlaneV1TeamsTeamIdWikiPagesGetQuery,
+  useCreatePageControlPlaneV1TeamsTeamIdWikiPagesPostMutation,
+  useReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery,
+  useLazyReadRulesControlPlaneV1TeamsTeamIdWikiRulesGetQuery,
+  useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation,
+  useReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery,
+  useLazyReadPageControlPlaneV1TeamsTeamIdWikiPagesSlugGetQuery,
+  useWritePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPutMutation,
+  usePatchPageControlPlaneV1TeamsTeamIdWikiPagesPageIdPatchMutation,
+  useDeletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDeleteMutation,
+  useSetReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPostMutation,
+  useListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
+  useLazyListRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGetQuery,
+  useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation,
+  useProposePageControlPlaneV1TeamsTeamIdWikiProposalsPagePostMutation,
+  useProposeEditControlPlaneV1TeamsTeamIdWikiProposalsEditPostMutation,
+  useReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  useLazyReadProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdGetQuery,
+  usePublishProposalControlPlaneV1TeamsTeamIdWikiProposalsProposalIdPublishPostMutation,
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
   useLazyGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Offline tests for the shared PPTX→PDF conversion helper.
+"""Offline tests for the shared Office→PDF conversion helper.
 
 These do not invoke the real ``soffice`` binary: they stub ``shutil.which`` and
 ``subprocess.run`` so the timeout / missing-binary / success behaviours are asserted
@@ -27,9 +27,9 @@ import subprocess  # nosec B404: only used to construct result/exception stubs i
 from pathlib import Path
 
 import pytest
-from fred_core.conversion import convert_pptx_bytes_to_pdf, convert_pptx_file_to_pdf
+from fred_core.conversion import convert_office_bytes_to_pdf, convert_office_file_to_pdf
 
-_MODULE = "fred_core.conversion.pptx_pdf"
+_MODULE = "fred_core.conversion.office_pdf"
 
 
 @pytest.mark.asyncio
@@ -45,54 +45,99 @@ async def test_convert_bytes_returns_pdf_on_success(monkeypatch) -> None:
 
     monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
 
-    pdf = await convert_pptx_bytes_to_pdf(b"fake pptx bytes")
+    pdf = await convert_office_bytes_to_pdf(b"fake pptx bytes", suffix=".pptx")
 
     assert pdf is not None
     assert pdf.startswith(b"%PDF")
 
 
-def test_export_filter_targets_impress(monkeypatch, tmp_path) -> None:
-    """A .pptx sent through Writer's PDF filter makes LibreOffice exit 0 and write
-    nothing, so the helper degrades to "conversion unavailable" with no error to log.
-    Pin the filter here: without a real soffice, nothing else catches that."""
+@pytest.mark.asyncio
+async def test_convert_bytes_hands_the_source_suffix_to_libreoffice(
+    monkeypatch,
+) -> None:
+    """LibreOffice picks its import filter from the source extension, so a Word
+    document has to reach ``soffice`` as ``.docx``, not as some fixed deck suffix."""
     monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
-    captured: list[str] = []
+    seen_suffixes: list[str] = []
 
-    def capturing_run(cmd, **kwargs):
-        captured.extend(cmd)
-        Path(cmd[cmd.index("--outdir") + 1], "deck.pdf").write_bytes(b"%PDF-1.5")
+    def fake_run(cmd, **kwargs):
+        src = Path(cmd[-1])
+        seen_suffixes.append(src.suffix)
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", capturing_run)
-    src = tmp_path / "deck.pptx"
+    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+
+    pdf = await convert_office_bytes_to_pdf(b"fake docx bytes", suffix=".docx")
+
+    assert pdf is not None
+    assert seen_suffixes == [".docx"]
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected_filter"),
+    [
+        (".pptx", "pdf:impress_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".ppt", "pdf:impress_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".docx", "pdf:writer_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".odt", "pdf:writer_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".PPTX", "pdf:impress_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".xlsx", "pdf:calc_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1"),
+        (".rtf", "pdf"),
+    ],
+)
+def test_export_filter_follows_the_source_application(
+    monkeypatch, tmp_path, suffix, expected_filter
+) -> None:
+    """Writer's PDF filter on an Impress deck is a build-dependent coin-flip: some
+    LibreOffice builds fall back to the right application, others exit 0 and write
+    nothing. A format the map does not know is left to soffice's own choice."""
+    monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
+    filters: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        filters.append(cmd[cmd.index("--convert-to") + 1])
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        src = Path(cmd[-1])
+        (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
+    src = tmp_path / f"source{suffix}"
     src.write_bytes(b"fake")
 
-    assert convert_pptx_file_to_pdf(src) is not None
-
-    export_filter = captured[captured.index("--convert-to") + 1]
-    assert export_filter.startswith("pdf:impress_pdf_Export:")
-    assert "writer_pdf_Export" not in export_filter
+    assert convert_office_file_to_pdf(src) is not None
+    assert filters == [expected_filter]
 
 
-def test_uses_a_private_profile_per_conversion(monkeypatch, tmp_path) -> None:
-    """Two conversions must not share a LibreOffice profile: the default one is
-    single-instance, and concurrent calls on it make soffice exit 0 writing nothing."""
+def test_each_conversion_gets_its_own_libreoffice_profile(
+    monkeypatch, tmp_path
+) -> None:
+    """`soffice` locks its user profile exclusively: two runs sharing the default one
+    make the loser exit 0 having written nothing. Conversions are request-driven, so
+    overlapping runs are normal and each needs a private profile."""
     monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
     profiles: list[str] = []
 
-    def capturing_run(cmd, **kwargs):
-        profiles.extend(a for a in cmd if a.startswith("-env:UserInstallation="))
-        Path(cmd[cmd.index("--outdir") + 1], "deck.pdf").write_bytes(b"%PDF-1.5")
+    def fake_run(cmd, **kwargs):
+        profiles.extend(arg for arg in cmd if arg.startswith("-env:UserInstallation="))
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        src = Path(cmd[-1])
+        (outdir / src.with_suffix(".pdf").name).write_bytes(b"%PDF-1.5 fake")
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
-    monkeypatch.setattr(f"{_MODULE}.subprocess.run", capturing_run)
-    src = tmp_path / "deck.pptx"
-    src.write_bytes(b"fake")
+    monkeypatch.setattr(f"{_MODULE}.subprocess.run", fake_run)
 
-    convert_pptx_file_to_pdf(src)
-    convert_pptx_file_to_pdf(src)
+    first = tmp_path / "a.docx"
+    first.write_bytes(b"fake")
+    second = tmp_path / "b.docx"
+    second.write_bytes(b"fake")
+    convert_office_file_to_pdf(first)
+    convert_office_file_to_pdf(second)
 
     assert len(profiles) == 2
+    # A bare path is silently ignored by soffice — the option takes a file URI.
     assert all(p.startswith("-env:UserInstallation=file://") for p in profiles)
     assert profiles[0] != profiles[1]
 
@@ -108,7 +153,9 @@ async def test_convert_bytes_returns_none_on_timeout(monkeypatch) -> None:
 
     monkeypatch.setattr(f"{_MODULE}.subprocess.run", hung_run)
 
-    pdf = await convert_pptx_bytes_to_pdf(b"fake pptx bytes", timeout_seconds=0.01)
+    pdf = await convert_office_bytes_to_pdf(
+        b"fake pptx bytes", suffix=".pptx", timeout_seconds=0.01
+    )
 
     assert pdf is None
 
@@ -122,7 +169,7 @@ async def test_convert_bytes_returns_none_when_soffice_missing(monkeypatch) -> N
 
     monkeypatch.setattr(f"{_MODULE}.subprocess.run", unexpected_run)
 
-    pdf = await convert_pptx_bytes_to_pdf(b"fake pptx bytes")
+    pdf = await convert_office_bytes_to_pdf(b"fake pptx bytes", suffix=".pptx")
 
     assert pdf is None
 
@@ -137,7 +184,7 @@ async def test_convert_bytes_returns_none_when_no_pdf_produced(monkeypatch) -> N
         lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0, b"", b""),
     )
 
-    pdf = await convert_pptx_bytes_to_pdf(b"fake pptx bytes")
+    pdf = await convert_office_bytes_to_pdf(b"fake pptx bytes", suffix=".pptx")
 
     assert pdf is None
 
@@ -155,7 +202,7 @@ def test_convert_file_returns_none_on_called_process_error(
     src = tmp_path / "deck.pptx"
     src.write_bytes(b"fake")
 
-    assert convert_pptx_file_to_pdf(src) is None
+    assert convert_office_file_to_pdf(src) is None
 
 
 @pytest.mark.integration
@@ -182,7 +229,7 @@ async def test_convert_bytes_with_real_libreoffice() -> None:
     buf = io.BytesIO()
     prs.save(buf)
 
-    pdf = await convert_pptx_bytes_to_pdf(buf.getvalue())
+    pdf = await convert_office_bytes_to_pdf(buf.getvalue(), suffix=".pptx")
 
     assert pdf is not None
     assert pdf.startswith(b"%PDF")

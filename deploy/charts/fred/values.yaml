@@ -1296,6 +1296,7 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        pdf_render_ttl_days: 30
 
       observability:
         kpi:
@@ -1473,6 +1474,8 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        # Same key as the API pod: the worker is what runs the nightly sweep.
+        pdf_render_ttl_days: 30
 
       observability:
         kpi:

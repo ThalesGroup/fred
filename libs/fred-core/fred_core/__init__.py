@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from fred_core.conversion import (
-    DEFAULT_PPTX_PDF_TIMEOUT_SECONDS,
-    convert_pptx_bytes_to_pdf,
-    convert_pptx_file_to_pdf,
+    DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    convert_office_bytes_to_pdf,
+    convert_office_file_to_pdf,
 )
 from fred_core.documents import (
     AccessInfo,
@@ -223,9 +223,9 @@ __all__ = [
     "get_user_store",
     "get_config",
     # conversion
-    "DEFAULT_PPTX_PDF_TIMEOUT_SECONDS",
-    "convert_pptx_bytes_to_pdf",
-    "convert_pptx_file_to_pdf",
+    "DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS",
+    "convert_office_bytes_to_pdf",
+    "convert_office_file_to_pdf",
     "JoiningMode",
     "TeamVisibility",
     "TeamMetadata",

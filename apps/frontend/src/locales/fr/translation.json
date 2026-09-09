@@ -370,6 +370,20 @@
           "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
+    },
+    "team_wiki": {
+      "name": "Wiki d'équipe",
+      "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres.",
+      "fields": {
+        "mode": {
+          "title": "Ce que l'agent peut faire",
+          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page.",
+          "options": {
+            "read": "Lecture seule",
+            "read_write": "Lecture et proposition"
+          }
+        }
+      }
     }
   },
   "chatbot": {
@@ -2072,7 +2086,8 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Ressources"
+          "resources": "Ressources",
+          "wiki": "Wiki"
         },
         "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
@@ -2494,6 +2509,10 @@
             "teamResources": {
               "title": "Accès aux ressources de l'équipe",
               "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
+            },
+            "teamWiki": {
+              "title": "Accès au Wiki de l'équipe",
+              "description": "Permet à l'agent de lire les pages du wiki de l'équipe et de suivre les règles qui y sont fixées."
             },
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
@@ -3044,6 +3063,120 @@
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
       "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
+    },
+    "wiki": {
+      "title": "Wiki",
+      "betaBadge": {
+        "label": "Beta",
+        "tooltip": "Ceci est une proposition, pas encore une fonctionnalité figée. Nous recueillons vos retours avant de nous engager sur sa conception — dites-nous ce qui fonctionne ou pas."
+      },
+      "resizeRail": "Redimensionner la liste des pages",
+      "newPage": "Nouvelle page",
+      "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
+      "notFound": "Cette page n'existe pas.",
+      "empty": {
+        "editor": "Le wiki de votre équipe est vide. Créez la première page pour commencer à consigner ce que l'équipe sait.",
+        "member": "Le wiki de votre équipe est vide. Un éditeur peut créer la première page."
+      },
+      "tree": {
+        "ariaLabel": "Pages du wiki",
+        "empty": "Aucune page pour l'instant.",
+        "expand": "Déplier",
+        "collapse": "Replier",
+        "needsReview": "Un agent a écrit cette page et personne ne l'a encore relue",
+        "pendingReview": "{{count}} page à relire",
+        "pendingReview_other": "{{count}} pages à relire",
+        "nothingToReview": "Rien à relire.",
+        "addChild": "Ajouter une sous-page à {{title}}",
+        "addChildTooltip": "Ajouter une sous-page"
+      },
+      "article": {
+        "breadcrumb": "Fil d’Ariane",
+        "edit": "Modifier",
+        "rename": "Renommer ou déplacer cette page",
+        "delete": "Supprimer cette page",
+        "history": "Historique des versions",
+        "empty": "Cette page est vide.",
+        "writtenByAgent": "Écrit par un agent",
+        "lastEditedBy": "Dernière modification par {{user}}",
+        "lastEditedByAt": "Dernière modification par {{user}} le {{when}}",
+        "lastEditedAt": "Dernière modification le {{when}}",
+        "awaitingReview": "En attente de relecture",
+        "markReviewed": "Marquer comme relue",
+        "clearReviewHint": "Retirez la marque une fois la page relue"
+      },
+      "editor": {
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
+        "loadCurrent": "Charger sa version",
+        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document."
+      },
+      "history": {
+        "title": "Historique des versions",
+        "close": "Fermer l'historique",
+        "empty": "Aucune version antérieure.",
+        "current": "Actuelle",
+        "restore": "Restaurer",
+        "loadMore": "Charger les versions antérieures",
+        "end": "Début de l'historique.",
+        "event": {
+          "humanEdit": "Édition manuelle",
+          "agentEdit": "Édition par agent ({{agent}})",
+          "agentEditUnnamed": "Édition par un agent",
+          "agentReview": "Validation de l'édition de l'agent",
+          "review": "Validation du contenu"
+        }
+      },
+      "rules": {
+        "title": "Règles pour les agents",
+        "notice": "Chaque agent ayant accès au wiki lit cette page avant de répondre. Seuls les éditeurs peuvent la modifier, et aucun agent ne peut jamais y écrire.",
+        "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre.",
+        "template": "## Ce que fait cette équipe\n\n## Vocabulaire de l'équipe\n\n## Comment répondre\n\n- Une page du wiki peut être périmée ou fausse. Si elle contredit ce que dit la conversation, signale-le plutôt que de trancher en silence.\n- N'invente jamais un sigle, un nom d'outil ou un processus interne : s'il n'est pas dans le wiki, dis que tu ne le connais pas.\n\n## À ne jamais faire\n",
+        "templateHint": "Cette page démarre sur une trame. Remplissez les sections vides, supprimez celles qui ne servent pas : chaque agent lit ce texte à chaque question, alors écrivez court, à l'impératif, et dites ce qu'un nouveau collègue devinerait sans qu'on le lui dise."
+      },
+      "proposal": {
+        "newPage": "Cet agent propose une nouvelle page « {{title}} » ({{added}} lignes).",
+        "edit": "Cet agent propose de modifier « {{title}} » : {{added}} lignes ajoutées, {{removed}} retirées.",
+        "seeChanges": "Voir les modifications",
+        "dialogTitle": "Modifications proposées — {{title}}",
+        "close": "Fermer",
+        "unavailable": "Cette proposition n’est plus disponible."
+      },
+      "newPageDialog": {
+        "title": "Nouvelle page de wiki",
+        "childTitle": "Nouvelle page sous « {{parent}} »",
+        "label": "Titre de la page",
+        "confirm": "Créer la page"
+      },
+      "renameDialog": {
+        "title": "Titre et emplacement",
+        "label": "Titre de la page",
+        "parentLabel": "Page parente",
+        "root": "Aucune — premier niveau",
+        "confirm": "Enregistrer"
+      },
+      "leaveDialog": {
+        "title": "Abandonner vos modifications ?",
+        "message": "Vous êtes en train de modifier « {{title}} ». Si vous ouvrez une autre page, le texte que vous n’avez pas enregistré sera perdu.",
+        "confirm": "Abandonner les modifications",
+        "cancel": "Continuer à écrire"
+      },
+      "deleteDialog": {
+        "title": "Supprimer cette page ?",
+        "message": "« {{title}} » et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
+        "confirm": "Supprimer la page"
+      },
+      "errors": {
+        "save": "Impossible d'enregistrer cette page",
+        "create": "Impossible de créer la page",
+        "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
+        "delete": "Impossible de supprimer la page",
+        "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre.",
+        "review": "Impossible d'enregistrer la marque de revue",
+        "reviewConflict": "Cette page a changé depuis que vous l'avez consultée. Rechargez-la et relisez la nouvelle version avant de valider.",
+        "restore": "Impossible de restaurer cette version"
+      }
     },
     "promptEditor": {
       "copy": "Copier le prompt",

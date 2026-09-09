@@ -1477,21 +1477,93 @@ _(none yet)_
 Shared, chrome-less document content renderer used by both `DocumentViewerPage`
 (`/documents/:uid`, chat-citation flow) and `DocumentWorkspace`'s corpus preview
 drawer (`InlineDrawer`). Picks a render strategy from the file's real extension
-(`isPdfFile` on `identity.document_name`, never the display title): `.pdf` renders
-natively via `PdfStreamingDocumentViewer` (`react-pdf`); every other format renders
-the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns no
-header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
-to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
+(`hasNativePreview` on `identity.document_name`, never the display title): a format
+with a native renderer goes to `PdfStreamingDocumentViewer` (`react-pdf`); every
+other one renders the existing markdown extraction
+(`GET /knowledge-flow/v1/markdown/{uid}`). Owns no header/close affordance — both
+hosts already provide one. Landed 2026-07-19 (FRONT-13) to close the "PDF viewer
+parity" regression from kea tracked on GitHub issue #1956.
 
-**Markdown toggle (2026-07-27).** A `mode` prop (`"original" | "markdown"`, default
-`"original"`) lets a host force the markdown extraction for a format that has a native
-renderer. The corpus preview drawer exposes it as an icon button in the `InlineDrawer`
-header (`headerActions`, left of the close button), gated on `hasNativePreview(fileName)`
-so it only appears for PDFs: `.docx`/`.xlsx`/`.csv` already display their markdown
-extraction, so a toggle there would be inert. Mode resets to `"original"` on every newly
-opened document. When the extraction is missing (endpoint 404s, or empty body), the body
-renders a `preview.markdownUnavailable` notice instead of the former literal
-"Error loading document." string, which read as document content.
+**File/Raw toggle (2026-07-27).** A `view` prop (`"file" | "raw"`) lets a host force
+the markdown extraction for a format that has a native renderer; omitting it keeps
+the single-strategy behaviour (`DocumentViewerPage`). The corpus preview drawer
+renders `DocumentViewerModeToggle` in the `InlineDrawer` header (`headerActions`,
+left of the close button) rather than inside the body, gated on
+`hasNativePreview(fileName)` so it never appears for a format that has nothing to
+toggle to (`.xlsx`/`.csv` already display their markdown extraction). The view resets
+to `"file"` on every newly opened document. When the extraction is missing (endpoint
+404s, or empty body), the body renders a `preview.markdownUnavailable` notice instead
+of the former literal "Error loading document." string, which read as document content.
+
+**Word/ODT native preview (2026-09-03).** `hasNativePreview` now also covers `.docx`,
+`.doc` and `.odt`, so the toggle's "Fichier" side shows the document itself rather
+than only its markdown extraction. Browsers cannot render a Word file, so
+`documentPdfSourceUrl` sends those formats to `GET /knowledge-flow/v1/raw_content/pdf/{uid}`
+(headless LibreOffice, converted once and cached under the document's own `output/`
+prefix) while a `.pdf` keeps streaming untouched from `/raw_content/stream/{uid}`. The
+viewer component itself is unchanged apart from a `sourceUrl` prop — it stays a PDF
+renderer and knows nothing about formats — so virtualization, byte-range fetching and
+the large-document guards below apply to Word documents for free. The frontend's
+accepted-suffix list is deliberately the same one `PDF_RENDERABLE_SUFFIXES`
+(`content_service.py`) accepts: a format offered here but refused there would show a
+toggle that 415s.
+
+**PowerPoint on the same path (2026-09-04).** `.pptx` and `.ppt` joined
+`PDF_RENDERABLE_SUFFIXES` and `OFFICE_DOCUMENT_SUFFIXES`; the render endpoint, cache
+and viewer are format-agnostic and needed no change. `.odp` is in neither list: the
+LibreOffice helper can convert it, but no ingestion processor accepts it, so it never
+reaches the library. The shared helper also stopped asking for Writer's PDF export
+filter on every format and now picks Impress' or Calc's from the source suffix —
+LibreOffice builds differ on how they treat that mismatch, and a refused export would
+surface here as a 503 behind a toggle the UI had offered.
+
+**Renders expire after 30 days (2026-09-07).** The cached `render.pdf` used to live as
+long as its document. It is now deleted by a nightly Temporal Schedule
+(`pipeline-pdf-render-expiry`, 03:00 UTC) once its write date is older than
+`app.pdf_render_ttl_days` (knowledge-flow configuration, default 30, `0` removes the
+Schedule at worker start). The TTL is read by the activity on every run, not stored in
+the Schedule, so changing it only takes a worker restart. The next viewer of an expired
+document pays one fresh conversion (a few seconds), nothing else changes: the render
+stays under the document's `output/` prefix, so deleting the document still removes it,
+and it is never charged to the storage quota. One pass per night, `SKIP` overlap and a
+one-hour catch-up window: after a long worker outage the first pass cleans everything
+older than the TTL at once instead of replaying each missed night. Local `memory`
+scheduler setups have no Schedule and therefore no expiry; k3d and fredlab run Temporal
+and do. Listing is server-side on GCS (`match_glob`), a full document-bucket walk on
+SeaweedFS/MinIO.
+
+`DocumentViewerPage` carries the same toggle in its top bar, not just the corpus
+drawer. A citation opens the document at the passage it quotes, and that passage
+lives in the markdown extraction — so the reader needs a route back to it, including
+when the render endpoint is down. Without it a 503 would leave a dead error pane
+where the cited text used to be.
+
+Two properties of the render endpoint are load-bearing for the viewer and easy to
+break. **Byte ranges are only ever cut from a cached render.** LibreOffice stamps
+`/CreationDate` and `/ID` per run, so two renders of one document differ in length
+and in every offset; if the cache write failed, each chunk request would re-convert
+and pdf.js would stitch windows from different files into one corrupt document. The
+service therefore reports whether the bytes it returned are persisted
+(`PdfRender.cached`) and the controller degrades to a full 200 body when they are
+not — which pdf.js handles the same way it handles a proxy that strips ranges.
+**Cold renders of one document are serialized per worker**, so a document opened by
+several viewers at once is converted once rather than once per viewer.
+
+Conversions also run on a dedicated two-worker pool
+(`PDF_RENDER_MAX_CONCURRENCY`), never on the default executor `asyncio.to_thread`
+would pick. That executor is shared with RAG search, summarization, metadata
+deletes and ingestion, and a `soffice` run holds its worker for up to the full 60 s
+timeout — left there, a handful of Word previews would stall the retrieval path of
+every agent turn on the pod. The same worker count caps how many `soffice` processes
+(hundreds of MB of RSS each) can exist at once. The path emits
+`content.pdf_render_latency_ms` with `file_type`/`status`, both already in
+`PROMETHEUS_ALLOWED_LABELS`, so it is Grafana-visible without an allow-list change.
+
+Known cost, not yet addressed: a ranged request reads the whole cached PDF and
+slices it, because the content store has no ranged read for derived artifacts (only
+for a document's primary file). Serving an N-MB render in 1 MB chunks therefore
+costs ~N store reads. The viewer's 20 MB opt-in guard bounds the practical exposure;
+the fix is a ranged `get_output_artifact`, mirroring `get_content_range`.
 
 **Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
 previously mounted one live `<canvas>` per page of the document the moment it
@@ -2666,6 +2738,23 @@ Non-interactive lock icon + label. Uses `material-symbols-outlined` `lock` icon 
 #### Open UX issues
 
 - **Label truncation** — no max-width set. Validate with long label text (`"Administrateur seulement"`) inside narrow `SourceCard` widths.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `BetaBadge`
+
+**Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
 
 #### Resolved
 
@@ -4110,3 +4199,176 @@ conversation that produced them (the slice only drops them when the next convers
 upserts one of its own). A conversation whose documents all come from the API never
 upserts, so the previous conversation's document showed up as an extra tab - someone
 else's document, in an editor that autosaves.
+
+---
+
+## Team wiki (2026-09-06, WIKI-02, issue #2572)
+
+### `TeamWikiPage`
+
+**Location:** `src/rework/components/pages/TeamWikiPage/`
+**Status:** `Functional` — all four delivery slices shipped (RFC §14): human
+CRUD, revision history and restore, agent read, and agent proposals gated
+behind a human's HITL approval.
+
+`/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
+tree, the article, and the version history when it is open. The layout is
+`HelpCenterPage`'s, which already solves this shape; reading uses
+`MarkdownRenderer` and editing uses `MDXEditor`, the same component
+`writable_document` uses. Nothing new was built where something existed.
+
+**The slug is in the URL**, so a wiki page is deep-linkable and the browser's
+back button walks the pages. A rename does not change the slug, so links
+survive it — nothing here maps an old slug to a page, so re-minting one would
+be a hard 404 for every link already shared.
+
+**Titles are unique among siblings** (2026-09-07): creating, renaming or
+moving a page onto a sibling's title is refused with a translated message. That
+is what makes a page's path — its titles from the root — a unique address, which
+is how an agent names one; the slug never reaches the model at all.
+
+**The slug is opaque** (2026-09-07): eight random hex characters, minted at
+creation and never derived from the title. Because a rename cannot change it, a
+title-derived slug outlives the title it was named for — a page renamed to "Les
+Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every reader,
+and it misled a model too: handed `Les Shinigamis — sous-page-11` in its index,
+it read the pair as one name and called back with a slug that did not exist. An
+identifier that never claimed to mean anything cannot go stale. Pages created
+before this keep the slugs they have; changing them would break their links.
+
+**Every editor-only control is absent, not disabled**, for a member — except
+the version history, which is deliberately open to everyone: the endpoint is
+member-readable, and who wrote a page and when is exactly what a reader needs
+to judge one an agent may have touched. Restore stays editor-only, inside the
+panel. Hiding is courtesy; the server decides either way.
+
+**The rules page is not a node of the tree.** It sits below a separator with its
+own icon, because it is not content the team browses — it is the instruction
+sheet every agent reads — and putting it in the tree would invite moving or
+deleting it like an ordinary page. Its article carries a one-line notice saying
+what it does and that no agent can write to it.
+
+**The review mark** shows as a dot in the rail and a chip on the article, with a
+filter above the tree that lists every page waiting for a human read. The filter
+control stays rendered while the filter is ON even when the count reaches zero —
+clearing the last mark would otherwise remove the only way to turn the filter
+off and strand the reader on an empty rail.
+
+### The rules page's starting draft (2026-09-07, WIKI-05)
+
+Opening the rules page for the first time seeds the editor with a short
+outline: three empty headings for the team's own material, and two rules that
+are true for any team and that the capability's prompt block does not already
+say. Nothing is written until the editor saves, so a team that never opens the
+page keeps no rules — agents are told about rules the team actually wrote,
+never about a default nobody chose.
+
+**Emptiness is not the test** — `revision_id` is. A page saved empty was
+emptied on purpose, and handing the outline back would undo that decision every
+time it is reopened.
+
+**Placeholders would have been worse than nothing.** This page's text is
+injected verbatim into every agent's system prompt, under a heading saying to
+follow it and never act against it. A conventional template of the
+`_(describe your team here)_ ` kind would reach the model as a standing
+instruction on every question, for every team that never cleaned it up. That
+is why the guidance on how to fill the page sits in the editor UI
+(`rules.templateHint`) instead of in the page's own content.
+
+### Version history (2026-09-07, WIKI-05)
+
+Each tile says in words what happened — `Édition manuelle`, `Édition par agent
+(<name>)`, `Validation de l'édition de l'agent` — because a column of
+timestamps and names does not tell a reader which changes were an agent's, and
+that is the one thing they open the history to find out. The agent's display
+name is resolved from the team's instances, and only fetched once a page
+actually has an agent revision.
+
+**A validation is its own entry**, not a line inside the edit it approves. The
+approval happens later than the write and often by someone else, so folding the
+two together would lose both facts. Event entries carry no preview and no
+restore: no content of their own belongs to them.
+
+**The whole tile opens the version**, and restore is a small icon button in the
+corner the current-version tag would otherwise occupy — the two never appear on
+the same tile. A row of text buttons under every entry cost more height than
+the history it was listing.
+
+### Paged history (2026-09-08, WIKI-05)
+
+`GET .../revisions` is bounded server-side (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49), so `WikiRevisions` owns the walk backward through it rather than
+receiving a finished list. Pagination logic is pulled into pure functions in
+`historyPages.ts` (`mergeHistoryPage`), matching this feature's existing
+convention (`historyEntries.ts`, `wikiTree.ts`) of testing the logic without
+rendering the component.
+
+**A base page (`cursor` omitted) always replaces the accumulated state
+outright**, never merges with an older tail. This is both the first load and
+every later re-arrival of that same query — a restore, an edit, another
+viewer's write invalidating the `HISTORY-*` tag while the reader is still
+parked on it. Replacing is what keeps a stale second/third page from surviving
+next to a freshly-invalidated first one.
+
+**"Load older" is disabled while a request for it is in flight**, the
+codebase's usual guard against a second click firing a concurrent duplicate.
+Three terminal states share one area below the list: a `Réessayer` (`common.
+retry`) button on error, `Charger les versions antérieures` while
+`next_cursor` is non-null, and `Début de l'historique.` once it is null —
+never more than one at a time.
+
+**Follow-up (2026-09-08, WIKI-05): three gaps in "every later re-arrival"
+above.** The paragraph's claim only held while the reader stayed on the base
+page — walking to an older one unsubscribes it, so nothing was left to
+re-arrive on. (1) Closing and reopening the panel left `fetchCursor` and the
+accumulated `pages` exactly where they were; `WikiRevisions` now resets both
+on the close→open transition (a ref tracking the previous `open`). Resetting
+state alone is not enough when the panel was already on the base page:
+`fetchCursor` staying `undefined` is a no-op that triggers no request, so
+reopening explicitly calls the query's own `refetch()` once it is confirmed
+bound to `cursor: undefined` — the one case a plain state reset cannot reach.
+The merge effect also gained `fulfilledTimeStamp` as a dependency, since RTK
+Query's structural sharing can keep the same object reference when a refetch
+returns byte-identical content, and reopening must still show it. (2) A local
+mutation this page's OWNER knows about but
+`WikiRevisions` does not (the review mark, an edit or rules save) is handled
+by `TeamWikiPage` remounting the panel on a `key` of
+`` `${pageId}-${historyGeneration}` `` — a full remount resets the walk the
+same way a fresh page does, so "the page changed" and "a save changed this
+page's history" are one mechanism, not two. Restore's own explicit reset
+(inside `WikiRevisions`) still fires directly, since restore is this
+component's own mutation. (3) The merge effect read RTK Query's `data`, which
+keeps the PREVIOUS args' value while a new one is in flight; pairing it with
+the `fetchCursor` that had just changed could merge a response into the walk
+under the wrong cursor. It now reads `currentData`, which is only ever set
+from the args the hook was just called with. None of the three add polling, a
+second cache, or a reconciliation layer — an explicit reset stays the
+accepted trade-off over merging two walks.
+
+### Conflict handling in the editor
+
+A stale save returns 409 carrying the current text and revision. The editor
+shows a banner and keeps the user's own draft on screen and editable: nothing is
+discarded for them, and "Load their version" is a choice, not a consequence.
+
+Two things that had to be right for it to work at all:
+
+- **The editor remounts on a new `key`** when the server's version is loaded.
+  `MDXEditor` reads `markdown` only at mount (`WritableDocumentPane` documents
+  the same constraint), so changing the prop alone would leave the user's text
+  on screen while claiming to have loaded someone else's.
+- **The conflict's `current_revision_id` becomes the next save's base.** Without
+  it every retry after a conflict conflicts again, and the banner promises an
+  outcome the code cannot reach.
+
+Navigating to another page closes the editor. Left open, its draft would still
+be in state while the save now targets the new page id — one click from
+overwriting page B with page A's text.
+
+### Cache tags
+
+The page read is addressed by slug but tagged by `page_id` off the **result**:
+every mutation knows the page id and none of them knows the slug, so tagging by
+slug leaves a write unable to invalidate the page it just changed — the article
+keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
+the *next* save conflict every time.
