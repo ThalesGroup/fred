@@ -3,3 +3,9 @@ target/
 design-tokens/LICENSE
 design-tokens/dist/
 design-tokens/licenses/
+ui/.generated/
+ui/LICENSE
+ui/dist/
+ui/licenses/
+ui/build-evidence.json
+fixtures/react-consumer/node_modules/

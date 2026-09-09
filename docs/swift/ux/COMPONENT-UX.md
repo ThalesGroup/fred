@@ -906,6 +906,36 @@ digit after the name.
 
 ---
 
+### Package-foundation component corrections (2026-09-09)
+
+**Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
+
+**Status:** `Functional`
+
+- `Button` and `IconButton` expose their implemented `2xs`, `small`, and `medium`
+  sizes without narrowing the shared size scale used by fields. `IconButton` retains
+  caller classes alongside generated classes and now has a visible two-pixel
+  `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
+  on-surface-retreat state layers for hover and press.
+- Material and custom icons are decorative by default. A standalone informative icon
+  receives only an explicit caller-owned accessible name; glyph identifiers no longer
+  become user-facing labels. The unsupported legacy `infos` name was corrected to
+  `info` at its sole caller.
+- `TextInput` preserves caller IDs, refs, handlers, input type, autocomplete, and other
+  native props. Labels target the effective ID; help/error descriptions are merged with
+  caller descriptions; enabled errors set `aria-invalid`; and controlled/uncontrolled
+  counters follow the current value, including an uncontrolled input's actual value
+  after an uncancelled native form reset. A canceled reset leaves both value and count
+  unchanged. Compact presentation keeps any visually omitted help/error text associated
+  through `aria-describedby`.
+- `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
+  text, and remains label-free when decorative.
+
+These corrections support the initial `@fred/ui` archive only. They do not claim the
+deferred component catalog, overlays, iframe SDK, release, or adoption work as shipped.
+
+---
+
 ### `Chip` atom + composer consolidation (`ManagedChatPage`, 2026-08-03)
 
 **Location:** `src/rework/components/shared/atoms/Chip/`,
