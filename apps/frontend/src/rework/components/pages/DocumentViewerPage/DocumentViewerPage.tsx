@@ -16,8 +16,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
-import { DocumentViewer } from "@shared/organisms/DocumentViewer/DocumentViewer";
-import { extractH1 } from "../../../utils/documentViewerUtils";
+import {
+  DocumentViewer,
+  DocumentViewerModeToggle,
+  type ViewMode,
+} from "@shared/organisms/DocumentViewer/DocumentViewer";
+import { extractH1, hasNativePreview } from "../../../utils/documentViewerUtils";
 import styles from "./DocumentViewerPage.module.css";
 
 export default function DocumentViewerPage() {
@@ -27,6 +31,7 @@ export default function DocumentViewerPage() {
 
   const [infoOpen, setInfoOpen] = useState(false);
   const [derivedTitle, setDerivedTitle] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>("file");
 
   // Drop the previous document's derived title as soon as the route targets a
   // new one, so a stale H1 never lingers while the new document's fetch is
@@ -34,6 +39,7 @@ export default function DocumentViewerPage() {
   // fires again for the current `uid`).
   useEffect(() => {
     setDerivedTitle(null);
+    setView("file");
   }, [uid]);
 
   const paramTitle = searchParams.get("title");
@@ -66,6 +72,10 @@ export default function DocumentViewerPage() {
           onClick={handleBack}
         />
         <span className={styles.title}>{title}</span>
+        {/* A citation opens the document itself, but the cited text lives in the
+            markdown extraction — so the reader always needs a way back to it,
+            including when the render endpoint is unavailable. */}
+        {hasNativePreview(paramFile) && <DocumentViewerModeToggle view={view} onChange={setView} />}
         {hasInfo && (
           <IconButton
             variant="icon"
@@ -82,6 +92,7 @@ export default function DocumentViewerPage() {
           <DocumentViewer
             documentUid={uid}
             fileName={paramFile}
+            view={hasNativePreview(paramFile) ? view : undefined}
             onMarkdownLoaded={(c) => setDerivedTitle(extractH1(c))}
           />
         </main>

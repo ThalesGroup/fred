@@ -1477,21 +1477,93 @@ _(none yet)_
 Shared, chrome-less document content renderer used by both `DocumentViewerPage`
 (`/documents/:uid`, chat-citation flow) and `DocumentWorkspace`'s corpus preview
 drawer (`InlineDrawer`). Picks a render strategy from the file's real extension
-(`isPdfFile` on `identity.document_name`, never the display title): `.pdf` renders
-natively via `PdfStreamingDocumentViewer` (`react-pdf`); every other format renders
-the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns no
-header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
-to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
+(`hasNativePreview` on `identity.document_name`, never the display title): a format
+with a native renderer goes to `PdfStreamingDocumentViewer` (`react-pdf`); every
+other one renders the existing markdown extraction
+(`GET /knowledge-flow/v1/markdown/{uid}`). Owns no header/close affordance — both
+hosts already provide one. Landed 2026-07-19 (FRONT-13) to close the "PDF viewer
+parity" regression from kea tracked on GitHub issue #1956.
 
-**Markdown toggle (2026-07-27).** A `mode` prop (`"original" | "markdown"`, default
-`"original"`) lets a host force the markdown extraction for a format that has a native
-renderer. The corpus preview drawer exposes it as an icon button in the `InlineDrawer`
-header (`headerActions`, left of the close button), gated on `hasNativePreview(fileName)`
-so it only appears for PDFs: `.docx`/`.xlsx`/`.csv` already display their markdown
-extraction, so a toggle there would be inert. Mode resets to `"original"` on every newly
-opened document. When the extraction is missing (endpoint 404s, or empty body), the body
-renders a `preview.markdownUnavailable` notice instead of the former literal
-"Error loading document." string, which read as document content.
+**File/Raw toggle (2026-07-27).** A `view` prop (`"file" | "raw"`) lets a host force
+the markdown extraction for a format that has a native renderer; omitting it keeps
+the single-strategy behaviour (`DocumentViewerPage`). The corpus preview drawer
+renders `DocumentViewerModeToggle` in the `InlineDrawer` header (`headerActions`,
+left of the close button) rather than inside the body, gated on
+`hasNativePreview(fileName)` so it never appears for a format that has nothing to
+toggle to (`.xlsx`/`.csv` already display their markdown extraction). The view resets
+to `"file"` on every newly opened document. When the extraction is missing (endpoint
+404s, or empty body), the body renders a `preview.markdownUnavailable` notice instead
+of the former literal "Error loading document." string, which read as document content.
+
+**Word/ODT native preview (2026-09-03).** `hasNativePreview` now also covers `.docx`,
+`.doc` and `.odt`, so the toggle's "Fichier" side shows the document itself rather
+than only its markdown extraction. Browsers cannot render a Word file, so
+`documentPdfSourceUrl` sends those formats to `GET /knowledge-flow/v1/raw_content/pdf/{uid}`
+(headless LibreOffice, converted once and cached under the document's own `output/`
+prefix) while a `.pdf` keeps streaming untouched from `/raw_content/stream/{uid}`. The
+viewer component itself is unchanged apart from a `sourceUrl` prop — it stays a PDF
+renderer and knows nothing about formats — so virtualization, byte-range fetching and
+the large-document guards below apply to Word documents for free. The frontend's
+accepted-suffix list is deliberately the same one `PDF_RENDERABLE_SUFFIXES`
+(`content_service.py`) accepts: a format offered here but refused there would show a
+toggle that 415s.
+
+**PowerPoint on the same path (2026-09-04).** `.pptx` and `.ppt` joined
+`PDF_RENDERABLE_SUFFIXES` and `OFFICE_DOCUMENT_SUFFIXES`; the render endpoint, cache
+and viewer are format-agnostic and needed no change. `.odp` is in neither list: the
+LibreOffice helper can convert it, but no ingestion processor accepts it, so it never
+reaches the library. The shared helper also stopped asking for Writer's PDF export
+filter on every format and now picks Impress' or Calc's from the source suffix —
+LibreOffice builds differ on how they treat that mismatch, and a refused export would
+surface here as a 503 behind a toggle the UI had offered.
+
+**Renders expire after 30 days (2026-09-07).** The cached `render.pdf` used to live as
+long as its document. It is now deleted by a nightly Temporal Schedule
+(`pipeline-pdf-render-expiry`, 03:00 UTC) once its write date is older than
+`app.pdf_render_ttl_days` (knowledge-flow configuration, default 30, `0` removes the
+Schedule at worker start). The TTL is read by the activity on every run, not stored in
+the Schedule, so changing it only takes a worker restart. The next viewer of an expired
+document pays one fresh conversion (a few seconds), nothing else changes: the render
+stays under the document's `output/` prefix, so deleting the document still removes it,
+and it is never charged to the storage quota. One pass per night, `SKIP` overlap and a
+one-hour catch-up window: after a long worker outage the first pass cleans everything
+older than the TTL at once instead of replaying each missed night. Local `memory`
+scheduler setups have no Schedule and therefore no expiry; k3d and fredlab run Temporal
+and do. Listing is server-side on GCS (`match_glob`), a full document-bucket walk on
+SeaweedFS/MinIO.
+
+`DocumentViewerPage` carries the same toggle in its top bar, not just the corpus
+drawer. A citation opens the document at the passage it quotes, and that passage
+lives in the markdown extraction — so the reader needs a route back to it, including
+when the render endpoint is down. Without it a 503 would leave a dead error pane
+where the cited text used to be.
+
+Two properties of the render endpoint are load-bearing for the viewer and easy to
+break. **Byte ranges are only ever cut from a cached render.** LibreOffice stamps
+`/CreationDate` and `/ID` per run, so two renders of one document differ in length
+and in every offset; if the cache write failed, each chunk request would re-convert
+and pdf.js would stitch windows from different files into one corrupt document. The
+service therefore reports whether the bytes it returned are persisted
+(`PdfRender.cached`) and the controller degrades to a full 200 body when they are
+not — which pdf.js handles the same way it handles a proxy that strips ranges.
+**Cold renders of one document are serialized per worker**, so a document opened by
+several viewers at once is converted once rather than once per viewer.
+
+Conversions also run on a dedicated two-worker pool
+(`PDF_RENDER_MAX_CONCURRENCY`), never on the default executor `asyncio.to_thread`
+would pick. That executor is shared with RAG search, summarization, metadata
+deletes and ingestion, and a `soffice` run holds its worker for up to the full 60 s
+timeout — left there, a handful of Word previews would stall the retrieval path of
+every agent turn on the pod. The same worker count caps how many `soffice` processes
+(hundreds of MB of RSS each) can exist at once. The path emits
+`content.pdf_render_latency_ms` with `file_type`/`status`, both already in
+`PROMETHEUS_ALLOWED_LABELS`, so it is Grafana-visible without an allow-list change.
+
+Known cost, not yet addressed: a ranged request reads the whole cached PDF and
+slices it, because the content store has no ranged read for derived artifacts (only
+for a document's primary file). Serving an N-MB render in 1 MB chunks therefore
+costs ~N store reads. The viewer's 20 MB opt-in guard bounds the practical exposure;
+the fix is a ranged `get_output_artifact`, mirroring `get_content_range`.
 
 **Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
 previously mounted one live `<canvas>` per page of the document the moment it

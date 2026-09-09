@@ -216,7 +216,7 @@ class MinioStorageBackend(BaseContentStore):
                 raise
             return []
 
-    def get_preview_bytes(self, doc_path: str) -> bytes:
+    def get_output_artifact(self, doc_path: str) -> bytes:
         try:
             response = self.client.get_object(self.document_bucket, doc_path)
             try:
@@ -227,8 +227,60 @@ class MinioStorageBackend(BaseContentStore):
                 response.close()
                 response.release_conn()
         except S3Error as e:
-            logger.error(f"[CONTENT][MINIO] Error fetching preview path={doc_path}: {e}")
-            raise FileNotFoundError(f"Preview image not found for document {doc_path}")
+            logger.error(f"[CONTENT][MINIO] Error fetching derived artifact path={doc_path}: {e}")
+            raise FileNotFoundError(f"Derived artifact not found: {doc_path}")
+
+    def put_output_artifact(self, doc_path: str, data: bytes, *, content_type: str) -> None:
+        try:
+            self.client.put_object(
+                self.document_bucket,
+                doc_path,
+                io.BytesIO(data),
+                length=len(data),
+                content_type=content_type,
+            )
+            logger.info(f"[CONTENT][MINIO] Wrote derived artifact object={doc_path} bytes={len(data)}")
+        except S3Error as e:
+            logger.error(f"[CONTENT][MINIO] Failed to write derived artifact path={doc_path}: {e}")
+            raise ValueError(f"Failed to write derived artifact '{doc_path}': {e}")
+
+    def delete_output_artifact(self, doc_path: str) -> None:
+        # S3 DeleteObject is already a no-op on a missing key.
+        try:
+            self.client.remove_object(self.document_bucket, doc_path)
+            logger.info(f"[CONTENT][MINIO] Deleted derived artifact object={doc_path}")
+        except S3Error as e:
+            if getattr(e, "code", "") in {"NoSuchKey", "NoSuchObject"}:
+                return
+            raise
+
+    def list_output_artifacts(self, artifact_name: str) -> List[StoredObjectInfo]:
+        # S3 listing is prefix-only and the uid comes first in the key, so the whole
+        # document bucket is walked and filtered here. Fine for local stacks.
+        suffix = f"/output/{artifact_name}"
+        items: List[StoredObjectInfo] = []
+        try:
+            for obj in self.client.list_objects(self.document_bucket, recursive=True):
+                name = obj.object_name
+                if not name or not name.endswith(suffix):
+                    continue
+                document_uid = name.split("/", 1)[0]
+                if name != f"{document_uid}{suffix}":
+                    continue
+                items.append(
+                    StoredObjectInfo(
+                        key=name,
+                        size=obj.size or 0,
+                        file_name=artifact_name,
+                        content_type=None,
+                        modified=obj.last_modified,
+                        etag=obj.etag,
+                        document_uid=document_uid,
+                    )
+                )
+        except S3Error as e:
+            raise RuntimeError(f"[CONTENT][MINIO] list_output_artifacts failed for '{artifact_name}': {e}") from e
+        return items
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         media_object = f"{document_uid}/output/media/{media_id}"

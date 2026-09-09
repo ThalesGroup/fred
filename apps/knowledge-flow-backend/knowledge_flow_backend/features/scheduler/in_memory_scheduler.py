@@ -333,7 +333,7 @@ class InMemoryScheduler(BaseScheduler):
             # Try to fetch markdown preview; fall back to CSV table.
             for candidate in (f"{meta.document_uid}/output/output.md", f"{meta.document_uid}/output/table.csv"):
                 try:
-                    data = content_store.get_preview_bytes(candidate)
+                    data = content_store.get_output_artifact(candidate)
                     suffix = ".md" if candidate.endswith(".md") else ".csv"
                     with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                         tmp.write(data)

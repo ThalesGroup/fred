@@ -16,6 +16,7 @@
 
 """Unit tests for GcsContentStore using an in-memory fake GCS client (no network)."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
@@ -101,9 +102,13 @@ class _FakeClient:
     def bucket(self, name):
         return _FakeBucket(self._buckets.setdefault(name, {}))
 
-    def list_blobs(self, bucket_name, prefix=""):
+    def list_blobs(self, bucket_name, prefix="", match_glob=None):
         store = self._buckets.setdefault(bucket_name, {})
         names = sorted(k for k in store if k.startswith(prefix or ""))
+        if match_glob is not None:
+            # GCS glob semantics: `*` never crosses a `/`, `**` does.
+            pattern = re.escape(match_glob).replace(r"\*\*", ".*").replace(r"\*", "[^/]*")
+            names = [n for n in names if re.fullmatch(pattern, n)]
         return [_FakeBlob(store, n) for n in names]
 
 
@@ -340,3 +345,35 @@ def test_mint_access_token_uses_adc_and_refreshes(monkeypatch):
     assert store._mint_access_token() == "minted-token"
     # Cached credentials are reused without a second ADC load on the next call.
     assert store._mint_access_token() == "minted-token"
+
+
+def test_list_output_artifacts_matches_one_uid_level_only(gcs_store):
+    gcs_store.put_output_artifact("doc-a/output/render.pdf", b"a", content_type="application/pdf")
+    gcs_store.put_output_artifact("doc-b/output/render.pdf", b"bb", content_type="application/pdf")
+    gcs_store.put_output_artifact("doc-b/output/output.md", b"# md", content_type="text/markdown")
+    gcs_store.put_output_artifact("doc-c/output/nested/render.pdf", b"c", content_type="application/pdf")
+    gcs_store.put_output_artifact("render.pdf", b"stray", content_type="application/pdf")
+
+    found = gcs_store.list_output_artifacts("render.pdf")
+
+    assert [(o.key, o.document_uid, o.size) for o in found] == [
+        ("doc-a/output/render.pdf", "doc-a", 1),
+        ("doc-b/output/render.pdf", "doc-b", 2),
+    ]
+    assert all(o.modified is not None and o.modified.tzinfo is not None for o in found)
+
+
+def test_list_output_artifacts_empty_bucket(gcs_store):
+    assert gcs_store.list_output_artifacts("render.pdf") == []
+
+
+def test_delete_output_artifact_removes_only_that_artifact_and_is_idempotent(gcs_store):
+    gcs_store.put_output_artifact("doc-a/output/render.pdf", b"a", content_type="application/pdf")
+    gcs_store.put_output_artifact("doc-a/output/output.md", b"# md", content_type="text/markdown")
+
+    gcs_store.delete_output_artifact("doc-a/output/render.pdf")
+    gcs_store.delete_output_artifact("doc-a/output/render.pdf")
+
+    with pytest.raises(FileNotFoundError):
+        gcs_store.get_output_artifact("doc-a/output/render.pdf")
+    assert gcs_store.get_output_artifact("doc-a/output/output.md") == b"# md"
