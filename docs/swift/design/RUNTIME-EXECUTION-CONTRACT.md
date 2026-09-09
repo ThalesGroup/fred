@@ -1217,8 +1217,14 @@ documents for every other execution path, silently absent for Deep since the
 runtime was first added. Found and fixed while scoping DeepAgent's move from
 dormant to visible ahead of the go-live validation, landed in the same change
 that registered `fred.github.deep_assistant` (`apps/fred-agents`) — the first
-concrete `DeepAgentDefinition` in any app — so no Deep turn has ever run
-unaudited in a shipped environment.
+concrete `DeepAgentDefinition` in any app. §8.75 (2026-09-08) later found
+that `DeepAgentRuntime` was not actually reachable yet at all: `agent_app.py`
+never dispatched to it, so every `DeepAgentDefinition` — including this
+one — ran on plain `ReActRuntime` until that fix landed. Every turn was
+audited regardless, but only because it silently ran on `ReActRuntime`
+(which always wires this same middleware pair) — not because of this
+entry's fix, which was dead code until §8.75. The middleware fix itself
+was real and still applies now that Deep is actually dispatched to.
 
 **Consequences.**
 
@@ -5652,3 +5658,95 @@ test_team_wiki_capability_via_adapter.py` (the same conflict-recovery
 sequence through the real adapter and capability together, against a
 scripted HTTP client, asserting the actual `base_revision_id` values and GET
 count on the wire).
+---
+
+### 8.76 ✅ `agent_app.py` dispatches `DeepAgentDefinition` to `DeepAgentRuntime`, not `ReActRuntime` (2026-09-08)
+
+**What.** `_iterate_runtime_event_payloads`'s per-turn dispatch selected only
+between `GraphRuntime` (`GraphAgentDefinition`) and `ReActRuntime` (the
+`else` branch, everything else). Because `DeepAgentDefinition` subclasses
+`ReActAgentDefinition`, every `DeepAgentDefinition` instance — including
+`fred.github.deep_assistant` — silently fell into the `else` branch and ran
+on plain `ReActRuntime`, never on `DeepAgentRuntime`'s `deepagents` planner.
+The `else` branch now picks `DeepAgentRuntime` when
+`isinstance(definition, DeepAgentDefinition)`, `ReActRuntime` otherwise; the
+rest of the branch (`ReActInput` construction, HITL claim handling, event
+streaming) is unchanged since `DeepAgentRuntime` already shares
+`ReActRuntime`'s `Executor[ReActInput, ReActOutput]` contract.
+
+Fixing dispatch alone would have shipped a silent regression: pre-fix,
+`DeepAgentRuntime.build_executor` never read `self._capability_block` at
+all — `fred.github.deep_assistant`'s default capabilities (`document_access`,
+tabular search) only "worked" because the dispatch bug ran it through
+`ReActRuntime`, which does wire the block. `_build_deepagent_runtime_middleware`
+now takes `capability_block: CapabilityAgentBlock | None`, mirroring
+`_create_compiled_react_agent`'s own parameter, and inserts its middleware
+before the platform observability pair (same relative order as
+`build_react_platform_middleware_frame`'s reserved slot);
+`capability_block.tools`/`.mcp_prompt_groups` are threaded into the
+tool-prompt suffix the same way `ReActRuntime` does. A capability's `hitl`
+bindings are the one piece
+still not wired — `FredHitlMiddleware` isn't part of this minimal runtime's
+frame (same reason `policy.tool_approval.enabled` already raised) — so
+`build_executor` now raises `NotImplementedError` when a selected
+capability carries an HITL binding, rather than silently letting a call
+through that should have paused for approval (RFC §3.9: never silently
+degrade).
+
+The pre-fix log signal was also incomplete: an earlier version of this
+change added a one-off `[DEEP][DISPATCH]` tag in `build_executor`, but
+`DeepAgentRuntime` also inherits `ReActRuntime.on_activate()` and reuses
+`_TransportBackedReActExecutor.invoke()`/`.stream()` unchanged, and those
+three hard-coded `"ReActRuntime"` in their `[AGENT VERSION]` log lines —
+so a Deep turn logged a contradictory pair ("ReActRuntime" at activation
+and every invoke/stream, "DeepAgentRuntime" once at build). Fixed at the
+root instead: those three lines now report `type(self).__name__` (for
+`on_activate`) or a `runtime_class_name` threaded into
+`_TransportBackedReActExecutor` at construction (for `invoke`/`stream`),
+and `deep_runtime.py`'s own `[V2][EXECUTOR] build start` line (mirroring
+`ReActRuntime.build_executor`'s, extended with the same `runtime=%s` field)
+replaces the one-off tag — one consistent, correct signal instead of two.
+`deep_runtime.py` gained its own `logging.getLogger(__name__)`
+(`fred_runtime.deep.deep_runtime`) to carry that line.
+
+**Why.** `DeepAgentRuntime` existed and was directly unit-tested, but no
+dispatch path ever selected it — the first registered `DeepAgentDefinition`
+(`fred.github.deep_assistant`) would have run entirely on `ReActRuntime`
+instead of the `deepagents` LangGraph planner it was authored for.
+
+**Not in scope of this fix** — tracked under issue #2328 (bringing
+`DeepAgentRuntime` into the supported product landscape via a Fred-backed
+workspace backend), which itself gates on critical issue #2113 (agent
+filesystem access not scoped to the current team): `DeepAgentRuntime` still
+passes no explicit `backend=` to `deepagents.create_deep_agent` (defaults to
+`deepagents`'s in-memory, ephemeral `StateBackend`), and the
+`_allows_standard_filesystem_tools`/`_FILESYSTEM_TOOL_NAMES` guard in
+`deep_runtime.py` is unchanged. Capability HITL support for Deep agents
+(wiring an equivalent of `FredHitlMiddleware` into `deepagents`'s own
+graph/interrupt model) is also left for that follow-on work — this change
+only makes the current gap fail loudly instead of silently. The rejection
+is turn-level, not per-tool-call: it fires on any selected capability whose
+`hitl_specs()` is non-empty, even one whose binding is `require=False` with
+a `when` predicate that would, on `ReActRuntime`, never actually pause (e.g.
+`document_extract`'s operator-configurable `require_confirmation`) —
+correctly narrowing this needs the same per-call gating `FredHitlMiddleware`
+does, which is exactly the follow-on work above. Nothing in the
+capability-selection UI is aware of this yet either, so an operator can
+still select such a capability on a Deep agent template; the failure
+surfaces at first turn, not at selection time.
+
+**Scope.** `agent_app.py` (`_iterate_runtime_event_payloads`),
+`deep_runtime.py` (`DeepAgentRuntime.build_executor`,
+`_build_deepagent_runtime_middleware`), `react_runtime.py`
+(`_TransportBackedReActExecutor`, `on_activate`, `build_executor`'s
+`[V2][EXECUTOR] build start` line — all parameterized by the actual runtime
+class name, no behavior change for `ReActRuntime` itself).
+
+**Tests.** `libs/fred-runtime/tests/test_deep_agent_dispatch.py` — asserts a
+`DeepAgentDefinition` routes to `DeepAgentRuntime` and a plain
+`ReActAgentDefinition` routes to `ReActRuntime` (verified to fail against the
+pre-fix dispatch and pass against the fix), plus that the shared executor's
+per-exchange log line names the actual runtime class. Extended
+`test_deep_agent_middleware.py` — capability middleware lands before the
+observability pair, reaches the compiled agent, and a capability HITL
+binding raises `NotImplementedError` rather than being dropped.

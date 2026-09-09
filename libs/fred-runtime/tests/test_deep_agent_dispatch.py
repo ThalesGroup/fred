@@ -145,7 +145,7 @@ async def test_dispatch_routes_deep_definition_to_deep_runtime(
     # Whichever runtime class dispatch selects, capability_block must reach
     # it unchanged — this was the exact regression a dispatch-only fix would
     # otherwise have introduced for Deep (see RUNTIME-EXECUTION-CONTRACT.md
-    # §8.75).
+    # §8.76).
     selected = (
         _FakeDeepRuntime.instances[0] if expect_deep else _FakeReActRuntime.instances[0]
     )

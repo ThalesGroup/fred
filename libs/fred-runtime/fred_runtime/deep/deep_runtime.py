@@ -127,7 +127,7 @@ class DeepAgentRuntime(ReActRuntime):
         capability_block = self._capability_block
         if capability_block is not None and capability_block.hitl:
             # Coarse, turn-level: per-call `when` evaluation needs gating this
-            # minimal runtime doesn't have. Trade-off: RUNTIME-EXECUTION-CONTRACT.md §8.75.
+            # minimal runtime doesn't have. Trade-off: RUNTIME-EXECUTION-CONTRACT.md §8.76.
             raise NotImplementedError(
                 "DeepAgentRuntime does not support capability HITL bindings "
                 "in this minimal version."
