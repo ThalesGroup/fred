@@ -614,6 +614,79 @@ async def test_platform_admin_and_observer_never_grant_team_access(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_team_manager_reaches_only_the_team_registry_capabilities(
+    rebac_engine: RebacEngine,
+) -> None:
+    """AUTHZ-05 delegated tier: `team_manager` is exactly `can_create_team` +
+    `can_list_all_teams`, resolved live rather than only in the compiled model.
+
+    The two halves that matter: the delegation works (a non-admin holder
+    really does pass the two gates the `/admin/teams` page needs), and it is
+    narrow (deleting a team, rescuing its admin, the `can_manage_platform`
+    catch-all and the Keycloak directory all stay refused, and no team
+    relation is gained anywhere).
+    """
+    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    team_manager = _make_reference(Resource.USER, prefix="team-manager")
+    platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
+    team = _make_reference(Resource.TEAM, prefix="northbridge")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=team_manager,
+                relation=RelationType.TEAM_MANAGER,
+                resource=organization,
+            ),
+            Relation(
+                subject=platform_admin,
+                relation=RelationType.PLATFORM_ADMIN,
+                resource=organization,
+            ),
+            Relation(
+                subject=organization, relation=RelationType.ORGANIZATION, resource=team
+            ),
+        ]
+    )
+
+    for capability in (
+        OrganizationPermission.CAN_CREATE_TEAM,
+        OrganizationPermission.CAN_LIST_ALL_TEAMS,
+    ):
+        assert await rebac_engine.has_permission(
+            team_manager, capability, organization, consistency_token=token
+        ), f"team_manager must reach {capability.value}"
+        # The role unions in platform_admin, so an admin never loses a surface
+        # to the narrower role.
+        assert await rebac_engine.has_permission(
+            platform_admin, capability, organization, consistency_token=token
+        ), f"platform_admin must still reach {capability.value}"
+
+    for capability in (
+        OrganizationPermission.CAN_DELETE_TEAM,
+        OrganizationPermission.CAN_RESCUE_TEAM_ADMIN,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        OrganizationPermission.CAN_ADMINISTER_USERS,
+    ):
+        assert not await rebac_engine.has_permission(
+            team_manager, capability, organization, consistency_token=token
+        ), f"team_manager must not reach {capability.value}"
+
+    for capability in (
+        TeamPermission.CAN_READ,
+        TeamPermission.CAN_UPDATE_INFO,
+        TeamPermission.CAN_ADMINISTER_ADMINS,
+    ):
+        assert not await rebac_engine.has_permission(
+            team_manager, capability, team, consistency_token=token
+        ), (
+            f"team_manager must not reach team.{capability.value} — the registry "
+            f"governs the existence of teams, never their data"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_team_tag_document_hierarchy(
     rebac_engine: RebacEngine,
 ) -> None:

@@ -273,3 +273,47 @@ def test_narrow_capabilities_are_carved_out_of_can_manage_platform() -> None:
     assert organization["relations"]["can_manage_platform"] == {
         "computedUserset": {"relation": "platform_admin"}
     }, "can_manage_platform must stay platform_admin-only."
+
+
+def _capabilities_admitting(role: str) -> set[str]:
+    """Every `organization.can_*` relation whose definition names `role`.
+
+    Direct union children only, which is all the schema uses for the delegated
+    roles — a nested rewrite would show up as an unexpected miss here rather
+    than passing silently.
+    """
+    organization = _type_definition("organization")
+    admitting: set[str] = set()
+    for name, definition in organization["relations"].items():
+        if not name.startswith("can_"):
+            continue
+        children = definition.get("union", {}).get("child", [definition])
+        if any(
+            child.get("computedUserset", {}).get("relation") == role
+            for child in children
+        ):
+            admitting.add(name)
+    return admitting
+
+
+def test_team_manager_reaches_exactly_the_two_registry_capabilities() -> None:
+    """Closed-world check on the delegation's narrowness: `team_manager` must
+    admit into `can_create_team` and `can_list_all_teams` and nothing else.
+    Asserting the exact set (rather than spot-checking a few denials) is what
+    makes a future capability quietly unioning in `team_manager` fail here."""
+    assert _capabilities_admitting("team_manager") == {
+        "can_create_team",
+        "can_list_all_teams",
+    }
+
+
+def test_user_administration_stays_out_of_the_delegated_tier() -> None:
+    """`can_administer_users` gates the unfiltered Keycloak directory
+    (`GET /users`) and stays platform_admin-only. It is why creating a team
+    needs its own bounded candidate search (`GET /teams/candidate-admins`,
+    gated on `can_create_team`) instead of widening this listing."""
+    organization = _type_definition("organization")
+
+    assert organization["relations"]["can_administer_users"] == {
+        "computedUserset": {"relation": "platform_admin"}
+    }
