@@ -44,11 +44,12 @@ const displayName = (user: UserSummary) => userDisplayName(user.id, user);
 const userHaystack = (user: UserSummary) =>
   [user.first_name, user.last_name, user.username, user.email].filter(Boolean).join(" ").toLowerCase();
 
-// PLATFORM-ADMIN-DELEGATION-RFC.md §3.7 (#2405): root-managed admins,
-// delegated observers. The visibility rules below only mirror what the
-// backend enforces — `platform_admin` grant/revoke is shown to the bootstrap
-// root only (`caller_is_bootstrap_root`), and the root's own row never gets a
-// revoke affordance. Display-only: every action is re-checked server-side.
+// PLATFORM-ADMIN-DELEGATION-RFC.md §3.7 (#2405): root-managed admins, every
+// other role delegated to any admin. The visibility rules below only mirror
+// what the backend enforces — `platform_admin` grant/revoke is shown to the
+// bootstrap root only (`caller_is_bootstrap_root`), and the root's own row
+// never gets a revoke affordance. Display-only: every action is re-checked
+// server-side.
 export default function PlatformRolesPage() {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
@@ -57,7 +58,7 @@ export default function PlatformRolesPage() {
 
   const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
   const [userQuery, setUserQuery] = useState("");
-  const [relation, setRelation] = useState<PlatformRoleRelation>("platform_observer");
+  const [relation, setRelation] = useState<PlatformRoleRelation>("team_manager");
 
   const { data: platformRoles, isLoading: isLoadingRoles, isError: isRolesError } = usePlatformRolesQuery();
   const { data: allUsers } = useListUsersQuery();
@@ -67,7 +68,9 @@ export default function PlatformRolesPage() {
   const callerIsRoot = platformRoles?.caller_is_bootstrap_root ?? false;
 
   const canRevoke = (holder: PlatformRoleHolder, revoked: PlatformRoleRelation) => {
-    if (revoked === "platform_observer") return true;
+    // The root guards cover `platform_admin` alone — every other role is
+    // revocable by any admin, the root's own tuples included.
+    if (revoked !== "platform_admin") return true;
     return callerIsRoot && !holder.is_bootstrap_root;
   };
 
@@ -114,8 +117,8 @@ export default function PlatformRolesPage() {
     },
     {
       label: t("rework.platformRoles.holders.table.roles"),
-      // Wider than the user column: a two-role holder keeps both full-label
-      // chips ("Admin plateforme" + "Observateur plateforme") on one line.
+      // Wider than the user column: role labels are long, and a holder of
+      // several delegated roles should not wrap after every chip.
       size: "3fr",
       cellRenderer: (holder) => (
         <div className={styles.rolesCell}>
@@ -172,7 +175,13 @@ export default function PlatformRolesPage() {
     });
   };
 
-  const relationOptions: PlatformRoleRelation[] = ["platform_observer", "platform_admin"];
+  const relationOptions: PlatformRoleRelation[] = [
+    "team_manager",
+    "feature_manager",
+    "prompt_editor",
+    "platform_observer",
+    "platform_admin",
+  ];
 
   const holdersContent = () => {
     if (isLoadingRoles) return <p className={styles.emptyMessage}>{t("rework.platformRoles.holders.loading")}</p>;
@@ -239,6 +248,9 @@ export default function PlatformRolesPage() {
               </Button>
             ))}
           </div>
+          {/* Role names alone don't say what a role unlocks — the picked one
+              spells out its surface before the grant is submitted. */}
+          <p className={styles.roleDescription}>{t(`rework.platformRoles.roleDescriptions.${relation}`)}</p>
           {!callerIsRoot && <p className={styles.rootOnlyHint}>{t("rework.platformRoles.grant.rootOnlyHint")}</p>}
         </div>
         <div className={styles.actions}>

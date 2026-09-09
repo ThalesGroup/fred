@@ -6,8 +6,7 @@
   margin: 0 auto;
   padding: var(--spacing-xl);
   width: 100%;
-  /* Iso with the other admin pages; the roles column's 3fr share keeps a
-     two-role holder's full-label chips on a single line at this width. */
+  /* Iso with the other admin pages. */
   max-width: 760px;
 }
 
@@ -57,9 +56,11 @@
   font-size: 1.125rem;
 }
 
+/* Wraps: a holder can carry up to five roles, and full-label chips overflow
+   the column well before that. */
 .rolesCell {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-xs);
 }
@@ -77,9 +78,11 @@
 
 .relationChoices {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-s);
 }
 
+.roleDescription,
 .rootOnlyHint {
   margin: 0;
   color: var(--on-surface-retreat);

@@ -31,8 +31,7 @@ interface PromptResponse {
 
 interface BootstrapResponse {
   permissions?: {
-    is_platform_admin?: boolean;
-    is_platform_observer?: boolean;
+    platform_roles?: string[];
   };
 }
 
@@ -66,10 +65,10 @@ const deps: AuthzProbeDeps = {
   fetchBootstrapFlags: async (token) => {
     const { status, body } = await authedFetch("/control-plane/v1/frontend/bootstrap", token);
     if (status !== 200) throw new Error(`GET /frontend/bootstrap: HTTP ${status}`);
-    const permissions = (body as BootstrapResponse)?.permissions ?? {};
+    const roles = (body as BootstrapResponse)?.permissions?.platform_roles ?? [];
     return {
-      isPlatformAdmin: Boolean(permissions.is_platform_admin),
-      isPlatformObserver: Boolean(permissions.is_platform_observer),
+      isPlatformAdmin: roles.includes("platform_admin"),
+      isPlatformObserver: roles.includes("platform_observer"),
     };
   },
   fetchOwnTeamIds: async (token) => {

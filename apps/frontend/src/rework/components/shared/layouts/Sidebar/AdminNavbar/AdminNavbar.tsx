@@ -20,21 +20,21 @@ import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
 import styles from "./AdminNavbar.module.css";
 
-// Analytics (`can_observe_platform`, item 16) is the one `/admin` page a
-// platform_observer may see — everything else here is `Protected
-// requires="admin"` (router.tsx) and would just bounce them to
-// `/unauthorized` if shown, so it's hidden rather than left as a dead link.
+// Each entry mirrors its route guard in router.tsx: a page the caller cannot
+// open would just bounce them to `/unauthorized`, so it is hidden rather than
+// left as a dead link. Delegated role holders see only the entry they own.
 export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
-  const { canAdmin, canObservePlatform } = useUserCapabilities();
+  const { canAdmin, canObservePlatform, canManageTeams, canManageFeatures, canEditPlatformPrompt } =
+    useUserCapabilities();
   const allItems: (NavigationMenuItemProps & { visible: boolean })[] = [
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/admin/teams" },
-      visible: canAdmin,
+      visible: canManageTeams,
     },
     {
       type: "link",
@@ -63,14 +63,14 @@ export default function AdminNavbar() {
       label: t("rework.sidebar.admin.menu.platformPrompt"),
       icon: { category: "outlined", type: "auto_awesome", filled: false },
       linkProps: { to: "/admin/platform-prompt" },
-      visible: canAdmin,
+      visible: canEditPlatformPrompt,
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.capabilities"),
       icon: { category: "outlined", type: "tune", filled: false },
       linkProps: { to: "/admin/capabilities" },
-      visible: canAdmin,
+      visible: canManageFeatures,
     },
     {
       type: "link",
