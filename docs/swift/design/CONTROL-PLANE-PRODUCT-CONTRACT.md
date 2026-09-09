@@ -3375,3 +3375,340 @@ surface is easier to reason about than two.
 Both are read by the same admin page, which renders the instructions verbatim
 under the editor with no input control, in the same order the runtime composes
 them.
+
+---
+
+## 49. Contract Notes — team wiki (2026-09-06, issue #2571)
+
+A per-team tree of Markdown pages, owned by control-plane. Design and rationale:
+[`../rfc/TEAM-WIKI-RFC.md`](../rfc/TEAM-WIKI-RFC.md); this section records the
+wire surface only.
+
+**Why control-plane owns it and not the capability that will read it.** A
+capability-owned table would live in the agent pod's own database, and there is
+more than one agent pod: the same capability installed in two of them would give
+one team two silent wikis. A capability's route base URL is also published only
+on `ExecutionPreparation`, i.e. during a chat, while the Wiki page lives in the
+team navigation and has no chat to be prepared. And a pod being down must not
+take a team's written memory with it. The capability (slice 3) reaches this API
+through a typed port, the way `platform_postgres` and `document_access` already
+reach theirs.
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| GET | `/teams/{team_id}/wiki/availability` | `can_read_members` |
+| GET | `/teams/{team_id}/wiki/pages` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/pages` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/pages/{slug}` | `can_read_members` |
+| PATCH | `/teams/{team_id}/wiki/pages/{page_id}` | `can_update_resources` |
+| DELETE | `/teams/{team_id}/wiki/pages/{page_id}` | `can_update_resources` |
+| PUT | `/teams/{team_id}/wiki/pages/{page_id}/content` | `can_update_resources` |
+| POST | `/teams/{team_id}/wiki/pages/{page_id}/review` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/pages/{page_id}/revisions` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `can_update_resources` |
+| GET | `/teams/{team_id}/wiki/rules` | `can_read_members` |
+| PUT | `/teams/{team_id}/wiki/rules` | `can_update_resources` |
+| POST | `/teams/{team_id}/wiki/proposals/page` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/proposals/edit` | `can_read_members` |
+| GET | `/teams/{team_id}/wiki/proposals/{proposal_id}` | `can_read_members` |
+| POST | `/teams/{team_id}/wiki/proposals/{proposal_id}/publish` | `can_read_members` |
+
+**Reads are `can_read_members`, deliberately not `can_read`.** `can_read` is
+`team_member or public`, so on a team flagged public it would hand a team's
+internal knowledge to non-members. Writes are `can_update_resources`
+(`team_editor`), like every other team content surface — `team_admin` has no
+write authority here, the roles being orthogonal rather than hierarchical.
+
+**A team has a wiki only where the `team_wiki` capability is enabled**
+(2026-09-07, issue #2573). Every route in the table above is refused with 404
+when an admin has not enabled that agent capability for the team — one gate in
+`_require_wiki_access`, so a route added later cannot forget it. 404 rather than
+403 for the same reason a hidden agent template answers 404: to a team without
+the capability, this wiki does not exist.
+
+One switch covers the team's agents and its people on purpose. A wiki nothing
+can read into a conversation is a document store, which the team space already
+is; the point of the wiki is that agents work from it. `/wiki/availability` is
+the one route NOT behind that gate — answering "no" is its whole purpose, and
+the team navigation panel asks it to decide whether to offer the entry.
+
+**Disabling never deletes anything.** The tables are untouched, and re-enabling
+brings the wiki back exactly as it was, revisions and all. Revoking access is
+not a destructive operation and must never become one.
+
+**Agent writes are two steps, and member-level** (2026-09-07, issue #2574).
+`propose_*` stores a revision at `status = "proposed"` — invisible in the tree,
+absent from the page's history, changing nothing — and `publish` is what makes
+it the page's current revision. The split exists because the platform's HITL
+gate pauses a tool *before* it runs and carries only a truncated argument
+preview: too little to diff a page, but ample for a proposal id, which is what
+the approval card resolves to render the change.
+
+The proposal routes are `can_read_members`, not `can_update_resources`. This is
+deliberate (RFC §5.4, §9) and it has a consequence worth stating plainly: a plain
+member can propose and publish, so the editor role does not gate wiki content the
+way it gates the direct `PUT` routes. What makes that defensible is not a check
+but two properties — every published proposal is stamped `author_kind = "agent"`
+and leaves the page `needs_review`, and any editor can restore an earlier
+revision. Contribution is open; the audit trail and reversibility are the
+mitigation.
+
+Three things no configuration reaches: the rules page (refused by its `kind` on
+both propose paths), deletion, and renaming or moving — no tool and no endpoint
+exists for an agent to do any of them. A `proposed` or `rejected` revision also
+cannot be restored: doing so would publish an agent's draft as a human edit and
+clear the review mark, undoing the very decision the statuses record.
+
+Declining an approval leaves the proposal pending rather than marking it
+refused — the runtime never runs the tool, so nothing reports the decision back.
+A queue of pending proposals for editors stays deferred (RFC §12.2).
+
+**A proposal's base is caller-supplied and checked twice (2026-09-08).**
+`POST .../proposals/edit` requires `base_revision_id` — the `revision_id` a
+prior read of the page returned — rather than assuming "whatever is current
+now". It is refused with the same 409 shape as publishing (`current_revision_id`
++ `current_content_md`) unless it matches the page's current revision at that
+instant, catching a stale read before a proposal is even stored. The store's
+existing compare-and-swap at publish time is the atomic guarantee for a write
+landing after the proposal is created; this is the earlier, best-effort half —
+neither replaces the other. Before this, the server derived the base from
+`current_revision_id` itself, so a write racing between an agent's read and its
+propose call went undetected and could be silently overwritten.
+
+**Content is append-only.** An edit inserts a revision and moves the page's
+`current_revision_id`; it never updates content in place. History, restore and
+conflict detection are consequences of that shape, not features layered on it —
+which is why there is no content field on a page, and why `restore` publishes a
+new revision rather than deleting the ones after it.
+
+**A stale write is refused, and the refusal carries the current state.**
+`UpdateWikiPageContentRequest.base_revision_id` is the revision the author
+started from. If the page has moved on, the response is `409` with
+`current_revision_id` and `current_content_md` in the body, because whoever
+retries — a human in the editor or, from slice 4, an agent redoing its edit —
+needs something to rebase onto, and a bare error costs a second round trip to
+get it. That payload is read AFTER the failed write's transaction rolls back:
+reading it inside would report the revision that transaction opened on — already
+superseded under a real interleaving — sending a rebase-and-retry client round
+the same loop forever.
+
+**There is no unconditional overwrite.** Omitting `base_revision_id` on a page
+that already has a revision is refused exactly like a stale one: a caller cannot
+opt out of the check by leaving the field off. It is absent only when creating
+the rules page for the first time.
+
+**A proposal identical to the page it targets is refused** (2026-09-07,
+WIKI-05, 409). Field evidence: asked to MOVE two pages, an agent used the only
+write tool it has and re-proposed each page's existing text byte-for-byte. Both
+published, both changed nothing, and the agent read "published" as "moved" —
+then told the user a hierarchy that did not exist. A write that cannot change
+anything is now a dead end rather than a silent success, and the refusal says
+that content is the only thing an agent can change.
+
+**Two pages under one parent cannot share a title** (2026-09-07, WIKI-05).
+An agent addresses a page by its path — its titles from the root — so two
+namesakes under one parent would give two pages the same address. Refused with
+409 on create, rename, move, propose and publish; enforced under concurrent
+writes by `uq_team_wiki_pages_sibling_title`, case-folded and
+whitespace-collapsed, `NULLS NOT DISTINCT` so the rule reaches root pages too.
+The migration renames existing collisions rather than failing. It is the one
+part of this change a user can see: a refusal when they pick a title a sibling
+already has.
+
+**Every structural writer serializes per team** (2026-09-08, WIKI-05). Create,
+move, delete, and proposal publication each run inside
+`TeamWikiStore._structural_lock`: a Postgres transaction-scoped
+`pg_advisory_xact_lock` keyed on the team, held for the writer's whole
+transaction — same primitive as `TeamMetadataStore.advisory_lock`. Parent
+existence, the rules-page restriction, the depth cap and the cycle check all
+re-run inside that lock against a fresh read, not a snapshot taken before the
+write. Without it, two writers touching different rows (an opposing move on
+each side, or a child insert racing its parent's delete) could each pass
+validation and commit, since neither a bare transaction nor a lock on the
+moved row alone serializes across rows with no foreign key between them
+(`parent_page_id` deliberately carries none — §5.3). Content-only writes
+(`publish_revision`) do not take this lock: they cannot change the tree's
+shape, and are already serialized by their own conditional `UPDATE` on
+`current_revision_id`. No-op on SQLite, so the guarantee is proven only
+against a real PostgreSQL — see the `integration_postgres`-marked tests in
+`test_team_wiki_store_postgres_integration.py`.
+
+**A page's slug is an opaque identifier** (2026-09-07), eight random hex
+characters minted at creation. It never reaches an agent: the injected index
+carries titles only, and the capability resolves a path to a slug itself, so
+the HTTP API is unchanged. It is the page's URL and a rename never changes
+it — nothing maps an old slug to a page — so deriving it from the title would
+guarantee it goes stale on the first rename. Existing rows keep their slugs.
+
+**The rules page is an ordinary page at a reserved slug**, `kind="rules"`. That
+is what makes it unique per team: `(team_id, slug)` is already constrained, so
+no partial index is needed, and the page inherits history, attribution and
+restore for free. Its **content** is reachable only through `/wiki/rules`: the
+ordinary page routes refuse a `rules` page for content edit, rename, move and
+delete, so it cannot be rewritten by addressing it as a normal page.
+
+`restore` and the review mark are deliberately NOT refused on it. Both are
+`can_update_resources`, both are things an editor legitimately wants on the
+rules page, and neither is reachable by an agent — the capability (slice 4)
+ships no tool for either. Blocking them would cost an editor the ability to roll
+back a bad rules edit while buying no isolation, since that same editor can
+rewrite the page through `/wiki/rules` anyway.
+
+`GET /wiki/rules` **never creates the row.** It is gated on the member-only read
+permission, so materialising the page there would let any team member create the
+page that steers every agent's system prompt, and be recorded as its author. A
+team that has never written rules gets an empty representation with no
+`revision_id`; the row appears on the first `PUT`, which is editor-only.
+
+**One table holds every team's pages.** `team_id` is therefore the tenant
+boundary, and it is always derived server-side from the authenticated request —
+never read from a body parameter, never assembled by a client. A table per team
+was rejected: it would mean DDL at team creation, outside Alembic and invisible
+to the migration history.
+
+**`needs_review`** is set when an agent-authored revision is published and
+cleared when a human edits the page or an editor clears it explicitly. It is
+what gives editors a review queue without building one, and it is the
+counterpart of the wiki being open to every member's contributions through an
+agent (RFC §5.4).
+
+**2026-09-07 (WIKI-05) — clearing the review mark is recorded, and is not an
+edit.** `POST .../review` now stamps `reviewed_at`/`reviewed_by` on the page's
+currently published revision, and `WikiRevisionSummary` exposes both. Setting
+`needs_review` back to true clears them: the same text is under review again,
+so an earlier approval must not still stand against it.
+
+Two bugs closed by that. The endpoint used to overwrite the page's
+`updated_by`/`updated_at`, so validating an agent's page relabelled it as
+edited by whoever read it — those columns are now left alone, since reviewing
+is not editing. And the validation itself was recorded nowhere, which mattered
+because the person who approves an agent's text need not be the one it was
+written for. The frontend renders the stamp as its own entry in the page
+history, at its own time, next to the edit it approves.
+
+**The review mark is anchored to the revision the reviewer displayed**
+(2026-09-08, WIKI-05). `SetNeedsReviewRequest` gained `base_revision_id`
+(same field, same semantics as the content/rules writes above), and
+`TeamWikiStore.set_needs_review`'s page-mark `UPDATE` carries the same
+`current_revision_id == base_revision_id` compare-and-swap `publish_revision`
+already uses — not a preceding `SELECT`, so a write racing between the
+reviewer's read and this call cannot slip through a check that already
+passed. Before this, the endpoint took no revision at all: a validation could
+land on whatever text happened to be current at UPDATE time, certifying a
+revision the reviewer never actually saw if one was published in between.
+The refusal reuses the existing 409 shape (`current_revision_id`,
+`current_content_md`) rather than inventing a second one, and `updated_at`/
+`updated_by` stay untouched either way — the paragraph above's "reviewing is
+not editing" holds for the refused path too.
+
+**History is paginated by keyset, not offset, and bounded in SQL** (2026-09-08,
+WIKI-05). `GET .../revisions` used to load every revision of a page — content
+included — before slicing to `MAX_REVISION_PAGE_SIZE` (50) in Python; a page
+edited a thousand times pulled a thousand Markdown bodies out of the database
+to return 50. `TeamWikiStore.list_revisions` now takes `limit` and an optional
+`before: RevisionCursor` and applies both as a real `WHERE`/`LIMIT`, still
+ordered `(created_at DESC, revision_id DESC)`. The endpoint accepts an optional
+`cursor` query parameter and `WikiRevisionList` gained `next_cursor`
+(`str | None`); the service fetches `limit + 1` rows to learn whether more
+remain without a second `COUNT` query, and builds `next_cursor` from the last
+row actually **returned**, never the extra one.
+
+The cursor is `base64(isoformat(created_at) + "|" + revision_id)` — opaque to
+the client, validated on decode (well-formed base64, both parts present, the
+timestamp timezone-aware, the id matching `_new_id()`'s 32-lowercase-hex
+shape) and refused with `400`, never left to reach the store or fail as a
+`500`. It is a keyset, not an offset: offset pagination on `ORDER BY created_at
+DESC` breaks the moment a new revision is inserted while a reader is mid-walk,
+since every row after it shifts by one position, producing exactly the
+duplicate/gap this fix exists to prevent — a keyset anchored on an
+already-seen `(created_at, revision_id)` is unaffected by inserts elsewhere,
+because it names a value, not a position. The same tuple that breaks ties in
+the `ORDER BY` is what the keyset condition compares on
+(`created_at < cursor.created_at OR (created_at = cursor.created_at AND
+revision_id < cursor.revision_id)`), so several revisions sharing one
+timestamp — an edit then a restore inside the same second, which `_utcnow()`'s
+own docstring already calls ordinary — do not destabilize a walk.
+
+**Not a frozen snapshot, and that is closed rather than merely documented for
+the one case that mattered.** A pending proposal's `created_at` is
+proposal-creation time, not approval time, so in principle an approved
+proposal could surface behind a cursor a reader had already established.
+`publish_proposal`'s existing base-revision guard (above) closes this for
+edit-proposals: a proposal can only be approved while its base is still the
+page's current revision, i.e. nothing else was published since it was
+proposed — which means the approved revision is always the newest thing on
+the page, never older than anything a reader has already paged past. A
+new-page proposal cannot exhibit this at all: the page does not exist, and so
+has no pre-existing history to page past, until the proposal is approved.
+
+**Restore is unaffected by pagination.** `restore` addresses a revision by id,
+returned from any page a reader has fetched — never by its position within
+one. `list_revisions` bounding the query changes what one response returns,
+never what a caller can act on.
+
+**A proposal a human never acts on resolves after 30 days, not never**
+(2026-09-08, WIKI-05). Declining a HITL approval card is invisible to
+control-plane: the runtime jumps back to `model` on cancel and
+`wiki_publish_proposal`'s body never runs, so nothing reports the decision
+back — a decline and simple abandonment are indistinguishable today, and both
+left the proposal at `status="proposed"` forever, publishable by any later
+retry that reused its id.
+
+The platform HITL epic (issue #1080) confirms this is not settled anywhere
+else either — "maximum age of an unanswered prompt" is explicitly listed as
+an unresolved, platform-wide gap. `PolicyConfig.wiki_policies.proposal.
+retention` (`conversation_policy_catalog.yaml`, default `P30D`, an ISO-8601
+duration parsed the same way as every other retention value in that file) is
+the platform-wide answer for wiki proposals specifically — not a team
+override, since nothing asked for one.
+
+**The lifecycle sweep reuses the existing Temporal `LifecycleManagerWorkflow`
+tick — no second scheduled entrypoint.** The same 10-minute `Schedule`, the
+same worker, the same `POST /lifecycle/run-once` manual trigger now also list
+`status="proposed"` rows older than the retention cutoff
+(`scheduler/wiki_proposal_actions.py`) and reject each with a single
+conditional `UPDATE ... WHERE status = 'proposed'` — the identical
+compare-and-swap idiom `store.py` already uses for every other proposal
+transition. `LifecycleManagerResult.wiki_proposals` carries that sweep's own
+`scanned`/`rejected`/`dry_run_actions` counts alongside the conversation
+sweep's.
+
+**Correction (2026-09-08).** The paragraph above originally claimed the
+initial `WHERE status == "proposed"` lookup closed the retry hole with no
+change to the publish path, "proven under real concurrency" by an
+`asyncio.gather` test. Both halves were wrong: `publish_proposal` read the row
+once at the top of its transaction and then wrote `status="published"` back
+from that in-memory copy, unconditionally, as an ORM attribute flush keyed
+only on `revision_id` — a reject that committed after the read but before
+that write was silently overwritten. `asyncio.gather` never forced that
+window open (nothing pins two independent DB round trips' relative order), so
+the test could pass without the interleaving ever occurring. Fixed by making
+that final write a second CAS — `WHERE ... AND status = 'proposed'` — in the
+same transaction as every other write `publish_proposal` makes; a miss raises
+`WikiProposalNoLongerPendingError`, mapped to the same 404 as the top-of-
+function lookup, and rolls back the page create/update alongside it, so a
+losing publish leaves no partial write. Proven with a genuinely forced
+interleaving (an `AsyncSession.execute` pause keyed to the exact statement,
+not `asyncio.gather` timing) in `test_team_wiki_store_postgres_integration.py`:
+`test_publish_loses_to_a_reject_committed_between_its_read_and_write` (edit),
+`test_publish_loses_to_a_reject_of_a_new_page_proposal_creates_no_page`
+(new page), and `test_publish_loses_to_a_session_erasure_reject_committed_mid_transaction`
+(session erasure). The same guard is what makes the sweep safe against a
+concurrent approval in the other direction too: whichever of {reject,
+publish} commits first is the only one that changes anything.
+
+**Erasing a session rejects its still-pending proposals immediately**, rather
+than waiting out the retention window: `team_wiki_revisions.session_id`
+already existed but `ConversationErasureService.erase_session` never looked
+at it. A proposal from a conversation that no longer exists is unambiguously
+abandoned. This runs as its own isolated store step (`wiki_proposals` in the
+erase receipt), matching every other store there — a failure there alone
+makes the whole erase retryable, never destructive.
+
+**Not built here, and why.** A synchronous decline→reject callback would mean
+teaching `HitlSpec` an on-cancel hook that reaches back into a specific
+capability's owning service — a new cross-stack contract surface belonging to
+the HITL epic (#1080), not this fix. An editor review inbox for pending
+proposals (RFC §12.2) stays deferred; retention does not need it, and building
+one only to solve retention would be solving a smaller problem with a bigger
+one.

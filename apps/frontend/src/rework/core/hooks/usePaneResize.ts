@@ -13,14 +13,14 @@
 // limitations under the License.
 
 /**
- * useInlineDrawerResize
- * ---------------------
- * Pointer-drag resize for a right-hand push InlineDrawer. Ported from the
- * legacy chat's `useResizablePane` (ResizablePaneShell, pre-rework), which the
- * writable-document editor and the PPT preview shared on `main`: the drawer
- * width is the distance from the drawer's right edge to the pointer, clamped
- * to [minWidth, min(maxWidth, 45vw)] — the same viewport guard the push layout
- * applies in CSS — and the last chosen width persists per `persistKey` so it
+ * usePaneResize
+ * -------------
+ * Pointer-drag resize for a side pane. Ported from the legacy chat's
+ * `useResizablePane` (ResizablePaneShell, pre-rework), which the writable-
+ * document editor and the PPT preview shared on `main`: the width is the
+ * distance between the pane's fixed edge and the pointer, clamped to
+ * [minWidth, min(maxWidth, 45vw)] — the same viewport guard a push layout
+ * applies in CSS — and the last chosen width persists per `storageKey` so it
  * survives reloads.
  *
  * Pointer capture keeps every move/up event on the handle element itself, so
@@ -31,9 +31,9 @@
 import { useCallback, useRef, useState } from "react";
 import { useLocalStorageState } from "src/hooks/useLocalStorageState";
 
-interface UseInlineDrawerResizeOptions {
-  /** localStorage identity for the persisted width — one key per drawer family. */
-  persistKey: string;
+interface UsePaneResizeOptions {
+  /** Full localStorage key for the persisted width. */
+  storageKey: string;
   /** Width (px) before the user ever drags. */
   initialWidth: number;
   minWidth?: number;
@@ -41,34 +41,39 @@ interface UseInlineDrawerResizeOptions {
   /** Viewport-width cap as a fraction (0–1). Mirrors the CSS `min(width, Nvw)`
    * guard so the stored width never diverges from the rendered one. Default 0.45. */
   maxViewportFraction?: number;
-  /** The drawer element — its right edge anchors the width computation. */
-  drawerRef: React.RefObject<HTMLElement | null>;
+  /** The pane's FIXED edge — the one the drag does not move. A right-hand
+   *  drawer grows leftwards from its right edge; a left-hand rail grows
+   *  rightwards from its left one. Default "right". */
+  anchor?: "left" | "right";
+  /** The pane element, whose anchored edge the width is measured from. */
+  paneRef: React.RefObject<HTMLElement | null>;
 }
 
-export interface InlineDrawerResizeHandleProps {
+export interface PaneResizeHandleProps {
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
   onPointerCancel: (e: React.PointerEvent) => void;
 }
 
-export function useInlineDrawerResize({
-  persistKey,
+export function usePaneResize({
+  storageKey,
   initialWidth,
   minWidth = 320,
   maxWidth = 900,
   maxViewportFraction = 0.45,
-  drawerRef,
-}: UseInlineDrawerResizeOptions): {
+  anchor = "right",
+  paneRef,
+}: UsePaneResizeOptions): {
   width: number;
   dragging: boolean;
-  handleProps: InlineDrawerResizeHandleProps;
+  handleProps: PaneResizeHandleProps;
 } {
-  const [width, setWidth] = useLocalStorageState(`inline-drawer:${persistKey}:width`, initialWidth);
+  const [width, setWidth] = useLocalStorageState(storageKey, initialWidth);
   const [dragging, setDragging] = useState(false);
-  // The drawer's right edge is fixed while dragging (only the left edge moves);
-  // captured once per drag so pointermove never forces a layout read.
-  const dragRightEdgeRef = useRef(0);
+  // The anchored edge does not move while dragging; captured once per drag so
+  // pointermove never forces a layout read.
+  const dragAnchorRef = useRef(0);
 
   const clamp = useCallback(
     (value: number) => {
@@ -86,14 +91,15 @@ export function useInlineDrawerResize({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      const drawer = drawerRef.current;
-      if (!drawer) return;
-      dragRightEdgeRef.current = drawer.getBoundingClientRect().right;
+      const pane = paneRef.current;
+      if (!pane) return;
+      const rect = pane.getBoundingClientRect();
+      dragAnchorRef.current = anchor === "right" ? rect.right : rect.left;
       e.currentTarget.setPointerCapture(e.pointerId);
       setDragging(true);
       e.preventDefault();
     },
-    [drawerRef],
+    [paneRef, anchor],
   );
 
   const onPointerMove = useCallback(
@@ -101,9 +107,10 @@ export function useInlineDrawerResize({
       // Capture doubles as the "is a drag in progress" flag — a plain hover
       // emits moves too, but never holds the capture.
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      setWidth(clamp(Math.round(dragRightEdgeRef.current - e.clientX)));
+      const distance = anchor === "right" ? dragAnchorRef.current - e.clientX : e.clientX - dragAnchorRef.current;
+      setWidth(clamp(Math.round(distance)));
     },
-    [clamp, setWidth],
+    [clamp, setWidth, anchor],
   );
 
   const endDrag = useCallback(() => setDragging(false), []);

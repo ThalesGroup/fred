@@ -347,6 +347,86 @@ operations:
     review_status: approved
     required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/page
+    review_status: approved
+    required_permission: can_read_members # member-level on purpose: a proposal changes nothing in the wiki, and the HITL approval is the authority rather than the role of whoever drove the agent
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/edit
+    review_status: approved
+    required_permission: can_read_members # same as the page proposal; the rules page is refused by its kind, so no agent can reach it under any configuration
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}
+    review_status: approved
+    required_permission: can_read_members # what the approval modal reads to render the diff
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}/publish
+    review_status: approved
+    required_permission: can_read_members # the member driving the conversation approves their own agent's proposal (RFC §9); the published revision carries their identity and leaves the page marked for review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/availability
+    review_status: approved
+    required_permission: can_read_members # member-only, like every wiki read. Answers whether the team_wiki capability is enabled; deliberately NOT behind the capability gate itself, since answering "no" is its whole purpose
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{slug}
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/content
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/review
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/revisions
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/rules
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/wiki/rules
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, and there is deliberately no agent path to this endpoint at all: the rules page steers every agent holding the wiki capability, so no agent tool may ever target it
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances
     review_status: pending_review

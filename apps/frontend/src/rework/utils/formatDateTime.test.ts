@@ -21,6 +21,11 @@ describe("formatDateTime", () => {
     expect(formatDateTime(iso)).toBe("27/07/26 - 15:02");
   });
 
+  it("appends seconds on request, for a list where two entries can share a minute", () => {
+    const iso = new Date(2026, 6, 27, 15, 2, 9).toISOString();
+    expect(formatDateTime(iso, { seconds: true })).toBe("27/07/26 - 15:02:09");
+  });
+
   it("returns an em dash for missing or invalid input", () => {
     expect(formatDateTime(null)).toBe("—");
     expect(formatDateTime(undefined)).toBe("—");

@@ -2745,6 +2745,23 @@ _(none yet)_
 
 ---
 
+### `BetaBadge`
+
+**Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ### `NumberedChip`
 
 **Location:** `src/rework/components/shared/atoms/NumberedChip/NumberedChip.tsx`
@@ -4182,3 +4199,176 @@ conversation that produced them (the slice only drops them when the next convers
 upserts one of its own). A conversation whose documents all come from the API never
 upserts, so the previous conversation's document showed up as an extra tab - someone
 else's document, in an editor that autosaves.
+
+---
+
+## Team wiki (2026-09-06, WIKI-02, issue #2572)
+
+### `TeamWikiPage`
+
+**Location:** `src/rework/components/pages/TeamWikiPage/`
+**Status:** `Functional` — all four delivery slices shipped (RFC §14): human
+CRUD, revision history and restore, agent read, and agent proposals gated
+behind a human's HITL approval.
+
+`/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
+tree, the article, and the version history when it is open. The layout is
+`HelpCenterPage`'s, which already solves this shape; reading uses
+`MarkdownRenderer` and editing uses `MDXEditor`, the same component
+`writable_document` uses. Nothing new was built where something existed.
+
+**The slug is in the URL**, so a wiki page is deep-linkable and the browser's
+back button walks the pages. A rename does not change the slug, so links
+survive it — nothing here maps an old slug to a page, so re-minting one would
+be a hard 404 for every link already shared.
+
+**Titles are unique among siblings** (2026-09-07): creating, renaming or
+moving a page onto a sibling's title is refused with a translated message. That
+is what makes a page's path — its titles from the root — a unique address, which
+is how an agent names one; the slug never reaches the model at all.
+
+**The slug is opaque** (2026-09-07): eight random hex characters, minted at
+creation and never derived from the title. Because a rename cannot change it, a
+title-derived slug outlives the title it was named for — a page renamed to "Les
+Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every reader,
+and it misled a model too: handed `Les Shinigamis — sous-page-11` in its index,
+it read the pair as one name and called back with a slug that did not exist. An
+identifier that never claimed to mean anything cannot go stale. Pages created
+before this keep the slugs they have; changing them would break their links.
+
+**Every editor-only control is absent, not disabled**, for a member — except
+the version history, which is deliberately open to everyone: the endpoint is
+member-readable, and who wrote a page and when is exactly what a reader needs
+to judge one an agent may have touched. Restore stays editor-only, inside the
+panel. Hiding is courtesy; the server decides either way.
+
+**The rules page is not a node of the tree.** It sits below a separator with its
+own icon, because it is not content the team browses — it is the instruction
+sheet every agent reads — and putting it in the tree would invite moving or
+deleting it like an ordinary page. Its article carries a one-line notice saying
+what it does and that no agent can write to it.
+
+**The review mark** shows as a dot in the rail and a chip on the article, with a
+filter above the tree that lists every page waiting for a human read. The filter
+control stays rendered while the filter is ON even when the count reaches zero —
+clearing the last mark would otherwise remove the only way to turn the filter
+off and strand the reader on an empty rail.
+
+### The rules page's starting draft (2026-09-07, WIKI-05)
+
+Opening the rules page for the first time seeds the editor with a short
+outline: three empty headings for the team's own material, and two rules that
+are true for any team and that the capability's prompt block does not already
+say. Nothing is written until the editor saves, so a team that never opens the
+page keeps no rules — agents are told about rules the team actually wrote,
+never about a default nobody chose.
+
+**Emptiness is not the test** — `revision_id` is. A page saved empty was
+emptied on purpose, and handing the outline back would undo that decision every
+time it is reopened.
+
+**Placeholders would have been worse than nothing.** This page's text is
+injected verbatim into every agent's system prompt, under a heading saying to
+follow it and never act against it. A conventional template of the
+`_(describe your team here)_ ` kind would reach the model as a standing
+instruction on every question, for every team that never cleaned it up. That
+is why the guidance on how to fill the page sits in the editor UI
+(`rules.templateHint`) instead of in the page's own content.
+
+### Version history (2026-09-07, WIKI-05)
+
+Each tile says in words what happened — `Édition manuelle`, `Édition par agent
+(<name>)`, `Validation de l'édition de l'agent` — because a column of
+timestamps and names does not tell a reader which changes were an agent's, and
+that is the one thing they open the history to find out. The agent's display
+name is resolved from the team's instances, and only fetched once a page
+actually has an agent revision.
+
+**A validation is its own entry**, not a line inside the edit it approves. The
+approval happens later than the write and often by someone else, so folding the
+two together would lose both facts. Event entries carry no preview and no
+restore: no content of their own belongs to them.
+
+**The whole tile opens the version**, and restore is a small icon button in the
+corner the current-version tag would otherwise occupy — the two never appear on
+the same tile. A row of text buttons under every entry cost more height than
+the history it was listing.
+
+### Paged history (2026-09-08, WIKI-05)
+
+`GET .../revisions` is bounded server-side (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49), so `WikiRevisions` owns the walk backward through it rather than
+receiving a finished list. Pagination logic is pulled into pure functions in
+`historyPages.ts` (`mergeHistoryPage`), matching this feature's existing
+convention (`historyEntries.ts`, `wikiTree.ts`) of testing the logic without
+rendering the component.
+
+**A base page (`cursor` omitted) always replaces the accumulated state
+outright**, never merges with an older tail. This is both the first load and
+every later re-arrival of that same query — a restore, an edit, another
+viewer's write invalidating the `HISTORY-*` tag while the reader is still
+parked on it. Replacing is what keeps a stale second/third page from surviving
+next to a freshly-invalidated first one.
+
+**"Load older" is disabled while a request for it is in flight**, the
+codebase's usual guard against a second click firing a concurrent duplicate.
+Three terminal states share one area below the list: a `Réessayer` (`common.
+retry`) button on error, `Charger les versions antérieures` while
+`next_cursor` is non-null, and `Début de l'historique.` once it is null —
+never more than one at a time.
+
+**Follow-up (2026-09-08, WIKI-05): three gaps in "every later re-arrival"
+above.** The paragraph's claim only held while the reader stayed on the base
+page — walking to an older one unsubscribes it, so nothing was left to
+re-arrive on. (1) Closing and reopening the panel left `fetchCursor` and the
+accumulated `pages` exactly where they were; `WikiRevisions` now resets both
+on the close→open transition (a ref tracking the previous `open`). Resetting
+state alone is not enough when the panel was already on the base page:
+`fetchCursor` staying `undefined` is a no-op that triggers no request, so
+reopening explicitly calls the query's own `refetch()` once it is confirmed
+bound to `cursor: undefined` — the one case a plain state reset cannot reach.
+The merge effect also gained `fulfilledTimeStamp` as a dependency, since RTK
+Query's structural sharing can keep the same object reference when a refetch
+returns byte-identical content, and reopening must still show it. (2) A local
+mutation this page's OWNER knows about but
+`WikiRevisions` does not (the review mark, an edit or rules save) is handled
+by `TeamWikiPage` remounting the panel on a `key` of
+`` `${pageId}-${historyGeneration}` `` — a full remount resets the walk the
+same way a fresh page does, so "the page changed" and "a save changed this
+page's history" are one mechanism, not two. Restore's own explicit reset
+(inside `WikiRevisions`) still fires directly, since restore is this
+component's own mutation. (3) The merge effect read RTK Query's `data`, which
+keeps the PREVIOUS args' value while a new one is in flight; pairing it with
+the `fetchCursor` that had just changed could merge a response into the walk
+under the wrong cursor. It now reads `currentData`, which is only ever set
+from the args the hook was just called with. None of the three add polling, a
+second cache, or a reconciliation layer — an explicit reset stays the
+accepted trade-off over merging two walks.
+
+### Conflict handling in the editor
+
+A stale save returns 409 carrying the current text and revision. The editor
+shows a banner and keeps the user's own draft on screen and editable: nothing is
+discarded for them, and "Load their version" is a choice, not a consequence.
+
+Two things that had to be right for it to work at all:
+
+- **The editor remounts on a new `key`** when the server's version is loaded.
+  `MDXEditor` reads `markdown` only at mount (`WritableDocumentPane` documents
+  the same constraint), so changing the prop alone would leave the user's text
+  on screen while claiming to have loaded someone else's.
+- **The conflict's `current_revision_id` becomes the next save's base.** Without
+  it every retry after a conflict conflicts again, and the banner promises an
+  outcome the code cannot reach.
+
+Navigating to another page closes the editor. Left open, its draft would still
+be in state while the save now targets the new page id — one click from
+overwriting page B with page A's text.
+
+### Cache tags
+
+The page read is addressed by slug but tagged by `page_id` off the **result**:
+every mutation knows the page id and none of them knows the slug, so tagging by
+slug leaves a write unable to invalidate the page it just changed — the article
+keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
+the *next* save conflict every time.

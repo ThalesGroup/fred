@@ -76,6 +76,8 @@ def _deps(
         erase_session=erase_session,
         get_service_bearer=_get_bearer,
         get_task_service=cast(Any, lambda: task_service or _NoopTaskService()),
+        get_team_wiki_store=cast(Any, object),
+        get_policy_catalog=cast(Any, object),
     )
 
 
@@ -101,6 +103,8 @@ async def test_list_due_conversation_candidates_threads_user_id() -> None:
         erase_session=cast(Any, None),
         get_service_bearer=cast(Any, None),
         get_task_service=cast(Any, None),
+        get_team_wiki_store=cast(Any, None),
+        get_policy_catalog=cast(Any, None),
     )
 
     batch = await list_due_conversation_candidates(limit=10, deps=deps)
@@ -185,6 +189,8 @@ async def test_erase_at_expiry_retryable_when_bearer_mint_fails() -> None:
         erase_session=cast(Any, _erase),
         get_service_bearer=_failing_bearer,
         get_task_service=cast(Any, _NoopTaskService),
+        get_team_wiki_store=cast(Any, None),
+        get_policy_catalog=cast(Any, None),
     )
 
     result = await delete_conversation_and_mark_done(event=_event(), deps=deps)

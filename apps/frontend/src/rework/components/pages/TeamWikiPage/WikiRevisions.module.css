@@ -1,0 +1,177 @@
+/* Laid over the page's right edge rather than taking a column of its own:
+   opening the history is a glance at what changed, and re-flowing the article
+   underneath costs the reader their place in it. The card clips it, so the
+   closed panel simply sits outside the rounding. */
+.panel {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  transform: translateX(100%);
+  opacity: 0;
+  z-index: 1;
+  transition:
+    transform var(--duration-short-3) var(--easing-standard),
+    opacity var(--duration-short-3) var(--easing-standard);
+  box-shadow: var(--shadow-m);
+  border-left: 1px solid var(--outline-muted);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  width: 340px;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.panelOpen {
+  transform: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font: var(--font-label-large);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  /* Transparent by default so the outlined entry below is the same size as
+     every other one — a current revision that grew by 4px would jump. */
+  border: 2px solid transparent;
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
+  padding: var(--spacing-xs);
+}
+
+/* A validation records that someone read the version above it. Recessed, so the
+   timeline still reads as a list of versions with events between them. */
+.entryEvent {
+  background: var(--surface-container);
+}
+
+/* The current revision is outlined rather than only tagged: in a list of
+   near-identical rows, the eye finds a border before it finds a word. */
+.entryCurrent {
+  border-color: var(--secondary-container);
+}
+
+/* The tile's own body: what happened, then when and by whom. A button on a
+   version, a plain block on an event. Right padding clears the corner control. */
+.entryMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  cursor: inherit;
+  border: none;
+  background: none;
+  padding: 0 var(--spacing-l) 0 0;
+  min-width: 0;
+  text-align: left;
+}
+
+button.entryMain {
+  cursor: pointer;
+}
+
+button.entryMain:hover .what {
+  color: var(--core-primary);
+}
+
+/* Says in words what this entry is — a manual edit, an agent's, a validation.
+   The line the eye lands on, so it leads rather than the timestamp. */
+.what {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Restore, tucked into the corner the current-version tag would otherwise hold
+   — the two are mutually exclusive, so they can share the spot. */
+.corner {
+  position: absolute;
+  top: var(--spacing-3xs);
+  right: var(--spacing-3xs);
+}
+
+.currentTag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* Flush into the tile's own corner, inside the outline. Only the two corners
+     it does not share with the tile are rounded. */
+  border-radius: 0 calc(var(--radius-s) - 2px) 0 calc(var(--radius-s) - 2px);
+  background: var(--secondary-container);
+  padding: 2px var(--spacing-2xs);
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+}
+
+.preview {
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-2xs);
+  max-height: 320px;
+  overflow-y: auto;
+  font: var(--font-body-small);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l);
+}
+
+.empty {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The bottom of the list: "load older", a retry, or "that's everything" —
+   one of the three, centered, never stacked with the initial spinner above. */
+.pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) 0;
+}

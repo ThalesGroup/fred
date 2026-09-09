@@ -1,0 +1,163 @@
+.article {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: var(--spacing-m);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Breadcrumb left, page actions right. */
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+/* What names the page — trail, actions, title, metadata — stays put. The rule
+   below it is the line the body scrolls under: without it, text sliding away
+   under a heading that never moves reads as a rendering fault. */
+.header {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-m);
+}
+
+/* Two groups in one header: the top row is navigation and commands, this is
+   the page's identity. Their own gaps, so they do not read as one list. */
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding-top: var(--spacing-m);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.trail {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* A real element between crumbs rather than an ::after on each: the trail ends
+   on a page name, never on a separator. */
+.trailSeparator {
+  color: var(--on-surface-muted);
+}
+
+/* The page being read. Not a link — it is where you already are — and stated
+   in the full text colour so the trail reads as leading somewhere. */
+.trailCurrent {
+  color: var(--on-surface);
+}
+
+.trailLink {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.trailLink:hover {
+  color: var(--on-surface);
+  text-decoration: underline;
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+/* The icon buttons read as one toolbar, set apart from the primary action:
+   no gap inside, a full step outside. */
+.tools {
+  display: flex;
+  align-items: center;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* An agent wrote the current revision. Stated plainly rather than decoratively:
+   a reader deciding how much to trust a page needs to know this at a glance. */
+.agentBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  background: var(--tertiary-container);
+  padding: 2px var(--spacing-xs);
+  color: var(--on-tertiary-container);
+  font: var(--font-label-small);
+}
+
+.reviewChip {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-full);
+  background: none;
+  padding: 2px var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.reviewChip:hover:not(:disabled) {
+  background: var(--state-on-surface-hover);
+}
+
+.reviewChip:disabled {
+  cursor: default;
+}
+
+.rulesNotice {
+  margin: 0;
+  border-left: 2px solid var(--outline-variant);
+  padding-left: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.body {
+  min-width: 0;
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
