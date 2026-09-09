@@ -27,6 +27,7 @@ import re
 from typing import Any
 
 import pytest
+from fred_capability_team_wiki.wiki import capability as cap_module
 from fred_capability_team_wiki.wiki.capability import (
     PAGE_READ_MAX_CHARS,
     TeamWikiCapability,
@@ -362,8 +363,6 @@ def test_pagination_boundary_is_exact_when_pages_fit_precisely() -> None:
     pages = (_page("a", "A"), _page("b", "B"))
     line_len = len(f"- {pages[1].title}") + 1
     budget = len(f"- {pages[0].title}") + 1 + line_len
-
-    import fred_capability_team_wiki.wiki.capability as cap_module
 
     original = cap_module.LIST_PAGES_MAX_CHARS
     cap_module.LIST_PAGES_MAX_CHARS = budget
