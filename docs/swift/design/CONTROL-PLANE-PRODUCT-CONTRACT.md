@@ -3712,3 +3712,35 @@ the HITL epic (#1080), not this fix. An editor review inbox for pending
 proposals (RFC §12.2) stays deferred; retention does not need it, and building
 one only to solve retention would be solving a smaller problem with a bigger
 one.
+
+## 50. Contract Notes — the admin tier splits into delegated roles (2026-09-09, issue #2592)
+
+**Extends §43.** `organization:fred` gains three role relations, each
+`[user] or platform_admin` in `schema.fga` — `team_manager`,
+`feature_manager`, `prompt_editor` — plus two computed relations carved out
+of the `can_manage_platform` catch-all: `can_manage_capabilities` and
+`can_edit_platform_prompt`. `can_create_team` and `can_list_all_teams` now
+read `platform_admin or team_manager`; `can_delete_team` and
+`can_rescue_team_admin` stay `platform_admin`-only, so registry governance is
+deliberately split from team creation. `can_manage_platform` is unchanged and
+still gates import/export, tasks and platform reset.
+
+`PlatformRoleRelation` grows the three values, so §43's three routes accept
+them with no other change. The service layer iterates the enum instead of
+naming roles, and the root guards remain scoped to `platform_admin` alone:
+**any `platform_admin` grants and revokes the three new roles**, exactly as
+for `platform_observer`. §43's direct-tuple rule now carries five relations'
+worth of weight — every non-admin role unions in `platform_admin`, so an
+expanded read would list every admin as a holder of all five and offer four
+revokes that delete nothing.
+
+**Breaking (frontend bootstrap):** `PermissionSummary` replaces
+`is_platform_admin` / `is_platform_observer` with
+`platform_roles: PlatformRoleRelation[]` — the roles the caller
+*effectively* holds, union-resolved, so a `platform_admin` carries all five.
+That is deliberately unlike `GET /users/platform-roles`, which reports
+directly-granted tuples only because those are what a revoke can delete.
+Five parallel `is_*` booleans over one closed enum is a list, and each future
+role would otherwise have cost a field, a codegen run and an edit in every
+consumer. The generated client, the frontend capability hook and the CLI
+bootstrap summary move with it.
