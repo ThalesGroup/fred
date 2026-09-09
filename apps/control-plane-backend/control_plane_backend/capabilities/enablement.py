@@ -32,8 +32,10 @@ here so the RFC invariants hold in exactly one spot:
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping
 
 from fred_core.common import (
@@ -44,6 +46,10 @@ from fred_core.common import (
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.security.models import Resource
+from fred_core.security.rebac.application_authz import (
+    app_ref,
+    application_id_from_catalog_id,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
@@ -271,6 +277,20 @@ def cap_ref(capability_id: str) -> RebacReference:
     return RebacReference(type=Resource.CAPABILITY, id=capability_id)
 
 
+def enablement_ref(catalog_entry: CapabilityCatalogEntry) -> RebacReference:
+    """Resolve a shared-catalog entry to its typed authorization object.
+
+    The admin API intentionally keeps one flat catalog whose application ids
+    are namespaced as ``app__<app_id>``. OpenFGA has a real ``app`` type, so
+    only this boundary removes the catalog namespace; all other entries remain
+    capabilities with their catalog id verbatim.
+    """
+
+    if catalog_entry.kind == "app":
+        return app_ref(application_id_from_catalog_id(catalog_entry.id))
+    return cap_ref(catalog_entry.id)
+
+
 def _team_ref(team_id: TeamId) -> RebacReference:
     return RebacReference(type=Resource.TEAM, id=str(team_id))
 
@@ -375,17 +395,25 @@ def _suspension_store(
     return agent_instance_store
 
 
-async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> None:
-    """Idempotently anchor a capability to the singleton organization so its
-    `can_manage` / `can_use` permissions resolve (RFC §8.1)."""
+async def ensure_enablement_anchor(
+    rebac: RebacEngine, resource: RebacReference
+) -> None:
+    """Idempotently anchor an enablement resource to the organization."""
 
     await rebac.add_relation(
         Relation(
             subject=ORG_REF,
             relation=RelationType.ORGANIZATION,
-            resource=cap_ref(capability_id),
+            resource=resource,
         )
     )
+
+
+async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> None:
+    """Idempotently anchor a capability to the singleton organization so its
+    `can_manage` / `can_use` permissions resolve (RFC §8.1)."""
+
+    await ensure_enablement_anchor(rebac, cap_ref(capability_id))
 
 
 async def enable_capability_for_team(
@@ -429,38 +457,30 @@ async def enable_capability_for_team(
             updated_by=updated_by,
         )
     # 2. Authorization half: anchor, clear any opt-out, then grant.
-    await ensure_capability_anchor(rebac, catalog_entry.id)
+    resource = enablement_ref(catalog_entry)
+    await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
             Relation(
                 subject=_team_ref(team_id),
                 relation=RelationType.DISABLED,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             )
         )
         await rebac.add_relation(
             Relation(
                 subject=_team_ref(team_id),
                 relation=RelationType.ENABLED,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             ),
             actor_uid=updated_by,
         )
     finally:
-        # Codex review (#2181 PR): the `delete` above can succeed and the
-        # `add` still raise — invalidating only after both means a cached
-        # reader keeps reporting the pre-write (disabled) state for a full
-        # TTL despite OpenFGA's state having already changed. `finally`
-        # covers that half-failure the same way a full success does; an
-        # extra invalidate on the (rarer) all-writes-failed path just costs
-        # one avoidable refetch, never a correctness problem.
-        invalidate_capability_relations_cache(catalog_entry.id)
-    logger.info(
-        "[capability-enablement] enabled capability=%s team=%s by=%s",
-        catalog_entry.id,
-        team_id,
-        updated_by,
-    )
+        # Either write can fail after the other lands, so invalidate on the
+        # half-failure too: a stale cached reader would otherwise hold the
+        # pre-write state for a full TTL. An extra refetch is the only cost.
+        invalidate_enablement_relations_cache(resource)
+    logger.info("[capability-enablement] enabled one capability for one team")
     return validated
 
 
@@ -480,33 +500,50 @@ async def disable_capability_for_team(
     re-enable restores prior settings) and a `disabled` opt-out tuple is
     written — always, not only for default-on capabilities, so the explicit
     disable survives a later default-on flip and reads back as the "disabled"
-    position in the admin tri-state matrix. Every dependent agent instance is
-    then suspended with `CAPABILITY_ACCESS_REVOKED`. Returns the number of
-    instances suspended.
+    position in the admin tri-state matrix. The sole exception is a stale
+    personal-team application tuple: applications cannot have personal scope,
+    so disabling one is a cleanup operation that deletes both possible team
+    relations and writes neither an anchor nor an opt-out. Every dependent
+    agent instance is then suspended with `CAPABILITY_ACCESS_REVOKED`. Returns
+    the number of instances suspended.
     """
 
     suspend_store = _suspension_store(catalog_entry, agent_instance_store)
+    resource = enablement_ref(catalog_entry)
+    personal_app_cleanup = catalog_entry.kind == "app" and (
+        _is_personal_application_team(team_id)
+    )
+    if catalog_entry.kind == "app" and not personal_app_cleanup:
+        await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
             Relation(
                 subject=_team_ref(team_id),
                 relation=RelationType.ENABLED,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             )
         )
-        await rebac.add_relation(
-            Relation(
-                subject=_team_ref(team_id),
-                relation=RelationType.DISABLED,
-                resource=cap_ref(catalog_entry.id),
-            ),
-            actor_uid=updated_by,
-        )
+        if personal_app_cleanup:
+            await rebac.delete_relation(
+                Relation(
+                    subject=_team_ref(team_id),
+                    relation=RelationType.DISABLED,
+                    resource=resource,
+                )
+            )
+        else:
+            await rebac.add_relation(
+                Relation(
+                    subject=_team_ref(team_id),
+                    relation=RelationType.DISABLED,
+                    resource=resource,
+                ),
+                actor_uid=updated_by,
+            )
     finally:
-        # See `enable_capability_for_team`'s matching comment (Codex review,
-        # #2181 PR): a half-failure between the two writes must not leave a
-        # cached reader reporting the pre-write (enabled) state for a TTL.
-        invalidate_capability_relations_cache(catalog_entry.id)
+        # Invalidate on the half-failure too: one write landing without the
+        # other must not leave a cached reader on the pre-write state.
+        invalidate_enablement_relations_cache(resource)
     del settings_store  # settings row is intentionally retained (re-enable restores)
     if suspend_store is None:
         return 0
@@ -555,26 +592,28 @@ async def reset_capability_for_team(
     suspend_store = (
         None if default_on else _suspension_store(catalog_entry, agent_instance_store)
     )
+    resource = enablement_ref(catalog_entry)
+    if catalog_entry.kind == "app" and not _is_personal_application_team(team_id):
+        await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
             Relation(
                 subject=_team_ref(team_id),
                 relation=RelationType.ENABLED,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             )
         )
         await rebac.delete_relation(
             Relation(
                 subject=_team_ref(team_id),
                 relation=RelationType.DISABLED,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             )
         )
     finally:
-        # See `enable_capability_for_team`'s matching comment (Codex review,
-        # #2181 PR): a half-failure between the two deletes must not leave a
-        # cached reader reporting the pre-write state for a TTL.
-        invalidate_capability_relations_cache(catalog_entry.id)
+        # Invalidate on the half-failure too: one delete landing without the
+        # other must not leave a cached reader on the pre-write state.
+        invalidate_enablement_relations_cache(resource)
     if suspend_store is None:
         return 0
     return await suspend_dependent_instances(
@@ -820,31 +859,35 @@ async def set_capability_default_on(
                 "cannot be default-on."
             )
         await _require_agent_capability_dependencies_default_on(rebac, catalog_entry)
-        await ensure_capability_anchor(rebac, catalog_entry.id)
+        resource = enablement_ref(catalog_entry)
+        await ensure_enablement_anchor(rebac, resource)
         try:
             await rebac.add_relation(
                 Relation(
                     subject=ORG_REF,
                     relation=RelationType.DEFAULT_ON,
-                    resource=cap_ref(catalog_entry.id),
+                    resource=resource,
                 ),
                 actor_uid=updated_by,
             )
         finally:
-            invalidate_capability_relations_cache(catalog_entry.id)
+            invalidate_enablement_relations_cache(resource)
         return 0
 
     suspend_store = _suspension_store(catalog_entry, agent_instance_store)
+    resource = enablement_ref(catalog_entry)
+    if catalog_entry.kind == "app":
+        await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
             Relation(
                 subject=ORG_REF,
                 relation=RelationType.DEFAULT_ON,
-                resource=cap_ref(catalog_entry.id),
+                resource=resource,
             )
         )
     finally:
-        invalidate_capability_relations_cache(catalog_entry.id)
+        invalidate_enablement_relations_cache(resource)
     if suspend_store is None:
         return 0
 
@@ -996,20 +1039,31 @@ async def _apply_personal_scope_tuples(
 
 _CAPABILITY_RELATIONS_CACHE_TTL_SECONDS = 45
 _CAPABILITY_RELATIONS_CACHE: ThreadSafeLRUCache[
-    str, tuple[float, list[Relation] | RebacDisabledResult]
+    RebacReference, tuple[float, list[Relation] | RebacDisabledResult]
 ] = ThreadSafeLRUCache(max_size=2000)
-# Mirrors `teams/service.py`'s `_TEAM_RELATIONS_LAST_INVALIDATED` (#2160
-# review): a read in flight when a write invalidates must not resurrect the
-# pre-write snapshot it already had in hand — see the race-guard comment in
-# `get_capability_relations_cached` below.
-_CAPABILITY_RELATIONS_LAST_INVALIDATED: ThreadSafeLRUCache[str, float] = (
+# A read in flight when a write invalidates must not resurrect the pre-write
+# snapshot it already had in hand. Tickets, not timestamps: two clock readings
+# taken a few statements apart tie, and a tie declined to cache.
+_CAPABILITY_RELATIONS_INVALIDATION_TICKET: ThreadSafeLRUCache[RebacReference, int] = (
     ThreadSafeLRUCache(max_size=2000)
 )
+_CAPABILITY_RELATIONS_TICKETS = itertools.count(1)
+_CAPABILITY_RELATIONS_TICKET_LOCK = Lock()
 
 
-def invalidate_capability_relations_cache(capability_id: str) -> None:
-    """Drop the cached `list_direct_relations` result for one capability
-    (#2181).
+def _stamp_enablement_invalidation(resource: RebacReference) -> None:
+    with _CAPABILITY_RELATIONS_TICKET_LOCK:
+        _CAPABILITY_RELATIONS_INVALIDATION_TICKET.set(
+            resource, next(_CAPABILITY_RELATIONS_TICKETS)
+        )
+
+
+def _enablement_invalidation_ticket(resource: RebacReference) -> int:
+    return _CAPABILITY_RELATIONS_INVALIDATION_TICKET.get(resource) or 0
+
+
+def invalidate_enablement_relations_cache(resource: RebacReference) -> None:
+    """Drop one typed enablement object's cached direct relations.
 
     Every relation-mutating call in this module (enable/disable/reset a
     team's grant, the default-on toggle, the personal-scope toggle) calls
@@ -1017,15 +1071,23 @@ def invalidate_capability_relations_cache(capability_id: str) -> None:
     `invalidate_team_relations_cache`.
     """
 
-    _CAPABILITY_RELATIONS_CACHE.delete(capability_id)
-    _CAPABILITY_RELATIONS_LAST_INVALIDATED.set(capability_id, time.time())
+    _CAPABILITY_RELATIONS_CACHE.delete(resource)
+    _stamp_enablement_invalidation(resource)
 
 
-async def get_capability_relations_cached(
-    rebac: RebacEngine, capability_id: str
+def invalidate_capability_relations_cache(capability_id: str) -> None:
+    """Compatibility wrapper for capability-only callers and tests."""
+
+    invalidate_enablement_relations_cache(cap_ref(capability_id))
+
+
+async def get_enablement_relations_cached(
+    rebac: RebacEngine, resource: RebacReference
 ) -> "list[Relation] | RebacDisabledResult":
-    """Cached `list_direct_relations(capability:<capability_id>)`, TTL-bounded
-    (#2181, follow-up to #2089).
+    """Cache ``list_direct_relations`` by the complete typed object reference.
+
+    Typed keys keep application and capability relations separate when
+    their resource identifiers overlap.
 
     #2089 made `GET /admin/capabilities`'s per-row ReBAC reads concurrent but
     did not reduce their count: each row still fired up to 5 individual
@@ -1040,33 +1102,38 @@ async def get_capability_relations_cached(
     of letting OpenFGA filter server-side. Layered with the same short TTL
     (45s) write-invalidated cache shape as `_get_team_relations_cached`.
 
-    Race guard, identical to `_get_team_relations_cached`: `read_started_at`
-    is captured before the `await`; if `invalidate_capability_relations_cache`
-    ran for this capability at or after that moment, the freshly fetched
-    result is provably stale and is returned without being published into the
-    cache, so a concurrent write's invalidation is never silently undone for
-    a full TTL.
+    Race guard: the object's invalidation ticket is read either side of the
+    `await`. A changed ticket means a write invalidated mid-fetch, so the
+    result is returned unpublished rather than resurrecting a stale entry.
     """
 
     read_started_at = time.time()
-    cached = _CAPABILITY_RELATIONS_CACHE.get(capability_id)
+    cached = _CAPABILITY_RELATIONS_CACHE.get(resource)
     if cached is not None:
         expires_at, relations = cached
         if expires_at > read_started_at:
             return relations
-        _CAPABILITY_RELATIONS_CACHE.delete(capability_id)
+        _CAPABILITY_RELATIONS_CACHE.delete(resource)
 
-    relations = await rebac.list_direct_relations(cap_ref(capability_id))
+    ticket_before = _enablement_invalidation_ticket(resource)
+    relations = await rebac.list_direct_relations(resource)
 
-    last_invalidated = _CAPABILITY_RELATIONS_LAST_INVALIDATED.get(capability_id)
-    if last_invalidated is not None and last_invalidated >= read_started_at:
+    if _enablement_invalidation_ticket(resource) != ticket_before:
         return relations
 
     _CAPABILITY_RELATIONS_CACHE.set(
-        capability_id,
+        resource,
         (read_started_at + _CAPABILITY_RELATIONS_CACHE_TTL_SECONDS, relations),
     )
     return relations
+
+
+async def get_capability_relations_cached(
+    rebac: RebacEngine, capability_id: str
+) -> "list[Relation] | RebacDisabledResult":
+    """Compatibility wrapper for capability-only callers and tests."""
+
+    return await get_enablement_relations_cached(rebac, cap_ref(capability_id))
 
 
 def capability_relation_subjects(
@@ -1118,9 +1185,17 @@ async def has_org_relation(
     across many teams.
     """
 
-    relations = await rebac.list_direct_relations(
-        cap_ref(capability_id), subject=ORG_REF
-    )
+    return await has_enablement_org_relation(rebac, cap_ref(capability_id), relation)
+
+
+async def has_enablement_org_relation(
+    rebac: RebacEngine,
+    resource: RebacReference,
+    relation: RelationType,
+) -> bool:
+    """Fresh org-marker lookup for one typed enablement object."""
+
+    relations = await rebac.list_direct_relations(resource, subject=ORG_REF)
     return ORGANIZATION_ID in capability_relation_subjects(
         relations, relation, Resource.ORGANIZATION
     )

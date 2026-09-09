@@ -25,8 +25,8 @@ from __future__ import annotations
 import logging
 import re
 
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
@@ -170,7 +170,7 @@ async def aggregate_capability_catalog(
                     source.base_url,
                 )
                 continue
-            if entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+            if entry.id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
                 logger.error(
                     "[capability-catalog] refusing kind=%r capability id %r "
                     'from %s: the %r prefix is reserved for kind="app" '
@@ -178,7 +178,7 @@ async def aggregate_capability_catalog(
                     entry.kind,
                     entry.id,
                     source.base_url,
-                    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+                    APPLICATION_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
             existing = catalog.get(entry.id)
@@ -221,7 +221,7 @@ async def aggregate_capability_catalog(
         for app in registered_applications(
             deps.configuration.platform.application_sources
         ):
-            catalog[app.capability_id] = app.capability_entry()
+            catalog[app.catalog_id] = app.capability_entry()
     return catalog
 
 
