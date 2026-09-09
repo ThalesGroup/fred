@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import postcss from "postcss";
+import selectorParser from "postcss-selector-parser";
 import valueParser from "postcss-value-parser";
 import * as fontkit from "fontkit";
 
@@ -71,7 +72,18 @@ function bareReferences(content) {
     .filter((reference) => !reference.startsWith("."));
 }
 
-async function assertRelativeReferences(packageRoot, relativePath) {
+async function isRegularFile(candidate) {
+  return lstat(candidate).then(
+    (entry) => entry.isFile(),
+    () => false,
+  );
+}
+
+async function assertRelativeReferences(
+  packageRoot,
+  relativePath,
+  referenceKind,
+) {
   const content = await readFile(path.join(packageRoot, relativePath), "utf8");
   for (const reference of bareReferences(content)) {
     assert(
@@ -92,24 +104,25 @@ async function assertRelativeReferences(packageRoot, relativePath) {
       !resolvedRelative.startsWith("..") && !path.isAbsolute(resolvedRelative),
       `${relativePath} has escaping reference ${reference}`,
     );
-    const candidates = [
-      resolved,
-      resolved.replace(/\.tsx?$/, ".d.ts"),
-      `${resolved}.d.ts`,
-      `${resolved}.js`,
-    ];
-    const present = await Promise.all(
-      candidates.map(async (candidate) =>
-        lstat(candidate).then(
-          (entry) => entry.isFile(),
-          () => false,
-        ),
-      ),
-    );
-    assert(
-      present.some(Boolean),
-      `${relativePath} has unresolved reference ${reference}`,
-    );
+    if (referenceKind === "runtime") {
+      assert(
+        [".js", ".mjs", ".cjs"].includes(path.extname(resolved)) &&
+          (await isRegularFile(resolved)),
+        `${relativePath} has runtime reference ${reference} without an executable module`,
+      );
+    } else {
+      const candidates = [
+        resolved,
+        resolved.replace(/\.(?:tsx?|jsx?|mjs|cjs)$/, ".d.ts"),
+        `${resolved}.d.ts`,
+        `${resolved}.js`,
+      ];
+      const present = await Promise.all(candidates.map(isRegularFile));
+      assert(
+        present.some(Boolean),
+        `${relativePath} has unresolved reference ${reference} in the declaration graph`,
+      );
+    }
   }
   for (const forbidden of [
     /@(?:shared|rework)\b/,
@@ -123,6 +136,45 @@ async function assertRelativeReferences(packageRoot, relativePath) {
     );
   }
   return content;
+}
+
+function selectorBranchIsContained(selector) {
+  let contained = false;
+  for (const node of selector.nodes) {
+    if (node.type === "combinator") {
+      if (["+", "~", "||"].includes(node.value.trim())) contained = false;
+      continue;
+    }
+    if (
+      node.type === "class" &&
+      (node.value === "fred-ui" || /^_[A-Za-z0-9_-]+$/.test(node.value))
+    ) {
+      contained = true;
+      continue;
+    }
+    if (
+      node.type === "pseudo" &&
+      [":is", ":where"].includes(node.value.toLowerCase()) &&
+      node.nodes?.length > 0 &&
+      node.nodes.every(selectorBranchIsContained)
+    ) {
+      contained = true;
+    }
+  }
+  return contained;
+}
+
+function assertSelectorContained(selector) {
+  let parsed;
+  try {
+    parsed = selectorParser().astSync(selector);
+  } catch {
+    assert.fail(`UI CSS selector ${selector} cannot be structurally parsed`);
+  }
+  assert(
+    parsed.nodes.length > 0 && parsed.nodes.every(selectorBranchIsContained),
+    `UI CSS contains unscoped non-module selector ${selector}: not contained in the permitted UI scope`,
+  );
 }
 
 async function validateCss(packageRoot) {
@@ -141,13 +193,6 @@ async function validateCss(packageRoot) {
     css.includes(".fred-ui"),
     "UI CSS is missing the consumer-owned .fred-ui root",
   );
-  const reviewedBaseSelectors = new Set([
-    ".fred-ui",
-    ".fred-ui *",
-    ".fred-ui *:before",
-    ".fred-ui *:after",
-    ".fred-ui .material-symbols-outlined",
-  ]);
   root.walkRules((rule) => {
     if (rule.parent?.type === "atrule" && /keyframes$/i.test(rule.parent.name))
       return;
@@ -156,11 +201,7 @@ async function validateCss(packageRoot) {
         !/(^|[\s,>+~])(?:html|body|:root)(?=$|[\s,>+~.:#[])/i.test(selector),
         `UI CSS contains shell selector ${selector}`,
       );
-      assert(
-        reviewedBaseSelectors.has(selector) ||
-          /\._[A-Za-z0-9_-]+/.test(selector),
-        `UI CSS contains unscoped non-module selector ${selector}`,
-      );
+      assertSelectorContained(selector);
     }
   });
   for (const property of ["overflow", "user-select"]) {
@@ -290,7 +331,11 @@ export async function validateUiArchive(archivePath) {
       "react-dom": "^19.2.4",
     });
 
-    const js = await assertRelativeReferences(packageRoot, "dist/index.js");
+    const js = await assertRelativeReferences(
+      packageRoot,
+      "dist/index.js",
+      "runtime",
+    );
     for (const forbidden of [
       "customAgent",
       "material-symbols-rounded",
@@ -303,7 +348,11 @@ export async function validateUiArchive(archivePath) {
       );
     const declarations = files.filter((file) => file.endsWith(".d.ts"));
     for (const file of declarations) {
-      const declaration = await assertRelativeReferences(packageRoot, file);
+      const declaration = await assertRelativeReferences(
+        packageRoot,
+        file,
+        "declaration",
+      );
       assert(
         !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType)\b|customAgent|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
           declaration,

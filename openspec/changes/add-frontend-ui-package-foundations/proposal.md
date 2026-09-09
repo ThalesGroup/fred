@@ -23,7 +23,8 @@ Implementation tracking: [ThalesGroup/fred#2590](https://github.com/ThalesGroup/
   is unsuitable for publication: export public prop types; narrow button sizes
   without changing the shared `ComponentSize`; restore `IconButton` focus styling
   and `className` composition; define icon accessibility; correct `TextInput`
-  label, description, counter, ref, and native-prop behavior; and allow
+  label, description, counter, native form-reset synchronization, ref, and native-prop
+  behavior; and allow
   consumer-supplied `Spinner` status text.
 - Limit the public icon contract to Material Symbols Outlined. Make exact binary
   provenance, the approved hash, glyph support, and complete license/notice content
@@ -36,7 +37,9 @@ Implementation tracking: [ThalesGroup/fred#2590](https://github.com/ThalesGroup/
   and exclude document- or shell-wide effects.
 - Extend the existing package producer, archive validator, isolated-consumer,
   browser, Makefile, and CI-selection contracts for a second archive while keeping
-  every design-token acceptance and negative test effective.
+  every design-token acceptance and negative test effective. Archive validation
+  structurally proves selector containment and requires runtime JavaScript references
+  to resolve to executable packaged modules independently of declaration closure.
 - Add an isolated React consumer that installs both tarballs outside FRED, then
   type-checks, builds, and exercises all exports without workspace links or access
   to producer sources. Provision lockfile-pinned registry dependencies and browsers

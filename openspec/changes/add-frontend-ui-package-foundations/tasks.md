@@ -174,3 +174,22 @@ is tracked by [ThalesGroup/fred#2590](https://github.com/ThalesGroup/fred/issues
       in-scope finding, and verify deferred components, overlays, iframe/auth/protocol,
       publication, FRED registry adoption, RAGS, issue closure, and OpenSpec archival
       remain outside this change.
+
+## 8. Confirmed review corrections
+
+- [x] 8.1 Reproduce the stale uncontrolled `TextInput` count after native form reset,
+      the two functional-selector CSS scope bypasses, and the runtime import accepted
+      through a declaration-only target with focused failing regression tests.
+- [x] 8.2 Synchronize an uncontrolled `TextInput` count after successful native form
+      reset while preserving canceled resets, controlled values, caller handlers,
+      forwarded refs, and native behavior; prove the generated package inherits the
+      canonical correction.
+- [x] 8.3 Replace CSS class-substring scope acceptance with structural selector
+      containment across functional pseudo-classes and combinators; retain positive
+      generated-selector coverage and every design-token guarantee.
+- [x] 8.4 Resolve runtime JavaScript references only to executable packed modules while
+      retaining valid TypeScript declaration closure; cover declaration-only rejection
+      and executable/declaration positive cases.
+- [x] 8.5 Run producer quality and unit tests, both archive and isolated-consumer gates,
+      browser smoke, canonical frontend quality/build/tests, strict OpenSpec validation,
+      and `git diff --check`; record any unavailable gate without weakening acceptance.

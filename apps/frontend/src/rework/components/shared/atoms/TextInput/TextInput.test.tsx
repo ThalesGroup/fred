@@ -56,6 +56,17 @@ describe("TextInput native and accessible behavior", () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
+  it("preserves callback ref cleanup", () => {
+    const cleanup = vi.fn();
+    const callbackRef = vi.fn(() => cleanup);
+    render(<TextInput ref={callbackRef} />);
+    expect(callbackRef).toHaveBeenCalledWith(input());
+
+    act(() => root.render(<></>));
+
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it("merges caller and help descriptions", () => {
     render(<TextInput id="topic" label="Topic" explanation="Helpful text" aria-describedby="outside" />);
     const ids = input().getAttribute("aria-describedby")?.split(" ");
@@ -96,5 +107,50 @@ describe("TextInput native and accessible behavior", () => {
       input().dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(container.textContent).toContain("8 / 10");
+  });
+
+  it("restores an uncontrolled count after native form reset", async () => {
+    render(
+      <form>
+        <TextInput defaultValue="abc" maxLength={20} />
+      </form>,
+    );
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input(), "abcdef");
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("6 / 20");
+
+    await act(async () => {
+      container.querySelector("form")?.reset();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(input().value).toBe("abc");
+    expect(container.textContent).toContain("3 / 20");
+  });
+
+  it("preserves the uncontrolled value and count when form reset is canceled", async () => {
+    render(
+      <form>
+        <TextInput defaultValue="abc" maxLength={20} />
+      </form>,
+    );
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input(), "abcdef");
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await act(async () => {
+      const resetEvent = new Event("reset", { bubbles: true, cancelable: true });
+      container.querySelector("form")?.addEventListener("reset", (event) => event.preventDefault(), {
+        once: true,
+      });
+      container.querySelector("form")?.dispatchEvent(resetEvent);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(input().value).toBe("abcdef");
+    expect(container.textContent).toContain("6 / 20");
   });
 });

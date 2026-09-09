@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./TextInput.module.scss";
-import { ComponentPropsWithRef, useId, useState } from "react";
+import { ComponentPropsWithRef, useCallback, useEffect, useId, useRef, useState } from "react";
 import Icon, { IconProps } from "../Icon/Icon.tsx";
 import { ComponentSize } from "../../utils/Type.ts";
 
@@ -59,6 +59,7 @@ export default function TextInput({
   const generatedId = useId();
   const id = callerId ?? generatedId;
   const hintId = `${id}-description`;
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
   const characterCounter = value === undefined ? uncontrolledValue.length : String(value).length;
   const message = error || explanation;
@@ -69,6 +70,49 @@ export default function TextInput({
     if (value === undefined) setUncontrolledValue(event.currentTarget.value);
     onChange?.(event);
   };
+
+  const setInputRef = useCallback(
+    (input: HTMLInputElement | null) => {
+      inputRef.current = input;
+      if (typeof ref === "function") {
+        const cleanup = ref(input);
+        if (input === null) return;
+        return () => {
+          inputRef.current = null;
+          if (typeof cleanup === "function") cleanup();
+          else ref(null);
+        };
+      }
+      if (ref) ref.current = input;
+      if (input === null) return;
+      return () => {
+        inputRef.current = null;
+        if (ref) ref.current = null;
+      };
+    },
+    [ref],
+  );
+
+  useEffect(() => {
+    const input = inputRef.current;
+    const form = input?.form;
+    if (value !== undefined || !input || !form) return;
+
+    let pendingReset: ReturnType<typeof setTimeout> | undefined;
+    const handleReset = (event: Event) => {
+      if (pendingReset !== undefined) clearTimeout(pendingReset);
+      pendingReset = setTimeout(() => {
+        if (!event.defaultPrevented && inputRef.current === input) {
+          setUncontrolledValue(input.value);
+        }
+      }, 0);
+    };
+    form.addEventListener("reset", handleReset);
+    return () => {
+      form.removeEventListener("reset", handleReset);
+      if (pendingReset !== undefined) clearTimeout(pendingReset);
+    };
+  });
 
   return (
     <div
@@ -89,7 +133,7 @@ export default function TextInput({
         )}
         <input
           id={id}
-          ref={ref}
+          ref={setInputRef}
           type={type}
           value={value}
           defaultValue={defaultValue}

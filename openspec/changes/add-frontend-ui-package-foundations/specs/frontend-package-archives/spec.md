@@ -164,6 +164,19 @@ following reviewed behavior:
 - **THEN** the displayed count begins with the actual default value length and follows
   subsequent native edits
 
+#### Scenario: An uncontrolled TextInput is reset by its form
+
+- **WHEN** a changed uncontrolled `TextInput` participates in a successful native form
+  reset
+- **THEN** the input returns to its native default value and the displayed count reflects
+  that actual reset value
+
+#### Scenario: A TextInput form reset is canceled
+
+- **WHEN** a consumer cancels the native reset event for a form containing an
+  uncontrolled `TextInput`
+- **THEN** the input value and displayed count both remain unchanged
+
 #### Scenario: Spinner text is customized
 
 - **WHEN** a non-decorative `Spinner` receives consumer-supplied status text
@@ -238,6 +251,13 @@ stylesheet; importing UI styles MUST NOT make Geist mandatory or duplicate its f
   selector, an import, an external URL, or a shell layout or selection mutation
 - **THEN** validation fails before the stylesheet is accepted
 
+#### Scenario: A functional selector only appears scoped by text
+
+- **WHEN** a packed selector mentions a generated class only inside a negation or mixes
+  a generated class with an outside branch of a functional pseudo-class
+- **THEN** structural selector validation rejects it because every matched subject is
+  not contained within the permitted component or `.fred-ui` scope
+
 #### Scenario: UI CSS references an absent token
 
 - **WHEN** generated or packed UI CSS references a custom property that is declared in
@@ -265,6 +285,13 @@ unchanged in meaning.
 - **WHEN** JavaScript, declarations, or CSS resolve a missing file, an undeclared bare
   module, a source alias, a checkout path, or a path outside the archive
 - **THEN** archive validation fails and identifies the invalid reference
+
+#### Scenario: A runtime import resolves only to a declaration
+
+- **WHEN** packed JavaScript imports a relative path for which only a TypeScript
+  declaration exists
+- **THEN** archive validation fails because runtime references must resolve to executable
+  packed modules while valid declaration references resolve under declaration rules
 
 #### Scenario: Existing token validation runs with the UI package
 

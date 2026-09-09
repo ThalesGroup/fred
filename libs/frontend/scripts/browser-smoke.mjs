@@ -483,6 +483,20 @@ async function verifyUi(browser, origin) {
       1,
     );
 
+    const resetFixture = observation.page.getByRole("form", {
+      name: "Reset counter fixture",
+    });
+    const resetInput = resetFixture.getByLabel("Resettable name");
+    await resetInput.fill("abcdef");
+    await resetFixture.getByText("6 / 20").waitFor();
+    await resetFixture.getByRole("button", { name: "Reset counter" }).click();
+    assert.equal(await resetInput.inputValue(), "abc");
+    await resetFixture.getByText("3 / 20").waitFor();
+    const resetCounter = {
+      count: await resetFixture.getByText("3 / 20").textContent(),
+      value: await resetInput.inputValue(),
+    };
+
     const tonalStates = {};
     for (const name of ["Surface tonal", "Retreat tonal"]) {
       const button = observation.page.getByRole("button", { name });
@@ -534,6 +548,7 @@ async function verifyUi(browser, origin) {
       themes,
       shellOwnership,
       iconButton: iconButtonEvidence,
+      resetCounter,
       tonalStates,
       materialLoaded,
       fontRequests,

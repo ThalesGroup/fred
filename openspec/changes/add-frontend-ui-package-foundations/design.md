@@ -148,9 +148,13 @@ error/help IDs with that value, merges caller `aria-describedby`, and applies
 `aria-invalid` for an active error without overriding caller refs, handlers, input type,
 autocomplete, or other native props. Controlled counts derive from `value`; uncontrolled
 counts initialize from `defaultValue` and update alongside, not instead of, the caller's
-change handler. Compact presentation may hide help/error text visually but retains its
-ID in the input's accessible description. Disabled error presentation follows the
-existing behavior.
+change handler. The uncontrolled input also observes its owning form's native `reset`
+event and, after uncancelled default reset behavior completes, synchronizes the count
+from the actual input value in the next task rather than before the browser's reset
+default action. A canceled reset changes neither value nor count. The
+implementation composes its internal element reference with the caller's forwarded ref.
+Compact presentation may hide help/error text visually but retains its ID in the input's
+accessible description. Disabled error presentation follows the existing behavior.
 
 Spinner exports its prop type and adds consumer-supplied status text, defaulting to the
 existing `Loading`. Decorative mode continues to remove its role and label.
@@ -207,6 +211,14 @@ custom-property reference against declarations in those canonical token inputs o
 UI stylesheet, including neutral tonal IconButton state layers. The UI tarball does not
 duplicate Geist.
 
+Archive validation parses selectors structurally rather than searching selector text for
+a generated class substring. A selector is contained only when its effective subject is
+within `.fred-ui` or a generated component-class scope. Negations do not establish
+containment, every branch of `:is()` or `:where()` used as a scope must be contained, and
+sibling or column combinators cannot use an earlier scoped element to authorize a later
+outside subject. This accepts the generated component selectors while rejecting
+functional-pseudo and combinator escapes.
+
 No selected component portals. A future portaled export must define a caller-controlled
 container inside the themed `.fred-ui` root before it can join the package.
 
@@ -246,6 +258,11 @@ structure, Geist hashes/licenses, mutations, neutral consumer, and browser asser
 The UI contract adds its own exact manifest and inventory; export and reference closure
 for ESM, declarations, and CSS; peer/import consistency; React build evidence; scoped
 CSS checks; font/glyph/license hashes; and source-path bans.
+
+Runtime JavaScript closure and TypeScript declaration closure use distinct resolution
+rules. A relative runtime import must resolve exactly to a packed executable JavaScript
+module; a declaration file alone never satisfies it. Declaration references retain the
+reviewed `.d.ts` and emitted-source mapping needed by the closed type graph.
 
 Pack each workspace member explicitly through `npm pack --json`. A combined validation
 target accepts only the two validated tarballs. Negative UI fixtures mutate disposable

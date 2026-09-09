@@ -117,6 +117,15 @@ function App() {
           icon={{ type: "info" }}
           aria-label="Retreat tonal"
         />
+        <form aria-label="Reset counter fixture">
+          <TextInput
+            id="reset-name"
+            label="Resettable name"
+            defaultValue="abc"
+            maxLength={20}
+          />
+          <button type="reset">Reset counter</button>
+        </form>
       </section>
     </main>
   );

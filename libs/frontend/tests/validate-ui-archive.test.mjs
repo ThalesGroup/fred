@@ -131,6 +131,31 @@ test("rejects an undeclared JS module", async (context) => {
   );
 });
 
+test("rejects a runtime import resolved only by a declaration", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/index.js");
+    await writeFile(
+      file,
+      `import "./types/src/index";\n${await readFile(file, "utf8")}`,
+    );
+  });
+  await assert.rejects(
+    validateUiArchive(archive),
+    /runtime reference.*executable module/,
+  );
+});
+
+test("accepts an executable runtime relative reference", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/index.js");
+    await writeFile(
+      file,
+      `import "./index.js";\n${await readFile(file, "utf8")}`,
+    );
+  });
+  await assert.doesNotReject(validateUiArchive(archive));
+});
+
 for (const forbidden of [
   "customAgent",
   "material-symbols-rounded",
@@ -254,6 +279,16 @@ for (const cssMutation of [
     ".fred-ui ._broken { color: var(--missing-reviewed-token); }",
     /custom-property references absent/,
   ],
+  [
+    "functional negation scope bypass",
+    "*:not(._unused) { margin: 0 !important; }",
+    /not contained in the permitted UI scope/,
+  ],
+  [
+    "functional selector branch scope bypass",
+    ":is(._unused, #outside-probe) { margin: 0 !important; }",
+    /not contained in the permitted UI scope/,
+  ],
 ]) {
   test(`rejects UI CSS ${cssMutation[0]}`, async (context) => {
     const archive = await mutateArchive(archivePath, context, async (root) => {
@@ -323,6 +358,17 @@ for (const input of [
     });
   }
 }
+
+test("accepts structurally scoped generated component selectors", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/styles.css");
+    await writeFile(
+      file,
+      `${await readFile(file, "utf8")}\n.fred-ui ._button:hover:not(:disabled) > ._stateLayer { margin: 0; }\n`,
+    );
+  });
+  await assert.doesNotReject(validateUiArchive(archive));
+});
 
 test("rejects build evidence that marks React internal", async (context) => {
   const archive = await mutateArchive(archivePath, context, (root) =>
