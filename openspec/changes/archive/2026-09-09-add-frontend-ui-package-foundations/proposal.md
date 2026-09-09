@@ -5,7 +5,7 @@ source checkout, but external React applications still have no similarly verifie
 component artifact. This change establishes the smallest useful `@fred/ui` surface
 from the existing FRED implementation while preserving the package archive and
 application boundaries defined by the
-[`FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
+[`FRED-FRONTEND-PACKAGING-RFC.md`](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 
 Implementation tracking: [ThalesGroup/fred#2590](https://github.com/ThalesGroup/fred/issues/2590).
 
