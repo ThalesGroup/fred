@@ -1,7 +1,7 @@
 ## Context
 
 See `proposal.md` for motivation and
-[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md)
+[`docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md)
 for the broader package architecture.
 
 Implementation is tracked by
