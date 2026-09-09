@@ -2298,7 +2298,7 @@
         "nameLabel": "Team name",
         "namePlaceholder": "e.g. swiftpost",
         "adminsLabel": "Initial team admin(s)",
-        "adminsPlaceholder": "Search users...",
+        "adminsPlaceholder": "Enter a name, first name, or user ID",
         "submit": "Create team",
         "successSummary": "Team created",
         "errors": {

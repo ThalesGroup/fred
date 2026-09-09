@@ -1057,6 +1057,51 @@ async def add_team_member(
     )
 
 
+async def _search_users_bounded(
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """Shared Keycloak lookup behind both candidate searches.
+
+    The minimum length is enforced here, not only by the API layer's
+    `min_length`: that validates the raw string, so `"  "` alone would reach
+    Keycloak's search un-narrowed and degrade it into a full directory dump.
+    """
+    stripped_query = query.strip()
+    if len(stripped_query) < 2:
+        return []
+    return await deps.search_users(stripped_query)
+
+
+async def search_candidate_team_admins(
+    user: KeycloakUser,
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """
+    Search Keycloak users eligible to be a brand-new team's first `team_admin`.
+
+    Why this function exists:
+    - `create_team` requires at least one `initial_team_admin_ids` entry, and
+      the only org-wide directory (`GET /users`) is gated on
+      `can_administer_users` — `platform_admin`-only. A `team_manager` could
+      reach `/admin/teams` and hold `can_create_team`, yet had no way to name
+      an admin, so the form was unusable for the very role that owns the page.
+
+    How to use it:
+    - call from `GET /teams/candidate-admins`
+    - gated on the same `can_create_team` as the action it feeds, and bounded
+      like the team-scoped search rather than widening the directory listing
+
+    Example:
+    - `matches = await search_candidate_team_admins(user, "cohen", deps)`
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+    )
+    return await _search_users_bounded(query, deps)
+
+
 async def search_candidate_team_members(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1078,10 +1123,8 @@ async def search_candidate_team_members(
 
     How to use it:
     - call from `GET /teams/{team_id}/candidate-members`
-    - `query` must have at least 2 non-whitespace characters — checked here,
-      not just via the API layer's `min_length` (which validates the raw
-      string, so " " alone would otherwise pass through and reach Keycloak's
-      search un-widened)
+    - `query` must have at least 2 non-whitespace characters (enforced by
+      `_search_users_bounded`)
     - users already holding any role on the team are filtered out of the
       result
 

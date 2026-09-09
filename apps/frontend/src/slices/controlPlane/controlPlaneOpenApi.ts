@@ -122,6 +122,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/teams/all` }),
     }),
+    searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/candidate-admins`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
     getTeamControlPlaneV1TeamsTeamIdGet: build.query<
       GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
       GetTeamControlPlaneV1TeamsTeamIdGetApiArg
@@ -1432,6 +1443,11 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
+  query: string;
+};
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
@@ -3875,6 +3891,8 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery,
   useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
+  useLazySearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
