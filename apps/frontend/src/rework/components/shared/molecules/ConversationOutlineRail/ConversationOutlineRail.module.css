@@ -3,7 +3,6 @@
 /* Against the page's left edge, not the conversation's. The rail is chrome for
    the whole page, and tying it to the lane made it drift inward with the
    reading column instead of staying where the reader's eye learns to find it.
-   The inset matches the top bar's, which is what sets the page's edge.
 
    The cost is known and accepted: on a column barely wider than the lane — one
    with a side panel open — the rail sits over the first characters of each
@@ -24,7 +23,7 @@
   display: flex;
   position: absolute;
   top: 50%;
-  left: var(--spacing-s);
+  left: var(--spacing-xs);
   flex-direction: column;
   transform: translateY(-50%);
   /* Widest a magnified mark gets, so magnifying never reflows anything. */
