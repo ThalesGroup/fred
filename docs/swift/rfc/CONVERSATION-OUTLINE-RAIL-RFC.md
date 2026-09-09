@@ -1,6 +1,8 @@
 # Conversation Outline Rail RFC — navigating a long chat session
 
-**Status:** Agreed, not yet built — design settled 2026-09-09, no open question
+**Status:** Agreed, not yet built — V1 design settled 2026-09-09, no open
+question. §6 lists what V1 deliberately leaves out to ship fast; those are
+revisitable, not closed.
 **ID:** `CHAT-OUTLINE-01` (informal label, no registry)
 **Author:** Maxime
 **Date:** 2026-09-09
@@ -200,13 +202,17 @@ Frontend-only. No backend, no schema, no SSE contract, no OpenAPI regeneration.
 
 ---
 
-## 6. Out of scope
+## 6. Out of scope for V1
 
-Explicitly deferred, by developer decision (2026-09-09):
+Deferred by developer decision (2026-09-09) **to ship a first version quickly
+and at low risk** — not because any of them was judged unnecessary. Each is
+explicitly open to revisiting once the rail is in use and new ideas surface;
+none of these decisions constrains a later iteration.
 
 - **Narrow-viewport behaviour.** The rail lives in the gutter left by the 720px
   lane; what happens when that gutter disappears is not decided here.
 - **Keyboard accessibility.** No tab order, arrow-key navigation, or
   focus-triggered preview tile in this iteration.
 - **HITL rows.** `hitl_request` / `hitl_response` get no special treatment.
-- **Interactivity during streaming.** See §3.
+- **Interactivity during streaming.** See §3, which also sketches what taking
+  it on would require.
