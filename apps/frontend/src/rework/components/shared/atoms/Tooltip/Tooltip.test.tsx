@@ -344,4 +344,64 @@ describe("Tooltip", () => {
     expect(top).toBeGreaterThanOrEqual(4);
     expect(top + 380).toBeLessThanOrEqual(400 - 4);
   });
+
+  // `gapPx` exists for a panel that reads as its own card rather than a hint
+  // stuck to its trigger — the conversation outline rail's preview tile.
+  it("honours a custom gap on both axes of a left-placed panel", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="left" gapPx={12}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 400, right: 420, width: 20, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 400 (trigger left) - 12 (gap) - 200 (panel width).
+    expect(parseFloat(panel.style.left)).toBe(188);
+    // Still vertically centred on the trigger: 200 (centre) - 50 (half height).
+    expect(parseFloat(panel.style.top)).toBe(150);
+  });
+
+  it("keeps its default gap when none is given", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="left">
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 400, right: 420, width: 20, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 400 - 4 - 200: the 4px default every other tooltip in the app relies on.
+    expect(parseFloat(panel.style.left)).toBe(196);
+  });
 });

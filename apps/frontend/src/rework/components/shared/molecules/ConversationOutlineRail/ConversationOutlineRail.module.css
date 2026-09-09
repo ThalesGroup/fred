@@ -1,0 +1,157 @@
+/* Outline rail — one mark per turn, along the conversation's left edge.
+   Marks are outside the squircle scope, so they take a plain radius token. */
+
+/* Sized to its marks and centred, never a full-height overlay. The rail is a
+   SIBLING of the scroll container, so a wheel gesture over it has no scrollable
+   ancestor to chain to and the conversation would simply not move — the dead
+   left gutter reported before. Hugging the marks keeps that surface to the few
+   pixels the reader is deliberately pointing at, where scrolling the rail is
+   the sensible reading of the gesture anyway.
+
+   Capped at the available height, at which point it scrolls itself: newest
+   turns stay reachable at the bottom and older ones leave through the top, the
+   same reading model as the conversation. Landing there is the reveal effect's
+   job (ConversationOutlineRail.tsx), which follows the active mark. */
+.rail {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  left: var(--spacing-m);
+  flex-direction: column;
+  transform: translateY(-50%);
+  /* Widest a magnified mark gets, so magnifying never reflows anything. */
+  width: 32px;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.marks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Each mark is wrapped — by Tooltip when interactive, by .markSlot when frozen.
+   The magnification rules below key off these wrappers, so they must stay a
+   uniform, styling-free row. */
+.marks > * {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 100%;
+}
+
+.markSlot {
+  display: flex;
+  justify-content: center;
+}
+
+.mark {
+  flex-shrink: 0;
+  transition:
+    width var(--duration-short-3) var(--easing-emphasized),
+    height var(--duration-short-3) var(--easing-emphasized),
+    background-color var(--duration-short-3) var(--easing-standard);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--outline-variant);
+  padding: 0;
+  width: var(--mark-w, 14px);
+  height: calc(var(--mark-h) + var(--mark-grow, 0px));
+}
+
+/* Height buckets — driven by the agent answer's length (outlineItems.ts). */
+.short {
+  --mark-h: 3px;
+}
+
+.medium {
+  --mark-h: 6px;
+}
+
+.tall {
+  --mark-h: 10px;
+}
+
+/* ── Magnification ──────────────────────────────────────────────────────────
+   Discrete falloff over the hovered mark and two neighbours each side, so the
+   rail deforms as one surface instead of a single mark popping alone. Sizing
+   only — colour is handled below, and mixing the two here would make the
+   active mark's colour depend on where the pointer happens to be.
+
+   Forward neighbours use sibling combinators; backward ones need `:has()`,
+   CSS having no previous-sibling combinator. Both are already used elsewhere
+   in this codebase. */
+.marks > *:hover .mark {
+  --mark-w: 32px;
+  --mark-grow: 3px;
+}
+
+.marks > *:hover + * .mark,
+.marks > *:has(+ *:hover) .mark {
+  --mark-w: 24px;
+  --mark-grow: 2px;
+}
+
+.marks > *:hover + * + * .mark,
+.marks > *:has(+ * + *:hover) .mark {
+  --mark-w: 18px;
+  --mark-grow: 1px;
+}
+
+/* ── Colour ─────────────────────────────────────────────────────────────────
+   Equal specificity to the hover rule, declared after it, so the turn being
+   read keeps its indicator colour even under the pointer. */
+.mark:hover {
+  background: var(--on-surface);
+}
+
+.mark.markActive {
+  background: var(--primary);
+}
+
+/* A turn is running: the rail stays legible as a position indicator but takes
+   no input, which is what keeps it from ever writing the conversation's scroll
+   position while useChatAutoScroll owns it. 38% is M3's disabled-content
+   opacity. */
+.railFrozen {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* ── Hover tile ─────────────────────────────────────────────────────────── */
+/* Tooltip's rich-content mode drops its own padding: the tile owns its
+   spacing. Width is capped so a long first sentence wraps into the line budget
+   below rather than stretching towards the reading column. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 320px;
+}
+
+.tileRequest {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.tileAnswer {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

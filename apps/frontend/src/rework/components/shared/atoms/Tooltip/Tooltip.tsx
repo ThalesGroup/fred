@@ -54,6 +54,10 @@ interface TooltipProps {
    *   right edge (e.g. a right-rail icon button).
    */
   placement?: "top" | "left";
+  /** Distance between trigger and panel. Defaults to `TOOLTIP_GAP_PX`; raise it
+   *  for a panel that reads as its own card rather than a hint attached to the
+   *  trigger. */
+  gapPx?: number;
   children: ReactNode;
 }
 
@@ -92,7 +96,14 @@ function trackFocusModality() {
 
 if (typeof document !== "undefined") trackFocusModality();
 
-export const Tooltip = ({ text, content, children, interactive = false, placement = "top" }: TooltipProps) => {
+export const Tooltip = ({
+  text,
+  content,
+  children,
+  interactive = false,
+  placement = "top",
+  gapPx = TOOLTIP_GAP_PX,
+}: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
@@ -210,18 +221,18 @@ export const Tooltip = ({ text, content, children, interactive = false, placemen
     if (placement === "left") {
       // To the left of the trigger, flipping right only when it wouldn't fit
       // (trigger hugging the viewport's left edge).
-      const fitsLeftSide = triggerRect.left - width - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
+      const fitsLeftSide = triggerRect.left - width - gapPx >= VIEWPORT_MARGIN_PX;
       const desiredLeft = fitsLeftSide
-        ? triggerRect.left - TOOLTIP_GAP_PX - width
-        : triggerRect.left + triggerRect.width + TOOLTIP_GAP_PX;
+        ? triggerRect.left - gapPx - width
+        : triggerRect.left + triggerRect.width + gapPx;
       left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
       // Vertically centred on the trigger.
       const center = (triggerRect.top + triggerRect.bottom) / 2;
       const desiredTop = center - height / 2;
       top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
     } else {
-      const fitsAbove = triggerRect.top - height - TOOLTIP_GAP_PX >= VIEWPORT_MARGIN_PX;
-      const desiredTop = fitsAbove ? triggerRect.top - TOOLTIP_GAP_PX - height : triggerRect.bottom + TOOLTIP_GAP_PX;
+      const fitsAbove = triggerRect.top - height - gapPx >= VIEWPORT_MARGIN_PX;
+      const desiredTop = fitsAbove ? triggerRect.top - gapPx - height : triggerRect.bottom + gapPx;
       top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
 
       // Aligned on the trigger's own left edge (no centring transform): centring
@@ -239,7 +250,7 @@ export const Tooltip = ({ text, content, children, interactive = false, placemen
       maxWidth: availableWidth,
       overflow: "auto",
     });
-  }, [triggerRect, placement]);
+  }, [triggerRect, placement, gapPx]);
 
   const child = isValidElement(children)
     ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })

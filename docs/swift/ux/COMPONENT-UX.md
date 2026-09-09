@@ -4372,3 +4372,69 @@ every mutation knows the page id and none of them knows the slug, so tagging by
 slug leaves a write unable to invalidate the page it just changed — the article
 keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
 the *next* save conflict every time.
+
+---
+
+## Conversation outline rail (2026-09-09, CHAT-OUTLINE-01, issue #2602)
+
+### `ConversationOutlineRail`
+
+**Location:** `src/rework/components/shared/molecules/ConversationOutlineRail/`
+**Status:** `Functional` — V1. Design and the deferred parts: RFC
+`CONVERSATION-OUTLINE-RAIL-RFC.md`.
+
+A rail of graphical marks along the left edge of `ManagedChatPage`'s
+conversation, one per turn. No text: the marks sit in the gutter left by the
+720px message lane, so they take no width from the reading column. Hovering one
+magnifies it and its two neighbours each side and opens a preview tile to its
+left — the question's first sentence over the answer's first two. Clicking one
+jumps to that turn.
+
+**The rail is inert while a turn is live** (`isStreaming || pendingHitl`):
+visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
+what makes the whole feature safe. `useChatAutoScroll` re-decides the
+conversation's scroll position every animation frame while a turn runs, so a
+jump written from outside would be overwritten a frame later — a frame-timing
+bug, therefore intermittent. The hook writes *only* while live, so a rail that
+can only be clicked when it is quiescent never overlaps it: the single-owner
+invariant holds by construction rather than by timing. `useChatAutoScroll`'s
+ownership comment states the refined rule.
+
+**Mark height encodes the answer's length**, in three buckets on absolute
+thresholds (400 / 1500 characters). Not tokens: a ReAct turn re-sends the whole
+context per call, so `tokenUsage` grows with the session's age rather than the
+turn's substance. Not per-conversation quantiles either: a mark that changed
+height as later turns arrived would destroy the spatial memory the rail exists
+to serve.
+
+**The active mark** (`--primary`) is the last turn whose anchor passed the
+container's top edge, not the topmost anchor still on screen — the anchors sit
+on the user message, so partway through a long answer none is visible and the
+naive rule would blank the mark on exactly the conversations the rail is for.
+The `IntersectionObserver`'s threshold is chosen so it fires at the boundary
+being measured; an observer that fires elsewhere only refreshes the answer by
+accident.
+
+**Streaming costs the rail nothing.** The message list is replaced on every
+token, so: the fold's result is handed back by identity when it describes the
+same rail (keeping the component's `memo` alive), the preview callback is
+ref-backed so its identity never changes, and extracts are derived on hover for
+the hovered turn only, from a bounded 500-character slice.
+
+**Sized to its marks, not full height.** The rail is a sibling of the scroll
+container, so a wheel gesture over it has no scrollable ancestor to chain to and
+the conversation would not move — the dead left gutter of #654. Hugging the
+marks keeps that surface to the few pixels the reader is deliberately pointing
+at. Once the marks outgrow the available height the rail scrolls itself, and
+follows the active mark.
+
+**`aria-hidden`, and the marks are out of the tab order.** Keyboard access is a
+V1 omission (RFC §6): with no labels or tab order, a screen reader would
+announce a row of silent marks, and a focusable control inside an aria-hidden
+subtree is a trap. The conversation itself stays fully readable in the thread.
+
+### `Tooltip` — `gapPx`
+
+`Tooltip` gained an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for
+every existing caller). The rail's preview tile reads as its own card rather
+than a hint stuck to its trigger, and takes 12.
