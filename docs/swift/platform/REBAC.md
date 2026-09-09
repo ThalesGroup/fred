@@ -248,7 +248,12 @@ the read-only listing is delegable:
 - **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
   regardless of the caller's own membership. The one of the three that is
   delegable — `team_manager` and `feature_manager` both need the roster to
-  render their own page (see below).
+  render their own page (see below). Read-only, and it reaches no team
+  *content* — but it is not just names and ids: the route returns the full
+  `Team` DTO, so a holder sees every private team's description, visibility,
+  member count, storage usage and `admins` roster (`UserSummary`, email
+  included). That is registry metadata, not the agents, prompts,
+  conversations or files those relations still gate exclusively.
 - **`can_delete_team`** → `DELETE /teams/{team_id}`: deletes the registry row
   and every relation referencing that team.
 - **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants
@@ -281,7 +286,7 @@ Three narrower roles own one admin surface each, and every one of them is
   enablement mutation, is defined as `can_manage_capabilities from
   organization`, so the object-level and org-level gates cannot drift apart.
   `can_list_all_teams` comes with the role: per-team enablement needs the team
-  picker, and the roster is names and ids only.
+  picker.
 - **`prompt_editor`** → `can_edit_platform_prompt` — the platform prompt
   prepended to every agent, and the read-only instructions pane beside it
   (`/admin/platform/prompt`, `/admin/platform/instructions`). Nothing else:

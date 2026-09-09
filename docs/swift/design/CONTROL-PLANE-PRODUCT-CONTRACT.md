@@ -3739,8 +3739,9 @@ gate every enablement mutation resolves through — is redefined from
 organization`; without that, a `feature_manager` would pass the org gate and
 fail the object gate on the very next line. `can_list_all_teams` joins the
 role for the same reason: the per-team enablement matrix is a team picker, and
-it renders empty without the roster. That listing is names and ids only and
-carries no authority over any team's data. Nothing else moves — import/export,
+it renders empty without the roster. That listing is read-only and carries no
+authority over any team's data, but it is the full `Team` DTO rather than bare
+names and ids — see `REBAC.md` for exactly what a holder sees. Nothing else moves — import/export,
 platform reset, tasks, platform stats and corpus audit stay on
 `can_manage_platform`, which is what makes this delegation safe.
 

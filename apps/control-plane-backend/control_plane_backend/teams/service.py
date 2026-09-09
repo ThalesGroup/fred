@@ -219,8 +219,10 @@ async def list_all_teams_for_registry(
 
     How to use it:
     - call from the `can_list_all_teams`-gated `GET /teams/all` route, which
-      `team_manager` and `feature_manager` reach as well as `platform_admin`:
-      names and ids only, no authority over any team's data
+      `team_manager` and `feature_manager` reach as well as `platform_admin`
+    - the response is the full `Team` DTO (admins roster, storage usage,
+      description), not bare names and ids — read-only registry metadata that
+      still grants nothing over a team's agents, prompts or files
 
     Example:
     - `teams = await list_all_teams_for_registry(user, deps)`
