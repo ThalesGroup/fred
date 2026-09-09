@@ -98,6 +98,7 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
+    DeepAgentDefinition,
     ExecutionCategory,
     GraphAgentDefinition,
     MCPServerConfiguration,
@@ -140,6 +141,7 @@ from fred_runtime.capabilities.errors import (
     UnknownCapabilityError,
 )
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.deep.deep_runtime import DeepAgentRuntime
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import (
@@ -3545,7 +3547,7 @@ async def _iterate_runtime_event_payloads(
         invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
-    runtime: ReActRuntime | GraphRuntime | None = None
+    runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     try:
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
@@ -3606,7 +3608,15 @@ async def _iterate_runtime_event_payloads(
                     )
                 yield payload
         else:
-            runtime = ReActRuntime(
+            # DeepAgentDefinition is-a ReActAgentDefinition (same typed
+            # input/output, same event contract), so it shares this branch's
+            # ReActInput plumbing below — only the runtime class differs.
+            runtime_cls = (
+                DeepAgentRuntime
+                if isinstance(definition, DeepAgentDefinition)
+                else ReActRuntime
+            )
+            runtime = runtime_cls(
                 definition=definition,
                 services=services,
                 capability_block=capability_block,
@@ -3646,10 +3656,9 @@ async def _iterate_runtime_event_payloads(
             if request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
-                    # Unnamespaced: this branch is ReAct-only, and LangGraph
-                    # stores every root-graph checkpoint at ns "" whatever the
-                    # runtime configures — the claim must key on the same
-                    # occurrence the early gate validated.
+                    # Unnamespaced: this branch is ReAct/Deep only (never Graph),
+                    # and LangGraph stores every root-graph checkpoint at ns ""
+                    # regardless of runtime configuration.
                     checkpoint_ns="",
                     interrupt_id=request.interrupt_id,
                 )

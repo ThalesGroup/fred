@@ -34,6 +34,7 @@ from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -46,7 +47,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import RuntimeServices
-from langchain.agents.middleware import ToolCallLimitMiddleware
+from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 
 
@@ -94,6 +95,27 @@ def test_middleware_keeps_observability_first_then_filesystem_guards() -> None:
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
     assert len(middleware) == 2 + 7
+
+
+class _MarkerMiddleware(AgentMiddleware):
+    pass
+
+
+def test_middleware_places_capability_middleware_before_observability() -> None:
+    marker = _MarkerMiddleware()
+    capability_block = CapabilityAgentBlock(
+        middleware=(marker,), hitl={}, tools=(), mcp_prompt_groups=()
+    )
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        filesystem_tools_enabled=True,
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        capability_block=capability_block,
+    )
+    assert middleware[0] is marker
+    assert type(middleware[1]) is TracingKpiMiddleware
+    assert type(middleware[2]) is ToolObservabilityMiddleware
 
 
 # ---------------------------------------------------------------------------
@@ -171,3 +193,62 @@ async def test_deep_build_executor_wires_observability_middleware(
     wired = captured["middleware"]
     assert type(wired[0]) is TracingKpiMiddleware
     assert type(wired[1]) is ToolObservabilityMiddleware
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_wires_capability_middleware(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A selected capability's middleware (e.g. ToolCarrierMiddleware, the
+    only channel that delivers its tools) must reach the compiled deep
+    agent, not be silently dropped — this was the regression the dispatch
+    fix would otherwise have introduced (previously Deep only ran, by
+    accident, via ReActRuntime, which does wire capability_block)."""
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured["middleware"] = list(cast(list, kwargs["middleware"]))
+        return object()
+
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    marker = _MarkerMiddleware()
+    capability_block = CapabilityAgentBlock(
+        middleware=(marker,), hitl={}, tools=(), mcp_prompt_groups=()
+    )
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=capability_block,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    assert marker in captured["middleware"]
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_rejects_capability_hitl_loudly() -> None:
+    """DeepAgentRuntime does not wire FredHitlMiddleware (same reason
+    tool_approval is rejected), so a capability HITL binding must fail
+    loudly instead of silently letting a call through that should have
+    paused for human approval (RFC §3.9: never silently degrade)."""
+    capability_block = CapabilityAgentBlock(
+        middleware=(),
+        hitl={"some-tool": object()},  # truthiness only; not consumed
+        tools=(),
+        mcp_prompt_groups=(),
+    )
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=capability_block,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    with pytest.raises(NotImplementedError, match="capability HITL"):
+        await runtime.build_executor(_binding())

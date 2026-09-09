@@ -26,6 +26,7 @@ How to read this file:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import cast
 
@@ -38,6 +39,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -63,6 +65,8 @@ from fred_runtime.react.react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
+
+logger = logging.getLogger(__name__)
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",
@@ -96,6 +100,17 @@ class DeepAgentRuntime(ReActRuntime):
         if self._model is None:
             raise RuntimeError("DeepAgentRuntime model is not initialized.")
 
+        # DeepAgentRuntime overrides build_executor wholesale, so it needs its
+        # own copy of ReActRuntime's "[V2][EXECUTOR] build start" line under
+        # this module's own logger to stay distinguishable in the logs.
+        logger.debug(
+            "[V2][EXECUTOR] build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
+            type(self).__name__,
+            self.definition.agent_id,
+            [r.tool_ref for r in self.definition.declared_tool_refs],
+            self._toolset_key(),
+        )
+
         policy = self.definition.policy()
         if policy.system_prompt_template is None:
             raise RuntimeError(
@@ -108,6 +123,14 @@ class DeepAgentRuntime(ReActRuntime):
         if policy.tool_selection.max_tool_calls_per_turn is not None:
             raise NotImplementedError(
                 "DeepAgentRuntime does not support per-turn tool-call limits in this minimal version."
+            )
+        capability_block = self._capability_block
+        if capability_block is not None and capability_block.hitl:
+            # Coarse, turn-level: per-call `when` evaluation needs gating this
+            # minimal runtime doesn't have. Trade-off: RUNTIME-EXECUTION-CONTRACT.md §8.75.
+            raise NotImplementedError(
+                "DeepAgentRuntime does not support capability HITL bindings "
+                "in this minimal version."
             )
 
         runtime_tools = ReActRuntimeToolResolver(
@@ -131,7 +154,17 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt,
             binding=binding,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
+            tool_suffix=_build_runtime_tool_prompt_suffix(
+                bound_tools,
+                mcp_prompt_groups=(
+                    capability_block.mcp_prompt_groups
+                    if capability_block is not None
+                    else ()
+                ),
+                capability_tools=(
+                    capability_block.tools if capability_block is not None else ()
+                ),
+            ),
             runtime_suffixes=(
                 _filesystem_prompt_suffix(
                     filesystem_tools_enabled=filesystem_tools_enabled
@@ -149,12 +182,14 @@ class DeepAgentRuntime(ReActRuntime):
                 tracer=self.services.tracer,
                 kpi=self.services.kpi_writer,
                 binding=binding,
+                capability_block=capability_block,
             ),
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,
             services=self.services,
+            runtime_class_name=type(self).__name__,
         )
 
 
@@ -247,10 +282,11 @@ def _build_deepagent_runtime_middleware(
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
+    capability_block: CapabilityAgentBlock | None = None,
 ) -> list[AgentMiddleware]:
     """
-    Build Deep runtime middleware: platform observability first, then the
-    filesystem-tool policy guard.
+    Build Deep runtime middleware: capability stack first, then platform
+    observability, then the filesystem-tool policy guard.
 
     Why this exists:
     - Deep used to bypass `build_react_platform_middleware_frame()` entirely
@@ -262,6 +298,13 @@ def _build_deepagent_runtime_middleware(
       gets. `create_deep_agent` accepts a plain `middleware=` list, so the
       fix is to hand it the same two middleware instances, same order, no
       new machinery.
+    - `capability_block` mirrors `_create_compiled_react_agent`'s own
+      parameter: it is the ONLY channel that delivers a selected capability's
+      tools (via `ToolCarrierMiddleware`) to the compiled agent, placed
+      before the observability pair — same relative order as
+      `build_react_platform_middleware_frame`'s reserved capability slot
+      (RFC §5.3). `capability_hitl` is rejected loudly by the caller instead
+      of being wired here (see `build_executor`).
     - when the standard filesystem MCP tools are absent, Deep should block
       accidental filesystem calls explicitly
     - when those tools are present, Deep should not add special blocking and
@@ -276,6 +319,7 @@ def _build_deepagent_runtime_middleware(
     - `middleware = _build_deepagent_runtime_middleware(filesystem_tools_enabled=True, tracer=tracer, kpi=kpi, binding=binding)`
     """
     middleware: list[AgentMiddleware] = [
+        *(capability_block.middleware if capability_block is not None else ()),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,
