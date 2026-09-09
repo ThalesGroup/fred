@@ -67,9 +67,9 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
-      label: t("rework.sidebar.admin.menu.capabilities"),
+      label: t("rework.sidebar.admin.menu.features"),
       icon: { category: "outlined", type: "tune", filled: false },
-      linkProps: { to: "/admin/capabilities" },
+      linkProps: { to: "/admin/features" },
       visible: canManageFeatures,
     },
     {

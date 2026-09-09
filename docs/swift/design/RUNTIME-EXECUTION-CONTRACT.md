@@ -5218,7 +5218,7 @@ drop), then re-upgraded onto the new name.
    shrinking rather than growing to fit children — with the same pair on
    `.instructions` and `flex: 1; min-height: 0; overflow: auto` on the body,
    which becomes the single scroll region. Same reasoning and same declarations
-   as `CapabilitiesPage.module.css`, which documents the flex `min-height: auto`
+   as `FeaturesPage.module.css`, which documents the flex `min-height: auto`
    trap this fell into. The editor dropped from 16 to 10 rows so the panel has
    room in the common case.
 

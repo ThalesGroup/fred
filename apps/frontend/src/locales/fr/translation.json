@@ -2051,8 +2051,8 @@
         },
         "menu": {
           "analytics": "Analytiques",
-          "capabilities": "Fonctionnalités",
           "corpusAudit": "Audit du corpus",
+          "features": "Fonctionnalités",
           "migration": "Données plateforme",
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",

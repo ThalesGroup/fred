@@ -2059,7 +2059,7 @@ it's now redundant with the default.
 
 `DataTable` gained an optional `pageSize` prop. Omitted (the default), it
 renders exactly as before — every consumer that doesn't pass it
-(`AdminTeamsPage`, `MigrationPage`, `CapabilitiesPage`) is unaffected. When
+(`AdminTeamsPage`, `MigrationPage`, `FeaturesPage`) is unaffected. When
 set, the table slices `data` to one page and renders a persistent pagination
 footer, height `3.75rem` — same height as a table row — with two flex
 containers:
@@ -2133,7 +2133,7 @@ names, `MigrationPage` team names):
 - Primitive `cellRenderer` values (string/number) are wrapped by DataTable
   in a `.cell-text` span: single-line `text-overflow: ellipsis`, full value
   readable via the span's native `title` on hover — same idiom as
-  `CorpusAuditPage`/`CapabilitiesPage` name cells. Element values pass
+  `CorpusAuditPage`/`FeaturesPage` name cells. Element values pass
   through untouched (the caller owns their layout).
 
 `TeamSettingsMembersTable`'s three text columns (Identifiant, First name,
@@ -2639,14 +2639,14 @@ now share one consistent header pattern instead of diverging per page:
 | `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
 | `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
 | `SelfTestPage` | title only |
-| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
+| `FeaturesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
 | `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
 | `AdminTeamsPage` | title only (new — page previously had no page-level header) |
 | `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
 | `TeamSettingsParameters` | title only (new) |
 | `TeamSettingsRouting` | title only (new) |
 
-Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
 visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
 filter, not a tab strip.
@@ -3891,10 +3891,10 @@ lands on the exact section.
 
 ### `PlatformModelBindingsPanel`
 
-**Location:** `src/rework/components/pages/admin/CapabilitiesPage/PlatformModelBindingsPanel/`
+**Location:** `src/rework/components/pages/admin/FeaturesPage/PlatformModelBindingsPanel/`
 **Status:** `Functional`
 
-`InlineDrawer` opened from `CapabilitiesPage`'s Models tab, sibling to
+`InlineDrawer` opened from `FeaturesPage`'s Models tab, sibling to
 `CapabilityTeamMatrixDrawer`. Renders exactly one row — chat — never a
 4-capability list; V1 has no `language`/`embedding`/`image` binding to show.
 Row states: bound (`{{provider}} / {{name}}`), unset ("Using pod default"),

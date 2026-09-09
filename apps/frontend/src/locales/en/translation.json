@@ -2051,8 +2051,8 @@
         },
         "menu": {
           "analytics": "Analytics",
-          "capabilities": "Features",
           "corpusAudit": "Corpus audit",
+          "features": "Features",
           "migration": "Platform data",
           "platformRoles": "Platform roles",
           "selftest": "Self-test",

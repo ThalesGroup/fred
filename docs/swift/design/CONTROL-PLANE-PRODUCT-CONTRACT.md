@@ -1321,7 +1321,7 @@ so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
 projection — never a runtime pod change), enabled/disabled through the exact
 same `PUT`/`DELETE .../teams/{team_id}` and gated the exact same way. The
-frontend (`CapabilitiesPage.tsx`) filters the one dataset by `kind` (a
+frontend (`FeaturesPage.tsx`) filters the one dataset by `kind` (a
 "Tools"/"Agents" toggle) rather than adding a second page or route. Also
 newly gated on `can_use`, using the same `capability` object space with id
 `f"{runtime_id}__{agent_id}"`: `GET /teams/{team_id}/agent-templates` (hides
@@ -1365,7 +1365,7 @@ manifest** — like `kind="agent"`, no one hand-writes a `kind="model"`
 `fred_runtime.model_routing.catalog`) stays the sole source of truth for
 routing. Every mechanism already built for `kind="tool"`/`kind="agent"` —
 schema, `can_use`, the enablement write path, the admin dashboard — governs
-`kind="model"` uniformly; `CapabilitiesPage.tsx` needed only a widened
+`kind="model"` uniformly; `FeaturesPage.tsx` needed only a widened
 `KIND_FILTERS` value and one i18n key, no `kind`-specific branch anywhere
 else (the team matrix, health column, and default-on toggle are all
 kind-agnostic).
@@ -1448,7 +1448,7 @@ stated for the other per-kind fields. This is the missing half of the
 capabilities were not usable by the target team, but the list contract carried
 no way for the dashboard to know it.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
 the drawer disables "Enable" and names the blocking dependencies for a team
 that cannot use them; the personal-space class row does the same against the
@@ -1497,7 +1497,7 @@ personal_disabled`): default-on reaches every team *present and future*, so a
 dependency merely granted to the teams that exist today would still leave
 tomorrow's team inheriting a template it cannot use.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
 `capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
 is **replaced by an "Enable all" confirmation** on all three paths. The
@@ -2701,7 +2701,7 @@ time, before this route's authz even runs, so a 422 on a bad binding never
 reaches the store.
 
 **Frontend:** `PlatformModelBindingsPanel` — an `InlineDrawer` opened from
-`CapabilitiesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
+`FeaturesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
 Renders exactly one row (chat), never a 4-capability list. Settings are
 edited as raw JSON text (not a key/value rows editor, since
 `ModelBindingSettings` is a strict typed shape a rows editor storing
@@ -3744,3 +3744,11 @@ Five parallel `is_*` booleans over one closed enum is a list, and each future
 role would otherwise have cost a field, a codegen run and an edit in every
 consumer. The generated client, the frontend capability hook and the CLI
 bootstrap summary move with it.
+
+**Frontend surface renamed:** the admin page `feature_manager` owns moves from
+`/admin/capabilities` to `/admin/features` (`FeaturesPage`, i18n key
+`rework.sidebar.admin.menu.features`). "Capabilities" already means the ReBAC
+computed relations and the agent-capability packages; the page governs
+platform features — capabilities, agent templates and models — so it takes the
+name of the role that governs it. The backend endpoints keep their
+`/admin/capabilities` prefix: there the word is accurate.

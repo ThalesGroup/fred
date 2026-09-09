@@ -14,8 +14,8 @@
 
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
-import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
+import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
@@ -67,7 +67,7 @@ const ManagedChatPageRoute = () => {
 // the admin lands on teams, exactly as before.
 const ADMIN_LANDING: [ProtectedRequirement, string][] = [
   ["teams", "/admin/teams"],
-  ["features", "/admin/capabilities"],
+  ["features", "/admin/features"],
   ["platformPrompt", "/admin/platform-prompt"],
   ["observer", "/admin/analytics"],
 ];
@@ -240,13 +240,13 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        // Admin Capabilities dashboard (CAPAB-01 / #1981, RFC §8.5). Gated on
-        // `can_manage_capabilities`, the same narrow relation the backend
-        // enforces on the enablement endpoints.
-        path: "admin/capabilities",
+        // Platform features dashboard — capabilities, agent templates and
+        // models. Gated on `can_manage_capabilities`, the same narrow relation
+        // the backend enforces on the enablement endpoints.
+        path: "admin/features",
         element: (
           <Protected requires="features">
-            <CapabilitiesPage />
+            <FeaturesPage />
           </Protected>
         ),
       },

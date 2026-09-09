@@ -19,7 +19,7 @@
 // own `models_catalog.yaml` resolution is bypassed for — the concrete lever
 // for a deployment where the operator knows what's actually
 // reachable/licensed and no pod's shipped catalog does. Opened as a drawer
-// (not a page) from CapabilitiesPage's Models tab, sibling to
+// (not a page) from FeaturesPage's Models tab, sibling to
 // CapabilityTeamMatrixDrawer.tsx — a single binding, so a full page is
 // disproportionate.
 //
