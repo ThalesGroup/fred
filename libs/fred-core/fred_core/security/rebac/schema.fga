@@ -11,6 +11,13 @@ type organization
     define platform_admin: [user]
     define platform_observer: [user] or platform_admin
 
+    # Delegated admin-tier roles: each owns one admin surface so appointing a
+    # team manager no longer hands over import/export, platform reset and user
+    # administration. All union in platform_admin, so an admin loses nothing.
+    define team_manager: [user] or platform_admin
+    define feature_manager: [user] or platform_admin
+    define prompt_editor: [user] or platform_admin
+
     # Reverse index of team.organization (FGA cannot traverse relations
     # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
     # checking with a team subject (capability#can_use) — every team belongs to
@@ -27,14 +34,16 @@ type organization
   # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
   # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
   # gains no ongoing relation on the created team from this capability alone.
-  define can_create_team: platform_admin
+  define can_create_team: platform_admin or team_manager
 
   # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance
   # capabilities. Distinct from §2.2's central rule: these let platform_admin
   # govern the *existence* of teams (the registry) — they grant nothing about
   # a team's agents, prompts, conversations, or resources, which remain
   # governed exclusively by team relations as everywhere else in this schema.
-  define can_list_all_teams: platform_admin
+  # team_manager reaches can_list_all_teams because /admin/teams renders empty
+  # without it; deleting a team and rescuing its admin stay platform_admin-only.
+  define can_list_all_teams: platform_admin or team_manager
   define can_delete_team: platform_admin
   define can_rescue_team_admin: platform_admin
 
@@ -69,6 +78,12 @@ type organization
   # Platform administration surfaces (global, no resource instance).
   define can_administer_users: platform_admin
   define can_manage_platform: platform_admin
+
+  # Carved out of the can_manage_platform catch-all, which also gates
+  # import/export, tasks and platform reset: a narrow surface cannot be
+  # delegated through it without handing over all of them.
+  define can_manage_capabilities: platform_admin or feature_manager
+  define can_edit_platform_prompt: platform_admin or prompt_editor
 
 
 type team

@@ -111,18 +111,27 @@ def test_team_role_administration_has_no_platform_escalation() -> None:
         )
 
 
-def test_can_create_team_is_platform_admin_only() -> None:
-    """`can_create_team` (the bootstrap gate, RFC §28) is `platform_admin`-only
-    (AUTHZ-05 review item 5): the legacy `admin` bridge had no other caller in
-    the repo than `create_team`, so it is cut rather than perpetuated. This
-    must not be confused with a team relation: `platform_admin` still does not
-    appear anywhere in the `team` type's relation definitions (checked above),
-    so this capability can only ever gate the one-shot create-team action,
-    never ongoing team access."""
-    organization = _type_definition("organization")
-    can_create_team = organization["relations"]["can_create_team"]
+def _union_of(*relations: str) -> dict:
+    """The compiled shape of `define x: a or b` — one helper so every
+    delegated-role assertion below spells the expectation the same way."""
+    return {
+        "union": {
+            "child": [{"computedUserset": {"relation": r}} for r in relations],
+        }
+    }
 
-    assert can_create_team == {"computedUserset": {"relation": "platform_admin"}}
+
+def test_can_create_team_admits_platform_admin_and_team_manager() -> None:
+    """`can_create_team` (the bootstrap gate, RFC §28) is the admin tier plus
+    the delegated `team_manager` role. It must not be confused with a team
+    relation: `platform_admin` still does not appear anywhere in the `team`
+    type's relation definitions (checked above), so this capability can only
+    ever gate the one-shot create-team action, never ongoing team access."""
+    organization = _type_definition("organization")
+
+    assert organization["relations"]["can_create_team"] == _union_of(
+        "platform_admin", "team_manager"
+    )
 
 
 def test_can_use_team_agents_is_team_member_only() -> None:
@@ -205,20 +214,59 @@ def test_no_legacy_organization_role_relations_survive() -> None:
         )
 
 
-def test_team_registry_governance_capabilities_are_platform_admin_only() -> None:
-    """AUTHZ-05 review item 9 (RFC Part 6 §32): `can_list_all_teams`,
-    `can_delete_team`, `can_rescue_team_admin` govern the team *registry*
-    (existence), never a team's data - `platform_admin`-only, like
-    `can_create_team` above. None of the three may ever be redefined to also
-    accept a team relation: that would let `platform_admin` reach team data
-    through the registry surface, the exact escalation this RFC closes."""
+def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> None:
+    """AUTHZ-05 review item 9 (RFC Part 6 §32): the registry capabilities
+    govern the *existence* of teams, never a team's data. Deleting a team and
+    rescuing its admin are deliberately excluded from `team_manager` and must
+    stay `platform_admin`-only; none of them may ever be redefined to also
+    accept a team relation, which would let a platform role reach team data
+    through the registry surface - the exact escalation this RFC closes."""
     organization = _type_definition("organization")
 
-    for capability in (
-        "can_list_all_teams",
-        "can_delete_team",
-        "can_rescue_team_admin",
-    ):
+    for capability in ("can_delete_team", "can_rescue_team_admin"):
         assert organization["relations"][capability] == {
             "computedUserset": {"relation": "platform_admin"}
         }, f"{capability} must be platform_admin-only."
+
+    assert organization["relations"]["can_list_all_teams"] == _union_of(
+        "platform_admin", "team_manager"
+    ), "team_manager needs can_list_all_teams or /admin/teams renders empty."
+
+
+def test_delegated_platform_roles_union_in_platform_admin() -> None:
+    """Each delegated role is a directly-assigned relation that unions in
+    `platform_admin`, so appointing one never removes a surface from an admin.
+    The union is exactly why the platform-roles read surface must stay on
+    direct tuples: an expanded read would report every admin as a holder."""
+    organization = _type_definition("organization")
+
+    for role in ("team_manager", "feature_manager", "prompt_editor"):
+        assert organization["relations"][role] == {
+            "union": {
+                "child": [
+                    {"this": {}},
+                    {"computedUserset": {"relation": "platform_admin"}},
+                ]
+            }
+        }, f"{role} must be `[user] or platform_admin`."
+        assert organization["metadata"]["relations"][role][
+            "directly_related_user_types"
+        ] == [{"type": "user"}], f"{role} must only ever be granted to a user."
+
+
+def test_narrow_capabilities_are_carved_out_of_can_manage_platform() -> None:
+    """`can_manage_platform` stays the catch-all it always was (import/export,
+    tasks, platform reset), so the two delegated surfaces need their own
+    relations - gating them on the catch-all is what made delegation
+    impossible in the first place."""
+    organization = _type_definition("organization")
+
+    assert organization["relations"]["can_manage_capabilities"] == _union_of(
+        "platform_admin", "feature_manager"
+    )
+    assert organization["relations"]["can_edit_platform_prompt"] == _union_of(
+        "platform_admin", "prompt_editor"
+    )
+    assert organization["relations"]["can_manage_platform"] == {
+        "computedUserset": {"relation": "platform_admin"}
+    }, "can_manage_platform must stay platform_admin-only."
