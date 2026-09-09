@@ -3725,6 +3725,19 @@ read `platform_admin or team_manager`; `can_delete_team` and
 deliberately split from team creation. `can_manage_platform` is unchanged and
 still gates import/export, tasks and platform reset.
 
+**Re-gated endpoints — platform prompt.** All three routes of the
+platform-prompt surface move off `can_manage_platform` onto
+`can_edit_platform_prompt`: `GET` and `PUT
+/control-plane/v1/admin/platform/prompt`, and the read-only `GET
+/control-plane/v1/admin/platform/instructions`. The read moves with the write
+deliberately — an editor who cannot see what they are overwriting is useless,
+and the instructions pane is the reference they write against; neither was
+readable below the admin tier before, so this widens rather than narrows. The
+runtime path is untouched: `resolve_platform_prompt_text` is a server-side
+platform assertion resolved per turn and has never been gated on the caller.
+Team-scoped prompts (`/teams/{id}/prompts`) are unaffected — they are governed
+by team relations, and `prompt_editor` grants nothing there.
+
 `PlatformRoleRelation` grows the three values, so §43's three routes accept
 them with no other change. The service layer iterates the enum instead of
 naming roles, and the root guards remain scoped to `platform_admin` alone:

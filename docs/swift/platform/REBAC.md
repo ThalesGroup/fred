@@ -270,7 +270,11 @@ Three narrower roles own one admin surface each, and every one of them is
 - **`feature_manager`** → `can_manage_capabilities` — enable/disable
   capabilities, agent templates and models, platform-wide or per team.
 - **`prompt_editor`** → `can_edit_platform_prompt` — the platform prompt
-  prepended to every agent.
+  prepended to every agent, and the read-only instructions pane beside it
+  (`/admin/platform/prompt`, `/admin/platform/instructions`). Nothing else:
+  team-scoped prompts stay governed by team relations, and the runtime's own
+  per-turn read of the platform prompt is a server-side assertion, never
+  gated on the caller.
 
 The last two relations exist because `can_manage_platform` is a catch-all
 shared with import/export, tasks and platform reset: a narrow surface cannot
