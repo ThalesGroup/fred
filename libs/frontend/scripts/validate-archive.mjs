@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import postcss from "postcss";
 import valueParser from "postcss-value-parser";
 
+import {
+  assertArchiveEntriesSafe,
+  assertNoArchiveLinks,
+  dependencyEntries,
+  listArchiveFiles,
+} from "./archive-safety.mjs";
 import { FONT_SOURCES, LICENSE_FILES } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
 import {
@@ -34,38 +40,6 @@ const expectedExports = {
 
 function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
-}
-
-async function listFiles(root, relativeDirectory = "") {
-  const directory = path.join(root, relativeDirectory);
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const relativePath = path.posix.join(relativeDirectory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await listFiles(root, relativePath)));
-    } else {
-      files.push(relativePath);
-    }
-  }
-  return files.sort();
-}
-
-function dependencyEntries(manifest) {
-  const fields = [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-    "overrides",
-  ];
-  return fields.flatMap((field) =>
-    Object.entries(manifest[field] ?? {}).map(([name, version]) => ({
-      field,
-      name,
-      version,
-    })),
-  );
 }
 
 async function validateCssAssets(packageRoot, relativePath) {
@@ -112,16 +86,6 @@ async function validateCssAssets(packageRoot, relativePath) {
   return assets.sort();
 }
 
-async function validateNoLinks(packageRoot, files) {
-  for (const relativePath of files) {
-    const stat = await lstat(path.join(packageRoot, relativePath));
-    assert(
-      !stat.isSymbolicLink(),
-      `archive contains a symbolic link: ${relativePath}`,
-    );
-  }
-}
-
 export async function validateArchive(archivePath) {
   const archive = path.resolve(archivePath);
   const temporaryRoot = await mkdtemp(
@@ -129,26 +93,16 @@ export async function validateArchive(archivePath) {
   );
   try {
     const { stdout: listing } = await run("tar", ["-tzf", archive]);
-    const archiveEntries = listing.trim().split("\n").filter(Boolean);
-    for (const entry of archiveEntries) {
-      assert(
-        entry === "package" || entry.startsWith("package/"),
-        `archive entry escapes package/: ${entry}`,
-      );
-      assert(
-        !entry.split("/").includes(".."),
-        `archive entry contains traversal: ${entry}`,
-      );
-    }
+    assertArchiveEntriesSafe(listing);
     await run("tar", ["-xzf", archive, "-C", temporaryRoot]);
     const packageRoot = path.join(temporaryRoot, "package");
-    const files = await listFiles(packageRoot);
+    const files = await listArchiveFiles(packageRoot);
     assert.deepEqual(
       files,
       expectedArchiveFiles,
       "packed inventory differs from the allowlist",
     );
-    await validateNoLinks(packageRoot, files);
+    await assertNoArchiveLinks(packageRoot, files);
 
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),

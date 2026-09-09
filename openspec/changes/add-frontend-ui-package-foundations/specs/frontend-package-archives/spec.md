@@ -152,6 +152,12 @@ following reviewed behavior:
 - **THEN** the input is marked invalid, its accessible description includes that error,
   and the documented error styling is visible
 
+#### Scenario: Compact TextInput retains its description
+
+- **WHEN** a compact `TextInput` receives help or error text that is visually omitted
+- **THEN** the input's accessible description still references that caller-visible
+  contract text
+
 #### Scenario: TextInput counts an uncontrolled value
 
 - **WHEN** a consumer uses `defaultValue` and `maxLength` without a controlled `value`
@@ -232,6 +238,12 @@ stylesheet; importing UI styles MUST NOT make Geist mandatory or duplicate its f
   selector, an import, an external URL, or a shell layout or selection mutation
 - **THEN** validation fails before the stylesheet is accepted
 
+#### Scenario: UI CSS references an absent token
+
+- **WHEN** generated or packed UI CSS references a custom property that is declared in
+  neither the UI stylesheet nor the canonical design-token stylesheets
+- **THEN** validation fails before a consumer can receive an unresolved visual state
+
 ### Requirement: The UI archive has package-specific completeness evidence
 
 Acceptance of the actual `npm pack` UI tarball SHALL validate its exact export map and
@@ -270,10 +282,18 @@ lockfile-pinned registry dependencies. Offline validation MUST NOT use FRED sour
 files, workspace links, local package links, or dependency resolution from the producer
 checkout.
 
-Dependency and browser provisioning MAY access their normal sources before validation.
-After provisioning, archive installation, type checking, production building, and
-browser smoke execution MUST run offline except for the smoke server's loopback traffic
-and MUST NOT install or download dependencies or browsers.
+Dependency provisioning MAY download only lockfile-pinned consumer dependencies into a
+dedicated cache before validation, and browser provisioning MAY install the required
+pinned browser separately. Offline validation MAY invoke the package manager to install
+the two generated tarballs and pinned consumer dependencies from that prepared cache
+into a fresh isolated consumer. It MUST NOT fetch from the network, resolve packages
+from FRED's installed dependency tree, use workspace or local-package links, or
+bootstrap a missing browser.
+
+Missing cached packages or browser prerequisites MUST cause an actionable failure.
+After the isolated consumer has been installed and built, browser smoke execution SHALL
+perform no dependency installation and MAY use the network only for its loopback smoke
+server traffic.
 
 #### Scenario: Both archives build independently
 
@@ -292,7 +312,21 @@ and MUST NOT install or download dependencies or browsers.
 
 - **WHEN** the required lockfile-pinned registry packages or browser are absent at the
   start of offline validation
-- **THEN** validation fails without attempting to download or install them implicitly
+- **THEN** validation fails with an actionable prerequisite error without attempting a
+  network fetch, using FRED's installed dependency tree, or bootstrapping a browser
+
+#### Scenario: The isolated consumer is installed from the prepared cache
+
+- **WHEN** offline validation creates a fresh consumer and invokes its package manager
+- **THEN** the two generated tarballs and every lockfile-pinned consumer dependency are
+  installed only from the dedicated prepared cache without network or FRED workspace
+  resolution
+
+#### Scenario: Browser smoke execution starts
+
+- **WHEN** the built isolated consumer and provisioned browser are available
+- **THEN** smoke execution starts without invoking dependency installation or browser
+  provisioning
 
 ### Requirement: UI browser evidence covers behavior and local assets
 
@@ -318,6 +352,12 @@ external font services.
   with Enter or Space
 - **THEN** focus order, visible focus, click handling, disabled suppression, and loading
   suppression match the documented native component behavior
+
+#### Scenario: Neutral tonal IconButtons expose interaction state
+
+- **WHEN** the browser hovers and presses tonal IconButtons using the `on-surface` and
+  `on-surface-retreat` public colors
+- **THEN** each state layer resolves to distinct non-transparent packaged token values
 
 #### Scenario: Accessible names and errors are inspected
 

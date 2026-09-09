@@ -4,10 +4,13 @@
 .btn {
   --btn-cursor: pointer;
   --btn-border: transparent;
+  --btn-outline: transparent;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: var(--btn-cursor);
+  outline: 2px solid var(--btn-outline);
+  outline-offset: 2px;
   border: 1px solid var(--btn-border);
   border-radius: 50%;
   background-color: var(--btn-background);

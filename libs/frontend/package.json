@@ -9,28 +9,49 @@
     "npm": ">=10.9.2 <11"
   },
   "workspaces": [
-    "design-tokens"
+    "design-tokens",
+    "ui"
   ],
   "scripts": {
-    "build": "node scripts/build-design-tokens.mjs",
+    "build": "npm run build:tokens && npm run build:ui",
+    "build:tokens": "node scripts/build-design-tokens.mjs",
+    "build:ui": "node scripts/build-ui.mjs",
     "lint": "eslint eslint.config.mjs scripts tests fixtures",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
+    "audit:compatibility": "node scripts/audit-ui-compatibility.mjs --evidence target/review-evidence/ui-compatibility.json",
+    "font:check": "node scripts/inspect-material-symbols.mjs --evidence target/review-evidence/material-symbols.json",
     "test": "npm run build && node --test --test-concurrency=1 tests/*.test.mjs",
-    "pack": "node scripts/pack-design-tokens.mjs",
-    "pack:check": "node scripts/pack-design-tokens.mjs --validate --evidence target/review-evidence/archive-inventory.json",
-    "test:consumer": "node scripts/isolated-consumer.mjs --evidence target/review-evidence/isolated-consumer.json",
+    "pack": "npm run pack:tokens && npm run pack:ui",
+    "pack:tokens": "node scripts/pack-design-tokens.mjs",
+    "pack:ui": "node scripts/pack-ui.mjs",
+    "pack:check": "npm run pack:check:tokens && npm run pack:check:ui",
+    "pack:check:tokens": "node scripts/pack-design-tokens.mjs --validate --evidence target/review-evidence/design-token-archive.json",
+    "pack:check:ui": "node scripts/pack-ui.mjs --validate --evidence target/review-evidence/ui-archive.json",
+    "consumer:provision": "node scripts/provision-react-consumer.mjs",
+    "test:consumer": "npm run test:consumer:tokens && npm run test:consumer:ui",
+    "test:consumer:tokens": "node scripts/isolated-consumer.mjs --evidence target/review-evidence/token-consumer.json",
+    "test:consumer:ui": "node scripts/isolated-react-consumer.mjs --evidence target/review-evidence/react-consumer.json",
     "browser:install": "PLAYWRIGHT_BROWSERS_PATH=target/playwright playwright install --with-deps chromium",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/browser-smoke.mjs --evidence target/review-evidence/browser-smoke.json"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.63.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
     "eslint": "10.10.0",
+    "fontkit": "2.0.4",
     "globals": "17.12.0",
     "postcss": "8.5.28",
     "postcss-value-parser": "4.2.0",
     "prettier": "3.9.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sass": "^1.98.0",
+    "typescript": "5.9.3",
+    "vite": "^6.4.3",
     "yaml": "2.9.0"
   }
 }

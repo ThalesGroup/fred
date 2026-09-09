@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import styles from "./TextInput.module.scss";
-import { ComponentPropsWithRef, useId } from "react";
-import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { ComponentSize } from "@shared/utils/Type.ts";
+import { ComponentPropsWithRef, useId, useState } from "react";
+import Icon, { IconProps } from "../Icon/Icon.tsx";
+import { ComponentSize } from "../../utils/Type.ts";
 
 export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   label?: string;
@@ -44,16 +44,35 @@ export default function TextInput({
   size,
   maxLength,
   value,
+  defaultValue,
   required,
+  disabled,
+  id: callerId,
+  ref,
+  onChange,
+  type = "text",
+  autoComplete = "off",
+  "aria-describedby": callerDescription,
+  "aria-invalid": callerInvalid,
   ...props
 }: TextInputProps) {
-  const id = useId();
+  const generatedId = useId();
+  const id = callerId ?? generatedId;
+  const hintId = `${id}-description`;
+  const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
+  const characterCounter = value === undefined ? uncontrolledValue.length : String(value).length;
+  const message = error || explanation;
+  const hasError = !disabled && Boolean(error);
+  const describedBy = [callerDescription, message ? hintId : undefined].filter(Boolean).join(" ") || undefined;
 
-  const characterCounter = String(value).length;
+  const handleChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    if (value === undefined) setUncontrolledValue(event.currentTarget.value);
+    onChange?.(event);
+  };
 
   return (
     <div
-      className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
+      className={`${styles.input} ${disabled ? styles.disabled : ""} ${hasError ? styles.error : ""}`}
       data-compact={compact}
       data-size={size}
     >
@@ -70,18 +89,26 @@ export default function TextInput({
         )}
         <input
           id={id}
-          type={"text"}
+          ref={ref}
+          type={type}
           value={value}
+          defaultValue={defaultValue}
           maxLength={maxLength}
           required={required}
-          autoComplete="off"
+          disabled={disabled}
+          autoComplete={autoComplete}
+          onChange={handleChange}
+          aria-describedby={describedBy}
+          aria-invalid={hasError ? true : callerInvalid}
           {...props}
         />
         {suffix && <span className={styles.suffix}>{suffix}</span>}
       </div>
       <span className={styles.information}>
-        <span className={styles.hint}>{error || explanation || null}</span>
-        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+        <span className={styles.hint} id={message ? hintId : undefined}>
+          {message || null}
+        </span>
+        <span className={styles.maxLength}>{maxLength !== undefined && `${characterCounter} / ${maxLength}`}</span>
       </span>
     </div>
   );

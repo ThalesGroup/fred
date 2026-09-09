@@ -111,10 +111,12 @@ is validated, coerced, or cast.
 
 Refactor the canonical Icon module so one named material-symbol primitive owns the
 Outlined rendering and accessibility behavior. The existing application-facing default
-Icon may remain a thin compatibility wrapper for broader internal inputs. The selected
-Button, IconButton, and TextInput implementations use the material primitive and its
-narrow props. `@fred/ui` exports that same primitive as `Icon`; it does not bundle the
-application wrapper, absolute asset paths, or custom behavior. If the renewed inventory
+Icon may remain a thin compatibility wrapper for broader internal inputs. The
+disposable package build redirects only the selected Button, IconButton, and TextInput
+copies from that wrapper to the material primitive and its narrow props; their remaining
+implementation stays canonical. This preserves the application's wider caller contract
+without bundling it. `@fred/ui` exports that same primitive as `Icon`; it does not bundle
+the application wrapper, absolute asset paths, or custom behavior. If the renewed inventory
 finds a real broader application behavior, preserve it in the wrapper or make explicit,
 tested caller changes rather than deleting it because the package is narrower.
 
@@ -146,7 +148,9 @@ error/help IDs with that value, merges caller `aria-describedby`, and applies
 `aria-invalid` for an active error without overriding caller refs, handlers, input type,
 autocomplete, or other native props. Controlled counts derive from `value`; uncontrolled
 counts initialize from `defaultValue` and update alongside, not instead of, the caller's
-change handler. Disabled error presentation follows the existing behavior.
+change handler. Compact presentation may hide help/error text visually but retains its
+ID in the input's accessible description. Disabled error presentation follows the
+existing behavior.
 
 Spinner exports its prop type and adds consumer-supplied status text, defaulting to the
 existing `Loading`. Decorative mode continues to remove its role and label.
@@ -164,7 +168,7 @@ closed declaration graph. The package manifest exposes:
 ```json
 {
   ".": {
-    "types": "./dist/index.d.ts",
+    "types": "./dist/types/src/index.d.ts",
     "import": "./dist/index.js"
   },
   "./styles.css": "./dist/styles.css"
@@ -198,7 +202,10 @@ Generate the Outlined `@font-face` and material-symbol rendering declarations fr
 canonical application font inputs with package-relative URLs. UI CSS contains no
 `@import` and no external URL. It consumes the existing token variable names but neither
 imports token CSS nor sets `data-theme`. Consumers import `tokens.css`, then
-`styles.css`, and optionally `fonts.css`. The UI tarball does not duplicate Geist.
+`styles.css`, and optionally `fonts.css`. Archive validation closes every emitted
+custom-property reference against declarations in those canonical token inputs or the
+UI stylesheet, including neutral tonal IconButton state layers. The UI tarball does not
+duplicate Geist.
 
 No selected component portals. A future portaled export must define a caller-controlled
 container inside the themed `.fred-ui` root before it can join the package.
@@ -210,14 +217,17 @@ browser execution.
 
 ### D7 — Block on verified Outlined font provenance and glyph closure
 
-The observed canonical binary is
+The implementation established that the canonical binary is the byte-identical
+`variablefont/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].woff2` artifact from
+`google/material-design-icons` commit
+`caeba1e66925218b1fd1464171f93e2656f9a0b9`. The observed canonical binary is
 `apps/frontend/src/assets/fonts/material-symbols-outlined.woff2`, currently SHA-256
-`98817d23c038afb643c659819b194fa4146880c54f2f14d12c1710a5c41760d7`. This is an
-observation, not provenance. Before copying it into generated output, establish its
-exact upstream source/version and redistribution obligations from evidence. Record that
-source, the canonical and packed hashes, complete license text, and required notices in
-package-owned license inputs. If the source cannot be proven, stop the implementation
-at that task; do not guess or download a replacement.
+`98817d23c038afb643c659819b194fa4146880c54f2f14d12c1710a5c41760d7`.
+`libs/frontend/ui/PROVENANCE.md` records its upstream path and blob, complete Apache
+2.0 license input, packed hashes, and the verified absence of an upstream `NOTICE` at
+that revision. Generation copies the canonical checkout asset after verifying this
+evidence; it does not download or substitute a font. If that evidence stops matching,
+the implementation remains blocked rather than guessing or replacing the asset.
 
 Use a lockfile-pinned font inspection tool to enumerate supported ligatures/codepoints
 from the canonical and packed binaries. Validate every public `MaterialIconType` name,
@@ -248,24 +258,29 @@ would blur two different public contracts and make regressions harder to localiz
 
 Commit a private `fixtures/react-consumer` manifest and lockfile for React 19.2.4,
 React DOM 19.2.4, TypeScript, and its production bundler. A provisioning target may
-populate the producer-owned npm cache from registry sources. Browser acquisition
-remains the existing separate Playwright provisioning step.
+download only those lockfile-pinned dependencies into a dedicated producer-owned npm
+cache from registry sources. Browser acquisition remains the existing separate pinned
+Playwright provisioning step.
 
 Validation creates a new OS temporary directory outside FRED, copies only the fixture
-and the two validated tarballs, clears workspace/package environment, installs registry
-dependencies from the prepared cache plus both archives in offline mode, and rejects
-links or paths back to the checkout. It type-checks every public prop/type and creates a
-production bundle before the browser harness sees the output. It also proves the
-resolved consumer graph contains one React and that the package's CSS import is
-explicit.
+and the two validated tarballs, clears workspace/package environment, and invokes the
+package manager in offline mode to install the pinned consumer dependencies from the
+dedicated prepared cache plus both archives. This install step is expected; it neither
+fetches from the network nor resolves from FRED's installed dependency tree, workspace,
+or local package links. Missing cache entries or a missing provisioned browser fail
+immediately with actionable setup guidance instead of triggering implicit provisioning.
+Validation type-checks every public prop/type and creates a production bundle before the
+browser harness sees the output. It also proves the resolved consumer graph contains one
+React and that the package's CSS import is explicit.
 
 Reuse and extend the producer-owned Playwright harness rather than adding Playwright to
-the consumer. Fresh contexts render every component in light and dark themes, exercise
+the consumer. Browser smoke execution performs no dependency installation or browser
+download. Fresh contexts render every component in light and dark themes, exercise
 Tab/Enter/Space behavior, names, focus, class composition, disabled/loading/error
-states, custom/default/decorative spinner text, material glyphs, tokens without Geist,
-and explicit Geist opt-in. Request observation retains the existing bans on failures,
-non-2xx responses, non-loopback traffic, `file:` URLs, checkout paths, and external font
-services.
+states, neutral tonal IconButton hover/pressed layers, custom/default/decorative spinner
+text, material glyphs, tokens without Geist, and explicit Geist opt-in. Request
+observation retains the existing bans on failures, non-2xx responses, non-loopback
+traffic, `file:` URLs, checkout paths, and external font services.
 
 Alternative: use FRED's Vite application as the consumer. Rejected because its aliases,
 dependencies, and global CSS can conceal an incomplete archive. Alternative: let the
@@ -303,9 +318,9 @@ iframe SDK, release/migration, and adoption.
 
 ## Risks / Trade-offs
 
-- **The current Outlined binary's exact origin may not be recoverable.** → Keep asset
-  provenance as the first blocking implementation task and accept no guessed or silently
-  substituted binary.
+- **A future canonical Outlined binary may no longer match the approved provenance.** →
+  Keep the approved hash, upstream revision, complete license, and glyph inspection as
+  blocking inputs and accept no guessed or silently substituted binary.
 - **A shared icon-type cleanup could break dynamic application metadata.** → Preserve
   application-wide types and the compatibility wrapper by default; inventory and test
   every coercion/cast caller before any broader edit.
@@ -343,10 +358,10 @@ package and FRED application continue independently.
 
 ## Open Questions
 
-- What exact upstream artifact and version produced the current canonical Material
-  Symbols Outlined binary, and what notice material accompanied it? Implementation is
-  blocked at D7 until repository or upstream evidence answers this; the answer does not
-  change the approved package boundary.
+- The Material Symbols provenance question is resolved for this binary by the exact
+  upstream revision, blob, byte comparison, SHA-256, complete Apache 2.0 input, and
+  absence-of-`NOTICE` check recorded in D7 and `libs/frontend/ui/PROVENANCE.md`. A future
+  binary change must establish a new approved evidence set before generation proceeds.
 - Which organization-controlled npm scope, stable/prerelease versions, publication
   owners, and support window will be used? These remain intentionally deferred to the
   publication change; `@fred/ui` and development versions are planning identities here.

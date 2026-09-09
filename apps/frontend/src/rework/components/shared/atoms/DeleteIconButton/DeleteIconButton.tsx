@@ -14,10 +14,10 @@
 
 import { ComponentPropsWithoutRef } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { ComponentSize } from "@shared/utils/Type";
+import { ButtonSize } from "@shared/utils/Type";
 
 interface DeleteIconButtonProps extends Omit<ComponentPropsWithoutRef<"button">, "color"> {
-  size?: ComponentSize;
+  size?: ButtonSize;
 }
 
 export function DeleteIconButton({ size = "medium", ...props }: DeleteIconButtonProps) {
