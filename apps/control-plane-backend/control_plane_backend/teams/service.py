@@ -213,12 +213,14 @@ async def list_all_teams_for_registry(
     """List every team in the registry (RFC §32, `GET /teams/all`).
 
     Why this function exists:
-    - platform_admin needs a registry-governance view of every team that is
-      gated on `can_list_all_teams`, distinct from `can_manage_platform`
+    - the registry-governance view of every team is gated on
+      `can_list_all_teams`, distinct from `can_manage_platform`
       (`compute_platform_stats`'s caller) — narrower intent, own capability
 
     How to use it:
-    - call from the platform-admin-gated `GET /teams/all` route
+    - call from the `can_list_all_teams`-gated `GET /teams/all` route, which
+      `team_manager` and `feature_manager` reach as well as `platform_admin`:
+      names and ids only, no authority over any team's data
 
     Example:
     - `teams = await list_all_teams_for_registry(user, deps)`
@@ -485,12 +487,13 @@ async def create_team(
       Keycloak root group, discovered lazily, and every membership endpoint
       requires the group (and a `team_admin`) to already exist — a freshly
       created Keycloak group was unreachable by any of them
-    - `platform_admin` must not gain a standing team relation from creating a
-      team (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples
-      only for the subjects named in the request
+    - the creator must not gain a standing team relation from creating a team
+      (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples only
+      for the subjects named in the request
 
     How to use it:
-    - call from the platform-admin-gated `POST /teams` route
+    - call from the `can_create_team`-gated `POST /teams` route, which a
+      `team_manager` reaches as well as a `platform_admin`
     - one-shot by construction: `team_metadata.name`'s DB-level unique
       constraint (migration a8b9c0d1e2f3) makes a second call for the same
       name fail with `TeamAlreadyExistsError` (409) rather than silently

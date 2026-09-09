@@ -220,8 +220,8 @@ class OrganizationPermission(str, Enum):
     resource instance to scope on (observability, platform administration).
     The check target is always the singleton ``organization:fred``. AUTHZ-05
     review item 8a removed the "any connected user" tier entirely (it never
-    protected anything specific) — only platform_admin-gated capabilities and
-    the raw `platform_observer` relation check remain.
+    protected anything specific) — only admin-tier capabilities and the raw
+    role-relation checks remain.
     """
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"

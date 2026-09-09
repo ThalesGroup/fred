@@ -31,9 +31,9 @@ type organization
     # (CAPAB-01 / #1961, RFC AGENT-CAPABILITY §8.4).
     define personal_team: [team]
 
-  # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
-  # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
-  # gains no ongoing relation on the created team from this capability alone.
+  # AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action
+  # (`POST /teams`), not a team relation. The creator gains no ongoing
+  # relation on the created team from this capability alone.
   define can_create_team: platform_admin or team_manager
 
   # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance
@@ -105,7 +105,7 @@ type team
     # this team has no owner yet", so it applied to every team, always, and
     # was a live escalation through the `add_team_member`/`update_team_member`
     # endpoints. The first `team_admin` of a team is instead granted by a
-    # one-shot, platform-admin-gated bootstrap action outside this schema
+    # one-shot, `can_create_team`-gated bootstrap action outside this schema
     # (RFC §28, `POST /teams`), never by a standing relation grant here.
     define team_admin: [user]
     define team_editor: [user]
