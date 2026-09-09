@@ -48,19 +48,21 @@ from fred_sdk.contracts.capability.manifest import TeamScopePolicy
 
 from control_plane_backend.capabilities.enablement import (
     ORG_REF,
-    cap_ref,
-    ensure_capability_anchor,
+    enablement_ref,
+    ensure_enablement_anchor,
     team_settings_has_required_fields,
 )
 
 logger = logging.getLogger(__name__)
 
 
-async def _is_capability_registered(rebac: RebacEngine, capability_id: str) -> bool:
-    """True once a capability has been anchored to the org (already seeded)."""
+async def _is_entry_registered(
+    rebac: RebacEngine, entry: CapabilityCatalogEntry
+) -> bool:
+    """True once a catalog entry's typed object has an organization anchor."""
 
     subjects = await rebac.lookup_subjects(
-        cap_ref(capability_id),
+        enablement_ref(entry),
         RelationType.ORGANIZATION,
         Resource.ORGANIZATION,
     )
@@ -94,31 +96,28 @@ async def seed_registration_defaults(
             # Required team settings ⇒ admin-gated by construction (§8.2).
             continue
         try:
-            if await _is_capability_registered(rebac, entry.id):
+            if await _is_entry_registered(rebac, entry):
                 continue
-            await ensure_capability_anchor(rebac, entry.id)
+            await ensure_enablement_anchor(rebac, enablement_ref(entry))
             await rebac.add_relation(
-                _default_on_relation(entry.id),
+                _default_on_relation(entry),
             )
-        except Exception as exc:  # noqa: BLE001 — best-effort per capability
-            # One bad entry (e.g. an id OpenFGA rejects) must not starve the
-            # rest of the catalog of their first-registration seed.
-            logger.warning(
-                "[capability-seeding] failed to seed default_on capability=%s: %s",
-                entry.id,
-                exc,
-            )
+        except Exception:  # noqa: BLE001 — best-effort per capability
+            # One rejected entry must not starve the rest of their seed. No id
+            # and no exception text: this line runs on every replica start and
+            # outlives the deployment.
+            logger.warning("[capability-seeding] failed to seed one capability")
             continue
         seeded.append(entry.id)
-        logger.info("[capability-seeding] seeded default_on capability=%s", entry.id)
+        logger.debug("[capability-seeding] seeded default_on for one capability")
     return seeded
 
 
-def _default_on_relation(capability_id: str):
+def _default_on_relation(entry: CapabilityCatalogEntry):
     from fred_core.security.rebac.rebac_engine import Relation
 
     return Relation(
         subject=ORG_REF,
         relation=RelationType.DEFAULT_ON,
-        resource=cap_ref(capability_id),
+        resource=enablement_ref(entry),
     )

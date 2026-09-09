@@ -27,6 +27,7 @@ from pydantic import AnyHttpUrl, ValidationError
 
 from fred_core import (
     AgentPermission,
+    AppPermission,
     AuthorizationError,
     CapabilityPermission,
     DocumentPermission,
@@ -1407,6 +1408,144 @@ async def test_capability_lookup_resources_lists_usable(
     )
     assert not isinstance(other_resources, RebacDisabledResult)
     assert usable.id not in {ref.id for ref in other_resources}
+
+
+# ---------------------------------------------------------------------------
+# Product application team scoping
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_can_use_is_typed_and_team_scoped(rebac_engine: RebacEngine) -> None:
+    org = _organization_ref()
+    raw_id = _unique_id("shared-id")
+    app = RebacReference(Resource.APP, raw_id)
+    capability = RebacReference(Resource.CAPABILITY, raw_id)
+    team = _make_reference(Resource.TEAM, prefix="team")
+    other_team = _make_reference(Resource.TEAM, prefix="other")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(
+                subject=org,
+                relation=RelationType.ORGANIZATION,
+                resource=capability,
+            ),
+            Relation(subject=team, relation=RelationType.ENABLED, resource=app),
+        ]
+    )
+
+    assert await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        CapabilityPermission.CAN_USE,
+        capability,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        other_team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(other_team),
+        consistency_token=token,
+    )
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=team, relation=RelationType.DISABLED, resource=app)
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_default_on_is_inherited_and_can_be_disabled(
+    rebac_engine: RebacEngine,
+) -> None:
+    org = _organization_ref()
+    app = _make_reference(Resource.APP, prefix="app")
+    team = _make_reference(Resource.TEAM, prefix="team")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.DEFAULT_ON, resource=app),
+        ]
+    )
+    assert await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        team, AppPermission.CAN_USE, app, consistency_token=token
+    )
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=team, relation=RelationType.DISABLED, resource=app)
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_can_manage_and_lookup_resources(rebac_engine: RebacEngine) -> None:
+    org = _organization_ref()
+    app = _make_reference(Resource.APP, prefix="app")
+    hidden = _make_reference(Resource.APP, prefix="hidden-app")
+    team = _make_reference(Resource.TEAM, prefix="team")
+    admin = _make_reference(Resource.USER, prefix="admin")
+    plain = _make_reference(Resource.USER, prefix="plain")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=hidden),
+            Relation(subject=team, relation=RelationType.ENABLED, resource=app),
+            Relation(subject=admin, relation=RelationType.PLATFORM_ADMIN, resource=org),
+        ]
+    )
+
+    assert await rebac_engine.has_permission(
+        admin, AppPermission.CAN_MANAGE, app, consistency_token=token
+    )
+    assert not await rebac_engine.has_permission(
+        plain, AppPermission.CAN_MANAGE, app, consistency_token=token
+    )
+
+    resources = await rebac_engine.lookup_resources(
+        team,
+        AppPermission.CAN_USE,
+        Resource.APP,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not isinstance(resources, RebacDisabledResult)
+    ids = {resource.id for resource in resources}
+    assert app.id in ids
+    assert hidden.id not in ids
 
 
 @pytest.mark.integration

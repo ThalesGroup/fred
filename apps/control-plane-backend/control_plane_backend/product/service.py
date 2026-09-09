@@ -25,8 +25,8 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
 from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
@@ -256,7 +256,7 @@ class _RuntimeTemplatePayload:
             entry.id
             for entry in parsed_capabilities
             if entry.kind == "app"
-            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+            or entry.id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
         }
         if quarantined_capability_ids:
             logger.warning(
@@ -293,7 +293,7 @@ class _RuntimeTemplatePayload:
                 if isinstance(cid, str)
                 and cid
                 and cid not in quarantined_capability_ids
-                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+                and not cid.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.

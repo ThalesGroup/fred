@@ -30,7 +30,12 @@ At startup, each backend must do exactly this:
 1. Load environment variables from `ENV_FILE` (default: `./config/.env`).
 2. Resolve YAML configuration from `CONFIG_FILE` (default: `./config/configuration.yaml`).
 3. Parse the YAML into the backend-specific pydantic `Configuration`.
-4. Log which env file and config file were effectively loaded.
+4. Log identifier-free load status; never emit selected paths, secret names,
+   configuration contents, or raw parser/exception details into log sinks.
+
+Item 4 is the requirement, not a description of current behavior: the shared
+helper and the backend startup paths still emit the resolved file paths. The
+gap is outstanding work and is not a licence to log paths in new code.
 
 The shared helper used by backends is:
 
@@ -55,7 +60,10 @@ Complete env inventory and ownership rules are documented in:
 
 - `make run` starts API using the same `ENV_FILE/CONFIG_FILE` contract.
 - `make run-worker` starts worker using the same `ENV_FILE/CONFIG_FILE` contract.
-- API and worker logs must show the loaded env/config file paths.
+- API and worker logs report configuration load status without file paths or
+  other system identifiers. Keep operational inspection separate from log sinks.
+  This is the required behavior; the current startup paths still emit the
+  resolved file paths.
 
 ## Policy Configuration In Fred
 
@@ -122,9 +130,10 @@ share, and it must match across them:
 - **Control plane** — `platform.application_sources[]`, expressed like
   `platform.runtime_catalog_sources[]`. Each entry carries `app_id`,
   `ui_prefix`, `version`, `icon`, localized `display_name`/`description`, and
-  `enabled`. It owns the catalog the API returns and the `app__<app_id>`
-  capability that team authorization is granted against, and it registers no
-  proxy upstream at all. `ui_prefix` is browser-facing: exactly
+  `enabled`. It owns the catalog the API returns, exposes `app__<app_id>` as
+  the flat catalog and administration id, and maps that entry to the OpenFGA
+  authorization object `app:<app_id>`. It registers no proxy upstream at all.
+  `ui_prefix` is browser-facing: exactly
   `/apps/<app_id>` while the UI is served from Fred's origin — config load
   rejects any other own-origin path, because the gateway routes on that
   segment and nothing else can reach the application — or an absolute `https`
@@ -141,8 +150,28 @@ other is not detected at startup. Forward (control plane only): the
 application appears in the catalog and its frame 404s. Reverse (gateway only):
 the prefixes proxy for an application no team was ever granted — the gateway
 performs no authorization of its own, so keep the gateway list a subset of the
-catalog. `enabled: false` withdraws an application from the catalog but leaves
-its gateway routes serving; remove both halves to retire one.
+catalog. In the current implementation, `enabled: false` withdraws an application
+from the catalog but leaves its gateway routes serving; remove both halves to
+retire one.
+
+**Current scope:** configuration registers enabled applications using the dedicated
+`app` authorization type and existing entitlement controls. Registration alone
+does not grant a team access. There is no app-wide active marker, lifecycle
+database or reconciliation command to initialize.
+
+**Lifecycle gap:** `enabled: false` hides a catalog entry; removing an entry
+withdraws registration from the loaded catalog. Neither action guarantees
+global denial by a directly reachable first-party backend or deletion of stored
+grants, denies or default-on. Re-adding the same identifier can reuse surviving
+permissions. Use existing entitlement revocation and route restrictions when
+access must be withdrawn; removing catalog and gateway entries is not proof
+that all authorization state has been erased.
+
+Global Deactivate/Activate/Delete belongs to a future shared lifecycle design
+for all or most applicable ReBAC types. Its authority, ownership, cleanup,
+recovery and rollout semantics are not selected here. No new lifecycle UI/API
+is included. See [the ReBAC guide](REBAC.md) and
+[the deferred RFC scope](../rfc/FRED-APPLICATION-HOSTING-RFC.md#6-deferred-shared-resource-lifecycle).
 
 Neither half carries a token, credential, arbitrary header, or raw HTML.
 Registration is routing and catalog configuration, not a secrets channel.
@@ -164,6 +193,6 @@ Use the same startup contract immediately:
 1. Use `ConfigFiles` for env/config path loading.
 2. Keep `ENV_FILE` and `CONFIG_FILE` as-is.
 3. Parse into local pydantic config model.
-4. Log loaded env/config paths.
+4. Log identifier-free configuration load status, not loaded paths or raw errors.
 
 If this contract cannot be followed, document the reason in this file before merging.

@@ -1771,8 +1771,8 @@ applications:
         # control plane, does the proxying. app_id is the only key both halves
         # carry.
         #
-        # An entry alone grants nothing: a platform administrator still enables
-        # app__<app_id> for each collaborative team on the Capabilities page.
+        # Registration grants no access; administrators manage team entitlements.
+        # Catalog entries resolve to typed application authorization resources.
         #
         # Worked example — the same application registered above:
         # application_sources:

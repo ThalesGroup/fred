@@ -57,14 +57,11 @@ CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 # runtime pod (`GET /agents/models-catalog`), not synthesized from data
 # control-plane already has. It lives in fred-sdk because both the runtime
 # (id generation, `model_capability_id` below) and control-plane read it.
-# The flat `capability:<id>` namespace has three reserved prefixes, each
-# beside the code deriving that kind's ids: `model__` here, `app__` in
-# fred-core (`security.rebac.capability_authz`), `agent__` in control-plane
-# (`product.service`). `aggregate_capability_catalog` guards all three.
+# Reserved catalog prefixes distinguish models, applications and agent templates.
+# Application entries resolve to a separate authorization resource type.
 MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 
-# Compatibility import for consumers of the former fred-sdk-owned constant.
-# fred-core remains the single source of truth for application capability ids.
+# Retain the compatibility import from the shared application identifier owner.
 APPLICATION_CAPABILITY_NAMESPACE_PREFIX = _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
 
 

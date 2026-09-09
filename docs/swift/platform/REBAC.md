@@ -166,14 +166,39 @@ Application admission deliberately uses two independent checks:
 
 1. the user has `team#can_use_team_applications`, computed from
    `team_member`; and
-2. that team has `capability#can_use` on
-   `capability:app__<application-id>`.
+2. that team has `app#can_use` on `app:<application-id>`.
 
 The first excludes public non-members and platform administrators who hold no
 role on the selected team. The second is the platform-admin-managed coarse
 enablement. V1 applications are unavailable in personal teams even when a
-capability is default-on; application services still own any finer-grained
-object authorization.
+registered application is default-on; application services still own any
+finer-grained object authorization.
+
+The shared capability catalog and administration routes identify that same
+application as `app__<application-id>`. This is a collision-free catalog id,
+not an OpenFGA capability object: the control plane maps the validated entry to
+`app:<application-id>` before reading or writing authorization relations.
+
+This cutover has no dual-read fallback and requires absence of semantic legacy
+capability-app grants; it does not prohibit existing first-class app grants.
+Fence every application administration operation that can write a
+relation before starting, including enable, disable, reset, default-on, and the
+old revoke-impact preview, then wait for requests already admitted by every old
+control-plane replica to finish. For each configured app id, use OpenFGA's read
+API to verify that `capability:app__<app_id>` has no `enabled`, `disabled`,
+`default_on`, `personal_on`, or `personal_disabled` relation. A bare
+`organization` anchor is inert for `capability#can_use` and does not block the
+cutover.
+
+Keep the fence closed for the entire rollout. First deploy the authorization
+model containing `type app` and confirm that it is available. Then update and
+verify every service pinned to an `authorization_model_id`. Only then roll out
+every control-plane writer and SDK reader that uses `app:*`. Fully drain the old
+replicas and their in-flight requests, repeat the legacy-relation check, and
+only then reopen application administration. Stop if either check finds
+semantic legacy state: migrating it requires a separate mixed-version design.
+Falling back after a denied app check could revive an old grant after a valid
+revocation.
 
 A first-party application backend — one deliberately admitted by devops and
 provisioned with its own OpenFGA credential — creates one process-lifetime
@@ -185,16 +210,49 @@ and raise on denial. An arm's-length backend instead keeps forwarding the
 caller's bearer to `GET /teams/{team_id}/applications` and requires its own id
 in the response. Every facade check rejects personal spaces locally before an
 OpenFGA call, including when a backend composes the two component checks.
+`check_application_access` checks the raw application id against the `app`
+resource; `check_team_capability` remains for actual capability objects and
+must not receive an `app__` catalog id.
 
-The SDK answers the two ReBAC questions above and does not read catalog or
-feature-gate state. `enableApplications: false` nevertheless withdraws the
-normal browser path for both tiers because the gateway returns 404 for
-`/apps` and `/app-services`. Parking one application (`enabled: false`) removes
-it from the arm's-length catalog while leaving its route and grant intact, so
-it does not change the SDK result and must not be treated as a security kill
-switch. Revoke the team's `app__<app_id>` grant to withdraw entitlement from
-both tiers; during an incident, also block or remove the gateway route. The
-trust-tier rationale and datastore boundary are recorded in
+**Current implementation:** the SDK answers membership and app entitlement
+without reading catalog configuration or the deployment feature flag.
+`enableApplications: false` withdraws the normal browser paths because the
+gateway returns 404. A catalog entry set to `enabled: false` or removed from
+configuration does not guarantee denial by a directly reachable first-party
+backend and does not automatically erase authorization relations. Re-adding
+an identifier may reuse surviving permissions. Catalog withdrawal is not a
+security kill switch.
+
+Applications use `can_use = (enabled or inherited) but not disabled`, with
+`inherited = team from default_on`. There is no app-wide active marker or
+lifecycle registry prerequisite. Configuration registration is catalog-only;
+startup seeding skips admin-gated apps. Authorized entitlement mutations create
+the typed organization anchor. Existing team disable/reset and default-on controls remain:
+a team deny wins, default-on OFF leaves explicit grants intact, and reset may
+restore inherited access. Supported revocation remains available for an entry
+that is hidden but still configured.
+
+Discovery and first-party app checks request higher consistency from the
+authorization engine and never use administration caches as admission decisions.
+Typed administration caches remain process-local, with mutation invalidation and
+expiry rather than a database permission-revision protocol. They do not promise
+immediate cross-replica display freshness.
+
+**Deferred shared lifecycle:** global Deactivate/Activate/Delete requires a
+separate design across all or most applicable ReBAC types, including ownership,
+config/UI authority, retained permissions, safe removal detection, interrupted
+cleanup, stale writers, re-registration and rollout. No app-specific lifecycle
+command, migration, global gate or UI action is shipped by this change.
+Generic bounded reference cleanup for existing callers is retained; it does
+not establish those lifecycle guarantees.
+
+For incident response, revoke entitlement through existing administration and
+restrict or remove routes as required. Verify deployed schema and authorization-model
+compatibility before rollout. Incompatible state requires a separately approved
+state-preserving migration plan; no automatic database downgrade or
+authorization-state migration is provided.
+
+The trust-tier and datastore boundaries remain in
 [`CONTROL-PLANE-PRODUCT-CONTRACT.md` §46](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#46-contract-notes--team-applications-are-runtime-registered-frame-hosted-uis-2026-08-31).
 
 ### Personal teams — self-provisioned, never admin-writable (AUTHZ-08)
