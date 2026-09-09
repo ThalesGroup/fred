@@ -292,7 +292,8 @@ async def test_prompt_editor_reads_the_platform_prompt() -> None:
     stored = StoredPlatformPrompt(text="SAVED", updated_by="a", updated_at=None)
 
     result = await get_platform_prompt(
-        user=_user(), deps=_authz_deps(rebac, _Store(stored))  # type: ignore[arg-type]
+        user=_user(),
+        deps=_authz_deps(rebac, _Store(stored)),  # type: ignore[arg-type]
     )
 
     assert result.text == "SAVED"
@@ -307,7 +308,9 @@ async def test_prompt_editor_updates_the_platform_prompt() -> None:
     store = _WritableStore()
 
     result = await set_platform_prompt(
-        user=_user(), text="NEW", deps=_authz_deps(rebac, store)  # type: ignore[arg-type]
+        user=_user(),
+        text="NEW",
+        deps=_authz_deps(rebac, store),  # type: ignore[arg-type]
     )
 
     assert store.written == ["NEW"]
@@ -322,7 +325,8 @@ async def test_prompt_editor_reads_the_shipped_instructions() -> None:
     rebac = _prompt_editor()
 
     result = await get_platform_instructions(
-        user=_user(), deps=_authz_deps(rebac, _Store(None))  # type: ignore[arg-type]
+        user=_user(),
+        deps=_authz_deps(rebac, _Store(None)),  # type: ignore[arg-type]
     )
 
     assert result.source_unavailable is True
