@@ -490,10 +490,12 @@ async function verifyUi(browser, origin) {
     await resetInput.fill("abcdef");
     await resetFixture.getByText("6 / 20").waitFor();
     await resetFixture.getByRole("button", { name: "Reset counter" }).click();
+    assert.equal(await resetFixture.getAttribute("data-reset-count"), "1");
     assert.equal(await resetInput.inputValue(), "abc");
     await resetFixture.getByText("3 / 20").waitFor();
     const resetCounter = {
       count: await resetFixture.getByText("3 / 20").textContent(),
+      parentResetCount: await resetFixture.getAttribute("data-reset-count"),
       value: await resetInput.inputValue(),
     };
 

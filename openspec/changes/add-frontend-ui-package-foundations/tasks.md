@@ -193,3 +193,18 @@ is tracked by [ThalesGroup/fred#2590](https://github.com/ThalesGroup/fred/issues
 - [x] 8.5 Run producer quality and unit tests, both archive and isolated-consumer gates,
       browser smoke, canonical frontend quality/build/tests, strict OpenSpec validation,
       and `git diff --check`; record any unavailable gate without weakening acceptance.
+
+## 9. Reset synchronization rerender correction
+
+- [x] 9.1 Reproduce an uncontrolled `TextInput` reset whose form `onReset` handler
+      updates parent React state; prove the native value resets while the scheduled
+      counter synchronization is canceled by the ordinary rerender.
+- [x] 9.2 Keep the reset listener and pending synchronization stable across ordinary
+      parent rerenders while preserving canceled resets, controlled behavior, forwarded
+      refs, and listener/task cleanup on unmount or controlled-mode changes.
+- [x] 9.3 Extend the installed-package browser fixture so the reset handler updates
+      parent state and retained evidence proves both that rerender and the corrected
+      value/count after consuming the packed archive.
+- [x] 9.4 Run affected canonical, producer, archive, isolated-consumer, browser,
+      frontend regression, strict OpenSpec, and diff checks; complete an independent
+      review and resolve every in-scope finding.

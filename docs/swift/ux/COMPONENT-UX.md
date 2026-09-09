@@ -924,8 +924,10 @@ digit after the name.
 - `TextInput` preserves caller IDs, refs, handlers, input type, autocomplete, and other
   native props. Labels target the effective ID; help/error descriptions are merged with
   caller descriptions; enabled errors set `aria-invalid`; and controlled/uncontrolled
-  counters follow the current value. Compact presentation keeps any visually omitted
-  help/error text associated through `aria-describedby`.
+  counters follow the current value, including an uncontrolled input's actual value
+  after an uncancelled native form reset. A canceled reset leaves both value and count
+  unchanged. Compact presentation keeps any visually omitted help/error text associated
+  through `aria-describedby`.
 - `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
   text, and remains label-free when decorative.
 

@@ -2,7 +2,7 @@
 // Copyright Thales 2026
 // Licensed under the Apache License, Version 2.0
 
-import { act, createRef } from "react";
+import { act, createRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TextInput from "./TextInput.tsx";
@@ -126,6 +126,32 @@ describe("TextInput native and accessible behavior", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
+    expect(input().value).toBe("abc");
+    expect(container.textContent).toContain("3 / 20");
+  });
+
+  it("restores an uncontrolled count when reset rerenders its parent", async () => {
+    function ResetFixture() {
+      const [resetCount, setResetCount] = useState(0);
+      return (
+        <form onReset={() => setResetCount((count) => count + 1)} data-reset-count={resetCount}>
+          <TextInput defaultValue="abc" maxLength={20} />
+        </form>
+      );
+    }
+    render(<ResetFixture />);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input(), "abcdef");
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("6 / 20");
+
+    await act(async () => {
+      container.querySelector("form")?.reset();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(container.querySelector("form")?.dataset.resetCount).toBe("1");
     expect(input().value).toBe("abc");
     expect(container.textContent).toContain("3 / 20");
   });

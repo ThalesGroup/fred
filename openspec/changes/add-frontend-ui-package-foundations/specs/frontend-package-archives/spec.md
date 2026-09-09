@@ -167,9 +167,10 @@ following reviewed behavior:
 #### Scenario: An uncontrolled TextInput is reset by its form
 
 - **WHEN** a changed uncontrolled `TextInput` participates in a successful native form
-  reset
+  reset, including when the form's reset handler updates parent React state and causes
+  an ordinary rerender
 - **THEN** the input returns to its native default value and the displayed count reflects
-  that actual reset value
+  that actual reset value without the rerender canceling synchronization
 
 #### Scenario: A TextInput form reset is canceled
 

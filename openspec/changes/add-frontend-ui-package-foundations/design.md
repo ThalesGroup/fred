@@ -153,6 +153,10 @@ event and, after uncancelled default reset behavior completes, synchronizes the 
 from the actual input value in the next task rather than before the browser's reset
 default action. A canceled reset changes neither value nor count. The
 implementation composes its internal element reference with the caller's forwarded ref.
+The reset listener's lifetime follows the input's controlled/uncontrolled mode rather
+than every component render, so a parent state update from `onReset` cannot cancel the
+pending post-reset synchronization. Cleanup still removes the listener and cancels any
+pending task when the input unmounts or changes mode.
 Compact presentation may hide help/error text visually but retains its ID in the input's
 accessible description. Disabled error presentation follows the existing behavior.
 

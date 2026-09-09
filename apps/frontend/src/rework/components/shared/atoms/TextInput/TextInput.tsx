@@ -52,6 +52,7 @@ export default function TextInput({
   onChange,
   type = "text",
   autoComplete = "off",
+  form: formId,
   "aria-describedby": callerDescription,
   "aria-invalid": callerInvalid,
   ...props
@@ -61,13 +62,14 @@ export default function TextInput({
   const hintId = `${id}-description`;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
-  const characterCounter = value === undefined ? uncontrolledValue.length : String(value).length;
+  const isControlled = value !== undefined;
+  const characterCounter = isControlled ? String(value).length : uncontrolledValue.length;
   const message = error || explanation;
   const hasError = !disabled && Boolean(error);
   const describedBy = [callerDescription, message ? hintId : undefined].filter(Boolean).join(" ") || undefined;
 
   const handleChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
-    if (value === undefined) setUncontrolledValue(event.currentTarget.value);
+    if (!isControlled) setUncontrolledValue(event.currentTarget.value);
     onChange?.(event);
   };
 
@@ -96,7 +98,7 @@ export default function TextInput({
   useEffect(() => {
     const input = inputRef.current;
     const form = input?.form;
-    if (value !== undefined || !input || !form) return;
+    if (isControlled || !input || !form) return;
 
     let pendingReset: ReturnType<typeof setTimeout> | undefined;
     const handleReset = (event: Event) => {
@@ -112,7 +114,7 @@ export default function TextInput({
       form.removeEventListener("reset", handleReset);
       if (pendingReset !== undefined) clearTimeout(pendingReset);
     };
-  });
+  }, [formId, isControlled]);
 
   return (
     <div
@@ -141,6 +143,7 @@ export default function TextInput({
           required={required}
           disabled={disabled}
           autoComplete={autoComplete}
+          form={formId}
           onChange={handleChange}
           aria-describedby={describedBy}
           aria-invalid={hasError ? true : callerInvalid}

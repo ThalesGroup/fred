@@ -45,6 +45,7 @@ const typedSpinner: SpinnerProps = { statusText: "Saving package" };
 function App() {
   const [clicks, setClicks] = useState(0);
   const [name, setName] = useState("Fred");
+  const [resetCount, setResetCount] = useState(0);
   return (
     <main className="fred-ui consumer-shell" data-clicks={clicks}>
       <h1>FRED UI archive consumer</h1>
@@ -117,7 +118,11 @@ function App() {
           icon={{ type: "info" }}
           aria-label="Retreat tonal"
         />
-        <form aria-label="Reset counter fixture">
+        <form
+          aria-label="Reset counter fixture"
+          data-reset-count={resetCount}
+          onReset={() => setResetCount((count) => count + 1)}
+        >
           <TextInput
             id="reset-name"
             label="Resettable name"
