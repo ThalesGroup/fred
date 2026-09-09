@@ -207,4 +207,11 @@ describe("TeamWikiPage — review mark wiring", () => {
       detail: "the wiki store is unavailable",
     });
   });
+
+  it("marks the wiki as beta in the rail header", async () => {
+    mount();
+    await settle();
+
+    expect(container.querySelector('[aria-label="rework.wiki.betaBadge.label"]')).not.toBeNull();
+  });
 });

@@ -96,8 +96,15 @@
   height: 48px;
 }
 
-.railTitle {
+.railTitleGroup {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.railTitle {
   color: var(--on-surface);
   font: var(--font-label-large);
 }

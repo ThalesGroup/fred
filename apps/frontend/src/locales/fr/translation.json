@@ -3066,6 +3066,10 @@
     },
     "wiki": {
       "title": "Wiki",
+      "betaBadge": {
+        "label": "Beta",
+        "tooltip": "Ceci est une proposition, pas encore une fonctionnalité figée. Nous recueillons vos retours avant de nous engager sur sa conception — dites-nous ce qui fonctionne ou pas."
+      },
       "resizeRail": "Redimensionner la liste des pages",
       "newPage": "Nouvelle page",
       "missingTeam": "Identifiant d'équipe manquant dans l'URL.",

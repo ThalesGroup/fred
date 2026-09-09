@@ -2745,6 +2745,23 @@ _(none yet)_
 
 ---
 
+### `BetaBadge`
+
+**Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ### `NumberedChip`
 
 **Location:** `src/rework/components/shared/atoms/NumberedChip/NumberedChip.tsx`

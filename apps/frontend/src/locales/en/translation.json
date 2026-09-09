@@ -3066,6 +3066,10 @@
     },
     "wiki": {
       "title": "Wiki",
+      "betaBadge": {
+        "label": "Beta",
+        "tooltip": "This is a proposal, not a finished feature. We're collecting feedback before committing to its design — tell us what works and what doesn't."
+      },
       "resizeRail": "Resize the page list",
       "newPage": "New page",
       "missingTeam": "Missing team id in route.",

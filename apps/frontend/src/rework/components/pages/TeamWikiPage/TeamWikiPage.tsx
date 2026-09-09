@@ -19,9 +19,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import TextInput from "@shared/atoms/TextInput/TextInput";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Select from "@shared/molecules/Select/Select";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
@@ -381,7 +383,12 @@ export default function TeamWikiPage() {
           data-dragging={railResize.dragging ? "true" : undefined}
         >
           <div className={styles.railHeader}>
-            <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
+            <span className={styles.railTitleGroup}>
+              <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
+              <Tooltip text={t("rework.wiki.betaBadge.tooltip")}>
+                <BetaBadge label={t("rework.wiki.betaBadge.label")} />
+              </Tooltip>
+            </span>
             {/* Not while a draft is open: creating a page navigates to it, and
                 the prompt would come after the page already existed. */}
             {canEdit && !editing && (
