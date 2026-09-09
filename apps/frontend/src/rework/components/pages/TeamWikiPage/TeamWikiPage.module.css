@@ -109,6 +109,18 @@
   font: var(--font-label-large);
 }
 
+/* `.tooltip-content-rich` zeroes the atom's own padding and hands spacing to
+ * the content, so this panel owns both. Width is capped because this is a
+ * prose sentence, not the short label/value rows the atom's nowrap default
+ * was sized for. */
+.betaTooltip {
+  display: block;
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 22rem;
+  text-align: left;
+  white-space: normal;
+}
+
 .state {
   display: flex;
   flex: 1;

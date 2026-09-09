@@ -3,9 +3,9 @@
   align-items: center;
   gap: var(--spacing-2xs);
   border-radius: var(--radius-xs);
-  background: var(--tertiary-container);
+  background: var(--surface-container-high);
   padding: 2px var(--spacing-xs);
-  color: var(--on-tertiary-container);
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
   user-select: none;
   white-space: nowrap;

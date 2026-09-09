@@ -385,7 +385,7 @@ export default function TeamWikiPage() {
           <div className={styles.railHeader}>
             <span className={styles.railTitleGroup}>
               <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
-              <Tooltip text={t("rework.wiki.betaBadge.tooltip")}>
+              <Tooltip content={<span className={styles.betaTooltip}>{t("rework.wiki.betaBadge.tooltip")}</span>}>
                 <BetaBadge label={t("rework.wiki.betaBadge.label")} />
               </Tooltip>
             </span>
