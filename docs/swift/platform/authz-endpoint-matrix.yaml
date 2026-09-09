@@ -289,13 +289,18 @@ operations:
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams
-    review_status: pending_review
-    required_permission: pending_review
+    review_status: approved
+    required_permission: can_create_team
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/all
     review_status: approved
     required_permission: can_list_all_teams
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/candidate-admins
+    review_status: approved
+    required_permission: can_create_team
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}
@@ -704,52 +709,52 @@ operations:
     method: GET
     path: /control-plane/v1/admin/capabilities
     review_status: approved
-    required_permission: can_manage_platform # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_platform (_require_manage_any)
+    required_permission: can_manage_capabilities # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_capabilities (organization_authz.require_manage_capabilities), the org twin of the per-object capability#can_manage below
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — read-only revoke-impact preview gated on capability#can_manage, same as the disable mutation it precedes (preview_capability_revoke)
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — read-only revoke-impact preview gated on capability#can_manage (can_manage_capabilities from organization), same as the disable mutation it precedes (preview_capability_revoke)
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (can_manage_capabilities from organization)
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning
     review_status: approved
-    required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (platform_admin from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
+    required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (can_manage_capabilities from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # platform-wide chat model binding (chat-only) — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as GET /admin/capabilities. binding=null when unset.
+    required_permission: can_manage_capabilities # platform-wide chat model binding (chat-only) — organization_authz.require_manage_capabilities; the model bindings are a panel of the same features page as GET /admin/capabilities and share its gate. binding=null when unset.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
+    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/prompt

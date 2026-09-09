@@ -2683,11 +2683,11 @@ retries once on the concurrent first-insert race (two admins, or a client
 retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
-**Authorization:** `organization_authz.require_manage_any`
-(`organization#can_manage_platform`), the same shared gate as
-`GET /admin/capabilities` — org-admin only, no team dimension (this is a
-platform-wide routing assertion, not a per-team permission, same reasoning
-as `model_reasoning`).
+**Authorization:** `organization_authz.require_manage_capabilities`
+(`organization#can_manage_capabilities`, §50), the same shared gate as
+`GET /admin/capabilities` — no team dimension (this is a platform-wide
+routing assertion, not a per-team permission, same reasoning as
+`model_reasoning`).
 
 **API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
 — no `{model_capability}` path segment (chat-only, nothing to select
@@ -3719,11 +3719,40 @@ one.
 `[user] or platform_admin` in `schema.fga` — `team_manager`,
 `feature_manager`, `prompt_editor` — plus two computed relations carved out
 of the `can_manage_platform` catch-all: `can_manage_capabilities` and
-`can_edit_platform_prompt`. `can_create_team` and `can_list_all_teams` now
-read `platform_admin or team_manager`; `can_delete_team` and
+`can_edit_platform_prompt`. `can_create_team` now reads `platform_admin or
+team_manager` and `can_list_all_teams` `platform_admin or team_manager or
+feature_manager` (see the capability paragraph below); `can_delete_team` and
 `can_rescue_team_admin` stay `platform_admin`-only, so registry governance is
 deliberately split from team creation. `can_manage_platform` is unchanged and
 still gates import/export, tasks and platform reset.
+
+**Re-gated endpoints — feature governance.** The whole `/admin/features`
+surface moves off `can_manage_platform` onto `can_manage_capabilities`: the
+seven `/control-plane/v1/admin/capabilities*` routes (aggregate list,
+revoke-impact preview, per-team enable/disable, default-on, personal-scope,
+model reasoning) and the `GET`/`PUT`/`DELETE`
+`/control-plane/v1/admin/platform/model-bindings` trio, which is a panel of
+that same page. Paths are unchanged. `capability#can_manage` — the per-object
+gate every enablement mutation resolves through — is redefined from
+`platform_admin from organization` to `can_manage_capabilities from
+organization`; without that, a `feature_manager` would pass the org gate and
+fail the object gate on the very next line. `can_list_all_teams` joins the
+role for the same reason: the per-team enablement matrix is a team picker, and
+it renders empty without the roster. That listing is names and ids only and
+carries no authority over any team's data. Nothing else moves — import/export,
+platform reset, tasks, platform stats and corpus audit stay on
+`can_manage_platform`, which is what makes this delegation safe.
+
+**New endpoint — `GET /teams/candidate-admins?query=<string>`** →
+`list[UserSummary]`, gated on `can_create_team`. `POST /teams` requires at
+least one `initial_team_admin_ids` entry, and the only org-wide directory
+(`GET /users`) is gated on `can_administer_users`, which stays
+`platform_admin`-only — so `/admin/teams` rendered for a `team_manager` with a
+permanently empty admin picker and a submit button that could never enable.
+The search is bounded exactly like `GET /teams/{team_id}/candidate-members`
+(§ above): minimum 2 non-whitespace characters, at most 20 Keycloak matches,
+never a full directory listing. Registered before `/teams/{team_id}` so the
+literal segment is not captured as a team id.
 
 **Re-gated endpoints — platform prompt.** All three routes of the
 platform-prompt surface move off `can_manage_platform` onto

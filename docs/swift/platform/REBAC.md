@@ -239,13 +239,16 @@ exactly what happened before AUTHZ-08), and it cannot support enumeration
 call site — including enumeration — from one place in `fred-core`, with no
 per-caller special-casing.
 
-### Team registry governance — platform admin, existence only
+### Team registry governance — existence only
 
-Three narrow, `platform_admin`-only capabilities govern the team *registry*
-(which teams exist) — none of them grant access to a team's data:
+Three narrow capabilities govern the team *registry* (which teams exist) —
+none of them grant access to a team's data. Two are `platform_admin`-only;
+the read-only listing is delegable:
 
 - **`can_list_all_teams`** → `GET /teams/all`: every team in the registry,
-  regardless of the caller's own membership.
+  regardless of the caller's own membership. The one of the three that is
+  delegable — `team_manager` and `feature_manager` both need the roster to
+  render their own page (see below).
 - **`can_delete_team`** → `DELETE /teams/{team_id}`: deletes the registry row
   and every relation referencing that team.
 - **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants
@@ -266,9 +269,19 @@ Three narrower roles own one admin surface each, and every one of them is
   deliberately excluded and stay `platform_admin`-only: creating and listing
   teams is not the same authority as destroying one or reassigning its admin.
   `can_list_all_teams` is included because without it the page renders empty
-  for the very role that owns it.
+  for the very role that owns it. `can_create_team` also gates `GET
+  /teams/candidate-admins`, the bounded user search that fills the new team's
+  `initial_team_admin_ids`: the org-wide `GET /users` directory stays on
+  `can_administer_users` (`platform_admin`-only), so without that search the
+  page was reachable but its form could never be submitted.
 - **`feature_manager`** → `can_manage_capabilities` — enable/disable
-  capabilities, agent templates and models, platform-wide or per team.
+  capabilities, agent templates and models, platform-wide or per team
+  (`/admin/features`: the capability enablement endpoints and the platform
+  chat model binding). `capability#can_manage`, the per-object gate on every
+  enablement mutation, is defined as `can_manage_capabilities from
+  organization`, so the object-level and org-level gates cannot drift apart.
+  `can_list_all_teams` comes with the role: per-team enablement needs the team
+  picker, and the roster is names and ids only.
 - **`prompt_editor`** → `can_edit_platform_prompt` — the platform prompt
   prepended to every agent, and the read-only instructions pane beside it
   (`/admin/platform/prompt`, `/admin/platform/instructions`). Nothing else:
