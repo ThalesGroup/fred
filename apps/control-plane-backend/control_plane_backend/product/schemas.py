@@ -18,7 +18,7 @@ from control_plane_backend.config.models import (
     UploadWarning,
 )
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
-from control_plane_backend.users.schemas import UserSummary
+from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
 
 class PermissionSummary(BaseModel):
@@ -35,22 +35,23 @@ class PermissionSummary(BaseModel):
     below; team-scoped gating goes through `TeamWithPermissions.permissions`
     (already OpenFGA-derived, see `teams/service.py::_get_team_permissions_for_user`)
     instead of a bespoke org-level flag per feature.
+
+    The two booleans this used to carry (`is_platform_admin` /
+    `is_platform_observer`) became `platform_roles` when the admin tier split
+    into five delegated roles: five parallel `is_*` flags over one closed enum
+    is a list, and every future role would have cost a field, a codegen run and
+    an edit in every consumer instead of one enum member.
     """
 
-    is_platform_admin: bool = Field(
-        default=False,
+    platform_roles: list[PlatformRoleRelation] = Field(
+        default_factory=list,
         description=(
-            "OpenFGA-derived platform-admin flag (organization `can_manage_platform`). "
-            "The single source of truth for gating admin-only UI surfaces — never "
-            "derive admin UI access from Keycloak roles directly."
-        ),
-    )
-    is_platform_observer: bool = Field(
-        default=False,
-        description=(
-            "OpenFGA-derived platform-observer flag (organization `platform_observer` "
-            "relation, checked directly). Grants read-only platform observability "
-            "surfaces without full platform-admin rights."
+            "OpenFGA-derived org-level roles the caller EFFECTIVELY holds — the "
+            "single source of truth for gating admin UI surfaces, never Keycloak "
+            "roles. Union-resolved, so a platform_admin holds every role here; "
+            "that is deliberately unlike `GET /users/platform-roles`, which "
+            "reports directly-granted tuples only because those are what a "
+            "revoke can actually delete."
         ),
     )
 

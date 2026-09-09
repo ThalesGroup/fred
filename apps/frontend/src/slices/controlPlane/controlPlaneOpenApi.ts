@@ -2381,7 +2381,12 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
-export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleRelation =
+  | "platform_admin"
+  | "platform_observer"
+  | "team_manager"
+  | "feature_manager"
+  | "prompt_editor";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -2533,10 +2538,8 @@ export type FrontendFeatureFlags = {
   enableInformationSystems?: boolean;
 };
 export type PermissionSummary = {
-  /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
-  is_platform_admin?: boolean;
-  /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
-  is_platform_observer?: boolean;
+  /** OpenFGA-derived org-level roles the caller EFFECTIVELY holds — the single source of truth for gating admin UI surfaces, never Keycloak roles. Union-resolved, so a platform_admin holds every role here; that is deliberately unlike `GET /users/platform-roles`, which reports directly-granted tuples only because those are what a revoke can actually delete. */
+  platform_roles?: PlatformRoleRelation[];
 };
 export type UploadWarning = {
   /** Visual severity variant of the banner. */
