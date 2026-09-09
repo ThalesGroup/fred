@@ -33,9 +33,18 @@ has been in use.
 
 ### 1. Narrow viewports
 
-The rail lives in the gutter left by the 720px message lane. What it should do
-when that gutter disappears is undecided — hide, overlay the lane, or collapse
-to a thinner form.
+The rail sits against the page's left edge, and the message lane is centred and
+capped at 720px. On a column barely wider than the lane — one with a side panel
+open — there is no gutter left, so the rail lands **on top of the first
+characters of every line and captures the pointer there**: clicks and text
+selection over that strip go to the rail, not the conversation. That is the
+concrete cost of the current placement, accepted for V1 rather than overlooked.
+
+Anchoring the rail to the lane instead was tried and rejected: it kept the rail
+clear of the text, but made it drift inward with the reading column instead of
+staying where the eye learns to find it. So the answer is not simply to move it
+back — hiding it, collapsing it to a thinner form, or overlaying it only on
+demand are all still open.
 
 ### 2. Keyboard access
 
