@@ -307,6 +307,22 @@ def test_team_manager_reaches_exactly_the_two_registry_capabilities() -> None:
     }
 
 
+def test_feature_manager_reaches_exactly_its_own_surface_and_the_roster() -> None:
+    """Same closed-world check for `feature_manager`: the feature-governance
+    gate, plus the team roster its per-team enablement picker needs. Anything
+    else appearing here means a capability quietly widened."""
+    assert _capabilities_admitting("feature_manager") == {
+        "can_manage_capabilities",
+        "can_list_all_teams",
+    }
+
+
+def test_prompt_editor_reaches_exactly_the_platform_prompt() -> None:
+    """`prompt_editor` is the narrowest role: one relation, one surface. It
+    must not reach the team roster or anything else."""
+    assert _capabilities_admitting("prompt_editor") == {"can_edit_platform_prompt"}
+
+
 def test_user_administration_stays_out_of_the_delegated_tier() -> None:
     """`can_administer_users` gates the unfiltered Keycloak directory
     (`GET /users`) and stays platform_admin-only. It is why creating a team
