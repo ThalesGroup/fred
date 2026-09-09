@@ -54,11 +54,15 @@ function makeScroller() {
   let anchorContentTop = 2000;
   Object.defineProperty(el, "clientHeight", { get: () => CLIENT_HEIGHT });
   Object.defineProperty(el, "scrollHeight", { get: () => SCROLL_HEIGHT });
+  // When true, writes are silently dropped — the container that stops being
+  // scrollable mid-flight.
+  let immovable = false;
   Object.defineProperty(el, "scrollTop", {
     get: () => top,
     // happy-dom does not clamp on its own, and the clamp is load-bearing here:
     // the hook reads back what it wrote to tell a clamp from a reader takeover.
     set: (v: number) => {
+      if (immovable) return;
       top = Math.max(0, Math.min(v, SCROLL_HEIGHT - CLIENT_HEIGHT));
     },
   });
@@ -66,7 +70,12 @@ function makeScroller() {
   // Viewport-relative, exactly as the real thing: content position minus scroll.
   anchor.getBoundingClientRect = () => ({ top: anchorContentTop - top }) as DOMRect;
 
-  return { el, moveAnchorTo: (v: number) => (anchorContentTop = v), scrollTopOf: () => top };
+  return {
+    el,
+    moveAnchorTo: (v: number) => (anchorContentTop = v),
+    scrollTopOf: () => top,
+    freezeScrolling: () => (immovable = true),
+  };
 }
 
 function Probe({ el, isLive, onReady }: { el: HTMLDivElement; isLive: boolean; onReady: (j: Jump) => void }) {
@@ -205,6 +214,23 @@ describe("useConversationJump", () => {
     expect(el.style.overflowAnchor).toBe("none");
 
     runFrames(60);
+    expect(el.style.overflowAnchor).toBe("");
+  });
+
+  it("gives up, and restores anchoring, when the container stops moving", () => {
+    // It can stop being scrollable mid-flight — a side panel opening, the
+    // conversation being replaced. Without a backstop the loop re-queues
+    // forever against a target it can never reach, and scroll anchoring stays
+    // suspended for the life of the page.
+    const { el, freezeScrolling } = makeScroller();
+    const jump = render(el, false);
+    act(() => jump("u2"));
+    runFrames(2);
+
+    freezeScrolling();
+    runFrames(300);
+
+    expect(frames.size).toBe(0);
     expect(el.style.overflowAnchor).toBe("");
   });
 

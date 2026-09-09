@@ -67,6 +67,16 @@ describe("ConversationOutlineRail", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("does not let a click focus a mark", () => {
+    // A focused mark that the next turn then disables is force-blurred by
+    // Chromium, which silently scrollIntoView()s the conversation — a scroll
+    // write on the frames useChatAutoScroll owns the position.
+    render();
+    const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    marks()[0].dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("jumps to the turn a mark belongs to", () => {
     const { onJump } = render();
     act(() => marks()[1].click());

@@ -1,13 +1,14 @@
 /* Outline rail — one mark per turn, along the conversation's left edge. */
 
-/* Anchored to the message lane's left edge, not the column's. The lane is
-   centred and capped at --composer-max-width, so this keeps the rail in the
-   gutter beside the text instead of on top of it: positioned from the column
-   edge, a column barely wider than the lane — one with a side panel open — put
-   the rail over the first characters of every line, swallowing clicks and text
-   selection there. Where the gutter is narrower than the rail, the rail is
-   clipped by the column rather than covering the conversation. Narrow viewports
-   deserve a real answer; that is deferred, and this is the safe default.
+/* Against the page's left edge, not the conversation's. The rail is chrome for
+   the whole page, and tying it to the lane made it drift inward with the
+   reading column instead of staying where the reader's eye learns to find it.
+   The inset matches the top bar's, which is what sets the page's edge.
+
+   The cost is known and accepted: on a column barely wider than the lane — one
+   with a side panel open — the rail sits over the first characters of each
+   line. Narrow viewports are deferred (see the RFC); when they are taken on,
+   this is the case to answer.
 
    Sized to its marks and centred, never a full-height overlay: the rail is a
    SIBLING of the scroll container, so a wheel gesture over it has no scrollable
@@ -23,7 +24,7 @@
   display: flex;
   position: absolute;
   top: 50%;
-  right: calc(50% + var(--composer-max-width) / 2 + var(--spacing-xs));
+  left: var(--spacing-s);
   flex-direction: column;
   transform: translateY(-50%);
   /* Widest a magnified mark gets, so magnifying never reflows anything. */

@@ -98,7 +98,7 @@ export const ConversationOutlineRail = memo(function ConversationOutlineRail({
           // stream starts and finishes.
           <Tooltip
             key={turnId}
-            placement="left"
+            placement="right"
             gapPx={12}
             content={<PreviewTile turnId={turnId} resolve={getPreview} />}
           >
@@ -108,6 +108,14 @@ export const ConversationOutlineRail = memo(function ConversationOutlineRail({
               // aria-hidden subtree is a trap — reachable by keyboard, yet
               // invisible to the screen reader that should announce it.
               tabIndex={-1}
+              // ...and never focused by the click either, which `tabIndex` does
+              // not prevent. A focused mark that then gets disabled — which is
+              // what the next turn does to it — is force-blurred by Chromium,
+              // and that silently scrollIntoView()s the nearest scroll
+              // container: here the conversation itself, on the exact frames
+              // useChatAutoScroll owns its scroll position. Same failure as
+              // index.tsx's document-level guard, which only covers <html>.
+              onMouseDown={(event) => event.preventDefault()}
               // The button is the whole row, not just the bar it draws: the rail
               // must have no gaps the pointer can fall into between two marks,
               // so hover and click share one contiguous target and the visible

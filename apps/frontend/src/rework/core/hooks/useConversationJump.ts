@@ -29,6 +29,20 @@ const JUMP_TOP_PADDING_PX = 16;
 const TAKEOVER_TOLERANCE_PX = 2;
 
 /**
+ * Hard ceiling on a jump's frames.
+ *
+ * `nextFollowTop` closes 22% of the remaining distance per frame, so it
+ * converges geometrically: even a jump across ten thousand pixels is inside the
+ * snap distance in well under fifty frames. Four seconds is therefore far
+ * beyond any legitimate jump, and it exists only to bound the case where the
+ * container stops moving at all — it stops being scrollable mid-flight, or the
+ * conversation is replaced under us. Without it the loop re-queues forever
+ * against a target it can never reach, and scroll anchoring stays suspended for
+ * the life of the page.
+ */
+const MAX_JUMP_FRAMES = 240;
+
+/**
  * Returns a `jumpTo(turnId)` that eases the conversation to that turn.
  *
  * Animated frame by frame rather than through `scrollTo({ behavior: "smooth" })`,
@@ -57,11 +71,13 @@ export function useConversationJump(
   const frameRef = useRef<number | null>(null);
   // What we last wrote, to tell our own movement from the reader's.
   const writtenTopRef = useRef<number | null>(null);
+  const framesLeftRef = useRef(0);
 
   const cancel = useCallback(() => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     writtenTopRef.current = null;
+    framesLeftRef.current = 0;
     // Scroll anchoring goes back on the moment we stop driving — see jumpTo.
     if (containerRef.current) containerRef.current.style.overflowAnchor = "";
   }, [containerRef]);
@@ -131,9 +147,13 @@ export function useConversationJump(
         // ends, and an unread clamp would look exactly like a reader takeover
         // on the next frame.
         writtenTopRef.current = node.scrollTop;
-        if (next !== target) frameRef.current = requestAnimationFrame(step);
-        else cancel();
+        if (next === target || --framesLeftRef.current <= 0) {
+          cancel();
+          return;
+        }
+        frameRef.current = requestAnimationFrame(step);
       };
+      framesLeftRef.current = MAX_JUMP_FRAMES;
       frameRef.current = requestAnimationFrame(step);
     },
     [containerRef, cancel],

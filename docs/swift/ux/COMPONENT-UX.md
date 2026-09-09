@@ -4387,8 +4387,15 @@ A rail of graphical marks along the left edge of `ManagedChatPage`'s
 conversation, one per turn. No text: the marks sit in the gutter left by the
 720px message lane, so they take no width from the reading column. Hovering one
 magnifies it and its two neighbours each side and opens a preview tile to its
-left — the question's first sentence over the answer's first two. Clicking one
+right — the question's first sentence over the answer's first two. Clicking one
 jumps to that turn.
+
+**The rail sits against the page's left edge**, at the top bar's inset, not
+against the reading column: it is chrome for the page, and anchoring it to the
+lane made it drift inward with the column instead of staying where the eye
+learns to find it. On a column barely wider than the lane it therefore overlaps
+the first characters of each line — a known cost, and the case to answer when
+narrow viewports are taken on.
 
 **Every mark is the same size.** Encoding the answer's length in a mark's
 height was built and then dropped: it turned the rail into a second thing to
@@ -4447,8 +4454,17 @@ V1 omission, and the RFC says what taking it on would involve: with no labels or
 tab order a screen reader would announce a row of silent marks, and a focusable
 control inside an aria-hidden subtree is a trap. The conversation itself stays fully readable in the thread.
 
-### `Tooltip` — `gapPx`
+### `Tooltip` — `gapPx`, `placement="right"`, and closing on window blur
 
-`Tooltip` gained an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for
-every existing caller). The rail's preview tile reads as its own card rather
-than a hint stuck to its trigger, and takes 12.
+Three additions, all made for the rail and all useful beyond it:
+
+- an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for every existing
+  caller) — the rail's preview tile reads as its own card rather than a hint
+  stuck to its trigger, and takes 12;
+- `placement="right"`, the mirror of `"left"`: beside the trigger, vertically
+  centred, flipping to the other side when there is no room;
+- **the panel now closes when the window loses focus or the page is hidden.**
+  Leaving the window produces no `mouseleave`, so a tooltip hovered at the
+  moment of an alt-tab was still open on return and — its own leave event
+  having been lost for good — stayed open alongside the next one hovered. On a
+  rail of many triggers that meant two panels on screen at once.

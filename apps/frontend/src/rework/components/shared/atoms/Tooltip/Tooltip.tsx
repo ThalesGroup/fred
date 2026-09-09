@@ -52,8 +52,11 @@ interface TooltipProps {
    * - `"left"`: to the left of the trigger, vertically centred on it, flipping
    *   right when there's no room. Suited to a trigger hugging the viewport's
    *   right edge (e.g. a right-rail icon button).
+   * - `"right"`: the mirror image — to the right, vertically centred, flipping
+   *   left when there's no room. For a trigger against the left edge (e.g. the
+   *   conversation outline rail).
    */
-  placement?: "top" | "left";
+  placement?: "top" | "left" | "right";
   /** Distance between trigger and panel. Defaults to `TOOLTIP_GAP_PX`; raise it
    *  for a panel that reads as its own card rather than a hint attached to the
    *  trigger. */
@@ -170,6 +173,28 @@ export const Tooltip = ({
     }
   }, [visible, updateTriggerRect]);
 
+  // Leaving the window does not produce a mouseleave: alt-tab away while
+  // hovering a trigger and the pointer is simply gone, with `isHovering` stuck
+  // true. The tooltip is then still open on return, and — since its own leave
+  // event will never arrive — stays open alongside the next one hovered. Common
+  // enough on a rail of many triggers that two panels sit on screen at once.
+  useEffect(() => {
+    if (!visible) return;
+    const close = () => {
+      window.clearTimeout(hideTimer.current);
+      setIsHovering(false);
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) close();
+    };
+    window.addEventListener("blur", close);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", close);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [visible]);
+
   // A visible tooltip tracks the trigger's position through scroll/resize —
   // without this, scrolling the table while hovering leaves it stranded.
   useEffect(() => {
@@ -218,13 +243,19 @@ export const Tooltip = ({
     // bottom edge cannot escape however wrong the measurement was.
     let top: number;
     let left: number;
-    if (placement === "left") {
-      // To the left of the trigger, flipping right only when it wouldn't fit
-      // (trigger hugging the viewport's left edge).
-      const fitsLeftSide = triggerRect.left - width - gapPx >= VIEWPORT_MARGIN_PX;
-      const desiredLeft = fitsLeftSide
-        ? triggerRect.left - gapPx - width
-        : triggerRect.left + triggerRect.width + gapPx;
+    if (placement === "left" || placement === "right") {
+      // Beside the trigger on the preferred side, flipping to the other only
+      // when it wouldn't fit (a trigger hugging that edge of the viewport).
+      const beforeTrigger = triggerRect.left - gapPx - width;
+      const afterTrigger = triggerRect.left + triggerRect.width + gapPx;
+      const desiredLeft =
+        placement === "left"
+          ? triggerRect.left - width - gapPx >= VIEWPORT_MARGIN_PX
+            ? beforeTrigger
+            : afterTrigger
+          : afterTrigger + width <= viewportWidth() - VIEWPORT_MARGIN_PX
+            ? afterTrigger
+            : beforeTrigger;
       left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
       // Vertically centred on the trigger.
       const center = (triggerRect.top + triggerRect.bottom) / 2;
