@@ -6,13 +6,21 @@
 Swift team-registry governance validation (AUTHZ-05 review item 9).
 
 Teams are no longer Keycloak groups - a team is a `team_metadata` row plus its
-OpenFGA relations, and its existence is governed by three platform-admin-only,
-registry-scoped capabilities that grant nothing about a team's own content:
+OpenFGA relations, and its existence is governed by four registry-scoped
+capabilities that grant nothing about a team's own content:
 `can_create_team` (`POST /teams`, one-shot bootstrap with an explicit initial
 admin), `can_list_all_teams` (`GET /teams/all`, bypasses the caller's own
 CAN_READ visibility filter), `can_delete_team` (`DELETE /teams/{id}`), and
 `can_rescue_team_admin` (`POST /teams/{id}/rescue-admin`, only succeeds when
 the team currently has zero team_admin).
+
+The `NON_PLATFORM_ADMINS` denial checks below read as "not platform_admin =>
+403" only because the validation fixtures seed no delegated-role holder. The
+first two capabilities are no longer platform-admin-only: `can_create_team` is
+`platform_admin or team_manager` and `can_list_all_teams` also admits
+`feature_manager`. Seed a `team_manager` in `users.json` and these two
+parametrizations must be narrowed to the users who hold neither role - only
+`can_delete_team` and `can_rescue_team_admin` are platform-admin-only for good.
 
 What this file does NOT attempt: driving a team to a genuine zero-admin state
 through the public API. `remove_team_member` (full member removal) and
