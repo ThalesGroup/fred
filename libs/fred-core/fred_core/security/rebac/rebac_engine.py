@@ -287,7 +287,9 @@ class CapabilityPermission(str, Enum):
       the user's teams into every team context they browse. Answers the
       tri-state (inherited via default-on / explicitly enabled / disabled).
     - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
-      default-on marker? Org admin only.
+      default-on marker? Defined as `can_manage_capabilities from
+      organization`, so it admits exactly the same actors as the org-level
+      gate on the aggregate list and can never drift away from it.
     """
 
     CAN_USE = "can_use"

@@ -229,8 +229,11 @@ def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> No
         }, f"{capability} must be platform_admin-only."
 
     assert organization["relations"]["can_list_all_teams"] == _union_of(
-        "platform_admin", "team_manager"
-    ), "team_manager needs can_list_all_teams or /admin/teams renders empty."
+        "platform_admin", "team_manager", "feature_manager"
+    ), (
+        "team_manager needs can_list_all_teams or /admin/teams renders empty, "
+        "and feature_manager needs it for the per-team enablement picker."
+    )
 
 
 def test_delegated_platform_roles_union_in_platform_admin() -> None:

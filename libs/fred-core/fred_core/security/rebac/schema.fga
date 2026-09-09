@@ -43,7 +43,10 @@ type organization
   # governed exclusively by team relations as everywhere else in this schema.
   # team_manager reaches can_list_all_teams because /admin/teams renders empty
   # without it; deleting a team and rescuing its admin stay platform_admin-only.
-  define can_list_all_teams: platform_admin or team_manager
+  # feature_manager reaches it too: per-team capability enablement is part of
+  # its charter and the team picker is unusable without the roster (names and
+  # ids only — no authority over any team's data).
+  define can_list_all_teams: platform_admin or team_manager or feature_manager
   define can_delete_team: platform_admin
   define can_rescue_team_admin: platform_admin
 
@@ -291,10 +294,10 @@ type capability
     define personal_block: personal_team from personal_disabled
 
     # --------------- Permissions (computed relations) ---------------
-    # Can manage (enable/disable/toggle default-on) —
-    # -> platform admin only (AUTHZ-05 retired the legacy `admin` organization
-    # relation; every org-admin-tier capability is `platform_admin`-only now)
-    define can_manage: platform_admin from organization
+    # Can manage (enable/disable/toggle default-on) — delegates to the org's
+    # own `can_manage_capabilities` so the per-object gate and the org-level
+    # gate on the same admin surface can never drift apart.
+    define can_manage: can_manage_capabilities from organization
 
     # Inherited (non-explicit) access: the org-wide `default_on` marker OR the
     # personal-space class grant, minus the personal-space class opt-out. The

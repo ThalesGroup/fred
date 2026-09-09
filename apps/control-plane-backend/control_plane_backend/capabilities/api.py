@@ -15,7 +15,8 @@
 """
 Admin capability-enablement routes (CAPAB-01 / #1980, RFC §8.5).
 
-All routes are gated on `capability#can_manage` (org admin). Structural FGA
+All routes are gated on `capability#can_manage`, which the schema resolves
+through the organization's `can_manage_capabilities`. Structural FGA
 tuples are written only through this surface — callers everywhere else check
 `can_use`.
 """

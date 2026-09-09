@@ -14,15 +14,14 @@
 
 """Shared organization-scoped gates.
 
-Extracted from `capabilities/service.py`'s private `_require_manage_any`
-(CAPAB-01 / #1980) now that `routing_policy/service.py`'s platform
-model-binding admin surface needs the identical check — both packages import
-this instead of one reaching into the other's `_`-prefixed helper.
+Home of the org-singleton checks several packages share, so none of them has to
+reach into another's `_`-prefixed helper.
 
 One helper per organization capability, all through `_require`: the narrow
 relations carved out of the `can_manage_platform` catch-all exist precisely so
 a delegated surface does NOT reuse the catch-all gate, so they must not share
-a parameterised entry point callers could point anywhere.
+a parameterised entry point callers could point anywhere. The catch-all itself
+has no helper here — its remaining call sites check it inline.
 """
 
 from __future__ import annotations
@@ -37,12 +36,12 @@ async def _require(
     await rebac.check_user_permission_or_raise(user, permission, ORGANIZATION_ID)
 
 
-async def require_manage_any(rebac: RebacEngine, user: KeycloakUser) -> None:
-    """Org-admin gate: `OrganizationPermission.CAN_MANAGE_PLATFORM` on the
-    organization singleton — the catch-all that also carries import/export,
-    tasks and platform reset."""
+async def require_manage_capabilities(rebac: RebacEngine, user: KeycloakUser) -> None:
+    """Feature-governance gate: `can_manage_capabilities`, which the schema
+    defines as `platform_admin or feature_manager`. The org-level twin of
+    `capability#can_manage`, which resolves through the very same relation."""
 
-    await _require(rebac, user, OrganizationPermission.CAN_MANAGE_PLATFORM)
+    await _require(rebac, user, OrganizationPermission.CAN_MANAGE_CAPABILITIES)
 
 
 async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
