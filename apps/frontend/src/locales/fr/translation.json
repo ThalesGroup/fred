@@ -3168,7 +3168,10 @@
         "create": "Impossible de créer la page",
         "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
         "delete": "Impossible de supprimer la page",
-        "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre."
+        "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre.",
+        "review": "Impossible d'enregistrer la marque de revue",
+        "reviewConflict": "Cette page a changé depuis que vous l'avez consultée. Rechargez-la et relisez la nouvelle version avant de valider.",
+        "restore": "Impossible de restaurer cette version"
       }
     }
   },

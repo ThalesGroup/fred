@@ -20,6 +20,7 @@ from control_plane_backend.team_wiki.schemas import (
     UpdateWikiPageMetadataRequest,
     UpdateWikiRulesRequest,
     WikiAvailability,
+    WikiConflictResponse,
     WikiPageDetail,
     WikiPageSummary,
     WikiPageTree,
@@ -49,6 +50,22 @@ from control_plane_backend.team_wiki.service import (
 
 router = APIRouter(tags=["Teams"])
 
+# A route that can raise WikiConflictError also always documents this shape for
+# 409 — FastAPI's `responses` only takes one schema per status code, so a route
+# that can also 409 for another reason (duplicate title, identical content,
+# depth exceeded) says so in the description; those carry `detail` only, none
+# of the fields below.
+_REVISION_CONFLICT_RESPONSE = {
+    "model": WikiConflictResponse,
+    "description": (
+        "The base revision is stale — the page moved on since it was read. "
+        "Carries the current revision and content to rebase onto."
+    ),
+}
+_DUPLICATE_TITLE_RESPONSE = {
+    "description": "A sibling page already carries this title."
+}
+
 ProductDependencies = Annotated[
     ProductServiceDependencies, Depends(get_product_service_dependencies)
 ]
@@ -66,20 +83,23 @@ def register_exception_handlers(app: FastAPI) -> None:
         # 409 carries the current state, not just the refusal: the caller — a
         # human in the editor or an agent redoing its edit — needs something to
         # rebase onto, and a bare error forces a second round trip to get it.
+        # Built from WikiConflictResponse so the wire body can never drift from
+        # the schema declared on the routes below.
+        body = WikiConflictResponse(
+            detail=str(exc),
+            current_revision_id=exc.current_revision_id,
+            current_content_md=exc.current_content_md,
+        )
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={
-                "detail": str(exc),
-                "current_revision_id": exc.current_revision_id,
-                "current_content_md": exc.current_content_md,
-            },
+            content=body.model_dump(mode="json"),
         )
 
 
 @router.get(
     "/teams/{team_id}/wiki/availability",
     response_model=WikiAvailability,
-    summary="Whether this team has a wiki (WIKI-03)",
+    summary="Whether this team has a wiki",
 )
 async def wiki_availability(
     team_id: Annotated[TeamId, Path()],
@@ -92,7 +112,7 @@ async def wiki_availability(
 @router.get(
     "/teams/{team_id}/wiki/pages",
     response_model=WikiPageTree,
-    summary="List one team's wiki pages (WIKI-01)",
+    summary="List one team's wiki pages",
 )
 async def list_pages(
     team_id: Annotated[TeamId, Path()],
@@ -105,7 +125,7 @@ async def list_pages(
 @router.get(
     "/teams/{team_id}/wiki/rules",
     response_model=WikiPageDetail,
-    summary="Read the team's wiki rules page (WIKI-01)",
+    summary="Read the team's wiki rules page",
 )
 async def read_rules(
     team_id: Annotated[TeamId, Path()],
@@ -118,7 +138,19 @@ async def read_rules(
 @router.put(
     "/teams/{team_id}/wiki/rules",
     response_model=WikiPageDetail,
-    summary="Update the team's wiki rules page (WIKI-01)",
+    summary="Update the team's wiki rules page",
+    responses={
+        409: {
+            "model": WikiConflictResponse,
+            "description": (
+                "The base revision is stale — the page moved on since it was "
+                "read. Carries the current revision and content to rebase "
+                "onto. On this route only, the very first rules page can "
+                "also 409 with `detail` only, when a root page is already "
+                'titled "Rules".'
+            ),
+        }
+    },
 )
 async def write_rules(
     team_id: Annotated[TeamId, Path()],
@@ -132,7 +164,7 @@ async def write_rules(
 @router.get(
     "/teams/{team_id}/wiki/pages/{slug}",
     response_model=WikiPageDetail,
-    summary="Read one wiki page by slug (WIKI-01)",
+    summary="Read one wiki page by slug",
 )
 async def read_page(
     team_id: Annotated[TeamId, Path()],
@@ -147,7 +179,8 @@ async def read_page(
     "/teams/{team_id}/wiki/pages",
     response_model=WikiPageDetail,
     status_code=status.HTTP_201_CREATED,
-    summary="Create one wiki page (WIKI-01)",
+    summary="Create one wiki page",
+    responses={409: _DUPLICATE_TITLE_RESPONSE},
 )
 async def create_page(
     team_id: Annotated[TeamId, Path()],
@@ -161,7 +194,8 @@ async def create_page(
 @router.put(
     "/teams/{team_id}/wiki/pages/{page_id}/content",
     response_model=WikiPageDetail,
-    summary="Publish a new revision of one wiki page (WIKI-01)",
+    summary="Publish a new revision of one wiki page",
+    responses={409: _REVISION_CONFLICT_RESPONSE},
 )
 async def write_page_content(
     team_id: Annotated[TeamId, Path()],
@@ -176,7 +210,8 @@ async def write_page_content(
 @router.patch(
     "/teams/{team_id}/wiki/pages/{page_id}",
     response_model=WikiPageSummary,
-    summary="Rename or move one wiki page (WIKI-01)",
+    summary="Rename or move one wiki page",
+    responses={409: _DUPLICATE_TITLE_RESPONSE},
 )
 async def patch_page(
     team_id: Annotated[TeamId, Path()],
@@ -191,7 +226,8 @@ async def patch_page(
 @router.post(
     "/teams/{team_id}/wiki/pages/{page_id}/review",
     response_model=WikiPageSummary,
-    summary="Set or clear one wiki page's review mark (WIKI-01)",
+    summary="Set or clear one wiki page's review mark",
+    responses={409: _REVISION_CONFLICT_RESPONSE},
 )
 async def set_review_mark(
     team_id: Annotated[TeamId, Path()],
@@ -206,7 +242,7 @@ async def set_review_mark(
 @router.get(
     "/teams/{team_id}/wiki/pages/{page_id}/revisions",
     response_model=WikiRevisionList,
-    summary="List one wiki page's revisions, newest first (WIKI-01)",
+    summary="List one wiki page's revisions, newest first",
 )
 async def list_revisions(
     team_id: Annotated[TeamId, Path()],
@@ -226,7 +262,7 @@ async def list_revisions(
 @router.post(
     "/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
     response_model=WikiPageDetail,
-    summary="Restore one earlier revision of a wiki page (WIKI-01)",
+    summary="Restore one earlier revision of a wiki page",
 )
 async def restore_revision(
     team_id: Annotated[TeamId, Path()],
@@ -241,7 +277,10 @@ async def restore_revision(
 @router.delete(
     "/teams/{team_id}/wiki/pages/{page_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete one wiki page (WIKI-01)",
+    summary="Delete one wiki page",
+    responses={
+        409: {"description": "The page has children — delete or move them first."}
+    },
 )
 async def delete_page(
     team_id: Annotated[TeamId, Path()],
@@ -265,7 +304,7 @@ async def delete_page(
     "/teams/{team_id}/wiki/proposals/page",
     response_model=WikiProposal,
     status_code=status.HTTP_201_CREATED,
-    summary="Propose a new wiki page through an agent (WIKI-04)",
+    summary="Propose a new wiki page through an agent",
 )
 async def propose_page(
     team_id: Annotated[TeamId, Path()],
@@ -280,7 +319,18 @@ async def propose_page(
     "/teams/{team_id}/wiki/proposals/edit",
     response_model=WikiProposal,
     status_code=status.HTTP_201_CREATED,
-    summary="Propose an edit to a wiki page through an agent (WIKI-04)",
+    summary="Propose an edit to a wiki page through an agent",
+    responses={
+        409: {
+            "model": WikiConflictResponse,
+            "description": (
+                "The base revision is stale — the page moved on since it was "
+                "read. Carries the current revision and content to redo the "
+                "edit against. A proposal identical to the current text also "
+                "409s on this route, with `detail` only."
+            ),
+        }
+    },
 )
 async def propose_edit(
     team_id: Annotated[TeamId, Path()],
@@ -294,7 +344,7 @@ async def propose_edit(
 @router.get(
     "/teams/{team_id}/wiki/proposals/{proposal_id}",
     response_model=WikiProposal,
-    summary="Read a pending proposal and the text it would replace (WIKI-04)",
+    summary="Read a pending proposal and the text it would replace",
 )
 async def read_proposal(
     team_id: Annotated[TeamId, Path()],
@@ -308,7 +358,18 @@ async def read_proposal(
 @router.post(
     "/teams/{team_id}/wiki/proposals/{proposal_id}/publish",
     response_model=WikiPageDetail,
-    summary="Approve a pending proposal and publish it (WIKI-04)",
+    summary="Approve a pending proposal and publish it",
+    responses={
+        409: {
+            "model": WikiConflictResponse,
+            "description": (
+                "The page moved on since the proposal was written. Carries "
+                "the current revision and content to redo the edit against. "
+                "A duplicate title or a depth-limit breach also 409s on this "
+                "route, with `detail` only."
+            ),
+        }
+    },
 )
 async def publish_proposal(
     team_id: Annotated[TeamId, Path()],

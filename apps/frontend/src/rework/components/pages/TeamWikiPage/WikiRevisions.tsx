@@ -26,6 +26,7 @@ import {
   useUsersByIdsQuery,
   useWikiRevisionsQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import { historyEntries } from "@rework/features/teamWiki/historyEntries";
@@ -68,38 +69,66 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
   }, [open, onClose]);
   useClickOutside(panelRef, closeOnOutsideClick);
 
-  // Stays true after the panel closes: unsubscribing on close would drop the
-  // revisions and blank the panel out through its whole slide-out.
-  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
-  useEffect(() => {
-    if (open) setHasOpenedOnce(true);
-  }, [open]);
-
   // `fetchCursor` is `undefined` for the base (newest) page. `pages` is
-  // everything accumulated so far by walking backward from it — reset
-  // whenever the page changes, since a walk through page A's history means
-  // nothing once the panel is looking at page B.
+  // everything accumulated so far by walking backward from it. A page change
+  // is handled by the caller remounting this component on a new `key`
+  // (TeamWikiPage.tsx) rather than an effect here — the same mechanism a
+  // local mutation elsewhere uses to reset this walk, so "the page changed"
+  // and "a save changed this page's history" are one code path, not two.
   const [fetchCursor, setFetchCursor] = useState<string | undefined>(undefined);
   const [pages, setPages] = useState(emptyHistoryPages);
+
+  // Stays true after the panel closes: unsubscribing on close would drop the
+  // revisions and blank the panel out through its whole slide-out. Reopening
+  // restarts the walk from the first page instead — an accumulated cursor
+  // from before the close may no longer be a meaningful position.
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
+  // Resetting `fetchCursor` below is a no-op when the panel was already on
+  // the base page, so it triggers no refetch on its own — this flag drives
+  // the explicit one below.
+  const [pendingReopenRefresh, setPendingReopenRefresh] = useState(false);
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    setFetchCursor(undefined);
-    setPages(emptyHistoryPages);
-  }, [pageId]);
+    if (open) {
+      setHasOpenedOnce(true);
+      if (!wasOpenRef.current) {
+        setPages(emptyHistoryPages);
+        setFetchCursor(undefined);
+        setPendingReopenRefresh(true);
+      }
+    }
+    wasOpenRef.current = open;
+  }, [open]);
 
   const {
-    data: fetchedPage,
+    // `currentData`, not `data`: RTK Query keeps the PREVIOUS args' value in
+    // `data` while a new one is in flight, so pairing `data` with the cursor
+    // that just changed can merge a response into the walk under the wrong
+    // cursor. `currentData` is only ever set from the args this hook was just
+    // called with, so it and `fetchCursor` below can never disagree.
+    currentData: fetchedPage,
+    fulfilledTimeStamp,
     isFetching,
     isError,
     refetch,
   } = useWikiRevisionsQuery({ teamId, pageId, cursor: fetchCursor }, { skip: !hasOpenedOnce || !pageId });
 
+  // Fires once bound to `cursor: undefined` (immediately, or after the reset
+  // above takes effect) and forces a real request, bypassing cache freshness.
+  useEffect(() => {
+    if (!pendingReopenRefresh || fetchCursor !== undefined) return;
+    setPendingReopenRefresh(false);
+    void refetch();
+  }, [pendingReopenRefresh, fetchCursor, refetch]);
+
   // Merging is keyed on the (cursor, page) pair that just arrived, not on
-  // `pages` itself — the functional update below reads it fresh regardless.
+  // `pages` itself. `fulfilledTimeStamp` also triggers it: structural sharing
+  // can keep `fetchedPage`'s reference on a byte-identical refetch.
   useEffect(() => {
     if (!fetchedPage) return;
     setPages((prev) => mergeHistoryPage(prev, fetchCursor, fetchedPage));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchedPage, fetchCursor]);
+  }, [fetchedPage, fetchCursor, fulfilledTimeStamp]);
 
   const revisions = pages.revisions;
   const contents = pages.contents;
@@ -140,18 +169,26 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
 
   const nameOf = (userId: string) => userDisplayName(userId, authorById.get(userId));
 
+  const { notifyApiError } = useApiErrorToast();
   const [restoreRevision, { isLoading: restoring }] = useRestoreWikiRevisionMutation();
   const onRestore = async (revisionId: string) => {
     try {
       await restoreRevision({ teamId, pageId, revisionId }).unwrap();
-    } catch {
-      return; // A failed restore leaves the reader exactly where they were.
+    } catch (error) {
+      // A failed restore leaves the reader exactly where they were — but they
+      // must be told, not left to think it silently worked.
+      notifyApiError(error, {
+        summary: t("rework.wiki.errors.restore"),
+        fallbackDetail: t("rework.wiki.errors.restore"),
+      });
+      return;
     }
     // The restored content is now the newest revision. Rather than wait for
     // whichever page happens to be subscribed to silently re-resolve via tag
     // invalidation, jump back to the top explicitly — the reader should see
     // what they just did, not stay buried in the page they restored from.
     setFetchCursor(undefined);
+    setPages(emptyHistoryPages);
   };
 
   return (

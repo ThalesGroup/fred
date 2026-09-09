@@ -295,12 +295,14 @@ async def test_clearing_the_review_mark_records_the_validation(tmp_path: Path) -
         )
         written = await store.get_page(TEAM_A, created.page.page_id)
         assert written is not None
+        assert written.current_revision_id is not None
 
         await store.set_needs_review(
             team_id=TEAM_A,
             page_id=created.page.page_id,
             needs_review=False,
             reviewed_by="bob",
+            base_revision_id=written.current_revision_id,
         )
 
         page = await store.get_page(TEAM_A, created.page.page_id)
@@ -324,11 +326,102 @@ async def test_clearing_the_review_mark_records_the_validation(tmp_path: Path) -
             page_id=created.page.page_id,
             needs_review=True,
             reviewed_by="bob",
+            base_revision_id=written.current_revision_id,
         )
         revisions = await store.list_revisions(TEAM_A, created.page.page_id)
         current = next(
             r for r in revisions if r.revision_id == page.current_revision_id
         )
+        assert current.reviewed_at is None
+        assert current.reviewed_by is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reviewing_the_currently_displayed_revision_succeeds(
+    tmp_path: Path,
+) -> None:
+    store, engine = await _make_store(tmp_path, "review-current.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="agent text",
+            author_user_id="alice",
+            author_kind="agent",
+        )
+        displayed = created.page.current_revision_id
+        assert displayed is not None
+
+        page = await store.set_needs_review(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            needs_review=False,
+            reviewed_by="bob",
+            base_revision_id=displayed,
+        )
+        assert page.needs_review is False
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reviewing_a_superseded_revision_is_refused_as_a_conflict(
+    tmp_path: Path,
+) -> None:
+    """B1: the editor read A, then B was published, then the editor clicks
+    "reviewed" still holding A's id. The page must not be certified against
+    text the reviewer never actually saw, and B keeps its own review mark."""
+
+    store, engine = await _make_store(tmp_path, "review-conflict.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A,
+            slug="p",
+            title="P",
+            content_md="A",
+            author_user_id="alice",
+        )
+        revision_a = created.page.current_revision_id
+        assert revision_a is not None
+
+        await store.publish_revision(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="B",
+            base_revision_id=revision_a,
+            author_user_id="alice",
+            author_kind="agent",
+            agent_instance_id="inst-1",
+        )
+        page_after_b = await store.get_page(TEAM_A, created.page.page_id)
+        assert page_after_b is not None
+        revision_b = page_after_b.current_revision_id
+        assert revision_b is not None
+        assert revision_b != revision_a
+        assert page_after_b.needs_review is True
+
+        with pytest.raises(WikiRevisionConflictError) as caught:
+            await store.set_needs_review(
+                team_id=TEAM_A,
+                page_id=created.page.page_id,
+                needs_review=False,
+                reviewed_by="bob",
+                base_revision_id=revision_a,
+            )
+        assert caught.value.current_revision_id == revision_b
+        assert caught.value.current_content_md == "B"
+
+        # B was neither certified nor moved off the review queue by the
+        # rejected call, and reviewing never touches edit attribution.
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        assert page.needs_review is True
+        assert page.updated_by == "alice"
+        current = await store.get_revision(TEAM_A, revision_b)
+        assert current is not None
         assert current.reviewed_at is None
         assert current.reviewed_by is None
     finally:
@@ -716,6 +809,7 @@ async def test_sort_columns_never_change_after_insert(tmp_path: Path) -> None:
             page_id=created.page.page_id,
             needs_review=False,
             reviewed_by="bob",
+            base_revision_id=revision_id,
         )
 
         after = await store.get_revision(TEAM_A, revision_id)
@@ -1228,6 +1322,137 @@ async def test_reject_proposals_for_session_only_touches_that_session(
         untouched = await store.get_revision(TEAM_A, other.revision_id)
         assert untouched is not None
         assert untouched.status == "proposed"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_stale_proposal_is_idempotent_when_repeated(
+    tmp_path: Path,
+) -> None:
+    """A retried lifecycle-sweep tick, or a session erased twice, must never
+    raise or double-count — the second call simply finds nothing left to
+    reject."""
+
+    store, engine = await _make_store(tmp_path, "reject_twice.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="proposed edit",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id=None,
+        )
+
+        first = await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=proposal.revision_id
+        )
+        second = await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=proposal.revision_id
+        )
+
+        assert first is True
+        assert second is False
+        revision = await store.get_revision(TEAM_A, proposal.revision_id)
+        assert revision is not None
+        assert revision.status == "rejected"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_stale_proposal_prevents_publishing_a_new_page_proposal(
+    tmp_path: Path,
+) -> None:
+    """The new-page path (§WIKI-04) of the same acceptance criterion as
+    `test_reject_stale_proposal_prevents_a_later_publish`: a proposal that
+    would have minted its own page must not do so once rejected."""
+
+    store, engine = await _make_store(tmp_path, "reject_then_publish_new_page.sqlite3")
+    try:
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=None,
+            content_md="drafted by an agent",
+            base_revision_id=None,
+            proposed_title="New page",
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id="inst-1",
+            session_id="sess-1",
+        )
+
+        assert await store.reject_stale_proposal(
+            team_id=TEAM_A, revision_id=proposal.revision_id
+        )
+
+        with pytest.raises(WikiPageNotFoundError):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="new-page",
+                approver_user_id="bob",
+            )
+
+        assert await store.get_page(TEAM_A, proposal.page_id) is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reject_proposals_for_session_prevents_a_later_publish(
+    tmp_path: Path,
+) -> None:
+    """Same acceptance criterion, the session-erasure path: a proposal
+    rejected because its conversation was erased must not be publishable
+    afterward either — this store call is the other producer of
+    `status="rejected"`, and `publish_proposal`'s guard does not care which
+    one got there first."""
+
+    store, engine = await _make_store(tmp_path, "session_reject_then_publish.sqlite3")
+    try:
+        created = await store.create_page(
+            team_id=TEAM_A, slug="p", title="P", content_md="v0", author_user_id="alice"
+        )
+        v0_id = _first_revision_id(created)
+        proposal = await store.create_proposal(
+            team_id=TEAM_A,
+            page_id=created.page.page_id,
+            content_md="from an erased session",
+            base_revision_id=v0_id,
+            proposed_title=None,
+            proposed_parent_page_id=None,
+            author_user_id="alice",
+            agent_instance_id=None,
+            session_id="session-erased",
+        )
+
+        assert (
+            await store.reject_proposals_for_session(
+                team_id=TEAM_A, session_id="session-erased"
+            )
+            == 1
+        )
+
+        with pytest.raises(WikiPageNotFoundError):
+            await store.publish_proposal(
+                team_id=TEAM_A,
+                revision_id=proposal.revision_id,
+                slug="unused",
+                approver_user_id="bob",
+            )
+
+        page = await store.get_page(TEAM_A, created.page.page_id)
+        assert page is not None
+        assert page.current_revision_id == v0_id
     finally:
         await engine.dispose()
 

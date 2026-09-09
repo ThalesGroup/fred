@@ -3586,6 +3586,21 @@ because the person who approves an agent's text need not be the one it was
 written for. The frontend renders the stamp as its own entry in the page
 history, at its own time, next to the edit it approves.
 
+**The review mark is anchored to the revision the reviewer displayed**
+(2026-09-08, WIKI-05). `SetNeedsReviewRequest` gained `base_revision_id`
+(same field, same semantics as the content/rules writes above), and
+`TeamWikiStore.set_needs_review`'s page-mark `UPDATE` carries the same
+`current_revision_id == base_revision_id` compare-and-swap `publish_revision`
+already uses — not a preceding `SELECT`, so a write racing between the
+reviewer's read and this call cannot slip through a check that already
+passed. Before this, the endpoint took no revision at all: a validation could
+land on whatever text happened to be current at UPDATE time, certifying a
+revision the reviewer never actually saw if one was published in between.
+The refusal reuses the existing 409 shape (`current_revision_id`,
+`current_content_md`) rather than inventing a second one, and `updated_at`/
+`updated_by` stay untouched either way — the paragraph above's "reviewing is
+not editing" holds for the refused path too.
+
 **History is paginated by keyset, not offset, and bounded in SQL** (2026-09-08,
 WIKI-05). `GET .../revisions` used to load every revision of a page — content
 included — before slicing to `MAX_REVISION_PAGE_SIZE` (50) in Python; a page
@@ -3658,15 +3673,29 @@ transition. `LifecycleManagerResult.wiki_proposals` carries that sweep's own
 `scanned`/`rejected`/`dry_run_actions` counts alongside the conversation
 sweep's.
 
-**This closes the retry hole for free.** `publish_proposal`'s own `WHERE
-status == "proposed"` lookup already existed; once a row is rejected, that
-lookup finds nothing and the caller gets the pre-existing
-`WikiRequestError("This proposal is no longer pending.", 404)` — no change to
-the publish path was needed. The same guard is what makes the sweep safe
-against a concurrent approval: whichever of {reject, publish} commits first
-is the only one that changes anything, proven under real concurrency in
-`test_publication_and_lifecycle_expiry_race_to_a_consistent_outcome`
-(`test_team_wiki_store_postgres_integration.py`).
+**Correction (2026-09-08).** The paragraph above originally claimed the
+initial `WHERE status == "proposed"` lookup closed the retry hole with no
+change to the publish path, "proven under real concurrency" by an
+`asyncio.gather` test. Both halves were wrong: `publish_proposal` read the row
+once at the top of its transaction and then wrote `status="published"` back
+from that in-memory copy, unconditionally, as an ORM attribute flush keyed
+only on `revision_id` — a reject that committed after the read but before
+that write was silently overwritten. `asyncio.gather` never forced that
+window open (nothing pins two independent DB round trips' relative order), so
+the test could pass without the interleaving ever occurring. Fixed by making
+that final write a second CAS — `WHERE ... AND status = 'proposed'` — in the
+same transaction as every other write `publish_proposal` makes; a miss raises
+`WikiProposalNoLongerPendingError`, mapped to the same 404 as the top-of-
+function lookup, and rolls back the page create/update alongside it, so a
+losing publish leaves no partial write. Proven with a genuinely forced
+interleaving (an `AsyncSession.execute` pause keyed to the exact statement,
+not `asyncio.gather` timing) in `test_team_wiki_store_postgres_integration.py`:
+`test_publish_loses_to_a_reject_committed_between_its_read_and_write` (edit),
+`test_publish_loses_to_a_reject_of_a_new_page_proposal_creates_no_page`
+(new page), and `test_publish_loses_to_a_session_erasure_reject_committed_mid_transaction`
+(session erasure). The same guard is what makes the sweep safe against a
+concurrent approval in the other direction too: whichever of {reject,
+publish} commits first is the only one that changes anything.
 
 **Erasing a session rejects its still-pending proposals immediately**, rather
 than waiting out the retention window: `team_wiki_revisions.session_id`

@@ -3408,6 +3408,11 @@ export type CreateWikiPageRequest = {
   parent_page_id?: string | null;
   position?: number;
 };
+export type WikiConflictResponse = {
+  detail: string;
+  current_revision_id: string;
+  current_content_md: string;
+};
 export type UpdateWikiRulesRequest = {
   content_md: string;
   base_revision_id?: string | null;
@@ -3425,6 +3430,8 @@ export type UpdateWikiPageMetadataRequest = {
 };
 export type SetNeedsReviewRequest = {
   needs_review: boolean;
+  /** The revision displayed when this decision was made — read it from the page first. Refused with 409 if the page has moved on since, so a validation can never certify text the reviewer did not actually see. */
+  base_revision_id: string;
 };
 export type WikiRevisionSummary = {
   revision_id: string;

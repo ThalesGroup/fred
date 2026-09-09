@@ -68,6 +68,18 @@ class WikiRevisionConflictError(Exception):
         self.current_content_md = current_content_md
 
 
+class WikiProposalNoLongerPendingError(Exception):
+    """`publish_proposal`'s own CAS matched no row: a reject (decline, sweep,
+    or session erasure) committed `status="rejected"` after this transaction
+    read the row as `proposed` but before this transaction's own write.
+
+    Distinct from `_StaleBaseWrite`, which is about the PAGE's pointer moving
+    under an edit — this is about the proposal row's status losing a race, and
+    is reported the same way a proposal found already rejected at the initial
+    lookup is: "no longer pending", not a page conflict.
+    """
+
+
 class WikiPageHasChildrenError(Exception):
     """Refusing to delete a page that still has children."""
 
@@ -457,20 +469,6 @@ class TeamWikiStore:
             ).scalars()
             return [_to_revision(row) for row in rows]
 
-    async def count_children(
-        self, team_id: TeamId, page_id: str, session: AsyncSession | None = None
-    ) -> int:
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                await s.execute(
-                    select(TeamWikiPageRow.page_id).where(
-                        TeamWikiPageRow.team_id == str(team_id),
-                        TeamWikiPageRow.parent_page_id == page_id,
-                    )
-                )
-            ).scalars()
-            return len(list(rows))
-
     # ---- writes -----------------------------------------------------------
 
     async def create_page(
@@ -747,10 +745,22 @@ class TeamWikiStore:
         return page
 
     async def set_needs_review(
-        self, *, team_id: TeamId, page_id: str, needs_review: bool, reviewed_by: str
+        self,
+        *,
+        team_id: TeamId,
+        page_id: str,
+        needs_review: bool,
+        reviewed_by: str,
+        base_revision_id: str,
     ) -> WikiPageRecord:
         """Flag or clear a page's review mark, and stamp the clearing on the
         revision it applies to.
+
+        The page-mark update is a CONDITIONAL UPDATE on `current_revision_id
+        == base_revision_id`, same pattern as `publish_revision`: a
+        validation only means something for the exact text the reviewer
+        displayed, so a page that moved on since is refused with 409 rather
+        than certifying whatever happens to be current now.
 
         Reviewing is not editing: `updated_at`/`updated_by` are left alone, or
         validating an agent's page would relabel it as edited by whoever read
@@ -760,34 +770,40 @@ class TeamWikiStore:
         stays true after the next edit moves the page on.
         """
         now = _utcnow()
-        async with use_session(self._sessions) as s:
-            result: CursorResult = await s.execute(  # type: ignore[assignment]
-                update(TeamWikiPageRow)
-                .where(
-                    TeamWikiPageRow.team_id == str(team_id),
-                    TeamWikiPageRow.page_id == page_id,
-                )
-                # `updated_at` restated so the column's `onupdate` does not fire.
-                .values(
-                    needs_review=needs_review,
-                    updated_at=TeamWikiPageRow.updated_at,
-                )
-            )
-            if result.rowcount == 0:
-                raise WikiPageNotFoundError(page_id)
+        try:
+            async with use_session(self._sessions) as s:
+                page_row = (
+                    await s.execute(
+                        select(TeamWikiPageRow).where(
+                            TeamWikiPageRow.team_id == str(team_id),
+                            TeamWikiPageRow.page_id == page_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if page_row is None:
+                    raise WikiPageNotFoundError(page_id)
 
-            current_revision_id = await s.scalar(
-                select(TeamWikiPageRow.current_revision_id).where(
-                    TeamWikiPageRow.team_id == str(team_id),
-                    TeamWikiPageRow.page_id == page_id,
+                result: CursorResult = await s.execute(  # type: ignore[assignment]
+                    update(TeamWikiPageRow)
+                    .where(
+                        TeamWikiPageRow.team_id == str(team_id),
+                        TeamWikiPageRow.page_id == page_id,
+                        TeamWikiPageRow.current_revision_id == base_revision_id,
+                    )
+                    # `updated_at` restated so the column's `onupdate` does not fire.
+                    .values(
+                        needs_review=needs_review,
+                        updated_at=TeamWikiPageRow.updated_at,
+                    )
                 )
-            )
-            if current_revision_id:
+                if result.rowcount == 0:
+                    raise _StaleBaseWrite()
+
                 await s.execute(
                     update(TeamWikiRevisionRow)
                     .where(
                         TeamWikiRevisionRow.team_id == str(team_id),
-                        TeamWikiRevisionRow.revision_id == current_revision_id,
+                        TeamWikiRevisionRow.revision_id == base_revision_id,
                     )
                     # Re-flagging withdraws the validation: the text under
                     # review is the same one someone had approved.
@@ -796,6 +812,17 @@ class TeamWikiStore:
                         reviewed_by=None if needs_review else reviewed_by,
                     )
                 )
+        except _StaleBaseWrite:
+            # Rolled back above; read fresh so the conflict carries whatever
+            # actually won, not the row this transaction opened on.
+            page = await self.get_page(team_id, page_id)
+            current_id = page.current_revision_id if page else None
+            current = (
+                await self.get_revision(team_id, current_id) if current_id else None
+            )
+            raise WikiRevisionConflictError(
+                current_id or "", current.content_md if current else ""
+            ) from None
 
         page = await self.get_page(team_id, page_id)
         assert page is not None
@@ -997,10 +1024,26 @@ class TeamWikiStore:
                             .values(status="superseded")
                         )
 
-                row.status = "published"
-                # The approver is the author of record: an agent drafted it, a human
-                # decided it. Identity in this table is never the agent's.
-                row.author_user_id = approver_user_id
+                # CAS, not an ORM attribute write from the SELECT above: a
+                # reject committed in between must not be overwritten back to
+                # "published". See CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
+                approved: CursorResult = await s.execute(  # type: ignore[assignment]
+                    update(TeamWikiRevisionRow)
+                    .where(
+                        TeamWikiRevisionRow.team_id == str(team_id),
+                        TeamWikiRevisionRow.revision_id == revision_id,
+                        TeamWikiRevisionRow.status == "proposed",
+                    )
+                    .values(
+                        status="published",
+                        # The approver is the author of record: an agent
+                        # drafted it, a human decided it. Identity in this
+                        # table is never the agent's.
+                        author_user_id=approver_user_id,
+                    )
+                )
+                if approved.rowcount == 0:
+                    raise WikiProposalNoLongerPendingError(revision_id)
         except IntegrityError as exc:
             raise WikiPageConstraintError(slug) from exc
         refreshed = await self.get_page(team_id, row.page_id)

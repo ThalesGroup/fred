@@ -135,6 +135,19 @@ class UpdateWikiRulesRequest(BaseModel):
 
 class SetNeedsReviewRequest(BaseModel):
     needs_review: bool
+    # Required, unlike the content/rules base: a review mark only ever
+    # targets a page that already has a published revision (_require_page
+    # guarantees it), so there is no "not created yet" state for this field
+    # to mean, the way an absent base legitimately can for a first write.
+    base_revision_id: str = Field(
+        min_length=1,
+        description=(
+            "The revision displayed when this decision was made — read it "
+            "from the page first. Refused with 409 if the page has moved on "
+            "since, so a validation can never certify text the reviewer did "
+            "not actually see."
+        ),
+    )
 
 
 class WikiConflictResponse(BaseModel):

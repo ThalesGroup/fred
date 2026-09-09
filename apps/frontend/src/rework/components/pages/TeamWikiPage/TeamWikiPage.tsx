@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The team wiki (WIKI-02): a tree of Markdown pages read by every member and
-// maintained by editors. Slice 2 has no agent involvement at all — the point of
-// shipping it first is that a team can judge whether the wiki earns its place
-// before anything starts writing into it. Design: rfc/TEAM-WIKI-RFC.md.
+// The team wiki: a tree of Markdown pages read by every member and maintained
+// by editors, with agents reading and (behind human approval) proposing edits.
+// Design: rfc/TEAM-WIKI-RFC.md.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router-dom";
@@ -28,11 +27,13 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
 import { rulesDraft } from "@rework/features/teamWiki/rulesDraft";
 import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { conflictFrom, errorText, type StaleWrite } from "@rework/features/teamWiki/wikiErrors";
 import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
@@ -53,15 +54,11 @@ import { WikiRevisions } from "./WikiRevisions";
 import { WikiTree } from "./WikiTree";
 import styles from "./TeamWikiPage.module.css";
 
+export { conflictFrom, isWikiConflictResponse } from "@rework/features/teamWiki/wikiErrors";
+
 /** Mirrors the backend's MAX_PAGE_CHARS / MAX_RULES_CHARS. */
 const MAX_PAGE_CHARS = 100_000;
 const MAX_RULES_CHARS = 4_000;
-
-/** The 409 body the write endpoints return when a base revision is stale. */
-interface ConflictBody {
-  current_revision_id?: string;
-  current_content_md?: string;
-}
 
 /** What the open editor is writing to, captured when it opens.
  *
@@ -76,27 +73,6 @@ interface EditingTarget {
   revisionId: string | null;
 }
 
-interface StaleWrite {
-  currentContentMd: string;
-  /** What the next save must use as its base, or the retry conflicts again. */
-  currentRevisionId: string | null;
-}
-
-function conflictFrom(error: unknown): StaleWrite | null {
-  const status = (error as { status?: number } | undefined)?.status;
-  if (status !== 409) return null;
-  const data = (error as { data?: ConflictBody } | undefined)?.data;
-  return {
-    currentContentMd: data?.current_content_md ?? "",
-    currentRevisionId: data?.current_revision_id ?? null,
-  };
-}
-
-function errorText(error: unknown): string {
-  const detail = (error as { data?: { detail?: string } } | undefined)?.data?.detail;
-  return detail ?? (error as { message?: string } | undefined)?.message ?? String(error);
-}
-
 /** Creating or renaming a page has one 409: a sibling already carries that
  *  title. It is the only refusal here an ordinary user meets, so it gets a
  *  translated sentence rather than the server's English `detail`. */
@@ -107,6 +83,7 @@ function isDuplicateTitle(error: unknown): boolean {
 export default function TeamWikiPage() {
   const { t } = useTranslation();
   const { showError } = useToast();
+  const { notifyApiError } = useApiErrorToast();
   const navigate = useNavigate();
   const { teamId: routeTeamId, slug } = useParams<{ teamId: string; slug?: string }>();
   const { selectedTeam } = useSelectedTeam();
@@ -135,6 +112,13 @@ export default function TeamWikiPage() {
   // Remount key for the editor: MDXEditor reads `markdown` only at mount, so
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
+  // Remount key for the history panel, same doctrine: bumped after a local
+  // mutation this page knows about (a save, a review mark) that changes this
+  // page's history and did not itself close the panel. A key change forces a
+  // full remount, so the panel's own accumulated walk is dropped and it
+  // starts over from the first page — cheaper and safer than reconciling an
+  // in-flight cursor against whatever just landed.
+  const [historyGeneration, setHistoryGeneration] = useState(0);
 
   // The rail is a reading aid for some wikis and the main surface for others —
   // deep trees need room, flat ones do not. Same grip as the chat's panels.
@@ -258,6 +242,7 @@ export default function TeamWikiPage() {
           updateWikiPageContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       }
+      setHistoryGeneration((n) => n + 1);
       leaveEditor();
     } catch (error) {
       // A stale base is the one failure with something useful to offer: the
@@ -271,6 +256,29 @@ export default function TeamWikiPage() {
         return;
       }
       showError({ summary: t("rework.wiki.errors.save"), detail: errorText(error) });
+    }
+  };
+
+  // Anchored to the revision the article actually displays, not "whatever is
+  // current" — the server refuses with 409 if the page moved on since,
+  // rather than certifying text the reviewer never saw. `revision_id` is only
+  // absent before a page has ever been written, when the review chip cannot
+  // be showing in the first place.
+  const handleClearReview = async () => {
+    if (!detail || !detail.revision_id) return;
+    try {
+      await setReviewMark({
+        teamId,
+        pageId: detail.page.page_id,
+        setNeedsReviewRequest: { needs_review: false, base_revision_id: detail.revision_id },
+      }).unwrap();
+      setHistoryGeneration((n) => n + 1);
+    } catch (error) {
+      notifyApiError(error, {
+        summary: t("rework.wiki.errors.review"),
+        fallbackDetail: t("rework.wiki.errors.review"),
+        conflictDetail: t("rework.wiki.errors.reviewConflict"),
+      });
     }
   };
 
@@ -470,13 +478,7 @@ export default function TeamWikiPage() {
               setRenaming(true);
             }}
             onDelete={() => setConfirmDelete(true)}
-            onClearReview={() =>
-              void setReviewMark({
-                teamId,
-                pageId: detail.page.page_id,
-                setNeedsReviewRequest: { needs_review: false },
-              })
-            }
+            onClearReview={() => void handleClearReview()}
             onNavigate={goTo}
             onNavigateRoot={() => goTo(null)}
           />
@@ -484,6 +486,12 @@ export default function TeamWikiPage() {
 
         {detail && (
           <WikiRevisions
+            // A new page id already needs a fresh walk; folding it into the key
+            // (rather than a separate effect keyed on the prop) means a local
+            // mutation and a page change are the same "start over" mechanism,
+            // not two. `slug` already closes the panel on navigation (below),
+            // so this never fights the close-on-navigate behavior.
+            key={`${detail.page.page_id}-${historyGeneration}`}
             open={showHistory}
             teamId={teamId}
             pageId={detail.page.page_id}

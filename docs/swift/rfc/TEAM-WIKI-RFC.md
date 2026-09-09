@@ -1,11 +1,16 @@
 # RFC — Team Wiki: a shared knowledge base written by agents and governed by humans
 
-**Status:** Draft for developer review — nothing implemented
+**Status:** Shipped — all four delivery slices complete (§14); no open design
+question remains. What follows below the delivery table is deferred work and
+residual limitations only.
 **Author:** Maxime Daragon
 **Date:** 2026-09-06
-**Area:** `control-plane-backend` (owner: tables, API, authorization), a new
-capability package (agent tools only), `frontend` (Wiki page, HITL diff modal)
-**Tracking:** none yet — an issue should be cut from §14 once this RFC is approved
+**Area:** `control-plane-backend` (tables, API, authorization), a capability
+package (agent tools), `frontend` (Wiki page, HITL diff modal)
+**Tracking:** issues #2571 (foundation), #2572 (Wiki page), #2573 (capability,
+read-only), #2574 (agent writes), plus the WIKI-05 correctness-pass issues
+(#2579, #2580, #2582) — all referenced by the still-open PR #2576, which
+carries every slice and closes them on merge
 **Related:** `writable_document` capability
 (`libs/fred-capability-writable-document/`) as the reference vertical for a
 capability package; `platform_postgres` / `document_access` as the reference for
@@ -103,27 +108,6 @@ actually used than to remove once people depend on it.
 
 ---
 
-## 4. Reuse audit (2026-09-06)
-
-Run before writing this document, per `CLAUDE.md`.
-
-| Looked for | Found | Verdict |
-| --- | --- | --- |
-| An existing wiki / knowledge-base issue or RFC | none | new ground |
-| A shared long-term agent memory | `MULTI_AGENT_MEMORY.md` is **conversational** memory (turn carry-forward, checkpoints); long-term semantic memory is an explicit non-goal there | no overlap |
-| A collaborative Markdown surface | `writable_document` — session-scoped, single-user-owned, no hierarchy, no history | wrong scope, right **pattern** (§5.3) |
-| A team-shared file space | `/teams/{t}/shared` in `FILESYSTEM.md` | disqualified — see §5.2 |
-| A wiki-shaped UI to copy | `HelpCenterPage` (tree left, Markdown article right, search) | reuse the layout |
-| A Markdown editor | `MDXEditor`, already used by `writable_document` | reuse |
-| An approval gate | `HitlSpec(require=True)` on a capability tool | reuse as-is |
-| A prompt-injection hook | capability middleware (`abefore_model`, `awrap_model_call`) | reuse as-is |
-| A per-team feature gate | `TeamScopePolicy.ADMIN_GATED` + per-team enablement | reuse as-is |
-
-Nothing here is invented. The only genuinely new pieces are two tables, one REST
-surface, one typed port, one capability package and one frontend page.
-
----
-
 ## 5. The structural decisions
 
 Each decision below states what was chosen, why, and — as this RFC is a proposal
@@ -164,16 +148,11 @@ To which one design argument is added: the wiki is a **team governance surface**
 and every other team-navigation page (Resources, Agents, Prompts, Usage,
 Settings) is served by control-plane, where team roles and ReBAC already live.
 
-**Reversing this.** If a reviewer wants the wiki inside the capability package
-(the `writable_document` shape), the four facts above have to be answered, not
-argued around: pin the capability to exactly one pod and enforce it at boot
-(fact 2), publish the capability base URL on a chat-independent endpoint
-(fact 3), and accept that the wiki is unavailable whenever that pod is
-(fact 4). The data model in §6 is unaffected — it would move verbatim into a
-capability-owned Alembic tree. The port in §7.1 would collapse into a direct
-store call, which is a simplification, and the frontend would call the pod
-instead of control-plane. Estimated as a smaller package but a strictly weaker
-product; recorded here so the trade is explicit rather than rediscovered.
+**Reversing this** would mean answering the four facts above rather than
+arguing around them (pin the capability to one pod, publish its base URL on a
+chat-independent endpoint, accept unavailability when that pod is down) — a
+smaller package but a strictly weaker product. See §15 for the alternative as
+rejected.
 
 ### 5.2 The team file space is not the storage
 
@@ -194,9 +173,9 @@ Building the wiki on that boundary would mean inheriting an open critical
 isolation gap, and blocking on a chantier we do not control. Beyond timing, the
 file space also offers no revisions, no hierarchy metadata and no page identity.
 
-**Reversing this.** Wait for #2113 and #2498 to ship, then the question can be
-reopened honestly. Even then the revision model of §6 has no equivalent in a
-file store, so this would be a rewrite rather than a substitution.
+**Reversing this** stays blocked on #2113/#2498, and even once they ship it
+would be a rewrite rather than a substitution: a file store has no equivalent
+of the revision model in §6.
 
 ### 5.3 One table for all teams, never one table per team
 
@@ -219,9 +198,9 @@ because it is the whole of the tenant boundary:
 This is the same lesson `AGENT-FILESYSTEM-HARDENING-RFC.md` §9 draws for the
 Workspace namespace, applied one layer up.
 
-**Reversing this.** There is no reasonable path to per-team tables. If row-level
+**Reversing this** has no reasonable path back to per-team tables; if row-level
 isolation is ever judged insufficient, the escalation is Postgres row-level
-security on `team_id`, which is additive and changes no application code.
+security on `team_id`, additive and no application-code change.
 
 ### 5.4 The capability *is* the grant
 
@@ -247,12 +226,10 @@ control-plane API, which is also where it is safest.
 Editors keep exclusive control of the *governance* surface (§9): the rules page,
 deletion, renaming/moving, direct UI editing, and restore.
 
-**Reversing this.** If contribution must be restricted to editors, change one
-predicate in the write endpoint (`CAN_UPDATE_RESOURCES` instead of team
-membership) and nothing else. The reverse move — from editors-only to members —
-is equally cheap. This is deliberately a one-line policy decision, not a
-structural one. Note that restricting it makes §12.2's review queue *more*
-attractive, not less, because members would then need a way to contribute at all.
+**Reversing this** is a one-line policy change (`CAN_UPDATE_RESOURCES` instead
+of team membership on the write endpoint), not a structural one — and it would
+make §12.2's review queue more attractive, not less, since members would then
+need a way to contribute at all.
 
 ### 5.5 Safety comes from reversibility, not prevention
 
@@ -277,39 +254,12 @@ missing.
 
 Two tables, following `writable_document`'s conventions: plain columns, **no
 foreign keys into core tables** (so install/uninstall ordering stays free), one
-owned Alembic revision.
-
-### `team_wiki_pages` — identity, hierarchy, current state
-
-| Column | Type | Notes |
-| --- | --- | --- |
-| `page_id` | `str(64)` PK | opaque id |
-| `team_id` | `str(128)`, indexed | the tenant boundary (§5.3) |
-| `parent_page_id` | `str(64)`, nullable | `NULL` at the root; plain column, not an FK |
-| `slug` | `str(160)` | unique per `(team_id, slug)`; the URL and the agents' address |
-| `title` | `str(300)` | display name |
-| `kind` | `str(16)` | `page` or `rules`; at most one `rules` row per team |
-| `current_revision_id` | `str(64)`, nullable | the published content; `NULL` only mid-creation |
-| `needs_review` | `bool` | set when an agent's edit is published, cleared by an editor (§8.8) |
-| `position` | `int` | sibling ordering |
-| `created_at` / `updated_at` | `timestamptz` | |
-| `created_by` / `updated_by` | `str(128)` | user ids |
-
-### `team_wiki_revisions` — content, append-only
-
-| Column | Type | Notes |
-| --- | --- | --- |
-| `revision_id` | `str(64)` PK | |
-| `page_id` | `str(64)`, indexed | |
-| `team_id` | `str(128)`, indexed | denormalised so every query filters on it without a join |
-| `content_md` | `text` | the Markdown |
-| `base_revision_id` | `str(64)`, nullable | what the author started from — the conflict check (§8.4) |
-| `status` | `str(16)` | `proposed`, `published`, `rejected`, `superseded` |
-| `author_user_id` | `str(128)` | always a real user — the human who wrote or approved |
-| `author_kind` | `str(16)` | `human` or `agent` |
-| `agent_instance_id` | `str(128)`, nullable | which agent proposed it; `NULL` for a human edit |
-| `session_id` | `str(128)`, nullable | the conversation an agent edit came from — the audit trail back to its context |
-| `created_at` | `timestamptz` | |
+owned Alembic revision. `team_wiki_pages` holds identity, hierarchy and a
+pointer to the current revision; `team_wiki_revisions` is append-only content,
+carrying `status` (`proposed`/`published`/`rejected`/`superseded`),
+`author_kind` (`human`/`agent`) and the attribution/conflict fields. Column-by-
+column reference: `control_plane_backend/models/team_wiki_models.py` — the
+ORM classes are documented in place rather than duplicated here.
 
 **Content is never modified in place.** An edit appends a revision and moves the
 page's `current_revision_id`. Three of §8's behaviours fall straight out of that
@@ -539,18 +489,15 @@ already solves this exact shape. Editors get an **Edit** button opening
 last author, its `human`/`agent` origin, the review mark when set, and its
 revision list.
 
-**The HITL diff modal.** This is the one genuinely new frontend mechanism. The
-approval prompt carries an identifier for the proposed revision; a **See the
-changes** button in the HITL widget opens a modal rendering the diff between the
-current content and the proposal.
-
-Today the approval request carries only `PendingToolCall.args_preview`,
-truncated to 1 200 characters, and the widget does not display it at all. So the
-capability needs a way to contribute a renderer to the HITL widget, keyed by
-tool name — the same registry pattern the codebase already uses for capability
-side panels (`sidePanelRegistry`) and capability config widgets
-(`configWidgetRegistry`). It is a third instance of an established pattern, not
-a new mechanism.
+**The HITL diff modal** was the one genuinely new frontend mechanism, and is
+shipped: `WikiProposalReview.tsx` renders the diff between the current content
+and the proposal, resolved by proposal id. Because the approval request itself
+carries only `PendingToolCall.args_preview` (truncated to 1 200 characters),
+the capability contributes a renderer to the HITL widget keyed by tool name —
+`hitlRendererRegistry.ts` — the same registry pattern already used for
+capability side panels (`sidePanelRegistry`) and config widgets
+(`configWidgetRegistry`); a third instance of an established pattern, not a
+new one.
 
 Because control-plane owns the API (§5.1), touching its controllers means
 regenerating the frontend client in the same change (`make update-control-plane-api`),
@@ -640,21 +587,24 @@ having before any agent writes into it.
 `fred-performance-reviewer` is required on slice 3, which touches per-turn prompt
 composition.
 
-**Two decisions taken while building slice 3**, both outside what this RFC had
-settled; the durable form of each lives in `CONTROL-PLANE-PRODUCT-CONTRACT.md`
-§49, and they are recorded here only because they change what §5 said.
+**Three decisions taken while building slices 3 and 4**, all outside what this
+RFC had settled and recorded here only because they change what §5 said. Each
+now has a durable home closer to its enforcement point than this RFC.
 
-*The capability is ReAct-only.* The rules page reaches the model as a
-system-prompt fragment, and prompt fragments are a ReAct-loop hook the Graph
-runtime never runs. §3 calls the rules non-negotiable, so a Graph agent
-selecting this capability must fail loudly at assembly rather than answer
-without them. The cost is real: the wiki is unavailable to Graph agents
-entirely, read included. Reversing this means finding a prompt seam both
-runtimes share — the closest is `McpCapability.prompt_group()`, which the
-assembler currently keys off `isinstance(capability, McpCapability)` and would
-have to generalise.
+*The capability is ReAct-only* — durable form: the `TeamWikiCapability` module
+docstring (`fred-capability-team-wiki/.../wiki/capability.py`). The rules page
+reaches the model as a system-prompt fragment, and prompt fragments are a
+ReAct-loop hook the Graph runtime never runs. §3 calls the rules
+non-negotiable, so a Graph agent selecting this capability must fail loudly at
+assembly rather than answer without them (enforced by
+`execution_models=("react",)`, checked at capability-registry boot). The cost
+is real: the wiki is unavailable to Graph agents entirely, read included.
+Reversing this means finding a prompt seam both runtimes share — the closest
+is `McpCapability.prompt_group()`, which the assembler currently keys off
+`isinstance(capability, McpCapability)` and would have to generalise.
 
-*Publishing is its own tool, and it is the gated one.* §7.1 listed
+*Publishing is its own tool, and it is the gated one* — durable form:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §49 ("Agent writes are two steps"). §7.1 listed
 `propose_*` and `publish_proposal` as port methods without saying which the HITL
 gate would pause. Checked against the platform: the gate runs BEFORE a tool and
 carries only `PendingToolCall.args_preview`, truncated to 1 200 characters — so
@@ -662,8 +612,10 @@ gating `propose_*` would ask the user to approve a page they cannot see. The
 proposal is stored first and its id is what the approval card resolves. Nothing
 about this is reversible cheaply: it is the shape the gate imposes.
 
-*Enabling the capability is what gives a team a wiki at all.* Not only its
-agents: the control-plane refuses every wiki route for a team without it. §5.4
+*Enabling the capability is what gives a team a wiki at all* — durable form:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §49 ("A team has a wiki only where the
+`team_wiki` capability is enabled"). Not only its agents: the control-plane
+refuses every wiki route for a team without it. §5.4
 said "the capability is the grant" about agent access; this extends the same
 sentence to people. The reasoning is that a wiki no agent can read is a
 document store, and the team space already is one. Reversing this means

@@ -42,6 +42,7 @@ from control_plane_backend.team_wiki.store import (
     WikiPageNotFoundError,
     WikiPageRecord,
     WikiPageRulesParentError,
+    WikiProposalNoLongerPendingError,
     WikiRevisionConflictError,
     WikiRevisionRecord,
     _child_depth_under,
@@ -684,12 +685,18 @@ async def set_wiki_page_needs_review(
     team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
     store = deps.get_team_wiki_store()
     await _require_page(store, team_id, page_id)
-    updated = await store.set_needs_review(
-        team_id=team_id,
-        page_id=page_id,
-        needs_review=request.needs_review,
-        reviewed_by=user.uid,
-    )
+    try:
+        updated = await store.set_needs_review(
+            team_id=team_id,
+            page_id=page_id,
+            needs_review=request.needs_review,
+            reviewed_by=user.uid,
+            base_revision_id=request.base_revision_id,
+        )
+    except WikiRevisionConflictError as exc:
+        raise WikiConflictError(
+            exc.current_revision_id, exc.current_content_md
+        ) from exc
     return _summary(updated)
 
 
@@ -947,11 +954,31 @@ async def publish_wiki_proposal(
         # Refusing carries the current text so the agent can redo its edit on
         # top of it rather than the approver losing the other person's work.
         current_page = await store.get_page(team_id, proposal.page_id)
-        current_id = current_page.current_revision_id if current_page else None
-        current = await store.get_revision(team_id, current_id) if current_id else None
+        if current_page is None:
+            # Deleted in the gap between the failed compare-and-swap (which
+            # confirmed the page still existed) and this re-read: a real 404,
+            # not a 409 with a fabricated empty revision to rebase onto.
+            raise WikiRequestError(
+                "The page this proposal targets no longer exists.",
+                http_status=404,
+            ) from None
+        current = (
+            await store.get_revision(team_id, current_page.current_revision_id)
+            if current_page.current_revision_id
+            else None
+        )
         raise WikiConflictError(
-            current_id or "", current.content_md if current else ""
+            current_page.current_revision_id or "",
+            current.content_md if current else "",
         ) from None
+    except WikiProposalNoLongerPendingError as exc:
+        # Lost the race to a concurrent decline/expiry/session-erasure reject:
+        # by the time this transaction would have committed, the proposal was
+        # no longer pending — same outcome, and same message, as finding it
+        # already rejected at the lookup above.
+        raise WikiRequestError(
+            "This proposal is no longer pending.", http_status=404
+        ) from exc
     except WikiPageNotFoundError as exc:
         raise WikiRequestError(
             "The page this proposal targets no longer exists.", http_status=404

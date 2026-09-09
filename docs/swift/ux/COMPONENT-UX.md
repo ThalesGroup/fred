@@ -4065,7 +4065,9 @@ else's document, in an editor that autosaves.
 ### `TeamWikiPage`
 
 **Location:** `src/rework/components/pages/TeamWikiPage/`
-**Status:** `Functional` — slice 2 of 4; no agent involvement yet (RFC §14)
+**Status:** `Functional` — all four delivery slices shipped (RFC §14): human
+CRUD, revision history and restore, agent read, and agent proposals gated
+behind a human's HITL approval.
 
 `/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
 tree, the article, and the version history when it is open. The layout is
@@ -4164,11 +4166,7 @@ outright**, never merges with an older tail. This is both the first load and
 every later re-arrival of that same query — a restore, an edit, another
 viewer's write invalidating the `HISTORY-*` tag while the reader is still
 parked on it. Replacing is what keeps a stale second/third page from surviving
-next to a freshly-invalidated first one. Restoring a revision additionally
-resets the panel's own cursor to the base page explicitly, rather than waiting
-on whichever page happens to be subscribed to quietly resolve: the reader
-should see what they just restored, not stay on the older page they restored
-from.
+next to a freshly-invalidated first one.
 
 **"Load older" is disabled while a request for it is in flight**, the
 codebase's usual guard against a second click firing a concurrent duplicate.
@@ -4176,6 +4174,34 @@ Three terminal states share one area below the list: a `Réessayer` (`common.
 retry`) button on error, `Charger les versions antérieures` while
 `next_cursor` is non-null, and `Début de l'historique.` once it is null —
 never more than one at a time.
+
+**Follow-up (2026-09-08, WIKI-05): three gaps in "every later re-arrival"
+above.** The paragraph's claim only held while the reader stayed on the base
+page — walking to an older one unsubscribes it, so nothing was left to
+re-arrive on. (1) Closing and reopening the panel left `fetchCursor` and the
+accumulated `pages` exactly where they were; `WikiRevisions` now resets both
+on the close→open transition (a ref tracking the previous `open`). Resetting
+state alone is not enough when the panel was already on the base page:
+`fetchCursor` staying `undefined` is a no-op that triggers no request, so
+reopening explicitly calls the query's own `refetch()` once it is confirmed
+bound to `cursor: undefined` — the one case a plain state reset cannot reach.
+The merge effect also gained `fulfilledTimeStamp` as a dependency, since RTK
+Query's structural sharing can keep the same object reference when a refetch
+returns byte-identical content, and reopening must still show it. (2) A local
+mutation this page's OWNER knows about but
+`WikiRevisions` does not (the review mark, an edit or rules save) is handled
+by `TeamWikiPage` remounting the panel on a `key` of
+`` `${pageId}-${historyGeneration}` `` — a full remount resets the walk the
+same way a fresh page does, so "the page changed" and "a save changed this
+page's history" are one mechanism, not two. Restore's own explicit reset
+(inside `WikiRevisions`) still fires directly, since restore is this
+component's own mutation. (3) The merge effect read RTK Query's `data`, which
+keeps the PREVIOUS args' value while a new one is in flight; pairing it with
+the `fetchCursor` that had just changed could merge a response into the walk
+under the wrong cursor. It now reads `currentData`, which is only ever set
+from the args the hook was just called with. None of the three add polling, a
+second cache, or a reconciliation layer — an explicit reset stays the
+accepted trade-off over merging two walks.
 
 ### Conflict handling in the editor
 

@@ -34,7 +34,10 @@ from control_plane_backend.team_wiki.store import (
     WikiPageNotFoundError,
     WikiPageRecord,
     WikiPageRulesParentError,
+    WikiProposalNoLongerPendingError,
+    WikiRevisionConflictError,
     WikiRevisionRecord,
+    _StaleBaseWrite,
 )
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
@@ -274,6 +277,9 @@ class _Store:
         # to raise here instead of re-implementing the check.
         self.raise_from_create_page: Exception | None = None
         self.raise_from_update_page_metadata: Exception | None = None
+        self.raise_from_publish_proposal: Exception | None = None
+        self.raise_from_set_needs_review: Exception | None = None
+        self.set_needs_review_calls: list[dict[str, Any]] = []
 
     async def list_pages(self, _team_id: TeamId) -> list[WikiPageRecord]:
         return self.pages
@@ -341,6 +347,24 @@ class _Store:
         if kwargs.get("title") is not None:
             page.title = kwargs["title"]
         return page
+
+    async def set_needs_review(self, **kwargs: Any) -> WikiPageRecord:
+        self.set_needs_review_calls.append(kwargs)
+        if self.raise_from_set_needs_review is not None:
+            raise self.raise_from_set_needs_review
+        page = next(p for p in self.pages if p.page_id == kwargs["page_id"])
+        page.needs_review = kwargs["needs_review"]
+        return page
+
+    async def get_proposal(
+        self, _team_id: TeamId, proposal_id: str
+    ) -> WikiRevisionRecord | None:
+        return next((p for p in self.proposals if p.revision_id == proposal_id), None)
+
+    async def publish_proposal(self, **_kwargs: Any) -> WikiPageRecord:
+        if self.raise_from_publish_proposal is not None:
+            raise self.raise_from_publish_proposal
+        raise AssertionError("not needed by the tests that use this fake")
 
     async def create_proposal(self, **kwargs: Any) -> WikiRevisionRecord:
         record = WikiRevisionRecord(
@@ -461,7 +485,11 @@ async def test_every_write_demands_the_editor_permission(gate: _RecordingGate) -
     )
     await reached(
         wiki_service.set_wiki_page_needs_review(
-            user, TEAM, "p1", SetNeedsReviewRequest(needs_review=False), deps
+            user,
+            TEAM,
+            "p1",
+            SetNeedsReviewRequest(needs_review=False, base_revision_id="rev-p1"),
+            deps,
         )
     )
     await reached(wiki_service.delete_wiki_page(user, TEAM, "p1", deps))
@@ -822,6 +850,52 @@ async def test_a_proposal_from_a_stale_read_is_refused(gate: _RecordingGate) -> 
 
 
 @pytest.mark.asyncio
+async def test_publish_stale_write_reports_404_when_the_page_is_gone(
+    gate: _RecordingGate,
+) -> None:
+    """The store's compare-and-swap can fail because the page moved on, or
+    because it was deleted in the gap before this re-read — those are not the
+    same refusal. A deleted page must not come back as a 409 conflict with a
+    fabricated empty revision to rebase onto."""
+
+    store = _Store()
+    store.proposals.append(
+        _revision("prop-1", "p1", status="proposed", created_at=datetime.now())
+    )
+    store.raise_from_publish_proposal = _StaleBaseWrite()
+    # No page in store.pages: get_page(..., "p1") returns None, the same as a
+    # page deleted after the store's own CAS already found it stale.
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.publish_wiki_proposal(_user(), TEAM, "prop-1", _deps(store))
+
+    assert caught.value.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_publish_reports_the_same_404_when_a_reject_wins_the_race(
+    gate: _RecordingGate,
+) -> None:
+    """The store's CAS on the proposal's own status can fail because a
+    decline, the retention sweep, or a session erasure committed between this
+    call's lookup and its write — that must read to the caller exactly like
+    finding the proposal already rejected, not as a page conflict."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None, slug="notes"))
+    store.proposals.append(
+        _revision("prop-1", "p1", status="proposed", created_at=datetime.now())
+    )
+    store.raise_from_publish_proposal = WikiProposalNoLongerPendingError("prop-1")
+
+    with pytest.raises(WikiRequestError) as caught:
+        await wiki_service.publish_wiki_proposal(_user(), TEAM, "prop-1", _deps(store))
+
+    assert caught.value.http_status == 404
+    assert str(caught.value) == "This proposal is no longer pending."
+
+
+@pytest.mark.asyncio
 async def test_a_proposal_cannot_bind_to_another_page_s_revision(
     gate: _RecordingGate,
 ) -> None:
@@ -842,6 +916,52 @@ async def test_a_proposal_cannot_bind_to_another_page_s_revision(
         )
 
     assert store.proposals == []
+
+
+@pytest.mark.asyncio
+async def test_reviewing_threads_the_displayed_revision_to_the_store(
+    gate: _RecordingGate,
+) -> None:
+    """B1: the revision the reviewer displayed must reach the store call
+    verbatim — nothing in the service may recompute it from "whatever is
+    current now"."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None, slug="notes"))
+
+    await wiki_service.set_wiki_page_needs_review(
+        _user(),
+        TEAM,
+        "p1",
+        SetNeedsReviewRequest(needs_review=False, base_revision_id="rev-A"),
+        _deps(store),
+    )
+
+    assert store.set_needs_review_calls[0]["base_revision_id"] == "rev-A"
+
+
+@pytest.mark.asyncio
+async def test_a_review_against_a_superseded_revision_is_refused(
+    gate: _RecordingGate,
+) -> None:
+    """B1: the store's compare-and-swap detected the page moved on since the
+    reviewer's read. The service must surface this as the same 409 conflict
+    shape every other stale wiki write uses, not let it escape untranslated."""
+
+    store = _Store()
+    store.pages.append(_page("p1", None, slug="notes"))
+    store.raise_from_set_needs_review = WikiRevisionConflictError("rev-B", "B")
+
+    with pytest.raises(wiki_service.WikiConflictError) as caught:
+        await wiki_service.set_wiki_page_needs_review(
+            _user(),
+            TEAM,
+            "p1",
+            SetNeedsReviewRequest(needs_review=False, base_revision_id="rev-A"),
+            _deps(store),
+        )
+
+    assert caught.value.current_revision_id == "rev-B"
 
 
 @pytest.mark.asyncio

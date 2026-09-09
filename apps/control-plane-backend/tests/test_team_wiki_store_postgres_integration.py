@@ -47,9 +47,11 @@ lock keys (database-wide, not schema-scoped) from colliding across tests.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -62,10 +64,11 @@ from control_plane_backend.team_wiki.store import (
     WikiPageInvalidMoveError,
     WikiPageNotFoundError,
     WikiPageRecord,
+    WikiProposalNoLongerPendingError,
 )
 from fred_core.common import TeamId
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import Update, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
@@ -135,6 +138,38 @@ async def _assert_committed_tree_is_sound(
             )
             parent = pages.get(cursor)
             cursor = parent.parent_page_id if parent else None
+
+
+@contextlib.asynccontextmanager
+async def _pause_before_the_proposal_publish_write(
+    reached: asyncio.Event, release: asyncio.Event
+) -> AsyncIterator[None]:
+    """Forces the interleaving `publish_proposal`'s CAS exists for: a reject
+    committing between its SELECT and its own write. Plain `asyncio.gather`
+    cannot guarantee that window is hit (see CONTROL-PLANE-PRODUCT-CONTRACT.md
+    §49's 2026-09-08 correction) — this pauses `AsyncSession.execute` for the
+    one statement matching that write's compiled SQL instead.
+    """
+
+    original_execute = AsyncSession.execute
+
+    async def _patched(
+        self: AsyncSession, statement: Any, *args: Any, **kwargs: Any
+    ) -> Any:
+        if (
+            isinstance(statement, Update)
+            and getattr(statement.table, "name", None) == "team_wiki_revisions"
+            and "author_user_id" in str(statement)
+        ):
+            reached.set()
+            await release.wait()
+        return await original_execute(self, statement, *args, **kwargs)
+
+    AsyncSession.execute = _patched  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        AsyncSession.execute = original_execute  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
@@ -372,22 +407,26 @@ async def test_concurrent_structural_writes_never_exceed_the_depth_cap(
 
 
 @pytest.mark.asyncio
-async def test_publication_and_lifecycle_expiry_race_to_a_consistent_outcome(
+async def test_publish_loses_to_a_reject_committed_between_its_read_and_write(
     pg: _Fixture,
 ) -> None:
-    """WIKI-05's required invariant, proven under real concurrency: the
-    lifecycle sweep's `reject_stale_proposal` and a human's `publish_proposal`
-    landing at the same instant must never both win. Whichever commits first
-    is the only one that changes anything — the page never ends up pointing
-    at a revision that the sweep then deletes out from under it, and a
-    rejected proposal never gets silently published anyway.
+    """WIKI-05's required invariant, proven under a forced interleaving: a
+    `reject_stale_proposal` that commits strictly between `publish_proposal`'s
+    own SELECT and its own write must beat the publish, and leave no partial
+    write behind — not the page pointer, not the superseded mark on the
+    revision it was about to replace.
+
+    Edit-page path. `publish_proposal`'s SELECT still sees `status="proposed"`
+    (the reject has not committed yet), so this is the window the SELECT-only
+    guard could not close — only the CAS this fix added, on the write itself,
+    can.
     """
 
     store = pg.store
     created = await store.create_page(
         team_id=pg.team_id,
-        slug="race-target",
-        title="Race target",
+        slug="race-edit",
+        title="Race edit",
         content_md="v0",
         author_user_id="alice",
     )
@@ -405,41 +444,149 @@ async def test_publication_and_lifecycle_expiry_race_to_a_consistent_outcome(
         session_id="sess-1",
     )
 
-    async def _expire() -> bool:
-        return await store.reject_stale_proposal(
+    reached = asyncio.Event()
+    release = asyncio.Event()
+    async with _pause_before_the_proposal_publish_write(reached, release):
+        publish_task = asyncio.create_task(
+            store.publish_proposal(
+                team_id=pg.team_id,
+                revision_id=proposal.revision_id,
+                slug="race-edit-published",
+                approver_user_id="bob",
+            )
+        )
+        await reached.wait()
+
+        # Publish already passed its own "still proposed" check. The reject
+        # now runs and commits in a fully separate transaction, before
+        # publish is allowed to write.
+        assert await store.reject_stale_proposal(
             team_id=pg.team_id, revision_id=proposal.revision_id
         )
 
-    async def _publish() -> WikiPageRecord | None:
-        try:
-            return await store.publish_proposal(
-                team_id=pg.team_id,
-                revision_id=proposal.revision_id,
-                slug="race-target-published",
-                approver_user_id="bob",
-            )
-        except WikiPageNotFoundError:
-            return None
-
-    expired, published = await asyncio.gather(_expire(), _publish())
-
-    # Exactly one side actually changed anything — never both, never neither.
-    assert expired != (published is not None)
+        release.set()
+        with pytest.raises(WikiProposalNoLongerPendingError):
+            await publish_task
 
     page = await store.get_page(pg.team_id, created.page.page_id)
     assert page is not None
+    assert page.current_revision_id == v0_id
+    v0 = await store.get_revision(pg.team_id, v0_id)
+    assert v0 is not None
+    assert v0.status == "published"  # never marked superseded by the loser
     revision = await store.get_revision(pg.team_id, proposal.revision_id)
     assert revision is not None
+    assert revision.status == "rejected"  # never overwritten back to published
+    await _assert_committed_tree_is_sound(store, pg.team_id)
 
-    if published is not None:
-        # Publication won: the page points at the now-published revision,
-        # and the sweep's own conditional UPDATE found nothing to change.
-        assert page.current_revision_id == proposal.revision_id
-        assert revision.status == "published"
-        assert expired is False
-    else:
-        # Expiry won: the page is untouched, and the proposal is rejected,
-        # never silently published.
-        assert page.current_revision_id == v0_id
-        assert revision.status == "rejected"
-        assert expired is True
+
+@pytest.mark.asyncio
+async def test_publish_loses_to_a_reject_of_a_new_page_proposal_creates_no_page(
+    pg: _Fixture,
+) -> None:
+    """Same forced interleaving, the new-page path (§WIKI-04): a losing
+    publish must not leave behind the page it was about to mint. Before this
+    fix, `s.add(page_row)` had already been flushed by the time the stale
+    `row.status = "published"` write landed, so a losing publish here used to
+    commit a real page pointing at a revision the sweep had just rejected."""
+
+    store = pg.store
+    proposal = await store.create_proposal(
+        team_id=pg.team_id,
+        page_id=None,
+        content_md="drafted by an agent",
+        base_revision_id=None,
+        proposed_title="Race new page",
+        proposed_parent_page_id=None,
+        author_user_id="alice",
+        agent_instance_id="inst-1",
+        session_id="sess-1",
+    )
+
+    reached = asyncio.Event()
+    release = asyncio.Event()
+    async with _pause_before_the_proposal_publish_write(reached, release):
+        publish_task = asyncio.create_task(
+            store.publish_proposal(
+                team_id=pg.team_id,
+                revision_id=proposal.revision_id,
+                slug="race-new-page",
+                approver_user_id="bob",
+            )
+        )
+        await reached.wait()
+
+        assert await store.reject_stale_proposal(
+            team_id=pg.team_id, revision_id=proposal.revision_id
+        )
+
+        release.set()
+        with pytest.raises(WikiProposalNoLongerPendingError):
+            await publish_task
+
+    assert await store.get_page(pg.team_id, proposal.page_id) is None
+    revision = await store.get_revision(pg.team_id, proposal.revision_id)
+    assert revision is not None
+    assert revision.status == "rejected"
+    await _assert_committed_tree_is_sound(store, pg.team_id)
+
+
+@pytest.mark.asyncio
+async def test_publish_loses_to_a_session_erasure_reject_committed_mid_transaction(
+    pg: _Fixture,
+) -> None:
+    """Invariant 5: the same forced interleaving, `reject_proposals_for_session`
+    in place of the lifecycle sweep — a session erased at the exact instant a
+    human approves one of its still-pending proposals must not let the
+    approval win over the erasure."""
+
+    store = pg.store
+    created = await store.create_page(
+        team_id=pg.team_id,
+        slug="race-session",
+        title="Race session",
+        content_md="v0",
+        author_user_id="alice",
+    )
+    v0_id = created.page.current_revision_id
+    assert v0_id is not None
+    proposal = await store.create_proposal(
+        team_id=pg.team_id,
+        page_id=created.page.page_id,
+        content_md="from a session about to be erased",
+        base_revision_id=v0_id,
+        proposed_title=None,
+        proposed_parent_page_id=None,
+        author_user_id="alice",
+        agent_instance_id="inst-1",
+        session_id="sess-erased",
+    )
+
+    reached = asyncio.Event()
+    release = asyncio.Event()
+    async with _pause_before_the_proposal_publish_write(reached, release):
+        publish_task = asyncio.create_task(
+            store.publish_proposal(
+                team_id=pg.team_id,
+                revision_id=proposal.revision_id,
+                slug="race-session-published",
+                approver_user_id="bob",
+            )
+        )
+        await reached.wait()
+
+        assert (
+            await store.reject_proposals_for_session(
+                team_id=pg.team_id, session_id="sess-erased"
+            )
+            == 1
+        )
+
+        release.set()
+        with pytest.raises(WikiProposalNoLongerPendingError):
+            await publish_task
+
+    page = await store.get_page(pg.team_id, created.page.page_id)
+    assert page is not None
+    assert page.current_revision_id == v0_id
+    await _assert_committed_tree_is_sound(store, pg.team_id)

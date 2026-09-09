@@ -72,11 +72,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete: {
       invalidatesTags: (_r, _e, arg) => [{ type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` }],
     },
-    // The review chip lives on the article as well as in the tree.
+    // The review chip lives on the article as well as in the tree, and a
+    // validation is its own entry in the history panel — without this tag
+    // the panel kept showing the version list from before it.
     setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost: {
       invalidatesTags: (_r, _e, arg) => [
         { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
         { type: "ControlPlaneTeamWiki", id: `PAGE-${arg.teamId}-${arg.pageId}` },
+        { type: "ControlPlaneTeamWiki", id: `HISTORY-${arg.teamId}-${arg.pageId}` },
       ],
     },
     restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost: {
@@ -92,12 +95,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     writeRulesControlPlaneV1TeamsTeamIdWikiRulesPut: {
-      // The rules page's history is keyed by its page id, which this caller
-      // does not have — invalidating the type's whole space is what keeps the
-      // panel from showing a version list missing the save just made.
-      invalidatesTags: (_r, _e, arg) => [
+      // The rules page's history is keyed by its page id, which the request
+      // args do not carry — read it off the RESULT instead, like the `PAGE-`
+      // tag above does.
+      invalidatesTags: (result, _e, arg) => [
         { type: "ControlPlaneTeamWiki", id: `RULES-${arg.teamId}` },
         { type: "ControlPlaneTeamWiki", id: `TREE-${arg.teamId}` },
+        ...(result
+          ? [{ type: "ControlPlaneTeamWiki" as const, id: `HISTORY-${arg.teamId}-${result.page.page_id}` }]
+          : []),
       ],
     },
     // #2148: bootstrap's `available_teams`/`active_team` are the same team
