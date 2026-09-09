@@ -3291,11 +3291,12 @@ template. Runtime side, block ordering and trust boundary:
 
 | Method | Path | Permission |
 | ------ | ---- | ---------- |
-| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
-| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+| GET | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
+| PUT | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
 
-Same shared org-admin gate as the platform model-binding trio (§40). Both are
-registered in `authz-endpoint-matrix.yaml`.
+Both are registered in `authz-endpoint-matrix.yaml`. The gate was
+`can_manage_platform` until §50 carved this surface out of that catch-all so a
+`prompt_editor` could hold it without import/export, tasks and platform reset.
 
 **No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
 field has a natural "off" value, and `""` is it. Keeping `DELETE` would give
