@@ -22,7 +22,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationOutlineRail } from "./ConversationOutlineRail";
-import type { OutlineItem, OutlinePreview } from "./outlineItems";
+import type { OutlinePreview } from "./outlineItems";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -38,11 +38,7 @@ afterEach(() => {
   container.remove();
 });
 
-const ITEMS: OutlineItem[] = [
-  { id: "u1", height: "short" },
-  { id: "u2", height: "tall" },
-  { id: "u3", height: "medium" },
-];
+const TURN_IDS = ["u1", "u2", "u3"];
 
 const preview = (id: string): OutlinePreview => ({ request: `q ${id}`, answer: `a ${id}` });
 
@@ -51,7 +47,7 @@ type Props = Parameters<typeof ConversationOutlineRail>[0];
 function render(props: Partial<Props> = {}) {
   const onJump = vi.fn();
   const getPreview = vi.fn(preview);
-  const merged: Props = { items: ITEMS, activeId: null, frozen: false, onJump, getPreview, ...props };
+  const merged: Props = { turnIds: TURN_IDS, activeId: null, frozen: false, onJump, getPreview, ...props };
   act(() => root.render(<ConversationOutlineRail {...merged} />));
   // The spies are returned as themselves, not through `merged`, so their mock
   // metadata survives the Props widening.
@@ -61,13 +57,13 @@ function render(props: Partial<Props> = {}) {
 const marks = () => Array.from(container.querySelectorAll<HTMLElement>("[data-mark-id]"));
 
 describe("ConversationOutlineRail", () => {
-  it("renders one mark per item, in order", () => {
+  it("renders one mark per turn, in order", () => {
     render();
     expect(marks().map((m) => m.dataset.markId)).toEqual(["u1", "u2", "u3"]);
   });
 
   it("renders nothing when there are no turns", () => {
-    render({ items: [] });
+    render({ turnIds: [] });
     expect(container.firstChild).toBeNull();
   });
 
@@ -83,6 +79,14 @@ describe("ConversationOutlineRail", () => {
     expect(active.map((m) => m.dataset.markId)).toEqual(["u2"]);
   });
 
+  it("gives every mark the same class, so none is visually singled out", () => {
+    // The rail says where the turns are and nothing about them; a mark that
+    // varied by turn would make it a second thing to read.
+    render();
+    const shapes = new Set(marks().map((m) => m.className.replace(/\s*\S*markActive\S*/, "")));
+    expect(shapes.size).toBe(1);
+  });
+
   it("keeps the marks out of the tab order", () => {
     // They live in an aria-hidden subtree: reachable by keyboard but silent to
     // a screen reader is worse than not reachable at all.
@@ -96,19 +100,32 @@ describe("ConversationOutlineRail", () => {
   });
 
   describe("while a turn is live", () => {
-    it("mounts no tooltip, so no extract is ever computed", () => {
-      const { getPreview } = render({ frozen: true });
-      act(() => {
-        marks()[0].dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-      });
-      expect(document.querySelector('[role="tooltip"]')).toBeNull();
-      expect(getPreview).not.toHaveBeenCalled();
+    it("takes no click, so no jump can reach the conversation", () => {
+      // The safety invariant: useChatAutoScroll owns the scroll position while
+      // a turn runs, and a jump landing then would be overwritten a frame
+      // later. Enforced in the markup, not only by the rail's pointer-events,
+      // so a stylesheet change cannot quietly re-enable it.
+      const { onJump } = render({ frozen: true });
+      act(() => marks()[1].click());
+      expect(onJump).not.toHaveBeenCalled();
+      expect(marks().every((m) => (m as HTMLButtonElement).disabled)).toBe(true);
     });
 
     it("still shows the marks, so the reader keeps their position", () => {
       render({ frozen: true, activeId: "u2" });
       expect(marks()).toHaveLength(3);
       expect(marks().filter((m) => m.className.includes("markActive"))).toHaveLength(1);
+    });
+
+    it("keeps every mark mounted across the freeze, rather than rebuilding them", () => {
+      // Swapping each mark's wrapper on freeze remounted the whole rail at both
+      // ends of every turn — hundreds of mount/unmount cycles on the frames the
+      // stream starts and finishes.
+      render();
+      const before = marks();
+      render({ frozen: true });
+      expect(marks()[0]).toBe(before[0]);
+      expect(marks()[2]).toBe(before[2]);
     });
   });
 

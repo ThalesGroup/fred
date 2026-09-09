@@ -12,11 +12,13 @@ file is trimmed to the parts that are still genuinely open.
 ## What shipped
 
 A rail of graphical marks along the conversation's left edge in
-`ManagedChatPage`: one per turn, discrete hover magnification over two
-neighbours each side, a preview tile, three heights from the answer's length, a
-scroll-spy active mark, and an animated jump. Inert while a turn is live, which
-is what keeps it clear of `useChatAutoScroll`'s ownership of the scroll
-position.
+`ManagedChatPage`: one per turn, all the same size, with discrete hover
+magnification over two neighbours each side, a preview tile, a scroll-spy
+active mark, and an animated jump. Inert while a turn is live, which is what
+keeps it clear of `useChatAutoScroll`'s ownership of the scroll position.
+
+Mark heights varying with the answer's length were built and dropped
+(2026-09-09): the rail reads better saying only where the turns are.
 
 Read `COMPONENT-UX.md` for the behaviour and the reasoning behind each choice.
 Nothing about V1 is still under discussion, so it is not restated here.

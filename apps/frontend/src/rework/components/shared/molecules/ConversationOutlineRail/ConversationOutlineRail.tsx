@@ -17,11 +17,12 @@
 
 import { memo, useEffect, useRef } from "react";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
-import type { OutlineItem, OutlinePreview } from "./outlineItems";
+import type { OutlinePreview } from "./outlineItems";
 import styles from "./ConversationOutlineRail.module.css";
 
 interface ConversationOutlineRailProps {
-  items: OutlineItem[];
+  /** Turn ids in thread order — one mark each, all the same size. */
+  turnIds: string[];
   activeId: string | null;
   /** A turn is running: marks stay visible but dimmed and inert, so the rail
    *  can never write the conversation's scroll position while the autoscroll
@@ -59,7 +60,7 @@ function PreviewTile({ turnId, resolve }: { turnId: string; resolve: (id: string
 // Memoized for the same reason ConversationThread is: the page above re-renders
 // on every composer keystroke, and the rail must not follow it down.
 export const ConversationOutlineRail = memo(function ConversationOutlineRail({
-  items,
+  turnIds,
   activeId,
   frozen,
   onJump,
@@ -79,47 +80,50 @@ export const ConversationOutlineRail = memo(function ConversationOutlineRail({
     const markBox = mark.getBoundingClientRect();
     if (markBox.top < railBox.top) rail.scrollTop -= railBox.top - markBox.top;
     else if (markBox.bottom > railBox.bottom) rail.scrollTop += markBox.bottom - railBox.bottom;
-  }, [activeId, items]);
+  }, [activeId, turnIds]);
 
-  if (items.length === 0) return null;
+  if (turnIds.length === 0) return null;
 
   return (
     // Hidden from assistive technology: the marks carry no text of their own,
     // and the conversation they summarise is already fully readable in the
     // thread. Reachability is a V1 omission, not a judgement that it is
-    // unwanted — see the RFC's out-of-scope section.
+    // unwanted — CONVERSATION-OUTLINE-RAIL-RFC.md says what it would take.
     <div ref={railRef} className={`${styles.rail} ${frozen ? styles.railFrozen : ""}`} aria-hidden="true">
       <div className={styles.marks}>
-        {items.map((item) => {
-          const mark = (
+        {turnIds.map((turnId) => (
+          // One wrapper shape in both states. Swapping Tooltip for a plain span
+          // while frozen remounted every mark's subtree at both ends of every
+          // turn — hundreds of mount/unmount cycles on the exact frames the
+          // stream starts and finishes.
+          <Tooltip
+            key={turnId}
+            placement="left"
+            gapPx={12}
+            content={<PreviewTile turnId={turnId} resolve={getPreview} />}
+          >
             <button
               type="button"
               // Never in the tab order: a focusable control inside an
               // aria-hidden subtree is a trap — reachable by keyboard, yet
               // invisible to the screen reader that should announce it.
               tabIndex={-1}
-              data-mark-id={item.id}
-              className={`${styles.mark} ${styles[item.height]} ${item.id === activeId ? styles.markActive : ""}`}
-              onClick={() => onJump(item.id)}
+              // The button is the whole row, not just the bar it draws: the rail
+              // must have no gaps the pointer can fall into between two marks,
+              // so hover and click share one contiguous target and the visible
+              // bar is a pseudo-element inside it.
+              //
+              // Disabled while a turn is live, belt and braces with the rail's
+              // `pointer-events: none`. This one is the invariant that matters —
+              // no jump may reach the conversation while useChatAutoScroll owns
+              // its scroll position — so it does not rest on a stylesheet.
+              disabled={frozen}
+              data-mark-id={turnId}
+              className={`${styles.mark} ${turnId === activeId ? styles.markActive : ""}`}
+              onClick={() => onJump(turnId)}
             />
-          );
-          // Frozen: no tooltip is mounted at all, so no extract is computed for
-          // a turn the reader cannot reach anyway.
-          return frozen ? (
-            <span key={item.id} className={styles.markSlot}>
-              {mark}
-            </span>
-          ) : (
-            <Tooltip
-              key={item.id}
-              placement="left"
-              gapPx={12}
-              content={<PreviewTile turnId={item.id} resolve={getPreview} />}
-            >
-              {mark}
-            </Tooltip>
-          );
-        })}
+          </Tooltip>
+        ))}
       </div>
     </div>
   );

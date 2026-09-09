@@ -19,60 +19,33 @@
 
 import type { ThreadMessage } from "@rework/types/thread";
 
-export type OutlineMarkHeight = "short" | "medium" | "tall";
-
-export interface OutlineItem {
-  /** The user message's id, which is also its `data-turn-id` anchor. */
-  id: string;
-  height: OutlineMarkHeight;
-}
-
 export interface OutlinePreview {
   request: string;
   answer: string;
 }
 
-/** Answer length, in characters, above which a mark takes the next height up.
- *  Absolute rather than per-conversation quantiles: a mark that changed height
- *  as later turns arrived would break the spatial memory the rail exists to
- *  serve. Full rationale: `CONVERSATION-OUTLINE-RAIL-RFC.md` §2.3. */
-const MEDIUM_ANSWER_CHARS = 400;
-const TALL_ANSWER_CHARS = 1500;
-
 /** Sentence detection reads this many characters, never the whole answer — an
  *  answer can be tens of kilobytes, and the tile shows two sentences. */
 const PREVIEW_SCAN_CHARS = 500;
 
-function heightFor(answer: string): OutlineMarkHeight {
-  if (answer.length > TALL_ANSWER_CHARS) return "tall";
-  if (answer.length > MEDIUM_ANSWER_CHARS) return "medium";
-  return "short";
-}
-
 /**
- * One mark per user-opened exchange, in thread order.
+ * One mark per user-opened exchange, in thread order — the turn ids, which are
+ * also the `data-turn-id` anchors in the thread.
+ *
+ * Every mark is the same size: the rail says where the turns are, and nothing
+ * about them. Encoding the answer's length in a mark's height was tried and
+ * dropped — it made the rail a second thing to read rather than a place to aim.
  *
  * HITL rows are skipped rather than given marks of their own: `hitl_response`
  * renders through `UserTurn` but is a reply to the agent, not a turn the reader
  * would navigate back to.
  */
-export function toOutlineItems(messages: ThreadMessage[]): OutlineItem[] {
-  const items: OutlineItem[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    if (messages[i].role !== "user") continue;
-    // The answer is the first assistant row before the next user row; a turn
-    // still without one (interrupted, or history that never got a reply) reads
-    // as short, which is honest — there is nothing to come back and read.
-    let answer = "";
-    for (let j = i + 1; j < messages.length && messages[j].role !== "user"; j++) {
-      if (messages[j].role === "assistant") {
-        answer = messages[j].text;
-        break;
-      }
-    }
-    items.push({ id: messages[i].id, height: heightFor(answer) });
+export function toTurnIds(messages: ThreadMessage[]): string[] {
+  const ids: string[] = [];
+  for (const message of messages) {
+    if (message.role === "user") ids.push(message.id);
   }
-  return items;
+  return ids;
 }
 
 /**
@@ -86,8 +59,8 @@ export function toOutlineItems(messages: ThreadMessage[]): OutlineItem[] {
  * switch between two conversations of equal length would leave the previous
  * one's marks on screen.
  */
-export function sameOutline(a: OutlineItem[], b: OutlineItem[]): boolean {
-  return a.length === b.length && a.every((item, i) => item.id === b[i].id && item.height === b[i].height);
+export function sameTurnIds(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
 }
 
 /**

@@ -1,12 +1,19 @@
-/* Outline rail — one mark per turn, along the conversation's left edge.
-   Marks are outside the squircle scope, so they take a plain radius token. */
+/* Outline rail — one mark per turn, along the conversation's left edge. */
 
-/* Sized to its marks and centred, never a full-height overlay. The rail is a
+/* Anchored to the message lane's left edge, not the column's. The lane is
+   centred and capped at --composer-max-width, so this keeps the rail in the
+   gutter beside the text instead of on top of it: positioned from the column
+   edge, a column barely wider than the lane — one with a side panel open — put
+   the rail over the first characters of every line, swallowing clicks and text
+   selection there. Where the gutter is narrower than the rail, the rail is
+   clipped by the column rather than covering the conversation. Narrow viewports
+   deserve a real answer; that is deferred, and this is the safe default.
+
+   Sized to its marks and centred, never a full-height overlay: the rail is a
    SIBLING of the scroll container, so a wheel gesture over it has no scrollable
-   ancestor to chain to and the conversation would simply not move — the dead
-   left gutter reported before. Hugging the marks keeps that surface to the few
-   pixels the reader is deliberately pointing at, where scrolling the rail is
-   the sensible reading of the gesture anyway.
+   ancestor to chain to and the conversation would simply not move. Hugging the
+   marks keeps that surface to the few pixels the reader is deliberately
+   pointing at, where scrolling the rail is the sensible reading of the gesture.
 
    Capped at the available height, at which point it scrolls itself: newest
    turns stay reachable at the bottom and older ones leave through the top, the
@@ -16,7 +23,7 @@
   display: flex;
   position: absolute;
   top: 50%;
-  left: var(--spacing-m);
+  right: calc(50% + var(--composer-max-width) / 2 + var(--spacing-xs));
   flex-direction: column;
   transform: translateY(-50%);
   /* Widest a magnified mark gets, so magnifying never reflows anything. */
@@ -34,12 +41,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
 }
 
-/* Each mark is wrapped — by Tooltip when interactive, by .markSlot when frozen.
-   The magnification rules below key off these wrappers, so they must stay a
-   uniform, styling-free row. */
+/* Each mark is wrapped by its Tooltip. The magnification rules below key off
+   these wrappers, so they must stay a uniform, styling-free row. */
 .marks > * {
   display: flex;
   flex-shrink: 0;
@@ -47,37 +52,36 @@
   width: 100%;
 }
 
-.markSlot {
+/* The row IS the target. There is no gap between marks and no padding around
+   the list: anywhere the pointer lands on the rail, it is on exactly one mark.
+   A gap between rows would leave slivers where the tile closes and the
+   magnification collapses as the pointer travels down the rail. */
+.mark {
   display: flex;
+  flex-shrink: 0;
   justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  width: 100%;
+  height: 16px;
 }
 
-.mark {
-  flex-shrink: 0;
+/* The visible bar, drawn inside the much larger target above. Marks are outside
+   the squircle scope, so a plain radius token. */
+.mark::before {
+  display: block;
   transition:
     width var(--duration-short-3) var(--easing-emphasized),
     height var(--duration-short-3) var(--easing-emphasized),
     background-color var(--duration-short-3) var(--easing-standard);
-  cursor: pointer;
-  border: none;
   border-radius: var(--radius-full);
   background: var(--outline-variant);
-  padding: 0;
   width: var(--mark-w, 14px);
-  height: calc(var(--mark-h) + var(--mark-grow, 0px));
-}
-
-/* Height buckets — driven by the agent answer's length (outlineItems.ts). */
-.short {
-  --mark-h: 3px;
-}
-
-.medium {
-  --mark-h: 6px;
-}
-
-.tall {
-  --mark-h: 10px;
+  height: var(--mark-h, 4px);
+  content: "";
 }
 
 /* ── Magnification ──────────────────────────────────────────────────────────
@@ -89,31 +93,31 @@
    Forward neighbours use sibling combinators; backward ones need `:has()`,
    CSS having no previous-sibling combinator. Both are already used elsewhere
    in this codebase. */
-.marks > *:hover .mark {
+.marks > *:hover .mark::before {
   --mark-w: 32px;
-  --mark-grow: 3px;
+  --mark-h: 7px;
 }
 
-.marks > *:hover + * .mark,
-.marks > *:has(+ *:hover) .mark {
+.marks > *:hover + * .mark::before,
+.marks > *:has(+ *:hover) .mark::before {
   --mark-w: 24px;
-  --mark-grow: 2px;
+  --mark-h: 6px;
 }
 
-.marks > *:hover + * + * .mark,
-.marks > *:has(+ * + *:hover) .mark {
+.marks > *:hover + * + * .mark::before,
+.marks > *:has(+ * + *:hover) .mark::before {
   --mark-w: 18px;
-  --mark-grow: 1px;
+  --mark-h: 5px;
 }
 
 /* ── Colour ─────────────────────────────────────────────────────────────────
    Equal specificity to the hover rule, declared after it, so the turn being
    read keeps its indicator colour even under the pointer. */
-.mark:hover {
+.mark:hover::before {
   background: var(--on-surface);
 }
 
-.mark.markActive {
+.mark.markActive::before {
   background: var(--primary);
 }
 

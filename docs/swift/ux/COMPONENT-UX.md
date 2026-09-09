@@ -4390,6 +4390,17 @@ magnifies it and its two neighbours each side and opens a preview tile to its
 left — the question's first sentence over the answer's first two. Clicking one
 jumps to that turn.
 
+**Every mark is the same size.** Encoding the answer's length in a mark's
+height was built and then dropped: it turned the rail into a second thing to
+read rather than a place to aim. The rail says where the turns are, and nothing
+about them.
+
+**The rail has no gaps.** Each mark's button is a full-width row with no gap
+between rows and no padding around the list, and the visible bar is a
+pseudo-element inside it. Anywhere the pointer lands on the rail it is on
+exactly one mark — otherwise travelling down the rail crosses slivers where the
+tile closes and the magnification collapses.
+
 **The rail is inert while a turn is live** (`isStreaming || pendingHitl`):
 visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
 what makes the whole feature safe. `useChatAutoScroll` re-decides the
@@ -4400,20 +4411,23 @@ can only be clicked when it is quiescent never overlaps it: the single-owner
 invariant holds by construction rather than by timing. `useChatAutoScroll`'s
 ownership comment states the refined rule.
 
-**Mark height encodes the answer's length**, in three buckets on absolute
-thresholds (400 / 1500 characters). Not tokens: a ReAct turn re-sends the whole
-context per call, so `tokenUsage` grows with the session's age rather than the
-turn's substance. Not per-conversation quantiles either: a mark that changed
-height as later turns arrived would destroy the spatial memory the rail exists
-to serve.
+**The active mark** (`--primary`) follows two rules, and the second is not a
+special case — it is the common one. *At the bottom of the conversation, the
+last turn is active*: a short final turn never climbs to any reading line,
+because there is not enough content below it to push it there, so without this
+the rail points at the previous turn while the reader sits on the newest one.
+Otherwise, *the last turn whose question has passed a line 35% down the
+viewport* — not the topmost anchor still on screen, since the anchors sit on the
+user message and partway through a long answer none is visible at all.
 
-**The active mark** (`--primary`) is the last turn whose anchor passed the
-container's top edge, not the topmost anchor still on screen — the anchors sit
-on the user message, so partway through a long answer none is visible and the
-naive rule would blank the mark on exactly the conversations the rail is for.
-The `IntersectionObserver`'s threshold is chosen so it fires at the boundary
-being measured; an observer that fires elsewhere only refreshes the answer by
-accident.
+This is driven by a scroll listener, not an `IntersectionObserver`. An observer
+only fires when something crosses a boundary, and the first rule turns on the
+scroll position: no anchor crosses anything over the last stretch to the bottom,
+so an observer stays silent through precisely the case that has to be right. The
+cost is paid off instead by binary search — anchors are in document order, so
+their positions are monotonic and the line is found in about eight measurements
+for a two-hundred-turn conversation — and by not measuring at all while a turn
+is live, which is when the autoscroll is writing every frame.
 
 **Streaming costs the rail nothing.** The message list is replaced on every
 token, so: the fold's result is handed back by identity when it describes the
@@ -4429,9 +4443,9 @@ at. Once the marks outgrow the available height the rail scrolls itself, and
 follows the active mark.
 
 **`aria-hidden`, and the marks are out of the tab order.** Keyboard access is a
-V1 omission (RFC §6): with no labels or tab order, a screen reader would
-announce a row of silent marks, and a focusable control inside an aria-hidden
-subtree is a trap. The conversation itself stays fully readable in the thread.
+V1 omission, and the RFC says what taking it on would involve: with no labels or
+tab order a screen reader would announce a row of silent marks, and a focusable
+control inside an aria-hidden subtree is a trap. The conversation itself stays fully readable in the thread.
 
 ### `Tooltip` — `gapPx`
 

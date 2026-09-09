@@ -16,47 +16,59 @@
 // mark.
 
 import { useEffect, useState, type RefObject } from "react";
+import { isNearBottom } from "./useChatAutoScroll";
 
-/**
- * Fired when an anchor becomes, or stops being, wholly inside the container —
- * the `1` is what matters. The measurement below is "this turn's question has
- * reached the container's top edge", and an observer must actually fire at the
- * boundary being measured or the answer only refreshes by accident, whenever
- * some other anchor happens to cross an edge. `0` alone fires when an anchor
- * has fully left, which is a different line and up to one anchor-height late.
- */
-const CROSSING_THRESHOLDS = [0, 1];
+/** Where down the viewport a turn counts as the one being read. A turn becomes
+ *  active once its question has climbed past this line, not when it merely
+ *  peeks in from the bottom. */
+const ACTIVE_LINE_RATIO = 0.35;
 
 /**
  * The id of the turn the reader is currently in, or null.
  *
- * The active turn is the LAST anchor to have passed the container's top edge —
- * not the topmost anchor still on screen. The anchors sit on the user message
- * that opens each turn, so while the reader is partway through a long answer
- * there is no anchor on screen at all; "topmost visible" would blank the active
- * mark for exactly the turns the rail is most useful on.
+ * Two rules, and the second is not a special case — it is the common one:
  *
- * The observer is a trigger, not the measurement: it says an anchor crossed,
- * and the answer is then recomputed from the anchors' positions. Scrolling
- * between two distant anchors fires nothing, and correctly changes nothing. A
- * scroll handler would instead run on every one of the per-frame scroll writes
- * `useChatAutoScroll` makes while a turn streams.
+ * 1. **At the bottom, the last turn is active.** A short final turn never
+ *    climbs past the reading line however far the reader scrolls: there simply
+ *    isn't enough content below it to push it up there. Without this the rail
+ *    would keep pointing at the previous turn while the reader sits on the
+ *    newest one, which is where a conversation is read most of the time.
+ * 2. Otherwise, the last turn whose question has passed the reading line. Not
+ *    "the topmost anchor still on screen": the anchors sit on the user message
+ *    that opens each turn, so partway through a long answer none is visible at
+ *    all, and that rule would blank the mark on exactly the conversations the
+ *    rail exists for.
  *
- * `sessionId` is in the subscription key, not decoration: two conversations can
- * hold the same number of turns, and re-keying on the count alone would leave
- * the observer watching the previous session's detached nodes. The autoscroll
- * guards the same case the same way.
+ * Driven by scroll rather than an IntersectionObserver. An observer only fires
+ * when an element crosses a boundary, and rule 1 turns on the *scroll position*
+ * — no anchor crosses anything over the last stretch to the bottom, so the
+ * observer stays silent through precisely the case this has to get right.
+ * A size observer covers what scrolling cannot: a side panel opening, a window
+ * resize or a late-rendering diagram moves every anchor without a scroll event,
+ * and the mark would otherwise stay wrong until the reader happened to scroll.
+ *
+ * `turnIds` must be identity-stable across renders (see ManagedChatPage) — it
+ * is the subscription key, and it is the RIGHT key precisely because it is
+ * derived from the messages: session id changes a render before the messages
+ * do, so re-keying on that would resolve against the previous conversation and
+ * then never correct itself.
+ *
+ * The cost that made an observer attractive is paid off differently: anchors
+ * are in document order, so their positions are monotonic and the line is found
+ * by binary search — around eight measurements for a two-hundred-turn
+ * conversation, not two hundred. And nothing runs while a turn is live, which
+ * is when `useChatAutoScroll` is writing the scroll position every frame.
  */
 export function useOutlineScrollSpy(
   containerRef: RefObject<HTMLElement | null>,
-  sessionId: string | null | undefined,
-  turnCount: number,
+  turnIds: string[],
+  live: boolean,
 ): string | null {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     const root = containerRef.current;
-    if (!root || turnCount === 0 || typeof IntersectionObserver === "undefined") {
+    if (!root || turnIds.length === 0) {
       setActiveId(null);
       return;
     }
@@ -67,22 +79,56 @@ export function useOutlineScrollSpy(
         setActiveId(null);
         return;
       }
-      const line = root.getBoundingClientRect().top;
-      let active: string | null = null;
-      for (const anchor of anchors) {
-        if (anchor.getBoundingClientRect().top > line) break;
-        active = anchor.dataset.turnId ?? active;
+      if (isNearBottom(root.scrollTop, root.scrollHeight, root.clientHeight)) {
+        setActiveId(anchors[anchors.length - 1].dataset.turnId ?? null);
+        return;
+      }
+
+      const line = root.getBoundingClientRect().top + root.clientHeight * ACTIVE_LINE_RATIO;
+      let low = 0;
+      let high = anchors.length - 1;
+      let found = -1;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (anchors[mid].getBoundingClientRect().top <= line) {
+          found = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
       }
       // Above the first turn: it is still the one being read into.
-      setActiveId(active ?? anchors[0].dataset.turnId ?? null);
+      const active = anchors[found === -1 ? 0 : found];
+      setActiveId(active.dataset.turnId ?? null);
     };
 
-    const observer = new IntersectionObserver(resolve, { root, threshold: CROSSING_THRESHOLDS });
-    for (const anchor of root.querySelectorAll("[data-turn-id]")) observer.observe(anchor);
     resolve();
+    if (live) return;
 
-    return () => observer.disconnect();
-  }, [containerRef, sessionId, turnCount]);
+    // Coalesced to one measurement per frame: a scroll event can fire more
+    // often than the screen repaints, and re-measuring in between is work
+    // nobody sees.
+    let frame: number | null = null;
+    const onScroll = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        resolve();
+      });
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
+
+    // The container's own box and the content inside it both move the anchors.
+    const sizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onScroll);
+    sizes?.observe(root);
+    if (root.firstElementChild) sizes?.observe(root.firstElementChild);
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      root.removeEventListener("scroll", onScroll);
+      sizes?.disconnect();
+    };
+  }, [containerRef, turnIds, live]);
 
   return activeId;
 }

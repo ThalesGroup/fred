@@ -14,92 +14,56 @@
 
 import { describe, expect, it } from "vitest";
 import type { ThreadMessage } from "@rework/types/thread";
-import { firstSentences, sameOutline, toOutlineItems, toOutlinePreview } from "./outlineItems";
+import { firstSentences, sameTurnIds, toOutlinePreview, toTurnIds } from "./outlineItems";
 
 function msg(id: string, role: ThreadMessage["role"], text: string): ThreadMessage {
   return { id, role, text, isStreaming: false, traceMessages: [], sources: [], uiParts: [] };
 }
 
-const chars = (n: number) => "x".repeat(n);
-
-describe("toOutlineItems", () => {
-  it("emits one item per user turn, in thread order", () => {
-    const items = toOutlineItems([
-      msg("u1", "user", "first"),
-      msg("a1", "assistant", "answer"),
-      msg("u2", "user", "second"),
-      msg("a2", "assistant", "answer"),
-    ]);
-    expect(items.map((i) => i.id)).toEqual(["u1", "u2"]);
+describe("toTurnIds", () => {
+  it("emits one id per user turn, in thread order", () => {
+    expect(
+      toTurnIds([
+        msg("u1", "user", "first"),
+        msg("a1", "assistant", "answer"),
+        msg("u2", "user", "second"),
+        msg("a2", "assistant", "answer"),
+      ]),
+    ).toEqual(["u1", "u2"]);
   });
 
-  it("buckets height on the answer length, at the exact thresholds", () => {
-    const heightFor = (answerLength: number) =>
-      toOutlineItems([msg("u", "user", "q"), msg("a", "assistant", chars(answerLength))])[0].height;
-
-    // Thresholds are exclusive: a turn sitting exactly on one stays in the
-    // lower bucket. Pinned because these boundaries are the whole signal.
-    expect(heightFor(400)).toBe("short");
-    expect(heightFor(401)).toBe("medium");
-    expect(heightFor(1500)).toBe("medium");
-    expect(heightFor(1501)).toBe("tall");
-  });
-
-  it("reads a turn with no answer yet as short", () => {
-    expect(toOutlineItems([msg("u", "user", "q")])[0].height).toBe("short");
-  });
-
-  it("takes the answer belonging to the turn, not a later one", () => {
-    const items = toOutlineItems([msg("u1", "user", "q"), msg("u2", "user", "q"), msg("a2", "assistant", chars(2000))]);
-    // u1 was never answered — u2's long answer must not leak up to it.
-    expect(items.map((i) => i.height)).toEqual(["short", "tall"]);
+  it("emits a turn that has no answer yet", () => {
+    // Every mark is the same size, so a turn still being answered is no
+    // different from any other — it just has nothing to preview.
+    expect(toTurnIds([msg("u", "user", "q")])).toEqual(["u"]);
   });
 
   it("gives HITL rows no marks of their own", () => {
-    const items = toOutlineItems([
-      msg("u1", "user", "q"),
-      msg("h1", "hitl_request", "may I?"),
-      msg("h2", "hitl_response", "proceed"),
-      msg("a1", "assistant", "done"),
-    ]);
-    expect(items.map((i) => i.id)).toEqual(["u1"]);
-  });
-
-  it("looks past a HITL exchange to find the turn's answer", () => {
-    const items = toOutlineItems([
-      msg("u1", "user", "q"),
-      msg("h1", "hitl_request", "may I?"),
-      msg("h2", "hitl_response", "proceed"),
-      msg("a1", "assistant", chars(2000)),
-    ]);
-    expect(items[0].height).toBe("tall");
+    expect(
+      toTurnIds([
+        msg("u1", "user", "q"),
+        msg("h1", "hitl_request", "may I?"),
+        msg("h2", "hitl_response", "proceed"),
+        msg("a1", "assistant", "done"),
+      ]),
+    ).toEqual(["u1"]);
   });
 });
 
-describe("sameOutline", () => {
+describe("sameTurnIds", () => {
   // Identity of the fold's result is what keeps the rail's memo alive while a
-  // turn streams, so equality has to notice everything a mark renders — and
-  // nothing else.
-  const base = [
-    { id: "u1", height: "short" as const },
-    { id: "u2", height: "tall" as const },
-  ];
-
-  it("treats an identical fold as unchanged", () => {
-    expect(sameOutline(base, [...base.map((i) => ({ ...i }))])).toBe(true);
-  });
-
-  it("notices a turn whose answer grew into the next height", () => {
-    expect(sameOutline(base, [base[0], { id: "u2", height: "medium" }])).toBe(false);
+  // turn streams, so equality has to notice every change the rail renders.
+  it("treats the same turns as unchanged", () => {
+    expect(sameTurnIds(["u1", "u2"], ["u1", "u2"])).toBe(true);
   });
 
   it("notices a new turn", () => {
-    expect(sameOutline(base, [...base, { id: "u3", height: "short" }])).toBe(false);
+    expect(sameTurnIds(["u1", "u2"], ["u1", "u2", "u3"])).toBe(false);
   });
 
   it("notices a different conversation of the same length", () => {
     // The staleness a session-plus-count cache key could not see.
-    expect(sameOutline(base, [{ id: "x1", height: "short" }, base[1]])).toBe(false);
+    expect(sameTurnIds(["u1", "u2"], ["x1", "u2"])).toBe(false);
   });
 });
 
@@ -141,7 +105,7 @@ describe("firstSentences", () => {
 
   it("reads a bounded slice however long the answer is", () => {
     // The whole point of the bound: cost must not scale with the answer.
-    const huge = `${chars(400)}. ${"tail. ".repeat(20000)}`;
+    const huge = `${"x".repeat(400)}. ${"tail. ".repeat(20000)}`;
     expect(firstSentences(huge, 2).length).toBeLessThanOrEqual(500);
   });
 

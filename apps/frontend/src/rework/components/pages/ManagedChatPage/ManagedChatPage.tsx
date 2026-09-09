@@ -18,8 +18,7 @@ import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
-import { sameOutline, toOutlineItems, toOutlinePreview } from "@shared/molecules/ConversationOutlineRail/outlineItems";
-import type { OutlineItem } from "@shared/molecules/ConversationOutlineRail/outlineItems";
+import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
@@ -206,14 +205,14 @@ export default function ManagedChatPage() {
   // since `sessionId` changes a render before the messages do — switching
   // between two cached conversations of equal length would leave the previous
   // one's marks on screen. The fold itself is a linear scan over small objects.
-  const outlineItemsRef = useRef<OutlineItem[]>([]);
-  const outlineItems = useMemo(() => {
-    const next = toOutlineItems(chat.threadMessages);
-    if (sameOutline(outlineItemsRef.current, next)) return outlineItemsRef.current;
-    outlineItemsRef.current = next;
+  const outlineTurnIdsRef = useRef<string[]>([]);
+  const outlineTurnIds = useMemo(() => {
+    const next = toTurnIds(chat.threadMessages);
+    if (sameTurnIds(outlineTurnIdsRef.current, next)) return outlineTurnIdsRef.current;
+    outlineTurnIdsRef.current = next;
     return next;
   }, [chat.threadMessages]);
-  const activeTurnId = useOutlineScrollSpy(scrollContainerRef, chat.sessionId, outlineItems.length);
+  const activeTurnId = useOutlineScrollSpy(scrollContainerRef, outlineTurnIds, outlineFrozen);
   const jumpToTurn = useConversationJump(scrollContainerRef, outlineFrozen);
   // Reads the message list only when a mark is actually hovered — see
   // ConversationOutlineRail's PreviewTile. Through a ref, so this callback keeps
@@ -588,7 +587,7 @@ export default function ManagedChatPage() {
                   </div>
                   {!isInitialState && (
                     <ConversationOutlineRail
-                      items={outlineItems}
+                      turnIds={outlineTurnIds}
                       activeId={activeTurnId}
                       frozen={outlineFrozen}
                       onJump={jumpToTurn}
