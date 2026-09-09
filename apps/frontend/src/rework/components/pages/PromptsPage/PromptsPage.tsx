@@ -16,8 +16,8 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
@@ -504,12 +504,11 @@ export default function PromptsPage() {
               onChange={(categoryId) => setForm((f) => ({ ...f, category_id: categoryId }))}
             />
 
-            <TextArea
+            <PromptEditor
               label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
-              rows={8}
-              onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
+              onChange={(text) => setForm((f) => ({ ...f, text }))}
             />
           </div>
 

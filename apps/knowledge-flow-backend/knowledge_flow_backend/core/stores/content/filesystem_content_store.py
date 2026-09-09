@@ -19,6 +19,7 @@ import logging
 import mimetypes
 import os
 import shutil
+import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, List, Optional, cast  # Added 'cast' here
@@ -111,11 +112,8 @@ class FileSystemContentStore(BaseContentStore):
 
         return open(files[0], "rb")
 
-    def get_preview_bytes(self, doc_path: str) -> bytes:
-        """
-        Returns the content of the `output/output.md` or `output/table.csv` file as bytes.
-        Raises FileNotFoundError if neither file exists.
-        """
+    def get_output_artifact(self, doc_path: str) -> bytes:
+        """Return one derived artifact under the document tree; FileNotFoundError if absent."""
         document_path = self.document_root / doc_path
         if document_path.exists():
             try:
@@ -124,7 +122,40 @@ class FileSystemContentStore(BaseContentStore):
                 logger.error(f"Error reading document file for {document_path}: {e}")
                 raise
 
-        raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {doc_path}")
+        raise FileNotFoundError(f"Derived artifact not found: {doc_path}")
+
+    def put_output_artifact(self, doc_path: str, data: bytes, *, content_type: str) -> None:
+        document_path = self._safe_under(self.document_root, self.document_root / doc_path)
+        document_path.parent.mkdir(parents=True, exist_ok=True)
+        document_path.write_bytes(data)
+        logger.info(f"[CONTENT] Wrote derived artifact path={doc_path} bytes={len(data)}")
+
+    def delete_output_artifact(self, doc_path: str) -> None:
+        document_path = self._safe_under(self.document_root, self.document_root / doc_path)
+        document_path.unlink(missing_ok=True)
+        logger.info(f"[CONTENT] Deleted derived artifact path={doc_path}")
+
+    def list_output_artifacts(self, artifact_name: str) -> List[StoredObjectInfo]:
+        items: List[StoredObjectInfo] = []
+        for path in sorted(self.document_root.glob(f"*/output/{artifact_name}")):
+            try:
+                st = path.stat()
+            except FileNotFoundError:
+                continue  # deleted between glob and stat
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            document_uid = path.parent.parent.name
+            items.append(
+                StoredObjectInfo(
+                    key=f"{document_uid}/output/{artifact_name}",
+                    size=st.st_size,
+                    file_name=path.name,
+                    content_type=mimetypes.guess_type(path.name)[0],
+                    modified=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
+                    document_uid=document_uid,
+                )
+            )
+        return items
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         """

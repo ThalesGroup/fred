@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.conversion.pptx_pdf import (
-    DEFAULT_PPTX_PDF_TIMEOUT_SECONDS,
-    convert_pptx_bytes_to_pdf,
-    convert_pptx_file_to_pdf,
+from fred_core.conversion.office_pdf import (
+    DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    convert_office_bytes_to_pdf,
+    convert_office_file_to_pdf,
 )
 
 __all__ = [
-    "DEFAULT_PPTX_PDF_TIMEOUT_SECONDS",
-    "convert_pptx_bytes_to_pdf",
-    "convert_pptx_file_to_pdf",
+    "DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS",
+    "convert_office_bytes_to_pdf",
+    "convert_office_file_to_pdf",
 ]

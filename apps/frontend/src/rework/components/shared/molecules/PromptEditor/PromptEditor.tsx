@@ -1,0 +1,237 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// PromptEditor — the editing surface for anything an LLM reads as a prompt.
+//
+// CodeMirror in markdown mode, which also colours inline HTML/XML tags, so the
+// same editor serves markdown prompts and tag-structured ones (Mistral). Plain
+// text in, plain text out: no AST round-trip, so what the author typed is what
+// the model receives, byte for byte. Chrome mirrors the TextArea atom so it does
+// not look foreign next to the other fields of a form.
+
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
+import { EditorView, keymap, placeholder as placeholderExtension } from "@codemirror/view";
+import { styleTags, tags } from "@lezer/highlight";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import styles from "./PromptEditor.module.css";
+
+export interface PromptEditorProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  required?: boolean;
+  error?: string;
+  /** Visible height in lines before the editor scrolls. */
+  rows?: number;
+}
+
+/** Height a prompt field gets unless a caller asks for more. */
+export const PROMPT_EDITOR_ROWS = 15;
+
+// `editable` alone only takes the surface out of the tab order and off
+// contenteditable: CodeMirror's drop handler gates on `readOnly`, so without it
+// text dropped on a disabled field still edits the document and reports a
+// change the form believes it has locked.
+const editStateFor = (disabled: boolean) => [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
+
+// Both list markers — a bullet's dash and an ordered item's number — are the
+// same `ListMark` node, and re-tagging it non-contextually is enough to give
+// them a colour of their own while `#`, `>`, `*` and backticks keep the muted
+// marker one. (A contextual selector would not work here: it cannot override
+// the parser's own rule for a node. Only the whole-node form does.)
+const listMarkerTag = {
+  props: [styleTags({ ListMark: tags.number })],
+};
+
+// Marks a document change this component made to adopt an incoming `value`, so
+// it is not echoed back to the parent as if the user had typed it.
+const externalSync = Annotation.define<boolean>();
+
+// Tags map to class names rather than colours: the palette then lives in the
+// stylesheet, on semantic tokens, and follows the theme with no JS branch.
+const promptHighlighting = HighlightStyle.define([
+  { tag: tags.heading, class: styles.heading },
+  { tag: tags.strong, class: styles.strong },
+  { tag: tags.emphasis, class: styles.emphasis },
+  { tag: tags.link, class: styles.link },
+  { tag: tags.url, class: styles.link },
+  { tag: tags.monospace, class: styles.code },
+  { tag: tags.quote, class: styles.quote },
+  { tag: [tags.tagName, tags.angleBracket], class: styles.tag },
+  { tag: tags.attributeName, class: styles.attribute },
+  { tag: [tags.attributeValue, tags.string], class: styles.value },
+  // Marks only. `tags.list` is deliberately absent: lezer applies it to the
+  // whole list subtree, so styling it would tint every line of a bullet list
+  // differently from a paragraph. Untagged text inherits `.cm-content`.
+  { tag: tags.processingInstruction, class: styles.marker },
+  { tag: tags.number, class: styles.listMarker },
+  { tag: tags.comment, class: styles.comment },
+]);
+
+export function PromptEditor({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  required = false,
+  error,
+  rows = PROMPT_EDITOR_ROWS,
+}: PromptEditorProps) {
+  const { t } = useTranslation();
+  const { showSuccess, showError } = useToast();
+  const labelId = useId();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const editableRef = useRef(new Compartment());
+  const placeholderRef = useRef(new Compartment());
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => clearTimeout(copiedTimer.current ?? undefined), []);
+
+  // The listener reads the current onChange through a ref: rebuilding the
+  // editor on every render would drop the selection on each keystroke.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          markdown({ extensions: [listMarkerTag] }),
+          EditorView.lineWrapping,
+          syntaxHighlighting(promptHighlighting),
+          placeholderRef.current.of(placeholder ? placeholderExtension(placeholder) : []),
+          // The editing surface is a contenteditable, not a form control, so a
+          // `<label for>` would not reach it — name it explicitly instead.
+          // CodeMirror defaults .cm-content to spellcheck="false"; a prompt is
+          // prose and used to get the browser's checker from the textarea it
+          // replaced. Autocorrect and autocapitalize stay off — they rewrite
+          // text, and a prompt's XML tags must survive verbatim.
+          EditorView.contentAttributes.of({ "aria-labelledby": labelId, spellcheck: "true" }),
+          editableRef.current.of(editStateFor(false)),
+          EditorView.updateListener.of((update) => {
+            if (!update.docChanged) return;
+            if (update.transactions.some((tr) => tr.annotation(externalSync))) return;
+            onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
+      parent: host,
+    });
+    viewRef.current = view;
+
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+    // Mount once. Everything that can change afterwards — the document, the
+    // placeholder, the editable flag — is reconfigured by the effects below,
+    // so that typing never rebuilds the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Adopt a value set from outside (picking a prompt from the library, loading
+  // an agent). Comparing against the live document first is what keeps the
+  // caret in place while the user types — the round-trip through the parent's
+  // state would otherwise replace the document on every keystroke.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const current = view.state.doc.toString();
+    if (current === value) return;
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: value },
+      // Kept out of the undo stack: a caller seeding the field after mount is
+      // not an edit, and undoing past it would empty the document and report
+      // that erasure as the user's own.
+      annotations: [externalSync.of(true), Transaction.addToHistory.of(false)],
+    });
+  }, [value]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: editableRef.current.reconfigure(editStateFor(disabled)),
+    });
+  }, [disabled]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: placeholderRef.current.reconfigure(placeholder ? placeholderExtension(placeholder) : []),
+    });
+  }, [placeholder]);
+
+  // Copies the document, not the `value` prop: the two are the same except in
+  // the tick between a keystroke and the parent re-rendering with it.
+  const handleCopy = async () => {
+    const text = viewRef.current?.state.doc.toString() ?? value;
+    const ok = await writeRichClipboard("", text);
+    if (!ok) {
+      showError({ summary: t("rework.promptEditor.copyFailed") });
+      return;
+    }
+    showSuccess({ summary: t("rework.promptEditor.copied") });
+    setCopied(true);
+    clearTimeout(copiedTimer.current ?? undefined);
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={`${styles.editor} ${disabled ? styles.disabled : ""} ${!disabled && error ? styles.error : ""}`}>
+      <span className={styles.label} id={labelId}>
+        {required ? `${label} *` : label}
+      </span>
+
+      <div className={styles.field}>
+        <div ref={hostRef} className={styles.host} style={{ "--prompt-editor-rows": rows } as CSSProperties} />
+
+        {/* Nothing to copy from an empty field, so the control stays out of the
+            way until there is a prompt. */}
+        {value.trim() !== "" && (
+          <div className={styles.copyButton}>
+            <IconButton
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
+              aria-label={t("rework.promptEditor.copy")}
+              onClick={handleCopy}
+            />
+          </div>
+        )}
+      </div>
+
+      {error && <span className={styles.information}>{error}</span>}
+    </div>
+  );
+}

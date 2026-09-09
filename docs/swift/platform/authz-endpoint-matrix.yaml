@@ -1218,6 +1218,11 @@ operations:
     required_permission: pending_review
   - service: knowledge-flow
     method: GET
+    path: /knowledge-flow/v1/raw_content/pdf/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
     path: /knowledge-flow/v1/raw_content/stream/{document_uid}
     review_status: pending_review
     required_permission: pending_review

@@ -3173,6 +3173,11 @@
         "reviewConflict": "This page has changed since you looked at it. Reload it and check the new version before validating.",
         "restore": "Could not restore this version"
       }
+    },
+    "promptEditor": {
+      "copy": "Copy the prompt",
+      "copied": "Prompt copied to the clipboard",
+      "copyFailed": "Could not copy the prompt"
     }
   },
   "runtime": {

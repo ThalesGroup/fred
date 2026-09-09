@@ -3173,6 +3173,11 @@
         "reviewConflict": "Cette page a changé depuis que vous l'avez consultée. Rechargez-la et relisez la nouvelle version avant de valider.",
         "restore": "Impossible de restaurer cette version"
       }
+    },
+    "promptEditor": {
+      "copy": "Copier le prompt",
+      "copied": "Prompt copié dans le presse-papier",
+      "copyFailed": "Impossible de copier le prompt"
     }
   },
   "runtime": {
