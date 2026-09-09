@@ -55,7 +55,7 @@ class TeamWikiPageRow(Base):
     __tablename__ = "team_wiki_pages"
     __table_args__ = (
         UniqueConstraint("team_id", "slug", name="uq_team_wiki_pages_team_slug"),
-        # Raw SQL in migration e4a71b9c6d38 creates the real index; this is its
+        # Raw SQL in migration b7d4c1a9e802 creates the real index; this is its
         # metadata twin, PostgreSQL-only via `ddl_if` — without it, `alembic
         # check` sees a DB index with nothing in the ORM to match and proposes
         # dropping it, and `create_all` (control-plane's SQLite test fixtures)
