@@ -205,7 +205,24 @@ carries them out of the marker rule together. Note that a *contextual* selector 
 whole-node form does — worth knowing before trying to colour the two list markers differently,
 which would need a `ViewPlugin` reading the syntax tree.
 
-`PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
+**Reserved system-prompt tags (2026-09-09, #2595).** The runtime wraps the system
+prompt's four blocks in `<platform_instructions>`, `<platform_prompt>`, `<tools>` and
+`<agent_instructions>`, and control-plane refuses (422) a platform prompt or any
+string-valued agent tuning field that contains one of them. The editor itself stays neutral; the
+two call sites that are validated compute the message with `findReservedPromptTag`
+(`rework/utils/promptValidation.ts`, a mirror of the fred-sdk finder) and pass it through
+the existing `error` prop, so the refusal is visible while typing and Save is disabled
+until the tag is gone (`AgentFormBody` → `TuningFieldRenderer`, `PlatformPromptPage`).
+The prompt library is not validated and shows nothing: its text is either inserted into
+the user's message or copied into an agent field, where the check applies. Any other
+XML/HTML tag is accepted, which is what the tag colouring above is for.
+
+`PlatformPromptPage` (2026-09-09) edits in this editor too. The 0 / 20 000 counter the
+`TextArea` atom used to draw is re-implemented beside the editor, with the hint on the
+left; a draft over the cap is refused like a reserved tag. Its two panes now read left to
+right in the order the model receives the blocks — the read-only platform instructions,
+which carry the precedence rule, then the editable global prompt — and a backend 422 is
+shown under the editor rather than only as a toast.
 
 ---
 

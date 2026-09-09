@@ -3749,3 +3749,37 @@ the HITL epic (#1080), not this fix. An editor review inbox for pending
 proposals (RFC §12.2) stays deferred; retention does not need it, and building
 one only to solve retention would be solving a smaller problem with a bigger
 one.
+
+---
+
+## 50. Contract Notes — reserved system-prompt tags are refused at save time (2026-09-09, issue #2595)
+
+The runtime wraps the system prompt's four blocks in XML tags
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.76): `platform_instructions`,
+`platform_prompt`, `tools`, `agent_instructions`. An authored text that
+contains one of those tags — opening, closing or self-closing, any case,
+whitespace tolerated inside the brackets — could close a block and open
+another, so control-plane refuses it where the text is written:
+
+| Surface | Field | Response |
+| ------- | ----- | -------- |
+| `PUT /control-plane/v1/admin/platform/prompt` | `text` | 422, Pydantic validation error naming the tag (`reserved system-prompt tag <tools> is not allowed in the platform prompt`) |
+| `POST /teams/{team_id}/agent-instances` and `PATCH …/{agent_instance_id}` | every string-valued tuning field (`string`, `text`, `text-multiline`, `prompt`) — the runtime substitutes each one into the agent template as a `{key}` token | 422 `EnrollmentError` naming the field and the tag |
+
+The check is `find_reserved_prompt_tag` from fred-sdk
+`contracts/prompt_utils.py`, next to `PROMPT_SAFE_TOKENS`; the list of names
+there is the single definition of what is reserved. Every other XML or HTML
+tag is accepted — authors structure prompts with `<example>` or `<rules>` and
+the prompt editor colours tags on purpose. Token validation is unchanged
+(none, `PROMPTS.md` §2).
+
+Not validated, by decision: the prompt library (`/teams/{team_id}/prompts`),
+whose text reaches the model either as the user's own message or by copy
+into a validated agent field; and code-owned content (the pod's
+`platform_prompt.json`, `mcp_catalog.yaml` `agent_instructions`).
+
+The generated client was regenerated for this change; the schema itself does
+not move (a validator adds no field), so `controlPlaneOpenApi.ts` is
+byte-identical. The frontend mirrors the check
+(`rework/utils/promptValidation.ts`) to show the refusal while typing; the
+backend remains the reference.

@@ -75,7 +75,7 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
 )
 
 _FILESYSTEM_DISABLED_PROMPT_SUFFIX = (
-    "\n\nFilesystem tools are disabled in this runtime. "
+    "Filesystem tools are disabled in this runtime. "
     "Do not call ls/read_file/write_file/edit_file/glob/grep/execute."
 )
 
@@ -131,11 +131,15 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt,
             binding=binding,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
-            runtime_suffixes=(
-                _filesystem_prompt_suffix(
-                    filesystem_tools_enabled=filesystem_tools_enabled
-                ),
+            tool_suffix="\n\n".join(
+                part
+                for part in (
+                    _build_runtime_tool_prompt_suffix(bound_tools),
+                    _filesystem_prompt_suffix(
+                        filesystem_tools_enabled=filesystem_tools_enabled
+                    ),
+                )
+                if part
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
