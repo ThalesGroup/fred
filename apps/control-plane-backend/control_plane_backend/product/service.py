@@ -40,6 +40,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
+from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -1223,9 +1224,13 @@ def _validate_tuning_field_values(
                 _fail(key, f"expected a string for type {field.type!r}")
             if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
                 _fail(key, f"value does not match pattern {field.pattern!r}")
-            # `prompt` fields carry no token validation (#2277): the runtime
-            # renderer substitutes only PROMPT_SAFE_TOKENS and leaves every other
-            # `{…}` verbatim, so an unknown token is harmless rather than invalid.
+            # No token validation: the runtime renderer leaves any unknown `{…}`
+            # verbatim. A reserved system-prompt tag is the one thing refused, on
+            # every string field: the runtime substitutes each one into the
+            # agent template, where it could close the <agent_instructions> block.
+            reserved = find_reserved_prompt_tag(value)
+            if reserved is not None:
+                _fail(key, f"reserved system-prompt tag <{reserved}> is not allowed")
         elif field.type == "select":
             if not isinstance(value, str):
                 _fail(key, "expected a string for type 'select'")

@@ -34,10 +34,12 @@ Why there is no validator here (#2277):
 
 How to use:
 - import PROMPT_SAFE_TOKENS to get the canonical {token} → description map
+- call find_reserved_prompt_tag(text) before storing an authored prompt
 """
 
 from __future__ import annotations
 
+import re
 from typing import Final
 
 # Canonical set of runtime tokens available in user-authored system prompts.
@@ -53,3 +55,46 @@ PROMPT_SAFE_TOKENS: Final[dict[str, str]] = {
     "user_id": "Authenticated user identifier",
     "agent_id": "Agent definition identifier",
 }
+
+# The XML tags fred-runtime wraps around the four system-prompt blocks, in
+# prompt order. No prefix: this tuple alone defines what an authored prompt
+# may not contain, so adding a block means adding its name here.
+RESERVED_PROMPT_TAGS: Final[tuple[str, ...]] = (
+    "platform_instructions",
+    "platform_prompt",
+    "tools",
+    "agent_instructions",
+)
+
+# Opening, closing or self-closing form of a reserved tag, attributes allowed
+# (`<tools x="1">` reads as the same block to a model). Whitespace inside the
+# brackets is tolerated so `< /tools >` cannot slip past the check.
+_RESERVED_TAG_RE: Final = re.compile(
+    r"<\s*/?\s*(" + "|".join(RESERVED_PROMPT_TAGS) + r")(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+
+
+def find_reserved_prompt_tag(text: str) -> str | None:
+    """
+    Return the name of the first reserved tag written as an XML tag in `text`,
+    or None when the text contains none.
+
+    Used by control-plane to refuse an authored prompt at save time. Every
+    other XML/HTML tag is legitimate prompt structure and is not reported.
+    """
+
+    match = _RESERVED_TAG_RE.search(text)
+    return match.group(1).lower() if match else None
+
+
+def escape_reserved_prompt_tags(text: str) -> str:
+    """
+    Neutralise reserved tags in data-derived text (`<` becomes `&lt;`), so a
+    file name or an id can never open or close a system-prompt block.
+
+    For data only: an authored prompt is refused with find_reserved_prompt_tag
+    instead of being rewritten.
+    """
+
+    return _RESERVED_TAG_RE.sub(lambda match: "&lt;" + match.group(0)[1:], text)

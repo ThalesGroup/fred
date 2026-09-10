@@ -1308,7 +1308,7 @@ or native `<details>`, respectively). Implemented by
   (`SourceBadge`).
 
 The Mermaid parse-safe output contract and other cross-agent prompt
-fragments are injected at runtime (`build_global_base_prompt_suffix`,
+fragments are injected at runtime (`compose_system_prompt`,
 `RUNTIME-09`) as a non-editable suffix — see
 `RUNTIME-EXECUTION-CONTRACT.md §8.12`. Graph agents (mindmap, `GraphRuntime`)
 do not go through this suffix path.
@@ -1327,7 +1327,7 @@ do not go through this suffix path.
 | `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
 | `libs/fred-sdk/fred_sdk/resources/prompts.py` | Global base prompt source (`GLOBAL_BASE_PROMPT_MARKDOWN`) |
 | `libs/fred-sdk/fred_sdk/resources/prompts/mermaid_output_contract.md` | Mermaid parse-safe contract |
-| `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `build_global_base_prompt_suffix()` |
+| `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `compose_system_prompt()` |
 
 ---
 
