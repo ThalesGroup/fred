@@ -612,32 +612,76 @@ async def test_platform_admin_and_observer_never_grant_team_access(
         )
 
 
+# Every capability an organization subject can be granted. Enumerated from the
+# enum rather than hand-listed so a newly added capability joins the
+# closed-world check below automatically instead of silently escaping it.
+ORGANIZATION_CAPABILITIES = tuple(
+    permission
+    for permission in OrganizationPermission
+    if permission.value.startswith("can_")
+)
+
+# AUTHZ-05 delegated tier: the exact capability set each role may reach. Each
+# role owns one admin surface, so appointing one never hands over the
+# import/export, platform-reset and user-administration surfaces that stay
+# behind `can_manage_platform`/`can_administer_users`.
+DELEGATED_ROLE_REACH: tuple[
+    tuple[str, RelationType, set[OrganizationPermission]], ...
+] = (
+    (
+        "team_manager",
+        RelationType.TEAM_MANAGER,
+        {
+            OrganizationPermission.CAN_CREATE_TEAM,
+            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+        },
+    ),
+    (
+        "feature_manager",
+        RelationType.FEATURE_MANAGER,
+        {
+            OrganizationPermission.CAN_MANAGE_CAPABILITIES,
+            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+        },
+    ),
+    (
+        "prompt_editor",
+        RelationType.PROMPT_EDITOR,
+        {OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT},
+    ),
+)
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_team_manager_reaches_only_the_team_registry_capabilities(
+@pytest.mark.parametrize(
+    ("label", "role", "expected"),
+    DELEGATED_ROLE_REACH,
+    ids=[label for label, _, _ in DELEGATED_ROLE_REACH],
+)
+async def test_delegated_role_reaches_exactly_its_own_capabilities(
     rebac_engine: RebacEngine,
+    label: str,
+    role: RelationType,
+    expected: set[OrganizationPermission],
 ) -> None:
-    """AUTHZ-05 delegated tier: `team_manager` is exactly `can_create_team` +
-    `can_list_all_teams`, resolved live rather than only in the compiled model.
+    """Closed-world check: a delegated role reaches its own surface and nothing
+    else, resolved by the engine rather than read off the compiled model.
 
-    The two halves that matter: the delegation works (a non-admin holder
-    really does pass the two gates the `/admin/teams` page needs), and it is
-    narrow (deleting a team, rescuing its admin, the `can_manage_platform`
-    catch-all and the Keycloak directory all stay refused, and no team
-    relation is gained anywhere).
+    Asserting the whole reachable set (not a few hand-picked denials) is what
+    makes a future capability quietly unioning in one of these roles fail here.
+    The same run pins the two other halves: the delegation actually works, and
+    the role gains no relation on a team — the registry governs the existence
+    of teams, never their data.
     """
     organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
-    team_manager = _make_reference(Resource.USER, prefix="team-manager")
+    holder = _make_reference(Resource.USER, prefix=label)
     platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
     team = _make_reference(Resource.TEAM, prefix="northbridge")
 
     token = await rebac_engine.add_relations(
         [
-            Relation(
-                subject=team_manager,
-                relation=RelationType.TEAM_MANAGER,
-                resource=organization,
-            ),
+            Relation(subject=holder, relation=role, resource=organization),
             Relation(
                 subject=platform_admin,
                 relation=RelationType.PLATFORM_ADMIN,
@@ -649,28 +693,24 @@ async def test_team_manager_reaches_only_the_team_registry_capabilities(
         ]
     )
 
-    for capability in (
-        OrganizationPermission.CAN_CREATE_TEAM,
-        OrganizationPermission.CAN_LIST_ALL_TEAMS,
-    ):
-        assert await rebac_engine.has_permission(
-            team_manager, capability, organization, consistency_token=token
-        ), f"team_manager must reach {capability.value}"
-        # The role unions in platform_admin, so an admin never loses a surface
-        # to the narrower role.
+    reached = {
+        capability
+        for capability in ORGANIZATION_CAPABILITIES
+        if await rebac_engine.has_permission(
+            holder, capability, organization, consistency_token=token
+        )
+    }
+    assert reached == expected, (
+        f"{label} must reach exactly {sorted(c.value for c in expected)}; "
+        f"got {sorted(c.value for c in reached)}"
+    )
+
+    # Each delegated role unions in platform_admin, so appointing one never
+    # removes a surface from an admin.
+    for capability in expected:
         assert await rebac_engine.has_permission(
             platform_admin, capability, organization, consistency_token=token
         ), f"platform_admin must still reach {capability.value}"
-
-    for capability in (
-        OrganizationPermission.CAN_DELETE_TEAM,
-        OrganizationPermission.CAN_RESCUE_TEAM_ADMIN,
-        OrganizationPermission.CAN_MANAGE_PLATFORM,
-        OrganizationPermission.CAN_ADMINISTER_USERS,
-    ):
-        assert not await rebac_engine.has_permission(
-            team_manager, capability, organization, consistency_token=token
-        ), f"team_manager must not reach {capability.value}"
 
     for capability in (
         TeamPermission.CAN_READ,
@@ -678,10 +718,10 @@ async def test_team_manager_reaches_only_the_team_registry_capabilities(
         TeamPermission.CAN_ADMINISTER_ADMINS,
     ):
         assert not await rebac_engine.has_permission(
-            team_manager, capability, team, consistency_token=token
+            holder, capability, team, consistency_token=token
         ), (
-            f"team_manager must not reach team.{capability.value} — the registry "
-            f"governs the existence of teams, never their data"
+            f"{label} must not reach team.{capability.value} — a platform role "
+            f"never grants access to a team's data"
         )
 
 
