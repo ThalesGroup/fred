@@ -279,7 +279,7 @@ async def grant_platform_role(
     ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): every role may be granted
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3: every role may be granted
     by any `platform_admin`; `platform_admin` itself only by the bootstrap
     root (403 otherwise, 409 if bootstrap never ran). 404 when Keycloak does
     not know the target uid (skipped when M2M is disabled)."""
@@ -302,7 +302,7 @@ async def revoke_platform_role(
     ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): every role may be revoked
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3: every role may be revoked
     by any `platform_admin`; `platform_admin` itself only by the bootstrap
     root, and never targeting the root itself — for any caller, root
     included."""

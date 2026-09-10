@@ -44,7 +44,7 @@ const displayName = (user: UserSummary) => userDisplayName(user.id, user);
 const userHaystack = (user: UserSummary) =>
   [user.first_name, user.last_name, user.username, user.email].filter(Boolean).join(" ").toLowerCase();
 
-// PLATFORM-ADMIN-DELEGATION-RFC.md §3.7 (#2405): root-managed admins, every
+// PLATFORM-ADMIN-DELEGATION-RFC.md §3.7: root-managed admins, every
 // other role delegated to any admin. The visibility rules below only mirror
 // what the backend enforces — `platform_admin` grant/revoke is shown to the
 // bootstrap root only (`caller_is_bootstrap_root`), and the root's own row

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PLATFORM-ADMIN-DELEGATION-RFC.md (#2405): root-managed admins, delegated
-observers.
+"""PLATFORM-ADMIN-DELEGATION-RFC.md: root-managed admins, every other role
+delegated to any admin.
 
 The load-bearing guarantees these tests lock in:
 - `platform_admin` is granted and revoked by the bootstrap root only — the
@@ -90,7 +90,7 @@ class _FakeRebac:
     ) -> None:
         self.enabled = enabled
         self._holders: dict[PlatformRoleRelation, set[str]] = {
-            role: set() for role in PlatformRoleRelation
+            role: set() for role in list(PlatformRoleRelation)
         }
         self._holders[PlatformRoleRelation.PLATFORM_ADMIN] = set(admins or ())
         self._holders[PlatformRoleRelation.PLATFORM_OBSERVER] = set(observers or ())
@@ -488,7 +488,7 @@ async def test_revoke_refuses_when_rebac_disabled_before_root_guards():
 # relation, so all of these behave exactly like `platform_observer`.
 _DELEGATED_ROLES = [
     role
-    for role in PlatformRoleRelation
+    for role in list(PlatformRoleRelation)
     if role is not PlatformRoleRelation.PLATFORM_ADMIN
 ]
 

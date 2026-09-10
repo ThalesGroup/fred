@@ -868,7 +868,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert set(payload["permissions"]) == {"platform_roles"}
     # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
     assert payload["permissions"]["platform_roles"] == [
-        r.value for r in PlatformRoleRelation
+        r.value for r in list(PlatformRoleRelation)
     ]
 
 

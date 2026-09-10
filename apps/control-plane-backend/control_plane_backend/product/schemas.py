@@ -36,11 +36,9 @@ class PermissionSummary(BaseModel):
     (already OpenFGA-derived, see `teams/service.py::_get_team_permissions_for_user`)
     instead of a bespoke org-level flag per feature.
 
-    The two booleans this used to carry (`is_platform_admin` /
-    `is_platform_observer`) became `platform_roles` when the admin tier split
-    into five delegated roles: five parallel `is_*` flags over one closed enum
-    is a list, and every future role would have cost a field, a codegen run and
-    an edit in every consumer instead of one enum member.
+    The `is_platform_admin` / `is_platform_observer` booleans became
+    `platform_roles` when the admin tier split into five delegated roles, so a
+    new role costs one enum member instead of a field in every consumer.
     """
 
     platform_roles: list[PlatformRoleRelation] = Field(

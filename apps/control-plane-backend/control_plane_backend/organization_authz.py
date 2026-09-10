@@ -14,14 +14,9 @@
 
 """Shared organization-scoped gates.
 
-Home of the org-singleton checks several packages share, so none of them has to
-reach into another's `_`-prefixed helper.
-
-One helper per organization capability, all through `_require`: the narrow
-relations carved out of the `can_manage_platform` catch-all exist precisely so
-a delegated surface does NOT reuse the catch-all gate, so they must not share
-a parameterised entry point callers could point anywhere. The catch-all itself
-has no helper here — its remaining call sites check it inline.
+One named helper per capability, never a parameterised entry point: the narrow
+relations carved out of `can_manage_platform` exist so a delegated surface
+cannot reuse the catch-all gate. The catch-all keeps no helper here.
 """
 
 from __future__ import annotations
@@ -45,10 +40,8 @@ async def require_manage_capabilities(rebac: RebacEngine, user: KeycloakUser) ->
 
 
 async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
-    """Platform-prompt gate: `can_edit_platform_prompt`, which the schema
-    defines as `platform_admin or prompt_editor`. Deliberately NOT
-    `can_manage_platform` — that catch-all also carries import/export, tasks
-    and platform reset, so editing one prompt could not be delegated through
-    it."""
+    """Platform-prompt gate: `can_edit_platform_prompt` (`platform_admin or
+    prompt_editor`). Not `can_manage_platform` — that catch-all also carries
+    import/export, tasks and platform reset."""
 
     await _require(rebac, user, OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT)

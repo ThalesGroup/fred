@@ -340,7 +340,9 @@ async def _build_permission_summary(
     )
     return PermissionSummary(
         platform_roles=[
-            role for role, is_held in zip(_PLATFORM_ROLE_CHECKS, held) if is_held
+            role
+            for role, is_held in zip(_PLATFORM_ROLE_CHECKS, held, strict=True)
+            if is_held
         ],
     )
 

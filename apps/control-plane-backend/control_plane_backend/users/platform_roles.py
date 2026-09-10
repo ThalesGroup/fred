@@ -91,7 +91,7 @@ async def _direct_holders(
         raise PlatformRolesRebacDisabledError()
 
     holders: dict[PlatformRoleRelation, set[str]] = {
-        role: set() for role in PlatformRoleRelation
+        role: set() for role in list(PlatformRoleRelation)
     }
     for relation in tuples:
         if relation.subject.type is not Resource.USER:
