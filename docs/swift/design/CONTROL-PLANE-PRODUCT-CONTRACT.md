@@ -139,15 +139,16 @@ branding channel in control-plane.
 Permissions are exposed via:
 
 - `PermissionSummary`
-  - `is_platform_admin`, `is_platform_observer` — the only fields, both
-    OpenFGA-derived (organization `platform_admin`/`platform_observer`
-    relations). See Contract Note §14 (AUTHZ-05 review item 11): the former
-    `items` flattened-permission list and six unwired `can_*` booleans were
-    removed — they were Keycloak-role-derived and had gone permanently empty
-    once AUTHZ-05 removed Keycloak app roles.
+  - `platform_roles: PlatformRoleRelation[]` — the only field, OpenFGA-derived
+    (the organization role relations) and union-resolved, so a `platform_admin`
+    carries every role. See Contract Note §50: it replaced the
+    `is_platform_admin` / `is_platform_observer` booleans when the admin tier
+    split into five delegated roles. Contract Note §14 records the earlier
+    removal of the Keycloak-derived `items` list and six unwired `can_*`
+    booleans.
   - no raw RBAC/REBAC graph internals
 
-Org-level gating stops at these two booleans. Team-scoped gating (agents,
+Org-level gating stops at this one list. Team-scoped gating (agents,
 resources, member administration, evaluation, …) does not belong on
 `PermissionSummary` at all — it is exposed per team on
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
@@ -1147,7 +1148,8 @@ unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
 `is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. Team-scoped gating was never this field's job; it goes through
+4. (Superseded 2026-09-09 by §50: both booleans became `platform_roles`.)
+Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
 
