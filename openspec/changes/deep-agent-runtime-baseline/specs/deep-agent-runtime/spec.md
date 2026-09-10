@@ -43,11 +43,12 @@ A Deep agent turn SHALL emit the same LLM call/response log lines, tool-call lat
   emitted for the tool call
 - **AND** the tool-call latency KPI is recorded
 
-### Requirement: Deep's built-in filesystem tools stay disabled absent a bound filesystem capability
+### Requirement: Every unbound Deep filesystem tool stays disabled
 
-The Deep agent runtime's own built-in filesystem tool names SHALL remain unavailable to the model
-whenever the agent's declared toolset does not bind a real filesystem capability, regardless of the
-Deep agent library's default behavior of always registering those tool names internally.
+For each filesystem tool name registered internally by the Deep agent library, the Deep agent
+runtime SHALL keep that tool unavailable unless the agent's declared toolset or selected capability
+binds that exact name. Binding one filesystem operation SHALL NOT authorize any other built-in
+filesystem operation.
 
 #### Scenario: No filesystem capability selected
 
@@ -55,4 +56,14 @@ Deep agent library's default behavior of always registering those tool names int
 - **WHEN** the agent's turn is planned
 - **THEN** the model is told filesystem tools are unavailable in this runtime
 - **AND** a call to any of the Deep agent library's built-in filesystem tool names is blocked before
+  it can execute
+
+#### Scenario: A partial filesystem surface is selected
+
+- **GIVEN** a Deep agent whose selected tools bind some filesystem operations but do not bind
+  `execute`
+- **WHEN** the agent's turn is planned
+- **THEN** the bound filesystem operations remain available
+- **AND** the model is told that `execute` is unavailable
+- **AND** a call to the Deep agent library's internally registered `execute` tool is blocked before
   it can execute

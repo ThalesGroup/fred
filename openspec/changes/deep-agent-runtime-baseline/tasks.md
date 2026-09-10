@@ -47,8 +47,10 @@
 ## 3. Filesystem-tool-name overlap
 
 - [x] 3.1 `test_deep_hitl_filesystem_tool_name_overlap_does_not_collide` stays as an implementation
-      regression test, not a delta-spec requirement — no shipped capability gates a filesystem tool
-      today (design.md D3). No spec change needed for it; briefly explained in design.md instead.
+      regression test proving the Fred HITL argument rewrite composes with a filesystem-named tool.
+- [x] 3.2 Replace the all-or-nothing filesystem enablement flag with exact model-visible tool names.
+      Keep a `ToolCallLimitMiddleware` guard and matching prompt warning for every missing Deep
+      built-in; prove that binding a partial surface without `execute` does not expose `execute`.
 
 ## 4. Cleanup
 
@@ -88,7 +90,8 @@
       ReAct and 15.3 ms for Deep. Design D6 records why optimization and load testing are isolated
       into a separate investigation from `swift`, and why cross-binding graph caching is not yet
       considered safe.
-- [ ] 6.3 Run an independent `/code-review` on the full diff and fix every blocking finding.
+- [x] 6.3 Independent Codex review completed on PR #2611. Its blocking filesystem-authorization
+      finding is fixed by task 3.2 and covered at both middleware and `build_executor` levels.
 
 ## 7. Move the durable behavioral record to OpenSpec
 

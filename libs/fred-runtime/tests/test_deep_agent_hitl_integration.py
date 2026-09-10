@@ -26,8 +26,7 @@ real `InMemorySaver`, mirroring `test_react_loop_regressions_1972.py`'s
 pattern for ReAct; the transport-level tests additionally drive the real
 `_TransportBackedReActExecutor` Deep uses in production. It also proves the
 `deepagents` built-in-filesystem-tool-name overlap composes cleanly with a
-gated tool of the same name (design.md D3 — a regression test, not a product
-requirement: no shipped capability gates a filesystem tool today).
+gated tool of the same name (design.md D3).
 """
 
 from __future__ import annotations
@@ -125,7 +124,6 @@ def _compile_deep_agent(
         middleware=(), hitl=capability_hitl or {}, tools=(), mcp_prompt_groups=()
     )
     middleware = deep_mod._build_deepagent_runtime_middleware(
-        filesystem_tools_enabled=True,
         tracer=None,
         kpi=None,
         binding=_binding(),
@@ -328,7 +326,7 @@ async def test_deep_hitl_filesystem_tool_name_overlap_does_not_collide() -> None
         capability_hitl=capability_hitl,
         # Includes "read_file" to match what build_executor actually computes
         # when Fred's own filesystem MCP tool is bound under that name (the
-        # `filesystem_tools_enabled=True` case) — this is what makes
+        # per-name enabled filesystem case) — this is what makes
         # `rewrite_filesystem_tool_arguments` actually engage instead of
         # no-opping merely because the gate itself thinks no filesystem tool
         # is available.

@@ -27,7 +27,7 @@ How to read this file:
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
@@ -85,11 +85,6 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "execute",
 )
 
-_FILESYSTEM_DISABLED_PROMPT_SUFFIX = (
-    "Filesystem tools are disabled in this runtime. "
-    "Do not call ls/read_file/write_file/edit_file/glob/grep/execute."
-)
-
 
 class DeepAgentRuntime(ReActRuntime):
     """
@@ -140,7 +135,15 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        filesystem_tools_enabled = _allows_standard_filesystem_tools(bound_tools)
+        available_tool_names = {
+            bound_tool.runtime_name
+            for bound_tool in bound_tools
+            if bound_tool.runtime_name
+        }
+        if capability_block is not None:
+            available_tool_names.update(
+                tool.name for tool in capability_block.tools if tool.name
+            )
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -167,25 +170,19 @@ class DeepAgentRuntime(ReActRuntime):
                         ),
                     ),
                     _filesystem_prompt_suffix(
-                        filesystem_tools_enabled=filesystem_tools_enabled
+                        available_tool_names=available_tool_names
                     ),
                 )
                 if part
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
-        available_tool_names = {
-            bound_tool.runtime_name
-            for bound_tool in bound_tools
-            if bound_tool.runtime_name
-        }
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
             system_prompt=system_prompt,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             middleware=_build_deepagent_runtime_middleware(
-                filesystem_tools_enabled=filesystem_tools_enabled,
                 tracer=self.services.tracer,
                 kpi=self.services.kpi_writer,
                 binding=binding,
@@ -240,54 +237,28 @@ def _create_compiled_deep_agent(
     )
 
 
-def _allows_standard_filesystem_tools(bound_tools: Sequence[object]) -> bool:
-    """
-    Tell Deep runtime whether standard filesystem tools are actually available.
-
-    Why this exists:
-    - Deep should only disable filesystem operations when the runtime did not
-      inject the standard filesystem MCP tools
-    - this keeps filesystem enablement declarative: if the definition/bootstrap
-      path provides the tools, Deep should pass them through unchanged
-
-    How to use it:
-    - call after tool binding and before building the deep-agent middleware
-    - pass the resolved bound tools for the current run
-
-    Example:
-    - `enabled = _allows_standard_filesystem_tools(bound_tools)`
-    """
-    tool_names = {
-        getattr(getattr(bound_tool, "tool", bound_tool), "name", "").strip()
-        for bound_tool in bound_tools
-    }
-    return any(tool_name in tool_names for tool_name in _FILESYSTEM_TOOL_NAMES)
+def _unavailable_filesystem_tool_names(
+    available_tool_names: Collection[str],
+) -> tuple[str, ...]:
+    """Return Deep filesystem names that the runtime did not bind."""
+    return tuple(
+        name for name in _FILESYSTEM_TOOL_NAMES if name not in available_tool_names
+    )
 
 
-def _filesystem_prompt_suffix(*, filesystem_tools_enabled: bool) -> str:
-    """
-    Return the Deep prompt suffix that explains filesystem availability.
-
-    Why this exists:
-    - Deep should only warn the model away from filesystem calls when the
-      standard filesystem tool set is absent
-    - keeping this in one helper avoids mismatches between prompt text and
-      middleware policy
-
-    How to use it:
-    - call while assembling the final system prompt for one Deep run
-
-    Example:
-    - `suffix = _filesystem_prompt_suffix(filesystem_tools_enabled=False)`
-    """
-    if filesystem_tools_enabled:
+def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
+    """Tell the model exactly which Deep filesystem tools remain unavailable."""
+    unavailable_tool_names = _unavailable_filesystem_tool_names(available_tool_names)
+    if not unavailable_tool_names:
         return ""
-    return _FILESYSTEM_DISABLED_PROMPT_SUFFIX
+    return (
+        "The following filesystem tools are disabled in this runtime: "
+        f"{', '.join(unavailable_tool_names)}. Do not call them."
+    )
 
 
 def _build_deepagent_runtime_middleware(
     *,
-    filesystem_tools_enabled: bool,
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
@@ -321,10 +292,7 @@ def _build_deepagent_runtime_middleware(
             capability_hitl=capability_hitl,
         ),
     ]
-    if filesystem_tools_enabled:
-        return middleware
-
-    for tool_name in _FILESYSTEM_TOOL_NAMES:
+    for tool_name in _unavailable_filesystem_tool_names(available_tool_names):
         middleware.append(
             cast(
                 AgentMiddleware,

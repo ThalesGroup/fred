@@ -37,6 +37,8 @@ rather than leaving Deep with a narrower, asymmetric subset of ReAct's approval 
   pause reaches Fred's own event/resume layer, not only the underlying graph library.
 - ReAct's own execution path is unchanged; it remains the comparison baseline for this change's
   acceptance evidence.
+- Deep's internally registered filesystem tools are enabled name by name: a partial Fred filesystem
+  surface cannot expose an unbound built-in such as `execute`.
 
 ## Capabilities
 
@@ -83,5 +85,3 @@ None.
   slice once #2328/#2498 land, not evidence for this change.
 - Advanced planning, sub-agent orchestration, and `GraphRuntime` HITL — out of scope; see `design.md`
   for `GraphRuntime`'s current, unrelated HITL lifecycle.
-- The `deepagents`-built-in-filesystem-tool-name-overlap case is a regression test, not a durable
-  product requirement — no shipped capability gates a filesystem tool today (see `design.md` D3).

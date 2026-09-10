@@ -75,12 +75,11 @@ def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled()
     None
 ):
     middleware = deep_mod._build_deepagent_runtime_middleware(
-        filesystem_tools_enabled=True,
         tracer=None,
         kpi=None,
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(),
-        available_tool_names=set(),
+        available_tool_names=set(deep_mod._FILESYSTEM_TOOL_NAMES),
     )
     assert [type(m) for m in middleware] == [
         TracingKpiMiddleware,
@@ -95,7 +94,6 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     `after_model` hooks run in reverse list order — a disabled filesystem call
     must still be blocked before the human gate ever sees it."""
     middleware = deep_mod._build_deepagent_runtime_middleware(
-        filesystem_tools_enabled=False,
         tracer=None,
         kpi=None,
         binding=_binding(),
@@ -111,6 +109,27 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     assert len(middleware) == 3 + 7
 
 
+def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
+    available_tool_names = set(deep_mod._FILESYSTEM_TOOL_NAMES) - {"execute"}
+
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=available_tool_names,
+    )
+
+    guards = [m for m in middleware if type(m) is ToolCallLimitMiddleware]
+    assert [guard.tool_name for guard in guards] == ["execute"]
+    assert deep_mod._filesystem_prompt_suffix(
+        available_tool_names=available_tool_names
+    ) == (
+        "The following filesystem tools are disabled in this runtime: "
+        "execute. Do not call them."
+    )
+
+
 class _MarkerMiddleware(AgentMiddleware):
     pass
 
@@ -121,12 +140,11 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
         middleware=(marker,), hitl={}, tools=(), mcp_prompt_groups=()
     )
     middleware = deep_mod._build_deepagent_runtime_middleware(
-        filesystem_tools_enabled=True,
         tracer=None,
         kpi=None,
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(),
-        available_tool_names=set(),
+        available_tool_names=set(deep_mod._FILESYSTEM_TOOL_NAMES),
         capability_block=capability_block,
     )
     assert middleware[0] is marker
@@ -148,7 +166,6 @@ def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
         middleware=(), hitl={"send_email": binding}, tools=(), mcp_prompt_groups=()
     )
     middleware = deep_mod._build_deepagent_runtime_middleware(
-        filesystem_tools_enabled=True,
         tracer=None,
         kpi=None,
         binding=_binding(),
@@ -202,6 +219,23 @@ class _FakeBinder:
         return []
 
 
+class _PartialFilesystemBinder:
+    def __init__(self, **_: object) -> None:
+        pass
+
+    def build_tools(self) -> list[object]:
+        return [
+            SimpleNamespace(
+                runtime_name=name,
+                description=f"Filesystem operation {name}",
+                tool=SimpleNamespace(name=name),
+                mcp_server_id=None,
+            )
+            for name in deep_mod._FILESYSTEM_TOOL_NAMES
+            if name != "execute"
+        ]
+
+
 class _FakeExecutor:
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
@@ -238,6 +272,36 @@ async def test_deep_build_executor_wires_observability_middleware(
     wired = captured["middleware"]
     assert type(wired[0]) is TracingKpiMiddleware
     assert type(wired[1]) is ToolObservabilityMiddleware
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_guards_unbound_execute_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _PartialFilesystemBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(), services=RuntimeServices()
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    middleware = cast(list[AgentMiddleware], captured["middleware"])
+    guards = [m for m in middleware if type(m) is ToolCallLimitMiddleware]
+    assert [guard.tool_name for guard in guards] == ["execute"]
+    assert "filesystem tools are disabled in this runtime: execute" in cast(
+        str, captured["system_prompt"]
+    )
 
 
 @pytest.mark.asyncio

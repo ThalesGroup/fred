@@ -34,13 +34,11 @@ See `proposal.md` for why the dispatch and HITL defects mattered.
 **Non-Goals:**
 
 - Any durable, user-visible file storage for Deep. No `backend=`/`CompositeBackend` is passed to
-  `create_deep_agent` in this change; Deep's filesystem tool names stay disabled by Fred's existing
-  guard whenever no real filesystem capability is bound, same as before this change.
+  `create_deep_agent` in this change; each built-in filesystem name remains guarded unless that
+  exact name is contributed by the selected tool surface.
 - A new approval mechanism. Operator-policy support on Deep is delivered by removing a rejection and
   reusing `FredHitlMiddleware`'s existing `approval_policy` handling — the same code path Deep
   already threads `approval_policy` through for capability bindings.
-- Treating the `deepagents` built-in-filesystem-tool-name overlap with a gated tool as a durable
-  product requirement — see D3.
 
 ## Decisions
 
@@ -71,18 +69,17 @@ correctly. Removing that guard is a deletion, not new gating logic.
 | Capability `HitlSpec` (no-op / pause+proceed / pause+cancel) | Existing, unchanged | Same gate, same outcomes — proven at both the compiled-graph and Fred-transport levels | Not applicable — own separate HITL lifecycle (`request_human_input`, `_pending_checkpoints`), not touched by this change |
 | Operator `ToolApprovalPolicy` (no-op / pause+proceed / pause+cancel) | Existing, unchanged | Same gate, same outcomes — proven at both the compiled-graph and Fred-transport levels | Not applicable |
 | Resume contract | `AwaitingHumanRuntimeEvent` carrying `HumanInputRequest`, proceed/cancel | Same contract, same event/request types, same `_TransportBackedReActExecutor` code path | Not applicable |
-| Filesystem tools | N/A (no Deep-style built-in filesystem) | `deepagents`'s built-in filesystem tools stay guarded off (disabled prompt + `ToolCallLimitMiddleware` blocks) whenever no real filesystem capability is bound — unchanged by this change | N/A |
+| Filesystem tools | N/A (no Deep-style built-in filesystem) | Each `deepagents` built-in filesystem name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact name is bound; a partial filesystem surface never enables the remaining built-ins | N/A |
 
-### D3 — The filesystem-tool-name overlap is a regression test, not a product requirement
+### D3 — Filesystem-tool-name overlap is enforced per tool
 
 `deepagents`'s built-in `read_file`/`write_file`/etc. share names with what a real Fred filesystem
-capability would one day expose. No shipped capability gates a filesystem tool today, so there is no
-current user-observable behavior to specify. `FredHitlMiddleware.rewrite_filesystem_tool_arguments`
-composing correctly with a gated tool of that name is covered by an implementation-level regression
-test (`test_deep_hitl_filesystem_tool_name_overlap_does_not_collide`) so a future capability that
-does gate a filesystem tool inherits a known-good combination — it is not a delta-spec requirement,
-since specs describe current externally observable behavior, not protection against a scenario
-nothing currently exercises.
+surface exposes. Availability is therefore derived from the exact model-visible names contributed
+by resolved tools and capability tools. The disabled prompt and `ToolCallLimitMiddleware` guards
+cover only the missing names: binding `ls` or `read_file`, for example, cannot expose Deep's
+internally registered `execute`. `FredHitlMiddleware.rewrite_filesystem_tool_arguments` composing
+correctly with a gated tool of the same name remains covered by
+`test_deep_hitl_filesystem_tool_name_overlap_does_not_collide`.
 
 ### D4 — The manual NOVA-DOC run is document-access evidence, not filesystem or Workspace evidence
 

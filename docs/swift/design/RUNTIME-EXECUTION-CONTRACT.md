@@ -5741,9 +5741,10 @@ unaffected.
 Deep passes no explicit `backend=` to `create_deep_agent`, so `deepagents`'s built-in filesystem
 tools default to its `StateBackend` — a conversation-scoped checkpoint filesystem, not a durable
 Workspace: content is checkpointed by Fred's SQL checkpointer and survives across turns of the same
-thread, but is not a separate object store and is not visible outside the thread. Those built-in
-tool names stay guarded off (disabled prompt + `ToolCallLimitMiddleware` blocks) whenever the
-agent's declared toolset does not bind a real filesystem capability.
+thread, but is not a separate object store and is not visible outside the thread. Each built-in tool
+name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact
+model-visible name is contributed by the agent's declared toolset or selected capability. Binding a
+partial filesystem surface never enables the remaining built-ins.
 
 `_TransportBackedReActExecutor` is shared unchanged by both runtimes; its per-exchange log line and
 `[V2][EXECUTOR] build start` line name the actual runtime class rather than hard-coding
