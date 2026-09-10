@@ -84,7 +84,8 @@ parallel type outside these files.
 
 **3. RFC lookup** — before writing a new RFC, scan `docs/swift/rfc/`. If an RFC
 covers the area, check whether the area is actually still open. **RFCs are
-scoped to open design questions and not-yet-built work only** (2026-08-01 —
+scoped to open design questions, and to agreed work still too broad or
+uncertain to scope into one OpenSpec change, only** (2026-08-01 —
 see "RFC vs. OpenSpec vs. doc" below); if the RFC's content is already settled and shipped,
 amending it is the wrong move — fold that part into the relevant compact doc
 instead. **RFCs are proposals, not verified truth** — each records intent at
@@ -127,8 +128,11 @@ Four homes, not three, each answering a different question:
   slice of already-agreed work: `proposal.md` (why / what / impact),
   `design.md` (rationale, deferred gaps), `tasks.md` (checklist), a delta
   `specs/<capability>/spec.md` (SHALL/MUST requirements + Given/When/Then
-  scenarios), `verification.md` (exact test evidence — what's proven, what
-  isn't). Links a GitHub issue; never duplicates its tracking.
+  scenarios) — the four artifacts the configured `spec-driven` schema
+  (`openspec schemas`) actually generates. A `verification.md` (exact test
+  evidence — what's proven, what isn't) is a useful per-change addition some
+  contributors include, not a schema-mandated artifact — don't assume every
+  change has one. Links a GitHub issue; never duplicates its tracking.
 - **OpenSpec spec** (`openspec/specs/<capability>/spec.md`) — the compact,
   current truth for one capability. Written automatically when a change is
   archived (`openspec archive`) — the CLI folds the delta in and moves the
@@ -138,11 +142,11 @@ Four homes, not three, each answering a different question:
   capability (a runtime contract, a product API, a platform convention).
 
 RFCs are not a permanent home for finished decisions — they exist only for
-**(a) a design question that is still genuinely open**, or **(b) work that is
-agreed but not yet built**. The moment a decision is settled — implemented,
-or clear enough that no alternative is really being weighed anymore — its
-durable "what/why" belongs in an **OpenSpec change** (a scoped, testable
-slice) or a **compact doc** (crosses capabilities), never in another dated
+**(a) a design question that is still genuinely open**, or **(b) agreed work
+still too broad or too uncertain to scope into a single OpenSpec change**.
+The moment a decision is settled and scoped — buildable as one slice, or
+already implemented — its durable "what/why" belongs in an **OpenSpec
+change** or a **compact doc** (crosses capabilities), never in another dated
 RFC amendment.
 
 Why: an RFC that keeps accreting amendment blocks reads as more authoritative
@@ -151,8 +155,8 @@ than it is. `Status: draft pending sign-off` looks the same on the page as
 can mistake "written into the RFC" for "decided and validated" — including
 amendments that turned out, on later inspection, not to have been especially
 good ideas. OpenSpec changes and compact docs don't carry that ambiguity: a
-change is explicit about what's proven vs. not (`verification.md`), and if
-it's in a compact doc, it shipped and it's current.
+change's `tasks.md` is binary about what's done vs. not, and if it's in a
+compact doc, it shipped and it's current.
 
 **Moving weight toward OpenSpec (2026-09-10).** New scoped work with testable
 acceptance criteria — a bug fix, a bounded feature, a capability extension —
@@ -169,15 +173,17 @@ restating it.
 
 In practice: when Step 6 below says a design doc needs updating, write there
 first (or in the relevant OpenSpec change, if the work is a scoped slice).
-Reach for `docs/swift/rfc/` only for the part that is still an open question
-or still-to-build — never to re-document something already decided. An
+Reach for `docs/swift/rfc/` only for the part that is still an open question,
+or still too broad/uncertain to scope into one OpenSpec change — never to
+re-document something already decided. An
 existing RFC whose open questions have all closed should be trimmed back to
 nothing (or archived) once its content has been folded into an OpenSpec spec
 or compact doc, not left growing.
 
 Decision tree for every piece of new content:
 
-    Design or API decision that is still open / not yet built?
+    Design or API decision still open, or agreed work too broad/uncertain
+    to scope into one OpenSpec change?
       → write/amend an RFC in docs/swift/rfc/, scoped to the open part only.
         Stop until developer confirms.
     Agreed work, scoped to one buildable, testable slice?
@@ -216,13 +222,15 @@ project site, not an internal rendering pipeline.)
 
 **Step 1 — RFC first, only while the design is still open; OpenSpec for
 agreed, scoped work.** For a design or API decision that is genuinely
-undecided (real alternatives still being weighed) or not yet built: write a
-short RFC in `docs/swift/rfc/` (or amend existing), scoped to that open part.
-State: problem, proposed solution, alternatives considered, impact on
-existing contracts. If the work is already agreed and scoped to one
-buildable, testable slice: skip the RFC and open an OpenSpec change instead
-(`openspec-propose`) — proposal, design, tasks, delta spec, verification. If
-the design is already settled/shipped — or is a mechanical fix (typo, missing
+undecided (real alternatives still being weighed), or agreed work still too
+broad or too uncertain to scope into one buildable slice: write a short RFC
+in `docs/swift/rfc/` (or amend existing), scoped to that open part. State:
+problem, proposed solution, alternatives considered, impact on existing
+contracts. If the work is already agreed and scoped to one buildable,
+testable slice: skip the RFC and open an OpenSpec change instead
+(`openspec-propose`) — proposal, design, tasks, delta spec (plus
+`verification.md` if the change adds one; it's not schema-mandated). If the
+design is already settled/shipped — or is a mechanical fix (typo, missing
 agreed field) — skip both and write/update the compact doc directly; state
 why in the close-out.
 
@@ -458,7 +466,7 @@ Do not silently expand scope. Do not silently delete content.
 | Domain feature backlogs (still live)     | `docs/swift/backlog/` (except `BACKLOG.md`, frozen)   |
 | Execution contracts (frozen)             | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`     |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
-| Technical proposals — open questions / not-yet-built work only (settled decisions move to OpenSpec or design docs, 2026-08-01) | `docs/swift/rfc/` |
+| Technical proposals — open questions, or work too broad for one OpenSpec change, only (settled/scoped decisions move to OpenSpec or design docs, 2026-08-01) | `docs/swift/rfc/` |
 | Scoped, buildable slices of agreed work (in-flight) | `openspec/changes/<name>/` |
 | Per-capability current spec (folded in on archive) | `openspec/specs/<capability>/spec.md` |
 | Architecture entry point                 | `docs/ARCHITECTURE.html`                              |
