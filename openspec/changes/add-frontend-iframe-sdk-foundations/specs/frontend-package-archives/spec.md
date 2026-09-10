@@ -101,7 +101,10 @@ actionably rather than becoming a silent connection.
 ### Requirement: Context, route, and navigation APIs preserve host ownership
 
 The connected client SHALL expose the accepted initial context and route-event
-subscriptions. It SHALL send only relative `fred:navigate` intents with explicit
+subscriptions. It SHALL deliver each accepted `fred:route` message exactly once to each
+subscriber that is current when the message is handled. It MUST NOT deduplicate accepted
+route messages solely because their `subPath` equals a previously delivered value. It
+SHALL send only relative `fred:navigate` intents with explicit
 replace semantics and `fred:open-chat` with a string session candidate or `null`.
 Relative path validation MUST reject absolute, schemed, fragmented, malformed,
 backslash, and single- or multiply-encoded traversal paths before posting while the
@@ -116,6 +119,13 @@ live-locale context behavior in this slice.
 - **WHEN** a connected client receives a valid `fred:route` message from its accepted
   parent and origin
 - **THEN** every current route subscriber receives the host-owned sub-path once
+
+#### Scenario: Navigation returns to a previously delivered route
+
+- **WHEN** the host sends route A, the child requests navigation to B, and the host later
+  sends route A again
+- **THEN** every subscriber current for each host message observes A and then A again,
+  with neither accepted route event suppressed by sub-path deduplication
 
 #### Scenario: A consumer requests application navigation
 
@@ -253,8 +263,12 @@ Acceptance of the actual `npm pack` SDK tarball SHALL validate its exact `.` and
 `./protocol` export map, declarations, executable-module closure, file inventory,
 metadata, complete FRED license, dependency absence, canonical-source/build evidence,
 and freedom from checkout paths, aliases, links, local dependency protocols, bundled
-Node code, and unrelated FRED package or application code. Existing design-token and UI
-positive and negative archive guarantees MUST continue unchanged.
+Node code, and unrelated FRED package or application code. Runtime imports and runtime
+export conditions MUST resolve to executable packed modules. Declaration references and
+`types` export conditions MAY resolve to valid packed `.d.ts` files and MUST be checked
+with declaration-aware resolution independently of runtime resolution. A declaration-only
+target MUST NOT satisfy a runtime reference. Existing design-token and UI positive and
+negative archive guarantees MUST continue unchanged.
 
 A lockfile-pinned neutral JavaScript/TypeScript consumer SHALL install the actual SDK
 tarball in a fresh OS temporary directory outside FRED, type-check both public entry
@@ -263,13 +277,42 @@ points, and produce a browser build without React or any other FRED package.
 #### Scenario: The actual SDK archive is validated
 
 - **WHEN** the SDK workspace member is generated, packed, and checked
-- **THEN** every public runtime and declaration reference resolves to an allowed file in
-  the exact archive and the package has no undeclared or framework dependency
+- **THEN** every runtime reference resolves to executable packed JavaScript, every
+  declaration reference resolves to a valid packed declaration, and the package has no
+  undeclared or framework dependency
+
+#### Scenario: Runtime references resolve through executable modules
+
+- **WHEN** a valid runtime entry point or executable packed module imports or exports
+  another runtime module
+- **THEN** archive validation resolves the reference through executable files contained
+  in the exact packed archive
+
+#### Scenario: A runtime reference has only a declaration target
+
+- **WHEN** a runtime import or runtime export condition resolves only to a packed `.d.ts`
+  file or similarly named declaration
+- **THEN** SDK archive validation fails even though TypeScript declaration resolution
+  could find that target
+
+#### Scenario: Declaration references resolve through packed declarations
+
+- **WHEN** a valid declaration import, reference, or `types` export condition names a
+  packed declaration target
+- **THEN** archive validation resolves it through the applicable `.d.ts` file without
+  requiring that type-only target to be executable
+
+#### Scenario: A declaration reference is missing or invalid
+
+- **WHEN** a declaration import, reference, or `types` export condition has no valid
+  packed `.d.ts` target
+- **THEN** SDK archive validation fails even if similarly named executable JavaScript is
+  present
 
 #### Scenario: An archive reference is missing or escapes
 
-- **WHEN** JavaScript, declarations, or exports reference a missing, declaration-only,
-  aliased, absolute, checkout-relative, undeclared, or outside-package target
+- **WHEN** JavaScript, declarations, or exports reference a missing, aliased, absolute,
+  checkout-relative, undeclared, or outside-package target
 - **THEN** SDK archive validation fails before consumption
 
 #### Scenario: The tarball is consumed outside FRED

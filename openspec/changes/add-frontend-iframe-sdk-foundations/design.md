@@ -129,9 +129,11 @@ parent; malformed contexts, unsupported versions, and application mismatch fail 
 `connect()` is idempotent for a lifecycle: concurrent callers share one promise. Ready is sent
 immediately and every 500 milliseconds until admission, disposal, or the configurable connection
 deadline (10 seconds by default, deliberately shorter than the host's 15-second frame deadline).
-Operational methods require admission. Context is immutable snapshot data; subsequent
-`fred:route` messages notify a copy of the current subscriber set. Unsubscribe and disposal are
-idempotent.
+Operational methods require admission. Context is immutable snapshot data; every subsequently
+accepted `fred:route` message notifies a copy of the current subscriber set exactly once. Route
+delivery is event-based: it is never suppressed merely because its `subPath` matches a previously
+delivered route. This preserves host route A, child navigation to B, then host navigation back to A
+as three meaningful lifecycle events. Unsubscribe and disposal are idempotent.
 
 Wrong-origin/window and unknown messages are ignored because treating ambient browser traffic as
 fatal would let unrelated frames deny service. A context from the admitted source/origin with the
@@ -148,9 +150,11 @@ characters. It validates the shared method, 32-header, protected-header, string-
 path rules before posting. The client permits 16 pending requests, matching the host concurrency
 bound, and stores correlation, method, timeout, and abort cleanup per request.
 
-The first structurally valid response for an outstanding ID removes and settles it. Unknown,
-duplicate, timed-out, aborted, disposed, and late replies are ignored. Abort and the default
-30-second deadline release only local state; protocol `"1"` has no cancel message. Disposal rejects
+The first structurally valid response for an outstanding ID removes and settles it. Response
+deduplication is keyed only by the outstanding request ID; unlike route events, a duplicate reply
+must not be delivered. Unknown, duplicate, timed-out, aborted, disposed, and late replies are
+ignored. Abort and the default 30-second deadline release only local state; protocol `"1"` has no
+cancel message. Disposal rejects
 connection and pending work, clears all timers/subscriptions/listeners, and permanently closes that
 client. Errors use stable SDK categories for configuration, connection, lifecycle, capacity,
 timeout, application mismatch, validation, and generic host transport failure without inventing a
@@ -193,10 +197,16 @@ setting does not describe eventual publication of individual packages.
 
 The generator will use explicit canonical-source and client-source allowlists, create disposable
 generated input, compile both entry points, and record source paths/hashes plus build graph/module
-externalization evidence. The SDK validator will reuse archive-safety checks and separately verify
-exports, executable and declaration closure, metadata, license completeness, dependency absence,
-forbidden checkout/workspace references, and exact contents. Mutation tests will prove each class
-of rejection while the token and UI validators remain unchanged.
+externalization evidence. The SDK validator will reuse archive-safety checks but use distinct
+resolution paths: every runtime import and runtime export condition must resolve to an executable
+packed ESM module, whereas declaration references and `types` export conditions may resolve to
+valid packed `.d.ts` files. An executable target cannot be satisfied by the mere presence of a
+declaration, and a declaration target must not be treated as valid merely because similarly named
+runtime JavaScript exists. Positive fixtures will prove both valid resolution paths; mutation
+fixtures will independently reject declaration-only runtime targets and missing or invalid
+declaration targets. The validator will also verify metadata, license completeness, dependency
+absence, forbidden checkout/workspace references, and exact contents while leaving token and UI
+validators unchanged.
 
 Alternatives considered: hand-copying the protocol violates single ownership; a general bundler
 crawl could accidentally package application code; reusing only the UI validator would encode

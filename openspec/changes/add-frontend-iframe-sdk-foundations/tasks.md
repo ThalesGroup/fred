@@ -16,7 +16,7 @@
 
 - [ ] 3.1 Add the `@fred/iframe-sdk` workspace member, public root/protocol source boundaries, development manifest, FRED license, and README skeleton; verify the manifest exposes only `.` and `./protocol` and declares no dependencies or peer dependencies.
 - [ ] 3.2 Implement origin/application configuration and the shared `connect()` lifecycle with listener-before-ready ordering, immediate plus 500 ms ready retries, a default 10-second deadline, exact parent/source/origin admission, and stable typed failures; verify focused unit tests cover valid, raced, concurrent, malformed, mismatched, timed-out, missing-parent, and disposed connection cases.
-- [ ] 3.3 Implement immutable context access and route subscriptions with idempotent unsubscribe; verify wrong-origin/window, pre-context, malformed, duplicate, and post-disposal route messages cannot notify consumers.
+- [ ] 3.3 Implement immutable context access and route subscriptions with idempotent unsubscribe; verify every accepted route event is delivered once to each current subscriber, identical `subPath` values are not deduplicated, and wrong-origin/window, pre-context, malformed, and post-disposal messages cannot notify consumers.
 - [ ] 3.4 Implement validated `navigate()` and `openChat()` intents with normalized replace and nullable session fields; verify valid wire shapes and local rejection of every unsafe path class before any postMessage call.
 - [ ] 3.5 Implement request serialization with collision-checked IDs, allowed methods, string-or-null bodies, ordinary string headers, case-insensitive protected-header rejection, and the 16-request client bound; verify invalid requests and the seventeenth pending request fail locally without posting.
 - [ ] 3.6 Implement out-of-order response correlation, default/per-request 30-second deadlines, `AbortSignal`, generic transport errors, and duplicate/unknown/late-response suppression; verify cancellation releases only local state and no mutation is retried.
@@ -26,16 +26,16 @@
 ## 4. FRED host and legacy-client compatibility
 
 - [ ] 4.1 Update canonical host-page tests to exercise legacy raw clients after extraction and the new canonical protocol surface; verify all eight existing shapes retain their serialized fields, defaults, and effects without a version change.
-- [ ] 4.2 Add SDK/current-host compatibility coverage for ready/context, route, navigation, open-chat, requests, duplicate IDs, and response errors; verify the host needs no protocol adapter and the SDK sends no operation before context.
+- [ ] 4.2 Add SDK/current-host compatibility coverage for ready/context, route, navigation, open-chat, requests, duplicate IDs, and response errors, including host route A, child navigation to B, then host route A; verify both accepted A events reach current subscribers, request responses remain deduplicated by request ID, the host needs no protocol adapter, and the SDK sends no operation before context.
 - [ ] 4.3 Extend frame/team lifecycle tests for application, target, team, and unmount replacement; verify old listeners are removed, fetches are aborted, late replies are suppressed, and stale frames cannot affect the new lifecycle.
 - [ ] 4.4 Run focused application host, request, path, TeamApplicationHostPage, authorization/token-refresh, and proxy suites; verify the 15-second host deadline, 16-request host bound, source/origin checks, protected-header defense, bearer/refresh policy, route ownership, and proxy behavior remain green.
 
 ## 5. SDK generation and archive validation
 
 - [ ] 5.1 Extend the producer's exact input inventory and generator to copy the canonical protocol and allowlisted client sources into disposable generated input; verify recorded paths/hashes and the reviewed module graph fail on missing, extra, or changed inputs.
-- [ ] 5.2 Build deterministic ESM JavaScript and closed declarations for both public entry points; verify build evidence contains no bundled Node code, framework/FRED dependency, source alias, absolute path, or undeclared module.
-- [ ] 5.3 Add an SDK archive validator using the shared tar safety checks and an exact contract for metadata, files, exports, executable references, declaration references, dependency absence, FRED license, README, and build evidence; verify the real `npm pack` archive passes.
-- [ ] 5.4 Add disposable negative archive mutations for missing/extra files, unsafe paths or links, wrong exports/metadata/license/evidence, declaration-only runtime targets, unresolved declarations, checkout/workspace references, local protocols, and undeclared or framework dependencies; verify each mutation fails for its intended reason.
+- [ ] 5.2 Build deterministic ESM JavaScript and closed declarations for both public entry points; verify positive build fixtures contain runtime imports/exports that close over executable packed modules and declaration references/`types` exports that close over packed `.d.ts` files, with no bundled Node code, framework/FRED dependency, source alias, absolute path, or undeclared module.
+- [ ] 5.3 Add an SDK archive validator using the shared tar safety checks and distinct runtime and declaration resolvers: runtime imports/exports must reach executable packed modules, while declaration references and `types` exports may reach valid packed `.d.ts` files; verify positive tests for both resolution paths and the real `npm pack` archive pass.
+- [ ] 5.4 Add disposable negative archive mutations for missing/extra files, unsafe paths or links, wrong exports/metadata/license/evidence, runtime imports or exports with only declaration targets, declaration references or `types` exports without valid `.d.ts` targets, checkout/workspace references, local protocols, and undeclared or framework dependencies; verify each mutation fails for its intended resolver and reason.
 - [ ] 5.5 Run the combined producer generation, quality, unit, pack, and archive suites; verify all existing token/UI positive and negative assertions pass unchanged alongside the SDK.
 
 ## 6. Isolated neutral consumer
@@ -48,7 +48,7 @@
 ## 7. Cross-origin browser validation
 
 - [ ] 7.1 Extend the existing harness with separate loopback host and child servers, stage only the isolated build and packed protocol surface, and load the child through a real iframe; verify browser origin and `WindowProxy` identities are distinct and all resource responses are successful and local.
-- [ ] 7.2 Add browser cases for ready retry, matching context, route subscription, navigation, open-chat, and two out-of-order requests; verify exact protocol-`"1"` messages and single settlement from the installed SDK.
+- [ ] 7.2 Add browser cases for ready retry, matching context, route subscription, host route A followed by child navigation to B and host route A again, navigation, open-chat, and two out-of-order requests; verify each accepted route message is delivered once without sub-path deduplication while response settlement remains deduplicated by request ID in the installed SDK.
 - [ ] 7.3 Add browser cases for buffered JSON/text success, 401/403/5xx Responses, generic transport failure, and HEAD/204/205/304 bodyless Responses; verify Fetch-like observable results without streaming or binary claims.
 - [ ] 7.4 Add browser cases for malformed messages, unsupported context, wrong application ID, wrong origin/window, sibling/popup/stale frame impersonation, and unsafe paths/headers; verify no unadmitted event changes client or host state.
 - [ ] 7.5 Add browser cases for pending capacity, connection/request deadlines, local abort, duplicate/unknown/late replies, disposal, and frame/team replacement; verify local resources are released and old lifecycles cannot affect replacements.

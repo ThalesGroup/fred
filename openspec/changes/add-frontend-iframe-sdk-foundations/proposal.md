@@ -17,17 +17,19 @@ approved tracking issue before code changes begin.
 - Establish one canonical protocol source shared by the existing FRED host and package generation.
   Preserve the eight serialized message shapes, existing normalizations, request limits, and
   legacy raw-client compatibility; do not maintain parallel host and package definitions.
-- Provide explicit connection and context handling, route subscriptions, navigation and open-chat
-  intents, buffered request/reply handling, fixed pending-work limits, deadlines, local abort, and
-  deterministic disposal/late-response behavior.
+- Provide explicit connection and context handling, route subscriptions that deliver every
+  accepted host route event without sub-path deduplication, navigation and open-chat intents,
+  buffered request/reply handling, fixed pending-work limits, deadlines, local abort, and
+  deterministic request-ID deduplication, disposal, and late-response behavior.
 - Validate the configured HTTP(S) host origin, `window.parent`, incoming message structure,
   protocol version, and the expected application identity before accepting host traffic.
 - Keep token refresh, bearer injection, protected-header enforcement, authorized application/team
   resolution, route construction, host request concurrency, and frame/team teardown in FRED.
   The SDK receives no bearer, Keycloak object, host store, upstream address, or backend model.
 - Extend the existing producer, exact archive validation, offline neutral consumer, Playwright
-  harness, and CI-selection contract for the third package while preserving every token/UI
-  guarantee.
+  harness, and CI-selection contract for the third package. Runtime imports and exports must close
+  over executable packed modules, while declaration references and `types` exports must close over
+  valid packed declarations; preserve every token/UI guarantee.
 - Exercise the packed SDK through a real iframe on a loopback child origin distinct from its host
   origin. Provision lockfile-pinned dependencies and Chromium separately from offline install,
   type-check, build, and browser execution.
