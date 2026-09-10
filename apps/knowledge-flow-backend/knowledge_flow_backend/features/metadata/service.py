@@ -196,7 +196,10 @@ class MetadataService:
         try:
             uids_by_tag = await self.metadata_store.document_uids_by_tags(tag_ids)
         except Exception as e:
-            logger.error(f"Error retrieving document uids for tags {tag_ids}: {e}")
+            # Count, not the ids: this batch can carry the endpoint's whole
+            # 10 000-tag ceiling, and a store blip would write that list once
+            # per concurrent request.
+            logger.error(f"Error retrieving document uids for {len(tag_ids)} tags: {e}")
             raise MetadataUpdateError(f"Failed to retrieve document uids for tags: {e}")
 
         if isinstance(authorized_doc_ref, RebacDisabledResult):
@@ -218,7 +221,7 @@ class MetadataService:
         try:
             docs = await self.metadata_store.metadata_in_tags(tag_ids)
         except Exception as e:
-            logger.error(f"Error retrieving metadata for tags {tag_ids}: {e}")
+            logger.error(f"Error retrieving metadata for {len(tag_ids)} tags: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tags: {e}")
 
         if isinstance(authorized_doc_ref, RebacDisabledResult):
