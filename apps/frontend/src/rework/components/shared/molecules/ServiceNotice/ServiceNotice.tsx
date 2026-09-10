@@ -43,7 +43,7 @@ interface ServiceNoticeProps {
  * Example:
  * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
-export default function ServiceNotice({ icon = "infos", title, description, centered }: ServiceNoticeProps) {
+export default function ServiceNotice({ icon = "info", title, description, centered }: ServiceNoticeProps) {
   const notice = (
     <div className={styles.serviceNotice}>
       <span className={styles.icon}>

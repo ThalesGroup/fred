@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
+import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
+import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
@@ -36,6 +38,8 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
+import { useConversationJump } from "../../../core/hooks/useConversationJump";
+import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
@@ -190,6 +194,35 @@ export default function ManagedChatPage() {
     traceCount: lastTurn?.traceMessages.length ?? 0,
     isAwaitingHuman: chat.pendingHitl != null,
   });
+  // ── Outline rail ────────────────────────────────────────────────────────
+  // Frozen while a turn runs: the rail then takes no input, so it can never
+  // write the conversation's scroll position while useChatAutoScroll owns it.
+  const outlineFrozen = chat.waitResponse || chat.pendingHitl != null;
+  // Derived from the messages themselves, then handed back by identity when it
+  // describes the same rail. The message list is replaced on every streamed
+  // token, so a plain memo would re-render every mark tens of times a second;
+  // a coarser key (session + turn count) avoids that but goes stale instead,
+  // since `sessionId` changes a render before the messages do — switching
+  // between two cached conversations of equal length would leave the previous
+  // one's marks on screen. The fold itself is a linear scan over small objects.
+  const outlineTurnIdsRef = useRef<string[]>([]);
+  const outlineTurnIds = useMemo(() => {
+    const next = toTurnIds(chat.threadMessages);
+    if (sameTurnIds(outlineTurnIdsRef.current, next)) return outlineTurnIdsRef.current;
+    outlineTurnIdsRef.current = next;
+    return next;
+  }, [chat.threadMessages]);
+  const activeTurnId = useOutlineScrollSpy(scrollContainerRef, outlineTurnIds, outlineFrozen);
+  const jumpToTurn = useConversationJump(scrollContainerRef, outlineFrozen);
+  // Reads the message list only when a mark is actually hovered — see
+  // ConversationOutlineRail's PreviewTile. Through a ref, so this callback keeps
+  // one identity for the life of the page: keyed on `threadMessages` it would
+  // change on every streamed token and defeat the rail's own `memo`, which is
+  // the whole thing that keeps streaming off the rail's back.
+  const threadMessagesRef = useRef(chat.threadMessages);
+  threadMessagesRef.current = chat.threadMessages;
+  const outlinePreview = useCallback((turnId: string) => toOutlinePreview(threadMessagesRef.current, turnId), []);
+
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
@@ -522,29 +555,43 @@ export default function ManagedChatPage() {
                   </div>
                 )}
 
-                <div
-                  className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
-                  ref={scrollContainerRef}
-                >
-                  {isInitialState ? (
-                    <div className={styles.initialStage}>
-                      <ManagedChatWelcome />
-                      <div className={styles.initialComposer}>
-                        {composer}
-                        <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                {/* Positioning context for the outline rail, scoped to the
+                    conversation alone — anchoring it on mainColumn would centre
+                    the rail across the composer too. */}
+                <div className={styles.conversationStage}>
+                  <div
+                    className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
+                    ref={scrollContainerRef}
+                  >
+                    {isInitialState ? (
+                      <div className={styles.initialStage}>
+                        <ManagedChatWelcome />
+                        <div className={styles.initialComposer}>
+                          {composer}
+                          <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <ConversationThread
-                      messages={chat.threadMessages}
-                      pendingHitl={chat.pendingHitl}
-                      isLoading={chat.isLoadingHistory}
-                      isStreaming={chat.waitResponse}
-                      scrollContainerRef={scrollContainerRef}
-                      onHitlAnswer={chat.handleHitlAnswer}
-                      maxChatInputChars={chat.maxChatInputChars}
-                      hitlFreeText={chat.hitlFreeText}
-                      onHitlFreeTextChange={chat.setHitlFreeText}
+                    ) : (
+                      <ConversationThread
+                        messages={chat.threadMessages}
+                        pendingHitl={chat.pendingHitl}
+                        isLoading={chat.isLoadingHistory}
+                        isStreaming={chat.waitResponse}
+                        scrollContainerRef={scrollContainerRef}
+                        onHitlAnswer={chat.handleHitlAnswer}
+                        maxChatInputChars={chat.maxChatInputChars}
+                        hitlFreeText={chat.hitlFreeText}
+                        onHitlFreeTextChange={chat.setHitlFreeText}
+                      />
+                    )}
+                  </div>
+                  {!isInitialState && (
+                    <ConversationOutlineRail
+                      turnIds={outlineTurnIds}
+                      activeId={activeTurnId}
+                      frozen={outlineFrozen}
+                      onJump={jumpToTurn}
+                      getPreview={outlinePreview}
                     />
                   )}
                 </div>

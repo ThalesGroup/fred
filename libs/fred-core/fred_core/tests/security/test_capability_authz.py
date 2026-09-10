@@ -26,6 +26,7 @@ import pytest
 
 from fred_core.security.models import Resource
 from fred_core.security.rebac.capability_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
     can_team_use_capability,
     team_capability_subject_and_context,
     usable_capability_ids,
@@ -39,6 +40,10 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 from fred_core.tests.security.rebac_fakes import FakeRebacEngine
+
+
+def test_legacy_application_catalog_prefix_remains_compatible() -> None:
+    assert APPLICATION_CAPABILITY_NAMESPACE_PREFIX == "app__"
 
 
 @pytest.mark.asyncio
@@ -91,16 +96,14 @@ async def test_can_team_use_capability_is_a_single_check_with_team_context() -> 
     rebac = FakeRebacEngine(permitted=True)
 
     assert (
-        await can_team_use_capability(
-            rebac, "team-1", capability_id="app__acme-forecast"
-        )
+        await can_team_use_capability(rebac, "team-1", capability_id="report_export")
         is True
     )
     assert rebac.checked == [
         (
             RebacReference(type=Resource.TEAM, id="team-1"),
             CapabilityPermission.CAN_USE,
-            RebacReference(type=Resource.CAPABILITY, id="app__acme-forecast"),
+            RebacReference(type=Resource.CAPABILITY, id="report_export"),
         )
     ]
     assert [
@@ -113,9 +116,7 @@ async def test_can_team_use_capability_reports_denial() -> None:
     rebac = FakeRebacEngine(permitted=False)
 
     assert (
-        await can_team_use_capability(
-            rebac, "team-1", capability_id="app__acme-forecast"
-        )
+        await can_team_use_capability(rebac, "team-1", capability_id="report_export")
         is False
     )
 
@@ -124,7 +125,7 @@ async def test_can_team_use_capability_reports_denial() -> None:
 async def test_can_team_use_capability_allows_when_rebac_is_disabled() -> None:
     assert (
         await can_team_use_capability(
-            NoopRebacEngine(), "team-1", capability_id="app__acme-forecast"
+            NoopRebacEngine(), "team-1", capability_id="report_export"
         )
         is True
     )

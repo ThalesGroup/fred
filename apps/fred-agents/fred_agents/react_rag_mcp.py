@@ -66,7 +66,7 @@ from memory when a corpus is available.
 """
 
 # The shared global base prompt (e.g. the Mermaid output contract) is injected at
-# execution time by the runtime (build_global_base_prompt_suffix), not baked into
+# execution time by the runtime (compose_system_prompt), not baked into
 # this editable template.
 _SYSTEM_PROMPT = _BASE_SYSTEM_PROMPT
 

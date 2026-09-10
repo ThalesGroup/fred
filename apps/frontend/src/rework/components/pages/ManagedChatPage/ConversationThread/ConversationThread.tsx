@@ -74,7 +74,12 @@ export const ConversationThread = memo(function ConversationThread({
           // docstring) — so translate it here; an unrecognized id falls back
           // to showing the raw text rather than nothing.
           const key = msg.role === "hitl_response" ? hitlResponseKey(msg.text) : null;
-          return <UserTurn key={msg.id} text={key ? t(key) : msg.text} />;
+          // Only a real user turn anchors the outline rail — a hitl_response
+          // renders through UserTurn but is a reply to the agent, not a turn
+          // anyone navigates back to.
+          return (
+            <UserTurn key={msg.id} turnId={msg.role === "user" ? msg.id : undefined} text={key ? t(key) : msg.text} />
+          );
         }
         if (msg.role === "hitl_request") {
           const frozenEvent: RuntimeAwaitingHumanEvent = {

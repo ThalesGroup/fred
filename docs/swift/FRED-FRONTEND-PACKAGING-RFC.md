@@ -1,11 +1,11 @@
 # RFC: Versioned frontend packages for external application integration with FRED
 
-**Status:** Draft — proposed for review; not implemented  
+**Status:** Partially implemented — design-token and initial UI archive foundations are implemented; iframe SDK, publication, FRED registry adoption, catalog expansion, and external adoption remain open
 **Date:** 2026-09-07  
 **Area:** FRED frontend, design system, application integration, package delivery  
 **Scope:** Common frontend integration contract for independently deployed external applications  
 **First adopter:** RAGS, an external application; pilot details in §10.2  
-**Suggested repository location:** `docs/swift/rfc/FRED-FRONTEND-PACKAGING-RFC.md`  
+**Repository location:** `docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`
 **Source baseline:** `ThalesGroup/fred`, branch `swift`, commit [`3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55`](https://github.com/ThalesGroup/fred/commit/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55). The supplied `fred-swift(4).zip` archive identifies this commit, which matched the GitHub branch when checked on 2026-09-07.
 
 Package names, new exports, and release numbers below are **proposals**, not packages verified to exist on npm. `@fred` is a working scope name; maintainers must confirm an organization-controlled scope before publication.
@@ -372,7 +372,7 @@ Track the detailed RAGS migration in its own implementation work. Completion of 
 
 | Location | Intended change |
 | --- | --- |
-| `libs/frontend/` | New package workspace, build configuration, public exports, fixtures, release notes, and tests |
+| `libs/frontend/` | Existing private package producer workspace; extend its build configuration, public exports, fixtures, release notes, and tests |
 | `apps/frontend/src/styles/` and `src/assets/fonts/` | Transfer reusable ownership; retain shell-specific styling; remove redundant assets once migrated |
 | `apps/frontend/src/rework/components/shared/` | Transfer selected presentation components and utilities; replace internal imports or use temporary re-exports |
 | `apps/frontend/src/rework/features/applications/applicationHost.ts` | Import shared protocol definitions; keep catalog/frame resolution host-local |

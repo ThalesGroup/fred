@@ -1,8 +1,8 @@
 # FRED frontend package producer
 
 This private npm workspace builds distributable frontend packages from canonical
-FRED sources. The current bounded slice produces only `@fred/design-tokens`; the
-broader package architecture and sequencing remain in the
+FRED sources. It produces the implemented `@fred/design-tokens` archive and the first
+bounded `@fred/ui` archive foundation; the broader package architecture and sequencing remain in the
 [frontend packaging RFC](../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 
 ## Workspace and publication boundary
@@ -12,10 +12,14 @@ orchestration manifest as a package. It does not make workspace members private
 or configure their eventual registry, access policy, version, credentials, or
 publication workflow. This change does not publish anything.
 
-The design-token member generates disposable output from canonical files under
+The members generate disposable output from canonical files under
 `apps/frontend/src/styles/` and `apps/frontend/src/assets/fonts/`. Do not copy
 those sources into a second maintained tree. The ordered source inventory and CI
 contract live together in `scripts/package-inputs.mjs`.
+
+The UI member additionally consumes an explicit allowlist of five canonical React
+components and their direct styles. Its public adapter narrows icons to Material
+Symbols Outlined without removing FRED's application-only custom-icon compatibility.
 
 ## Provisioning
 
@@ -23,13 +27,15 @@ Use the repository Node `22.13.0` and npm `10.9.2` baseline:
 
 ```sh
 make install
+make consumer-provision
 make browser-install
 ```
 
-`make install` installs the lockfile-pinned producer dependencies. The browser
-target separately provisions Playwright's pinned Chromium and its system
-dependencies. These are setup operations and may contact their package sources;
-no validation target installs or downloads them.
+`make install` installs the lockfile-pinned producer dependencies.
+`make consumer-provision` downloads the isolated React fixture's pinned dependencies
+into a dedicated cache, and the browser target separately provisions Playwright's
+pinned Chromium and system dependencies. These setup operations may contact their
+package sources.
 
 ## Offline validation
 
@@ -45,17 +51,20 @@ make browser-smoke
 
 - `make test` runs offline generator, archive, filter-selection, and isolated
   consumer tests.
-- `make pack-check` validates the files in the actual `npm pack` tarball,
+- `make pack-check` validates the files in both actual `npm pack` tarballs,
   including exports, import-free token structure, CSS asset closure, dependency
   protocols, source-path leakage, and complete license/notice content.
-- `make isolated-consumer` copies only the tarball and neutral fixture to a new
-  OS temporary directory, installs with npm offline and without save, lock, or
-  scripts, then builds standalone output without workspace links.
-- `make browser-smoke` repeats that staging and uses the already installed
-  Chromium against a loopback-only server. Fresh contexts verify light/dark
+- `make isolated-consumer` validates the neutral token consumer and a React consumer
+  in fresh OS temporary directories. The React fixture installs both tarballs and its
+  pinned dependencies only from the prepared cache, type-checks, and builds without
+  workspace links or FRED's dependency tree. Missing cache data fails actionably.
+- `make browser-smoke` performs no dependency install or browser provisioning. It uses
+  the already staged consumer output and installed Chromium against loopback-only
+  servers. Fresh contexts verify light/dark
   computed styles, explicit regular/italic Geist loading, no tokens-only font
-  requests, successful stylesheet/resource responses, and no non-loopback or
-  FRED-checkout asset requests.
+  requests, every public UI component, keyboard/accessibility/error/loading behavior,
+  local Material glyph rendering, successful stylesheet/resource responses, and no
+  non-loopback or FRED-checkout asset requests.
 
 Machine-readable review evidence is retained under `target/review-evidence/`.
 Generated package files, tarballs, installed dependencies, browsers, and evidence
@@ -75,5 +84,7 @@ in `design-tokens/THIRD_PARTY_NOTICES.md`; the complete OFL text is packed with
 the font assets. A font hash change deliberately fails generation until that
 audit is updated.
 
-UI components and icons, the iframe SDK, registry publication, FRED package
-consumption, and external adopter integration are outside this workspace slice.
+The current UI archive, its public imports, `.fred-ui` ownership rule, peers, icon
+limits, and optional Geist use are documented in [ui/README.md](ui/README.md). Deferred
+components and overlays, the iframe SDK, registry publication, FRED package
+consumption, and external adopter integration remain outside this workspace slice.

@@ -60,6 +60,11 @@ class FakeRebacEngine(RebacEngine):
         self.received_contextual_relations: list[Relation] = []
         self.checked: list[tuple[RebacReference, RebacPermission, RebacReference]] = []
         self.checked_contextual_relations: list[list[Relation]] = []
+        # Consistency is a correctness argument for app admission, so a test has
+        # to be able to assert the value each read requested, not only that a
+        # read happened. Both lists grow in lockstep with their call list.
+        self.checked_consistency_tokens: list[str | None] = []
+        self.lookup_resources_consistency_tokens: list[str | None] = []
 
     @property
     def enabled(self) -> bool:
@@ -102,6 +107,7 @@ class FakeRebacEngine(RebacEngine):
         self.received_permission = permission
         self.received_resource_type = resource_type
         self.received_contextual_relations = list(contextual_relations or [])
+        self.lookup_resources_consistency_tokens.append(consistency_token)
         if self._disabled:
             return RebacDisabledResult()
         return [
@@ -130,6 +136,7 @@ class FakeRebacEngine(RebacEngine):
     ) -> bool:
         self.checked.append((subject, permission, resource))
         self.checked_contextual_relations.append(list(contextual_relations or []))
+        self.checked_consistency_tokens.append(consistency_token)
         if permission in self._denied_permissions:
             return False
         return self._permitted

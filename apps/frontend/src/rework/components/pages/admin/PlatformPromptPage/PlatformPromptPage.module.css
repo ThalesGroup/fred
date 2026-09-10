@@ -134,6 +134,34 @@
   min-width: 0;
 }
 
+.editorFooter {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-s);
+}
+
+.hint {
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.counter {
+  flex: none;
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.counterOver {
+  color: var(--error);
+}
+
 .paneFooter {
   display: flex;
   flex: none;

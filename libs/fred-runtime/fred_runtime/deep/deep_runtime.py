@@ -59,12 +59,14 @@ from fred_runtime.react.react_runtime import (
     ReActInput,
     ReActOutput,
     ReActRuntime,
-    _build_runtime_tool_prompt_suffix,
     _CompiledReActAgent,
     _TransportBackedReActExecutor,
 )
 from fred_runtime.react.react_tool_binding import (
     ReActToolBinder,
+)
+from fred_runtime.react.react_tool_binding import (
+    build_runtime_tool_prompt_suffix as _build_runtime_tool_prompt_suffix,
 )
 from fred_runtime.react.react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
@@ -84,7 +86,7 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
 )
 
 _FILESYSTEM_DISABLED_PROMPT_SUFFIX = (
-    "\n\nFilesystem tools are disabled in this runtime. "
+    "Filesystem tools are disabled in this runtime. "
     "Do not call ls/read_file/write_file/edit_file/glob/grep/execute."
 )
 
@@ -148,21 +150,27 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt,
             binding=binding,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(
-                bound_tools,
-                mcp_prompt_groups=(
-                    capability_block.mcp_prompt_groups
-                    if capability_block is not None
-                    else ()
-                ),
-                capability_tools=(
-                    capability_block.tools if capability_block is not None else ()
-                ),
-            ),
-            runtime_suffixes=(
-                _filesystem_prompt_suffix(
-                    filesystem_tools_enabled=filesystem_tools_enabled
-                ),
+            tool_suffix="\n\n".join(
+                part
+                for part in (
+                    _build_runtime_tool_prompt_suffix(
+                        bound_tools,
+                        mcp_prompt_groups=(
+                            capability_block.mcp_prompt_groups
+                            if capability_block is not None
+                            else ()
+                        ),
+                        capability_tools=(
+                            capability_block.tools
+                            if capability_block is not None
+                            else ()
+                        ),
+                    ),
+                    _filesystem_prompt_suffix(
+                        filesystem_tools_enabled=filesystem_tools_enabled
+                    ),
+                )
+                if part
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
@@ -293,7 +301,7 @@ def _build_deepagent_runtime_middleware(
     alike), then the filesystem-tool guard — same relative order as
     `build_react_platform_middleware_frame` (`after_model` hooks run in
     REVERSE list order, so the filesystem guard still blocks a disabled call
-    before the human gate ever sees it). RUNTIME-EXECUTION-CONTRACT.md §8.76.
+    before the human gate ever sees it). RUNTIME-EXECUTION-CONTRACT.md §8.77.
     """
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = (
         capability_block.hitl if capability_block is not None else None

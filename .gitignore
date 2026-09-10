@@ -237,3 +237,6 @@ frontend/node_modules
 
 # ML model files downloaded at runtime (see scripts/download_models.py)
 apps/knowledge-flow-backend/models/
+
+# Databases and content the offline test suites own
+.pytest-run/

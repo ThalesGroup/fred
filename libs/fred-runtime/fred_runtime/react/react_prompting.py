@@ -31,11 +31,15 @@ Example:
 
 from __future__ import annotations
 
+import functools
 import re
-from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.prompt_utils import (
+    RESERVED_PROMPT_TAGS,
+    escape_reserved_prompt_tags,
+)
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 from ..runtime_context import get_runtime_context_or_none
@@ -143,34 +147,9 @@ def normalize_response_language(language: str | None) -> str:
 
 def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
     """
-    Render the platform-wide platform prompt — the FIRST block of the system prompt.
-
-    Why this exists:
-    - a platform admin needs one place to state how every agent on the
-      deployment must behave, ahead of any agent's own template. Before this,
-      the only platform-wide text was the static
-      `GLOBAL_BASE_PROMPT_MARKDOWN` output contract, which is shipped in
-      fred-sdk and deliberately not editable.
-    - it goes first, not last, for the reason §8.67 moved the agent template
-      last: this is the single most stable block on a deployment — identical
-      for every agent, every session, every turn — so it extends the provider
-      prefix cache rather than truncating it. Ordering is not precedence here;
-      the output contract that follows is subordinated by its own wording,
-      exactly as `build_context_prompt_suffix` already is.
-
-    Precedence:
-    - `binding.platform_prompt` (what a platform admin saved, resolved trusted
-      per managed turn) wins.
-    - `None` means no admin ever saved one — fall back to the shipped
-      `platform_prompt` field of the pod's `config/platform_prompt.json`. That
-      is the same file control-plane fetches over `GET /agents/platform-prompt`
-      to fill the admin editor, so what an admin reads there is what agents
-      actually receive.
-    - an admin-saved empty string is NOT `None`: it suppresses the block on
-      purpose, and must not silently resurrect the shipped default.
-
-    How to use:
-    - first element of `compose_system_prompt`'s block list.
+    Content of the `platform_prompt` block: the admin-saved text, else the pod
+    default. A saved "" suppresses the block and must not resurrect the default,
+    so `None` is checked before emptiness. Design: PROMPTS.md "System Prompt Assembly".
     """
 
     text = binding.platform_prompt
@@ -183,37 +162,13 @@ def build_platform_prompt_prefix(binding: BoundRuntimeContext) -> str:
         )
     if text is None or not text.strip():
         return ""
-    # Leading separator, like every other block in `compose_system_prompt`:
-    # each one owns the blank line that precedes it, none owns the one that
-    # follows. Being first is not an exception — the composer strips the
-    # resulting leading newlines once, for whichever block happens to lead.
-    return f"\n\n{text.strip()}"
+    return text.strip()
 
 
 def build_platform_instructions_prefix() -> str:
     """
-    Render the platform's operating instructions — the SECOND block, directly
-    under the admin-editable platform prompt.
-
-    Why this exists:
-    - the platform prompt above it carries personality and deployment-specific
-      intent, and an admin can rewrite it freely. The behaviour a coherent
-      platform depends on — call the tools you were given, never fake a call,
-      recover from a failed one, say when you don't know — must not be
-      rewritable along with it, so it lives here, shipped and read-only.
-    - it absorbed `build_tool_failure_recovery_suffix`'s hardcoded text
-      (removed 2026-08-31). That guidance was the same kind of rule living in a
-      third place; keeping it separate would have meant the admin UI's
-      "platform instructions" view showed only part of what agents are actually
-      told, which is worse than not showing it at all.
-
-    Not the same thing as `build_global_base_prompt_suffix` below: that one is
-    an OUTPUT/renderer contract (Mermaid syntax) and stays after the platform blocks.
-    This one is operating behaviour and leads the prompt with the platform
-    prompt, where the two platform-wide layers read as one section.
-
-    How to use:
-    - second element of `compose_system_prompt`'s block list.
+    Content of the `platform_instructions` block: shipped with the pod, read-only,
+    and the home of the precedence clause. Design: PROMPTS.md "System Prompt Assembly".
     """
 
     runtime_context = get_runtime_context_or_none()
@@ -224,34 +179,7 @@ def build_platform_instructions_prefix() -> str:
     )
     if text is None or not text.strip():
         return ""
-    return f"\n\n{text.strip()}"
-
-
-def build_global_base_prompt_suffix() -> str:
-    """
-    Render Fred's shared global base prompt as a runtime system-prompt suffix.
-
-    Why this exists:
-    - renderer/output contracts (currently the Mermaid output contract) must apply
-      to every ReAct/Deep agent turn, but they should NOT live inside the
-      operator-editable ``system_prompt_template`` where they clutter the agent
-      editor and an operator can accidentally delete them
-    - injecting the contract at execution time keeps one source of truth
-      (``GLOBAL_BASE_PROMPT_MARKDOWN``) and guarantees it is present even when the
-      operator overrides the whole prompt — the previous authoring-time bake lost
-      the contract on any custom prompt
-
-    How to use it:
-    - append the returned text during final system-prompt composition, after
-      the platform blocks (see `compose_system_prompt`)
-
-    Example:
-    - `system_prompt += build_global_base_prompt_suffix()`
-    """
-
-    if not GLOBAL_BASE_PROMPT_MARKDOWN.strip():
-        return ""
-    return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
+    return text.strip()
 
 
 # Matches only a real filename extension — the extension must be followed by
@@ -336,7 +264,9 @@ def build_attachment_context_suffix(
         return line
 
     safe_attachment_lines = [_annotate(line) for line in safe_attachment_lines]
-    safe_attachments_markdown = "\n".join(safe_attachment_lines).strip()
+    safe_attachments_markdown = escape_reserved_prompt_tags(
+        "\n".join(safe_attachment_lines).strip()
+    )
     if not safe_attachments_markdown:
         return ""
     csv_capability_sentence = (
@@ -395,7 +325,7 @@ def build_document_scope_suffix(binding: BoundRuntimeContext) -> str:
     uids = binding.runtime_context.selected_document_uids
     if not uids:
         return ""
-    listed = "\n".join(f"- {uid}" for uid in uids)
+    listed = escape_reserved_prompt_tags("\n".join(f"- {uid}" for uid in uids))
     return (
         "\n\nThe user has picked the document(s) listed below for this turn. "
         'When they say "this document" or "the document", they mean one of '
@@ -433,9 +363,13 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
     context_prompt_text = binding.runtime_context.context_prompt_text
     if not context_prompt_text or not context_prompt_text.strip():
         return ""
-    rendered = render_prompt_template(
-        context_prompt_text, binding=binding, agent_id=agent_id
-    ).strip()
+    # Reaches the model unvalidated (session API, pipelines), so it gets the
+    # same neutralisation as the other data-derived blocks.
+    rendered = escape_reserved_prompt_tags(
+        render_prompt_template(
+            context_prompt_text, binding=binding, agent_id=agent_id
+        ).strip()
+    )
     if not rendered:
         return ""
     return (
@@ -446,97 +380,106 @@ def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) 
     )
 
 
+# Prompt order of the four blocks; pinned to the shared reserved-tag list so
+# the two cannot drift apart.
+_BLOCK_TAGS = (
+    "platform_instructions",
+    "platform_prompt",
+    "tools",
+    "agent_instructions",
+)
+assert _BLOCK_TAGS == RESERVED_PROMPT_TAGS
+
+_HEADING_RE = re.compile(r"^( {0,3})(#{1,6})(?=\s|$)")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def _demote_heading(match: re.Match[str]) -> str:
+    return match.group(1) + "#" * min(len(match.group(2)) + 1, 6)
+
+
+def demote_markdown_headings(text: str) -> str:
+    """
+    Push every Markdown heading down one level (`#` -> `##`, capped at six).
+
+    Inside a wrapped block the XML tag is the top level, so level 1 belongs to
+    nothing. Fenced code is left alone: `#` there is a comment, not a heading.
+    """
+
+    lines: list[str] = []
+    open_fence: str | None = None
+    for line in text.split("\n"):
+        fence = _FENCE_RE.match(line)
+        if open_fence is None:
+            if fence:
+                open_fence = fence.group(1)
+            else:
+                line = _HEADING_RE.sub(_demote_heading, line)
+        elif (
+            fence
+            and fence.group(1)[0] == open_fence[0]
+            and len(fence.group(1)) >= len(open_fence)
+        ):
+            open_fence = None
+        lines.append(line)
+    return "\n".join(lines)
+
+
+@functools.lru_cache(maxsize=128)
+def render_prompt_block(tag: str, content: str) -> str:
+    """Wrap one system-prompt block in its XML tag; "" when the block is blank.
+
+    Cached: the platform blocks and the output contract are identical on every
+    turn of every agent, so their demotion runs once per process, not per turn.
+    """
+
+    body = content.strip()
+    if not body:
+        return ""
+    return f"<{tag}>\n{demote_markdown_headings(body)}\n</{tag}>"
+
+
 def compose_system_prompt(
     base_prompt: str,
     *,
     binding: BoundRuntimeContext,
     agent_id: str,
     tool_suffix: str = "",
-    runtime_suffixes: Sequence[str] = (),
     tabular_tools_available: bool,
 ) -> str:
     """
-    Assemble the final system prompt shared by the ReAct and Deep runtimes.
+    Assemble the system prompt shared by the ReAct and Deep runtimes.
 
-    Why this exists:
-    - both runtimes need the identical block chain (the two platform-wide
-      blocks, global base contract, tools, then the per-turn conversation
-      context: selected prompts and attachments). Each runtime
-      used to hand-roll that chain, and they had already drifted — attachments
-      reached ReAct but not Deep, and neither injected the selected chat-context
-      prompts (#1915). One owner keeps them from drifting again.
+    Four XML-wrapped blocks whose order is also their precedence (the clause
+    lives in the platform instructions), then the untagged per-turn context:
+    selected prompts, document scope, attachments. Full rationale:
+    PROMPTS.md "System Prompt Assembly".
 
-    Ordering rationale (issue #2412 item 3, 2026-08-27 — supersedes the
-    "agent template first" chain this function shipped with; extended
-    2026-08-31 with the two platform blocks):
-    - **The platform** — ``build_platform_prompt_prefix`` (admin-editable
-      personality and standardised instructions), then
-      ``build_platform_instructions_prefix`` (shipped, read-only operating
-      behaviour). The most stable text on a deployment: identical for every
-      agent, every session, every turn, so it extends the provider prefix
-      cache rather than truncating it. Read as one section, which is why they
-      are adjacent.
-    - **General instructions** — the global base output contract. A hard
-      invariant, identical across every agent on a deployment. (Two blocks
-      used to sit here: tool-failure recovery, folded into the platform
-      instructions, and per-agent guardrails, folded into each agent's
-      template — RUNTIME-EXECUTION-CONTRACT §8.70/§8.71.)
-    - **Tools** — ``tool_suffix``: what tools exist, grouped by MCP server
-      with each server's ``agent_instructions`` inlined (#2455). Also
-      near-identical across agents sharing the same tool set.
-    - **Tool usage** — ``runtime_suffixes``: runtime-specific static notices
-      (e.g. Deep's filesystem-browsing context). Rare enough today to still
-      sit ahead of the agent block rather than needing its own numbered slot.
-    - **The agent** — ``base_prompt``, the rendered agent template, preceded
-      by a fixed ``# Agent instructions`` heading (#2412 item 3 follow-up,
-      2026-08-28) so the boundary is visible: without it, ``base_prompt``
-      landed directly after the tool/``agent_instructions`` block above with
-      no blank line or marker, making it hard to tell where Fred's shared
-      instructions end and this agent's own configured behavior begins. The
-      LAST *static* block: for a given agent instance, everything before it
-      is identical turn over turn (and largely identical across agents
-      sharing the deployment's tools), while the agent's own
-      instructions are what should carry the model's attention. Two reasons,
-      not just one: recency (the model's own instructions are furthest from
-      its answer under the old order) and provider prefix-cache reuse (the
-      stable prefix — general instructions + tools — now extends all the way
-      to the agent block instead of ending after the first few dozen
-      characters).
-    - **Per-turn user context, unchanged** — selected chat-context prompts,
-      then the turn's document scope, then conversation attachments. Placed
-      last because they are genuinely volatile (change with the conversation,
-      not just the agent), which also keeps the cache boundary clean:
-      everything before this point is stable for the whole session.
-
-    How to use:
-    - render the agent template first, then pass it here with the runtime's tool
-      suffix and any runtime-specific suffixes. ``tabular_tools_available`` must
-      come from `react_tool_binding.tabular_tools_bound(bound_tools)` for this
-      call's resolved tools — it decides whether the attachment suffix may tell
-      the model to query a CSV attachment's SQL dataset.
+    ``tool_suffix`` is everything the model must know about its tools this
+    turn (list, MCP instructions, runtime notices); the shared output contract
+    is appended to it here. ``tabular_tools_available`` must come from
+    `react_tool_binding.tabular_tools_bound(bound_tools)` for this call's
+    resolved tools.
     """
 
-    # No dangling heading when an agent has no configured template at all
-    # (`policy.system_prompt_template or ""` in the callers) — only mark the
-    # boundary when there is a template to introduce.
-    agent_header = "\n\n# Agent instructions\n\n" if base_prompt.strip() else ""
-
-    # `.lstrip("\n")`: every block carries its own leading blank line, so
-    # whichever one comes first would otherwise open the prompt with stray
-    # newlines.
-    return "".join(
-        [
-            build_platform_prompt_prefix(binding),
-            build_platform_instructions_prefix(),
-            build_global_base_prompt_suffix(),
-            tool_suffix,
-            *runtime_suffixes,
-            agent_header,
-            base_prompt,
-            build_context_prompt_suffix(binding, agent_id=agent_id),
-            build_document_scope_suffix(binding),
-            build_attachment_context_suffix(
-                binding, tabular_tools_available=tabular_tools_available
-            ),
-        ]
-    ).lstrip("\n")
+    tools_content = "\n\n".join(
+        part for part in (tool_suffix.strip(), GLOBAL_BASE_PROMPT_MARKDOWN) if part
+    )
+    contents = (
+        build_platform_instructions_prefix(),
+        build_platform_prompt_prefix(binding),
+        tools_content,
+        base_prompt,
+    )
+    rendered = [
+        render_prompt_block(tag, content)
+        for tag, content in zip(_BLOCK_TAGS, contents, strict=True)
+    ]
+    per_turn = (
+        build_context_prompt_suffix(binding, agent_id=agent_id),
+        build_document_scope_suffix(binding),
+        build_attachment_context_suffix(
+            binding, tabular_tools_available=tabular_tools_available
+        ),
+    )
+    return "\n\n".join(block for block in rendered if block) + "".join(per_turn)

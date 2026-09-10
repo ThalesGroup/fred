@@ -47,6 +47,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from tabulate import tabulate
 
+from knowledge_flow_backend.compat import openpyxl_patch  # noqa: F401
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseMarkdownProcessor,
     InputConversionError,

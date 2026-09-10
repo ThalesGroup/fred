@@ -91,15 +91,26 @@ from fred_core.security.oidc import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
+from fred_core.security.rebac.application_authz import (
+    app_ref,
+    application_catalog_id,
+    application_id_from_catalog_id,
+    can_team_use_application,
+    usable_application_ids,
+)
 from fred_core.security.rebac.capability_authz import (
     team_capability_subject_and_context,
     usable_capability_ids,
 )
-from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+from fred_core.security.rebac.openfga_engine import (
+    OpenFgaRebacEngine,
+    RebacCleanupIncomplete,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
     AgentPermission,
+    AppPermission,
     CapabilityPermission,
     DocumentPermission,
     OrganizationPermission,
@@ -202,6 +213,7 @@ __all__ = [
     "ORGANIZATION_ID",
     "team_organization_relation",
     "AgentPermission",
+    "AppPermission",
     "OrganizationPermission",
     "CapabilityPermission",
     "RebacPermission",
@@ -209,7 +221,13 @@ __all__ = [
     "RebacEngine",
     "team_capability_subject_and_context",
     "usable_capability_ids",
+    "app_ref",
+    "application_catalog_id",
+    "application_id_from_catalog_id",
+    "can_team_use_application",
+    "usable_application_ids",
     "OpenFgaRebacEngine",
+    "RebacCleanupIncomplete",
     "OpenFgaRebacConfig",
     "rebac_factory",
     "get_keycloak_url",

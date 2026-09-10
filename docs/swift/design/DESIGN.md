@@ -176,6 +176,13 @@ never happens.
   opt-in for `.xlsx`/`.xlsm` and **mandatory** for legacy `.xls` (openpyxl
   cannot read binary BIFF) — this is how `.xls` support actually shipped,
   not via `xlrd`.
+- **Charts never block extraction.** openpyxl 3.1.5 aborts `load_workbook`
+  with an `IndexError` on a chart whose `plotArea` holds no plot type it
+  knows (a chart written by another tool). `compat/openpyxl_patch.py` patches the
+  chart reader at import so such a chart loads as an empty placeholder;
+  valid charts are untouched, and cells are all the extractor reads anyway.
+  A canary test asserts the upstream bug is still present — when it fails,
+  drop the module, its import and the test.
 - **Display-fidelity masking** — values hidden by Excel number format, zeros
   hidden by `showZeros=False`, and error cells are all treated as empty, so
   extraction matches what a human sees on screen.
@@ -199,7 +206,8 @@ never happens.
 
 **Code map:** `core/processors/input/excel_processor/excel_extractor.py`
 (`ExcelExtractor`, phases), `excel_processor.py` (`ExcelProcessor`, I/O +
-LibreOffice recalc), `core/processors/output/excel_processor/
+LibreOffice recalc), `compat/openpyxl_patch.py` (chart-reader workaround),
+`core/processors/output/excel_processor/
 excel_table_registration_processor.py` (output stage).
 
 **Tabular value locator (`search_tabular_values`):** a read-only

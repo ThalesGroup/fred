@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, cast
@@ -30,15 +31,18 @@ from control_plane_backend.applications.catalog import (
     ConfiguredApplicationCatalogSource,
 )
 from control_plane_backend.applications.service import list_team_applications
+from control_plane_backend.capabilities import seeding
 from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.api import router as capabilities_router
 from control_plane_backend.capabilities.catalog import aggregate_capability_catalog
 from control_plane_backend.capabilities.enablement import (
+    _CAPABILITY_RELATIONS_CACHE,
     ApplicationTeamScopeNotAllowed,
     CapabilityNotFound,
     PersonalScopeNotAllowed,
     disable_capability_for_team,
     enable_capability_for_team,
+    invalidate_enablement_relations_cache,
     reset_capability_for_team,
     set_capability_default_on,
     set_capability_personal_scope,
@@ -53,18 +57,20 @@ from control_plane_backend.product.dependencies import get_product_service_depen
 from control_plane_backend.teams.schemas import TeamNotFoundError
 from fastapi import FastAPI
 from fred_core import (
+    AppPermission,
     AuthorizationError,
-    CapabilityPermission,
     KeycloakUser,
     get_current_user,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
+    app_ref,
 )
 from fred_core.security.rebac.rebac_engine import (
     RebacDisabledResult,
+    RebacEngine,
     RebacReference,
     Relation,
     RelationType,
@@ -158,6 +164,7 @@ class _DiscoveryRebac:
         self.usable = usable or set()
         self.lookup_subject: RebacReference | None = None
         self.lookup_context: tuple[Relation, ...] = ()
+        self.lookup_consistency_tokens: list[str | None] = []
 
     async def check_user_team_permission_or_raise(
         self, user: KeycloakUser, permission: TeamPermission, team_id: str
@@ -170,32 +177,33 @@ class _DiscoveryRebac:
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: CapabilityPermission,
+        permission: AppPermission,
         resource_type: Resource,
         *,
         contextual_relations: list[Relation] | None = None,
+        consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         self.events.append("entitlements")
-        assert permission is CapabilityPermission.CAN_USE
-        assert resource_type is Resource.CAPABILITY
+        assert permission is AppPermission.CAN_USE
+        assert resource_type is Resource.APP
         self.lookup_subject = subject
         self.lookup_context = tuple(contextual_relations or ())
-        return [
-            RebacReference(Resource.CAPABILITY, capability_id)
-            for capability_id in self.usable
-        ]
+        self.lookup_consistency_tokens.append(consistency_token)
+        return [RebacReference(Resource.APP, app_id) for app_id in self.usable]
 
 
 class _DisabledDiscoveryRebac(_DiscoveryRebac):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: CapabilityPermission,
+        permission: AppPermission,
         resource_type: Resource,
         *,
         contextual_relations: list[Relation] | None = None,
+        consistency_token: str | None = None,
     ) -> RebacDisabledResult:
         self.events.append("entitlements")
+        self.lookup_consistency_tokens.append(consistency_token)
         return RebacDisabledResult()
 
 
@@ -231,9 +239,9 @@ async def test_discovery_authorizes_before_team_or_application_metadata() -> Non
 
 
 @pytest.mark.asyncio
-async def test_discovery_filters_with_team_subject_capability_admission() -> None:
+async def test_discovery_filters_with_team_subject_application_admission() -> None:
     events: list[str] = []
-    rebac = _DiscoveryRebac(events, usable={"app__second"})
+    rebac = _DiscoveryRebac(events, usable={"second"})
 
     result = await list_team_applications(
         user=_user(),
@@ -252,6 +260,59 @@ async def test_discovery_filters_with_team_subject_capability_admission() -> Non
             resource=RebacReference(Resource.ORGANIZATION, "fred"),
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_discovery_admission_never_takes_an_eventually_consistent_read() -> None:
+    """A revoked application must disappear on the next listing, not a TTL later."""
+    events: list[str] = []
+    rebac = _DiscoveryRebac(events, usable={"second"})
+
+    await list_team_applications(
+        user=_user(),
+        team_id=TeamId("team-a"),
+        deps=_deps(rebac, _MetadataStore(events)),
+        catalog_source=_CatalogSource(_catalog("example", "second"), events),
+    )
+
+    assert rebac.lookup_consistency_tokens == [RebacEngine.HIGHER_CONSISTENCY]
+
+
+@pytest.mark.asyncio
+async def test_discovery_does_not_read_through_the_admin_relations_cache() -> None:
+    """Admission reads the authorization store itself: a cached grant must
+    never decide it, or a revoked application stays usable for a whole TTL."""
+    events: list[str] = []
+    rebac = _DiscoveryRebac(events, usable={"second"})
+
+    # A cached grant that contradicts the live lookup: the cache says this team
+    # may use the first entry, while authorization admits only the second.
+    stale_ref = app_ref("example")
+    _CAPABILITY_RELATIONS_CACHE.set(
+        stale_ref,
+        (
+            time.time() + 3600,
+            [
+                Relation(
+                    subject=RebacReference(Resource.TEAM, "team-a"),
+                    relation=RelationType.ENABLED,
+                    resource=stale_ref,
+                )
+            ],
+        ),
+    )
+    try:
+        result = await list_team_applications(
+            user=_user(),
+            team_id=TeamId("team-a"),
+            deps=_deps(rebac, _MetadataStore(events)),
+            catalog_source=_CatalogSource(_catalog("example", "second"), events),
+        )
+    finally:
+        invalidate_enablement_relations_cache(stale_ref)
+
+    assert events.count("entitlements") == 1
+    assert [item.id for item in result.items] == ["second"]
 
 
 @pytest.mark.asyncio
@@ -275,7 +336,7 @@ async def test_personal_team_is_authorized_then_returns_empty_without_team_looku
     None
 ):
     events: list[str] = []
-    rebac = _DiscoveryRebac(events, usable={"app__example"})
+    rebac = _DiscoveryRebac(events, usable={"example"})
 
     result = await list_team_applications(
         user=_user(),
@@ -306,7 +367,7 @@ async def test_unknown_team_checks_membership_before_returning_not_found() -> No
     assert events == ["membership", "metadata"]
 
 
-def test_configured_source_serves_enabled_apps_and_projects_app_capability() -> None:
+def test_configured_source_serves_enabled_apps_and_projects_app_catalog_entry() -> None:
     source = ConfiguredApplicationCatalogSource(
         (_source("example"), _source("parked", enabled=False))
     )
@@ -317,7 +378,7 @@ def test_configured_source_serves_enabled_apps_and_projects_app_capability() -> 
     entry = catalog.items[0].capability_entry()
     assert entry.kind == "app"
     assert entry.team_scope is TeamScopePolicy.ADMIN_GATED
-    assert entry.id == f"{APPLICATION_CAPABILITY_NAMESPACE_PREFIX}example"
+    assert entry.id == f"{APPLICATION_CATALOG_NAMESPACE_PREFIX}example"
 
 
 def test_summary_publishes_only_the_browser_facing_registration() -> None:
@@ -493,9 +554,15 @@ class _TupleRebac:
         return None
 
     async def list_direct_relations(
-        self, _resource: RebacReference, **_kwargs: object
+        self, resource: RebacReference, **kwargs: object
     ) -> list[Relation]:
-        return list(self.relations)
+        subject = kwargs.get("subject")
+        return [
+            relation
+            for relation in self.relations
+            if relation.resource == resource
+            and (subject is None or relation.subject == subject)
+        ]
 
 
 class _LifecycleRebac(_TupleRebac):
@@ -511,18 +578,36 @@ class _LifecycleRebac(_TupleRebac):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: CapabilityPermission,
+        permission: AppPermission,
         resource_type: Resource,
         **_kwargs: object,
     ) -> list[RebacReference]:
-        assert permission is CapabilityPermission.CAN_USE
-        assert resource_type is Resource.CAPABILITY
+        assert permission is AppPermission.CAN_USE
+        assert resource_type is Resource.APP
         return [
             relation.resource
             for relation in self.relations
             if relation.subject == subject
             and relation.relation is RelationType.ENABLED
             and relation.resource.type is resource_type
+        ]
+
+
+class _SeedingRebac(_TupleRebac):
+    """Answers the anchor lookup seeding uses, so a seed can actually run."""
+
+    async def lookup_subjects(
+        self,
+        resource: RebacReference,
+        relation: RelationType,
+        subject_type: Resource,
+    ) -> list[RebacReference]:
+        return [
+            stored.subject
+            for stored in self.relations
+            if stored.resource == resource
+            and stored.relation is relation
+            and stored.subject.type is subject_type
         ]
 
 
@@ -560,6 +645,20 @@ async def test_unknown_app_id_is_rejected_before_structural_anchor_write() -> No
 
 
 @pytest.mark.asyncio
+async def test_known_app_management_gate_does_not_write_before_mutation() -> None:
+    rebac = _TupleRebac()
+    deps = SimpleNamespace(
+        configuration=_feature_configuration(enable_applications=True)
+    )
+
+    await _require_can_manage(
+        cast(Any, rebac), _user(), "app__example", deps=cast(Any, deps)
+    )
+
+    assert rebac.relations == set()
+
+
+@pytest.mark.asyncio
 async def test_disabled_app_is_rejected_before_structural_anchor_write() -> None:
     rebac = _TupleRebac()
     deps = SimpleNamespace(
@@ -581,7 +680,7 @@ async def test_applications_flag_preserves_existing_grant_across_off_on() -> Non
     grant = Relation(
         subject=RebacReference(Resource.TEAM, "team-a"),
         relation=RelationType.ENABLED,
-        resource=RebacReference(Resource.CAPABILITY, "app__example"),
+        resource=RebacReference(Resource.APP, "example"),
     )
     rebac.relations.add(grant)
     relation_bytes = _relation_snapshot(rebac.relations)
@@ -633,7 +732,7 @@ async def test_admin_app_row_forces_agent_impact_and_reasoning_fields_empty() ->
             Relation(
                 subject=RebacReference(Resource.TEAM, team_id),
                 relation=RelationType.ENABLED,
-                resource=RebacReference(Resource.CAPABILITY, entry.id),
+                resource=RebacReference(Resource.APP, "example"),
             )
             for team_id in ("team-a", "personal", "personal-user-a")
         }
@@ -675,9 +774,22 @@ async def test_app_enablement_writes_only_entitlement_and_skips_agent_stores() -
     )
 
     assert validated == {}
+    assert (
+        Relation(
+            subject=RebacReference(Resource.ORGANIZATION, "fred"),
+            relation=RelationType.ORGANIZATION,
+            resource=RebacReference(Resource.APP, "example"),
+        )
+        in rebac.relations
+    )
     assert any(
         relation.relation is RelationType.ENABLED
         and relation.subject == RebacReference(Resource.TEAM, "team-a")
+        and relation.resource == RebacReference(Resource.APP, "example")
+        for relation in rebac.relations
+    )
+    assert not any(
+        relation.resource == RebacReference(Resource.CAPABILITY, "app__example")
         for relation in rebac.relations
     )
 
@@ -703,6 +815,37 @@ async def test_app_enable_rejects_personal_team_forms_before_writes(
 
 
 @pytest.mark.asyncio
+async def test_public_app_enable_rejects_personal_team_before_app_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rebac = _TupleRebac()
+    app = _app_entry()
+
+    async def _catalog(_deps: object) -> dict[str, CapabilityCatalogEntry]:
+        return {app.id: app}
+
+    monkeypatch.setattr(capability_service, "aggregate_capability_catalog", _catalog)
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            configuration=_feature_configuration(enable_applications=True),
+            team_dependencies=SimpleNamespace(rebac=rebac),
+        ),
+    )
+
+    with pytest.raises(ApplicationTeamScopeNotAllowed):
+        await capability_service.enable_team_capability(
+            user=_user(),
+            capability_id=app.id,
+            team_id=TeamId("personal"),
+            settings={},
+            deps=deps,
+        )
+
+    assert rebac.relations == set()
+
+
+@pytest.mark.asyncio
 async def test_app_personal_tuple_cleanup_remains_available() -> None:
     rebac = _TupleRebac()
     app = _app_entry()
@@ -710,9 +853,14 @@ async def test_app_personal_tuple_cleanup_remains_available() -> None:
     enabled = Relation(
         subject=RebacReference(Resource.TEAM, str(team_id)),
         relation=RelationType.ENABLED,
-        resource=RebacReference(Resource.CAPABILITY, app.id),
+        resource=RebacReference(Resource.APP, "example"),
     )
-    rebac.relations.add(enabled)
+    disabled = Relation(
+        subject=RebacReference(Resource.TEAM, str(team_id)),
+        relation=RelationType.DISABLED,
+        resource=RebacReference(Resource.APP, "example"),
+    )
+    rebac.relations.update((enabled, disabled))
 
     assert (
         await disable_capability_for_team(
@@ -725,6 +873,8 @@ async def test_app_personal_tuple_cleanup_remains_available() -> None:
         == 0
     )
     assert enabled not in rebac.relations
+    assert disabled not in rebac.relations
+    assert rebac.relations == set()
 
     assert (
         await reset_capability_for_team(
@@ -756,7 +906,7 @@ async def test_app_disable_canonicalizes_personal_alias_for_legacy_cleanup(
     enabled = Relation(
         subject=RebacReference(Resource.TEAM, str(canonical_team_id)),
         relation=RelationType.ENABLED,
-        resource=RebacReference(Resource.CAPABILITY, app.id),
+        resource=RebacReference(Resource.APP, "example"),
     )
     rebac.relations.add(enabled)
 
@@ -785,12 +935,28 @@ async def test_app_disable_canonicalizes_personal_alias_for_legacy_cleanup(
     )
 
     assert enabled not in rebac.relations
+    assert rebac.relations == set()
     assert result.team_id == str(canonical_team_id)
 
 
 @pytest.mark.asyncio
 async def test_app_default_off_and_personal_scope_never_touch_agent_store() -> None:
     rebac = _TupleRebac()
+    default_on = Relation(
+        subject=RebacReference(Resource.ORGANIZATION, "fred"),
+        relation=RelationType.DEFAULT_ON,
+        resource=RebacReference(Resource.APP, "example"),
+    )
+    assert (
+        await set_capability_default_on(
+            rebac=cast(Any, rebac),
+            agent_instance_store=None,
+            catalog_entry=_app_entry(),
+            on=True,
+        )
+        == 0
+    )
+    assert default_on in rebac.relations
     assert (
         await set_capability_default_on(
             rebac=cast(Any, rebac),
@@ -799,6 +965,10 @@ async def test_app_default_off_and_personal_scope_never_touch_agent_store() -> N
             on=False,
         )
         == 0
+    )
+    assert default_on not in rebac.relations
+    assert not any(
+        relation.resource.type is Resource.CAPABILITY for relation in rebac.relations
     )
 
     with pytest.raises(PersonalScopeNotAllowed):
@@ -810,7 +980,12 @@ async def test_app_default_off_and_personal_scope_never_touch_agent_store() -> N
         )
 
 
-def _parked_deps(rebac: object) -> Any:
+class _NullSettingsStore:
+    async def upsert(self, **_kwargs: object) -> None:
+        return None
+
+
+def _catalog_hidden_deps(rebac: object) -> Any:
     return cast(
         Any,
         SimpleNamespace(
@@ -828,15 +1003,15 @@ def _app_grant(team_id: str, relation: RelationType) -> Relation:
     return Relation(
         subject=RebacReference(Resource.TEAM, team_id),
         relation=relation,
-        resource=RebacReference(Resource.CAPABILITY, "app__example"),
+        resource=RebacReference(Resource.APP, "example"),
     )
 
 
 @pytest.mark.asyncio
-async def test_parked_application_grant_stays_revocable() -> None:
-    """Parking withdraws an application from the catalog but keeps its gateway
-    routes and its grants alive. Blocking the revoke as well would strand every
-    grant, and un-parking would restore access with no admin action."""
+async def test_catalog_hidden_application_grant_stays_revocable() -> None:
+    """`enabled: false` hides an application but keeps its grants alive.
+    Blocking the revoke too would strand them, and re-listing would restore
+    access with no admin action."""
 
     rebac = _TupleRebac()
     rebac.relations.add(_app_grant("team-a", RelationType.ENABLED))
@@ -845,7 +1020,7 @@ async def test_parked_application_grant_stays_revocable() -> None:
         user=_user(),
         capability_id="app__example",
         team_id=TeamId("team-a"),
-        deps=_parked_deps(rebac),
+        deps=_catalog_hidden_deps(rebac),
     )
 
     assert result.enabled is False
@@ -854,7 +1029,7 @@ async def test_parked_application_grant_stays_revocable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_parked_application_grant_stays_resettable() -> None:
+async def test_catalog_hidden_application_grant_stays_resettable() -> None:
     rebac = _TupleRebac()
     rebac.relations.add(_app_grant("team-a", RelationType.ENABLED))
 
@@ -862,7 +1037,7 @@ async def test_parked_application_grant_stays_resettable() -> None:
         user=_user(),
         capability_id="app__example",
         team_id=TeamId("team-a"),
-        deps=_parked_deps(rebac),
+        deps=_catalog_hidden_deps(rebac),
     )
 
     assert not any(
@@ -871,8 +1046,8 @@ async def test_parked_application_grant_stays_resettable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_parked_application_cannot_be_granted() -> None:
-    """The revoke direction opens for a parked app; the grant direction does not."""
+async def test_catalog_hidden_application_cannot_be_granted() -> None:
+    """The revoke direction stays open for a hidden app; granting does not."""
 
     rebac = _TupleRebac()
 
@@ -882,9 +1057,177 @@ async def test_parked_application_cannot_be_granted() -> None:
             capability_id="app__example",
             team_id=TeamId("team-a"),
             settings={},
-            deps=_parked_deps(rebac),
+            deps=_catalog_hidden_deps(rebac),
         )
 
     assert not any(
         relation.relation is RelationType.ENABLED for relation in rebac.relations
     )
+
+
+@pytest.mark.asyncio
+async def test_plain_capability_enable_needs_no_application_wiring() -> None:
+    """Applications reuse the capability write path; it gains nothing from them."""
+    rebac = _TupleRebac()
+    entry = CapabilityCatalogEntry(
+        id="corp_drive",
+        version="1.0.0",
+        name="cap.corp_drive.name",
+        description="cap.corp_drive.desc",
+        icon="Icon",
+        team_scope=TeamScopePolicy.ADMIN_GATED,
+        team_settings_fields=[],
+        kind="tool",
+    )
+
+    await enable_capability_for_team(
+        rebac=cast(Any, rebac),
+        settings_store=cast(Any, _NullSettingsStore()),
+        catalog_entry=entry,
+        team_id=TeamId("team-a"),
+        settings={},
+        updated_by="user-a",
+    )
+
+    assert any(r.relation is RelationType.ENABLED for r in rebac.relations)
+
+
+@pytest.mark.asyncio
+async def test_listed_application_is_activated_from_configuration_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The configured catalog is all a grant needs: activation anchors the
+    typed `app:` object and writes the team grant, with no durable registry
+    behind it and no per-application gate to clear."""
+    rebac = _TupleRebac()
+    app = _app_entry()
+
+    async def _entries(_deps: object) -> dict[str, CapabilityCatalogEntry]:
+        return {app.id: app}
+
+    monkeypatch.setattr(capability_service, "aggregate_capability_catalog", _entries)
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            configuration=_feature_configuration(enable_applications=True),
+            team_dependencies=SimpleNamespace(rebac=rebac),
+        ),
+    )
+
+    result = await capability_service.enable_team_capability(
+        user=_user(),
+        capability_id=app.id,
+        team_id=TeamId("team-a"),
+        settings={},
+        deps=deps,
+    )
+
+    assert result.enabled is True
+    assert (
+        Relation(
+            subject=RebacReference(Resource.ORGANIZATION, "fred"),
+            relation=RelationType.ORGANIZATION,
+            resource=RebacReference(Resource.APP, "example"),
+        )
+        in rebac.relations
+    )
+    assert _app_grant("team-a", RelationType.ENABLED) in rebac.relations
+    assert not any(
+        relation.resource.type is Resource.CAPABILITY for relation in rebac.relations
+    )
+
+
+def _default_on_tool(cap_id: str = "corp_drive") -> CapabilityCatalogEntry:
+    return CapabilityCatalogEntry(
+        id=cap_id,
+        version="1.0.0",
+        name=f"cap.{cap_id}.name",
+        description=f"cap.{cap_id}.desc",
+        icon="Icon",
+        team_scope=TeamScopePolicy.DEFAULT_ON,
+        team_settings_fields=[],
+        kind="tool",
+    )
+
+
+async def _configured_catalog(
+    sources: list[ApplicationSourceConfig] | None = None,
+) -> dict[str, CapabilityCatalogEntry]:
+    deps = SimpleNamespace(
+        configuration=_feature_configuration(
+            enable_applications=True, application_sources=sources
+        )
+    )
+    return await aggregate_capability_catalog(cast(Any, deps))
+
+
+@pytest.mark.asyncio
+async def test_registration_seeding_leaves_configured_applications_untouched() -> None:
+    """Applications project as admin-gated, so seeding writes nothing for them:
+    no anchor, no grant, no platform default, on the first pass or a repeat."""
+
+    rebac = _SeedingRebac()
+    catalog = await _configured_catalog()
+    app = catalog["app__example"]
+    assert app.team_scope is TeamScopePolicy.ADMIN_GATED
+    tool = _default_on_tool()
+
+    for _ in range(2):
+        seeded = await seeding.seed_registration_defaults(
+            rebac=cast(Any, rebac), catalog=[app, tool]
+        )
+        assert app.id not in seeded
+        assert not any(
+            relation.resource.type is Resource.APP for relation in rebac.relations
+        )
+
+    # The default-on tool proves this double can seed, so the application's
+    # absence is the team-scope guard rather than a fake that writes nothing.
+    assert {
+        (relation.relation, relation.resource)
+        for relation in rebac.relations
+        if relation.resource.type is Resource.CAPABILITY
+    } == {
+        (RelationType.ORGANIZATION, RebacReference(Resource.CAPABILITY, tool.id)),
+        (RelationType.DEFAULT_ON, RebacReference(Resource.CAPABILITY, tool.id)),
+    }
+
+
+@pytest.mark.asyncio
+async def test_delisting_an_application_leaves_its_permissions_in_place() -> None:
+    """Delisting is a catalog change only: nothing sweeps the application's
+    tuples, and re-listing hands administration back over the same grants.
+    Reclaiming them for a removed application is a known gap, not done here."""
+
+    rebac = _SeedingRebac()
+    same_id_capability = Relation(
+        subject=RebacReference(Resource.TEAM, "team-a"),
+        relation=RelationType.ENABLED,
+        resource=RebacReference(Resource.CAPABILITY, "example"),
+    )
+    unrelated = Relation(
+        subject=RebacReference(Resource.TEAM, "team-b"),
+        relation=RelationType.ENABLED,
+        resource=RebacReference(Resource.APP, "other"),
+    )
+    rebac.relations.update(
+        {_app_grant("team-a", RelationType.ENABLED), same_id_capability, unrelated}
+    )
+    before = _relation_snapshot(rebac.relations)
+
+    assert await _configured_catalog(sources=[]) == {}
+    assert (
+        await seeding.seed_registration_defaults(rebac=cast(Any, rebac), catalog=[])
+        == []
+    )
+    assert _relation_snapshot(rebac.relations) == before
+
+    relisted = await _configured_catalog()
+    assert set(relisted) == {"app__example"}
+    assert (
+        await seeding.seed_registration_defaults(
+            rebac=cast(Any, rebac), catalog=list(relisted.values())
+        )
+        == []
+    )
+    assert _relation_snapshot(rebac.relations) == before
