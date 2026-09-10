@@ -1,0 +1,31 @@
+{
+  "name": "@fred/ui",
+  "version": "0.0.0-development",
+  "description": "Application-agnostic React component foundations for FRED consumers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "types": "./dist/types/src/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses",
+    "build-evidence.json"
+  ],
+  "sideEffects": [
+    "./dist/styles.css"
+  ],
+  "peerDependencies": {
+    "@fred/design-tokens": "0.0.0-development",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}

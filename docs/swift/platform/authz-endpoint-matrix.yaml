@@ -310,7 +310,7 @@ operations:
     method: GET
     path: /control-plane/v1/teams/{team_id}/applications
     review_status: approved
-    required_permission: can_use_team_applications # Response items are additionally filtered by capability#can_use.
+    required_permission: can_use_team_applications # Response items are additionally filtered by app#can_use on app:<raw-app-id>.
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/teams/{team_id}
@@ -714,27 +714,27 @@ operations:
     method: GET
     path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — read-only revoke-impact preview gated on capability#can_manage (can_manage_capabilities from organization), same as the disable mutation it precedes (preview_capability_revoke)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution. Same gate as the disable mutation this preview precedes.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (can_manage_capabilities from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (can_manage_capabilities from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows pass organization#can_manage_capabilities and then fail because applications have no personal scope.
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning

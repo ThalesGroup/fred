@@ -25,8 +25,8 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
 from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
@@ -40,6 +40,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
+from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -256,7 +257,7 @@ class _RuntimeTemplatePayload:
             entry.id
             for entry in parsed_capabilities
             if entry.kind == "app"
-            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+            or entry.id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
         }
         if quarantined_capability_ids:
             logger.warning(
@@ -293,7 +294,7 @@ class _RuntimeTemplatePayload:
                 if isinstance(cid, str)
                 and cid
                 and cid not in quarantined_capability_ids
-                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+                and not cid.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.
@@ -1234,9 +1235,13 @@ def _validate_tuning_field_values(
                 _fail(key, f"expected a string for type {field.type!r}")
             if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
                 _fail(key, f"value does not match pattern {field.pattern!r}")
-            # `prompt` fields carry no token validation (#2277): the runtime
-            # renderer substitutes only PROMPT_SAFE_TOKENS and leaves every other
-            # `{…}` verbatim, so an unknown token is harmless rather than invalid.
+            # No token validation: the runtime renderer leaves any unknown `{…}`
+            # verbatim. A reserved system-prompt tag is the one thing refused, on
+            # every string field: the runtime substitutes each one into the
+            # agent template, where it could close the <agent_instructions> block.
+            reserved = find_reserved_prompt_tag(value)
+            if reserved is not None:
+                _fail(key, f"reserved system-prompt tag <{reserved}> is not allowed")
         elif field.type == "select":
             if not isinstance(value, str):
                 _fail(key, "expected a string for type 'select'")

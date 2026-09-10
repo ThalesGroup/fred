@@ -13,25 +13,24 @@
 // limitations under the License.
 
 import styles from "./IconButton.module.scss";
-import { ComponentSize, IconButtonVariant, ColorTheme } from "../../utils/Type.ts";
+import { ButtonSize, IconButtonVariant, ColorTheme } from "../../utils/Type.ts";
 import { ComponentPropsWithoutRef } from "react";
-import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import Icon, { IconProps } from "../Icon/Icon.tsx";
+import { Spinner } from "../Spinner/Spinner.tsx";
 
 // Matches each size's `--icon-size` (IconButton.module.scss) so the spinner
 // drops into the same visual footprint as the icon it replaces — no button
 // resize when toggling `loading`.
-// IconButton expresses 32px through `small`, so it does not offer a distinct
-// `xs` (32px) tier — the `xs` entry mirrors `small` only to satisfy the
-// exhaustive Record; no `.btn-xs` rule exists (see #2298/#2299). `2xs` is the
-// 24px tier formerly named `xs`.
-const SPINNER_SIZE: Record<ComponentSize, number> = { "2xs": 16, xs: 20, small: 20, medium: 24 };
+// Buttons intentionally expose only sizes backed by CSS. The shared `xs` tier
+// remains available to other controls; `2xs` is the 24px button tier formerly
+// named `xs`.
+const SPINNER_SIZE: Record<ButtonSize, number> = { "2xs": 16, small: 20, medium: 24 };
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
   /** Defaults to "on-surface-retreat" — the app's baseline icon-button color. */
   color?: ColorTheme;
   variant: IconButtonVariant;
-  size: ComponentSize;
+  size: ButtonSize;
   icon: IconProps;
   /** Swaps the icon for a spinner and disables the button — for an action
    *  whose async work (e.g. a network fetch) isn't instant, so a click
@@ -57,12 +56,20 @@ export default function IconButton({
   loading = false,
   badgeCount,
   disabled,
+  className,
+  "aria-busy": callerBusy,
   ...props
 }: IconButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
+  if (className) buttonClasses.push(className);
 
   const button = (
-    <button className={buttonClasses.join(" ")} disabled={disabled || loading} aria-busy={loading} {...props}>
+    <button
+      className={buttonClasses.join(" ")}
+      disabled={disabled || loading}
+      aria-busy={loading ? true : (callerBusy ?? false)}
+      {...props}
+    >
       <div className={`${styles["state-layer"]}`}>
         {loading ? <Spinner size={SPINNER_SIZE[size]} /> : <Icon {...icon} />}
       </div>

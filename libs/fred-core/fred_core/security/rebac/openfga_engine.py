@@ -70,6 +70,18 @@ RebacOperation = Literal["check", "list_objects", "list_users", "write", "read"]
 # rejects more tuple operations than this, so a large batch delete must chunk.
 _MAX_TUPLES_PER_WRITE = 100
 
+# Exact-reference cleanup re-enumerates after each deleting pass; a bound stops
+# a reference that keeps gaining tuples from looping forever.
+_MAX_REFERENCE_CLEANUP_PASSES = 10
+
+
+class RebacCleanupIncomplete(RuntimeError):
+    """Raised when a reference still has relationships after cleanup.
+
+    Callers must treat this as an unfinished deletion: tuples naming the
+    reference may survive, so the removal must not be reported as done.
+    """
+
 
 def _rebac_timer(kpi_writer: BaseKPIWriter | None, operation: RebacOperation):
     """One `rebac_operation` dim (check/list_objects/list_users/write/read) —
@@ -169,48 +181,78 @@ class OpenFgaRebacEngine(RebacEngine):
 
         async with _rebac_timer(self._kpi, "write"):
             fga_id_to_delete = OpenFgaRebacEngine._reference_to_openfga_id(reference)
-            to_delete: list[ClientTuple] = []
-
             client = await self.get_client()
-            body = ReadRequestTupleKey()
-            continuation_token: str | None = None
 
-            while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+            # The loop ends only on a re-read that finds nothing, so a
+            # pagination cursor reaching its end never stands in for the final
+            # state; a cleanup resumed after a crash converges the same way.
+            deleted_total = 0
+            converged = False
+            for _ in range(_MAX_REFERENCE_CLEANUP_PASSES):
+                to_delete = await self._read_exact_reference_tuples(
+                    client, fga_id_to_delete
+                )
+                if not to_delete:
+                    converged = True
+                    break
+
                 options = self._build_options()
-                if continuation_token:
-                    options["continuation_token"] = continuation_token
+                for index in range(0, len(to_delete), _MAX_TUPLES_PER_WRITE):
+                    chunk = to_delete[index : index + _MAX_TUPLES_PER_WRITE]
+                    _ = await client.write(ClientWriteRequest(deletes=chunk), options)
+                deleted_total += len(to_delete)
 
-                res = await client.read(body, options)
-                continuation_token = res.continuation_token
+            if not converged:
+                logger.warning(
+                    "Reference cleanup did not converge within %d passes",
+                    _MAX_REFERENCE_CLEANUP_PASSES,
+                )
+                raise RebacCleanupIncomplete(
+                    "Relationships remain after the bounded cleanup passes"
+                )
 
-                # Filter only tuples related to the given reference
-                for tup in res.tuples:
-                    if (
-                        tup.key.user == fga_id_to_delete
-                        or tup.key.object == fga_id_to_delete
-                    ):
-                        to_delete.append(
-                            ClientTuple(
-                                user=tup.key.user,
-                                relation=tup.key.relation,
-                                object=tup.key.object,
-                            )
-                        )
+            logger.debug("Deleted %d relations of one reference", deleted_total)
 
-            if not to_delete:
-                return None
-
-            # Delete all found tuples
-            body_delete = ClientWriteRequest(deletes=to_delete)
-            logger.debug(
-                "Deleting %d relations of reference %s", len(to_delete), reference
-            )
-            options = self._build_options()
-            _ = await client.write(body_delete, options)
+        if deleted_total == 0:
+            return None
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
         return ConsistencyPreference.HIGHER_CONSISTENCY
+
+    async def _read_exact_reference_tuples(
+        self, client: OpenFgaClient, fga_id: str
+    ) -> list[ClientTuple]:
+        """Return every stored tuple naming this exact reference on either side.
+
+        Higher-consistency reads avoid treating a stale empty result as completion.
+        """
+
+        found: list[ClientTuple] = []
+        body = ReadRequestTupleKey()
+        continuation_token: str | None = None
+
+        while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
+            options = self._build_options(
+                consistency=ConsistencyPreference.HIGHER_CONSISTENCY
+            )
+            if continuation_token:
+                options["continuation_token"] = continuation_token
+
+            res = await client.read(body, options)
+            continuation_token = res.continuation_token
+
+            for tup in res.tuples:
+                if tup.key.user == fga_id or tup.key.object == fga_id:
+                    found.append(
+                        ClientTuple(
+                            user=tup.key.user,
+                            relation=tup.key.relation,
+                            object=tup.key.object,
+                        )
+                    )
+
+        return found
 
     async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
         async with _rebac_timer(self._kpi, "write"):

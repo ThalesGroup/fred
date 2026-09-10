@@ -141,7 +141,7 @@ Permissions are exposed via:
 - `PermissionSummary`
   - `platform_roles: PlatformRoleRelation[]` — the only field, OpenFGA-derived
     (the organization role relations) and union-resolved, so a `platform_admin`
-    carries every role. See Contract Note §50: it replaced the
+    carries every role. See Contract Note §51: it replaced the
     `is_platform_admin` / `is_platform_observer` booleans when the admin tier
     split into five delegated roles. Contract Note §14 records the earlier
     removal of the Keycloak-derived `items` list and six unwired `can_*`
@@ -1148,7 +1148,7 @@ unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
 `is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. (Superseded 2026-09-09 by §50: both booleans became `platform_roles`.)
+4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
 Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
@@ -2686,7 +2686,7 @@ retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
 **Authorization:** `organization_authz.require_manage_capabilities`
-(`organization#can_manage_capabilities`, §50), the same shared gate as
+(`organization#can_manage_capabilities`, §51), the same shared gate as
 `GET /admin/capabilities` — no team dimension (this is a platform-wide
 routing assertion, not a per-team permission, same reasoning as
 `model_reasoning`).
@@ -2997,12 +2997,12 @@ only key the two registrations share. Duplicate `app_id` values are rejected
 at config load, as is an own-origin `ui_prefix` that is not exactly
 `/apps/<app_id>` — the gateway routes on that segment, so any other own-origin
 path is a silent 404 the browser cannot distinguish from a cold service.
-`enabled: false` parks an entry without deleting it, but withdraws it only
-from the catalog; its gateway routes keep serving until that half is removed
+In the current implementation, `enabled: false` deactivates an entry without deleting
+it, but withdraws it only from the catalog; its gateway routes keep serving until that half is removed
 too. Its existing team grants keep living as well: revoking one stays
-available for a parked entry, while granting a new one does not. An entry
+available for a deactivated entry, while granting a new one does not. An entry
 withdrawn from the catalog must still be unwindable, or the grants an operator
-parked it to retire are stranded. Removing an entry makes the application
+deactivated it to retire are stranded. Removing an entry makes the application
 unavailable on the next config load, not on the next rebuild.
 
 The typed deployment-wide `enableApplications` feature gate defaults to
@@ -3017,25 +3017,33 @@ Effective access is therefore:
 ```text
 enableApplications
 AND user can_use_team_applications on team:<team_id>
-AND team:<team_id> can_use capability:app__<app_id>
+AND team:<team_id> can_use app:<app_id>
 AND the frame answers the protocol handshake with an accepted version
 ```
 
-Applications reuse capability enablement for coarse admission. A registered
-`app_id` derives capability id `app__<app_id>`; `app__` is reserved for catalog
-`kind="app"`. The discriminator exists only on the JSON-safe
+Applications reuse the existing capability administration workflow for coarse
+admission, but they are first-class `app` resources in OpenFGA. A registered
+`app_id` derives the flat catalog and administration id `app__<app_id>` and the
+authorization object `app:<app_id>`. The `app__` prefix is reserved for catalog
+`kind="app"`; it prevents collisions in the shared catalog and is not part of
+the OpenFGA object id. The discriminator exists only on the JSON-safe
 `CapabilityCatalogEntry` and admin wire model: runtime `CapabilityManifest`
 continues to accept `tool | agent | model` only. Every registered application
 is `admin_gated`; registration alone grants no team access. The admin catalog
 entry carries single-string labels, so the mandatory `"en"` display strings are
 the ones projected there.
 
-Existing platform-admin capability routes remain the only enablement writers.
-Application rows support default-on and collaborative-team controls, but have
-no personal-space control or generic team-settings JSON. App changes do not
-enter agent dependency, impact, health, suspension, revival, reasoning, or
-model-binding paths. Attempts to grant an app to a personal team are rejected;
-revocation remains available to clean up a stale personal tuple.
+Existing platform-admin capability routes remain the entitlement writers,
+and establish the typed organization anchor during authorized mutations.
+Configuration registration is catalog-only; startup seeding skips admin-gated apps.
+No app lifecycle registry, global active marker or reconciliation command is
+required. The routes continue to accept and return `app__<app_id>` for application rows, then
+map that validated catalog entry to `app:<app_id>` for relation reads and
+writes. Application rows support default-on and collaborative-team controls,
+but have no personal-space control or generic team-settings JSON. App changes
+do not enter agent dependency, impact, health, suspension, revival, reasoning,
+or model-binding paths. Attempts to grant an app to a personal team are
+rejected; revocation remains available to clean up a stale personal tuple.
 
 The team discovery contract is:
 
@@ -3055,7 +3063,7 @@ Fred's translation bundle. `"en"` is always present and is the fallback.
 application API only through the proxy. The service canonicalizes the team id
 and checks the user's `can_use_team_applications` permission before team or
 application metadata. A collaborative team then sees only registered items for
-which that team has `capability#can_use`. Personal teams return an empty list.
+which that team has `app#can_use`. Personal teams return an empty list.
 With ReBAC disabled, all registered items are returned for collaborative teams.
 
 The frontend keeps two generic routes, `/team/:teamId/apps` and
@@ -3114,7 +3122,7 @@ that choice is ambiguous.
 
 Nothing about the conversation travels on this message. An application that
 wants a conversation to be about one of its records records that intent through
-its own service, and its capability resolves it on the agent side from the
+its own service, and the receiving agent capability resolves it from the
 runtime identity — so the record never passes through a channel the model or
 the frame could redirect.
 
@@ -3158,12 +3166,13 @@ entitlement locally through the narrow SDK described below. A gateway
 registration with no matching `application_sources` entry still proxies both
 prefixes, so the gateway list must stay a subset of the catalog.
 
-`app__<app_id>` is derived by `application_capability_id` (fred-core), which
-unlike `model_capability_id` does **not** normalize characters outside the id
-charset. A registered `app_id` is already constrained to a subset of
-`CAPABILITY_ID_PATTERN` at config load, so an id needing repair is one no
-catalog accepted; normalizing it on an authorization path could resolve it
-onto a neighbouring capability's id instead of failing closed.
+The catalog and administration id `app__<app_id>` is derived by
+`application_catalog_id` (fred-core), which unlike `model_capability_id`
+does **not** normalize characters outside the id charset. A registered `app_id`
+is already constrained to a subset of `CAPABILITY_ID_PATTERN` at config load,
+so an id needing repair is one no catalog accepted; normalizing it while
+mapping to `app:<app_id>` could resolve it onto a neighbouring application's id
+instead of failing closed.
 
 ### Two application trust tiers (2026-09-04)
 
@@ -3199,19 +3208,22 @@ The facade exposes only `check_user_team_permission`,
 `check_team_capability`, and `check_application_access`. These are
 authorization gates: they return no data and raise on denial. The combined
 application check asks team membership first, then the team's grant on
-`app__<app_id>`. Every facade check rejects personal spaces before contacting
-OpenFGA, so composing the two component checks cannot bypass the collaborative-
-team-only application boundary or trigger personal-team self-healing writes.
-It exposes no engine, tuple writer, general query, or raw OpenFGA client.
+`app:<app_id>`. `check_team_capability` remains capability-specific and must not
+be called with the `app__<app_id>` catalog id. Every facade check rejects
+personal spaces before contacting OpenFGA, so composing the two component
+checks cannot bypass the collaborative-team-only application boundary or
+trigger personal-team self-healing writes. It exposes no engine, tuple writer,
+general query, or raw OpenFGA client.
 
-The SDK deliberately reads neither catalog state nor the application feature
-gate. `enableApplications: false` still withdraws the normal browser path for
+In the current implementation, the SDK deliberately reads neither catalog state
+nor the application feature gate. `enableApplications: false` still withdraws the normal browser path for
 **both** tiers because the gateway returns 404 for `/apps` and
-`/app-services`. Parking one catalog entry (`enabled: false`) is narrower: the
+`/app-services`. Deactivating one catalog entry (`enabled: false`) is narrower: the
 arm's-length endpoint stops returning it while the gateway route and team grant
 remain, so a directly reachable first-party backend would still accept the
-grant. Parking is catalog state, **not a security kill switch**. Revoke the
-`app__<app_id>` team grant to withdraw entitlement from both tiers; for an
+grant. Deactivation is catalog state, **not a security kill switch**. Revoke the
+application through its `app__<app_id>` administration entry to remove the
+team's `app:<app_id>` grant and withdraw entitlement from both tiers; for an
 incident, also block or remove the gateway route. Remove both registration
 halves to retire the application.
 
@@ -3238,9 +3250,34 @@ footing as its agent pods, and the frame is not a sandbox for untrusted code.
 The `postMessage` handshake is what keeps the eventual separate-origin move a
 configuration edit — `ui_prefix` becomes an absolute `https` URL and nothing
 else changes. Anything that would only work same-origin is a defect against
-this contract. Durable installed/tombstoned registration, admin-visible
-stale-grant cleanup after removal, and `pending_reactivation` on id
-reappearance remain deferred lifecycle requirements.
+this contract. Administrator lifecycle status/actions and tombstone presentation remain
+outside this change.
+
+### Application authorization scope and deferred lifecycle (2026-09-09)
+
+This change delivers the dedicated app resource and configuration-based
+registration/activation under existing team entitlements. App admission is
+`(enabled or inherited) but not disabled`; it has no additional global active
+marker. Registration alone grants nothing. Higher-consistency app checks and
+typed local administration-cache invalidation are retained.
+
+Global Deactivate/Activate/Delete is a future cross-resource design for all or
+most applicable ReBAC types, not an application-only lifecycle subsystem.
+It must establish ownership, desired-state authority, retained settings,
+safe cleanup, interrupted-write recovery, stale-writer exclusion, cache
+coherence, re-registration and rollout semantics. No storage design is selected
+for that future work.
+
+Setting `enabled: false` or removing an app entry affects catalog availability,
+not guaranteed global first-party authorization revocation or deletion of
+stored permissions. Re-adding an identifier can reuse surviving permissions.
+Existing team disable/reset/default-off controls remain; default-off alone
+does not revoke explicit grants. No new frontend lifecycle presentation,
+lifecycle API, migration or recovery command is introduced.
+
+Deployment requires compatible database revisions and authorization models.
+Incompatible state requires a separately approved state-preserving migration
+plan. No automatic database downgrade or authorization-state migration is provided.
 
 ---
 
@@ -3297,7 +3334,7 @@ template. Runtime side, block ordering and trust boundary:
 | PUT | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
 
 Both are registered in `authz-endpoint-matrix.yaml`. The gate was
-`can_manage_platform` until §50 carved this surface out of that catch-all so a
+`can_manage_platform` until §51 carved this surface out of that catch-all so a
 `prompt_editor` could hold it without import/export, tasks and platform reset.
 
 **No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
@@ -3716,7 +3753,43 @@ proposals (RFC §12.2) stays deferred; retention does not need it, and building
 one only to solve retention would be solving a smaller problem with a bigger
 one.
 
-## 50. Contract Notes — the admin tier splits into delegated roles (2026-09-09, issue #2592)
+---
+
+## 50. Contract Notes — reserved system-prompt tags are refused at save time (2026-09-09, issue #2595)
+
+The runtime wraps the system prompt's four blocks in XML tags
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.76): `platform_instructions`,
+`platform_prompt`, `tools`, `agent_instructions`. An authored text that
+contains one of those tags — opening, closing or self-closing, any case,
+whitespace tolerated inside the brackets — could close a block and open
+another, so control-plane refuses it where the text is written:
+
+| Surface | Field | Response |
+| ------- | ----- | -------- |
+| `PUT /control-plane/v1/admin/platform/prompt` | `text` | 422, Pydantic validation error naming the tag (`reserved system-prompt tag <tools> is not allowed in the platform prompt`) |
+| `POST /teams/{team_id}/agent-instances` and `PATCH …/{agent_instance_id}` | every string-valued tuning field (`string`, `text`, `text-multiline`, `prompt`) — the runtime substitutes each one into the agent template as a `{key}` token | 422 `EnrollmentError` naming the field and the tag |
+
+The check is `find_reserved_prompt_tag` from fred-sdk
+`contracts/prompt_utils.py`, next to `PROMPT_SAFE_TOKENS`; the list of names
+there is the single definition of what is reserved. Every other XML or HTML
+tag is accepted — authors structure prompts with `<example>` or `<rules>` and
+the prompt editor colours tags on purpose. Token validation is unchanged
+(none, `PROMPTS.md` §2).
+
+Not validated, by decision: the prompt library (`/teams/{team_id}/prompts`),
+whose text reaches the model either as the user's own message or by copy
+into a validated agent field; and code-owned content (the pod's
+`platform_prompt.json`, `mcp_catalog.yaml` `agent_instructions`).
+
+The generated client was regenerated for this change; the schema itself does
+not move (a validator adds no field), so `controlPlaneOpenApi.ts` is
+byte-identical. The frontend mirrors the check
+(`rework/utils/promptValidation.ts`) to show the refusal while typing; the
+backend remains the reference.
+
+---
+
+## 51. Contract Notes — the admin tier splits into delegated roles (2026-09-09, issue #2592)
 
 **Extends §43.** `organization:fred` gains three role relations, each
 `[user] or platform_admin` in `schema.fga` — `team_manager`,
@@ -3739,7 +3812,9 @@ that same page. Paths are unchanged. `capability#can_manage` — the per-object
 gate every enablement mutation resolves through — is redefined from
 `platform_admin from organization` to `can_manage_capabilities from
 organization`; without that, a `feature_manager` would pass the org gate and
-fail the object gate on the very next line. `can_list_all_teams` joins the
+fail the object gate on the very next line. `app#can_manage` follows the same
+redefinition: `app__` rows are listed and toggled on the same page, behind the
+same org gate. `can_list_all_teams` joins the
 role for the same reason: the per-team enablement matrix is a team picker, and
 it renders empty without the roster. That listing is read-only and carries no
 authority over any team's data, but it is the full `Team` DTO rather than bare

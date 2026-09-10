@@ -3047,15 +3047,16 @@
     },
     "platformPrompt": {
       "title": "Platform global prompt",
-      "subtitle": "The personality and standardised instructions of this platform. It is the first block of every agent's system prompt, before each agent's own instructions.",
+      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
         "badge": "Editable",
-        "subtitle": "Your platform's personality and its own standards. Sent first, ahead of everything else, on every call of every agent."
+        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
       },
       "field": {
         "label": "Prompt text",
-        "explanation": "Keep it short: every character here is permanent context."
+        "explanation": "Keep it short: every character here is permanent context.",
+        "tooLong": "The prompt exceeds {{max}} characters."
       },
       "save": "Save",
       "saving": "Saving...",
@@ -3068,7 +3069,7 @@
       "instructions": {
         "title": "Platform operating instructions",
         "badge": "Read-only",
-        "subtitle": "Shipped with the platform and rendered immediately after your prompt, for every agent. It can only change with a deployment.",
+        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
         "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
@@ -3191,7 +3192,8 @@
     "promptEditor": {
       "copy": "Copy the prompt",
       "copied": "Prompt copied to the clipboard",
-      "copyFailed": "Could not copy the prompt"
+      "copyFailed": "Could not copy the prompt",
+      "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
     }
   },
   "runtime": {

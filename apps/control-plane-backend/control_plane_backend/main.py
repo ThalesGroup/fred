@@ -203,7 +203,7 @@ async def _seed_capability_registration_defaults(container) -> None:
             default_policy=container.configuration.platform.capabilities.default_policy,
         )
         if seeded:
-            logger.info("[capability-seeding] seeded default-on: %s", seeded)
+            logger.info("[capability-seeding] seeded default-on: count=%d", len(seeded))
     except Exception:  # noqa: BLE001 — seeding must never block startup
         logger.exception("[capability-seeding] registration seeding failed")
 

@@ -58,9 +58,24 @@ jobs:
               - 'apps/frontend/src/styles/motion.css'
               - 'apps/frontend/src/styles/gradients.css'
               - 'apps/frontend/src/styles/typography.css'
+              - 'apps/frontend/src/rework/components/shared/utils/Type.ts'
+              - 'apps/frontend/src/rework/components/shared/atoms/Icon/Icon.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Icon/Icon.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/Spinner/Spinner.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Spinner/Spinner.module.css'
+              - 'apps/frontend/src/rework/components/shared/atoms/Button/Button.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Button/Button.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.module.scss'
+              - 'apps/frontend/src/index.scss'
               - 'apps/frontend/src/styles/index.css'
               - 'apps/frontend/src/assets/fonts/Geist.woff2'
               - 'apps/frontend/src/assets/fonts/Geist-Italic.woff2'
+              - 'apps/frontend/src/assets/fonts/material-symbols-outlined.woff2'
+              - 'apps/frontend/package.json'
+              - 'apps/frontend/package-lock.json'
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
@@ -255,6 +270,10 @@ jobs:
 
       - name: Provision Chromium
         run: make browser-install
+        working-directory: libs/frontend
+
+      - name: Provision isolated consumer cache
+        run: make consumer-provision
         working-directory: libs/frontend
 
       - name: Check producer quality

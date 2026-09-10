@@ -315,3 +315,24 @@ type capability
     # and personal-class edges resolve through the contextual
     # `organization#team` / `organization#personal_team` reverse edges.
     define can_use: (enabled or inherited) but not disabled
+
+type app
+  # Product applications reuse the collaborative-team enablement workflow but
+  # remain distinct from agent capabilities and have no personal-space class.
+  relations
+    # Platform anchor for management rights.
+    define organization: [organization]
+
+    # Organization-wide default inherited through the contextual team edge.
+    define default_on: [organization]
+
+    # Explicit per-team grant and override.
+    define enabled: [team]
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    # Same delegation as `capability#can_manage`: applications are governed
+    # from the same admin surface, behind the same org-level gate.
+    define can_manage: can_manage_capabilities from organization
+    define inherited: team from default_on
+    define can_use: (enabled or inherited) but not disabled

@@ -45,10 +45,10 @@ security:
 
 storage:
   postgres:
-    sqlite_path: "~/.fred/control-plane/control_plane_test.sqlite3"
+    sqlite_path: "./.pytest-run/control_plane_test.sqlite3"
   content_storage:
     type: local
-    root_path: "~/.fred/control-plane/content-storage"
+    root_path: "./.pytest-run/content-storage"
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog_test.yaml

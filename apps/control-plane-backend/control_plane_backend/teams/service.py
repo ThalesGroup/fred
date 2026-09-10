@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -270,11 +272,7 @@ async def delete_team(
     )
     await store.delete(team_id)
 
-    logger.info(
-        "Deleted team %s (%s) via platform-admin registry action",
-        team_id,
-        metadata.name,
-    )
+    logger.info("Deleted one team via platform-admin registry action")
 
 
 async def rescue_team_admin(
@@ -332,11 +330,8 @@ async def rescue_team_admin(
         )
 
     logger.info(
-        "Rescued team %s (%s): granted team_admin to %s via platform-admin "
-        "registry action (team had zero team_admin)",
-        team_id,
-        metadata.name,
-        user_id,
+        "Rescued one orphaned team via platform-admin registry action: "
+        "granted team_admin to one account"
     )
 
 
@@ -1382,14 +1377,25 @@ _TEAM_RELATIONS_CACHE_TTL_SECONDS = 45
 _TEAM_RELATIONS_CACHE: ThreadSafeLRUCache[
     TeamId, tuple[float, list[Relation] | RebacDisabledResult]
 ] = ThreadSafeLRUCache(max_size=2000)
-# PR #2160 review (Codex, P2): a read that starts before a write's
-# invalidation but finishes after it would otherwise re-`set` the pre-write
-# snapshot, silently undoing the invalidation for a full TTL. Tracking the
-# last invalidation time per team lets a read recognize this and skip
-# publishing its (now provably stale) result — see `_get_team_relations_cached`.
-_TEAM_RELATIONS_LAST_INVALIDATED: ThreadSafeLRUCache[TeamId, float] = (
+# Monotonic tickets distinguish overlapping invalidations without timestamp ties.
+# A changed ticket prevents publication of an in-flight stale read.
+_TEAM_RELATIONS_INVALIDATION_TICKET: ThreadSafeLRUCache[TeamId, int] = (
     ThreadSafeLRUCache(max_size=2000)
 )
+_TEAM_RELATIONS_TICKETS = itertools.count(1)
+# Serializes issue-and-store so a slow writer cannot stamp a team with an
+# older ticket than one already stored, which would hide an invalidation.
+_TEAM_RELATIONS_TICKET_LOCK = Lock()
+
+
+def _stamp_team_invalidation(team_id: TeamId) -> None:
+    with _TEAM_RELATIONS_TICKET_LOCK:
+        _TEAM_RELATIONS_INVALIDATION_TICKET.set(team_id, next(_TEAM_RELATIONS_TICKETS))
+
+
+def _team_invalidation_ticket(team_id: TeamId) -> int:
+    # Absent means no invalidation has been recorded for this team.
+    return _TEAM_RELATIONS_INVALIDATION_TICKET.get(team_id) or 0
 
 
 def invalidate_team_relations_cache(team_id: TeamId) -> None:
@@ -1405,7 +1411,7 @@ def invalidate_team_relations_cache(team_id: TeamId) -> None:
       calls this right after its write succeeds
     """
     _TEAM_RELATIONS_CACHE.delete(team_id)
-    _TEAM_RELATIONS_LAST_INVALIDATED.set(team_id, time.time())
+    _stamp_team_invalidation(team_id)
 
 
 async def _get_team_relations_cached(
@@ -1426,15 +1432,8 @@ async def _get_team_relations_cached(
       change is reflected without waiting on the TTL. No authorization
       decision is ever served from this cache — `Check` calls stay live.
 
-    PR #2160 review (Codex, P2): between the cache-miss check and the final
-    `.set()` below there's a real `await` — a concurrent write can invalidate
-    this team while this call is in flight, and this call would otherwise
-    re-`set` the pre-write snapshot it already had in hand, undoing that
-    invalidation for a full TTL. `read_started_at` is captured before the
-    `await`; if `invalidate_team_relations_cache` ran for this team at or
-    after that moment, this result is provably stale and is returned to the
-    caller without being published back into the cache — the next call
-    starts clean instead of resurrecting it.
+    In-flight reads whose invalidation ticket changed are returned without
+    publication, so the next read fetches current state.
     """
     read_started_at = time.time()
     cached = _TEAM_RELATIONS_CACHE.get(team_id)
@@ -1444,12 +1443,12 @@ async def _get_team_relations_cached(
             return relations
         _TEAM_RELATIONS_CACHE.delete(team_id)
 
+    ticket_before = _team_invalidation_ticket(team_id)
     relations = await rebac.list_direct_relations(
         RebacReference(Resource.TEAM, team_id)
     )
 
-    last_invalidated = _TEAM_RELATIONS_LAST_INVALIDATED.get(team_id)
-    if last_invalidated is not None and last_invalidated >= read_started_at:
+    if _team_invalidation_ticket(team_id) != ticket_before:
         return relations
 
     _TEAM_RELATIONS_CACHE.set(

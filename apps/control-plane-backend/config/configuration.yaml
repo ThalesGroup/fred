@@ -103,12 +103,8 @@ platform:
       base_url: http://127.0.0.1:8013/rags/agents/v2
       enabled: true
       ingress_prefix: /rags/agents/v2
-  # Applications deployed alongside Fred, each serving its own UI (and
-  # optionally its own API) container. This half owns the catalog and the
-  # app__<app_id> capability only; the proxy upstreams live in the frontend
-  # gateway's FRONTEND_APPLICATIONS_JSON. `ui_prefix` is what the browser
-  # loads in the application frame — exactly /apps/<app_id> while the UI is
-  # served from Fred's origin, an absolute https URL once it moves to its own.
+  # Register application catalog entries against typed authorization resources.
+  # Configure gateway upstreams separately from browser-facing prefixes.
   # application_sources:
   #   - app_id: example
   #     ui_prefix: /apps/example

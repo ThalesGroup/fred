@@ -205,7 +205,24 @@ carries them out of the marker rule together. Note that a *contextual* selector 
 whole-node form does — worth knowing before trying to colour the two list markers differently,
 which would need a `ViewPlugin` reading the syntax tree.
 
-`PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
+**Reserved system-prompt tags (2026-09-09, #2595).** The runtime wraps the system
+prompt's four blocks in `<platform_instructions>`, `<platform_prompt>`, `<tools>` and
+`<agent_instructions>`, and control-plane refuses (422) a platform prompt or any
+string-valued agent tuning field that contains one of them. The editor itself stays neutral; the
+two call sites that are validated compute the message with `findReservedPromptTag`
+(`rework/utils/promptValidation.ts`, a mirror of the fred-sdk finder) and pass it through
+the existing `error` prop, so the refusal is visible while typing and Save is disabled
+until the tag is gone (`AgentFormBody` → `TuningFieldRenderer`, `PlatformPromptPage`).
+The prompt library is not validated and shows nothing: its text is either inserted into
+the user's message or copied into an agent field, where the check applies. Any other
+XML/HTML tag is accepted, which is what the tag colouring above is for.
+
+`PlatformPromptPage` (2026-09-09) edits in this editor too. The 0 / 20 000 counter the
+`TextArea` atom used to draw is re-implemented beside the editor, with the hint on the
+left; a draft over the cap is refused like a reserved tag. Its two panes now read left to
+right in the order the model receives the blocks — the read-only platform instructions,
+which carry the precedence rule, then the editable global prompt — and a backend 422 is
+shown under the editor rather than only as a toast.
 
 ---
 
@@ -903,6 +920,36 @@ call site keeps rendering a bare `<button>`.
 It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
 otherwise a screen reader announces the button with no number, or reads a bare
 digit after the name.
+
+---
+
+### Package-foundation component corrections (2026-09-09)
+
+**Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
+
+**Status:** `Functional`
+
+- `Button` and `IconButton` expose their implemented `2xs`, `small`, and `medium`
+  sizes without narrowing the shared size scale used by fields. `IconButton` retains
+  caller classes alongside generated classes and now has a visible two-pixel
+  `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
+  on-surface-retreat state layers for hover and press.
+- Material and custom icons are decorative by default. A standalone informative icon
+  receives only an explicit caller-owned accessible name; glyph identifiers no longer
+  become user-facing labels. The unsupported legacy `infos` name was corrected to
+  `info` at its sole caller.
+- `TextInput` preserves caller IDs, refs, handlers, input type, autocomplete, and other
+  native props. Labels target the effective ID; help/error descriptions are merged with
+  caller descriptions; enabled errors set `aria-invalid`; and controlled/uncontrolled
+  counters follow the current value, including an uncontrolled input's actual value
+  after an uncancelled native form reset. A canceled reset leaves both value and count
+  unchanged. Compact presentation keeps any visually omitted help/error text associated
+  through `aria-describedby`.
+- `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
+  text, and remains label-free when decorative.
+
+These corrections support the initial `@fred/ui` archive only. They do not claim the
+deferred component catalog, overlays, iframe SDK, release, or adoption work as shipped.
 
 ---
 
@@ -4372,3 +4419,99 @@ every mutation knows the page id and none of them knows the slug, so tagging by
 slug leaves a write unable to invalidate the page it just changed — the article
 keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
 the *next* save conflict every time.
+
+---
+
+## Conversation outline rail (2026-09-09, CHAT-OUTLINE-01, issue #2602)
+
+### `ConversationOutlineRail`
+
+**Location:** `src/rework/components/shared/molecules/ConversationOutlineRail/`
+**Status:** `Functional` — V1. Design and the deferred parts: RFC
+`CONVERSATION-OUTLINE-RAIL-RFC.md`.
+
+A rail of graphical marks along the left edge of `ManagedChatPage`'s
+conversation, one per turn. No text: the marks sit in the gutter left by the
+720px message lane, so they take no width from the reading column. Hovering one
+magnifies it and its two neighbours each side and opens a preview tile to its
+right — the question's first sentence over the answer's first two. Clicking one
+jumps to that turn.
+
+**The rail sits against the page's left edge**, at the top bar's inset, not
+against the reading column: it is chrome for the page, and anchoring it to the
+lane made it drift inward with the column instead of staying where the eye
+learns to find it. On a column barely wider than the lane it therefore overlaps
+the first characters of each line — a known cost, and the case to answer when
+narrow viewports are taken on.
+
+**Every mark is the same size.** Encoding the answer's length in a mark's
+height was built and then dropped: it turned the rail into a second thing to
+read rather than a place to aim. The rail says where the turns are, and nothing
+about them.
+
+**The rail has no gaps.** Each mark's button is a full-width row with no gap
+between rows and no padding around the list, and the visible bar is a
+pseudo-element inside it. Anywhere the pointer lands on the rail it is on
+exactly one mark — otherwise travelling down the rail crosses slivers where the
+tile closes and the magnification collapses.
+
+**The rail is inert while a turn is live** (`isStreaming || pendingHitl`):
+visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
+what makes the whole feature safe. `useChatAutoScroll` re-decides the
+conversation's scroll position every animation frame while a turn runs, so a
+jump written from outside would be overwritten a frame later — a frame-timing
+bug, therefore intermittent. The hook writes *only* while live, so a rail that
+can only be clicked when it is quiescent never overlaps it: the single-owner
+invariant holds by construction rather than by timing. `useChatAutoScroll`'s
+ownership comment states the refined rule.
+
+**The active mark** (`--primary`) follows two rules, and the second is not a
+special case — it is the common one. *At the bottom of the conversation, the
+last turn is active*: a short final turn never climbs to any reading line,
+because there is not enough content below it to push it there, so without this
+the rail points at the previous turn while the reader sits on the newest one.
+Otherwise, *the last turn whose question has passed a line 35% down the
+viewport* — not the topmost anchor still on screen, since the anchors sit on the
+user message and partway through a long answer none is visible at all.
+
+This is driven by a scroll listener, not an `IntersectionObserver`. An observer
+only fires when something crosses a boundary, and the first rule turns on the
+scroll position: no anchor crosses anything over the last stretch to the bottom,
+so an observer stays silent through precisely the case that has to be right. The
+cost is paid off instead by binary search — anchors are in document order, so
+their positions are monotonic and the line is found in about eight measurements
+for a two-hundred-turn conversation — and by not measuring at all while a turn
+is live, which is when the autoscroll is writing every frame.
+
+**Streaming costs the rail nothing.** The message list is replaced on every
+token, so: the fold's result is handed back by identity when it describes the
+same rail (keeping the component's `memo` alive), the preview callback is
+ref-backed so its identity never changes, and extracts are derived on hover for
+the hovered turn only, from a bounded 500-character slice.
+
+**Sized to its marks, not full height.** The rail is a sibling of the scroll
+container, so a wheel gesture over it has no scrollable ancestor to chain to and
+the conversation would not move — the dead left gutter of #654. Hugging the
+marks keeps that surface to the few pixels the reader is deliberately pointing
+at. Once the marks outgrow the available height the rail scrolls itself, and
+follows the active mark.
+
+**`aria-hidden`, and the marks are out of the tab order.** Keyboard access is a
+V1 omission, and the RFC says what taking it on would involve: with no labels or
+tab order a screen reader would announce a row of silent marks, and a focusable
+control inside an aria-hidden subtree is a trap. The conversation itself stays fully readable in the thread.
+
+### `Tooltip` — `gapPx`, `placement="right"`, and closing on window blur
+
+Three additions, all made for the rail and all useful beyond it:
+
+- an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for every existing
+  caller) — the rail's preview tile reads as its own card rather than a hint
+  stuck to its trigger, and takes 12;
+- `placement="right"`, the mirror of `"left"`: beside the trigger, vertically
+  centred, flipping to the other side when there is no room;
+- **the panel now closes when the window loses focus or the page is hidden.**
+  Leaving the window produces no `mouseleave`, so a tooltip hovered at the
+  moment of an alt-tab was still open on return and — its own leave event
+  having been lost for good — stayed open alongside the next one hovered. On a
+  rail of many triggers that meant two panels on screen at once.

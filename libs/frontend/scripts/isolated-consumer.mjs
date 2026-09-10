@@ -83,6 +83,7 @@ async function assertNoLinks(root, relativeDirectory = "") {
 export async function stageIsolatedConsumer({
   keep = false,
   evidencePath,
+  stagedOutputPath,
 } = {}) {
   const { archivePath } = await packDesignTokens();
   await validateArchive(archivePath);
@@ -183,6 +184,12 @@ export async function stageIsolatedConsumer({
         `${JSON.stringify(evidence, null, 2)}\n`,
       );
     }
+    if (stagedOutputPath) {
+      const resolvedOutput = path.resolve(workspaceRoot, stagedOutputPath);
+      await rm(resolvedOutput, { recursive: true, force: true });
+      await mkdir(path.dirname(resolvedOutput), { recursive: true });
+      await cp(outputRoot, resolvedOutput, { recursive: true });
+    }
     return {
       consumerRoot,
       outputRoot,
@@ -202,6 +209,7 @@ export async function stageIsolatedConsumer({
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await stageIsolatedConsumer({
     evidencePath: optionValue("--evidence"),
+    stagedOutputPath: "target/staged-consumers/tokens",
   });
   process.stdout.write(`${JSON.stringify(result.evidence, null, 2)}\n`);
 }

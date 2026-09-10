@@ -60,7 +60,8 @@ class RelationType(str, Enum):
     ORGANIZATION = "organization"
     # Reverse index of team.organization (`organization:fred#team@team:<id>`).
     # Never persisted — injected as a contextual tuple for team-subject checks
-    # (capability#can_use), since every team belongs to the singleton org.
+    # (capability#can_use and app#can_use), since every team belongs to the
+    # singleton org.
     TEAM = "team"
     # Reverse index restricted to PERSONAL spaces
     # (`organization:fred#personal_team@team:<id>`). Never persisted — injected
@@ -69,8 +70,8 @@ class RelationType(str, Enum):
     # every personal team and no regular team.
     PERSONAL_TEAM = "personal_team"
 
-    # Capability team-scoping structural relations (CAPAB-01 / #1980,
-    # RFC AGENT-CAPABILITY §8.1). Written only by the enablement API.
+    # Shared capability/application team-scoping structural relations. Written
+    # only by the enablement API.
     DEFAULT_ON = "default_on"
     ENABLED = "enabled"
     DISABLED = "disabled"
@@ -296,6 +297,18 @@ class CapabilityPermission(str, Enum):
     CAN_MANAGE = "can_manage"
 
 
+class AppPermission(str, Enum):
+    """Actions allowed on one registered product application.
+
+    The target is always ``app:<app_id>``. Application catalog identifiers use
+    an ``app__`` prefix, but that administrative namespace is never persisted
+    as part of the OpenFGA object id.
+    """
+
+    CAN_USE = "can_use"
+    CAN_MANAGE = "can_manage"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
@@ -304,6 +317,7 @@ RebacPermission = (
     | AgentPermission
     | OrganizationPermission
     | CapabilityPermission
+    | AppPermission
 )
 
 
@@ -328,6 +342,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.ORGANIZATION
     if isinstance(permission, CapabilityPermission):
         return Resource.CAPABILITY
+    if isinstance(permission, AppPermission):
+        return Resource.APP
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
@@ -360,6 +376,30 @@ def team_organization_relation(team_id: str) -> Relation:
         relation=RelationType.ORGANIZATION,
         resource=RebacReference(Resource.TEAM, team_id),
     )
+
+
+def team_subject_and_context(
+    team_id: str,
+) -> tuple[RebacReference, list[Relation]]:
+    """Build a team subject and its contextual organization reverse edges.
+
+    The plain ``organization#team`` edge is shared by capability and
+    application checks. Personal teams also receive the capability-only class
+    edge; application callers reject personal ids before reaching OpenFGA.
+    """
+
+    team_ref = RebacReference(type=Resource.TEAM, id=team_id)
+    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
+    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
+    if is_personal_team_id(team_id):
+        context.append(
+            Relation(
+                subject=team_ref,
+                relation=RelationType.PERSONAL_TEAM,
+                resource=org_ref,
+            )
+        )
+    return team_ref, context
 
 
 class RebacDisabledResult:
@@ -488,8 +528,11 @@ class RebacEngine(ABC):
     ) -> str | None:
         """Remove every statement touching the given reference.
 
-        Example:
-        - deleting an agent can remove all `owner`, `viewer`, or parent links.
+        Raises `RebacCleanupIncomplete` when an implementation cannot verify
+        completion within its own bound. That reports unverified completion,
+        not that statements necessarily remain; progress may be partial and a
+        retry is idempotent. This contract does not guarantee exclusion of
+        concurrent writers.
         """
 
     @abstractmethod
@@ -1126,13 +1169,12 @@ class RebacEngine(ABC):
             contextual_relations=contextual_relations,
             consistency_token=consistency_token,
         ):
+            # Log fixed types and permission names without actor or resource identifiers.
             logger.warning(
-                "ReBAC authorization denied: subject=%s:%s permission=%s resource=%s:%s",
+                "ReBAC authorization denied: subject_type=%s permission=%s resource_type=%s",
                 subject.type.value,
-                subject.id,
                 permission.value,
                 resource.type.value,
-                resource.id,
             )
             denied_actor_uid = actor_uid
             if denied_actor_uid is None and subject.type == Resource.USER:

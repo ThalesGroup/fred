@@ -12578,7 +12578,7 @@
                             },
                             "enableApplications": {
                               "default": false,
-                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled.",
+                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
                               "type": "boolean"
                             },
@@ -12798,7 +12798,7 @@
                         "description": "One application this deployment serves, registered by an operator.\n\nMirrors ``RuntimeCatalogSourceConfig``. Everything here is browser-facing\nor catalog metadata: the server-side proxy upstreams belong to the\nfrontend gateway, which is the only process that routes to them.",
                         "properties": {
                           "app_id": {
-                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> capability the team authorization grant is written against.",
+                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> identifier used by the shared administration catalog. Authorization uses the raw id as app:<app_id>.",
                             "maxLength": 64,
                             "minLength": 1,
                             "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
@@ -14701,7 +14701,7 @@
                             },
                             "enableApplications": {
                               "default": false,
-                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application capability administration, and the frontend Apps experience stay disabled.",
+                              "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
                               "type": "boolean"
                             },
@@ -14921,7 +14921,7 @@
                         "description": "One application this deployment serves, registered by an operator.\n\nMirrors ``RuntimeCatalogSourceConfig``. Everything here is browser-facing\nor catalog metadata: the server-side proxy upstreams belong to the\nfrontend gateway, which is the only process that routes to them.",
                         "properties": {
                           "app_id": {
-                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> capability the team authorization grant is written against.",
+                            "description": "Application id. Interpolated into /apps/<app_id>/ and /app-services/<app_id>/, and into the app__<app_id> identifier used by the shared administration catalog. Authorization uses the raw id as app:<app_id>.",
                             "maxLength": 64,
                             "minLength": 1,
                             "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",

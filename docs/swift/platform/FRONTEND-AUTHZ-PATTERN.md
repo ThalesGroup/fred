@@ -42,8 +42,10 @@ tier. `useTeamCapabilities()` exposes `canUseTeamApplications` for ordinary UI
 decisions, while the host fetches
 `GET /control-plane/v1/teams/{team_id}/applications`. That endpoint first
 requires `can_use_team_applications`, then returns only installed applications
-for which the selected team has `capability#can_use` on
-`app__<application-id>`.
+for which the selected team has `app#can_use` on `app:<application-id>`. The
+Capabilities administration surface continues to identify the same entry as
+`app__<application-id>`; that catalog id is mapped by the control plane and is
+never a frontend authorization target.
 
 The host searches that authorized response before consulting or invoking its
 build-time module registry. Unknown, unavailable, and unentitled ids therefore

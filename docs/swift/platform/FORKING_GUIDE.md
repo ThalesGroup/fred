@@ -130,7 +130,7 @@ authorize the response on your behalf.
 So every request handler must answer both questions — is this caller a member
 of the team, and was this application granted to that team. You do not have to
 implement either: the Control Plane already answers both in one call, because
-grants are **team → capability**, never user → capability. Use the *caller's*
+application grants are **team → app**, never user → app. Use the *caller's*
 token, not a service credential:
 
 ```js
@@ -261,8 +261,9 @@ value; do not add a second chart setting for the frontend container. With the
 switch off, both prefixes return 404 and the Apps surface does not mount.
 
 Registration still grants nothing. A platform administrator enables
-`app__<app_id>` for each collaborative team on the Capabilities page. Personal
-spaces are outside V1.
+the `app__<app_id>` entry for each collaborative team on the Capabilities page.
+The control plane maps that catalog id to the OpenFGA authorization object
+`app:<app_id>`; personal spaces are outside V1.
 
 ### What the registration refuses
 

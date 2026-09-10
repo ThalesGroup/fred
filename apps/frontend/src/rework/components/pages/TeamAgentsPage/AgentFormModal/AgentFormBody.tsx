@@ -28,6 +28,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
+import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
@@ -242,6 +243,15 @@ export function AgentFormBody({
     (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
   );
 
+  // A reserved system-prompt tag is refused by the backend (422) whichever way
+  // it is submitted; say so while typing rather than after the round-trip.
+  const fieldError = (field: ManagedAgentFieldSpec): string | undefined => {
+    const value = tuningFieldValues[field.key];
+    const reservedTag = reservedTagInPromptField(field, value);
+    if (reservedTag) return t("rework.promptEditor.reservedTag", { tag: reservedTag });
+    return submitAttempted && field.required && !value ? `${field.title} is required` : undefined;
+  };
+
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
     fields.map((field) => (
       <TuningFieldRenderer
@@ -254,9 +264,7 @@ export function AgentFormBody({
         allValues={effectiveTuningValues}
         pickerExplicit={promptPickerExplicit[field.key] ?? null}
         onPickerExplicitChange={(v) => setPromptPickerExplicit((prev) => ({ ...prev, [field.key]: v }))}
-        error={
-          submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
-        }
+        error={fieldError(field)}
       />
     ));
 

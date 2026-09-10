@@ -2,14 +2,113 @@ from __future__ import annotations
 
 import asyncio
 import pathlib
+import shutil
+import tempfile
 
 import pytest
+import yaml
 from sqlalchemy.ext.asyncio import create_async_engine
+
+_CONFIG_SOURCE = (
+    pathlib.Path(__file__).resolve().parents[1] / "config" / "configuration_test.yaml"
+)
+
+# Set by pytest_configure before collection; read by the fixtures below.
+_RUN_ROOT: pathlib.Path | None = None
+_PRE_EXISTING_DATABASES: dict[pathlib.Path, tuple[int, int]] = {}
+
+
+def _run_root() -> pathlib.Path:
+    if _RUN_ROOT is None:
+        raise RuntimeError("Test isolation root was not initialised.")
+    return _RUN_ROOT
+
+
+def _configured_database_path() -> pathlib.Path:
+    """The database the test configuration selects, resolved as the app does.
+
+    Read from that file rather than repeated here, so the schema this fixture
+    resets and the database those tests open cannot drift apart.
+    """
+    settings = yaml.safe_load(_CONFIG_SOURCE.read_text())
+    raw = settings["storage"]["postgres"]["sqlite_path"]
+    return pathlib.Path(raw).expanduser().resolve()
+
+
+def _run_database_path() -> pathlib.Path:
+    return _run_root() / "control_plane.sqlite3"
+
+
+def _home_database_dir() -> pathlib.Path:
+    """Directory holding a developer's own databases, which tests never touch."""
+    return pathlib.Path("~/.fred/control-plane").expanduser()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Give the run its own root, and record the databases it must not touch.
+
+    Installed before collection because the schema fixture drops and recreates
+    every table in the database it is pointed at.
+    """
+    global _RUN_ROOT
+    _RUN_ROOT = pathlib.Path(tempfile.mkdtemp(prefix="control-plane-tests-"))
+
+    home_dir = _home_database_dir()
+    if home_dir.is_dir():
+        for existing in home_dir.glob("*.sqlite3"):
+            stat = existing.stat()
+            _PRE_EXISTING_DATABASES[existing] = (stat.st_mtime_ns, stat.st_size)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    if _RUN_ROOT is not None:
+        shutil.rmtree(_RUN_ROOT, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def isolated_run_root() -> pathlib.Path:
+    """Temporary root owned by this run; removed when the session ends."""
+    return _run_root()
+
+
+@pytest.fixture(scope="session")
+def configured_database_path() -> pathlib.Path:
+    """The database the test configuration selects; reset once per session."""
+    return _configured_database_path()
+
+
+@pytest.fixture(scope="session")
+def isolated_database_path() -> pathlib.Path:
+    """A per-run database for tests that must not share session state."""
+    return _run_database_path()
+
+
+@pytest.fixture(scope="session")
+def isolated_config_path() -> pathlib.Path:
+    """A test configuration whose storage paths stay under the run root.
+
+    Opt in per test with `monkeypatch.setenv("CONFIG_FILE", ...)`; the process
+    default is left alone because tests resolve several different configurations.
+    """
+    settings = yaml.safe_load(_CONFIG_SOURCE.read_text())
+    settings["storage"]["postgres"]["sqlite_path"] = str(_run_database_path())
+    settings["storage"]["content_storage"]["root_path"] = str(
+        _run_root() / "content-storage"
+    )
+    generated = _run_root() / "configuration_test.yaml"
+    generated.write_text(yaml.safe_dump(settings, sort_keys=False))
+    return generated
+
+
+@pytest.fixture(scope="session")
+def pre_existing_databases() -> dict[pathlib.Path, tuple[int, int]]:
+    """Modification time and size of each developer database seen at start-up."""
+    return dict(_PRE_EXISTING_DATABASES)
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _setup_test_schema() -> None:
-    """Ensure the test SQLite database has a fresh schema before any test runs.
+    """Ensure the run's database has a fresh schema before any test runs.
 
     Alembic migrations are the production path; for offline unit tests we
     drop and recreate all tables so the schema always matches the current ORM
@@ -28,9 +127,7 @@ def _setup_test_schema() -> None:
     from fred_core.teams import TeamMetadataRow  # noqa: F401
     from fred_core.users.user_models import UserRow  # noqa: F401
 
-    db_path = pathlib.Path(
-        "~/.fred/control-plane/control_plane_test.sqlite3"
-    ).expanduser()
+    db_path = _configured_database_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     async def _create_all() -> None:
@@ -65,6 +162,7 @@ def _clear_module_level_caches() -> None:
     from control_plane_backend.users import service as users_service
 
     teams_service._TEAM_RELATIONS_CACHE.clear()
+    teams_service._TEAM_RELATIONS_INVALIDATION_TICKET.clear()
     capabilities_enablement._CAPABILITY_RELATIONS_CACHE.clear()
-    capabilities_enablement._CAPABILITY_RELATIONS_LAST_INVALIDATED.clear()
+    capabilities_enablement._CAPABILITY_RELATIONS_INVALIDATION_TICKET.clear()
     users_service._USER_SUMMARY_CACHE.clear()

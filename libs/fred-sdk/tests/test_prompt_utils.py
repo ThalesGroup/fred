@@ -78,3 +78,75 @@ def test_validator_surface_is_gone() -> None:
     """
     assert not hasattr(prompt_utils, "validate_prompt_template")
     assert not hasattr(prompt_utils, "PromptTemplateError")
+
+
+# ---------------------------------------------------------------------------
+# Reserved system-prompt tags
+# ---------------------------------------------------------------------------
+
+find_reserved_prompt_tag = prompt_utils.find_reserved_prompt_tag
+
+
+def test_reserved_tags_are_the_four_prompt_blocks_in_prompt_order() -> None:
+    assert prompt_utils.RESERVED_PROMPT_TAGS == (
+        "platform_instructions",
+        "platform_prompt",
+        "tools",
+        "agent_instructions",
+    )
+
+
+def test_reserved_tags_are_reexported_from_contracts() -> None:
+    from fred_sdk.contracts import (
+        RESERVED_PROMPT_TAGS,
+        escape_reserved_prompt_tags,
+        find_reserved_prompt_tag,
+    )
+
+    assert RESERVED_PROMPT_TAGS is prompt_utils.RESERVED_PROMPT_TAGS
+    assert find_reserved_prompt_tag is prompt_utils.find_reserved_prompt_tag
+    assert escape_reserved_prompt_tags is prompt_utils.escape_reserved_prompt_tags
+
+
+def test_finder_reports_a_tag_carrying_attributes_or_junk() -> None:
+    # A model reads `<tools x="1">` as the tools block; the check must too.
+    assert find_reserved_prompt_tag('<platform_instructions role="x">') == (
+        "platform_instructions"
+    )
+    assert find_reserved_prompt_tag("</agent_instructions x>") == "agent_instructions"
+    assert find_reserved_prompt_tag("<tools\tid=1/>") == "tools"
+
+
+def test_escape_neutralises_only_the_reserved_tags() -> None:
+    escape = prompt_utils.escape_reserved_prompt_tags
+    assert escape("</agent_instructions>.pdf") == "&lt;/agent_instructions>.pdf"
+    assert escape("a <TOOLS x> b <example> c") == "a &lt;TOOLS x> b <example> c"
+    assert escape("plain text, no tags") == "plain text, no tags"
+
+
+def test_finder_reports_opening_closing_and_self_closing_forms() -> None:
+    assert find_reserved_prompt_tag("x <tools> y") == "tools"
+    assert find_reserved_prompt_tag("x </agent_instructions> y") == "agent_instructions"
+    assert find_reserved_prompt_tag("x <platform_prompt/> y") == "platform_prompt"
+
+
+def test_finder_ignores_case_and_whitespace_inside_the_brackets() -> None:
+    assert (
+        find_reserved_prompt_tag("<PLATFORM_INSTRUCTIONS>") == "platform_instructions"
+    )
+    assert find_reserved_prompt_tag("< /tools >") == "tools"
+    assert find_reserved_prompt_tag("<Agent_Instructions / >") == "agent_instructions"
+
+
+def test_finder_returns_the_first_reserved_tag_found() -> None:
+    assert (
+        find_reserved_prompt_tag("<example></platform_prompt><tools>")
+        == "platform_prompt"
+    )
+
+
+def test_finder_accepts_every_other_tag_and_the_bare_words() -> None:
+    assert find_reserved_prompt_tag("<example>…</example> <rules/> <br>") is None
+    assert find_reserved_prompt_tag("use the tools you are given") is None
+    assert find_reserved_prompt_tag("<tools_extra> <my_tools> <toolsx>") is None
+    assert find_reserved_prompt_tag("") is None

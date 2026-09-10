@@ -11,6 +11,10 @@ import {
   PACKAGE_WORKSPACE_PATTERN,
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
+  UI_COMPONENT_SOURCE_PATHS,
+  UI_FONT_SOURCE,
+  UI_REACT_BASELINE_PATHS,
+  UI_STYLE_SUPPORT_PATHS,
   VALIDATION_ORCHESTRATION_PATHS,
 } from "../scripts/package-inputs.mjs";
 import { workspaceRoot } from "../scripts/pack-design-tokens.mjs";
@@ -68,6 +72,21 @@ test("every packaged Geist asset selects package validation", () => {
   for (const { sourcePath } of FONT_SOURCES) {
     assert(selectsPackageJob([sourcePath]), sourcePath);
   }
+});
+
+test("every canonical UI source and style input selects package validation", () => {
+  for (const sourcePath of [
+    ...UI_COMPONENT_SOURCE_PATHS,
+    ...UI_STYLE_SUPPORT_PATHS,
+  ]) {
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+  }
+});
+
+test("Material Symbols and React baseline inputs select package validation", () => {
+  assert(selectsPackageJob([UI_FONT_SOURCE.sourcePath]));
+  for (const sourcePath of UI_REACT_BASELINE_PATHS)
+    assert(selectsPackageJob([sourcePath]), sourcePath);
 });
 
 test("license and validation orchestration changes select package validation", () => {
