@@ -82,7 +82,7 @@ from control_plane_backend.capabilities.schemas import (
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
-from control_plane_backend.organization_authz import require_manage_any
+from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
@@ -104,9 +104,10 @@ async def _require_can_manage(
     *,
     deps: ProductServiceDependencies,
 ) -> None:
-    """Gate a shared-admin mutation on the platform administrator relation.
+    """Gate a feature-governance mutation on the org's `can_manage_capabilities`.
 
-    Capabilities are checked through ``capability#can_manage``. Applications
+    Capabilities are checked through ``capability#can_manage``, which the
+    schema resolves through that relation. Applications
     first pass the equivalent organization gate, then resolve an exact
     configured ``app__`` catalog entry. Their typed anchor is left to the
     mutation itself, after any team-scope guard has run, so a rejected request
@@ -120,7 +121,7 @@ async def _require_can_manage(
         # kill switch is then checked before reading registered applications or
         # creating any structural tuple, so disabled applications are both
         # undiscoverable and immutable through the generic capability API.
-        await require_manage_any(rebac, user)
+        await require_manage_capabilities(rebac, user)
         if not is_feature_enabled(deps.configuration, "enableApplications"):
             raise CapabilityNotFound(
                 f"Application catalog entry {capability_id!r} is not installed."
@@ -367,11 +368,10 @@ async def list_capability_enablement(
     """List every advertised capability with its scope + enablement state (§8.5)."""
 
     rebac = _rebac(deps)
-    # Aggregate-list read gate: `can_manage` is org-admin, so probe it on the
-    # organization singleton via the same admin relation. Kept before every
-    # other step below — authorization must resolve before any of this
-    # request's work runs.
-    await require_manage_any(rebac, user)
+    # Aggregate-list read gate: no single capability object to check, so probe
+    # the org relation `capability#can_manage` itself resolves through. Kept
+    # before every other step — authorization resolves before any work runs.
+    await require_manage_capabilities(rebac, user)
 
     # Lazy import breaks the product.service ↔ capabilities import cycle, same
     # reason `catalog.py`/`impact.py` defer their own product.service imports.

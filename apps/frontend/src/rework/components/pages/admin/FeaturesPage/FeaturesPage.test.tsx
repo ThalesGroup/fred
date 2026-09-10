@@ -77,7 +77,7 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
 }));
 
 // Isolate the page from the drawer's own internals (TuningFieldRenderer, tri-state
-// mutations, search) — but still render the props CapabilitiesPage passes it, so a
+// mutations, search) — but still render the props FeaturesPage passes it, so a
 // regression that stops forwarding the global team registry is caught here too.
 const drawerProps = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock("./CapabilityTeamMatrixDrawer", () => ({
@@ -87,7 +87,7 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
   },
 }));
 
-import CapabilitiesPage from "./CapabilitiesPage";
+import FeaturesPage from "./FeaturesPage";
 
 function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {
   return {
@@ -104,14 +104,14 @@ function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablement
 
 function render(): string {
   h.tKeys = [];
-  return renderToStaticMarkup(<CapabilitiesPage />);
+  return renderToStaticMarkup(<FeaturesPage />);
 }
 
 beforeEach(() => {
   h.applicationsEnabled = false;
 });
 
-describe("CapabilitiesPage states", () => {
+describe("FeaturesPage states", () => {
   beforeEach(() => {
     h.list = { data: undefined, isLoading: false, isError: false };
   });
@@ -132,7 +132,7 @@ describe("CapabilitiesPage states", () => {
   });
 });
 
-describe("CapabilitiesPage team registry wiring", () => {
+describe("FeaturesPage team registry wiring", () => {
   // Regression coverage for the bug where the "Manage teams" drawer used
   // `useListTeamsQuery` (caller-scoped: only teams the admin belongs to)
   // instead of `useListAllTeamsQuery` (the full registry, `can_list_all_teams`).
@@ -178,7 +178,7 @@ describe("CapabilitiesPage team registry wiring", () => {
   });
 });
 
-describe("CapabilitiesPage catalog rows", () => {
+describe("FeaturesPage catalog rows", () => {
   it("renders each capability with enabled-team count and a healthy resting state", () => {
     h.list = {
       data: {
@@ -359,7 +359,7 @@ describe("CapabilitiesPage catalog rows", () => {
 // capability with a required team setting, which the backend always refuses
 // (`DefaultOnNotAllowed`, HTTP 409) — nobody has filled the settings for the
 // teams that would inherit it (RFC §8.2).
-describe("CapabilitiesPage default-on gate for required team settings (#2408)", () => {
+describe("FeaturesPage default-on gate for required team settings", () => {
   const REQUIRED_FIELD = { key: "endpoint", type: "url" as const, title: "Endpoint", required: true };
 
   /** The default-on column is the first cell, so its Switch is the first input. */
@@ -416,7 +416,7 @@ describe("CapabilitiesPage default-on gate for required team settings (#2408)", 
   });
 });
 
-describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
+describe("FeaturesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-02 v3 RFC §8.7)", () => {
   it("shows only tool-kind capabilities by default, hiding agent-kind and model-kind rows", () => {
     h.list = {
       data: {
@@ -464,7 +464,7 @@ describe("CapabilitiesPage kind filter (CAPAB-01, RFC §8.6; model kind OBSERV-0
   });
 });
 
-describe("CapabilitiesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5)", () => {
+describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5)", () => {
   it("does not render a reasoning column on the tools view", () => {
     // The two axes share this screen and must not be confused: "Enabled for
     // all" is access (per team, ReBAC), reasoning is how a model runs (global).

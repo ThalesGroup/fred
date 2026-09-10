@@ -122,6 +122,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/teams/all` }),
     }),
+    searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/candidate-admins`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
     getTeamControlPlaneV1TeamsTeamIdGet: build.query<
       GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
       GetTeamControlPlaneV1TeamsTeamIdGetApiArg
@@ -1432,6 +1443,11 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
+  query: string;
+};
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
@@ -2381,7 +2397,12 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
-export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleRelation =
+  | "platform_admin"
+  | "platform_observer"
+  | "team_manager"
+  | "feature_manager"
+  | "prompt_editor";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -2533,10 +2554,8 @@ export type FrontendFeatureFlags = {
   enableInformationSystems?: boolean;
 };
 export type PermissionSummary = {
-  /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
-  is_platform_admin?: boolean;
-  /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
-  is_platform_observer?: boolean;
+  /** OpenFGA-derived org-level roles the caller EFFECTIVELY holds — the single source of truth for gating admin UI surfaces, never Keycloak roles. Union-resolved, so a platform_admin holds every role here; that is deliberately unlike `GET /users/platform-roles`, which reports directly-granted tuples only because those are what a revoke can actually delete. */
+  platform_roles?: PlatformRoleRelation[];
 };
 export type UploadWarning = {
   /** Visual severity variant of the banner. */
@@ -3872,6 +3891,8 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery,
   useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
+  useLazySearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,

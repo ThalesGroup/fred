@@ -72,18 +72,18 @@ export interface AuthzProbeDeps {
 }
 
 /** Pure — no fetch, nothing to mock. A capability that returns 200 must line up
- * with the same account's own `is_platform_admin` flag, in either direction:
+ * with the same account's own `platform_admin` role, in either direction:
  * a "yes" without the flag, or the flag without the "yes", are both bugs. */
 export function assertAccessMatchesPlatformAdmin(label: string, status: number, isPlatformAdmin: boolean): void {
   const allowed = status === 200;
   if (allowed === isPlatformAdmin) return;
   throw new Error(
-    `${label}: HTTP ${status} (${allowed ? "allowed" : "denied"}), but is_platform_admin=${isPlatformAdmin}`,
+    `${label}: HTTP ${status} (${allowed ? "allowed" : "denied"}), but platform_admin=${isPlatformAdmin}`,
   );
 }
 
 /** Pure — same shape as `assertAccessMatchesPlatformAdmin`, for a team-scoped write
- * capability instead of the org-level `is_platform_admin` flag. A create that
+ * capability instead of the org-level `platform_admin` role. A create that
  * succeeds (200/201) must line up with the account's own `can_update_resources`
  * permission on that team, as reported by the team itself (never hardcoded). */
 export function assertWriteAccessMatchesTeamPermission(label: string, status: number, hasPermission: boolean): void {
@@ -109,7 +109,7 @@ export async function authzProbeScenario(
 ): Promise<void> {
   const flags = await runStep(report, "bootstrap-flags", "Read bootstrap permission flags", async () => {
     const f = await deps.fetchBootstrapFlags(targetToken);
-    return { value: f, detail: `is_platform_admin=${f.isPlatformAdmin}, is_platform_observer=${f.isPlatformObserver}` };
+    return { value: f, detail: `platform_admin=${f.isPlatformAdmin}, platform_observer=${f.isPlatformObserver}` };
   });
 
   const ownTeamIds = await runStep(report, "own-teams", "List the target's own collaborative teams", async () => {
