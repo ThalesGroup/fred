@@ -1145,8 +1145,8 @@ async def search_candidate_team_members(
         deps,
     )
 
-    stripped_query = query.strip()
-    if len(stripped_query) < 2:
+    matches = await _search_users_bounded(query, deps)
+    if not matches:
         return []
 
     admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
@@ -1157,7 +1157,6 @@ async def search_candidate_team_members(
     )
     existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
 
-    matches = await deps.search_users(stripped_query)
     return [
         candidate for candidate in matches if candidate.id not in existing_member_ids
     ]
