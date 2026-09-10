@@ -1,0 +1,161 @@
+/* Outline rail — one mark per turn, along the conversation's left edge. */
+
+/* Against the page's left edge, not the conversation's. The rail is chrome for
+   the whole page, and tying it to the lane made it drift inward with the
+   reading column instead of staying where the reader's eye learns to find it.
+
+   The cost is known and accepted: on a column barely wider than the lane — one
+   with a side panel open — the rail sits over the first characters of each
+   line. Narrow viewports are deferred (see the RFC); when they are taken on,
+   this is the case to answer.
+
+   Sized to its marks and centred, never a full-height overlay: the rail is a
+   SIBLING of the scroll container, so a wheel gesture over it has no scrollable
+   ancestor to chain to and the conversation would simply not move. Hugging the
+   marks keeps that surface to the few pixels the reader is deliberately
+   pointing at, where scrolling the rail is the sensible reading of the gesture.
+
+   Capped at the available height, at which point it scrolls itself: newest
+   turns stay reachable at the bottom and older ones leave through the top, the
+   same reading model as the conversation. Landing there is the reveal effect's
+   job (ConversationOutlineRail.tsx), which follows the active mark. */
+.rail {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  left: var(--spacing-xs);
+  flex-direction: column;
+  transform: translateY(-50%);
+  /* Widest a magnified mark gets, so magnifying never reflows anything. */
+  width: 32px;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.marks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Each mark is wrapped by its Tooltip. The magnification rules below key off
+   these wrappers, so they must stay a uniform, styling-free row. */
+.marks > * {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 100%;
+}
+
+/* The row IS the target. There is no gap between marks and no padding around
+   the list: anywhere the pointer lands on the rail, it is on exactly one mark.
+   A gap between rows would leave slivers where the tile closes and the
+   magnification collapses as the pointer travels down the rail. */
+.mark {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  width: 100%;
+  height: 16px;
+}
+
+/* The visible bar, drawn inside the much larger target above. Marks are outside
+   the squircle scope, so a plain radius token. */
+.mark::before {
+  display: block;
+  transition:
+    width var(--duration-short-3) var(--easing-emphasized),
+    height var(--duration-short-3) var(--easing-emphasized),
+    background-color var(--duration-short-3) var(--easing-standard);
+  border-radius: var(--radius-full);
+  background: var(--outline-variant);
+  width: var(--mark-w, 14px);
+  height: var(--mark-h, 4px);
+  content: "";
+}
+
+/* ── Magnification ──────────────────────────────────────────────────────────
+   Discrete falloff over the hovered mark and two neighbours each side, so the
+   rail deforms as one surface instead of a single mark popping alone. Sizing
+   only — colour is handled below, and mixing the two here would make the
+   active mark's colour depend on where the pointer happens to be.
+
+   Forward neighbours use sibling combinators; backward ones need `:has()`,
+   CSS having no previous-sibling combinator. Both are already used elsewhere
+   in this codebase. */
+.marks > *:hover .mark::before {
+  --mark-w: 32px;
+  --mark-h: 7px;
+}
+
+.marks > *:hover + * .mark::before,
+.marks > *:has(+ *:hover) .mark::before {
+  --mark-w: 24px;
+  --mark-h: 6px;
+}
+
+.marks > *:hover + * + * .mark::before,
+.marks > *:has(+ * + *:hover) .mark::before {
+  --mark-w: 18px;
+  --mark-h: 5px;
+}
+
+/* ── Colour ─────────────────────────────────────────────────────────────────
+   Equal specificity to the hover rule, declared after it, so the turn being
+   read keeps its indicator colour even under the pointer. */
+.mark:hover::before {
+  background: var(--on-surface);
+}
+
+.mark.markActive::before {
+  background: var(--primary);
+}
+
+/* A turn is running: the rail stays legible as a position indicator but takes
+   no input, which is what keeps it from ever writing the conversation's scroll
+   position while useChatAutoScroll owns it. 38% is M3's disabled-content
+   opacity. */
+.railFrozen {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* ── Hover tile ─────────────────────────────────────────────────────────── */
+/* Tooltip's rich-content mode drops its own padding: the tile owns its
+   spacing. Width is capped so a long first sentence wraps into the line budget
+   below rather than stretching towards the reading column. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 320px;
+}
+
+.tileRequest {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.tileAnswer {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
