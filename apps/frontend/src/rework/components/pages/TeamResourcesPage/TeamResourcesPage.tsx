@@ -136,7 +136,15 @@ export default function TeamResourcesPage() {
     limit: 1,
     offset: 0,
   });
-  const kfState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
+  // Blocks on the first answer only. This gate returns the whole page to a
+  // spinner, which unmounts DocumentWorkspace with it — and that workspace owns
+  // the folder you are standing in, its loaded document pages and its resolved
+  // folder sizes, none of which survive. Letting a background revalidation do
+  // that turned one probe refetch into a full reload of the page.
+  const kfState = getQueryUiState(
+    { isLoading, isFetching, isUninitialized, isError },
+    { keepPreviousWhileRefetching: true },
+  );
 
   if (kfState === "loading") {
     return (
