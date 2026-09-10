@@ -29,6 +29,8 @@ const h = vi.hoisted(() => ({
   navigate: vi.fn(),
   request: vi.fn(),
   subPath: "",
+  teamId: "team-1",
+  teamName: "Team One",
   uiPrefix: "/apps/example-ui/",
   sessions: [] as Array<{ session_id: string; agent_instance_id?: string }>,
   sessionsFail: false,
@@ -47,14 +49,14 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ teamId: "team-1", appId: h.appId, "*": h.subPath }),
+  useParams: () => ({ teamId: h.teamId, appId: h.appId, "*": h.subPath }),
   useNavigate: () => h.navigate,
 }));
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
-    teamId: "team-1",
+    teamId: h.teamId,
     isPersonalTeam: h.isPersonalTeam,
-    selectedTeam: { id: "team-1", name: "Team One" },
+    selectedTeam: { id: h.teamId, name: h.teamName },
   }),
 }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
@@ -183,6 +185,8 @@ beforeEach(() => {
   h.agents = [];
   h.request.mockReset();
   h.subPath = "";
+  h.teamId = "team-1";
+  h.teamName = "Team One";
   h.uiPrefix = "/apps/example-ui/";
   h.result = { data: { items: [application()] }, isLoading: false, isError: false };
 });
@@ -450,6 +454,21 @@ describe("TeamApplicationHostPage routing", () => {
 
     expect(postedMessages(spy)).toEqual([{ type: "fred:route", subPath: "reports/12" }]);
   });
+
+  it("delivers host route A, suppresses the child navigation echo to B, then delivers host route A again", async () => {
+    h.subPath = "A";
+    const spy = await connect();
+    spy.mockClear();
+
+    await postFromFrame({ type: "fred:navigate", path: "B" });
+    h.subPath = "B";
+    await rerender();
+    expect(postedMessages(spy)).toEqual([]);
+
+    h.subPath = "A";
+    await rerender();
+    expect(postedMessages(spy)).toEqual([{ type: "fred:route", subPath: "A" }]);
+  });
 });
 
 describe("TeamApplicationHostPage service proxying", () => {
@@ -559,5 +578,51 @@ describe("TeamApplicationHostPage request identity", () => {
     expect(postedMessages(spy)).toEqual([
       { type: "fred:response-error", requestId: `r${MAX_IN_FLIGHT_APPLICATION_REQUESTS}` },
     ]);
+  });
+});
+
+describe("TeamApplicationHostPage lifecycle replacement", () => {
+  it.each([
+    [
+      "application",
+      () => {
+        h.appId = "other";
+        h.uiPrefix = "/apps/other/";
+        h.result.data = {
+          items: [{ ...application(), id: "other", ui_prefix: h.uiPrefix }],
+        };
+      },
+      FRED_ORIGIN,
+    ],
+    ["target", () => withUiPrefix("https://replacement.example/app/"), "https://replacement.example"],
+    [
+      "team",
+      () => {
+        h.teamId = "team-2";
+        h.teamName = "Team Two";
+      },
+      FRED_ORIGIN,
+    ],
+  ])("disposes the old frame when the %s changes", async (_kind, replace, replacementOrigin) => {
+    h.request.mockReturnValue(new Promise<Response>(() => undefined));
+    await connect();
+    const oldFrameWindow = frameWindow();
+    await postFromFrame({
+      type: "fred:request",
+      requestId: "pending",
+      path: "reports",
+    });
+    const signal = (h.request.mock.calls[0]?.[1] as RequestInit).signal as AbortSignal;
+
+    replace();
+    await rerender();
+
+    expect(signal.aborted).toBe(true);
+    expect(frameWindow()).not.toBe(oldFrameWindow);
+    const replacementSpy = spyOnFrame();
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, oldFrameWindow);
+    expect(replacementSpy).not.toHaveBeenCalled();
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, frameWindow(), replacementOrigin);
+    expect(postedMessages(replacementSpy)[0]?.type).toBe("fred:context");
   });
 });

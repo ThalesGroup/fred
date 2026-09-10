@@ -11,22 +11,36 @@ async function prerequisiteFixture(context) {
   context.after(() => rm(root, { recursive: true, force: true }));
   const tokenOutput = path.join(root, "tokens");
   const reactOutput = path.join(root, "react");
+  const iframeSdkOutput = path.join(root, "iframe-sdk");
   const browserPath = path.join(root, "chromium");
   await Promise.all([
     mkdir(tokenOutput),
     mkdir(reactOutput),
+    mkdir(iframeSdkOutput),
     writeFile(browserPath, "fixture"),
   ]);
   await Promise.all([
     writeFile(path.join(tokenOutput, "tokens-only.html"), "fixture"),
     writeFile(path.join(reactOutput, "index.html"), "fixture"),
+    ...["index.html", "child.html", "attacker.html"].map((file) =>
+      writeFile(path.join(iframeSdkOutput, file), "fixture"),
+    ),
   ]);
-  return { browserPath, tokenOutput, reactOutput };
+  return { browserPath, tokenOutput, reactOutput, iframeSdkOutput };
 }
 
 test("accepts fully provisioned browser smoke prerequisites", async (context) => {
   const prerequisites = await prerequisiteFixture(context);
   await assert.doesNotReject(assertBrowserPrerequisites(prerequisites));
+});
+
+test("browser smoke does not build a missing iframe SDK consumer", async (context) => {
+  const prerequisites = await prerequisiteFixture(context);
+  await rm(path.join(prerequisites.iframeSdkOutput, "child.html"));
+  await assert.rejects(
+    assertBrowserPrerequisites(prerequisites),
+    /staged iframe SDK consumer is missing; run npm run test:consumer first/,
+  );
 });
 
 test("missing browser fails with the provisioning command", async (context) => {

@@ -38,6 +38,27 @@ export const UI_REACT_BASELINE_PATHS = [
   "apps/frontend/package-lock.json",
 ];
 
+export const IFRAME_SDK_CANONICAL_SOURCE_PATH =
+  "apps/frontend/src/rework/features/applications/applicationProtocol.ts";
+
+export const IFRAME_SDK_SOURCE_PATHS = [
+  IFRAME_SDK_CANONICAL_SOURCE_PATH,
+  "libs/frontend/iframe-sdk/src/index.ts",
+];
+
+export const IFRAME_HOST_COMPATIBILITY_PATHS = [
+  IFRAME_SDK_CANONICAL_SOURCE_PATH,
+  "apps/frontend/src/rework/features/applications/applicationProtocol.test.ts",
+  "apps/frontend/src/rework/features/applications/applicationHost.ts",
+  "apps/frontend/src/rework/features/applications/applicationHost.test.ts",
+  "apps/frontend/src/rework/features/applications/applicationPath.ts",
+  "apps/frontend/src/rework/features/applications/applicationPath.test.ts",
+  "apps/frontend/src/rework/features/applications/applicationRequest.ts",
+  "apps/frontend/src/rework/features/applications/applicationRequest.test.ts",
+  "apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx",
+  "apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx",
+];
+
 export const UI_FONT_SOURCE = {
   sourcePath: "apps/frontend/src/assets/fonts/material-symbols-outlined.woff2",
   packedName: "MaterialSymbolsOutlined.woff2",
@@ -93,6 +114,7 @@ export const CI_EXACT_INPUTS = [
   ...FONT_SOURCES.map(({ sourcePath }) => sourcePath),
   UI_FONT_SOURCE.sourcePath,
   ...UI_REACT_BASELINE_PATHS,
+  ...IFRAME_HOST_COMPATIBILITY_PATHS,
   ROOT_LICENSE_PATH,
   ...VALIDATION_ORCHESTRATION_PATHS,
 ];

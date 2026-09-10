@@ -7,8 +7,8 @@ authentication or coupling consumers to the FRED checkout.
 
 This is the next bounded slice of
 [`FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
-No matching GitHub issue existed when this proposal was prepared; implementation must link the
-approved tracking issue before code changes begin.
+Implementation is tracked by
+[ThalesGroup/fred#2614](https://github.com/ThalesGroup/fred/issues/2614).
 
 ## What Changes
 

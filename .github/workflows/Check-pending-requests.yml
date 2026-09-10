@@ -76,6 +76,16 @@ jobs:
               - 'apps/frontend/src/assets/fonts/material-symbols-outlined.woff2'
               - 'apps/frontend/package.json'
               - 'apps/frontend/package-lock.json'
+              - 'apps/frontend/src/rework/features/applications/applicationProtocol.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationProtocol.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationHost.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationHost.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationPath.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationPath.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationRequest.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationRequest.test.ts'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx'
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
@@ -108,7 +118,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents, libs/fred-capability-platform-ops, libs/fred-capability-html-artifact]
+        directory:
+          [
+            apps/knowledge-flow-backend,
+            libs/fred-core,
+            apps/control-plane-backend,
+            libs/fred-sdk,
+            libs/fred-runtime,
+            apps/fred-agents,
+            libs/fred-capability-platform-ops,
+            libs/fred-capability-html-artifact,
+          ]
         check:
           - lint
           - format

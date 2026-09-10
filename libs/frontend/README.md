@@ -1,8 +1,8 @@
 # FRED frontend package producer
 
 This private npm workspace builds distributable frontend packages from canonical
-FRED sources. It produces the implemented `@fred/design-tokens` archive and the first
-bounded `@fred/ui` archive foundation; the broader package architecture and sequencing remain in the
+FRED sources. It produces the implemented `@fred/design-tokens`, bounded `@fred/ui`, and
+framework-independent `@fred/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
 [frontend packaging RFC](../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 
 ## Workspace and publication boundary
@@ -20,6 +20,10 @@ contract live together in `scripts/package-inputs.mjs`.
 The UI member additionally consumes an explicit allowlist of five canonical React
 components and their direct styles. Its public adapter narrows icons to Material
 Symbols Outlined without removing FRED's application-only custom-icon compatibility.
+The iframe SDK member copies the transport-neutral canonical protocol module from
+`apps/frontend/src/rework/features/applications/applicationProtocol.ts` into disposable
+build input and combines it with the allowlisted child client. FRED's host, request,
+authorization, routing, and authentication code is not package input.
 
 ## Provisioning
 
@@ -32,10 +36,10 @@ make browser-install
 ```
 
 `make install` installs the lockfile-pinned producer dependencies.
-`make consumer-provision` downloads the isolated React fixture's pinned dependencies
-into a dedicated cache, and the browser target separately provisions Playwright's
-pinned Chromium and system dependencies. These setup operations may contact their
-package sources.
+`make consumer-provision` downloads the isolated React fixture and neutral iframe SDK
+fixture's lockfile-pinned dependencies into separate dedicated caches. The browser
+target separately provisions Playwright's pinned Chromium and system dependencies.
+These setup operations may contact their package sources.
 
 ## Offline validation
 
@@ -51,20 +55,24 @@ make browser-smoke
 
 - `make test` runs offline generator, archive, filter-selection, and isolated
   consumer tests.
-- `make pack-check` validates the files in both actual `npm pack` tarballs,
+- `make pack-check` validates the files in all three actual `npm pack` tarballs,
   including exports, import-free token structure, CSS asset closure, dependency
   protocols, source-path leakage, and complete license/notice content.
-- `make isolated-consumer` validates the neutral token consumer and a React consumer
-  in fresh OS temporary directories. The React fixture installs both tarballs and its
-  pinned dependencies only from the prepared cache, type-checks, and builds without
-  workspace links or FRED's dependency tree. Missing cache data fails actionably.
+- `make isolated-consumer` validates the neutral token consumer, a React consumer, and
+  a framework-neutral iframe SDK consumer in fresh OS temporary directories. The
+  consumers install actual tarballs and pinned dependencies only from prepared caches,
+  type-check, and build without workspace links or FRED's dependency tree. The SDK
+  fixture imports both public entry points and has no React or other FRED dependency.
+  Missing cache data fails actionably.
 - `make browser-smoke` performs no dependency install or browser provisioning. It uses
   the already staged consumer output and installed Chromium against loopback-only
   servers. Fresh contexts verify light/dark
   computed styles, explicit regular/italic Geist loading, no tokens-only font
   requests, every public UI component, keyboard/accessibility/error/loading behavior,
   local Material glyph rendering, successful stylesheet/resource responses, and no
-  non-loopback or FRED-checkout asset requests.
+  non-loopback or FRED-checkout asset requests. Separate loopback host, child, and
+  attacker origins also exercise the packed SDK's admission, route, request, error,
+  timeout, cancellation, disposal, and frame-replacement behavior.
 
 Machine-readable review evidence is retained under `target/review-evidence/`.
 Generated package files, tarballs, installed dependencies, browsers, and evidence
@@ -85,6 +93,8 @@ the font assets. A font hash change deliberately fails generation until that
 audit is updated.
 
 The current UI archive, its public imports, `.fred-ui` ownership rule, peers, icon
-limits, and optional Geist use are documented in [ui/README.md](ui/README.md). Deferred
-components and overlays, the iframe SDK, registry publication, FRED package
-consumption, and external adopter integration remain outside this workspace slice.
+limits, and optional Geist use are documented in [ui/README.md](ui/README.md). The
+iframe client contract and its deliberately buffered transport are documented in
+[iframe-sdk/README.md](iframe-sdk/README.md). Deferred components and overlays,
+theme/live-locale protocol extensions, registry publication, FRED package consumption,
+and external adopter integration remain outside these archive foundations.
