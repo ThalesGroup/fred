@@ -57,6 +57,7 @@ export const IFRAME_HOST_COMPATIBILITY_PATHS = [
   "apps/frontend/src/rework/features/applications/applicationRequest.test.ts",
   "apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx",
   "apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx",
+  "apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.sdk-integration.test.tsx",
 ];
 
 export const UI_FONT_SOURCE = {

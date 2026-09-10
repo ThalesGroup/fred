@@ -173,9 +173,18 @@ clone or imply unsupported serialization; retrying in both layers would duplicat
 
 Canonical application tests will retain golden raw protocol-`"1"` inputs and outputs so the
 refactored host continues to accept legacy clients. Protocol/client unit tests and the packed
-browser fixture prove the new client against current host behavior. The host continues to verify
-its own source/origin, application authorization, routes, headers, request capacity, token refresh,
-and frame/team lifecycle even if a child bypasses the SDK.
+browser fixture prove the client and cross-origin transport independently. A separate integration
+suite will load the actual generated tarball and mount `TeamApplicationHostPage` or exercise the
+production message handler that it uses. That suite must therefore prove new-SDK/current-host
+compatibility directly instead of inferring it from separate raw-host and simulated-host tests.
+The host continues to verify its own source/origin, application authorization, routes, headers,
+request capacity, token refresh, and frame/team lifecycle even if a child bypasses the SDK.
+
+The direct matrix covers ready/context, route delivery, navigation and open-chat intents, request
+correlation, HTTP and transport outcomes, bounded pending work, and stale frame/team teardown. It
+includes host route A, child navigation to B, then host route A and observes both accepted A events,
+while request replies remain deduplicated by request ID. The existing raw protocol and simulated
+cross-origin suites remain complementary required gates.
 
 Application identity is required in the initial context. Later route/response messages are trusted
 only after admission from the captured source/origin and, for replies, a live request ID; adding an
@@ -197,16 +206,27 @@ setting does not describe eventual publication of individual packages.
 
 The generator will use explicit canonical-source and client-source allowlists, create disposable
 generated input, compile both entry points, and record source paths/hashes plus build graph/module
-externalization evidence. The SDK validator will reuse archive-safety checks but use distinct
-resolution paths: every runtime import and runtime export condition must resolve to an executable
-packed ESM module, whereas declaration references and `types` export conditions may resolve to
-valid packed `.d.ts` files. An executable target cannot be satisfied by the mere presence of a
-declaration, and a declaration target must not be treated as valid merely because similarly named
-runtime JavaScript exists. Positive fixtures will prove both valid resolution paths; mutation
-fixtures will independently reject declaration-only runtime targets and missing or invalid
-declaration targets. The validator will also verify metadata, license completeness, dependency
-absence, forbidden checkout/workspace references, and exact contents while leaving token and UI
-validators unchanged.
+externalization evidence. A shared TypeScript-compiler-API walker will parse JavaScript and
+declarations and inspect static imports, re-exports, dynamic imports, declaration import types, and
+applicable reference directives regardless of comments or quoting. Static string and
+no-substitution-template specifiers are resolved; computed runtime imports and malformed syntax
+are rejected. Because the TypeScript parser intentionally represents some grammar-invalid
+JavaScript, archive validation additionally runs Node's parse-only native ESM syntax check over
+every executable without importing or executing it. Build-evidence reference collection uses the
+same parser so the evidence cannot retain the archive validator's former textual blind spots.
+
+The SDK validator will reuse archive-safety checks but use distinct resolution paths. Every runtime
+import and runtime export condition must name an exact executable file present in the archive, as
+required by browser and Node native ESM; validation must not infer `.js` or fall back to a directory
+`index.js`. Declaration references and `types` export conditions may use declaration-aware
+resolution to valid packed `.d.ts` files. An executable target cannot be satisfied by the mere
+presence of a declaration, and a declaration target must not be treated as valid merely because
+similarly named runtime JavaScript exists. Positive fixtures and native ESM loading prove valid
+runtime and declaration paths; mutation fixtures independently reject commented, template,
+computed, malformed, extensionless, directory-fallback, declaration-only runtime, and missing or
+invalid declaration references. The validator also verifies metadata, license completeness,
+dependency absence, forbidden checkout/workspace references, and exact contents while leaving
+token and UI validators unchanged.
 
 Alternatives considered: hand-copying the protocol violates single ownership; a general bundler
 crawl could accidentally package application code; reusing only the UI validator would encode
@@ -230,9 +250,11 @@ unrepeatable.
 
 Extend the Playwright harness with two HTTP servers on different loopback ports. The child build
 imports the installed tarball; the host fixture imports only the packed protocol surface and
-models the existing host behavior. Canonical FRED tests remain the evidence for application code,
-while cross-origin browser tests cover real `WindowProxy` identity and browser `postMessage`
-origins.
+models the existing host behavior. This simulated host remains the deterministic browser-origin
+and transport harness, but it is not evidence by itself that the SDK interoperates with current
+FRED host code. The direct integration from Decision 5 supplies that evidence using the same actual
+archive and production host handler. Canonical raw-client tests retain legacy compatibility, while
+the cross-origin browser tests cover real `WindowProxy` identity and browser `postMessage` origins.
 
 The matrix covers handshake retries, context, routes, navigation/open-chat, out-of-order request
 correlation, success, HTTP errors, generic transport errors, bodyless responses, malformed and
@@ -247,12 +269,14 @@ contract test.
 
 ### 9. Select exact inputs and update durable documentation
 
-The frontend-package CI selector will include the SDK workspace, validator, fixtures, browser
-harness, producer metadata/lockfile, shared archive utilities, and every canonical protocol/path
-source consumed by generation. Canonical protocol/path changes select both package validation and
-the frontend application gates; host/request/page/proxy/auth-regression inputs continue to select
-the relevant frontend compatibility gates. Selection tests will include positive cases for every
-new input class and negative cases for unrelated application files.
+The frontend-package CI selector will include the SDK workspace, syntax-aware reference scanner,
+validator, fixtures, browser and direct-host integration harnesses, producer metadata/lockfile,
+shared archive utilities, and every canonical protocol/path or production host source consumed by
+generation or compatibility testing. Canonical protocol/path and direct-host integration changes
+select both package validation and the frontend application gates; host/request/page/proxy/auth-
+regression inputs continue to select the relevant frontend compatibility gates. Selection tests
+will include positive cases for every new input class and negative cases for unrelated application
+files.
 
 Implementation documentation will add the SDK consumer README, extend the producer README,
 identify the canonical contract in the control-plane product contract and frontend guidance, and

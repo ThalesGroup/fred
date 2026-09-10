@@ -73,8 +73,19 @@ then run browser smoke without dependency installation or browser bootstrapping:
 ```sh
 npm run pack:check:iframe-sdk
 npm run test:consumer:iframe-sdk
+npm run test:host-integration
 npm run test:browser
 ```
 
 Missing cached packages or Chromium fail with the relevant provisioning command. The consumer
 lockfile pins its tooling; it does not resolve from FRED's installed dependency tree.
+
+Archive verification parses runtime and declaration module syntax with the TypeScript compiler
+API, including commented imports, re-exports, literal dynamic imports, declaration import types,
+and reference directives. Computed runtime imports and malformed modules are rejected. Runtime
+references must name exact packed executable files as native ESM requires; declaration references
+use a separate declaration-aware resolver. Each executable also passes Node's parse-only native
+ESM grammar check, covering invalid JavaScript constructs that TypeScript's permissive parser can
+represent. The direct host-integration command extracts the actual tarball and exercises FRED's
+production host-page handler. It complements rather than replaces the legacy raw-client host tests
+and the simulated cross-origin browser harness.

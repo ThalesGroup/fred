@@ -86,6 +86,7 @@ jobs:
               - 'apps/frontend/src/rework/features/applications/applicationRequest.test.ts'
               - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx'
               - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.sdk-integration.test.tsx'
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
@@ -276,6 +277,10 @@ jobs:
         run: npm ci
         working-directory: libs/frontend
 
+      - name: Install frontend host-integration dependencies
+        run: npm ci
+        working-directory: apps/frontend
+
       - name: Provision Chromium
         run: make browser-install
         working-directory: libs/frontend
@@ -294,6 +299,10 @@ jobs:
 
       - name: Validate packed archive
         run: make pack-check
+        working-directory: libs/frontend
+
+      - name: Run packed SDK with production host integration
+        run: make host-integration
         working-directory: libs/frontend
 
       - name: Build isolated consumer offline

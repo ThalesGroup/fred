@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer browser-install browser-smoke clean
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -51,6 +51,9 @@ consumer-provision: ## Populate the pinned consumer caches (network allowed)
 
 isolated-consumer: ## Install actual tarballs offline in isolated consumers and build
 	npm run test:consumer
+
+host-integration: ## Exercise the actual SDK tarball with FRED's production host page
+	npm run test:host-integration
 
 browser-install: ## Provision Chromium separately from browser-smoke execution
 	npm run browser:install

@@ -123,6 +123,23 @@ test("canonical protocol and declared host compatibility inputs select both gate
   }
 });
 
+test("frontend-package CI runs the actual-tarball production-host integration", () => {
+  const steps = workflow.jobs["frontend-package-checks"].steps;
+  assert(
+    steps.some(
+      (step) =>
+        step.run === "npm ci" && step["working-directory"] === "apps/frontend",
+    ),
+  );
+  assert(
+    steps.some(
+      (step) =>
+        step.run === "make host-integration" &&
+        step["working-directory"] === "libs/frontend",
+    ),
+  );
+});
+
 test("an unrelated application-only change may skip package validation", () => {
   assert.equal(
     selectsPackageJob(["apps/frontend/src/components/Unrelated.tsx"]),

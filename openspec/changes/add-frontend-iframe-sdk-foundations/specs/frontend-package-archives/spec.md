@@ -257,6 +257,21 @@ host state, service upstream, or authorization result MAY enter SDK context or m
 - **THEN** FRED preserves its one refresh/retry policy and logs out only when refresh
   itself fails, independently of SDK behavior
 
+#### Scenario: The packed SDK exercises the production host handler
+
+- **WHEN** the actual generated SDK tarball connects to the production message handler used by
+  FRED's host page
+- **THEN** ready/context, route delivery, navigation, open-chat, request correlation, HTTP and
+  transport outcomes, pending limits, and stale frame/team teardown work without a protocol
+  adapter or loss of host authority
+
+#### Scenario: Host routing returns to a prior route through the packed SDK
+
+- **WHEN** the production host sends route A, the packed SDK sends child navigation to B, and the
+  production host later sends route A
+- **THEN** the SDK delivers both accepted A events to current subscribers while request responses
+  remain deduplicated by request ID
+
 ### Requirement: The iframe SDK archive is complete and independently consumable
 
 Acceptance of the actual `npm pack` SDK tarball SHALL validate its exact `.` and
@@ -269,6 +284,22 @@ export conditions MUST resolve to executable packed modules. Declaration referen
 with declaration-aware resolution independently of runtime resolution. A declaration-only
 target MUST NOT satisfy a runtime reference. Existing design-token and UI positive and
 negative archive guarantees MUST continue unchanged.
+
+Reference inspection SHALL use the TypeScript compiler API to parse JavaScript and declaration
+syntax and inspect static imports, re-exports, dynamic imports, declaration import types, and
+applicable reference directives. Comments MUST NOT hide a reference. Literal strings and
+no-substitution template literals MUST be inspected. A computed runtime import or malformed module
+syntax MUST fail validation. Build-graph evidence SHALL use the same syntax-aware reference
+inspection rather than a less complete textual scan.
+
+Every packed executable module SHALL also pass a parse-only native ESM grammar check without being
+imported or executed. The check MUST reject grammar-invalid JavaScript that a permissive TypeScript
+AST can still represent, including top-level `return` and TypeScript-only annotations in `.js`.
+
+Runtime relative references SHALL resolve exactly as written to executable packed JavaScript.
+Validation MUST NOT infer an omitted extension or fall back from a directory to `index.js` because
+native ESM consumption does not perform those substitutions. Declaration resolution SHALL remain
+separate and declaration-aware.
 
 A lockfile-pinned neutral JavaScript/TypeScript consumer SHALL install the actual SDK
 tarball in a fresh OS temporary directory outside FRED, type-check both public entry
@@ -288,6 +319,46 @@ points, and produce a browser build without React or any other FRED package.
 - **THEN** archive validation resolves the reference through executable files contained
   in the exact packed archive
 
+#### Scenario: Comments surround a static module reference
+
+- **WHEN** a runtime or declaration import places comments between its syntax tokens and its
+  literal module specifier
+- **THEN** syntax-aware validation still inspects and resolves that reference through the
+  applicable runtime or declaration path
+
+#### Scenario: A dynamic import uses a literal template
+
+- **WHEN** runtime JavaScript dynamically imports a no-substitution template literal
+- **THEN** archive validation resolves its exact target as an executable packed module
+
+#### Scenario: A runtime import is computed
+
+- **WHEN** runtime JavaScript calls `import()` with an identifier, expression, or interpolated
+  template rather than a statically reviewable module literal
+- **THEN** SDK archive validation fails instead of accepting an unknown runtime dependency
+
+#### Scenario: Packed module syntax is malformed
+
+- **WHEN** an executable or declaration module cannot be parsed without syntax diagnostics
+- **THEN** SDK archive validation fails before accepting its reference graph
+
+#### Scenario: A runtime module is not valid native ESM grammar
+
+- **WHEN** a packed executable contains top-level `return`, TypeScript-only annotations, or another
+  construct that the TypeScript AST accepts but native ESM grammar rejects
+- **THEN** parse-only native validation rejects the archive without executing the module
+
+#### Scenario: A runtime import omits its executable extension
+
+- **WHEN** runtime JavaScript imports `./protocol` while only `./protocol.js` is packed
+- **THEN** archive validation fails and a native ESM loading check confirms the entry point is not
+  consumable as written
+
+#### Scenario: A runtime import names a packed directory
+
+- **WHEN** runtime JavaScript names a directory whose `index.js` could be found only by fallback
+- **THEN** archive validation fails rather than treating the directory as an executable target
+
 #### Scenario: A runtime reference has only a declaration target
 
 - **WHEN** a runtime import or runtime export condition resolves only to a packed `.d.ts`
@@ -301,6 +372,12 @@ points, and produce a browser build without React or any other FRED package.
   packed declaration target
 - **THEN** archive validation resolves it through the applicable `.d.ts` file without
   requiring that type-only target to be executable
+
+#### Scenario: Declaration import types remain declaration-aware
+
+- **WHEN** a declaration contains a commented or ordinary `import("./types.js").Name` reference
+- **THEN** syntax-aware validation resolves it using the packed declaration graph without applying
+  runtime executable-target rules
 
 #### Scenario: A declaration reference is missing or invalid
 

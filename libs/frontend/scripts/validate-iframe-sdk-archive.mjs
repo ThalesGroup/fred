@@ -15,6 +15,7 @@ import {
   IFRAME_SDK_CANONICAL_SOURCE_PATH,
   IFRAME_SDK_SOURCE_PATHS,
 } from "./package-inputs.mjs";
+import { inspectModuleReferences } from "./module-references.mjs";
 import { run } from "./process.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -52,15 +53,6 @@ async function isRegularFile(candidate) {
   );
 }
 
-function references(content) {
-  return [
-    ...content.matchAll(
-      /(?:from\s*|import\s*\(\s*|import\s*)["']([^"']+)["']/g,
-    ),
-    ...content.matchAll(/<reference\s+(?:path|types)=["']([^"']+)["']/g),
-  ].map((match) => match[1]);
-}
-
 function confinedTarget(packageRoot, owner, reference) {
   const resolved = path.resolve(
     path.dirname(path.join(packageRoot, owner)),
@@ -75,21 +67,10 @@ function confinedTarget(packageRoot, owner, reference) {
 }
 
 async function executableTarget(resolved) {
-  if (
-    [".js", ".mjs", ".cjs"].includes(path.extname(resolved)) &&
+  return [".js", ".mjs", ".cjs"].includes(path.extname(resolved)) &&
     (await isRegularFile(resolved))
-  )
-    return resolved;
-  if (path.extname(resolved)) return null;
-  for (const candidate of [
-    `${resolved}.js`,
-    `${resolved}.mjs`,
-    `${resolved}.cjs`,
-    path.join(resolved, "index.js"),
-  ]) {
-    if (await isRegularFile(candidate)) return candidate;
-  }
-  return null;
+    ? resolved
+    : null;
 }
 
 async function declarationTarget(resolved) {
@@ -121,8 +102,21 @@ function assertNoForbiddenReferences(relativePath, content) {
 }
 
 export async function assertRuntimeReferences(packageRoot, relativePath) {
-  const content = await readFile(path.join(packageRoot, relativePath), "utf8");
-  for (const reference of references(content)) {
+  const filePath = path.join(packageRoot, relativePath);
+  try {
+    await run(process.execPath, ["--check", filePath]);
+  } catch (error) {
+    throw new Error(
+      `${relativePath} has malformed module syntax: invalid native ESM syntax`,
+      { cause: error },
+    );
+  }
+  const content = await readFile(filePath, "utf8");
+  const references = inspectModuleReferences(content, {
+    fileName: relativePath,
+    mode: "runtime",
+  });
+  for (const { specifier: reference } of references) {
     assert(
       reference.startsWith("."),
       `${relativePath} contains undeclared bare runtime module ${reference}`,
@@ -134,12 +128,16 @@ export async function assertRuntimeReferences(packageRoot, relativePath) {
     );
   }
   assertNoForbiddenReferences(relativePath, content);
-  return content;
+  return { content, references };
 }
 
 export async function assertDeclarationReferences(packageRoot, relativePath) {
   const content = await readFile(path.join(packageRoot, relativePath), "utf8");
-  for (const reference of references(content)) {
+  const references = inspectModuleReferences(content, {
+    fileName: relativePath,
+    mode: "declaration",
+  });
+  for (const { specifier: reference } of references) {
     assert(
       reference.startsWith("."),
       `${relativePath} contains undeclared bare declaration module ${reference}`,
@@ -151,7 +149,7 @@ export async function assertDeclarationReferences(packageRoot, relativePath) {
     );
   }
   assertNoForbiddenReferences(relativePath, content);
-  return content;
+  return { content, references };
 }
 
 async function assertExportTarget(packageRoot, exportName, condition, target) {

@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import { packIframeSdk } from "../scripts/pack-iframe-sdk.mjs";
 import { run } from "../scripts/process.mjs";
-import { validateIframeSdkArchive } from "../scripts/validate-iframe-sdk-archive.mjs";
+import {
+  assertRuntimeReferences,
+  validateIframeSdkArchive,
+} from "../scripts/validate-iframe-sdk-archive.mjs";
 
 async function mutateArchive(sourceArchive, context, mutate) {
   const temporary = await mkdtemp(
@@ -39,6 +50,16 @@ test("accepts the actual packed iframe SDK with runtime and declaration closure"
     "dist/types/.generated/applicationProtocol.d.ts",
     "dist/types/src/index.d.ts",
   ]);
+});
+
+test("loads the actual packed root entry with native ESM", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "fred-native-sdk-"));
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  await run("tar", ["-xzf", archivePath, "-C", temporary]);
+  const loaded = await import(
+    `${pathToFileURL(path.join(temporary, "package/dist/index.js")).href}?native-esm`
+  );
+  assert.equal(typeof loaded.createFredApplicationClient, "function");
 });
 
 for (const file of [
@@ -102,6 +123,93 @@ test("accepts executable runtime and declaration-only resolution on their proper
     );
   });
   await assert.doesNotReject(validateIframeSdkArchive(archive));
+});
+
+for (const [name, source, pattern] of [
+  [
+    "a commented static runtime import",
+    'import /* comment */ "./missing-runtime.js";',
+    /runtime reference .*missing-runtime\.js without an executable packed module/,
+  ],
+  [
+    "a literal-template dynamic runtime import",
+    "export const loadMissing = () => import(`./missing-runtime.js`);",
+    /runtime reference .*missing-runtime\.js without an executable packed module/,
+  ],
+  [
+    "a computed dynamic runtime import",
+    "export const loadComputed = (name) => import(name);",
+    /non-literal dynamic import reference/,
+  ],
+  ["malformed runtime module syntax", "import {", /malformed module syntax/],
+  [
+    "a top-level return accepted by the TypeScript parser",
+    "return;",
+    /invalid native ESM syntax/,
+  ],
+  [
+    "TypeScript-only syntax in runtime JavaScript",
+    "const typed: number = 1;",
+    /invalid native ESM syntax/,
+  ],
+]) {
+  test(`rejects ${name}`, async (context) => {
+    const archive = await mutateArchive(archivePath, context, async (root) => {
+      const runtime = path.join(root, "dist/index.js");
+      await writeFile(runtime, `${source}\n${await readFile(runtime, "utf8")}`);
+    });
+    await assert.rejects(validateIframeSdkArchive(archive), pattern);
+  });
+}
+
+test("rejects a commented declaration import type without a target", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    await writeFile(
+      path.join(root, "dist/types/src/index.d.ts"),
+      'export type Missing = import /* comment */ ("./missing-types.js").Missing;\n',
+    );
+  });
+  await assert.rejects(
+    validateIframeSdkArchive(archive),
+    /unresolved declaration reference .*missing-types\.js/,
+  );
+});
+
+test("rejects an extensionless runtime reference that native ESM cannot load", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "fred-native-esm-"));
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  await writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n');
+  await writeFile(path.join(temporary, "protocol.js"), "export {};\n");
+  await writeFile(path.join(temporary, "index.js"), 'import "./protocol";\n');
+  await assert.rejects(
+    import(pathToFileURL(path.join(temporary, "index.js")).href),
+  );
+
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const runtime = path.join(root, "dist/index.js");
+    await writeFile(
+      runtime,
+      `import "./protocol";\n${await readFile(runtime, "utf8")}`,
+    );
+  });
+  await assert.rejects(
+    validateIframeSdkArchive(archive),
+    /runtime reference .*protocol without an executable packed module/,
+  );
+});
+
+test("rejects a runtime directory resolved only through index fallback", async (context) => {
+  const temporary = await mkdtemp(
+    path.join(os.tmpdir(), "fred-runtime-directory-"),
+  );
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  await writeFile(path.join(temporary, "index.js"), 'import "./runtime";\n');
+  await mkdir(path.join(temporary, "runtime"));
+  await writeFile(path.join(temporary, "runtime/index.js"), "export {};\n");
+  await assert.rejects(
+    assertRuntimeReferences(temporary, "index.js"),
+    /runtime reference .*runtime without an executable packed module/,
+  );
 });
 
 test("rejects a runtime import resolved only by a declaration", async (context) => {

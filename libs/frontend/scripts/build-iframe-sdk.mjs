@@ -11,6 +11,7 @@ import {
   IFRAME_SDK_SOURCE_PATHS,
   ROOT_LICENSE_PATH,
 } from "./package-inputs.mjs";
+import { inspectModuleReferences } from "./module-references.mjs";
 import { run } from "./process.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -120,11 +121,10 @@ export async function buildIframeSdk() {
     await Promise.all(
       ["index.js", "protocol.js"].map(async (file) => [
         file,
-        [
-          ...(
-            await readFile(path.join(distributionRoot, file), "utf8")
-          ).matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/g),
-        ].map((match) => match[1]),
+        inspectModuleReferences(
+          await readFile(path.join(distributionRoot, file), "utf8"),
+          { fileName: file, mode: "runtime" },
+        ).map(({ specifier }) => specifier),
       ]),
     ),
   );

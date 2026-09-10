@@ -39,6 +39,7 @@
     "test:consumer:tokens": "node scripts/isolated-consumer.mjs --evidence target/review-evidence/token-consumer.json",
     "test:consumer:ui": "node scripts/isolated-react-consumer.mjs --evidence target/review-evidence/react-consumer.json",
     "test:consumer:iframe-sdk": "node scripts/isolated-iframe-sdk-consumer.mjs --evidence target/review-evidence/iframe-sdk-consumer.json",
+    "test:host-integration": "node scripts/iframe-sdk-host-integration.mjs",
     "browser:install": "PLAYWRIGHT_BROWSERS_PATH=target/playwright playwright install --with-deps chromium",
     "test:browser": "PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/browser-smoke.mjs --evidence target/review-evidence/browser-smoke.json"
   },
