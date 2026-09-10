@@ -19,7 +19,7 @@ import { loginWithPassword } from "./keycloakDirectGrant";
 import type { StepReport } from "./types";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { isPersonalTeamId } from "../../components/shared/utils/teamId";
-import type { Team } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PermissionSummary, Team } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 interface TeamWithPermissionsResponse {
   permissions?: string[];
@@ -30,9 +30,7 @@ interface PromptResponse {
 }
 
 interface BootstrapResponse {
-  permissions?: {
-    platform_roles?: string[];
-  };
+  permissions?: PermissionSummary;
 }
 
 async function authedFetch(
