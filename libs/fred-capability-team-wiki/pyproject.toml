@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-team-wiki"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fred agent capability for the team wiki: read the team's shared knowledge base (team_wiki)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

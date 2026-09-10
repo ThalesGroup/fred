@@ -563,7 +563,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "fred-core" },
@@ -633,7 +633,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "3.10.0"
+version = "3.10.1"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -728,7 +728,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "3.5.1"
+version = "3.5.2"
 source = { editable = "../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -789,7 +789,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "3.6.0"
+version = "3.7.0"
 source = { editable = "../fred-sdk" }
 dependencies = [
     { name = "fred-core" },
