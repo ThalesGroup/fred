@@ -225,10 +225,9 @@ jobs:
         env:
           UV: uv
 
-      # Only fred-core sets integration-target; the key is undefined (empty)
-      # on every other matrix entry, which skips this step.
       - name: Run integration tests
         if: ${{ matrix.should-run && matrix.integration-target != '' }}
+        timeout-minutes: 15
         run: make ${{ matrix.integration-target }}
         working-directory: ${{ matrix.directory }}
         env:

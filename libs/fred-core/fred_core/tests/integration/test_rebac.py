@@ -612,21 +612,21 @@ async def test_platform_admin_and_observer_never_grant_team_access(
         )
 
 
-# Every capability an organization subject can be granted. Enumerated from the
-# enum rather than hand-listed so a newly added capability joins the
-# closed-world check below automatically instead of silently escaping it.
+# Enumerated rather than hand-listed so a newly added capability joins the
+# closed-world check below instead of silently escaping it. The `IS_*` members
+# are raw role relations, not capabilities, so the `can_` prefix filters them.
 ORGANIZATION_CAPABILITIES = tuple(
     permission
-    for permission in OrganizationPermission
+    for permission in list(OrganizationPermission)
     if permission.value.startswith("can_")
 )
 
-# AUTHZ-05 delegated tier: the exact capability set each role may reach. Each
-# role owns one admin surface, so appointing one never hands over the
-# import/export, platform-reset and user-administration surfaces that stay
-# behind `can_manage_platform`/`can_administer_users`.
+# The exact capability set each delegated role may reach: one admin surface
+# each, so appointing one never hands over the import/export, platform-reset
+# and user-administration surfaces. The `IS_*` entry is the raw role check
+# behind the frontend's platform-role list.
 DELEGATED_ROLE_REACH: tuple[
-    tuple[str, RelationType, set[OrganizationPermission]], ...
+    tuple[str, RelationType, set[OrganizationPermission], OrganizationPermission], ...
 ] = (
     (
         "team_manager",
@@ -635,6 +635,7 @@ DELEGATED_ROLE_REACH: tuple[
             OrganizationPermission.CAN_CREATE_TEAM,
             OrganizationPermission.CAN_LIST_ALL_TEAMS,
         },
+        OrganizationPermission.IS_TEAM_MANAGER,
     ),
     (
         "feature_manager",
@@ -643,11 +644,13 @@ DELEGATED_ROLE_REACH: tuple[
             OrganizationPermission.CAN_MANAGE_CAPABILITIES,
             OrganizationPermission.CAN_LIST_ALL_TEAMS,
         },
+        OrganizationPermission.IS_FEATURE_MANAGER,
     ),
     (
         "prompt_editor",
         RelationType.PROMPT_EDITOR,
         {OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT},
+        OrganizationPermission.IS_PROMPT_EDITOR,
     ),
 )
 
@@ -655,25 +658,20 @@ DELEGATED_ROLE_REACH: tuple[
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("label", "role", "expected"),
+    ("label", "role", "expected", "role_check"),
     DELEGATED_ROLE_REACH,
-    ids=[label for label, _, _ in DELEGATED_ROLE_REACH],
+    ids=[label for label, _, _, _ in DELEGATED_ROLE_REACH],
 )
 async def test_delegated_role_reaches_exactly_its_own_capabilities(
     rebac_engine: RebacEngine,
     label: str,
     role: RelationType,
     expected: set[OrganizationPermission],
+    role_check: OrganizationPermission,
 ) -> None:
     """Closed-world check: a delegated role reaches its own surface and nothing
-    else, resolved by the engine rather than read off the compiled model.
-
-    Asserting the whole reachable set (not a few hand-picked denials) is what
-    makes a future capability quietly unioning in one of these roles fail here.
-    The same run pins the two other halves: the delegation actually works, and
-    the role gains no relation on a team — the registry governs the existence
-    of teams, never their data.
-    """
+    else. Asserting the whole reachable set, rather than hand-picked denials,
+    is what makes a capability that later unions in one of these roles fail."""
     organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
     holder = _make_reference(Resource.USER, prefix=label)
     platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
@@ -706,11 +704,18 @@ async def test_delegated_role_reaches_exactly_its_own_capabilities(
     )
 
     # Each delegated role unions in platform_admin, so appointing one never
-    # removes a surface from an admin.
+    # removes a surface from an admin. The role check itself has to pass too:
+    # it is what the frontend's platform-role list reads.
     for capability in expected:
         assert await rebac_engine.has_permission(
             platform_admin, capability, organization, consistency_token=token
         ), f"platform_admin must still reach {capability.value}"
+    assert await rebac_engine.has_permission(
+        platform_admin, role_check, organization, consistency_token=token
+    ), f"platform_admin must satisfy {role_check.value} through the union"
+    assert await rebac_engine.has_permission(
+        holder, role_check, organization, consistency_token=token
+    ), f"{label} must satisfy its own {role_check.value} check"
 
     for capability in (
         TeamPermission.CAN_READ,
@@ -722,6 +727,14 @@ async def test_delegated_role_reaches_exactly_its_own_capabilities(
         ), (
             f"{label} must not reach team.{capability.value} — a platform role "
             f"never grants access to a team's data"
+        )
+
+    # The role is grantable to a user and nothing else: a team-subject grant
+    # would hand the surface to every member of that team at once. The engine
+    # refuses the write outright, so the restriction cannot be checked.
+    with pytest.raises(Exception, match="not an allowed type restriction"):
+        await rebac_engine.add_relation(
+            Relation(subject=team, relation=role, resource=organization)
         )
 
 
