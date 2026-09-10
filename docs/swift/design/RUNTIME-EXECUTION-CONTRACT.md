@@ -5722,3 +5722,45 @@ fences), wrapper, reserved-name neutralisation in the three per-turn blocks, and
 frozen full render of an example agent as the "dump as sent" check.
 `apps/fred-agents/tests/test_platform_prompt_file.py` pins the shipped clause
 and the version bump. fred-sdk `test_prompt_utils.py` covers the finder.
+
+---
+
+### 8.77 Deep agent runtime — dispatch, capability wiring, HITL parity
+
+`agent_app.py` dispatches a `DeepAgentDefinition` to `DeepAgentRuntime`, never to plain
+`ReActRuntime`. `build_executor` threads the selected capability's tools, MCP prompt groups and
+middleware into the compiled `deepagents` graph, the same way `_create_compiled_react_agent` does
+for ReAct, and reuses `TracingKpiMiddleware`/`ToolObservabilityMiddleware` unchanged.
+`FredHitlMiddleware` is composed into Deep's middleware list in the same relative position
+`build_react_platform_middleware_frame` uses for ReAct: both capability-declared `HitlSpec` bindings
+and an operator-configured `ToolApprovalPolicy` route through that one gate and Fred's one
+`AwaitingHumanRuntimeEvent`/`HumanInputRequest` proceed/cancel contract, on both runtimes. Neither
+runtime has a second approval mechanism. `GraphRuntime` keeps its own separate HITL lifecycle and is
+unaffected.
+
+Deep passes no explicit `backend=` to `create_deep_agent`, so `deepagents`'s built-in filesystem
+tools default to its `StateBackend` — a conversation-scoped checkpoint filesystem, not a durable
+Workspace: content is checkpointed by Fred's SQL checkpointer and survives across turns of the same
+thread, but is not a separate object store and is not visible outside the thread. Each built-in tool
+name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact
+model-visible name is contributed by the agent's declared toolset or selected capability. Binding a
+partial filesystem surface never enables the remaining built-ins.
+
+`_TransportBackedReActExecutor` is shared unchanged by both runtimes; its per-exchange log line and
+`[V2][EXECUTOR] build start` line name the actual runtime class rather than hard-coding
+`ReActRuntime`.
+
+Native `deepagents`/LangChain `interrupt_on` (`HumanInTheLoopMiddleware`) was evaluated and rejected:
+its resume payload shape is structurally incompatible with Fred's frozen `HumanInputRequest`
+contract, and would fail mid-turn on resume rather than at build time. See #2227 for the spike
+result.
+
+**Durable behavioral record.** OpenSpec capabilities `deep-agent-runtime` and `agent-human-approval`
+(`openspec/specs/` once the `deep-agent-runtime-baseline` change is archived) are the source of
+truth for this area's observable requirements and scenarios. This section stays a compact
+architecture summary; it does not carry the implementation chronology.
+
+**Scope.** `libs/fred-runtime/fred_runtime/app/agent_app.py` (dispatch),
+`libs/fred-runtime/fred_runtime/deep/deep_runtime.py` (`DeepAgentRuntime.build_executor`,
+`_build_deepagent_runtime_middleware`), `libs/fred-runtime/fred_runtime/react/react_runtime.py`
+(shared executor, runtime-class-name logging only — no ReAct behavior change).

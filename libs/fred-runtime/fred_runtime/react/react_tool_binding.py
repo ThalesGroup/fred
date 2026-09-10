@@ -148,8 +148,9 @@ def build_runtime_tool_prompt_suffix(
       `RUNTIME-EXECUTION-CONTRACT.md` §8.63). Untagged tools, or tools whose
       tag matches no given group, render under a flat `Other tools:` bucket
       ahead of the named groups — or, when no group renders at all (the
-      default for every caller that doesn't pass `mcp_prompt_groups`, e.g.
-      Deep agents), as today's plain flat list with no extra heading.
+      default for every caller that doesn't pass `mcp_prompt_groups`, e.g. an
+      agent with no capability selected), as today's plain flat list with no
+      extra heading.
     - `capability_tools` covers tools a native Fred capability contributes via
       `tools(ctx)` (e.g. `document_access`'s `list_document_tree`,
       `document_verbatim`'s `read_document`) — these reach the model's actual
