@@ -839,16 +839,18 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Open UX issues
 
-- **No syntax highlighting** — plain monospace only. Consider adding `react-syntax-highlighter`
-  (already in `package.json`) for a richer developer experience, especially for code-heavy agents.
-
-- **Fenced code without language** — renders as inline code (no language class, so the block
-  path is not triggered). Low-frequency edge case, but may surprise users who write unlabelled
-  fenced blocks. Discuss whether to detect by trailing `\n` heuristic.
+_(none)_
 
 #### Resolved
 
-_(none yet)_
+- **No syntax highlighting** — `CodeBlock` renders through `react-syntax-highlighter` (Prism,
+  `oneDark`/`oneLight` following the theme).
+
+- **Fenced code without language (2026-09-10)** — used to render as inline code because
+  `MarkdownRenderer` picked block vs inline from the presence of a `language-*` class.
+  Block routing now lives on the `pre` component (every fenced or indented block has one;
+  react-markdown v9 passes no `inline` prop), so an unlabelled fence renders as a
+  `plaintext` block and only backtick spans reach the inline path.
 
 ---
 
