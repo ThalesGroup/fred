@@ -27,11 +27,12 @@ How to read this file:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.models import ToolApprovalPolicy
 from fred_sdk.contracts.runtime import Executor, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
@@ -40,6 +41,10 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.react.middleware.hitl import (
+    CapabilityHitlBinding,
+    FredHitlMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -116,22 +121,11 @@ class DeepAgentRuntime(ReActRuntime):
             raise RuntimeError(
                 "DeepAgentRuntime requires a non-empty system_prompt_template."
             )
-        if policy.tool_approval.enabled:
-            raise NotImplementedError(
-                "DeepAgentRuntime does not support tool approval in this minimal version."
-            )
         if policy.tool_selection.max_tool_calls_per_turn is not None:
             raise NotImplementedError(
                 "DeepAgentRuntime does not support per-turn tool-call limits in this minimal version."
             )
         capability_block = self._capability_block
-        if capability_block is not None and capability_block.hitl:
-            # Coarse, turn-level: per-call `when` evaluation needs gating this
-            # minimal runtime doesn't have. Trade-off: RUNTIME-EXECUTION-CONTRACT.md §8.76.
-            raise NotImplementedError(
-                "DeepAgentRuntime does not support capability HITL bindings "
-                "in this minimal version."
-            )
 
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
@@ -172,6 +166,11 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
+        available_tool_names = {
+            bound_tool.runtime_name
+            for bound_tool in bound_tools
+            if bound_tool.runtime_name
+        }
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
@@ -182,6 +181,8 @@ class DeepAgentRuntime(ReActRuntime):
                 tracer=self.services.tracer,
                 kpi=self.services.kpi_writer,
                 binding=binding,
+                approval_policy=policy.tool_approval,
+                available_tool_names=available_tool_names,
                 capability_block=capability_block,
             ),
         )
@@ -282,42 +283,21 @@ def _build_deepagent_runtime_middleware(
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
+    approval_policy: ToolApprovalPolicy,
+    available_tool_names: set[str] | frozenset[str],
     capability_block: CapabilityAgentBlock | None = None,
 ) -> list[AgentMiddleware]:
     """
-    Build Deep runtime middleware: capability stack first, then platform
-    observability, then the filesystem-tool policy guard.
-
-    Why this exists:
-    - Deep used to bypass `build_react_platform_middleware_frame()` entirely
-      (it overrides `build_executor`, so it never went through
-      `_create_compiled_react_agent`), which meant a Deep turn emitted no
-      `[LLM][CALL]`/`[LLM][RESPONSE]` logs, no `llm.call_latency_ms` KPI, and
-      no `agent.tool.invocation.*` audit events — the same
-      `TracingKpiMiddleware`/`ToolObservabilityMiddleware` pair ReAct always
-      gets. `create_deep_agent` accepts a plain `middleware=` list, so the
-      fix is to hand it the same two middleware instances, same order, no
-      new machinery.
-    - `capability_block` mirrors `_create_compiled_react_agent`'s own
-      parameter: it is the ONLY channel that delivers a selected capability's
-      tools (via `ToolCarrierMiddleware`) to the compiled agent, placed
-      before the observability pair — same relative order as
-      `build_react_platform_middleware_frame`'s reserved capability slot
-      (RFC §5.3). `capability_hitl` is rejected loudly by the caller instead
-      of being wired here (see `build_executor`).
-    - when the standard filesystem MCP tools are absent, Deep should block
-      accidental filesystem calls explicitly
-    - when those tools are present, Deep should not add special blocking and
-      should let the injected MCP tool surface behave normally
-
-    How to use it:
-    - call once while creating the compiled deep agent
-    - pass whether standard filesystem tools are available in the resolved tool
-      list, plus the same tracer/kpi/binding used to build the tool bindings
-
-    Example:
-    - `middleware = _build_deepagent_runtime_middleware(filesystem_tools_enabled=True, tracer=tracer, kpi=kpi, binding=binding)`
+    Assemble Deep's middleware list: capability stack, platform observability,
+    the HITL gate (capability-declared and operator-configured approval
+    alike), then the filesystem-tool guard — same relative order as
+    `build_react_platform_middleware_frame` (`after_model` hooks run in
+    REVERSE list order, so the filesystem guard still blocks a disabled call
+    before the human gate ever sees it). RUNTIME-EXECUTION-CONTRACT.md §8.76.
     """
+    capability_hitl: Mapping[str, CapabilityHitlBinding] | None = (
+        capability_block.hitl if capability_block is not None else None
+    )
     middleware: list[AgentMiddleware] = [
         *(capability_block.middleware if capability_block is not None else ()),
         TracingKpiMiddleware(
@@ -326,6 +306,12 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
         ),
         ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+        FredHitlMiddleware(
+            binding=binding,
+            approval_policy=approval_policy,
+            available_tool_names=available_tool_names,
+            capability_hitl=capability_hitl,
+        ),
     ]
     if filesystem_tools_enabled:
         return middleware

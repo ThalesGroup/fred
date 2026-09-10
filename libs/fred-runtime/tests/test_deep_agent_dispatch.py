@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 from fred_runtime.app import agent_app as agent_app_module
@@ -66,11 +66,13 @@ class _ReActAgent(ReActAgentDefinition):
 class _NullExecutor:
     async def stream(self, *args: object, **kwargs: object) -> AsyncIterator[Any]:
         return
-        yield  # pragma: no cover - makes this an async generator
+        yield  # pragma: no cover - makes this an async generator  # pyright: ignore[reportUnreachable]
 
 
 class _RecordingRuntime:
-    instances: list["_RecordingRuntime"]
+    # `Any`, not `_RecordingRuntime`, so each subclass can narrow its own
+    # `instances` list without an invariant-list override mismatch.
+    instances: ClassVar[list[Any]]
 
     def __init__(
         self, *, definition: object, services: object, capability_block: object
@@ -93,11 +95,11 @@ class _RecordingRuntime:
 
 
 class _FakeDeepRuntime(_RecordingRuntime):
-    instances: list["_FakeDeepRuntime"] = []
+    instances: ClassVar[list["_FakeDeepRuntime"]] = []
 
 
 class _FakeReActRuntime(_RecordingRuntime):
-    instances: list["_FakeReActRuntime"] = []
+    instances: ClassVar[list["_FakeReActRuntime"]] = []
 
 
 @pytest.mark.asyncio
