@@ -15,8 +15,8 @@ group 6 passes.
 
 ## 2. Control Plane configured catalog
 
-- [ ] 2.1 Add configured-definition parsing to the control-plane deployment configuration, carrying identity/version, display metadata, configuration fields, expected M2M client identity and internal execution routing; verify with tests for a valid definition and for each missing required part
-- [ ] 2.2 Add startup validation refusing to serve an invalid configured definition; verify with a test that startup rejects it rather than exposing a half-valid catalog
+- [x] 2.1 Add configured-definition parsing to the control-plane deployment configuration, carrying identity/version, display metadata, configuration fields, expected M2M client identity and internal execution routing; verify with tests for a valid definition and for each missing required part
+- [x] 2.2 Add startup validation refusing to serve an invalid configured definition; verify with a test that startup rejects it rather than exposing a half-valid catalog
 - [ ] 2.3 Expose the configured catalog to Platform Admin and reuse the existing team enablement mechanism over it, storing no configuration on enablement; verify with tests that an unenabled definition cannot be instantiated, enabling permits it, disabling blocks new instances, and no surface reports a definition as online
 
 ## 3. Team instances and schedule lifecycle
