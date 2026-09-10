@@ -10,6 +10,8 @@ Before making any code or documentation change, read and follow:
 
 When `CLAUDE.md` refers to Claude or Claude Code, apply the same instruction to Codex unless the instruction is technically impossible in Codex.
 
+**OpenSpec is the one exception worth spelling out.** CLAUDE.md's OpenSpec workflow (see "RFC vs. OpenSpec vs. doc") is driven by the `openspec` CLI, not by a Claude-Code-only feature — the `openspec-propose`/`-apply-change`/`-archive-change`/`-explore`/`-sync-specs`/`-update-change` names are Claude Code Skill wrappers around that CLI. Codex has no Skill tool, so invoke the underlying commands directly (`openspec new change <name>`, `openspec archive <name>`, `openspec change validate <name>`, etc.) — same `openspec/changes/` and `openspec/specs/` files, same result, no Claude-specific step is actually required.
+
 Conflict resolution order:
 
 1. Explicit user instruction
