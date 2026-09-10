@@ -53,13 +53,20 @@ entitlement checks for every request.
 
 ## Route guards
 
-`src/components/Protected.tsx` is the one guard component, used only for the
-org tier:
+`src/rework/core/guards/Protected.tsx` is the one guard component, used only
+for the org tier. One `requires` value per platform role — `"admin"`,
+`"observer"`, `"teams"`, `"features"`, `"platformPrompt"`:
 
 ```tsx
-<Protected requires="admin">      {/* canAdmin only */}
-<Protected requires="observer">   {/* canAdmin OR canObservePlatform */}
+<Protected requires="admin">     {/* canAdmin only */}
+<Protected requires="features">  {/* canAdmin OR canManageFeatures */}
 ```
+
+`canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
+each role relation unions in `platform_admin`. The decision itself is the
+exported `isProtectedAllowed(requires, capabilities)`, which `AdminNavbar` and
+the `/admin` landing redirect call directly so nav visibility, the landing
+choice and route access cannot drift apart.
 
 It replaces three former components (`AdminProtectedRoute`,
 `KpiObserverProtectedRoute`, the `resource`/`action` `ProtectedRoute`). Add a
@@ -119,7 +126,7 @@ to check, instead of grepping the repo:
 | Layer                              | Proves                                                          | File                                                                                                                     |
 | ----------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Pure mapping logic                 | Every `TeamPermission` turns on exactly its own flag, nothing else | `apps/frontend/src/rework/core/hooks/teamCapabilities.test.ts`                                                          |
-| Guard decision logic               | `admin`/`observer` requirement resolves correctly                 | `apps/frontend/src/components/Protected.test.ts`                                                                        |
+| Guard decision logic               | Each `requires` value resolves correctly, `canAdmin` included     | `apps/frontend/src/rework/core/guards/Protected.test.ts`                                                                |
 | Backend derivation (unit)          | `platform_roles` comes from OpenFGA, not Keycloak                 | `apps/control-plane-backend/tests/test_main.py::test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac` |
 | Live, self-service, in-browser      | Isolation (registry/users/foreign-team access match the account's own flags) **and** a real team-scoped write (create+delete a prompt) match the account's own `can_update_resources` — for the running admin or any other account (`/admin/self-test`, "Test another profile") | `apps/frontend/src/rework/features/pipeline/scenarios/authzProbeScenario.ts` + `useAuthzProbeRun.ts` (deps), unit-tested in `authzProbeScenario.test.ts` |
 | Live, black-box, real running stack | The whole chain end-to-end, real JWT + real OpenFGA               | `validation/scenarios/test_platform_admin_capabilities.py`, `test_team_registry_authz.py`, `test_prompt_authz.py` |
