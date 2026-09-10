@@ -300,6 +300,56 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
 
+    async def document_uids_by_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> dict[str, list[str]]:
+        unique = list(dict.fromkeys(tag_ids))
+        if not unique:
+            return {}
+        # SQLite in tests has no array overlap operator — fall back to the
+        # per-tag loop in the base class.
+        if not self._is_postgres:
+            return await super().document_uids_by_tags(unique, session=session)
+
+        wanted = set(unique)
+        # Two columns, no JSONB blob and no label hydration: the caller only
+        # needs uids, and this runs on every folder listing.
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        result: dict[str, list[str]] = {tag_id: [] for tag_id in unique}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        DocumentMetadataRow.document_uid, DocumentMetadataRow.tag_ids
+                    ).where(cond)
+                )
+            ).all()
+        for uid, row_tags in rows:
+            for tag_id in row_tags or []:
+                if tag_id in wanted:
+                    result[tag_id].append(uid)
+        return result
+
+    async def metadata_in_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> List[DocumentMetadata]:
+        unique = list(dict.fromkeys(tag_ids))
+        if not unique:
+            return []
+        if not self._is_postgres:
+            return await super().metadata_in_tags(unique, session=session)
+
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (await s.execute(select(DocumentMetadataRow).where(cond)))
+                .scalars()
+                .all()
+            )
+            docs = [self._from_row(row) for row in rows]
+            await self._hydrate_labels(docs, s)
+        return docs
+
     async def total_size_by_tags(
         self, tag_ids: List[str], session: AsyncSession | None = None
     ) -> dict[str, int]:
