@@ -42,6 +42,11 @@ from fred_core import (
     Resource,
     TagPermission,
     TeamPermission,
+    usable_capability_ids,
+)
+from fred_core.security.rebac.capability_authz import (
+    CapabilityEnablementFacts,
+    can_team_use_from_facts,
 )
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from fred_core.security.structure import KeycloakUser, M2MSecurity
@@ -1534,6 +1539,137 @@ async def test_capability_lookup_resources_lists_usable(
     )
     assert not isinstance(other_resources, RebacDisabledResult)
     assert usable.id not in {ref.id for ref in other_resources}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_local_can_use_fold_agrees_with_openfga(
+    rebac_engine: RebacEngine,
+) -> None:
+    """The admin display folds `can_use` from a capability's own tuples instead
+    of asking OpenFGA, so pin that second copy of the schema against the real
+    engine - every branch of `capability#can_use`, both team kinds."""
+
+    org = _organization_ref()
+    personal = _make_reference(Resource.TEAM, prefix="personal")
+    collaborative = _make_reference(Resource.TEAM, prefix="team")
+
+    # One capability per schema branch.
+    default_on = _make_reference(Resource.CAPABILITY, prefix="cap")
+    personal_class = _make_reference(Resource.CAPABILITY, prefix="cap")
+    team_granted = _make_reference(Resource.CAPABILITY, prefix="cap")
+    personal_blocked = _make_reference(Resource.CAPABILITY, prefix="cap")
+    blocked_but_granted = _make_reference(Resource.CAPABILITY, prefix="cap")
+    team_opted_out = _make_reference(Resource.CAPABILITY, prefix="cap")
+    admin_gated = _make_reference(Resource.CAPABILITY, prefix="cap")
+    capabilities = [
+        default_on,
+        personal_class,
+        team_granted,
+        personal_blocked,
+        blocked_but_granted,
+        team_opted_out,
+        admin_gated,
+    ]
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=cap)
+            for cap in capabilities
+        ]
+        + [
+            # default_on alone: inherited by BOTH team kinds.
+            Relation(
+                subject=org, relation=RelationType.DEFAULT_ON, resource=default_on
+            ),
+            # personal_on alone: the personal class only.
+            Relation(
+                subject=org, relation=RelationType.PERSONAL_ON, resource=personal_class
+            ),
+            # An explicit per-team grant, no org marker.
+            Relation(
+                subject=collaborative,
+                relation=RelationType.ENABLED,
+                resource=team_granted,
+            ),
+            # personal_disabled subtracts from the inherited layer only...
+            Relation(
+                subject=org,
+                relation=RelationType.DEFAULT_ON,
+                resource=personal_blocked,
+            ),
+            Relation(
+                subject=org,
+                relation=RelationType.PERSONAL_DISABLED,
+                resource=personal_blocked,
+            ),
+            # ...so an explicit grant survives it.
+            Relation(
+                subject=org,
+                relation=RelationType.DEFAULT_ON,
+                resource=blocked_but_granted,
+            ),
+            Relation(
+                subject=org,
+                relation=RelationType.PERSONAL_DISABLED,
+                resource=blocked_but_granted,
+            ),
+            Relation(
+                subject=personal,
+                relation=RelationType.ENABLED,
+                resource=blocked_but_granted,
+            ),
+            # A per-team opt-out of a default-on capability.
+            Relation(
+                subject=org, relation=RelationType.DEFAULT_ON, resource=team_opted_out
+            ),
+            Relation(
+                subject=collaborative,
+                relation=RelationType.DISABLED,
+                resource=team_opted_out,
+            ),
+        ]
+    )
+
+    facts_by_id = {}
+    for cap in capabilities:
+        relations = await rebac_engine.list_direct_relations(
+            cap, consistency_token=token
+        )
+        assert not isinstance(relations, RebacDisabledResult)
+        facts_by_id[cap.id] = CapabilityEnablementFacts.from_relations(relations)
+
+    created_ids = {cap.id for cap in capabilities}
+    for team in (personal, collaborative):
+        listed = await usable_capability_ids(rebac_engine, team.id)
+        assert listed is not None
+        folded = {
+            cap_id
+            for cap_id, facts in facts_by_id.items()
+            if can_team_use_from_facts(team.id, facts)
+        }
+        assert listed & created_ids == folded
+
+    # Spelled out per branch, so set equality cannot be satisfied by a fold
+    # that answers "nothing" (or that confuses the two team kinds).
+    def can_use(cap: RebacReference, team: RebacReference) -> bool:
+        return can_team_use_from_facts(team.id, facts_by_id[cap.id])
+
+    assert can_use(default_on, personal) and can_use(default_on, collaborative)
+    assert can_use(personal_class, personal) and not can_use(
+        personal_class, collaborative
+    )
+    assert can_use(team_granted, collaborative) and not can_use(team_granted, personal)
+    assert not can_use(personal_blocked, personal) and can_use(
+        personal_blocked, collaborative
+    )
+    assert can_use(blocked_but_granted, personal)
+    assert can_use(team_opted_out, personal) and not can_use(
+        team_opted_out, collaborative
+    )
+    assert not can_use(admin_gated, personal) and not can_use(
+        admin_gated, collaborative
+    )
 
 
 # ---------------------------------------------------------------------------
