@@ -174,6 +174,15 @@ application-container-smoke: ## Verify /apps and /app-services routing in an alr
 theme-container-smoke: ## Verify the deployment theme overlay (FRONTEND_THEME_URL) in an already-built frontend image
 	FRONTEND_IMAGE=$(IMAGE_FULL) sh tests/theme-container-smoke.sh
 
+# Directory laid out like public/ (images/, contrib/, root *.md) and the zip to
+# upload to the deployment's object storage.
+THEME_SRC ?= theme
+THEME_ZIP ?= theme.zip
+
+.PHONY: theme-bundle
+theme-bundle: ## Package THEME_SRC into THEME_ZIP, the archive a deployment serves as its theme
+	sh scripts/build-theme-archive.sh "$(THEME_SRC)" "$(THEME_ZIP)"
+
 ##@ API client generation
 
 # The frontend RTK Query client and TypeScript types are GENERATED from each
