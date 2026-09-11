@@ -7,7 +7,9 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=3.9.0",
+  # 3.10.1 is the floor, not 3.9.0: Knowledge Base routing derives its task
+  # queue from fred-core's `knowledge_base_catalog_id`, which lands in 3.10.1.
+  "fred-core>=3.10.1",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=1.3.14",
