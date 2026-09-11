@@ -200,7 +200,7 @@ it unchanged, so the icon never claims a copy that did not happen.
 Both list markers — a bullet's dash and an ordered item's number — are drawn in `primary`; the
 other syntax marks (`#`, `>`, `*`, backticks) stay in the muted marker colour. lezer gives both
 list markers the same `ListMark` node, so one non-contextual `styleTags` override on that node
-carries them out of the marker rule together. Note that a *contextual* selector cannot do this: a
+carries them out of the marker rule together. Note that a _contextual_ selector cannot do this: a
 `"OrderedList/.../ListMark"` form does not override the parser's own rule for a node, only the
 whole-node form does — worth knowing before trying to colour the two list markers differently,
 which would need a `ViewPlugin` reading the syntax tree.
@@ -438,7 +438,7 @@ agents) so the decision is informed at the point it is made.
 
   Two changes, both needed. `traceRows()` trims each reasoning row of the leading run of
   **complete sentences** the previous row already carried (`stripRepeatedPreamble`), compared
-  against that row's *full* text, so the rows tile the whole reasoning with nothing lost
+  against that row's _full_ text, so the rows tile the whole reasoning with nothing lost
   between them. Whole sentences only: blocks that merely open on the same few words share no
   sentence and are left alone — a character-level trim rendered `demandé un document nommé…`
   on this very session. And the clamp went from 2 lines to 3: with the repeat removed, the
@@ -485,7 +485,7 @@ agents) so the decision is informed at the point it is made.
   entries at all, so its per-phase pill branch was dead code and was removed — the badge
   survives only in `TraceDetailDrawer`.
 
-  A grouping background behind *consecutive* tool rows may come back; it was deliberately
+  A grouping background behind _consecutive_ tool rows may come back; it was deliberately
   left out here rather than guessed at.
 
 - **Reasoning rendered as a tool step (2026-07-30, #2172 — lane split superseded 2026-09-04)** — the trace was one flat list of
@@ -499,7 +499,7 @@ agents) so the decision is informed at the point it is made.
   as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
-  sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
+  sum of _tool_ latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
   replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock, tool
   count, tool latency, running flag — which the component formats through i18n as e.g.
   "Reasoning 16.4s · 4 tools". The wall-clock was the max of the blocks, not their sum,
@@ -657,8 +657,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
   dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
   `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
-  + SSE consumption) — a reasonable fast-follow, not required for the current fix since
-  `content` already carries enough to render useful citations.
+  - SSE consumption) — a reasonable fast-follow, not required for the current fix since
+    `content` already carries enough to render useful citations.
 
 - **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
   `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
@@ -900,7 +900,7 @@ _(none yet)_
 
 **Status:** `Functional`
 
-`badgeCount` puts an M3 *large badge* on the button's top-right corner. Nothing
+`badgeCount` puts an M3 _large badge_ on the button's top-right corner. Nothing
 renders below 1 — a "0" pill is noise, not information — and counts above 999
 show as `999+`, M3's three-digit cap.
 
@@ -914,7 +914,7 @@ not the `error` / `on-error` M3 specifies. M3 colors badges as notification
 signals; this one is a neutral count (attachments in a conversation), and a red
 pill would read as something to fix.
 
-The badge renders in a wrapper *beside* the `<button>`, not inside it: `.btn` is
+The badge renders in a wrapper _beside_ the `<button>`, not inside it: `.btn` is
 `overflow: hidden` to clip its state layer to the circle, so a nested badge
 would be cut off. The wrapper only appears when a badge does, so every other
 call site keeps rendering a bare `<button>`.
@@ -1056,7 +1056,7 @@ first-ever value only).
 
 **Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
 (150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
-capability viewer keeps. Note this is deliberately *faster* than M3 recommends
+capability viewer keeps. Note this is deliberately _faster_ than M3 recommends
 for a panel (300–400ms) — a designer call: they are a quick detour from the
 conversation, not a context switch. The prop moved the drawer's hardcoded
 `250ms ease-out` onto the `--duration-*` / `--easing-*` tokens on the way.
@@ -1123,7 +1123,7 @@ old always-on prompt query is part of that — the chat no longer fetches prompt
 on session load.
 
 In a personal chat the space picker is hidden: the team side would have nothing
-to show, and the chat's own team id *is* the personal space.
+to show, and the chat's own team id _is_ the personal space.
 
 **Categories are team-owned** (migration `8ca7cafc292f`), so they are fetched
 per space and the active category resets when the space changes. The counts come
@@ -1283,7 +1283,7 @@ inline popover into a full-height right-side push panel (#2259).
 - **Reset** reverts the per-turn selection to the agent's configured scope. For an agent that
   binds specific libraries at creation (`bind_libraries` → `bound_library_ids`), the library tree
   stays read-only and reset clears only any per-turn document narrowing back to that bound
-  baseline; for an unbound agent, reset clears to empty (no per-agent *editable* default exists in
+  baseline; for an unbound agent, reset clears to empty (no per-agent _editable_ default exists in
   the data today — this is frontend-only). Reset is disabled when the selection already equals the
   agent scope.
 - **Tune badge**: `ComposerActionsMenu` gained a `badge` prop (a small `--error` dot over the
@@ -1329,7 +1329,7 @@ _(none)_
   instant and cancels any animation in flight.
 
   That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
-  the content grown since the last trace-only height *is* the answer's height on screen. The
+  the content grown since the last trace-only height _is_ the answer's height on screen. The
   trace-only height is sampled continuously during the work phase rather than read when the answer
   phase opens — the latter already includes the first batch, and an answer arriving in one chunk
   would leave a budget of zero.
@@ -1344,7 +1344,7 @@ _(none)_
   Distance alone is a race: the follow write and the browser's scroll event are a frame apart, so
   content landing in between makes a perfectly-followed view measure as far from the bottom, which
   would give up following for the rest of the turn with nothing left to re-arm it. Direction alone
-  misses content being *removed*: answering a HITL prompt takes it out of the thread, the page
+  misses content being _removed_: answering a HITL prompt takes it out of the thread, the page
   shortens, and the browser clamps `scrollTop` downward with no reader involved — which read as a
   scroll-up and killed the resume's autoscroll. So: at the bottom is following whatever moved the
   view there; away from it, only an upward move is the reader.
@@ -1353,7 +1353,7 @@ _(none)_
   gate is open, and treating that as idle stranded the reader above a prompt they had to act on,
   with the resume then having nowhere to scroll back from.
 
-  One more signal is needed because `hasAnswerText` only accumulates: a tool round *after* the model
+  One more signal is needed because `hasAnswerText` only accumulates: a tool round _after_ the model
   has written text would otherwise leave the turn stuck in the answer phase, with its new trace rows
   eating the freeze budget. A rise in the turn's trace-row count drops the anchor and resumes
   following — which also covers a HITL resume, since that adds no user message and so leaves the key
@@ -1361,13 +1361,13 @@ _(none)_
 
   `ChatMessagesArea` lost its `useLayoutEffect`/`turnKey` bottom-jump in the same change; it is
   presentation only now. Two owners on one scroll container cannot be reasoned about, and the hook
-  is the one that also has to decide when *not* to move.
+  is the one that also has to decide when _not_ to move.
 
 - **Trace no longer collapses under the reader (2026-09-04, #2566)** — `ThoughtTrace` collapsed
   itself on `done`, contracting the layout by tens of pixels at the exact moment the reader started
   on the answer, every turn. `resolveTraceExpanded` takes a fourth input: a block that watched its
   own turn stream stays open. Captured at mount rather than latched over time — `done` briefly goes
-  false on the *previous* turn during the pre-flight between `waitResponse` flipping and the new user
+  false on the _previous_ turn during the pre-flight between `waitResponse` flipping and the new user
   message landing, and a running latch would pin that history block open for good. History blocks
   still mount collapsed, so opening a long conversation is unchanged.
 
@@ -1450,7 +1450,7 @@ _(none)_
   translated on both sides (they were hardcoded English here). The 2s revert timer is also
   now cancelled before re-arming and on unmount: clicking copy twice inside the window used
   to have the first click's timer cut the second confirmation short after ~0.1s. The
-  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  clipboard _payload_ stays asymmetric on purpose: assistant replies go through
   `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
 
 ---
@@ -1878,11 +1878,11 @@ Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
 
-| `joining_mode` | Footer content |
-| --- | --- |
-| `open` | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable |
-| already a member | Nothing renders in the footer's join slot |
+| `joining_mode`   | Footer content                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `open`           | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `invite_only`    | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable                                                                                                                                                                |
+| already a member | Nothing renders in the footer's join slot                                                                                                                                                                                                                                 |
 
 The former lock icon next to the team name (driven by the retired
 `is_private` bool) was removed rather than remapped to `joining_mode` — the
@@ -1942,7 +1942,7 @@ decides on its own what is discoverable, and drops from the "discover"
 `visibility` is `private` (#2398). The server already withholds the ReBAC
 `public` relation from a private team, but that filter is skipped entirely
 when authorization is disabled — so the page never relies on it. A team the
-caller *is* a member of stays listed under "your teams" whatever its
+caller _is_ a member of stays listed under "your teams" whatever its
 visibility: members need it to navigate.
 
 ---
@@ -1992,7 +1992,7 @@ support line switches to the `privateSupport` copy ("a private team is not
 listed on the marketplace: its members are added manually by a team
 admin"). One inert, locked control states the fact; the original 2026-07-26
 treatment kept the whole group mounted with every item `disabled`, and a
-greyed-out *two-state* toggle still reads as a live choice — while "Invite
+greyed-out _two-state_ toggle still reads as a live choice — while "Invite
 only" named a mechanism that does not exist. Plain muted text was tried
 first and read as too weak for the row (it also wrapped onto two lines),
 hence a real button shape. `.team-settings-toggle-action` carries the
@@ -2308,6 +2308,7 @@ generic `Dialog` primitive exists yet):
   the dialog's own padding, and clipping would also cut off the
   `Autocomplete` menu popover in the search row above the list (same class
   of bug just fixed on the old inline field, see above).
+
 - **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
   (`filled`/`primary`, disabled while the list is empty or a submit is in
   flight). Clicking `Ajouter` always closes the dialog once the batch
@@ -2371,13 +2372,13 @@ cannot drift apart in the same row.
 
 **`TeamRoleChips`: a static `Member` badge and a description tooltip on
 every badge** (2026-08-17, #2383). Two complaints from team admins, one
-fix. (1) A member holding no elevated role rendered as three *inactive*
+fix. (1) A member holding no elevated role rendered as three _inactive_
 pills — visually indistinguishable from a row that hadn't loaded. A
 non-interactive `Member` badge now closes the row, after the three toggles,
 always visible. It shares the toggles' pill geometry (a `%pill` placeholder
 both `@extend`, so height/padding cannot desync mid-row) but carries its own
 fill: tonal `secondary-container` / `on-secondary-container`, with a
-transparent 1px border to keep the geometry identical. Deliberately *not*
+transparent 1px border to keep the geometry identical. Deliberately _not_
 the toggles' `--primary` fill — in this row `--primary` reads as "someone
 granted this and someone can revoke it", whereas `team_member` is neither
 granted nor revocable, just always true. The same tonal pairing already
@@ -2392,7 +2393,7 @@ that cannot happen. (2) The role names carried no meaning on the page: all
 four badges now open a rich `Tooltip` (title + one-line description), copy
 condensed from the help centre's `features/roles.md` tables so the two
 surfaces agree. The Analyst panel alone carries a `--warning` footer row —
-it grants evaluation-campaign execution *and* the limited conversation
+it grants evaluation-campaign execution _and_ the limited conversation
 slices those datasets are built from, which a flat pill row hinted at
 nowhere.
 
@@ -2405,7 +2406,7 @@ reader who cannot act on the role and most needs to know what it is.
 
 **Members table: role chips are a live, single-click toggle in both
 directions.** `TeamRoleChips` renders identically here and in the
-add-members dialog, but only the table's instance is *live* — a click
+add-members dialog, but only the table's instance is _live_ — a click
 there immediately grants/revokes via the API, while the dialog's is a
 staged selection with no effect until "Ajouter". A confirmation step was
 added on the revoke path (2026-07-26) while investigating a report of "a
@@ -2510,7 +2511,7 @@ Helps a user recognize their role in each team they belong to.
   token — roles are priority-sorted, admin first), the same Shield glyph as
   the `TeamSelectionItem` badge (`color: secondary`, 12px) prefixes the
   label, without that badge's circular background/outline — inline, `gap:
-  var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
+var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
   label itself isn't shown there) — left for a follow-up task.
 - Backend: new `TeamWithPermissions.my_relations` field — see
   `CONTROL-PLANE-PRODUCT-CONTRACT.md` §26 for why `permissions` alone
@@ -2680,20 +2681,20 @@ Extended 2026-07-31 with the `breadcrumb`/`tabs` slots and retrofitted onto ever
 admin-scope and team-admin-scope page in the same pass, so platform-admin and team-admin pages
 now share one consistent header pattern instead of diverging per page:
 
-| Page | Slots used |
-| --- | --- |
-| `TeamUsagePage` | title, actions (`TimeRangeSelector` + refresh) |
-| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle |
-| `Evaluations` (team Evaluations tab) | title, subtitle, actions |
-| `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
-| `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
-| `SelfTestPage` | title only |
-| `FeaturesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
-| `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
-| `AdminTeamsPage` | title only (new — page previously had no page-level header) |
-| `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
-| `TeamSettingsParameters` | title only (new) |
-| `TeamSettingsRouting` | title only (new) |
+| Page                                                   | Slots used                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
+| `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
+| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
+| `SelfTestPage`                                         | title only                                                                               |
+| `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
+| `MigrationPage` (Platform data)                        | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
+| `AdminTeamsPage`                                       | title only (new — page previously had no page-level header)                              |
+| `TeamSettingsMembers`                                  | title, actions (search + `LeaveTeamButton` + Add members)                                |
+| `TeamSettingsParameters`                               | title only (new)                                                                         |
+| `TeamSettingsRouting`                                  | title only (new)                                                                         |
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
@@ -2966,7 +2967,7 @@ _(none yet)_
 Generic `<T extends string>` pill-chip trigger + `MenuPopover`/`MenuPopoverItem` options popover anchored above the chip (`position: absolute; bottom: calc(100% + spacing-xs)`, same "opens above" grammar as `ComposerActionsMenu`). Chip: 32px height, fully rounded (`--radius-full`), `--surface-container-low` background, `--font-label-medium` in `--on-surface-retreat`, 18×18px icon; hover lightens via `--state-on-surface-hover`; open state (`data-open`) shows `--primary` text/icon over a `--state-primary-selected` background layer (a `primary`-tinted 16%-opacity overlay — the same token vocabulary as every other state layer in the app, not a one-off value). Self-contained `open` state (unlike `EnumSelectRow`'s externally-coordinated `open`/`onToggle`): each chip closes itself on outside mousedown or Escape, so multiple chips can sit side by side without a shared "one open at a time" coordinator — clicking a sibling chip already lands outside the first one's container. Full ARIA: `role="listbox"`/`role="option"` on the popover, `aria-haspopup`/`aria-expanded`/`aria-label` (`"{title}: {current value}"`) on the trigger. `ArrowUp`/`ArrowDown`/`Home`/`End` roving-tabindex navigation across options, mirroring `EnumSelectRow`'s pattern.
 
 The trigger is wrapped in the shared `Tooltip` atom (`text={title}`) — the chip itself only shows
-the current *value* ("Hybride"), the setting's *name* ("Recherche") shows on hover/focus via the
+the current _value_ ("Hybride"), the setting's _name_ ("Recherche") shows on hover/focus via the
 tooltip. `Tooltip` has no built-in show delay (toggles on `onMouseEnter`/focus immediately), so
 this is an instant tooltip with no extra wiring needed. The wrapper stays mounted unconditionally
 (not gated on `open`) — swapping it in/out based on `open` would remount the trigger `<button>`
@@ -3078,7 +3079,7 @@ cut short by the first click's timer, and the pending revert is dropped on unmou
 is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
 email-safe HTML serialisation applies.
 
-A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+A failed clipboard write is deliberately silent — the icon not flipping _is_ the feedback, and
 the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
 non-secure origin has no `navigator.clipboard` at all, so the property access throws
 synchronously and never reaches a `.catch`). Both turns get this from
@@ -3113,7 +3114,7 @@ change — deliberately left as its own call (see Hover zone below).
   deleted.
 
   `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
-  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  the point: the old hook bundled the clipboard _write_ with the confirmation flag, which
   forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
   HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
   The new hook holds only the flag and its timer, so both turns really do share it, and the
@@ -3587,18 +3588,18 @@ A folder row now summarizes everything under it — its own documents and every
 sub-folder's, at any depth — in the status column that used to be blank on
 folder rows. Three states, in strict precedence:
 
-| State | Chip | Lifetime |
-| --- | --- | --- |
-| something still ingesting | `StatusChip status="processing"` | until the last child settles |
-| some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
-| something under it finished this session | `status="ready" justCompleted` ("Done") | session-only |
+| State                                    | Chip                                                                                | Lifetime                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
+| something still ingesting                | `StatusChip status="processing"`                                                    | until the last child settles |
+| some documents failed                    | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent                   |
+| something under it finished this session | `status="ready" justCompleted` ("Done")                                             | session-only                 |
 
 `raw` is never rolled up: a folder of stored-but-unprocessed documents is a
 steady state, not news. Precedence is processing > failures > done — while
 anything runs the folder is not settled, and once it is, an unresolved failure
 outranks a "your upload landed" marker.
 
-"Done" means *something* under the folder finished this session and nothing
+"Done" means _something_ under the folder finished this session and nothing
 under it is still running or failed — not that every document it holds has been
 processed. The stricter reading would never fire on a folder of long-stored
 documents, and the mark exists to answer "did what I just started land?". It is
@@ -4052,19 +4053,19 @@ The composer's right-edge chip. Two concerns, now independent:
   diagnosability rule: a control that can do nothing must be absent).
 
 Previously the model identity rode on the `reasoning_toggle` control's own
-`params`, i.e. the single model whose *reasoning* an admin had enabled
+`params`, i.e. the single model whose _reasoning_ an admin had enabled
 platform-wide. That is unrelated to routing, so the chip contradicted any
 platform binding or team override in force. The name is kept (`ReasoningChip`)
 because the reasoning menu is still what makes it interactive.
 
 Three render states:
 
-| Condition | Renders |
-| --------- | ------- |
-| Reasoning control present **and** `reasoning_enabled` | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click. |
+| Condition                                                   | Renders                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reasoning control present **and** `reasoning_enabled`       | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click.                                                                                                    |
 | Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
-| No reasoning control at all, model resolved | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable. |
-| Neither | Nothing (`null`). An empty chip would be worse than none. |
+| No reasoning control at all, model resolved                 | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable.                          |
+| Neither                                                     | Nothing (`null`). An empty chip would be worse than none.                                                                                                                                                                         |
 
 **Unavailable model.** When `enabled_for_team` is `false` the turn will fail
 with `ModelNotUsableError` before the LLM call. The model name takes
@@ -4148,6 +4149,13 @@ agent-health controls.
 
 - Application-owned information architecture remains outside the generic host
   contract; the host specifies containment and failure behavior only.
+- The framework-independent `@fred/iframe-sdk` child client is generated from the
+  canonical protocol source in
+  `src/rework/features/applications/applicationProtocol.ts`. It replaces hand-written
+  consumer messaging, not the host's source/origin checks, authorization, routing,
+  authenticated request broker, refresh policy, or frame/team teardown.
+- Route notifications are events rather than route-value state: returning to a
+  previously observed sub-path must notify the current child subscribers again.
 
 ---
 
@@ -4420,7 +4428,7 @@ The page read is addressed by slug but tagged by `page_id` off the **result**:
 every mutation knows the page id and none of them knows the slug, so tagging by
 slug leaves a write unable to invalidate the page it just changed — the article
 keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
-the *next* save conflict every time.
+the _next_ save conflict every time.
 
 ---
 
@@ -4462,18 +4470,18 @@ visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
 what makes the whole feature safe. `useChatAutoScroll` re-decides the
 conversation's scroll position every animation frame while a turn runs, so a
 jump written from outside would be overwritten a frame later — a frame-timing
-bug, therefore intermittent. The hook writes *only* while live, so a rail that
+bug, therefore intermittent. The hook writes _only_ while live, so a rail that
 can only be clicked when it is quiescent never overlaps it: the single-owner
 invariant holds by construction rather than by timing. `useChatAutoScroll`'s
 ownership comment states the refined rule.
 
 **The active mark** (`--primary`) follows two rules, and the second is not a
-special case — it is the common one. *At the bottom of the conversation, the
-last turn is active*: a short final turn never climbs to any reading line,
+special case — it is the common one. _At the bottom of the conversation, the
+last turn is active_: a short final turn never climbs to any reading line,
 because there is not enough content below it to push it there, so without this
 the rail points at the previous turn while the reader sits on the newest one.
-Otherwise, *the last turn whose question has passed a line 35% down the
-viewport* — not the topmost anchor still on screen, since the anchors sit on the
+Otherwise, _the last turn whose question has passed a line 35% down the
+viewport_ — not the topmost anchor still on screen, since the anchors sit on the
 user message and partway through a long answer none is visible at all.
 
 This is driven by a scroll listener, not an `IntersectionObserver`. An observer

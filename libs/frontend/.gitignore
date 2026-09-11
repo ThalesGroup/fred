@@ -8,4 +8,9 @@ ui/LICENSE
 ui/dist/
 ui/licenses/
 ui/build-evidence.json
+iframe-sdk/.generated/
+iframe-sdk/LICENSE
+iframe-sdk/dist/
+iframe-sdk/build-evidence.json
 fixtures/react-consumer/node_modules/
+fixtures/iframe-sdk-consumer/node_modules/

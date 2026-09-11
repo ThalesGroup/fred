@@ -8,6 +8,9 @@ import { parse } from "yaml";
 import {
   CI_INPUT_PATTERNS,
   FONT_SOURCES,
+  IFRAME_HOST_COMPATIBILITY_PATHS,
+  IFRAME_SDK_CANONICAL_SOURCE_PATH,
+  IFRAME_SDK_SOURCE_PATHS,
   PACKAGE_WORKSPACE_PATTERN,
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
@@ -31,6 +34,7 @@ const changeStep = workflow.jobs["detect-changes"].steps.find(
 );
 const filters = parse(changeStep.with.filters);
 const packagePatterns = filters["frontend-packages"];
+const frontendPatterns = filters.frontend;
 
 function matches(changedPath, pattern) {
   if (pattern.endsWith("/**")) {
@@ -42,6 +46,12 @@ function matches(changedPath, pattern) {
 function selectsPackageJob(changedPaths) {
   return changedPaths.some((changedPath) =>
     packagePatterns.some((pattern) => matches(changedPath, pattern)),
+  );
+}
+
+function selectsFrontendJob(changedPaths) {
+  return changedPaths.some((changedPath) =>
+    frontendPatterns.some((pattern) => matches(changedPath, pattern)),
   );
 }
 
@@ -96,9 +106,44 @@ test("license and validation orchestration changes select package validation", (
   }
 });
 
+test("every SDK producer and canonical source selects package validation", () => {
+  for (const sourcePath of IFRAME_SDK_SOURCE_PATHS) {
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+  }
+});
+
+test("canonical protocol and declared host compatibility inputs select both gates", () => {
+  assert.equal(
+    IFRAME_HOST_COMPATIBILITY_PATHS[0],
+    IFRAME_SDK_CANONICAL_SOURCE_PATH,
+  );
+  for (const sourcePath of IFRAME_HOST_COMPATIBILITY_PATHS) {
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+    assert(selectsFrontendJob([sourcePath]), sourcePath);
+  }
+});
+
+test("frontend-package CI runs the actual-tarball production-host integration", () => {
+  const steps = workflow.jobs["frontend-package-checks"].steps;
+  assert(
+    steps.some(
+      (step) =>
+        step.run === "npm ci" && step["working-directory"] === "apps/frontend",
+    ),
+  );
+  assert(
+    steps.some(
+      (step) =>
+        step.run === "make host-integration" &&
+        step["working-directory"] === "libs/frontend",
+    ),
+  );
+});
+
 test("an unrelated application-only change may skip package validation", () => {
   assert.equal(
     selectsPackageJob(["apps/frontend/src/components/Unrelated.tsx"]),
     false,
   );
+  assert(selectsFrontendJob(["apps/frontend/src/components/Unrelated.tsx"]));
 });

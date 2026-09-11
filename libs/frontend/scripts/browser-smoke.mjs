@@ -69,7 +69,10 @@ async function startServer(outputRoot, defaultFile = "tokens-only.html") {
   };
 }
 
-async function createObservedPage(browser, origin) {
+async function createObservedPage(browser, allowedOrigins) {
+  const origins = new Set(
+    Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins],
+  );
   const context = await browser.newContext({ serviceWorkers: "block" });
   const requests = [];
   const blockedRequests = [];
@@ -80,7 +83,7 @@ async function createObservedPage(browser, origin) {
     const url = new URL(request.url());
     const record = { type: request.resourceType(), url: request.url() };
     requests.push(record);
-    if (url.origin !== origin || url.protocol !== "http:") {
+    if (!origins.has(url.origin) || url.protocol !== "http:") {
       blockedRequests.push(record);
       await route.abort("blockedbyclient");
       return;
@@ -126,6 +129,10 @@ export async function assertBrowserPrerequisites({
   browserPath = chromium.executablePath(),
   tokenOutput = path.join(workspaceRoot, "target/staged-consumers/tokens"),
   reactOutput = path.join(workspaceRoot, "target/staged-consumers/react"),
+  iframeSdkOutput = path.join(
+    workspaceRoot,
+    "target/staged-consumers/iframe-sdk",
+  ),
 } = {}) {
   await Promise.all([
     stat(path.join(tokenOutput, "tokens-only.html")).catch(() => {
@@ -138,6 +145,13 @@ export async function assertBrowserPrerequisites({
         "staged React consumer is missing; run npm run test:consumer first",
       );
     }),
+    ...["index.html", "child.html", "attacker.html"].map((file) =>
+      stat(path.join(iframeSdkOutput, file)).catch(() => {
+        throw new Error(
+          "staged iframe SDK consumer is missing; run npm run test:consumer first",
+        );
+      }),
+    ),
     stat(browserPath).catch(() => {
       throw new Error(
         "Playwright Chromium is missing; run npm run browser:install during provisioning",
@@ -146,7 +160,10 @@ export async function assertBrowserPrerequisites({
   ]);
 }
 
-function assertLocalRequests(observation, origin) {
+function assertLocalRequests(observation, allowedOrigins) {
+  const origins = new Set(
+    Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins],
+  );
   assertSuccessfulBrowserRequests(observation);
   assert.deepEqual(
     observation.blockedRequests,
@@ -154,7 +171,7 @@ function assertLocalRequests(observation, origin) {
     "browser attempted a non-loopback request",
   );
   for (const request of observation.requests) {
-    assert.equal(new URL(request.url).origin, origin);
+    assert(origins.has(new URL(request.url).origin));
     assert(
       !request.url.startsWith("file:"),
       `browser requested a file URL: ${request.url}`,
@@ -167,6 +184,330 @@ function assertLocalRequests(observation, origin) {
       !request.url.includes("fred-frontend-packaging"),
       `browser exposed the FRED checkout path: ${request.url}`,
     );
+  }
+}
+
+async function iframeHarness(page) {
+  await page.waitForFunction(() => window.__fredHost?.readyCount >= 2);
+  let child;
+  let attacker;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    child = page.frames().find((frame) => /\/child\.html/.test(frame.url()));
+    attacker = page
+      .frames()
+      .find((frame) => /\/attacker\.html/.test(frame.url()));
+    if (child && attacker) break;
+    await page.waitForTimeout(10);
+  }
+  assert(
+    child,
+    `cross-origin child frame is missing: ${page
+      .frames()
+      .map((frame) => frame.url())
+      .join(", ")}`,
+  );
+  assert(
+    attacker,
+    `cross-origin attacker frame is missing: ${page
+      .frames()
+      .map((frame) => frame.url())
+      .join(", ")}`,
+  );
+  await child.waitForFunction(() => window.__fredChild !== undefined);
+  await child.evaluate(async () => window.__fredChild.connected);
+  return { attacker, child };
+}
+
+async function rejectedIframeHarness(page) {
+  let child;
+  for (let attempt = 0; attempt < 100 && !child; attempt += 1) {
+    child = page
+      .frames()
+      .find(
+        (frame) =>
+          frame.url() && new URL(frame.url()).pathname === "/child.html",
+      );
+    if (!child) await page.waitForTimeout(10);
+  }
+  assert(child, "negative cross-origin child frame is missing");
+  await child.waitForFunction(() => window.__fredChild !== undefined);
+  await child.waitForFunction(
+    () => window.__fredChild.connectionError !== null,
+  );
+  return child.evaluate(() => window.__fredChild.connectionError);
+}
+
+async function verifyRejectedFixtureOrigins(
+  browser,
+  hostOrigin,
+  applicationOrigin,
+  attackerOrigin,
+) {
+  const allowedOrigins = [hostOrigin, applicationOrigin, attackerOrigin];
+  const observation = await createObservedPage(browser, allowedOrigins);
+  try {
+    const rejected = {};
+    for (const [name, configuredApplication, configuredAttacker] of [
+      [
+        "application",
+        "javascript:document.body.dataset.fixtureOriginBypass='accepted'",
+        attackerOrigin,
+      ],
+      [
+        "attacker",
+        applicationOrigin,
+        "javascript:document.body.dataset.fixtureOriginBypass='accepted'",
+      ],
+    ]) {
+      const fixtureUrl = new URL("/", hostOrigin);
+      fixtureUrl.searchParams.set("applicationOrigin", configuredApplication);
+      fixtureUrl.searchParams.set("attackerOrigin", configuredAttacker);
+      await observation.page.goto(fixtureUrl.href, { waitUntil: "load" });
+      await observation.page.waitForTimeout(50);
+      const destinations = await observation.page.evaluate(() => ({
+        application: document
+          .querySelector("#application")
+          ?.getAttribute("src"),
+        attacker: document.querySelector("#attacker")?.getAttribute("src"),
+      }));
+      assert.deepEqual(destinations, { application: null, attacker: null });
+      rejected[name] = destinations;
+    }
+    assertLocalRequests(observation, allowedOrigins);
+    return rejected;
+  } finally {
+    await observation.context.close();
+  }
+}
+
+async function verifyIframeSdk(
+  browser,
+  hostOrigin,
+  applicationOrigin,
+  attackerOrigin,
+) {
+  const allowedOrigins = [hostOrigin, applicationOrigin, attackerOrigin];
+  assert.equal(
+    new Set(allowedOrigins).size,
+    3,
+    "iframe fixture origins must be distinct",
+  );
+  const observation = await createObservedPage(browser, allowedOrigins);
+  try {
+    const fixtureUrl = new URL("/", hostOrigin);
+    fixtureUrl.searchParams.set("applicationOrigin", applicationOrigin);
+    fixtureUrl.searchParams.set("attackerOrigin", attackerOrigin);
+    await observation.page.goto(fixtureUrl.href, { waitUntil: "networkidle" });
+    let { attacker, child } = await iframeHarness(observation.page);
+    assert.equal(new URL(child.url()).origin, applicationOrigin);
+    assert.equal(new URL(child.url()).pathname, "/child.html");
+    assert.equal(new URL(attacker.url()).origin, attackerOrigin);
+    assert.equal(new URL(attacker.url()).pathname, "/attacker.html");
+    const admission = await observation.page.evaluate(() => ({
+      applicationOrigin: window.__fredHost.applicationOrigin,
+      readyCount: window.__fredHost.readyCount,
+      protocolVersion: window.__fredHost.records.find(
+        (message) => message.type === "fred:ready",
+      )?.protocolVersion,
+    }));
+    assert.equal(admission.applicationOrigin, applicationOrigin);
+    assert(admission.readyCount >= 2, "ready retry was not observed");
+    assert.equal(admission.protocolVersion, "1");
+
+    await observation.page.evaluate(() => window.__fredHost.sendRoute("A"));
+    await child.evaluate(() => window.__fredChild.navigate("B"));
+    await observation.page.evaluate(() => window.__fredHost.sendRoute("A"));
+    await child.waitForFunction(() => window.__fredChild.routes.length === 2);
+    assert.deepEqual(await child.evaluate(() => window.__fredChild.routes), [
+      "A",
+      "A",
+    ]);
+    await child.evaluate(() => window.__fredChild.openChat("session-1"));
+    const intents = await observation.page.evaluate(() =>
+      window.__fredHost.records.filter(
+        (message) =>
+          message.type === "fred:navigate" || message.type === "fred:open-chat",
+      ),
+    );
+    assert.deepEqual(intents, [
+      { type: "fred:navigate", path: "B", replace: false },
+      { type: "fred:open-chat", sessionId: "session-1" },
+    ]);
+
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredChild.requestPair()),
+      ["pair/one", "pair/two"],
+    );
+    for (const [pathName, method, expected] of [
+      ["ok", "GET", { status: 200, text: '{"ok":true}' }],
+      ["status/401", "GET", { status: 401, text: '{"ok":false}' }],
+      ["status/403", "GET", { status: 403, text: '{"ok":false}' }],
+      ["status/503", "GET", { status: 503, text: '{"ok":false}' }],
+      ["status/204", "GET", { status: 204, text: "" }],
+      ["status/205", "GET", { status: 205, text: "" }],
+      ["status/304", "GET", { status: 304, text: "" }],
+      ["ok", "HEAD", { status: 200, text: "" }],
+    ]) {
+      const result = await child.evaluate(
+        ([requestPath, requestMethod]) =>
+          window.__fredChild.request(requestPath, requestMethod),
+        [pathName, method],
+      );
+      assert.deepEqual(
+        { status: result.status, text: result.text },
+        expected,
+        `${method} ${pathName}`,
+      );
+      assert.equal(result.headers["x-fred-fixture"], "local");
+    }
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredChild.request("transport-error")),
+      { code: "transport-error" },
+    );
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.request("settlement/duplicate"),
+      ),
+      {
+        status: 200,
+        headers: {},
+        text: "first",
+      },
+    );
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.request("settlement/unknown"),
+      ),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-fred-fixture": "local",
+        },
+        text: '{"ok":true}',
+      },
+    );
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.request("pending/timeout", "GET", 10),
+      ),
+      { code: "request-timeout" },
+    );
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.request("pending/late", "GET", 10),
+      ),
+      { code: "request-timeout" },
+    );
+    await observation.page.waitForTimeout(60);
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredChild.request("after-late")),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-fred-fixture": "local",
+        },
+        text: '{"ok":true}',
+      },
+    );
+    assert.equal(
+      await child.evaluate(() => window.__fredChild.abort()),
+      "AbortError",
+    );
+
+    const routeCount = await child.evaluate(
+      () => window.__fredChild.routes.length,
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.send({ type: "fred:route", subPath: 7 }),
+    );
+    await attacker.evaluate(() =>
+      window.__attack({ type: "fred:route", subPath: "attacker" }),
+    );
+    await observation.page.waitForTimeout(20);
+    assert.equal(
+      await child.evaluate(() => window.__fredChild.routes.length),
+      routeCount,
+      "malformed or impersonated route was admitted",
+    );
+    assert(
+      (await observation.page.evaluate(() => window.__fredHost.rejected)) >= 1,
+      "host did not reject the attacker frame",
+    );
+
+    const hostRecordCount = await observation.page.evaluate(
+      () => window.__fredHost.records.length,
+    );
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredChild.invalidInputs()),
+      ["TypeError", "invalid-request"],
+    );
+    assert.equal(
+      await observation.page.evaluate(() => window.__fredHost.records.length),
+      hostRecordCount,
+      "unsafe path or protected header reached the host",
+    );
+
+    const rejectedConnections = {};
+    for (const mode of ["malformed", "unsupported", "mismatch"]) {
+      await observation.page.evaluate((selectedMode) => {
+        window.__fredHost.configureContext(selectedMode);
+        window.__fredHost.replaceFrame(100);
+      }, mode);
+      rejectedConnections[mode] = await rejectedIframeHarness(observation.page);
+    }
+    await observation.page.evaluate(() => {
+      window.__fredHost.configureContext("silent");
+      window.__fredHost.replaceFrame(30);
+    });
+    rejectedConnections.deadline = await rejectedIframeHarness(
+      observation.page,
+    );
+    assert.match(rejectedConnections.malformed, /malformed/i);
+    assert.match(rejectedConnections.unsupported, /unsupported/i);
+    assert.match(rejectedConnections.mismatch, /different application/i);
+    assert.match(rejectedConnections.deadline, /deadline/i);
+
+    await observation.page.evaluate(() => {
+      window.__fredHost.configureContext("valid", "team-2");
+      window.__fredHost.replaceFrame();
+    });
+    ({ child } = await iframeHarness(observation.page));
+    assert.equal(new URL(child.url()).origin, applicationOrigin);
+    assert.equal(new URL(child.url()).pathname, "/child.html");
+    assert.equal(
+      await child.evaluate(() => window.__fredChild.client.context?.team.id),
+      "team-2",
+    );
+    assert.equal(
+      await child.evaluate(() => window.__fredChild.capacity()),
+      "request-capacity",
+    );
+    const disposedRoutes = await child.evaluate(
+      () => window.__fredChild.routes.length,
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendRoute("after-disposal"),
+    );
+    await observation.page.waitForTimeout(20);
+    assert.equal(
+      await child.evaluate(() => window.__fredChild.routes.length),
+      disposedRoutes,
+    );
+
+    assertLocalRequests(observation, allowedOrigins);
+    return {
+      admission,
+      intents,
+      routes: ["A", "A"],
+      rejectedConnections,
+      distinctOrigins: true,
+      requests: observation.requests,
+      responses: observation.responses,
+    };
+  } finally {
+    await observation.context.close();
   }
 }
 
@@ -568,19 +909,46 @@ export async function runBrowserSmoke({ evidencePath } = {}) {
     "target/staged-consumers/tokens",
   );
   const reactOutput = path.join(workspaceRoot, "target/staged-consumers/react");
-  await assertBrowserPrerequisites({ tokenOutput, reactOutput });
+  const iframeSdkOutput = path.join(
+    workspaceRoot,
+    "target/staged-consumers/iframe-sdk",
+  );
+  await assertBrowserPrerequisites({
+    tokenOutput,
+    reactOutput,
+    iframeSdkOutput,
+  });
   let tokenServer;
   let reactServer;
+  let iframeHostServer;
+  let iframeChildServer;
+  let iframeAttackerServer;
   let browser;
   try {
     tokenServer = await startServer(tokenOutput);
     reactServer = await startServer(reactOutput, "index.html");
+    iframeHostServer = await startServer(iframeSdkOutput, "index.html");
+    iframeChildServer = await startServer(iframeSdkOutput, "child.html");
+    iframeAttackerServer = await startServer(iframeSdkOutput, "attacker.html");
     browser = await chromium.launch({ headless: true });
-    const [tokens, fonts, ui] = await Promise.all([
-      verifyTokens(browser, tokenServer.origin),
-      verifyFonts(browser, tokenServer.origin),
-      verifyUi(browser, reactServer.origin),
-    ]);
+    const [tokens, fonts, ui, rejectedFixtureOrigins, iframeSdk] =
+      await Promise.all([
+        verifyTokens(browser, tokenServer.origin),
+        verifyFonts(browser, tokenServer.origin),
+        verifyUi(browser, reactServer.origin),
+        verifyRejectedFixtureOrigins(
+          browser,
+          iframeHostServer.origin,
+          iframeChildServer.origin,
+          iframeAttackerServer.origin,
+        ),
+        verifyIframeSdk(
+          browser,
+          iframeHostServer.origin,
+          iframeChildServer.origin,
+          iframeAttackerServer.origin,
+        ),
+      ]);
     for (const property of [
       "documentOverflow",
       "bodyOverflow",
@@ -600,6 +968,8 @@ export async function runBrowserSmoke({ evidencePath } = {}) {
       tokensOnly: tokens,
       fontsOptIn: fonts,
       ui,
+      rejectedFixtureOrigins,
+      iframeSdk,
       shellOwnershipComparison: {
         beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,
         afterUiStyles: ui.shellOwnership,
@@ -618,6 +988,9 @@ export async function runBrowserSmoke({ evidencePath } = {}) {
     await browser?.close();
     await tokenServer?.close();
     await reactServer?.close();
+    await iframeHostServer?.close();
+    await iframeChildServer?.close();
+    await iframeAttackerServer?.close();
   }
 }
 
