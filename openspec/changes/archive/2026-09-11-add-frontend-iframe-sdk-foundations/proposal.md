@@ -6,7 +6,7 @@ archive can make that existing boundary consumable and testable without exposing
 authentication or coupling consumers to the FRED checkout.
 
 This is the next bounded slice of
-[`FRED-FRONTEND-PACKAGING-RFC.md`](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
+[`FRED-FRONTEND-PACKAGING-RFC.md`](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 Implementation is tracked by
 [ThalesGroup/fred#2614](https://github.com/ThalesGroup/fred/issues/2614).
 
