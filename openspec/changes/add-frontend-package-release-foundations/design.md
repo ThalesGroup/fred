@@ -8,6 +8,20 @@ consumer graphs still encode `0.0.0-development`; the pack scripts also select t
 three current names directly. The root's `private: true` is already enforced and is
 an orchestration safeguard, not a member publication setting.
 
+The inspected npm lockfile uses two intentionally different local-reference shapes.
+`libs/frontend/package-lock.json` records the three declared workspace members as
+`link: true` entries resolving to the contained `design-tokens`, `ui`, and `iframe-sdk`
+directories. Separately, the React and SDK isolated-consumer scripts copy validated
+tarballs into fresh temporary consumers and run `npm install --package-lock-only` on
+those `.tgz` files before offline `npm ci`, so npm may record `file:` archive references
+in disposable manifests and lockfiles. These expected representations are not equivalent
+to a published local dependency or a directory/workspace fallback.
+
+The production-host integration currently runs the host with
+`apps/frontend/node_modules/.bin/vitest` and points it at an SDK entry extracted from the
+validated tarball. The corrected plan preserves that split: application dependencies run
+the host; verified archive or exact registry bytes supply the SDK under test.
+
 The synchronized
 [`frontend-package-archives` specification](../../specs/frontend-package-archives/spec.md)
 is the existing behavioral contract. This change adds release readiness without
@@ -99,8 +113,16 @@ expects exactly the three selected members. Confirmed member manifests gain cons
 release metadata such as repository directory, homepage/bugs, license, engines, and
 bounded files/exports, without adding registry credentials. UI's React and React DOM peer
 ranges remain those already validated unless separately reviewed, and its token peer must
-match the selected release contract. The lockfile must agree and contain no local release
-protocols.
+match the selected release contract.
+
+Published member manifests contain only release-safe semver dependency references and
+reject `workspace:`, `file:`, `link:`, directory, or source-checkout references. The
+private producer lockfile is validated with a narrower boundary rule: npm-generated
+`link: true` entries are allowed exactly for the members declared by the root workspace
+manifest, provided every resolved target is the expected member directory inside
+`libs/frontend/`. Any undeclared link, name/directory mismatch, symlink escape, absolute
+checkout target, or other link is rejected. This preserves npm's legitimate workspace
+model without permitting it to leak into a packed manifest.
 
 Registry URL, public-access setting, scope ownership, and owner identities are decisions,
 not harmless metadata defaults. Any `publishConfig` fields that encode those choices are
@@ -121,6 +143,8 @@ from each completed file. One JSON evidence record contains:
 - selected contract identity and decision status;
 - exact package coordinate, archive filename, byte length, and SRI-formatted SHA-512;
 - references/results for archive, isolated-consumer, browser, and host-compatibility gates.
+- explicit expected provenance identity: source repository, source commit, authorized
+  Trusted Publishing workflow identity, and each candidate artifact digest.
 
 Disposable output remains under `libs/frontend/target/`; CI retains the three tarballs and
 evidence together as a candidate artifact identified by commit. Any later manual or
@@ -141,8 +165,10 @@ to run as regression gates.
 Checks that execute FRED application tests remain in an environment provisioned from
 `apps/frontend/package-lock.json` and the application's separately controlled Node/npm
 baseline. They consume the already produced SDK tarball and its verified integrity, never
-the release job's `node_modules`. The evidence record names both environments. Updating
-application tooling remains separate work.
+the release job's `node_modules`. The host and its test runner resolve only the application
+installation; the SDK entry resolves only from the hash-verified extracted archive or,
+during post-publication verification, the exact registry installation. The evidence record
+names both environments. Updating application tooling remains separate work.
 
 Alternative rejected: changing every frontend job to the release Node/npm pair, because
 that would turn package readiness into an unreviewed application-toolchain migration.
@@ -154,7 +180,18 @@ and production-host compatibility gate remain the acceptance fixtures. Their orc
 will take the selected names and exact versions and assert the resulting dependency graph.
 Candidate validation stages the actual tarballs plus lockfile-pinned dependencies in fresh
 directories outside FRED, then runs offline exactly as today. It rejects development
-versions, workspace/file links, source paths, dependency-tree reuse, and network access.
+versions, directory dependencies, workspace links, source paths, dependency-tree reuse,
+and network access.
+
+The disposable consumer is allowed to name only its copied candidate `.tgz` files using
+npm's generated `file:` manifest or lockfile representation. Before installation, the
+orchestrator resolves each target without following an escape, requires it to be a regular
+tarball file within the temporary consumer, and compares its SHA-512 with candidate evidence.
+The generated lock is then allowed to retain that exact archive reference. A `file:` target
+to a directory, a different file, a symlink, any checkout path, or an archive whose bytes do
+not match is rejected. Installed FRED packages themselves must be ordinary extracted
+directories, not symlinks. Registry dependencies such as React continue to resolve from the
+prepared cache during candidate validation.
 
 Provisioning remains a distinct network-capable operation. Browser execution performs no
 installation. Package renaming cannot be accomplished by blind string replacement inside
@@ -169,9 +206,19 @@ foundations and release acceptance to drift.
 The registry verifier accepts all three exact coordinates and the candidate evidence file.
 It requires the approved public registry explicitly, refuses tags/ranges and local specs,
 downloads each exact version into a fresh OS temporary area, and verifies both registry
-metadata and downloaded SHA-512 before installation. It also requires npm-verifiable
-provenance for each package and confirms that package/repository identity matches the
-release contract.
+metadata and downloaded SHA-512 before installation. Registry-installed consumers accept
+only exact registry versions and reject every tarball, directory, workspace, source-checkout,
+or reused-dependency-tree fallback.
+
+Provenance verification is two separate gates. First, the verifier cryptographically checks
+the signature and attestation chain using the pinned supported tooling. Second, it compares
+the verified statement with values that were already bound to the approved release contract
+and candidate evidence: the subject/artifact digest must equal the candidate tarball digest,
+the source repository must equal the approved FRED repository identity, the source commit must
+equal the candidate commit, and the publisher identity must equal the specifically authorized
+Trusted Publishing workflow identity. Expected values are never populated from the downloaded
+attestation. A correctly signed statement for another repository, commit, workflow, or artifact
+is therefore rejected as the wrong release.
 
 It then materializes clean versions of the existing consumers using exact registry
 coordinates, creates/uses their registry-derived lock graphs, and runs the applicable
@@ -179,8 +226,9 @@ type-check, production build, browser, and host compatibility evidence without a
 local tarballs or FRED package sources. Failure to resolve a public package is a failure,
 not permission to use a candidate archive.
 
-Automated repository tests exercise argument validation, integrity/provenance success,
-and negative paths against controlled fixtures or a local test registry. Their evidence
+Automated repository tests exercise argument validation, signature failure, validly signed but
+identity-mismatched provenance, integrity success/failure, and fallback rejection against
+controlled fixtures or a local test registry. Their evidence
 is labelled `registry-verifier-tooling`; only a real run against exact published public
 coordinates can produce `public-registry-verification` evidence.
 
@@ -193,13 +241,15 @@ The compact runbook records four maintainer gates before any later publish comma
 
 1. Confirm organization-controlled scope, package names, owners, public-access/registry
    policy, and exact coordinates.
-2. Confirm account or organization authority capable of creating brand-new scoped public
-   packages. Package-scoped credentials for nonexistent packages are not assumed to work.
+2. Confirm and record the bootstrap actor or credential identity with account or organization
+   authority capable of creating brand-new scoped public packages. Package-scoped credentials
+   for nonexistent packages are not assumed to work.
 3. Create each initial package through the separately approved bootstrap process. npm's
    staged publishing cannot create a brand-new package.
-4. Configure an exact trusted publisher identity for each existing package, then choose
-   direct or staged publishing as maintainer policy. Staging is recommended for review but
-   remains a policy choice and requires its documented Node/npm/access/2FA prerequisites.
+4. Separately confirm and configure the exact trusted publisher repository and workflow identity
+   for each existing package, bind it to future candidate evidence, then choose direct or staged
+   publishing as maintainer policy. Staging is recommended for review but remains a policy choice
+   and requires its documented Node/npm/access/2FA prerequisites.
 
 No publishing workflow or token is added in this change. The runbook sequences a later
 publication as design tokens first, SDK independently, and UI only after its selected token
@@ -245,6 +295,12 @@ operation only.
   requires a fresh candidate run.
 - **[Registry APIs or provenance representation can evolve]** → Pin npm exactly, test failures
   closed, and revise the verifier/toolchain together from current official documentation.
+- **[A valid signature can attest the wrong release]** → Keep repository, commit, workflow, and
+  artifact-digest expectations outside the downloaded statement and require every identity
+  comparison after cryptographic verification.
+- **[Broad local-reference rejection would reject npm's intended graphs]** → Validate each
+  boundary separately: allow only declared producer links and integrity-matched disposable
+  tarballs, while keeping published manifests and registry consumers local-reference-free.
 - **[Staged publishing may appear to solve bootstrap]** → State explicitly that it requires an
   existing package and separate initial package creation authority.
 - **[Independent versions add release coordination]** → Encode the selected UI/token pairing
@@ -255,11 +311,13 @@ operation only.
 ## Migration Plan
 
 1. Implement coordinate-independent contract parsing, expected-metadata validation, candidate
-   evidence/integrity handling, consumer parameterization, registry-verifier fixture tests, and
-   CI selection using non-authoritative test contracts.
+   evidence/integrity/provenance-identity handling, boundary-aware producer/consumer reference
+   validation, registry-verifier fixture tests, and CI selection using non-authoritative test
+   contracts.
 2. Have maintainers confirm scope ownership, final package coordinates, release metadata,
-   owners, registry/access policy, workflow identity, bootstrap authority, and staged/direct
-   policy. This is a gate, not an implementation inference.
+   owners, registry/access policy, distinct bootstrap identity and authority, authorized Trusted
+   Publishing repository/workflow identity, and staged/direct policy. This is a gate, not an
+   implementation inference.
 3. Synchronize the three member manifests, UI token peer, and producer lockfile to the confirmed
    contract while keeping the root private; run the full current archive regression suite.
 4. Produce one candidate set under the exact release toolchain, provision separately, run all
@@ -279,9 +337,9 @@ repository changes; no registry state exists to roll back.
 
 - Which organization-controlled npm scope and final package names will maintainers approve?
 - Which exact owners may bootstrap packages, and what organization/account permission path is
-  approved for creating each nonexistent public scoped package?
-- Which public registry/access settings and GitHub workflow identity will be authorized for
-  later Trusted Publishing?
+  approved for creating each nonexistent public scoped package, under which bootstrap identity?
+- Which public registry/access settings and exact source repository plus GitHub workflow identity
+  will be authorized for later Trusted Publishing and provenance matching?
 - Will maintainers choose staged or direct publishing after bootstrap? Recommended default:
   staged review for later releases, subject to the documented prerequisites.
 - Will all three first prereleases use the proposed independent value `0.1.0-alpha.1`, and will

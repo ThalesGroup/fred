@@ -1,9 +1,11 @@
 ## 1. Release contract foundation (coordinate-independent)
 
 - [ ] 1.1 Record the audited hard-coded package names, development versions, UI token peer,
-  consumer graph assertions, manifest metadata gaps, and reusable archive/consumer helpers;
-  verify the inventory covers all three packers, validators, tests, fixtures, manifests, and
-  `libs/frontend/package-lock.json` without changing application sources.
+  consumer graph assertions, manifest metadata gaps, npm-generated producer member links,
+  disposable consumer tarball references, and reusable archive/consumer helpers; verify the
+  inventory covers all three packers, validators, tests, fixtures, manifests,
+  `libs/frontend/package-lock.json`, offline install paths, and production-host integration
+  without changing application sources.
 - [ ] 1.2 Add a versioned release-contract schema and parser under `libs/frontend/release/`
   for exact toolchain pins, decision status, independent coordinates, manifest metadata,
   dependencies/peers, exports, files, and intended dist-tag; verify unit tests accept a complete
@@ -25,8 +27,10 @@
   and intended dist-tag; verify the confirmed contract is reviewable and does not treat the
   provisional `@fred/*`, `0.1.0-alpha.1`, or `next` values as pre-authorized.
 - [ ] 2.2 Obtain and record named package/public-API, SDK wire-compatibility, release, and npm
-  publishing owners plus the exact future GitHub workflow identity; verify no credential,
-  registry mutation, or publishing workflow is added by this task.
+  publishing owners plus the distinct bootstrap actor/credential identity and exact future
+  Trusted Publishing source repository and GitHub workflow identity; verify unconfirmed
+  identities remain explicit gates and no credential, registry mutation, or publishing workflow
+  is added by this task.
 - [ ] 2.3 Verify the approved npm organization/account permission model can create each package
   if it does not exist and document the separate bootstrap path; verify the record does not
   assume a package-scoped credential or staged publishing can create a brand-new package.
@@ -48,10 +52,15 @@
   local protocol, or undeclared runtime dependency.
 - [ ] 3.4 Regenerate `libs/frontend/package-lock.json` only with the repository-pinned release
   toolchain and verify all member names, exact versions, and peer edges match the confirmed
-  contract with no `workspace:`, `file:`, or link release dependency.
+  contract; permit npm-generated `link: true` records only for the three explicitly declared
+  workspace members resolving to their contained member directories.
 - [ ] 3.5 Verify the root and member manifests remain distinct: root privacy neither marks members
   private nor supplies registry/publication approval, and member release metadata does not make
   the root packable.
+- [ ] 3.6 Add positive producer-lockfile tests for the three declared npm member links and negative
+  tests for undeclared links, wrong name-to-directory mappings, absolute or escaping targets, and
+  symlink escapes; verify every packed member manifest still rejects `workspace:`, `file:`,
+  `link:`, directory, checkout-source, and other local dependency references.
 
 ## 4. Candidate packing, archive validation, and immutable evidence
 
@@ -71,8 +80,10 @@
   stops before approved evidence is written.
 - [ ] 4.5 Generate one schema-versioned candidate evidence record containing the clean source
   commit, UTC time, selected contract, exact producer and application-test toolchains, package
-  coordinates, archive filenames, byte lengths, and independently computed SRI SHA-512 values;
-  verify the record covers all three archives and all required gates.
+  coordinates, archive filenames, byte lengths, independently computed SRI SHA-512 values, and
+  explicit expected provenance repository, commit, authorized Trusted Publishing workflow
+  identity, and artifact digest; verify the record covers all three archives and all required
+  gates without deriving expectations from a downloaded attestation.
 - [ ] 4.6 Add integrity and immutability regression tests that truncate, modify, replace, or rebuild
   a recorded archive; verify prior evidence is rejected and cannot authorize later use of changed
   bytes.
@@ -85,19 +96,28 @@
 - [ ] 5.1 Parameterize the neutral token, isolated React, and neutral iframe SDK consumer
   orchestration with selected exact coordinates while reusing their existing fixtures; verify
   generated disposable manifests/imports and dependency-graph assertions contain no
-  `0.0.0-development`, workspace link, local file dependency, or FRED source path.
+  `0.0.0-development`, workspace link, directory dependency, unverified local file, or FRED
+  source path while permitting only integrity-verified candidate-tarball references.
 - [ ] 5.2 Update lockfile-pinned provisioning for the selected candidate graphs; verify it may
   contact package sources only during provisioning and fails actionably when an exact dependency
   or browser prerequisite cannot be prepared.
 - [ ] 5.3 Install the actual token, UI, and SDK candidate tarballs from prepared caches into fresh
-  locations outside FRED with networking disabled; verify type checks and production builds pass
-  without the FRED checkout or producer/application `node_modules`.
+  locations outside FRED with networking disabled; permit npm's generated `file:` references to
+  those copied `.tgz` files only after resolving them as contained regular files and matching
+  candidate SHA-512, and verify type checks and production builds pass without the FRED checkout
+  or producer/application `node_modules`.
 - [ ] 5.4 Run the existing browser harness against the candidate token/UI archives and verify both
   themes, optional Geist, Material Symbols, component behavior, local-only successful assets,
   and no dependency installation or browser bootstrap during smoke execution.
 - [ ] 5.5 Run the packed candidate SDK against the cross-origin browser and FRED production-host
   compatibility harnesses; verify protocol `"1"`, legacy behavior, origin/window admission,
-  request lifecycle, host authority, and iframe/proxy/authentication regressions remain green.
+  request lifecycle, host authority, and iframe/proxy/authentication regressions remain green;
+  verify the host/test runner uses `apps/frontend` dependencies while the SDK entry comes only
+  from the integrity-verified archive.
+- [ ] 5.6 Add positive tests for npm-generated disposable manifest/lockfile `file:` references to
+  the exact staged candidate tarballs and negative tests for directory targets, a different or
+  modified tarball, symlinks, workspace links, checkout paths, and reused FRED dependency trees;
+  verify only the evidence-matched archive references pass.
 
 ## 6. Exact public-registry verifier (no publication)
 
@@ -105,9 +125,11 @@
   evidence, and three exact name-at-version coordinates; verify it rejects tags, ranges, missing
   packages, unexpected registries, local tarballs, file/workspace specs, and omitted integrity.
 - [ ] 6.2 Resolve and download each exact registry package in a fresh temporary area, compare
-  registry metadata and downloaded bytes with recorded SHA-512, and require npm-verifiable
-  provenance and matching repository identity; verify controlled tests cover success plus missing,
-  malformed, mismatched, and unverifiable results.
+  registry metadata and downloaded bytes with recorded SHA-512, cryptographically verify
+  provenance, then compare its artifact digest, source repository, source commit, and publishing
+  workflow identity with expectations already bound to the release contract and candidate
+  evidence; verify signature validity and intended-release identity are reported as separate
+  gates.
 - [ ] 6.3 Build clean registry-only versions of the token, React UI, and iframe SDK consumers from
   the downloaded exact versions; verify tests fail rather than falling back to candidate tarballs,
   workspace sources, FRED dependencies, or mutable dist-tags.
@@ -117,6 +139,10 @@
 - [ ] 6.5 Document the exact future post-publication invocation and expected evidence without
   executing it; verify the runbook states that successful genuine registry verification remains
   unavailable until separately authorized publication occurs.
+- [ ] 6.6 Add negative provenance fixtures that remain cryptographically valid while independently
+  changing the source repository, source commit, authorized workflow identity, or attested
+  artifact digest; verify each fails the expected-identity comparison and that missing/unconfirmed
+  expected identities fail closed rather than being copied from the attestation.
 
 ## 7. Toolchain-aware CI and selection
 
@@ -128,7 +154,9 @@
   producer quality, unit, archive, and negative gates.
 - [ ] 7.3 Keep FRED application and production-host tests under their separately controlled
   application toolchain and pass only hash-verified candidate archives/evidence between jobs;
-  verify neither environment resolves the other's installed dependency tree.
+  verify the host and its runner use the application's own dependencies, the SDK under test comes
+  from the verified archive or exact registry installation, and neither environment resolves the
+  other's installed dependency tree.
 - [ ] 7.4 Extend `scripts/package-inputs.mjs`, workflow path filters, and CI-selection tests for
   every release contract, member manifest/lockfile, toolchain pin, evidence schema/helper,
   registry-verifier fixture, runbook, and orchestration input; verify relevant changes select
@@ -143,7 +171,9 @@
 - [ ] 8.1 Add a compact `libs/frontend/` release runbook covering decision gates, exact toolchains,
   candidate creation, evidence retention, bootstrap, later Trusted Publishing configuration,
   optional staging, dependency-first publication, genuine registry verification, recovery, and
-  rollback; verify every command is clearly classified as implemented repository readiness,
+  rollback; document the distinct producer-workspace, candidate-tarball, published-manifest, and
+  registry-consumer dependency boundaries plus separate bootstrap and Trusted Publishing
+  identities, and verify every command is clearly classified as implemented repository readiness,
   future maintainer action, or separately authorized publication.
 - [ ] 8.2 Update the existing package producer/member documentation for selected coordinates,
   candidate validation, immutable archives, and verifier-tooling limitations; verify the package
@@ -169,12 +199,14 @@
   production-host SDK integration, iframe/proxy/authentication, and CI-selection regression gates
   under the separately controlled application tooling; record exact commands and results.
 - [ ] 9.4 Run registry-verifier controlled positive/negative tests and confirm no genuine
-  public-registry success is claimed before publication; record the distinction in completion
-  evidence.
+  public-registry success is claimed before publication; include signature-invalid and
+  validly-signed wrong-repository/commit/workflow/digest cases and record the distinction in
+  completion evidence.
 - [ ] 9.5 Run `openspec validate add-frontend-package-release-foundations --strict`, applicable
   repository-wide OpenSpec validation, and `git diff --check`; verify all pass and all change
   artifacts remain consistent with the implementation.
 - [ ] 9.6 Obtain the repository-required independent implementation review of metadata contracts,
-  archive immutability, offline/registry isolation, toolchain separation, security failure modes,
-  and documentation; resolve every in-scope finding and record any genuinely external maintainer
-  gate without weakening acceptance criteria.
+  boundary-aware workspace/tarball references, archive immutability, provenance signature and
+  expected-identity binding, offline/registry isolation, toolchain separation, security failure
+  modes, and documentation; resolve every in-scope finding and record any genuinely external
+  maintainer gate without weakening acceptance criteria.

@@ -10,9 +10,16 @@ contract rather than accepting metadata declared by an archive as its own expect
 
 The producer workspace root MUST remain `private: true`, MUST NOT be a release
 candidate, and MUST be distinguished from the publication eligibility and configuration
-of each member package. Package manifests and the producer lockfile MUST agree with the
-selected contract, contain no `workspace:`, `file:`, or link dependency, and preserve
-the existing exports, asset, license, notice, CSS, React-peer, and protocol contracts.
+of each member package. Published member manifests MUST agree with the selected contract,
+MUST contain no `workspace:`, `file:`, `link:`, directory, source-checkout, or other local
+dependency reference, and MUST preserve the existing exports, asset, license, notice,
+CSS, React-peer, and protocol contracts.
+
+The private producer lockfile MAY contain npm-generated `link: true` entries only for the
+exact members declared by the root workspace manifest. Each such entry MUST resolve to
+its declared member directory within the producer workspace. The lockfile MUST reject an
+undeclared linked package, a member-name mismatch, an escaping target, or any other link
+that is not npm's representation of an explicitly declared producer member.
 
 The `@fred` scope, the three current package names, version `0.1.0-alpha.1`, and the
 `next` dist-tag SHALL remain proposed values until maintainers record confirmation of
@@ -34,6 +41,25 @@ MUST NOT represent such a test as an approved release candidate.
 - **THEN** it excludes the private producer workspace root and evaluates each of the
   three member packages independently
 
+#### Scenario: npm links the declared producer members
+
+- **WHEN** the private producer lockfile represents each explicitly declared token, UI,
+  and SDK member with `link: true` and a contained member-directory target
+- **THEN** release validation accepts those expected workspace links while continuing to
+  exclude the root from release
+
+#### Scenario: A producer link is unexpected or escapes
+
+- **WHEN** the producer lockfile links an undeclared package, resolves a declared member
+  outside the producer workspace, or maps a package name to the wrong member directory
+- **THEN** release validation fails and identifies the invalid link target
+
+#### Scenario: A published manifest uses a local dependency
+
+- **WHEN** a packed member manifest declares a `workspace:`, `file:`, `link:`, directory,
+  checkout-source, or other local dependency reference
+- **THEN** archive validation fails even if the producer workspace could resolve it
+
 #### Scenario: An archive self-declares different metadata
 
 - **WHEN** a candidate archive declares a name, version, dependency, export, license,
@@ -52,7 +78,11 @@ Release-candidate validation SHALL operate on the actual packed bytes for all th
 packages and SHALL preserve every existing design-token, UI, iframe SDK, isolated
 consumer, browser, and production-host compatibility guarantee. A successful candidate
 record MUST bind the source commit, exact Node and npm versions, selected package
-coordinates, archive filenames, and SHA-512 integrity values to those bytes.
+coordinates, archive filenames, and SHA-512 integrity values to those bytes. It MUST also
+bind the expected provenance source repository, source commit, authorized publishing
+workflow identity, and artifact digest used by later registry verification. These
+expected values MUST come from the approved release contract and candidate evidence, not
+from a downloaded provenance statement.
 
 Any archive that is rebuilt, renamed in a way that changes its recorded identity,
 modified, or replaced after validation MUST receive fresh archive, consumer, browser,
@@ -64,7 +94,8 @@ validated bytes; it MUST NOT rebuild packages and treat the prior evidence as va
 - **WHEN** the selected source commit produces token, UI, and SDK tarballs whose metadata
   and contents satisfy the expected release contract and all existing archive gates
 - **THEN** evidence records the exact toolchain, coordinates, filenames, and SHA-512
-  integrity for each tarball
+  integrity for each tarball together with its expected repository, commit, authorized
+  publishing workflow identity, and attested artifact digest
 
 #### Scenario: Candidate bytes change after validation
 
@@ -118,8 +149,18 @@ SHALL accept the exact selected candidate coordinates and install the actual can
 archives in fresh locations outside the FRED checkout. Provisioning MAY populate only
 the lockfile-pinned caches and browser prerequisites declared for those selected
 coordinates. Offline validation MUST retain source isolation, production builds,
-browser checks, and SDK production-host compatibility without network access, workspace
-links, local source fallback, or resolution from FRED's installed dependency tree.
+browser checks, and SDK production-host compatibility without network access, directory
+dependencies, workspace links, local source fallback, or resolution from FRED's installed
+dependency tree.
+
+Disposable offline consumer manifests and lockfiles MAY contain npm-generated `file:`
+references to the exact staged candidate `.tgz` files. Each permitted reference MUST
+identify a regular tarball file inside the disposable consumer, and the referenced bytes
+MUST match the candidate evidence before installation. No directory target, unexpected
+local file, checkout path, symlinked package, or reused FRED dependency tree is permitted.
+Production-host integration MUST run the host with dependencies installed from the FRED
+application's own lockfile while loading the SDK under test only from its verified archive
+or exact registry installation.
 
 #### Scenario: Candidate archives replace development versions
 
@@ -128,11 +169,31 @@ links, local source fallback, or resolution from FRED's installed dependency tre
 - **THEN** offline installation, type checking, production builds, browser smoke, and
   host compatibility pass with the actual candidate tarballs
 
+#### Scenario: npm records a verified candidate tarball
+
+- **WHEN** disposable offline installation records a `file:` dependency or lockfile
+  resolution for a staged candidate `.tgz` whose bytes match the recorded SHA-512
+- **THEN** validation accepts that archive reference and installs the packed package
+
+#### Scenario: A local reference targets a directory or different file
+
+- **WHEN** a disposable consumer reference resolves to a directory, workspace member,
+  symlink, checkout path, or local file other than the integrity-verified staged tarball
+- **THEN** isolated-consumer validation fails before building
+
 #### Scenario: A consumer resolves a development or workspace package
 
 - **WHEN** a candidate consumer graph contains `0.0.0-development`, a workspace link, a
-  local file dependency, or a package resolved from the FRED checkout
+  directory dependency, an unverified local file dependency, or a package resolved from
+  the FRED checkout or its installed dependency tree
 - **THEN** release-candidate validation fails
+
+#### Scenario: Production host compatibility uses the packed SDK
+
+- **WHEN** the production-host integration gate exercises an SDK candidate
+- **THEN** the host test runner and application modules resolve from the FRED application's
+  own lockfile installation while the SDK entry resolves from the integrity-verified
+  candidate archive, not the producer workspace
 
 #### Scenario: Candidate provisioning is incomplete
 
@@ -144,8 +205,16 @@ links, local source fallback, or resolution from FRED's installed dependency tre
 The repository SHALL provide a registry-verification command that accepts the exact
 expected coordinate and previously recorded archive SHA-512 integrity for each FRED
 package. Against a real public registry, it MUST resolve those exact versions, verify
-registry-reported and downloaded-byte integrity, require verifiable provenance for each
-package, and exercise fresh clean consumers installed from the registry.
+registry-reported and downloaded-byte integrity, cryptographically verify provenance for
+each package, and exercise fresh clean consumers installed from the registry.
+
+Cryptographic signature validity alone MUST NOT establish a matching release. For every
+package, verification MUST compare the attested artifact digest, source repository,
+source commit, and publishing workflow identity with the explicit expected values bound
+to the approved release contract and candidate evidence. It MUST NOT accept values merely
+because they appear in a validly signed downloaded attestation. The expected bootstrap
+identity and the later authorized Trusted Publishing workflow identity MUST remain
+distinct and explicit; an unconfirmed identity MUST fail closed as a maintainer decision.
 
 The command MUST reject tags, ranges, unexpected registries, missing provenance,
 integrity mismatches, local tarballs, workspace packages, source-checkout resolution,
@@ -160,11 +229,43 @@ not as proof that packages were genuinely published.
 - **THEN** clean registry-only token, UI, and SDK consumers pass their applicable build,
   browser, and compatibility checks
 
+#### Scenario: Valid provenance names an unexpected repository
+
+- **WHEN** a provenance statement is cryptographically valid but its source repository
+  differs from the repository expected by the approved contract and candidate evidence
+- **THEN** registry verification fails the release-identity comparison
+
+#### Scenario: Valid provenance names an unexpected commit
+
+- **WHEN** a provenance statement is cryptographically valid but its source commit differs
+  from the candidate source commit recorded as expected
+- **THEN** registry verification fails the release-identity comparison
+
+#### Scenario: Valid provenance names an unexpected workflow
+
+- **WHEN** a provenance statement is cryptographically valid but its publishing workflow
+  identity differs from the explicitly authorized Trusted Publishing identity
+- **THEN** registry verification fails the release-identity comparison
+
+#### Scenario: Valid provenance names an unexpected artifact digest
+
+- **WHEN** a provenance statement is cryptographically valid but its attested artifact
+  digest differs from the expected digest of the candidate tarball
+- **THEN** registry verification fails even if registry metadata reports another
+  internally consistent integrity value
+
 #### Scenario: Registry content does not match the candidate
 
 - **WHEN** registry metadata, downloaded bytes, or provenance is missing or differs from
   the expected coordinate and integrity
 - **THEN** verification fails and does not substitute a local archive or source tree
+
+#### Scenario: A registry consumer attempts local fallback
+
+- **WHEN** a registry-installed consumer resolves a FRED package from a tag, range, local
+  tarball, directory, workspace, checkout source, or reused FRED dependency tree instead
+  of the expected exact registry version
+- **THEN** verification fails rather than accepting the consumer result
 
 #### Scenario: Only verifier tooling was tested locally
 
@@ -182,7 +283,9 @@ Initial creation MUST require confirmed scope ownership and an account or organi
 permission model capable of creating each package; it MUST NOT assume that a
 package-scoped credential can create a nonexistent package. Staged publishing MUST be
 documented as a maintainer policy choice and MUST NOT be used for brand-new package
-creation.
+creation. The bootstrap actor or credential identity and the later Trusted Publishing
+workflow identity MUST be recorded separately. Neither identity may be inferred from the
+other, and an unconfirmed identity remains a maintainer gate.
 
 Dependencies SHALL be released before consumers: a compatible design-token version
 before its UI consumer, while the independent SDK may be sequenced separately. FRED
@@ -201,7 +304,8 @@ redeploy a prior application image.
 
 - **WHEN** one of the selected package names does not yet exist in the approved npm scope
 - **THEN** maintainers verify organization ownership and package-creation authority and
-  use the approved bootstrap process before configuring later Trusted Publishing
+  record the authorized bootstrap identity before using the approved bootstrap process
+  and separately configuring the later Trusted Publishing workflow identity
 
 #### Scenario: Maintainers choose staged publishing
 
