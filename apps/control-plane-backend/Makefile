@@ -81,7 +81,7 @@ bootstrap-local: bootstrap-token ## One command for LOCAL-DEVELOPMENT.md steps 1
 	BODY=$$(printf '%s' "$$RESPONSE" | sed '$$d'); \
 	if [ "$$HTTP_CODE" = "409" ]; then \
 		IS_ADMIN=$$(curl -sS "$(CONTROL_PLANE_BASE_URL)/frontend/bootstrap" -H "Authorization: Bearer $$TOKEN" \
-			| $(UV) run python -c 'import sys,json; print(bool(json.load(sys.stdin).get("permissions",{}).get("is_platform_admin")))' 2>/dev/null); \
+			| $(UV) run python -c 'import sys,json; print("platform_admin" in json.load(sys.stdin).get("permissions",{}).get("platform_roles",[]))' 2>/dev/null); \
 		if [ "$$IS_ADMIN" = "True" ]; then \
 			echo "✓ $(BOOTSTRAP_USER) is already platform_admin (one-shot bootstrap already used)."; \
 		else \

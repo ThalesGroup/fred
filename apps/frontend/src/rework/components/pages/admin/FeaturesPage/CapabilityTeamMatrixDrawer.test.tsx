@@ -18,7 +18,7 @@
 // any interpolated `team`/`count`), so assertions match on translation keys.
 //
 // Rendered with `renderToStaticMarkup` (no effects run — same convention as
-// CapabilitiesPage.test.tsx; this repo's test environment has no DOM/jsdom), so
+// FeaturesPage.test.tsx; this repo's test environment has no DOM/jsdom), so
 // `orderedTeams` never advances past its initial value (the `teams` prop as
 // passed): rows render in input order, which the tri-state tests below rely on.
 

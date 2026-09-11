@@ -11,6 +11,13 @@ type organization
     define platform_admin: [user]
     define platform_observer: [user] or platform_admin
 
+    # Delegated admin-tier roles: each owns one admin surface so appointing a
+    # team manager no longer hands over import/export, platform reset and user
+    # administration. All union in platform_admin, so an admin loses nothing.
+    define team_manager: [user] or platform_admin
+    define feature_manager: [user] or platform_admin
+    define prompt_editor: [user] or platform_admin
+
     # Reverse index of team.organization (FGA cannot traverse relations
     # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
     # checking with a team subject (capability#can_use) — every team belongs to
@@ -24,17 +31,23 @@ type organization
     # (CAPAB-01 / #1961, RFC AGENT-CAPABILITY §8.4).
     define personal_team: [team]
 
-  # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
-  # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
-  # gains no ongoing relation on the created team from this capability alone.
-  define can_create_team: platform_admin
+  # AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action
+  # (`POST /teams`), not a team relation. The creator gains no ongoing
+  # relation on the created team from this capability alone.
+  define can_create_team: platform_admin or team_manager
 
   # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance
   # capabilities. Distinct from §2.2's central rule: these let platform_admin
   # govern the *existence* of teams (the registry) — they grant nothing about
   # a team's agents, prompts, conversations, or resources, which remain
   # governed exclusively by team relations as everywhere else in this schema.
-  define can_list_all_teams: platform_admin
+  # team_manager reaches can_list_all_teams because /admin/teams renders empty
+  # without it; deleting a team and rescuing its admin stay platform_admin-only.
+  # feature_manager reaches it too: per-team capability enablement is part of
+  # its charter and the team picker is unusable without the roster. The listing
+  # is read-only registry metadata (REBAC.md details what it exposes) and
+  # carries no authority over any team's agents, prompts or files.
+  define can_list_all_teams: platform_admin or team_manager or feature_manager
   define can_delete_team: platform_admin
   define can_rescue_team_admin: platform_admin
 
@@ -70,6 +83,12 @@ type organization
   define can_administer_users: platform_admin
   define can_manage_platform: platform_admin
 
+  # Carved out of the can_manage_platform catch-all, which also gates
+  # import/export, tasks and platform reset: a narrow surface cannot be
+  # delegated through it without handing over all of them.
+  define can_manage_capabilities: platform_admin or feature_manager
+  define can_edit_platform_prompt: platform_admin or prompt_editor
+
 
 type team
   relations
@@ -87,7 +106,7 @@ type team
     # this team has no owner yet", so it applied to every team, always, and
     # was a live escalation through the `add_team_member`/`update_team_member`
     # endpoints. The first `team_admin` of a team is instead granted by a
-    # one-shot, platform-admin-gated bootstrap action outside this schema
+    # one-shot, `can_create_team`-gated bootstrap action outside this schema
     # (RFC §28, `POST /teams`), never by a standing relation grant here.
     define team_admin: [user]
     define team_editor: [user]
@@ -276,10 +295,10 @@ type capability
     define personal_block: personal_team from personal_disabled
 
     # --------------- Permissions (computed relations) ---------------
-    # Can manage (enable/disable/toggle default-on) —
-    # -> platform admin only (AUTHZ-05 retired the legacy `admin` organization
-    # relation; every org-admin-tier capability is `platform_admin`-only now)
-    define can_manage: platform_admin from organization
+    # Can manage (enable/disable/toggle default-on) — delegates to the org's
+    # own `can_manage_capabilities` so the per-object gate and the org-level
+    # gate on the same admin surface can never drift apart.
+    define can_manage: can_manage_capabilities from organization
 
     # Inherited (non-explicit) access: the org-wide `default_on` marker OR the
     # personal-space class grant, minus the personal-space class opt-out. The
@@ -312,7 +331,9 @@ type app
     define disabled: [team]
 
     # --------------- Permissions (computed relations) ---------------
-    define can_manage: platform_admin from organization
+    # Same delegation as `capability#can_manage`: applications are governed
+    # from the same admin surface, behind the same org-level gate.
+    define can_manage: can_manage_capabilities from organization
     define inherited: team from default_on
     define can_use: (enabled or inherited) but not disabled
 

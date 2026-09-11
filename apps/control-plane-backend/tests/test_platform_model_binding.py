@@ -30,8 +30,9 @@ Covers:
   can be inserted, even bypassing the store's own API — and a row that
   bypasses the store's own `set()` entirely (malformed provider, unknown
   settings key) fails closed on `get()`, not just at write time
-- the service's org-admin gate (`organization_authz.require_manage_any`,
-  shared with `capabilities/service.py`)
+- the service's feature-governance gate
+  (`organization_authz.require_manage_capabilities`, shared with
+  `capabilities/service.py`)
 - `resolve_platform_chat_model_binding`: the trusted, no-client-authz
   per-turn entrypoint threaded into `ManagedAgentRuntimeBinding.
   platform_chat_model_binding` — resolved fresh on the runtime's own
@@ -65,9 +66,10 @@ from control_plane_backend.routing_policy.store import (
     PlatformModelBindingStore,
     StoredPlatformModelBinding,
 )
-from fred_core import AuthorizationError, KeycloakUser
+from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
 from fred_core.common import PostgresStoreConfig
 from fred_core.security.models import Resource
+from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.context import ModelBinding
 from httpx import ASGITransport, AsyncClient
@@ -355,18 +357,20 @@ class _RecordingPlatformModelBindingStore:
 
 
 class _FakeOrgAdminRebac:
-    """Fake for `organization_authz.require_manage_any`'s
+    """Fake for `organization_authz.require_manage_capabilities`'s
     `check_user_permission_or_raise` call — a distinct, narrower interface
     than the team-scoped fakes `test_routing_policy.py` uses."""
 
     def __init__(self, *, allow: bool) -> None:
         self.allow = allow
         self.calls = 0
+        self.checked: list[tuple[Any, str]] = []
 
     async def check_user_permission_or_raise(
         self, user, permission, resource_id, **kwargs
     ) -> None:
         self.calls += 1
+        self.checked.append((permission, resource_id))
         if not self.allow:
             raise AuthorizationError(
                 user.uid, str(permission), Resource.ORGANIZATION, "denied"
@@ -452,6 +456,26 @@ async def test_admin_get_set_delete_all_succeed() -> None:
     )
     assert delete_result.binding is None
     assert store.delete_calls == 1
+
+
+async def test_model_bindings_gate_on_the_narrow_feature_relation() -> None:
+    """The panel lives on the features page, so a `feature_manager` must reach
+    it — checking the `can_manage_platform` catch-all here would drag
+    import/export, tasks and platform reset along with the delegation."""
+
+    rebac = _FakeOrgAdminRebac(allow=True)
+    deps = _deps(store=_RecordingPlatformModelBindingStore(), rebac=rebac)
+
+    await routing_policy_service.get_platform_model_binding(user=_user(), deps=deps)
+    await routing_policy_service.set_platform_model_binding(
+        user=_user(), binding=_binding(), deps=deps
+    )
+    await routing_policy_service.delete_platform_model_binding(user=_user(), deps=deps)
+
+    assert (
+        rebac.checked
+        == [(OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID)] * 3
+    )
 
 
 # ---------------------------------------------------------------------------

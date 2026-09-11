@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 from fred_core import Resource
 from fred_core.security.rebac.knowledge_base_authz import (
     knowledge_base_definition_ref,
