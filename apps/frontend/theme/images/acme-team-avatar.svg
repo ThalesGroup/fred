@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <circle cx="32" cy="32" r="30" fill="#e6007e"/>
-  <text x="32" y="44" font-family="Helvetica,Arial,sans-serif" font-size="34"
-        font-weight="700" fill="#ffffff" text-anchor="middle">A</text>
+  <defs>
+    <linearGradient id="themeAvatar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e6bff"/>
+      <stop offset="0.5" stop-color="#ff2d9b"/>
+      <stop offset="1" stop-color="#ffd200"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#themeAvatar)"/>
+  <circle cx="32" cy="25" r="9.5" fill="#ffffff" opacity="0.95"/>
+  <path d="M13 56a19 19 0 0 1 38 0z" fill="#ffffff" opacity="0.95"/>
 </svg>
