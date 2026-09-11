@@ -437,12 +437,43 @@ disposal, late responses, and host frame/team lifecycle behavior. Every resource
 response MUST succeed locally, and non-loopback, `file:`, external-service, and FRED
 checkout requests MUST fail validation.
 
+The host fixture SHALL validate its host, application, and attacker configuration as three
+distinct canonical `http://127.0.0.1:<port>` origins before assigning either iframe's `src`.
+Credentials, missing or invalid ports, other schemes or hosts, protocol-relative input, and any
+path, query, fragment, malformed, or non-canonical form MUST be rejected. Initial and replacement
+destinations SHALL be constructed from the fixed permitted scheme, host, fixture paths, validated
+numeric ports, and URL/search-parameter APIs. These fixture-only constraints MUST NOT narrow the
+production SDK's documented HTTP(S) origin support.
+
+Readonly context and route declaration checks SHALL be compiled from a dedicated typecheck-only
+fixture that is not reachable from a browser entry. Both negative assignments MUST use consumed
+`@ts-expect-error` directives so either property becoming writable fails isolated type checking.
+
 #### Scenario: Distinct origins complete the protocol lifecycle
 
 - **WHEN** the isolated child runs in an iframe on a different loopback origin from its
   host fixture
 - **THEN** the packed client connects and exercises context, routes, intents, and
   buffered requests using only exact-origin `postMessage`
+
+#### Scenario: Valid dynamic fixture origins are constructed safely
+
+- **WHEN** the harness supplies three distinct dynamically allocated loopback ports
+- **THEN** the host, child, and attacker retain distinct origins and initial and replacement frames
+  navigate only to their fixed paths under the validated origins
+
+#### Scenario: A fixture origin is unsafe or ambiguous
+
+- **WHEN** either configured origin uses an executable, file, unsupported, or protocol-relative
+  scheme; an external or misleading host; credentials; an invalid port; an unexpected URL
+  component; a malformed form; or duplicates another fixture origin
+- **THEN** configuration fails before either iframe receives a navigation destination
+
+#### Scenario: Readonly declarations are checked without browser code
+
+- **WHEN** the isolated consumer type-checks and builds its browser entries
+- **THEN** both readonly mutations are rejected by TypeScript while their typecheck-only fixture is
+  absent from the browser runtime graph
 
 #### Scenario: Another window impersonates the parent or child
 

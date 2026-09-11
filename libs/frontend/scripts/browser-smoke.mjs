@@ -237,7 +237,7 @@ async function rejectedIframeHarness(page) {
   return child.evaluate(() => window.__fredChild.connectionError);
 }
 
-async function verifyIframeSdk(
+async function verifyRejectedFixtureOrigins(
   browser,
   hostOrigin,
   applicationOrigin,
@@ -246,11 +246,63 @@ async function verifyIframeSdk(
   const allowedOrigins = [hostOrigin, applicationOrigin, attackerOrigin];
   const observation = await createObservedPage(browser, allowedOrigins);
   try {
-    await observation.page.goto(
-      `${hostOrigin}/?applicationOrigin=${encodeURIComponent(applicationOrigin)}&attackerOrigin=${encodeURIComponent(attackerOrigin)}`,
-      { waitUntil: "networkidle" },
-    );
+    const rejected = {};
+    for (const [name, configuredApplication, configuredAttacker] of [
+      [
+        "application",
+        "javascript:document.body.dataset.fixtureOriginBypass='accepted'",
+        attackerOrigin,
+      ],
+      [
+        "attacker",
+        applicationOrigin,
+        "javascript:document.body.dataset.fixtureOriginBypass='accepted'",
+      ],
+    ]) {
+      const fixtureUrl = new URL("/", hostOrigin);
+      fixtureUrl.searchParams.set("applicationOrigin", configuredApplication);
+      fixtureUrl.searchParams.set("attackerOrigin", configuredAttacker);
+      await observation.page.goto(fixtureUrl.href, { waitUntil: "load" });
+      await observation.page.waitForTimeout(50);
+      const destinations = await observation.page.evaluate(() => ({
+        application: document
+          .querySelector("#application")
+          ?.getAttribute("src"),
+        attacker: document.querySelector("#attacker")?.getAttribute("src"),
+      }));
+      assert.deepEqual(destinations, { application: null, attacker: null });
+      rejected[name] = destinations;
+    }
+    assertLocalRequests(observation, allowedOrigins);
+    return rejected;
+  } finally {
+    await observation.context.close();
+  }
+}
+
+async function verifyIframeSdk(
+  browser,
+  hostOrigin,
+  applicationOrigin,
+  attackerOrigin,
+) {
+  const allowedOrigins = [hostOrigin, applicationOrigin, attackerOrigin];
+  assert.equal(
+    new Set(allowedOrigins).size,
+    3,
+    "iframe fixture origins must be distinct",
+  );
+  const observation = await createObservedPage(browser, allowedOrigins);
+  try {
+    const fixtureUrl = new URL("/", hostOrigin);
+    fixtureUrl.searchParams.set("applicationOrigin", applicationOrigin);
+    fixtureUrl.searchParams.set("attackerOrigin", attackerOrigin);
+    await observation.page.goto(fixtureUrl.href, { waitUntil: "networkidle" });
     let { attacker, child } = await iframeHarness(observation.page);
+    assert.equal(new URL(child.url()).origin, applicationOrigin);
+    assert.equal(new URL(child.url()).pathname, "/child.html");
+    assert.equal(new URL(attacker.url()).origin, attackerOrigin);
+    assert.equal(new URL(attacker.url()).pathname, "/attacker.html");
     const admission = await observation.page.evaluate(() => ({
       applicationOrigin: window.__fredHost.applicationOrigin,
       readyCount: window.__fredHost.readyCount,
@@ -421,7 +473,9 @@ async function verifyIframeSdk(
       window.__fredHost.configureContext("valid", "team-2");
       window.__fredHost.replaceFrame();
     });
-    ({ attacker, child } = await iframeHarness(observation.page));
+    ({ child } = await iframeHarness(observation.page));
+    assert.equal(new URL(child.url()).origin, applicationOrigin);
+    assert.equal(new URL(child.url()).pathname, "/child.html");
     assert.equal(
       await child.evaluate(() => window.__fredChild.client.context?.team.id),
       "team-2",
@@ -448,8 +502,7 @@ async function verifyIframeSdk(
       intents,
       routes: ["A", "A"],
       rejectedConnections,
-      crossOrigin: hostOrigin !== applicationOrigin,
-      attackerOriginDistinct: attackerOrigin !== applicationOrigin,
+      distinctOrigins: true,
       requests: observation.requests,
       responses: observation.responses,
     };
@@ -878,17 +931,24 @@ export async function runBrowserSmoke({ evidencePath } = {}) {
     iframeChildServer = await startServer(iframeSdkOutput, "child.html");
     iframeAttackerServer = await startServer(iframeSdkOutput, "attacker.html");
     browser = await chromium.launch({ headless: true });
-    const [tokens, fonts, ui, iframeSdk] = await Promise.all([
-      verifyTokens(browser, tokenServer.origin),
-      verifyFonts(browser, tokenServer.origin),
-      verifyUi(browser, reactServer.origin),
-      verifyIframeSdk(
-        browser,
-        iframeHostServer.origin,
-        iframeChildServer.origin,
-        iframeAttackerServer.origin,
-      ),
-    ]);
+    const [tokens, fonts, ui, rejectedFixtureOrigins, iframeSdk] =
+      await Promise.all([
+        verifyTokens(browser, tokenServer.origin),
+        verifyFonts(browser, tokenServer.origin),
+        verifyUi(browser, reactServer.origin),
+        verifyRejectedFixtureOrigins(
+          browser,
+          iframeHostServer.origin,
+          iframeChildServer.origin,
+          iframeAttackerServer.origin,
+        ),
+        verifyIframeSdk(
+          browser,
+          iframeHostServer.origin,
+          iframeChildServer.origin,
+          iframeAttackerServer.origin,
+        ),
+      ]);
     for (const property of [
       "documentOverflow",
       "bodyOverflow",
@@ -908,6 +968,7 @@ export async function runBrowserSmoke({ evidencePath } = {}) {
       tokensOnly: tokens,
       fontsOptIn: fonts,
       ui,
+      rejectedFixtureOrigins,
       iframeSdk,
       shellOwnershipComparison: {
         beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,

@@ -263,6 +263,20 @@ replacement frame/team lifecycles. Request observation fails on unsuccessful res
 non-loopback destinations, external services, file URLs, or checkout paths. Browser smoke performs
 no install or provisioning and reports missing built fixtures or Chromium actionably.
 
+The fixture treats its query parameters as untrusted test configuration. One shared parser accepts
+only the canonical absolute form `http://127.0.0.1:<port>` with a non-default numeric port and no
+credentials, path, query, or fragment. It validates host, application, and attacker origins and
+their distinctness before assigning either iframe destination. Initial and replacement URLs are
+then constructed from the fixed HTTP scheme, fixed loopback host, validated ports, fixed fixture
+paths, and `URLSearchParams`; no configured string is interpolated into a navigation target. These
+restrictions are local harness invariants and do not narrow the production SDK's external HTTP(S)
+origin contract.
+
+Readonly declaration regressions live in a dedicated source included by the isolated consumer's
+TypeScript configuration but omitted from every Vite entry and runtime import. Each assignment is
+guarded by `@ts-expect-error`, so making either public property writable turns the directive into a
+typecheck failure without adding unreachable browser code.
+
 Alternatives considered: same-origin synthetic event tests cannot prove browser origin behavior;
 using the live FRED deployment would add authentication and service nondeterminism to a package
 contract test.
@@ -301,6 +315,9 @@ that become stale. The broader RFC remains open.
 - **[Browser APIs limit non-browser or opaque-origin use]** → State browser-window and HTTP(S)
   requirements explicitly; worker, server, sandboxed-null-origin, and opaque-origin support need a
   future protocol/hosting decision.
+- **[Fixture query parameters can become iframe destinations]** → Reduce validated inputs to three
+  distinct numeric loopback ports and construct every destination from fixed scheme, host, and
+  path components before browser navigation.
 
 ## Migration Plan
 

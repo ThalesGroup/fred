@@ -5,6 +5,12 @@ import {
   type ApplicationHostMessage,
 } from "@fred/iframe-sdk/protocol";
 
+import {
+  applicationFixtureUrl,
+  attackerFixtureUrl,
+  readFixtureOrigins,
+} from "./fixture-origin.js";
+
 interface HostHarness {
   applicationOrigin: string;
   records: ApplicationFrameMessage[];
@@ -25,21 +31,21 @@ declare global {
   }
 }
 
-const parameters = new URLSearchParams(window.location.search);
-const configuredApplicationOrigin = parameters.get("applicationOrigin");
-const configuredAttackerOrigin = parameters.get("attackerOrigin");
-if (!configuredApplicationOrigin || !configuredAttackerOrigin)
-  throw new Error("fixture origins are required");
-const applicationOrigin = configuredApplicationOrigin;
-const attackerOrigin = configuredAttackerOrigin;
+const fixtureOrigins = readFixtureOrigins(
+  window.location.origin,
+  window.location.search,
+);
+const { applicationOrigin } = fixtureOrigins;
+const initialApplicationUrl = applicationFixtureUrl(fixtureOrigins);
+const initialAttackerUrl = attackerFixtureUrl(fixtureOrigins);
 
 let applicationFrame =
   document.querySelector<HTMLIFrameElement>("#application")!;
 const attackerFrame = document.querySelector<HTMLIFrameElement>("#attacker")!;
 if (!applicationFrame || !attackerFrame)
   throw new Error("fixture frames are missing");
-applicationFrame.src = `${applicationOrigin}/child.html?hostOrigin=${encodeURIComponent(window.location.origin)}`;
-attackerFrame.src = `${attackerOrigin}/attacker.html?targetOrigin=${encodeURIComponent(applicationOrigin)}`;
+applicationFrame.src = initialApplicationUrl.href;
+attackerFrame.src = initialAttackerUrl.href;
 
 const records: ApplicationFrameMessage[] = [];
 let rejected = 0;
@@ -209,14 +215,10 @@ window.__fredHost = {
   },
   replaceFrame: (connectionTimeoutMs) => {
     const replacement = applicationFrame.cloneNode(false) as HTMLIFrameElement;
-    const replacementUrl = new URL(`${applicationOrigin}/child.html`);
-    replacementUrl.searchParams.set("hostOrigin", window.location.origin);
-    if (connectionTimeoutMs !== undefined)
-      replacementUrl.searchParams.set(
-        "connectionTimeoutMs",
-        String(connectionTimeoutMs),
-      );
-    replacement.src = replacementUrl.href;
+    replacement.src = applicationFixtureUrl(
+      fixtureOrigins,
+      connectionTimeoutMs,
+    ).href;
     applicationFrame.replaceWith(replacement);
     applicationFrame = replacement;
   },

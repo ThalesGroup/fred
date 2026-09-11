@@ -2,21 +2,7 @@ import {
   createFredApplicationClient,
   type FredApplicationClient,
   type FredApplicationContext,
-  type FredApplicationRoute,
 } from "@fred/iframe-sdk";
-
-function verifyReadonlyDeclarations(
-  context: FredApplicationContext,
-  route: FredApplicationRoute,
-): void {
-  if (false) {
-    // @ts-expect-error The installed SDK context is an immutable snapshot.
-    context.team.id = "other-team";
-    // @ts-expect-error Accepted route events are immutable payloads.
-    route.subPath = "other-route";
-  }
-}
-void verifyReadonlyDeclarations;
 
 interface ChildHarness {
   client: FredApplicationClient;

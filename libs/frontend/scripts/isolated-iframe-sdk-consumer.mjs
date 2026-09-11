@@ -74,12 +74,18 @@ export async function assertIframeSdkConsumerFixture(root = fixtureRoot) {
   );
   assert.deepEqual(lock.packages[""].devDependencies, manifest.devDependencies);
   const source = await Promise.all(
-    ["src/host.ts", "src/child.ts"].map((file) =>
-      readFile(path.join(root, file), "utf8"),
-    ),
+    [
+      "src/host.ts",
+      "src/child.ts",
+      "src/fixture-origin.ts",
+      "src/readonly-declarations.ts",
+    ].map((file) => readFile(path.join(root, file), "utf8")),
   );
   assert(source[0].includes('"@fred/iframe-sdk/protocol"'));
   assert(source[1].includes('"@fred/iframe-sdk"'));
+  assert(source[3].includes("readonly-context-typecheck-only"));
+  assert(source[3].includes("readonly-route-typecheck-only"));
+  assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 2);
   assert(
     !/(?:workspace|file|link):|apps\/frontend|libs\/frontend|\breact\b/i.test(
       `${JSON.stringify(manifest)}\n${source.join("\n")}`,
@@ -199,6 +205,11 @@ export async function stageIsolatedIframeSdkConsumer({
       assert(
         !content.includes(checkout) && !content.includes("apps/frontend"),
         `${file} refers to the FRED checkout`,
+      );
+      assert(
+        !content.includes("readonly-context-typecheck-only") &&
+          !content.includes("readonly-route-typecheck-only"),
+        `${file} includes typecheck-only declaration assertions`,
       );
     }
     const stagedOutput = path.resolve(

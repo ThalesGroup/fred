@@ -35,6 +35,10 @@ Implementation is tracked by
 - Exercise the packed SDK through a real iframe on a loopback child origin distinct from its host
   origin. Provision lockfile-pinned dependencies and Chromium separately from offline install,
   type-check, build, and browser execution.
+- Constrain the browser fixture's query-configured destinations to distinct absolute
+  `http://127.0.0.1:<port>` origins before either iframe navigates, and keep readonly declaration
+  assertions in typecheck-only input outside the browser bundle. These are fixture protections,
+  not restrictions on the production SDK's documented HTTP(S) host support.
 - Add a direct compatibility integration that loads the actual generated SDK archive and exercises
   the production FRED host handler used by `TeamApplicationHostPage`, while retaining the simulated
   cross-origin browser and raw protocol regression suites.
@@ -69,6 +73,8 @@ None.
 - New package and fixture: `libs/frontend/iframe-sdk/` and a lockfile-pinned neutral TypeScript
   consumer under `libs/frontend/fixtures/`.
 - Browser/CI: the existing Playwright harness and `.github/workflows/Check-pending-requests.yml`.
+- Fixture hardening: strict loopback-origin parsing and fixed-path URL construction, typecheck-only
+  declaration assertions, and browser regressions for invalid configuration before navigation.
 - Archive hardening: the SDK validator, build-evidence reference inspection, disposable archive
   mutations, and native ESM import checks.
 - Documentation: package READMEs, the durable application-hosting section of
