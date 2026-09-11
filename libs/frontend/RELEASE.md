@@ -64,6 +64,70 @@ always loaded from a validated archive or an exact registry installation.
 Fixture evidence is visibly labelled `fixture-candidate-evidence`. It exercises the tools but
 is neither approved candidate evidence nor proof that a public package exists.
 
+## Fixture transfer between CI toolchains
+
+The pull-request workflow rehearses the future immutable release boundary without publishing.
+Its release-readiness job uses Node `24.21.0` and npm `11.19.0` to create exactly one designated
+fixture archive per package after archive validation. It uploads only those three `.tgz` files
+and `fixture-transfer.json` as a seven-day artifact. The artifact name binds the checked-out
+commit, workflow run ID, and run attempt; its metadata also binds the fixture contract digest,
+observed producer toolchain, exact coordinates, filenames, byte lengths, SHA-512 values, and
+repository/workflow identity. It contains no checkout files, credentials, dependency trees,
+consumer caches, or browser installation.
+
+The dependent application-toolchain job downloads that exact artifact from the same workflow
+run. Before any consumer executes, the receiver rejects a missing or additional file, a
+non-regular file or symlink, modified bytes, malformed metadata, a different contract or source
+commit, or a different run identity. It then passes only the verified absolute archive paths and
+integrities to the existing isolated consumers, browser harness, and production-host integration.
+It neither rebuilds packages nor falls back to `target/archives`, workspace sources, or locally
+generated names. Consumer-cache and browser provisioning remain separate network-capable steps;
+the transferred validation itself installs from the prepared caches and performs no browser
+bootstrap.
+
+Final `fixture-candidate-evidence` is written only after all receiver gates pass. It records the
+transfer metadata digest and artifact identity, the exact archive records, the independently
+observed application Node/npm versions, and downstream results. Failure removes any stale final
+record. A final post-gate verification recomputes the transferred lengths and SHA-512 values and
+requires the evidence package records to remain identical to producer metadata. Both the transfer
+metadata and final evidence remain fixtures: neither can authorize publication or satisfy
+public-registry verification.
+
+For a local separate-directory rehearsal, provision dependencies and Chromium first, then use
+the command-line entry points. The producer command must run under the fixture contract's exact
+Node/npm versions; the receiver intentionally runs under the application toolchain:
+
+```sh
+make consumer-provision
+make browser-install
+
+npm run fixture:transfer:create -- \
+  --output /tmp/fred-fixture-producer \
+  --repository ThalesGroup/fred \
+  --workflow local-fixture-transfer \
+  --run-id local-review \
+  --run-attempt 1
+
+cp -R /tmp/fred-fixture-producer /tmp/fred-fixture-receiver
+
+PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- \
+  --transfer /tmp/fred-fixture-receiver \
+  --evidence /tmp/fred-fixture-validation/final-evidence.json \
+  --stage-root /tmp/fred-fixture-validation/staged \
+  --repository ThalesGroup/fred \
+  --workflow local-fixture-transfer \
+  --run-id local-review \
+  --run-attempt 1
+```
+
+Local rehearsal metadata truthfully records whether the checkout was dirty. GitHub Actions
+requires a clean checkout. Producer output cleanup is restricted to a dedicated descendant of
+`libs/frontend/target/` or a system temporary directory; broad or symlink roots are rejected.
+After a push, reviewers must still confirm the real upload/download actions selected the same-run
+artifact and retained final evidence; local success cannot prove that remote service behavior. If
+an artifact expires, is incomplete, or fails verification, discard it and rerun the producer job.
+Never rebuild an archive in the receiver or repair an artifact in place.
+
 ## Candidate and registry commands
 
 After maintainers supply a confirmed contract, use its exact producer toolchain and a clean

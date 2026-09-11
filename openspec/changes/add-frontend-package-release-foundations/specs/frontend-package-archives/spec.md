@@ -150,6 +150,78 @@ producer's installed dependencies from the application environment.
 - **WHEN** maintainers select a different exact Node or npm version
 - **THEN** all three archives and their release evidence are regenerated and revalidated
 
+### Requirement: Fixture transfer preserves exact producer archives across CI jobs
+
+Before coordinates are maintainer-confirmed, CI MAY exercise the release-to-application toolchain
+boundary with the development fixture contract. The release-toolchain producer SHALL create one
+strictly fixture-labelled transfer containing exactly the three validated npm tarballs and
+producer transfer metadata. The metadata MUST bind the checked-out source commit, fixture
+contract digest, observed producer Node/npm versions, exact package roles, coordinates,
+filenames, byte lengths, SHA-512 values, and repository/workflow/run/attempt identity. It MUST
+state that downstream consumer, browser, and host gates have not run, and MUST NOT be classified
+as approved candidate or public-registry evidence. The retained artifact MUST exclude credentials,
+installed dependencies, consumer caches, and checkout content and MUST use an explicit retention
+period and source/run-specific fixture name.
+
+The application-toolchain receiver MUST obtain that exact artifact from its producer dependency
+in the same workflow execution, MUST independently select the expected checkout commit and
+fixture contract, and MUST validate the metadata plus exact archive file set before extraction,
+installation, or execution. It MUST reject missing, additional, non-regular, substituted,
+truncated, or modified files; wrong commits, contract digests, package identities, versions, or
+run associations; and missing, malformed, or inconsistent integrity metadata. It MUST pass only
+verified explicit archive paths and expected integrities to the existing isolated consumers,
+browser harness, and production-host SDK integration. It MUST NOT rebuild or repack the received
+archives, use mutable latest-run selection or `target/` archive defaults, fall back to package
+sources or workspace dependencies, or transfer installed dependency trees between jobs.
+
+Final fixture validation evidence MUST be written only after all required receiver gates succeed.
+It MUST retain the `fixture-candidate-evidence` classification, bind the original transfer
+metadata digest and artifact identity to the exact archive records, record the receiver's actually
+observed application Node/npm versions separately from producer versions, and include the
+consumer, browser, and host results. An incomplete receiver run MUST NOT leave successful final
+evidence. Fixture transfer or validation evidence MUST NOT satisfy approved-candidate retention,
+exact-toolchain candidate execution, or genuine registry-verification requirements.
+
+#### Scenario: A valid fixture set crosses the toolchain boundary
+
+- **WHEN** the release-toolchain job uploads its source/run-specific three-archive fixture and the
+  dependent application-toolchain job receives it in the same workflow attempt
+- **THEN** the receiver verifies the metadata and exact bytes before reusing those paths without
+  invoking any package build or pack operation
+
+#### Scenario: Transfer contents are incomplete or substituted
+
+- **WHEN** an archive or metadata file is missing or additional, non-regular, truncated, modified,
+  or inconsistent with its recorded length or SHA-512
+- **THEN** transfer validation fails before installation or package execution and does not search
+  local generated archives for a replacement
+
+#### Scenario: Transfer identity differs from receiver expectations
+
+- **WHEN** source commit, contract digest, package coordinate, repository, workflow, run, or
+  attempt differs from the receiver's independently selected expectation
+- **THEN** transfer validation rejects the complete set before any downstream gate runs
+
+#### Scenario: A downstream fixture gate fails
+
+- **WHEN** any isolated consumer, browser smoke, or production-host integration gate fails after
+  transfer verification
+- **THEN** no successful final fixture-candidate evidence record is written
+
+#### Scenario: A downstream gate changes a transferred archive
+
+- **WHEN** a downstream gate mutates an archive after initial transfer verification but otherwise
+  reports success
+- **THEN** the receiver's post-gate byte-length and SHA-512 verification fails and no final
+  fixture-candidate evidence record re-baselines the changed bytes
+
+#### Scenario: A fixture record is presented as approved evidence
+
+- **WHEN** intermediate transfer metadata or final fixture validation evidence is supplied to an
+  approved candidate, publication, or public-registry verification path
+- **THEN** the operation rejects the fixture classification regardless of otherwise matching
+  archive hashes
+
 ### Requirement: Candidate versions work in isolated consumers
 
 The existing neutral token, React UI, and framework-independent iframe SDK consumers
@@ -425,7 +497,8 @@ Material Symbols asset; an applicable license or notice input; an SDK compatibil
 isolated-consumer fixture; or relevant validation orchestration changes. Release
 readiness validation SHALL also be selected when a release coordinate contract,
 candidate metadata, exact producer-toolchain pin, release-evidence schema, registry
-verifier, release runbook, or release-specific orchestration changes. It MAY skip that
+verifier, fixture-transfer helper or metadata, release runbook, or release-specific orchestration
+changes. It MAY skip that
 job for application changes that affect neither package generation nor package/host
 compatibility or release validation. Existing frontend selection MUST continue to run
 the FRED host, request, path, and proxy regressions when their application inputs change.
@@ -439,6 +512,13 @@ NOT depend on another job's filesystem or introduce network fallback into valida
   consumer-dependent package tests
 - **THEN** it provisions the isolated-consumer caches in that job before those tests, after which
   archive installation and validation remain offline
+
+#### Scenario: Fixture transfer inputs change
+
+- **WHEN** a pull request changes fixture-transfer production, verification, evidence,
+  workflow-artifact orchestration, or a downstream transferred-archive gate
+- **THEN** CI selects both the release-toolchain producer and its application-toolchain receiver
+  while unrelated application-only changes retain their existing selection behavior
 
 #### Scenario: The producer workspace changes
 

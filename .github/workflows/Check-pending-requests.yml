@@ -271,7 +271,7 @@ jobs:
 
   frontend-package-checks:
     runs-on: ubuntu-24.04
-    needs: detect-changes
+    needs: [detect-changes, frontend-package-release-readiness]
     if: needs.detect-changes.outputs.frontend-packages == 'true'
 
     steps:
@@ -309,21 +309,23 @@ jobs:
         run: make test
         working-directory: libs/frontend
 
-      - name: Validate packed archive
-        run: make pack-check
+      - name: Download release-toolchain fixture archives
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-packages-fixture-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/fixture-transfer
+
+      - name: Validate transferred fixture archives offline
+        run: make fixture-transfer-validate
         working-directory: libs/frontend
 
-      - name: Run packed SDK with production host integration
-        run: make host-integration
-        working-directory: libs/frontend
-
-      - name: Build isolated consumer offline
-        run: make isolated-consumer
-        working-directory: libs/frontend
-
-      - name: Run browser smoke offline
-        run: make browser-smoke
-        working-directory: libs/frontend
+      - name: Retain fixture validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-fixture-validation-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/fixture-validation/final-evidence.json
+          if-no-files-found: error
+          retention-days: 7
 
   frontend-package-release-readiness:
     runs-on: ubuntu-24.04
@@ -363,6 +365,18 @@ jobs:
       - name: Preserve package archive regressions
         run: make code-quality test pack-check
         working-directory: libs/frontend
+
+      - name: Create transferable fixture archive set
+        run: make fixture-transfer-create
+        working-directory: libs/frontend
+
+      - name: Retain release-toolchain fixture archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-fixture-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/fixture-transfer
+          if-no-files-found: error
+          retention-days: 7
 
   # Job to run code quality checks on the frontend
   frontend-code-quality:

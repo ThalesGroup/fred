@@ -27,6 +27,11 @@ authorize any publication.
 - Record immutable candidate evidence: source commit, exact Node/npm versions, package
   coordinates, archive filenames, and SHA-512 integrity. Any rebuilt or modified archive
   requires new validation and evidence.
+- Exercise that immutable-byte boundary before coordinate approval by transferring one explicitly
+  fixture-labelled three-archive set from the release-toolchain job to the application-toolchain
+  job in the same workflow run. The receiver independently verifies commit, contract, run/attempt,
+  package identity, byte length, and SHA-512 before passing only those archive paths to the
+  existing offline consumers, browser smoke, and production-host compatibility gates.
 - Add a registry-verification command that requires exact package coordinates and recorded
   integrity, rejects local/workspace fallback, cryptographically verifies provenance against
   the expected signer certificate URI and issuer, compares
@@ -72,7 +77,8 @@ None.
   disposable consumers may refer only to integrity-verified candidate tarballs, while published
   manifests and registry consumers remain free of local/workspace dependency fallback.
 - Frontend-package Makefile targets, exact CI input selection, and a release-readiness command;
-  application-owned Node/npm tooling remains independently controlled.
+  application-owned Node/npm tooling remains independently controlled while verified fixture
+  archives cross the CI job boundary without dependency trees or consumer caches.
 - `libs/frontend/` release documentation and the existing
   `docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`; the RFC remains authoritative for broader
   publication, adoption, and future package work.
