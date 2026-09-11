@@ -1,5 +1,18 @@
 # Fred
 
+[![Docker images](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Build-and-push-docker.yml?branch=swift&label=docker%20images)](https://github.com/ThalesGroup/fred/actions/workflows/Build-and-push-docker.yml)
+[![Migrations](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-migrations.yml?branch=swift&label=migrations)](https://github.com/ThalesGroup/fred/actions/workflows/Check-migrations.yml)
+[![Config schemas](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-config-schema.yml?branch=swift&label=config%20schemas)](https://github.com/ThalesGroup/fred/actions/workflows/Check-config-schema.yml)
+[![Release](https://img.shields.io/github/v/release/ThalesGroup/fred?filter=code/v*&label=release)](https://github.com/ThalesGroup/fred/releases/latest)
+[![fred-sdk on PyPI](https://img.shields.io/pypi/v/fred-sdk?label=fred-sdk)](https://pypi.org/project/fred-sdk/)
+[![License](https://img.shields.io/github/license/ThalesGroup/fred)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+
+[![Stars](https://img.shields.io/github/stars/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/stargazers)
+[![Contributors](https://img.shields.io/github/contributors/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/ThalesGroup/fred/swift?label=last%20commit)](https://github.com/ThalesGroup/fred/commits/swift)
+[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
+
 > **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
 
 Two key references before diving in:
@@ -740,8 +753,6 @@ We welcome pull requests and issues. Start with the [Contributing guide](./CONTR
 ## Community
 
 Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
-
-[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
 
 ## Contacts
 
