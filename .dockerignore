@@ -92,7 +92,6 @@ __pycache__/
 # Local database files
 **/*.sqlite3
 **/db.sqlite3
-**/migrations/
 
 # Temporary files
 **/*.tmp
