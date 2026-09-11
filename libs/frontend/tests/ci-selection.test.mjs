@@ -116,6 +116,89 @@ test("release-readiness CI provisions isolated consumers before tests", () => {
   assert(consumerProvisionIndex < consumerDependentTestIndex);
 });
 
+test("CI transfers one same-run fixture set from release to application tooling", () => {
+  const producer = workflow.jobs["frontend-package-release-readiness"];
+  const receiver = workflow.jobs["frontend-package-checks"];
+  assert.deepEqual(receiver.needs, [
+    "detect-changes",
+    "frontend-package-release-readiness",
+  ]);
+  const artifactName =
+    "frontend-packages-fixture-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}";
+  const createIndex = producer.steps.findIndex(
+    (step) =>
+      step.run === "make fixture-transfer-create" &&
+      step["working-directory"] === "libs/frontend",
+  );
+  const producerRegressionIndex = producer.steps.findIndex(
+    (step) => step.run === "make code-quality test pack-check",
+  );
+  const uploadIndex = producer.steps.findIndex(
+    (step) =>
+      step.uses === "actions/upload-artifact@v4" &&
+      step.with.name === artifactName &&
+      step.with.path === "libs/frontend/target/fixture-transfer" &&
+      step.with["if-no-files-found"] === "error" &&
+      step.with["retention-days"] === 7,
+  );
+  const downloadIndex = receiver.steps.findIndex(
+    (step) =>
+      step.uses === "actions/download-artifact@v4" &&
+      step.with.name === artifactName &&
+      step.with.path === "libs/frontend/target/fixture-transfer",
+  );
+  const receiverProvisionIndex = receiver.steps.findIndex(
+    (step) => step.run === "make consumer-provision",
+  );
+  const browserProvisionIndex = receiver.steps.findIndex(
+    (step) => step.run === "make browser-install",
+  );
+  const validationIndex = receiver.steps.findIndex(
+    (step) =>
+      step.run === "make fixture-transfer-validate" &&
+      step["working-directory"] === "libs/frontend",
+  );
+  const finalEvidenceIndex = receiver.steps.findIndex(
+    (step) =>
+      step.uses === "actions/upload-artifact@v4" &&
+      step.with.name ===
+        "frontend-packages-fixture-validation-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" &&
+      step.with.path ===
+        "libs/frontend/target/fixture-validation/final-evidence.json" &&
+      step.with["if-no-files-found"] === "error" &&
+      step.with["retention-days"] === 7,
+  );
+
+  for (const index of [
+    createIndex,
+    producerRegressionIndex,
+    uploadIndex,
+    downloadIndex,
+    receiverProvisionIndex,
+    browserProvisionIndex,
+    validationIndex,
+    finalEvidenceIndex,
+  ])
+    assert.notEqual(index, -1);
+  assert(producerRegressionIndex < createIndex && createIndex < uploadIndex);
+  assert(receiverProvisionIndex < validationIndex);
+  assert(browserProvisionIndex < validationIndex);
+  assert(
+    downloadIndex < validationIndex && validationIndex < finalEvidenceIndex,
+  );
+  assert.equal(
+    receiver.steps.some((step) =>
+      [
+        "make pack-check",
+        "make host-integration",
+        "make isolated-consumer",
+        "make browser-smoke",
+      ].includes(step.run),
+    ),
+    false,
+  );
+});
+
 test("every consumed canonical stylesheet selects package validation", () => {
   for (const sourcePath of TOKEN_SOURCE_PATHS) {
     assert(selectsPackageJob([sourcePath]), sourcePath);
@@ -168,7 +251,7 @@ test("canonical protocol and declared host compatibility inputs select both gate
   }
 });
 
-test("frontend-package CI runs the actual-tarball production-host integration", () => {
+test("frontend-package CI runs transferred archives with application-owned host dependencies", () => {
   const steps = workflow.jobs["frontend-package-checks"].steps;
   assert(
     steps.some(
@@ -179,7 +262,7 @@ test("frontend-package CI runs the actual-tarball production-host integration", 
   assert(
     steps.some(
       (step) =>
-        step.run === "make host-integration" &&
+        step.run === "make fixture-transfer-validate" &&
         step["working-directory"] === "libs/frontend",
     ),
   );

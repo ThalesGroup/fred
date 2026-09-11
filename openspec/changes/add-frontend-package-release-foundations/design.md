@@ -177,6 +177,49 @@ names both environments. Updating application tooling remains separate work.
 Alternative rejected: changing every frontend job to the release Node/npm pair, because
 that would turn package readiness into an unreviewed application-toolchain migration.
 
+### 4a. Rehearse the immutable job boundary with a fixture-only transfer
+
+Before maintainers confirm registry coordinates, the release-readiness job produces one
+designated transfer set using the development fixture contract and the exact release toolchain.
+It packs and validates the three members once for this set, copies only those tarballs into a
+dedicated transfer directory, and writes strict producer metadata containing the checked-out
+commit, fixture-contract digest, observed Node/npm versions, exact package records, and GitHub
+repository/workflow/run/attempt identity. The intermediate metadata kind is
+`fixture-archive-transfer`: it attests only producer archive validation and explicitly records
+that consumer, browser, and host gates have not yet run. The artifact name includes fixture,
+source-commit, run, and attempt identity; retention is seven days. Credentials, dependency trees,
+consumer caches, checkout files, and mutable `target/archives` output are excluded.
+Before clearing prior output, the producer accepts only a dedicated descendant of its own
+`target/` directory or a system temporary directory; filesystem, checkout, workspace, home, and
+symlink output roots fail before deletion.
+
+The application-toolchain package job depends on that producer job and downloads the exact named
+artifact from the same workflow execution. It independently selects its checkout commit and
+development fixture contract, verifies the transfer schema and exact four-file allowlist, checks
+the run/attempt association, package coordinates, regular-file status, byte lengths, and SHA-512,
+then supplies the verified paths and integrities explicitly to the existing token, React UI, SDK,
+browser, and production-host helpers. Transfer validation uses a dedicated staged-consumer root;
+it never invokes a packer, searches for a latest successful artifact, or falls back to
+`target/archives`, package source, workspace links, or FRED's installed package tree. Producer and
+receiver jobs provision their own lockfile-pinned caches, and the receiver provisions its own
+browser before offline execution.
+
+Only after every downstream gate succeeds does the receiver write the existing
+`fixture-candidate-evidence` classification. That final record includes the producer metadata
+digest and artifact identity, exact transferred archive records, independently observed
+application Node/npm versions, and consumer/browser/host results. A failed or incomplete gate
+removes or leaves absent the final record. The receiver re-verifies the immutable transfer
+metadata digest, byte lengths, and SHA-512 values after the downstream gates and compares every
+final package record with the original transfer record, so a gate cannot mutate and silently
+re-baseline an archive. Neither intermediate nor final fixture evidence can be promoted into
+approved candidate or public-registry evidence. This rehearsal therefore completes new
+fixture-infrastructure tasks only; it does not satisfy maintainer-gated tasks 4.7, 7.3, 9.1, or
+9.2.
+
+Alternative rejected: rebuilding in the receiver and comparing package versions, because equal
+coordinates do not prove equal tarball bytes and would leave the cross-toolchain boundary
+untested.
+
 ### 5. Parameterize the existing consumers; do not create release-only product fixtures
 
 The neutral token consumer, isolated React consumer, iframe SDK consumer, browser harness,
@@ -301,7 +344,10 @@ verifier and fixtures, release documentation, and release-readiness workflow wir
 inputs select both release-readiness and applicable existing archive regression jobs.
 Unrelated application changes may continue to skip package work; canonical package and host
 inputs retain their existing selection behavior. Workflow-contract tests also require every job
-that runs consumer-dependent package tests to provision its own caches before those tests.
+that runs consumer-dependent package tests to provision its own caches before those tests. The
+release-readiness and application-toolchain jobs run as one producer/receiver chain when selected;
+tests require an exact same-run artifact name, explicit dependency, separate provisioning, and no
+mutable latest-run lookup.
 
 ### 10. Make only a targeted RFC sequencing correction
 

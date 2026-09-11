@@ -245,6 +245,88 @@
   consumer-dependent tests; add a workflow-contract regression that proves the exact command,
   working directory, and ordering while preserving offline validation.
 
+## 11. Fixture archive transfer across release and application toolchains
+
+- [x] 11.1 Add strict fixture-transfer creation and verification helpers that bind the development
+  fixture contract, checked-out source commit, observed producer Node/npm versions, exact
+  three-package coordinates/files/lengths/SHA-512 values, and repository/workflow/run/attempt
+  identity; reject malformed metadata and any missing, additional, substituted, non-regular, or
+  modified transfer file before a consumer callback can run.
+- [x] 11.2 Generate one designated transfer set from exactly one validated pack per role under the
+  release toolchain; keep intermediate metadata explicitly limited to producer archive validation,
+  copy no credentials/dependency trees/caches/checkout content, and distinguish this set from
+  disposable archives produced by regression tests.
+- [x] 11.3 Add a receiver orchestrator that verifies the downloaded transfer against the receiver's
+  independently selected commit, fixture-contract digest, and same workflow run/attempt, then
+  supplies only explicit archive paths and integrities to the existing isolated token, React UI,
+  iframe SDK, browser, and production-host helpers without repacking or `target/archives` fallback.
+- [x] 11.4 Write final `fixture-candidate-evidence` only after every receiver gate succeeds, binding
+  the transfer metadata digest/artifact identity, exact archive records, independently observed
+  application Node/npm versions, and downstream results; prove failure leaves no success record
+  and neither fixture evidence kind can enter approved/public evidence paths.
+- [x] 11.5 Wire the release-readiness and application-toolchain package jobs as a same-run
+  producer/receiver chain with exact artifact naming, seven-day retention, explicit upload and
+  download failure behavior, separate dependency/browser provisioning, and final evidence
+  retention; transfer neither caches nor installed dependencies.
+- [x] 11.6 Extend release, transfer, evidence, CI-selection, and negative regression tests for exact
+  byte reuse, file/identity/integrity/run mismatches, callback ordering, no local fallback, no
+  evidence on gate failure, fixture non-promotion, job dependencies, artifact selection,
+  provisioning order, and relevant versus unrelated input selection.
+- [x] 11.7 Add Makefile/npm entry points and release-runbook instructions for fixture transfer,
+  retrieval, local producer/receiver rehearsal, retention, evidence relationships, failure
+  recovery, and the remaining manual verification of GitHub upload/download after push.
+- [x] 11.8 Run the complete producer, archive, isolated-consumer, browser, host, application where
+  affected, strict OpenSpec, and diff checks; perform a separate-directory local transfer rehearsal
+  with actual tarballs and obtain independent review. Keep tasks 4.7, 7.3, 9.1, and 9.2 plus all
+  other maintainer-gated work unchecked because fixture evidence cannot satisfy them.
+
+## Fixture archive-transfer evidence (2026-09-11)
+
+- Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
+  `feat/frontend-package-release-candidates` and continues to track
+  [ThalesGroup/fred#2630](https://github.com/ThalesGroup/fred/issues/2630). The proposed contract
+  remains `proposed`; the transfer uses the development fixture contract and produces no
+  publication or public-registry evidence.
+- Separate network-capable provisioning used `make consumer-provision`; the pre-provisioned
+  repository Chromium at `target/playwright` was selected explicitly during offline validation.
+  The first sandboxed provisioning attempt could not resolve the npm registry and was rerun with
+  authorized network access; validation itself retained no network fallback.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, `npm run release:check` passes,
+  `npm run release:test` passes 65/65 controlled tests, `npm run lint` and `npm run format` pass,
+  the complete `npm test` producer suite passes 263/263 tests, and `npm run pack:check` validates
+  all three development archives and existing negative guarantees.
+- A separate-directory rehearsal created the transfer under `/private/tmp` with the exact release
+  toolchain, copied only `fixture-transfer.json` plus the three tarballs to a receiver directory,
+  and validated it under independently observed application Node `22.13.0` and npm `10.9.2`.
+  The checkout was truthfully recorded as dirty because this review leaves changes uncommitted.
+  The receiver passed the offline token, React UI, and iframe SDK consumers, local-only browser
+  smoke, and the production-host integration (4/4 tests), then wrote only
+  `fixture-candidate-evidence` with the transfer metadata digest and downstream results.
+- The designated archive records were
+  `fred-design-tokens-0.0.0-development.tgz`
+  (`sha512-Ah/MK0RQHpAEnW/wZR69mHRQId+W5w4aBKPZCfZvG/42LHXGPwO80K87Asu77tuZNbe108cT0g8fQKLpSrIr7w==`),
+  `fred-ui-0.0.0-development.tgz`
+  (`sha512-Zv1I+XQx9Ndukm0/0JAZT2ypqFQiwn+ZHxRq9y9F1yAoD7GCyGauvlgLbchbe1ETu1FD2Ozn+Z0lV8GQQpdvAQ==`),
+  and `fred-iframe-sdk-0.0.0-development.tgz`
+  (`sha512-PS6OmcYwcklAprkCtNiHdZLrVAU+L+LCZe3yfXDrwiLf/5pA/tdYA99GSaM0gUIB6k9jS+Ux+YWP3RVHdCjddg==`).
+- Existing development commands `make isolated-consumer`, `make host-integration`, and
+  `make browser-smoke` also pass; browser evidence records zero dependency installations,
+  browser provisioning, or external requests during execution. Changed inputs require no broader
+  application suite beyond the packed-SDK production-host gate and workflow/selection regressions.
+- Independent review reproduced and resolved two issues: downstream mutation could initially be
+  re-baselined into final evidence, and output cleanup did not initially protect broad paths.
+  Post-gate byte/metadata verification plus exact final-record comparison now prevent mutation,
+  while canonical, location-independent output guards reject filesystem, home, repository,
+  workspace, producer-target, and symlink roots before deletion. Focused final transfer and CI
+  tests pass 34/34; final re-review found no remaining in-scope issue.
+- Local checks cannot prove GitHub's remote artifact service upload/download behavior. After the
+  manual push, reviewers must confirm the exact same-run artifact name, seven-day retention,
+  download, and final-evidence upload. This remote check cannot upgrade fixture evidence or
+  complete maintainer-gated tasks 4.7, 7.3, 9.1, or 9.2.
+- Tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain unchecked: they still require confirmed
+  package coordinates, owners, bootstrap authority, registry/release policy, workflow identity,
+  and later approved-candidate execution.
+
 ## Coordinate-independent phase evidence (2026-09-11)
 
 - Tracking: [ThalesGroup/fred#2630](https://github.com/ThalesGroup/fred/issues/2630).

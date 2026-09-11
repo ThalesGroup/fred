@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test release-candidate release-verify-evidence registry-verify clean
+FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
+FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
+
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-candidate release-verify-evidence registry-verify clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -66,6 +69,12 @@ release-check: ## Validate release contracts and dependency boundaries
 
 release-test: ## Run controlled release tooling tests without registry access
 	npm run release:test
+
+fixture-transfer-create: ## Produce the three-archive fixture transfer for this run
+	npm run fixture:transfer:create -- --output $(FIXTURE_TRANSFER_ROOT)
+
+fixture-transfer-validate: ## Verify and exercise the received fixture archives
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- --transfer $(FIXTURE_TRANSFER_ROOT) --evidence $(FIXTURE_VALIDATION_ROOT)/final-evidence.json --stage-root $(FIXTURE_VALIDATION_ROOT)/staged
 
 release-candidate: ## Build evidence under an explicitly selected contract
 	npm run release:candidate --

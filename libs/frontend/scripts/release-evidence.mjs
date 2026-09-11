@@ -12,7 +12,7 @@ import {
 
 const exactToolVersionPattern = /^\d+\.\d+\.\d+$/;
 
-function assertApplicationToolchain(toolchain) {
+export function assertApplicationToolchain(toolchain) {
   assert(toolchain && typeof toolchain === "object");
   assert.deepEqual(
     Object.keys(toolchain).sort(),
