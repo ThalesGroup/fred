@@ -39,7 +39,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 async def _make_store(tmp_path: Path) -> PostgresDocumentMetadataStore:
-    engine: AsyncEngine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'batches.db'}")
+    engine: AsyncEngine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'batches.db'}"
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     return PostgresDocumentMetadataStore(engine=engine)
@@ -48,7 +50,9 @@ async def _make_store(tmp_path: Path) -> PostgresDocumentMetadataStore:
 def _doc(uid: str, tag_ids: list[str]) -> DocumentMetadata:
     return DocumentMetadata(
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid),
-        source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads", pull_location=None),
+        source=SourceInfo(
+            source_type=SourceType.PUSH, source_tag="uploads", pull_location=None
+        ),
         tags=Tagging(tag_ids=tag_ids),
     )
 
@@ -73,7 +77,9 @@ async def test_uids_by_tags_groups_each_requested_tag(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_uids_by_tags_reports_empty_tags_and_ignores_duplicates(tmp_path: Path) -> None:
+async def test_uids_by_tags_reports_empty_tags_and_ignores_duplicates(
+    tmp_path: Path,
+) -> None:
     store = await _make_store(tmp_path)
     await _seed(store)
 
