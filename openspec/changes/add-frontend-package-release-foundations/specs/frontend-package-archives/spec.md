@@ -1,0 +1,315 @@
+## ADDED Requirements
+
+### Requirement: Release coordinates and metadata are explicit
+
+The release-readiness process SHALL consume an explicitly selected contract for the
+independently versioned design-token, UI, and iframe SDK packages. The contract MUST
+state the expected package names, exact versions, dependency and peer ranges, release
+metadata, and intended dist-tag; validation MUST compare candidate contents with that
+contract rather than accepting metadata declared by an archive as its own expectation.
+
+The producer workspace root MUST remain `private: true`, MUST NOT be a release
+candidate, and MUST be distinguished from the publication eligibility and configuration
+of each member package. Package manifests and the producer lockfile MUST agree with the
+selected contract, contain no `workspace:`, `file:`, or link dependency, and preserve
+the existing exports, asset, license, notice, CSS, React-peer, and protocol contracts.
+
+The `@fred` scope, the three current package names, version `0.1.0-alpha.1`, and the
+`next` dist-tag SHALL remain proposed values until maintainers record confirmation of
+scope ownership, final coordinates, registry policy, publishing owners, workflow
+identity, and bootstrap authorization. Repository tooling MAY be implemented and tested
+with explicit non-authoritative fixture coordinates before that confirmation, but it
+MUST NOT represent such a test as an approved release candidate.
+
+#### Scenario: A confirmed coordinate set is selected
+
+- **WHEN** maintainers select confirmed names, independent exact versions, dependency
+  ranges, release metadata, and an intended dist-tag
+- **THEN** synchronized member manifests, peer requirements, and the producer lockfile
+  match that external expected contract exactly
+
+#### Scenario: The workspace root is inspected for release
+
+- **WHEN** release readiness enumerates packable members
+- **THEN** it excludes the private producer workspace root and evaluates each of the
+  three member packages independently
+
+#### Scenario: An archive self-declares different metadata
+
+- **WHEN** a candidate archive declares a name, version, dependency, export, license,
+  repository field, or other required value that differs from the selected contract
+- **THEN** validation fails even if the archive is internally self-consistent
+
+#### Scenario: Coordinates have not been confirmed
+
+- **WHEN** a command attempts to create approved release evidence while the selected
+  scope, package names, versions, or bootstrap authorization remain provisional
+- **THEN** it fails actionably and does not label the archives release candidates
+
+### Requirement: Candidate archives and evidence are immutable
+
+Release-candidate validation SHALL operate on the actual packed bytes for all three
+packages and SHALL preserve every existing design-token, UI, iframe SDK, isolated
+consumer, browser, and production-host compatibility guarantee. A successful candidate
+record MUST bind the source commit, exact Node and npm versions, selected package
+coordinates, archive filenames, and SHA-512 integrity values to those bytes.
+
+Any archive that is rebuilt, renamed in a way that changes its recorded identity,
+modified, or replaced after validation MUST receive fresh archive, consumer, browser,
+host-compatibility, and integrity evidence. A later publication step MUST use the exact
+validated bytes; it MUST NOT rebuild packages and treat the prior evidence as valid.
+
+#### Scenario: Three candidate archives pass validation
+
+- **WHEN** the selected source commit produces token, UI, and SDK tarballs whose metadata
+  and contents satisfy the expected release contract and all existing archive gates
+- **THEN** evidence records the exact toolchain, coordinates, filenames, and SHA-512
+  integrity for each tarball
+
+#### Scenario: Candidate bytes change after validation
+
+- **WHEN** any candidate tarball is rebuilt or its bytes no longer match the recorded
+  SHA-512 integrity
+- **THEN** prior candidate evidence is rejected and the complete validation sequence
+  must run again
+
+#### Scenario: Publication input differs from candidate evidence
+
+- **WHEN** a future publication operation receives archive bytes other than the bytes
+  identified by the reviewed evidence
+- **THEN** it must stop before registry mutation rather than publishing a rebuild
+
+### Requirement: Release validation uses an exact producer toolchain
+
+Candidate generation and release-evidence production SHALL require exact, non-floating
+Node and npm versions recorded in the release contract. The initial recommended pin is
+Node `24.21.0` with npm `11.19.0`, which satisfies the currently documented minimums for
+npm Trusted Publishing and staged publishing; changing either pin MUST be a reviewed
+contract change with renewed validation.
+
+FRED application tests that participate in compatibility validation MUST remain under
+their separately controlled application toolchain. Release orchestration MUST identify
+which toolchain produced each item of evidence and MUST pass immutable candidate
+archives between producer and application-test environments rather than resolving the
+producer's installed dependencies from the application environment.
+
+#### Scenario: Candidate production uses the pinned versions
+
+- **WHEN** a release-candidate command starts with Node or npm different from the exact
+  selected versions
+- **THEN** it fails actionably before packing or recording candidate evidence
+
+#### Scenario: Application compatibility runs on its own tooling
+
+- **WHEN** CI executes FRED application regression or production-host compatibility
+  checks against candidate archives
+- **THEN** the application uses its independently pinned tooling and receives the exact
+  candidate bytes without using the producer dependency tree
+
+#### Scenario: The toolchain pin changes
+
+- **WHEN** maintainers select a different exact Node or npm version
+- **THEN** all three archives and their release evidence are regenerated and revalidated
+
+### Requirement: Candidate versions work in isolated consumers
+
+The existing neutral token, React UI, and framework-independent iframe SDK consumers
+SHALL accept the exact selected candidate coordinates and install the actual candidate
+archives in fresh locations outside the FRED checkout. Provisioning MAY populate only
+the lockfile-pinned caches and browser prerequisites declared for those selected
+coordinates. Offline validation MUST retain source isolation, production builds,
+browser checks, and SDK production-host compatibility without network access, workspace
+links, local source fallback, or resolution from FRED's installed dependency tree.
+
+#### Scenario: Candidate archives replace development versions
+
+- **WHEN** isolated consumers are configured with the selected token, UI, and SDK
+  candidate coordinates and matching lockfiles
+- **THEN** offline installation, type checking, production builds, browser smoke, and
+  host compatibility pass with the actual candidate tarballs
+
+#### Scenario: A consumer resolves a development or workspace package
+
+- **WHEN** a candidate consumer graph contains `0.0.0-development`, a workspace link, a
+  local file dependency, or a package resolved from the FRED checkout
+- **THEN** release-candidate validation fails
+
+#### Scenario: Candidate provisioning is incomplete
+
+- **WHEN** an exact dependency or browser prerequisite is absent from the prepared cache
+- **THEN** offline validation fails actionably without fetching or installing it
+
+### Requirement: Registry verification is exact and cannot fall back locally
+
+The repository SHALL provide a registry-verification command that accepts the exact
+expected coordinate and previously recorded archive SHA-512 integrity for each FRED
+package. Against a real public registry, it MUST resolve those exact versions, verify
+registry-reported and downloaded-byte integrity, require verifiable provenance for each
+package, and exercise fresh clean consumers installed from the registry.
+
+The command MUST reject tags, ranges, unexpected registries, missing provenance,
+integrity mismatches, local tarballs, workspace packages, source-checkout resolution,
+and silent fallback. Its local automated tests MUST use controlled registry fixtures or
+equivalent deterministic responses and MUST label their result as tooling validation,
+not as proof that packages were genuinely published.
+
+#### Scenario: Published candidates match recorded evidence
+
+- **WHEN** the command is given the three exact published coordinates and their recorded
+  integrity values and the public registry serves matching packages with provenance
+- **THEN** clean registry-only token, UI, and SDK consumers pass their applicable build,
+  browser, and compatibility checks
+
+#### Scenario: Registry content does not match the candidate
+
+- **WHEN** registry metadata, downloaded bytes, or provenance is missing or differs from
+  the expected coordinate and integrity
+- **THEN** verification fails and does not substitute a local archive or source tree
+
+#### Scenario: Only verifier tooling was tested locally
+
+- **WHEN** the verifier passes against controlled local fixtures without genuinely
+  published package coordinates
+- **THEN** evidence reports only that verifier behavior passed and does not report a
+  successful public-registry release verification
+
+### Requirement: Bootstrap, publication, and adoption remain separate gates
+
+Release documentation SHALL distinguish repository readiness, initial npm package
+creation, later Trusted Publishing configuration, optional staged-publishing policy,
+actual publication, registry verification, FRED adoption, and external adoption.
+Initial creation MUST require confirmed scope ownership and an account or organization
+permission model capable of creating each package; it MUST NOT assume that a
+package-scoped credential can create a nonexistent package. Staged publishing MUST be
+documented as a maintainer policy choice and MUST NOT be used for brand-new package
+creation.
+
+Dependencies SHALL be released before consumers: a compatible design-token version
+before its UI consumer, while the independent SDK may be sequenced separately. FRED
+adoption SHALL occur only after the required prereleases pass genuine registry
+verification. If later protocol-ownership transfer changes SDK bytes, the corresponding
+SDK version MUST be built, validated, and published before FRED adopts it. RAGS adoption
+remains separately tracked and MUST use the same generic contract as any external
+application.
+
+Published versions MUST be treated as immutable. Recovery SHALL select a previously
+validated version or publish a newly versioned correction; it MUST NOT overwrite a
+published version. Adoption rollback SHALL restore a prior lockfile/dependency set or
+redeploy a prior application image.
+
+#### Scenario: Maintainers bootstrap a new public package
+
+- **WHEN** one of the selected package names does not yet exist in the approved npm scope
+- **THEN** maintainers verify organization ownership and package-creation authority and
+  use the approved bootstrap process before configuring later Trusted Publishing
+
+#### Scenario: Maintainers choose staged publishing
+
+- **WHEN** staged publishing is selected as release policy
+- **THEN** it is used only after the package exists and the required npm, Node, access,
+  and two-factor approval prerequisites are satisfied
+
+#### Scenario: FRED adoption is proposed
+
+- **WHEN** maintainers prepare a later change to consume registry packages in FRED
+- **THEN** the required prereleases already have matching integrity, provenance, and
+  clean-consumer registry evidence, and any changed SDK artifact is released first
+
+#### Scenario: A released candidate must be rolled back
+
+- **WHEN** a defect is found after publication or adoption
+- **THEN** maintainers deprecate or supersede the affected version and restore a prior
+  validated dependency set or image without replacing published bytes
+
+## MODIFIED Requirements
+
+### Requirement: CI selection covers every package-validation input
+
+Pull-request validation SHALL select the frontend-package job when the producer
+workspace; a consumed canonical component, type, stylesheet, protocol source, or path
+validator; the FRED frontend React manifest or lockfile baseline; a packaged Geist or
+Material Symbols asset; an applicable license or notice input; an SDK compatibility or
+isolated-consumer fixture; or relevant validation orchestration changes. Release
+readiness validation SHALL also be selected when a release coordinate contract,
+candidate metadata, exact producer-toolchain pin, release-evidence schema, registry
+verifier, release runbook, or release-specific orchestration changes. It MAY skip that
+job for application changes that affect neither package generation nor package/host
+compatibility or release validation. Existing frontend selection MUST continue to run
+the FRED host, request, path, and proxy regressions when their application inputs change.
+
+#### Scenario: The producer workspace changes
+
+- **WHEN** a pull request changes a file in the frontend package producer workspace
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: Consumed canonical CSS changes
+
+- **WHEN** a pull request changes a canonical FRED stylesheet consumed by token, font,
+  shared-base, or component-style generation
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: A consumed component or type changes
+
+- **WHEN** a pull request changes a canonical component, shared prop or visual type, or
+  Sass support file in the UI package allowlist
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: A canonical protocol or path rule changes
+
+- **WHEN** a pull request changes the maintained protocol source or relative-path rules
+  consumed by the SDK and host compatibility checks
+- **THEN** CI selects both frontend-package validation and the applicable FRED frontend
+  regression checks
+
+#### Scenario: A host compatibility input changes
+
+- **WHEN** a pull request changes the application host page, request adapter, frame/path
+  integration, or their compatibility tests
+- **THEN** CI selects the FRED frontend regression checks and every declared SDK/host
+  compatibility gate affected by that input
+
+#### Scenario: The tested React baseline changes
+
+- **WHEN** a pull request changes the FRED frontend manifest or lockfile entries that
+  establish the UI package's tested React or React DOM baseline
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: A packaged Geist asset changes
+
+- **WHEN** a pull request changes either canonical Geist font binary packaged by the
+  design-token member
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: The packaged Material Symbols asset changes
+
+- **WHEN** a pull request changes the canonical Material Symbols Outlined binary used by
+  the UI member
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: An applicable license input changes
+
+- **WHEN** a pull request changes a license, provenance record, glyph inventory, or
+  notice input applicable to a generated archive
+- **THEN** CI selects the frontend-package validation job
+
+#### Scenario: Release readiness input changes
+
+- **WHEN** a pull request changes selected release coordinates, package metadata,
+  dependency ranges, a toolchain pin, candidate evidence or registry-verification logic,
+  release documentation, or the workflow that validates them
+- **THEN** CI selects the frontend-package release-readiness and applicable existing
+  archive regression jobs
+
+#### Scenario: Validation orchestration changes
+
+- **WHEN** a pull request changes a root command, workflow, setup action, build
+  configuration, fixture lockfile, or validation script that controls the
+  frontend-package or host-compatibility gates
+- **THEN** CI selects the affected validation jobs
+
+#### Scenario: An unrelated application file changes
+
+- **WHEN** a pull request changes only application files that are not consumed by or
+  responsible for frontend-package, SDK/host compatibility, or release validation
+- **THEN** CI may skip the frontend-package job while retaining normal application
+  validation
