@@ -292,8 +292,11 @@ anonymous and the baked assets are served.
 
 `deploy/local/k3d/values-local.yaml` carries this shape against the k3d
 seaweedfs, reusing the stack chart's own `fred-secrets`.
-`make theme-container-smoke` exercises the whole path against a locally built
-image.
+`make theme-bundle THEME_SRC=<dir> THEME_ZIP=<file>` packages the archive and
+flags the two layout mistakes that are hard to spot from a running pod: entries
+outside the three served surfaces, and an English legal file with no language
+variant beside it. `make theme-container-smoke` exercises the whole path against
+a locally built image.
 
 ## Chat UI
 
