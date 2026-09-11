@@ -1872,6 +1872,7 @@
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
         "process": "Traiter",
+        "refresh": "Rafraîchir cette vue",
         "rename": "Renommer",
         "reprocess": "Retraiter",
         "searchable": "Exclure de la recherche",
@@ -2051,8 +2052,8 @@
         },
         "menu": {
           "analytics": "Analytiques",
-          "capabilities": "Fonctionnalités",
           "corpusAudit": "Audit du corpus",
+          "features": "Fonctionnalités",
           "migration": "Données plateforme",
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
@@ -2245,7 +2246,17 @@
       },
       "roles": {
         "platform_admin": "Admin plateforme",
-        "platform_observer": "Observateur plateforme"
+        "platform_observer": "Observateur plateforme",
+        "team_manager": "Gestionnaire d'équipes",
+        "feature_manager": "Gestionnaire de fonctionnalités",
+        "prompt_editor": "Éditeur du prompt plateforme"
+      },
+      "roleDescriptions": {
+        "platform_admin": "Administration complète : toutes les pages d'admin, import/export et réinitialisation de la plateforme.",
+        "platform_observer": "Accès en lecture seule aux analyses de la plateforme.",
+        "team_manager": "Créer des équipes et voir toutes les équipes de la plateforme.",
+        "feature_manager": "Activer ou désactiver les capacités, modèles et gabarits d'agents.",
+        "prompt_editor": "Modifier le prompt plateforme ajouté à chaque agent."
       },
       "grant": {
         "title": "Attribuer un rôle",
@@ -2288,7 +2299,7 @@
         "nameLabel": "Nom de l'équipe",
         "namePlaceholder": "ex. swiftpost",
         "adminsLabel": "Administrateur(s) initial(aux)",
-        "adminsPlaceholder": "Rechercher des utilisateurs...",
+        "adminsPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
         "submit": "Créer l'équipe",
         "successSummary": "Équipe créée",
         "errors": {

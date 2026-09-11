@@ -1,0 +1,25 @@
+{
+  "name": "@fred/iframe-sdk",
+  "version": "0.0.0-development",
+  "description": "Framework-independent child client for FRED application iframes",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/types/.generated/applicationProtocol.d.ts",
+      "import": "./dist/protocol.js"
+    }
+  },
+  "types": "./dist/types/src/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "build-evidence.json"
+  ],
+  "sideEffects": false
+}

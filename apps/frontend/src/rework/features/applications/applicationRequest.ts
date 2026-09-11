@@ -15,15 +15,7 @@
 import { KeyCloakService } from "../../../security/KeycloakService.ts";
 import type { FredApplicationRequest } from "./applicationHost.ts";
 import { applicationServiceUrl } from "./applicationPath.ts";
-
-const PROTECTED_HEADERS = new Set([
-  "authorization",
-  "cookie",
-  "host",
-  "proxy-authorization",
-  "x-fred-application-id",
-  "x-fred-team-id",
-]);
+import { isProtectedApplicationHeader } from "./applicationProtocol.ts";
 
 interface ApplicationRequestDependencies {
   fetch: typeof fetch;
@@ -41,10 +33,9 @@ const browserDependencies: ApplicationRequestDependencies = {
 
 function applicationHeaders(headersInit: HeadersInit | undefined, token: string | null): Headers {
   const headers = new Headers(headersInit);
-  for (const header of PROTECTED_HEADERS) {
-    if (headers.has(header)) {
+  for (const header of headers.keys()) {
+    if (isProtectedApplicationHeader(header))
       throw new TypeError(`Application requests cannot set the ${header} header`);
-    }
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return headers;

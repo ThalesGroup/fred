@@ -5069,8 +5069,10 @@ binding.
   own docstring carries this warning; `alembic merge` is not the fix (CLAUDE.md,
   "Alembic migrations - keep history linear").
 - `GET`/`PUT /control-plane/v1/admin/platform/prompt`, both gated on
-  `organization_authz.require_manage_any` (`can_manage_platform`) and both
-  registered in `authz-endpoint-matrix.yaml`. No `DELETE`, per the table above.
+  `organization_authz.require_edit_platform_prompt` (`can_edit_platform_prompt`,
+  carved out of `can_manage_platform` — CONTROL-PLANE-PRODUCT-CONTRACT.md §51)
+  and both registered in `authz-endpoint-matrix.yaml`. No `DELETE`, per the
+  table above.
 - Admin UI: a new **Platform prompt** entry in `AdminNavbar`, `/admin/platform-prompt`,
   `Protected requires="admin"`. The page names which of the three states is in
   force rather than showing an identical empty box for two of them.
@@ -5184,8 +5186,9 @@ contract stays where it is and is **not** merged in: it is an output/renderer
 contract, a different concern from operating behaviour, and it keeps its
 position after the guardrails.
 
-*Read-only surface.* `GET /admin/platform/instructions` (org admin, same
-`require_manage_any` gate) returns the same constant the runtime composes, so
+*Read-only surface.* `GET /admin/platform/instructions` (same
+`require_edit_platform_prompt` gate as its editable sibling) returns the same
+constant the runtime composes, so
 the admin page cannot drift from what agents actually receive. No PUT, no
 DELETE, no row — it changes only with a deployment. The page renders it
 verbatim under the editor, scrollable, with no input control.
@@ -5218,7 +5221,7 @@ drop), then re-upgraded onto the new name.
    shrinking rather than growing to fit children — with the same pair on
    `.instructions` and `flex: 1; min-height: 0; overflow: auto` on the body,
    which becomes the single scroll region. Same reasoning and same declarations
-   as `CapabilitiesPage.module.css`, which documents the flex `min-height: auto`
+   as `FeaturesPage.module.css`, which documents the flex `min-height: auto`
    trap this fell into. The editor dropped from 16 to 10 rows so the panel has
    room in the common case.
 

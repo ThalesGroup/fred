@@ -131,7 +131,7 @@ vi.mock("./PlatformModelBindingsPanel/PlatformModelBindingsPanel", () => ({
   PlatformModelBindingsPanel: () => null,
 }));
 
-const { default: CapabilitiesPage } = await import("./CapabilitiesPage");
+const { default: FeaturesPage } = await import("./FeaturesPage");
 const { CapabilityTeamMatrixDrawer } = await import("./CapabilityTeamMatrixDrawer");
 
 const cap = (over: Partial<CapabilityEnablementItem>): CapabilityEnablementItem =>
@@ -175,7 +175,7 @@ afterEach(() => {
 /** Render the page and switch to the Agents tab, where `kind="agent"` rows live. */
 function renderAgentsTab(items: CapabilityEnablementItem[]) {
   h.items = items;
-  act(() => root.render(<CapabilitiesPage />));
+  act(() => root.render(<FeaturesPage />));
   // KIND_FILTERS order is [tool, agent, model]; the tab strip is the first radio group.
   const tabs = container.querySelectorAll('[role="radio"]');
   act(() => (tabs[1] as HTMLElement).click());
@@ -184,7 +184,7 @@ function renderAgentsTab(items: CapabilityEnablementItem[]) {
 /** Same, for any kind tab: [tool, agent, model], plus app when the gate is on. */
 function renderKindTab(items: CapabilityEnablementItem[], index: number) {
   h.items = items;
-  act(() => root.render(<CapabilitiesPage />));
+  act(() => root.render(<FeaturesPage />));
   if (index === 0) return;
   const tabs = container.querySelectorAll('[role="radio"]');
   act(() => (tabs[index] as HTMLElement).click());
@@ -207,7 +207,7 @@ const clickConfirm = async () => {
   await act(async () => confirm!.click());
 };
 
-describe("CapabilitiesPage default-on grant-all (#2470)", () => {
+describe("FeaturesPage default-on grant-all", () => {
   it("intercepts the bare write and opens the confirmation instead", () => {
     renderAgentsTab([AGENT, DEP]);
     act(() => defaultOnSwitch()!.click());
@@ -371,7 +371,7 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
 // Where the applications work meets the grant-all flow above: both edit the same
 // if/else chain in `onToggleDefault`, so every rebase resolves it by hand. These
 // pin which branch each behaviour belongs to, which no other test asserts.
-describe("CapabilitiesPage default-on toggle routing", () => {
+describe("FeaturesPage default-on toggle routing", () => {
   it("previews the revoke impact for an ordinary capability", () => {
     renderKindTab([cap({ id: "web_search", default_on: true })], 0);
     act(() => defaultOnSwitch()!.click());

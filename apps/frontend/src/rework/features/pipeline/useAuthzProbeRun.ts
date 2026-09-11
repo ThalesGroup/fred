@@ -19,7 +19,7 @@ import { loginWithPassword } from "./keycloakDirectGrant";
 import type { StepReport } from "./types";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { isPersonalTeamId } from "../../components/shared/utils/teamId";
-import type { Team } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PermissionSummary, Team } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 interface TeamWithPermissionsResponse {
   permissions?: string[];
@@ -30,10 +30,7 @@ interface PromptResponse {
 }
 
 interface BootstrapResponse {
-  permissions?: {
-    is_platform_admin?: boolean;
-    is_platform_observer?: boolean;
-  };
+  permissions?: PermissionSummary;
 }
 
 async function authedFetch(
@@ -66,10 +63,10 @@ const deps: AuthzProbeDeps = {
   fetchBootstrapFlags: async (token) => {
     const { status, body } = await authedFetch("/control-plane/v1/frontend/bootstrap", token);
     if (status !== 200) throw new Error(`GET /frontend/bootstrap: HTTP ${status}`);
-    const permissions = (body as BootstrapResponse)?.permissions ?? {};
+    const roles = (body as BootstrapResponse)?.permissions?.platform_roles ?? [];
     return {
-      isPlatformAdmin: Boolean(permissions.is_platform_admin),
-      isPlatformObserver: Boolean(permissions.is_platform_observer),
+      isPlatformAdmin: roles.includes("platform_admin"),
+      isPlatformObserver: roles.includes("platform_observer"),
     };
   },
   fetchOwnTeamIds: async (token) => {

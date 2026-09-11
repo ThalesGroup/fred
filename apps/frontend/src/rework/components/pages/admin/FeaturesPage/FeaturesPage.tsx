@@ -40,7 +40,7 @@ import {
   useSetModelReasoningMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import styles from "./CapabilitiesPage.module.css";
+import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
@@ -66,7 +66,7 @@ import {
 type CapabilityKind = "tool" | "agent" | "model" | "app";
 const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model"];
 
-export default function CapabilitiesPage() {
+export default function FeaturesPage() {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn } = useToast();
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
