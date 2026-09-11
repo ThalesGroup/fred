@@ -102,6 +102,12 @@ from fred_core.security.rebac.capability_authz import (
     team_capability_subject_and_context,
     usable_capability_ids,
 )
+from fred_core.security.rebac.knowledge_base_authz import (
+    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
+    knowledge_base_catalog_id,
+    knowledge_base_definition_ref,
+    knowledge_base_provider_and_definition,
+)
 from fred_core.security.rebac.openfga_engine import (
     OpenFgaRebacEngine,
     RebacCleanupIncomplete,
@@ -113,6 +119,7 @@ from fred_core.security.rebac.rebac_engine import (
     AppPermission,
     CapabilityPermission,
     DocumentPermission,
+    KnowledgeBaseDefinitionPermission,
     OrganizationPermission,
     RebacDisabledResult,
     RebacEngine,
@@ -216,6 +223,7 @@ __all__ = [
     "AppPermission",
     "OrganizationPermission",
     "CapabilityPermission",
+    "KnowledgeBaseDefinitionPermission",
     "RebacPermission",
     "RebacDisabledResult",
     "RebacEngine",
@@ -225,6 +233,10 @@ __all__ = [
     "application_catalog_id",
     "application_id_from_catalog_id",
     "can_team_use_application",
+    "KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX",
+    "knowledge_base_catalog_id",
+    "knowledge_base_definition_ref",
+    "knowledge_base_provider_and_definition",
     "usable_application_ids",
     "OpenFgaRebacEngine",
     "RebacCleanupIncomplete",

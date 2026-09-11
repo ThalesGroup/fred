@@ -15,13 +15,14 @@
 """
 Knowledge Base authoring surface.
 
-A Knowledge Base is declared, given one synchronization handler, and installed
-into a Fred deployment as a JSON-safe manifest:
+A Knowledge Base is declared, given one synchronization handler, and published
+into a Fred deployment by its own image:
 
     from fred_sdk.knowledge_base import (
         KnowledgeBase,
         KnowledgeBaseRunContext,
         KnowledgeBaseSyncResult,
+        knowledge_base_main,
     )
 
     kb = KnowledgeBase(
@@ -38,19 +39,30 @@ into a Fred deployment as a JSON-safe manifest:
     ) -> KnowledgeBaseSyncResult:
         ...
 
-Configuration is declared with the same `FieldSpec` vocabulary the rest of the
-SDK uses — import it from `fred_sdk.contracts.models`.
+    raise SystemExit(knowledge_base_main(kb))
+
+That image then exposes two commands: `publish` posts the declaration at
+deployment time, `run` serves runs. Configuration is declared with the same
+`FieldSpec` vocabulary the rest of the SDK uses — import it from
+`fred_sdk.contracts.models`.
 """
 
-from fred_sdk.knowledge_base.declaration import (
+from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
+from fred_sdk.knowledge_base.entrypoints import (
+    knowledge_base_main,
+    publish_knowledge_base,
+    run_knowledge_base,
+)
+from fred_sdk.knowledge_base.environment import MissingPodEnvironment
+from fred_sdk.knowledge_base.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
     KnowledgeBase,
     KnowledgeBaseDeclarationError,
     SynchronizeHandler,
 )
-from fred_sdk.knowledge_base.manifest import KnowledgeBaseManifest
 from fred_sdk.knowledge_base.models import (
     MAX_ISSUE_MESSAGE_CHARS,
+    MAX_ISSUE_SUBJECT_CHARS,
     MAX_ISSUES,
     MAX_SUMMARY_CHARS,
     KnowledgeBaseIssue,
@@ -63,13 +75,18 @@ __all__ = [
     "KNOWLEDGE_BASE_ID_PATTERN",
     "MAX_ISSUES",
     "MAX_ISSUE_MESSAGE_CHARS",
+    "MAX_ISSUE_SUBJECT_CHARS",
     "MAX_SUMMARY_CHARS",
     "KnowledgeBase",
+    "KnowledgeBaseDeclaration",
     "KnowledgeBaseDeclarationError",
     "KnowledgeBaseIssue",
-    "KnowledgeBaseManifest",
     "KnowledgeBaseRunContext",
     "KnowledgeBaseRunOutcome",
     "KnowledgeBaseSyncResult",
+    "MissingPodEnvironment",
     "SynchronizeHandler",
+    "knowledge_base_main",
+    "publish_knowledge_base",
+    "run_knowledge_base",
 ]

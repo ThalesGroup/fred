@@ -45,6 +45,9 @@ from control_plane_backend.config.loader import (
 from control_plane_backend.config.models import AppState
 from control_plane_backend.evaluations.api import build_evaluations_router
 from control_plane_backend.import_export.api import build_import_export_router
+from control_plane_backend.knowledge_bases.api import (
+    router as knowledge_bases_router,
+)
 from control_plane_backend.kpi.api import build_kpi_router
 from control_plane_backend.platform_prompt.api import router as platform_prompt_router
 from control_plane_backend.product.api import router as product_router
@@ -376,6 +379,7 @@ def create_app() -> FastAPI:
     router.include_router(product_router)
     router.include_router(bootstrap_router)
     router.include_router(capabilities_router)
+    router.include_router(knowledge_bases_router)
     router.include_router(routing_policy_router)
     router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)

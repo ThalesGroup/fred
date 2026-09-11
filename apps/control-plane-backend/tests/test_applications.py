@@ -22,6 +22,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from conftest import no_knowledge_base_store
 from control_plane_backend.app.dependencies import attach_application_container
 from control_plane_backend.app.feature_flags import require_feature_enabled
 from control_plane_backend.applications.api import router as applications_router
@@ -408,10 +409,12 @@ def test_unknown_feature_guard_name_fails_fast() -> None:
 @pytest.mark.asyncio
 async def test_applications_flag_controls_capability_projection() -> None:
     disabled = SimpleNamespace(
-        configuration=_feature_configuration(enable_applications=False)
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=_feature_configuration(enable_applications=False),
     )
     enabled = SimpleNamespace(
-        configuration=_feature_configuration(enable_applications=True)
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=_feature_configuration(enable_applications=True),
     )
 
     assert await aggregate_capability_catalog(cast(Any, disabled)) == {}
@@ -633,7 +636,8 @@ def _app_entry() -> CapabilityCatalogEntry:
 async def test_unknown_app_id_is_rejected_before_structural_anchor_write() -> None:
     rebac = _TupleRebac()
     deps = SimpleNamespace(
-        configuration=_feature_configuration(enable_applications=True)
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=_feature_configuration(enable_applications=True),
     )
 
     with pytest.raises(CapabilityNotFound):
@@ -648,7 +652,8 @@ async def test_unknown_app_id_is_rejected_before_structural_anchor_write() -> No
 async def test_known_app_management_gate_does_not_write_before_mutation() -> None:
     rebac = _TupleRebac()
     deps = SimpleNamespace(
-        configuration=_feature_configuration(enable_applications=True)
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=_feature_configuration(enable_applications=True),
     )
 
     await _require_can_manage(
@@ -662,7 +667,8 @@ async def test_known_app_management_gate_does_not_write_before_mutation() -> Non
 async def test_disabled_app_is_rejected_before_structural_anchor_write() -> None:
     rebac = _TupleRebac()
     deps = SimpleNamespace(
-        configuration=_feature_configuration(enable_applications=False)
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=_feature_configuration(enable_applications=False),
     )
 
     with pytest.raises(CapabilityNotFound):
@@ -685,6 +691,7 @@ async def test_applications_flag_preserves_existing_grant_across_off_on() -> Non
     rebac.relations.add(grant)
     relation_bytes = _relation_snapshot(rebac.relations)
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=configuration,
         team_dependencies=SimpleNamespace(rebac=rebac),
         get_team_metadata_store=lambda: _MetadataStore([]),
@@ -828,6 +835,7 @@ async def test_public_app_enable_rejects_personal_team_before_app_write(
     deps = cast(
         Any,
         SimpleNamespace(
+            get_knowledge_base_definition_store=no_knowledge_base_store,
             configuration=_feature_configuration(enable_applications=True),
             team_dependencies=SimpleNamespace(rebac=rebac),
         ),
@@ -921,6 +929,7 @@ async def test_app_disable_canonicalizes_personal_alias_for_legacy_cleanup(
     deps = cast(
         Any,
         SimpleNamespace(
+            get_knowledge_base_definition_store=no_knowledge_base_store,
             configuration=_feature_configuration(enable_applications=True),
             team_dependencies=SimpleNamespace(rebac=rebac),
             get_kpi_writer=lambda: None,
@@ -989,6 +998,7 @@ def _catalog_hidden_deps(rebac: object) -> Any:
     return cast(
         Any,
         SimpleNamespace(
+            get_knowledge_base_definition_store=no_knowledge_base_store,
             configuration=_feature_configuration(
                 enable_applications=True,
                 application_sources=[_source("example", enabled=False)],
@@ -1109,6 +1119,7 @@ async def test_listed_application_is_activated_from_configuration_alone(
     deps = cast(
         Any,
         SimpleNamespace(
+            get_knowledge_base_definition_store=no_knowledge_base_store,
             configuration=_feature_configuration(enable_applications=True),
             team_dependencies=SimpleNamespace(rebac=rebac),
         ),
@@ -1154,9 +1165,10 @@ async def _configured_catalog(
     sources: list[ApplicationSourceConfig] | None = None,
 ) -> dict[str, CapabilityCatalogEntry]:
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=_feature_configuration(
             enable_applications=True, application_sources=sources
-        )
+        ),
     )
     return await aggregate_capability_catalog(cast(Any, deps))
 

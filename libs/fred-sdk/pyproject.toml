@@ -23,6 +23,12 @@ classifiers = [
 urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
 
 [project.optional-dependencies]
+# Only a Knowledge Base pod serving runs needs the workflow engine; agentic
+# pods import fred-sdk without it. `worker.py` is imported lazily so `publish`
+# never loads it either.
+knowledge-base = [
+  "temporalio>=1.7.0",
+]
 dev = [
   "bandit>=1.8.6",
   "basedpyright==1.31.0",

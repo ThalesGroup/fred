@@ -51,6 +51,7 @@ import {
   enabledTeamCount,
   hasReasoningControl,
   isCapabilityUnused as isUnused,
+  hasAgentInstanceLifecycle,
   missingAgentDependenciesForPlatform,
   personalSpaceCount,
   requiresTeamSettings,
@@ -63,8 +64,11 @@ import {
 // page: a tool can be depended on by several agents, so admins need all
 // enabled views over the same underlying mechanism, not several disconnected
 // pages. The optional Apps view follows the deployment-wide feature gate.
-type CapabilityKind = "tool" | "agent" | "model" | "app";
-const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model"];
+// "knowledge_base" is a control-plane projection of a published Knowledge Base
+// definition: same enablement shape as an app, on its own ReBAC type, so it
+// belongs on this surface rather than a page of its own.
+type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
 
 export default function CapabilitiesPage() {
   const { t } = useTranslation();
@@ -137,7 +141,7 @@ export default function CapabilitiesPage() {
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const rowIsUnused = (capability: CapabilityEnablementItem) =>
-    capability.kind === "app" ? enabledTeamCount(capability) === 0 : isUnused(capability);
+    hasAgentInstanceLifecycle(capability.kind) ? isUnused(capability) : enabledTeamCount(capability) === 0;
 
   // Resolved from the live query on every render — NOT snapshotted into state.
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
@@ -146,6 +150,15 @@ export default function CapabilitiesPage() {
   const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
   const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
+  // Each kind loses something different when default-on goes off: agent
+  // instances can be suspended, an application or a Knowledge Base only loses
+  // inherited access. Naming the object is what makes the dialog truthful.
+  const defaultOffCopyVariant =
+    visiblePendingDefaultOff?.kind === "app"
+      ? "app"
+      : visiblePendingDefaultOff?.kind === "knowledge_base"
+        ? "knowledgeBase"
+        : "generic";
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
     if (inFlightDefaultOnIdRef.current === capability.id) {
@@ -263,7 +276,7 @@ export default function CapabilitiesPage() {
       // Applications have no agent-instance dependencies or suspension
       // lifecycle. Their confirmation stays generic and never asks the
       // agent-specific impact endpoint for a meaningless preview.
-      if (capability.kind !== "app") {
+      if (hasAgentInstanceLifecycle(capability.kind)) {
         void fetchRevokeImpact({ capabilityId: capability.id });
       }
     } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
@@ -286,7 +299,7 @@ export default function CapabilitiesPage() {
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
-    if (!visiblePendingDefaultOff || visiblePendingDefaultOff.kind === "app") return null;
+    if (!visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind)) return null;
     if (revokeImpact.isFetching || !impact) return null;
     return (
       <div className={styles.impact}>
@@ -430,7 +443,7 @@ export default function CapabilitiesPage() {
       size: "1.6fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
-        const personal = cap.kind === "app" ? 0 : personalSpaceCount(cap);
+        const personal = hasAgentInstanceLifecycle(cap.kind) ? personalSpaceCount(cap) : 0;
         // Personal-class reach is additive to the team count — "12 teams" over
         // "40 personal spaces", one line each — because personal spaces are
         // deliberately not in `total_team_count` (RFC §8.4). A zero part says
@@ -475,7 +488,7 @@ export default function CapabilitiesPage() {
         );
       },
     },
-    ...(activeKindFilter === "app"
+    ...(!hasAgentInstanceLifecycle(activeKindFilter)
       ? []
       : [
           {
@@ -587,7 +600,9 @@ export default function CapabilitiesPage() {
                 ? "rework.admin.capabilities.emptyModels"
                 : activeKindFilter === "app"
                   ? "rework.admin.capabilities.emptyApps"
-                  : "rework.admin.capabilities.empty",
+                  : activeKindFilter === "knowledge_base"
+                    ? "rework.admin.capabilities.emptyKnowledgeBases"
+                    : "rework.admin.capabilities.empty",
           )}
         />
       )}
@@ -620,16 +635,8 @@ export default function CapabilitiesPage() {
 
       <ConfirmationDialog
         open={visiblePendingDefaultOff !== null}
-        title={t(
-          visiblePendingDefaultOff?.kind === "app"
-            ? "rework.admin.capabilities.defaultOffConfirm.appTitle"
-            : "rework.admin.capabilities.defaultOffConfirm.title",
-        )}
-        message={t(
-          visiblePendingDefaultOff?.kind === "app"
-            ? "rework.admin.capabilities.defaultOffConfirm.appMessage"
-            : "rework.admin.capabilities.defaultOffConfirm.message",
-        )}
+        title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
+        message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
         details={renderImpactDetails()}
         confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
         cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}

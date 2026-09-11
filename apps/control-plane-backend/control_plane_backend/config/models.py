@@ -19,7 +19,6 @@ from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
-from control_plane_backend.knowledge_bases.catalog import KnowledgeBaseDefinitionConfig
 
 
 class AppConfig(BaseModel):
@@ -373,18 +372,6 @@ class PlatformConfig(BaseModel):
         ),
     )
 
-    # Model defined next to its catalog projection in
-    # `control_plane_backend.knowledge_bases.catalog`.
-    knowledge_base_definitions: list[KnowledgeBaseDefinitionConfig] = Field(
-        default_factory=list,
-        description=(
-            "Knowledge Base definitions this deployment offers. Each entry "
-            "carries the manifest its SDK author produced plus the deployment "
-            "bindings. Configured means visible and enablable — never that a "
-            "pod exists or a worker is connected."
-        ),
-    )
-
     @model_validator(mode="after")
     def _validate_unique_application_ids(self) -> "PlatformConfig":
         app_ids = [source.app_id for source in self.application_sources]
@@ -393,26 +380,6 @@ class PlatformConfig(BaseModel):
             raise ValueError(
                 f"Duplicate application_sources app_id: {duplicates}. "
                 "A duplicate id silently shadows an application route."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_knowledge_base_definitions(self) -> "PlatformConfig":
-        ids = [entry.definition_id for entry in self.knowledge_base_definitions]
-        duplicates = sorted({value for value in ids if ids.count(value) > 1})
-        if duplicates:
-            raise ValueError(
-                f"Duplicate knowledge_base_definitions id: {duplicates}. "
-                "A duplicate id silently shadows a definition."
-            )
-        # A shared client would let one definition's pod read another's
-        # instance configuration, which is where the source secrets live.
-        clients = [entry.client_id for entry in self.knowledge_base_definitions]
-        shared = sorted({value for value in clients if clients.count(value) > 1})
-        if shared:
-            raise ValueError(
-                f"Shared knowledge_base_definitions client_id: {shared}. "
-                "Each definition needs its own confidential client."
             )
         return self
 

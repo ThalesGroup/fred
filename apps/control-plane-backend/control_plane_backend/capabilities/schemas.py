@@ -85,7 +85,7 @@ class CapabilityEnablementItem(BaseModel):
         default_factory=list,
         description="The enable-with-settings form (rendered like config fields).",
     )
-    kind: Literal["tool", "agent", "model", "app"] = Field(
+    kind: Literal["tool", "agent", "model", "app", "knowledge_base"] = Field(
         default="tool",
         description=(
             '"tool": a pod-advertised capability. "agent": a control-plane'
@@ -95,6 +95,10 @@ class CapabilityEnablementItem(BaseModel):
             " pod-advertised projection of one models_catalog.yaml"
             ' (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app":'
             " a control-plane projection of one installed Fred application."
+            ' "knowledge_base": a control-plane projection of one published'
+            " Knowledge Base definition — same enablement shape as an"
+            " application, on its own ReBAC type so no capability or"
+            " application grant can make one usable."
         ),
     )
     default_capability_ids: list[str] = Field(

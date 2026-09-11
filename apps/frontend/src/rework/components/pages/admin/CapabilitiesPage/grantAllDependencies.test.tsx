@@ -182,12 +182,16 @@ function renderAgentsTab(items: CapabilityEnablementItem[]) {
 }
 
 /** Same, for any kind tab: [tool, agent, model], plus app when the gate is on. */
-function renderKindTab(items: CapabilityEnablementItem[], index: number) {
+// Addressed by kind, never by tab position: the filter grows a kind from time
+// to time, and a positional index silently retargets every test when it does.
+function renderKindTab(items: CapabilityEnablementItem[], kind: string) {
   h.items = items;
   act(() => root.render(<CapabilitiesPage />));
-  if (index === 0) return;
-  const tabs = container.querySelectorAll('[role="radio"]');
-  act(() => (tabs[index] as HTMLElement).click());
+  if (kind === "tool") return;
+  const tabs = Array.from(container.querySelectorAll('[role="radio"]'));
+  const tab = tabs.find((element) => element.textContent?.endsWith(`kindFilter.${kind}`));
+  if (!tab) throw new Error(`no tab for kind ${kind}`);
+  act(() => (tab as HTMLElement).click());
 }
 
 const defaultOnSwitch = () => container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
@@ -373,18 +377,18 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
 // pin which branch each behaviour belongs to, which no other test asserts.
 describe("CapabilitiesPage default-on toggle routing", () => {
   it("previews the revoke impact for an ordinary capability", () => {
-    renderKindTab([cap({ id: "web_search", default_on: true })], 0);
+    renderKindTab([cap({ id: "web_search", default_on: true })], "tool");
     act(() => defaultOnSwitch()!.click());
 
     expect(h.impactCalls).toEqual(["web_search"]);
-    expect(dialog()?.textContent).toContain("defaultOffConfirm.title");
+    expect(dialog()?.textContent).toContain("defaultOffConfirm.genericTitle");
   });
 
   it("asks for no impact preview when the row is an application", () => {
     // An application has no agent instances to suspend, so the agent-specific
     // impact endpoint has nothing to say about one.
     h.applicationsEnabled = true;
-    renderKindTab([cap({ id: "app__forecast", kind: "app", default_on: true })], 3);
+    renderKindTab([cap({ id: "app__forecast", kind: "app", default_on: true })], "app");
     act(() => defaultOnSwitch()!.click());
 
     expect(h.impactCalls).toEqual([]);
@@ -394,7 +398,7 @@ describe("CapabilitiesPage default-on toggle routing", () => {
   it("routes an agent with missing dependencies to grant-all, previewing nothing", () => {
     // Turning default-on ON must never ask for a REVOKE preview: that request
     // belongs to the off path alone.
-    renderKindTab([AGENT, DEP], 1);
+    renderKindTab([AGENT, DEP], "agent");
     act(() => defaultOnSwitch()!.click());
 
     expect(h.impactCalls).toEqual([]);

@@ -1117,6 +1117,7 @@
           "agent": "Agents",
           "model": "Modèles",
           "app": "Apps",
+          "knowledge_base": "Bases de connaissances",
           "aria": "Filtrer par type de fonctionnalité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
@@ -1157,8 +1158,6 @@
         "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
         "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
         "defaultOffConfirm": {
-          "title": "Désactiver l'activation par défaut ?",
-          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
           "appTitle": "Désactiver l'application par défaut ?",
           "appMessage": "Désactiver l'activation par défaut retire l'accès hérité à l'application pour toutes les équipes. Les autorisations explicites restent inchangées.",
           "confirm": "Désactiver",
@@ -1168,7 +1167,11 @@
           "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés — leur pod était injoignable, l'impact est donc inconnu.",
           "showAffected": "Afficher les agents concernés",
           "hideAffected": "Masquer les agents concernés",
-          "affectedAgent": "{{name}} (équipe {{team}})"
+          "affectedAgent": "{{name}} (équipe {{team}})",
+          "genericTitle": "Désactiver l'activation par défaut ?",
+          "genericMessage": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
+          "knowledgeBaseTitle": "Désactiver la base de connaissances par défaut ?",
+          "knowledgeBaseMessage": "La désactivation du mode par défaut retire l'accès hérité à toutes les équipes. Les accès accordés explicitement restent inchangés."
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",
@@ -1227,7 +1230,8 @@
           "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
           "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
-        }
+        },
+        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
       },
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",

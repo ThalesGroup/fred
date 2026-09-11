@@ -28,10 +28,15 @@ import re
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
+from fred_core.security.rebac.knowledge_base_authz import (
+    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
+    knowledge_base_catalog_id,
+)
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
     CAPABILITY_ID_PATTERN,
     MODEL_CAPABILITY_NAMESPACE_PREFIX,
+    TeamScopePolicy,
 )
 
 from control_plane_backend.app.feature_flags import is_feature_enabled
@@ -181,6 +186,19 @@ async def aggregate_capability_catalog(
                     APPLICATION_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
+            if entry.kind == "knowledge_base" or entry.id.startswith(
+                KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX
+            ):
+                logger.error(
+                    "[capability-catalog] refusing kind=%r capability id %r "
+                    'from %s: kind="knowledge_base" and the %r prefix are '
+                    "reserved for control-plane projections",
+                    entry.kind,
+                    entry.id,
+                    source.base_url,
+                    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
+                )
+                continue
             existing = catalog.get(entry.id)
             if (
                 existing is not None
@@ -222,6 +240,23 @@ async def aggregate_capability_catalog(
             deps.configuration.platform.application_sources
         ):
             catalog[app.catalog_id] = app.capability_entry()
+    # Published Knowledge Base definitions, projected exactly like the
+    # applications above: same stored-not-pod-advertised origin, same
+    # enablement shape, and a distinct ReBAC type so no capability or
+    # application grant can ever make one usable.
+    for definition in await deps.get_knowledge_base_definition_store().list_all():
+        entry = CapabilityCatalogEntry(
+            id=knowledge_base_catalog_id(
+                definition.provider_id, definition.definition_id
+            ),
+            version=definition.version,
+            name=definition.name,
+            description=definition.description,
+            icon="database",
+            kind="knowledge_base",
+            team_scope=TeamScopePolicy.ADMIN_GATED,
+        )
+        catalog[entry.id] = entry
     return catalog
 
 

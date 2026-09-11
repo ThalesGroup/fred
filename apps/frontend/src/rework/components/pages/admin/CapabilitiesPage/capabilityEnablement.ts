@@ -269,6 +269,20 @@ export function sortTeamsForMatrix<T extends { id: string; name: string }>(
 }
 
 /**
+ * Whether this kind can have agent instances depending on it, and a
+ * personal-space class.
+ *
+ * False for the two control-plane-projected product objects — an application
+ * and a Knowledge Base definition. Both are things a team is simply enabled
+ * for: no agent selects them, so nothing suspends when access is revoked, and
+ * neither ReBAC type carries a personal class. Drives the health column, the
+ * revoke-impact preview and the drawer's personal row.
+ */
+export function hasAgentInstanceLifecycle(kind: CapabilityEnablementItem["kind"]): boolean {
+  return kind !== "app" && kind !== "knowledge_base";
+}
+
+/**
  * How many teams can actually use this capability (the catalog column).
  *
  * Two regimes, because access is granted two different ways:

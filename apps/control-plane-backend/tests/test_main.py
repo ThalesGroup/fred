@@ -3223,6 +3223,7 @@ def _build_erasure_deps(
         team_dependencies=None,  # type: ignore[arg-type]
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_knowledge_base_definition_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]

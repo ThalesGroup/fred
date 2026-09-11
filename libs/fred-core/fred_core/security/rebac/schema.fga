@@ -315,3 +315,27 @@ type app
     define can_manage: platform_admin from organization
     define inherited: team from default_on
     define can_use: (enabled or inherited) but not disabled
+
+type knowledge_base_definition
+  # A Knowledge Base definition configured into this deployment. The authorized
+  # object is the definition, never an instance of it — instances are
+  # team-scoped rows that follow their team. Same enablement shape as `app`,
+  # deliberately a distinct type: a capability or application grant must never
+  # make a Knowledge Base usable. No personal-space class on purpose: a personal
+  # space is enabled one definition at a time, like any other team, so nothing
+  # reaches every personal space at once.
+  relations
+    # Platform anchor for management rights.
+    define organization: [organization]
+
+    # Organization-wide default inherited through the contextual team edge.
+    define default_on: [organization]
+
+    # Explicit per-team grant and override.
+    define enabled: [team]
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    define can_manage: platform_admin from organization
+    define inherited: team from default_on
+    define can_use: (enabled or inherited) but not disabled

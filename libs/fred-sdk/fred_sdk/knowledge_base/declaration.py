@@ -13,116 +13,57 @@
 # limitations under the License.
 
 """
-The Knowledge Base declaration — the live object an author writes.
+The JSON-safe declaration an image publishes to Fred at deployment time.
 
-It holds a callable and is therefore not serializable; the JSON-safe artifact
-an operator installs is projected from it (see `manifest.py`).
+Declarations only — identity, display metadata and configuration field
+declarations. It never carries a configured value, a secret, or the handler.
 """
 
 from __future__ import annotations
 
-import inspect
-import re
-from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
-from fred_sdk.contracts.capability.manifest import CAPABILITY_ID_PATTERN
+from pydantic import BaseModel, Field
+
 from fred_sdk.contracts.models import FieldSpec
-from fred_sdk.knowledge_base.models import (
-    KnowledgeBaseRunContext,
-    KnowledgeBaseSyncResult,
+from fred_sdk.knowledge_base.knowledge_base import (
+    KNOWLEDGE_BASE_ID_PATTERN,
+    KnowledgeBase,
 )
 
-# The identifier shape is shared with capabilities on purpose: one namespace
-# convention across everything a deployment configures.
-KNOWLEDGE_BASE_ID_PATTERN = CAPABILITY_ID_PATTERN
 
-_ID_RE = re.compile(KNOWLEDGE_BASE_ID_PATTERN)
+class KnowledgeBaseDeclaration(BaseModel):
+    """Serializable projection of a `KnowledgeBase`, safe to publish."""
 
-SynchronizeHandler = Callable[
-    [KnowledgeBaseRunContext], Awaitable[KnowledgeBaseSyncResult]
-]
+    id: str = Field(min_length=1, pattern=KNOWLEDGE_BASE_ID_PATTERN)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    configuration_fields: list[FieldSpec] = Field(default_factory=list)
 
+    def to_payload(self) -> dict[str, Any]:
+        """Return the compact JSON-safe body published to Control Plane.
 
-class KnowledgeBaseDeclarationError(ValueError):
-    """Raised when a declaration is malformed or used incorrectly."""
+        Defaults and unset values are dropped, so what crosses the wire is only
+        what the author actually declared. It carries no client identity: Fred
+        binds that from the token the publishing call presents.
+        """
+        return self.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
 
+    @classmethod
+    def of(cls, knowledge_base: KnowledgeBase) -> "KnowledgeBaseDeclaration":
+        """Project a live Knowledge Base into its publishable declaration.
 
-class KnowledgeBase:
-    """One Knowledge Base an author declares and an operator installs.
-
-    Example:
-        kb = KnowledgeBase(
-            id="http-markdown",
-            version="1.0.0",
-            name="HTTP Markdown",
-            description="Synchronize Markdown documents",
-            configuration_fields=[FieldSpec(key="base_url", type="url", title="URL")],
+        Field specs are deep-copied so a later edit to the live object cannot
+        mutate a declaration already produced from it.
+        """
+        return cls(
+            id=knowledge_base.id,
+            version=knowledge_base.version,
+            name=knowledge_base.name,
+            description=knowledge_base.description,
+            configuration_fields=[
+                field.model_copy(deep=True)
+                for field in knowledge_base.configuration_fields
+            ],
         )
-
-        @kb.synchronize
-        async def synchronize(
-            context: KnowledgeBaseRunContext,
-        ) -> KnowledgeBaseSyncResult:
-            ...
-    """
-
-    def __init__(
-        self,
-        *,
-        id: str,
-        version: str,
-        name: str,
-        description: str,
-        configuration_fields: Sequence[FieldSpec] = (),
-    ) -> None:
-        if not _ID_RE.match(id):
-            raise KnowledgeBaseDeclarationError(
-                f"Knowledge Base id {id!r} must match {KNOWLEDGE_BASE_ID_PATTERN}"
-            )
-        for label, value in (
-            ("version", version),
-            ("name", name),
-            ("description", description),
-        ):
-            if not value.strip():
-                raise KnowledgeBaseDeclarationError(
-                    f"Knowledge Base {label} must not be empty"
-                )
-
-        seen: set[str] = set()
-        for field in configuration_fields:
-            if field.key in seen:
-                raise KnowledgeBaseDeclarationError(
-                    f"Duplicate configuration field key {field.key!r}"
-                )
-            seen.add(field.key)
-
-        self.id = id
-        self.version = version
-        self.name = name
-        self.description = description
-        self.configuration_fields: list[FieldSpec] = list(configuration_fields)
-        self._handler: SynchronizeHandler | None = None
-
-    def synchronize(self, handler: SynchronizeHandler) -> SynchronizeHandler:
-        """Register the one synchronization handler, and return it unchanged."""
-        if not inspect.iscoroutinefunction(handler):
-            raise KnowledgeBaseDeclarationError(
-                f"Synchronization handler {handler.__name__!r} must be async"
-            )
-        if self._handler is not None:
-            raise KnowledgeBaseDeclarationError(
-                f"Knowledge Base {self.id!r} already declares a synchronization "
-                f"handler ({self._handler.__name__!r})"
-            )
-        self._handler = handler
-        return handler
-
-    def resolve_handler(self) -> SynchronizeHandler:
-        """Return the registered handler. For the SDK runtime, not for authors."""
-        if self._handler is None:
-            raise KnowledgeBaseDeclarationError(
-                f"Knowledge Base {self.id!r} declares no synchronization handler; "
-                "decorate one with @kb.synchronize"
-            )
-        return self._handler

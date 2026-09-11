@@ -1117,6 +1117,7 @@
           "agent": "Agents",
           "model": "Models",
           "app": "Apps",
+          "knowledge_base": "Knowledge Bases",
           "aria": "Filter by feature kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
@@ -1157,8 +1158,6 @@
         "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
         "defaultToggleError": "Could not change the default-on setting.",
         "defaultOffConfirm": {
-          "title": "Disable default-on?",
-          "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
           "appTitle": "Disable application by default?",
           "appMessage": "Turning off default-on removes inherited application access from every team. Explicit team grants remain unchanged.",
           "confirm": "Disable",
@@ -1168,7 +1167,11 @@
           "impactUnknown": "{{count}} agent(s) could not be checked — their pod was unreachable, so the impact is unknown.",
           "showAffected": "Show affected agents",
           "hideAffected": "Hide affected agents",
-          "affectedAgent": "{{name}} (team {{team}})"
+          "affectedAgent": "{{name}} (team {{team}})",
+          "genericTitle": "Disable default-on?",
+          "genericMessage": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
+          "knowledgeBaseTitle": "Disable Knowledge Base by default?",
+          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged."
         },
         "matrix": {
           "title": "{{name}} — team access",
@@ -1227,7 +1230,8 @@
           "depFailed": "Could not enable {{dep}} — {{agent}} was left unchanged.",
           "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
-        }
+        },
+        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
       },
       "platformModelBindings": {
         "openButton": "Platform model binding",

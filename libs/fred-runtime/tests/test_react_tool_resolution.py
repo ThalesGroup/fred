@@ -55,7 +55,11 @@ def _resolver() -> ReActRuntimeToolResolver:
 
 
 def _provider_error_artifact() -> ToolInvocationResult:
-    secret = "sk-live-PROVIDER-SECRET /srv/private/report.docx"
+    # Synthetic bait, not a credential: this test exists to prove the classifier
+    # never lets such a string reach a user-visible artifact.
+    secret = (
+        "sk-live-PROVIDER-SECRET /srv/private/report.docx"  # pragma: allowlist secret
+    )
     return ToolInvocationResult(
         tool_ref="provider.error",
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=secret),),
