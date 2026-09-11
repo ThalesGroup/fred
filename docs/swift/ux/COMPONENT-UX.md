@@ -3384,7 +3384,12 @@ so every later open showed an empty drawer. The drawer's chrome (title band,
 inset) is dressed from the panel it is opening onto, not from the one mounted,
 or it flips mid-slide.
 
-Mounted by `CapabilitySidePanelHost` when the capability is active.
+Mounted by `CapabilitySidePanelHost` when the capability is active, through a
+`Suspense` boundary: the pane is code-split (2026-09-11) because MDXEditor pulls
+the whole lexical graph, and a static import put ~600 kB of it in the chunk every
+eagerly-routed page loads — the chat included, whether or not a document exists.
+`TeamWikiPage` splits `WikiEditor` for the same reason (it only renders in edit
+mode); both paths have to stay lazy or lexical returns to the shared chunk.
 
 Resume-if-left-open (2026-07-22, default inverted and generalised 2026-09-11):
 re-opening a conversation restores the editor pane only where the user had it
