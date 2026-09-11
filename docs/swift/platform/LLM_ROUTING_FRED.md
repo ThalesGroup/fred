@@ -118,9 +118,10 @@ no longer advertises. Guessing a model would be worse than naming none.
 
 ## Platform administration
 
-The Models view represents a concrete model by `(provider, name)`. If several
-profiles use the same concrete model, enabling it is still one administrative
-decision. Profile settings and profile ids remain pod-owned.
+The Models view represents a concrete model by `(provider, name)`, or by
+`(provider, model_id)` where a profile declares one (see the pod author guide
+below). If several profiles use the same concrete model, enabling it is still
+one administrative decision. Profile settings and profile ids remain pod-owned.
 
 For team policy, the control plane offers only profiles explicitly advertised
 as chat profiles. It never infers capability from a profile-id prefix.
@@ -174,6 +175,44 @@ profiles:
 agent_profile_overrides:
   my.expensive.agent: chat.mistral.medium
 ```
+
+Some OpenAI-compatible gateways serve each model on its own `base_url` but
+expect the same `model` value for all of them. Declare `model_id` on those
+profiles: it replaces `name` in the model's identity (its capability id), while
+`name` stays what is sent to the provider. Without it the profiles below are one
+model, sharing a label, a reasoning toggle and a team enablement decision.
+
+```yaml
+profiles:
+  - profile_id: chat.gw.mistral-small
+    capability: chat
+    model_id: mistral-small
+    model_display_name: Mistral Small 4
+    model:
+      provider: openai
+      name: mistral
+      settings:
+        base_url: https://gateway.example/small/v1
+
+  - profile_id: chat.gw.mistral-medium
+    capability: chat
+    model_id: mistral-medium
+    model_display_name: Mistral Medium 3.1
+    model:
+      provider: openai
+      name: mistral
+      settings:
+        base_url: https://gateway.example/medium/v1
+```
+
+Declare `model_display_name` on every profile you give a `model_id`: the
+composer labels a model by its display name and falls back to the wire `name`,
+which the siblings share, so without it both still read as the same model.
+
+Adopting `model_id` on an existing deployment changes those models' capability
+ids, so their team enablement and reasoning toggle must be set again. Give each
+model a `model_id` no other profile can reach — one that collides with another
+profile's `model_id`, or with a plain `name`, merges them back into one model.
 
 Authoring rules:
 

@@ -961,6 +961,49 @@ async def test_effective_model_lets_the_pod_static_override_win(
 
 
 @pytest.mark.asyncio
+async def test_effective_model_names_the_entry_owning_the_winning_profile(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    """Pins the "no control-plane change needed" decision: given pod entries the
+    pod has ALREADY split (same wire `name`, distinct capability ids because its
+    profiles declare `model_id`), this resolution takes the label and the
+    reasoning flag from the entry owning the winning profile. It does not cover
+    the pod-side merge, which is a runtime concern."""
+
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry(
+                "model__openai__mistral-small",
+                "chat.gw.small",
+                name="mistral",
+                display_name="Mistral Small 4",
+            ),
+            _chat_entry(
+                "model__openai__mistral-medium",
+                "chat.gw.medium",
+                name="mistral",
+                display_name="Mistral Medium 3.1",
+            ),
+        ],
+        default_chat_profile_id="chat.gw.small",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.gw.medium",
+            reasoning_enabled_ids={"model__openai__mistral-small"},
+        ),
+    )
+    assert result.display_name == "Mistral Medium 3.1"
+    assert result.capability_id == "model__openai__mistral-medium"
+    # The sibling's toggle must not surface an inert control on this model.
+    assert result.reasoning_enabled is False
+
+
+@pytest.mark.asyncio
 async def test_effective_model_reports_a_model_not_enabled_for_the_team(
     monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
 ) -> None:

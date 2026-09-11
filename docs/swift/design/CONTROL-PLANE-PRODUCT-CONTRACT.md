@@ -1374,10 +1374,11 @@ kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
-has one enablement decision even if different typed consumers eventually use
-it) — and deriving the id itself
-(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+per distinct model identity — not per `profile_id` (a concrete model has one
+enablement decision even if different typed consumers eventually use it) — and
+deriving the id itself (`ModelProfile.capability_id`, which is
+`model_capability_id(provider, model_id or name)` — see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
 agent fetches (same best-effort contract — `None` on an unreachable pod),
