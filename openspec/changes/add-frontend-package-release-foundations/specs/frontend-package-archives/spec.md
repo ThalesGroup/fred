@@ -163,9 +163,16 @@ dependency tree.
 
 Disposable offline consumer manifests and lockfiles MAY contain npm-generated `file:`
 references to the exact staged candidate `.tgz` files. Each permitted reference MUST
-identify a regular tarball file inside the disposable consumer, and the referenced bytes
-MUST match the candidate evidence before installation. No directory target, unexpected
-local file, checkout path, symlinked package, or reused FRED dependency tree is permitted.
+map by package identity to an approved candidate evidence record, identify a regular
+non-symlink tarball file whose real path remains inside the disposable consumer, and match
+the recorded archive filename, bytes, and lock integrity. Validation MUST inspect all
+applicable root and nested manifest/lock dependency fields and local lock resolutions before
+dependency installation; a matching archive basename alone MUST NOT authorize a reference.
+Permitted generated `file:` references MUST use unencoded, unambiguous relative paths; percent
+encoding, query strings, fragments, and backslashes MUST be rejected so validation and npm
+cannot resolve different targets.
+No directory target, unexpected or additional local file, checkout path, unmatched nested
+dependency, symlinked package, or reused FRED dependency tree is permitted.
 Production-host integration MUST run the host with dependencies installed from the FRED
 application's own lockfile while loading the SDK under test only from its verified archive
 or exact registry installation.
@@ -188,6 +195,24 @@ or exact registry installation.
 - **WHEN** a disposable consumer reference resolves to a directory, workspace member,
   symlink, checkout path, or local file other than the integrity-verified staged tarball
 - **THEN** isolated-consumer validation fails before building
+
+#### Scenario: An additional lock entry reuses an approved filename
+
+- **WHEN** a root or nested lock entry names an unapproved package, escapes the consumer, or
+  resolves different bytes under the same basename as an approved candidate archive
+- **THEN** isolated-consumer validation fails before `npm ci` despite the filename match
+
+#### Scenario: A nested local dependency lacks matching evidence
+
+- **WHEN** any dependency-reference field or local lock resolution identifies a package,
+  archive real path, version, or integrity value that does not match its approved evidence
+- **THEN** isolated-consumer validation rejects the complete graph before dependencies are used
+
+#### Scenario: A file reference encodes a different path
+
+- **WHEN** a local tarball reference uses encoded traversal or separators, a query, a fragment,
+  or a backslash that npm could interpret differently from a literal filesystem check
+- **THEN** isolated-consumer validation rejects the ambiguous reference before dependency use
 
 #### Scenario: A consumer resolves a development or workspace package
 
@@ -233,12 +258,33 @@ and silent fallback. Its local automated tests MUST use controlled registry fixt
 equivalent deterministic responses and MUST label their result as tooling validation,
 not as proof that packages were genuinely published.
 
+The command MUST discover the attestation document from npm's raw
+`dist.attestations.url` version-metadata field, MUST validate that it is an allowed npm
+attestation endpoint for the exact expected coordinate, and MUST re-root its pathname onto
+the explicitly approved registry before fetching. It MUST reject a missing, malformed,
+credential-bearing, non-HTTP(S), fragment-bearing, endpoint-mismatched, or
+coordinate-mismatched URL. The sibling provenance predicate metadata MUST NOT be treated as
+the endpoint location.
+
 #### Scenario: Published candidates match recorded evidence
 
 - **WHEN** the command is given the three exact published coordinates and their recorded
   integrity values and the public registry serves matching packages with provenance
 - **THEN** clean registry-only token, UI, and SDK consumers pass their applicable build,
   browser, and compatibility checks
+
+#### Scenario: npm metadata provides the attestation endpoint
+
+- **WHEN** exact-version metadata supplies a valid `dist.attestations.url` for the selected
+  coordinate
+- **THEN** the verifier fetches that endpoint only through the approved registry and performs
+  the required cryptographic and expected-release identity checks
+
+#### Scenario: The attestation endpoint metadata is invalid
+
+- **WHEN** `dist.attestations.url` is absent, malformed, disallowed, or names a different
+  package coordinate or endpoint
+- **THEN** registry verification fails before accepting or fetching provenance
 
 #### Scenario: Valid provenance names an unexpected repository
 

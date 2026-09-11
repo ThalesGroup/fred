@@ -16,8 +16,10 @@ authorize any publication.
   and the producer lockfile.
 - Validate dependency references by boundary: permit only npm-generated links for the declared
   private-workspace members; reject local dependency protocols from published manifests; permit
-  integrity-verified candidate-tarball references in disposable offline consumers; and require
-  registry-installed consumers to resolve exact registry versions without local fallback.
+  integrity-verified candidate-tarball references in disposable offline consumers only when every
+  manifest and lock entry uses an unambiguous path and matches an approved package identity and
+  archive; validate that graph before dependency installation; and require registry-installed
+  consumers to resolve exact registry versions without local fallback.
 - Validate actual candidate tarballs against selected expected coordinates and the complete
   existing archive contracts rather than trusting metadata declared by an archive.
 - Record immutable candidate evidence: source commit, exact Node/npm versions, package
@@ -30,6 +32,9 @@ authorize any publication.
   explicit release expectations, and exercises clean registry-installed consumers. A valid
   signature alone does not establish the intended release identity. Local tests of the command
   remain distinct from evidence of a successful run against genuinely published packages.
+- Read npm provenance discovery from the registry's `dist.attestations.url` metadata shape,
+  re-root its approved endpoint path onto the selected registry as npm does, and fail closed on
+  missing, malformed, disallowed, or coordinate-mismatched attestation endpoints.
 - Pin the producer release toolchain exactly and preserve the separately controlled tooling
   used by CI jobs that also run FRED application tests.
 - Extend CI selection and regression coverage for release inputs, and add a compact release

@@ -14,8 +14,10 @@ import {
   assertProvenanceIdentity,
   buildRegistryConsumers,
   provenanceIdentityFromStatement,
+  resolveNpmRegistryPackage,
   statementFromDsseEnvelope,
   verifyFixtureSignature,
+  verifyNpmPackageProvenance,
   verifyProvenanceAttestation,
   verifyRegistryTooling,
 } from "../scripts/registry-verifier.mjs";
@@ -79,6 +81,164 @@ const applicationToolchain = {
   node: "22.13.0",
   npm: "10.9.2",
 };
+
+test("uses npm's dist.attestations.url metadata path for provenance", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-npm-metadata-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const selected = fixtureContract.packages.ui;
+  const coordinate = `${selected.name}@${selected.version}`;
+  const filename = "fred-ui-metadata-fixture.tgz";
+  const archivePath = path.join(root, filename);
+  await writeFile(archivePath, "npm metadata fixture archive");
+  const integrity = await sha512Integrity(archivePath);
+  const provenanceUrl =
+    "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development";
+  const metadata = {
+    name: selected.name,
+    version: selected.version,
+    dist: {
+      integrity,
+      attestations: {
+        url: provenanceUrl,
+        provenance: {
+          predicateType: "https://slsa.dev/provenance/v1",
+        },
+      },
+    },
+  };
+  const commands = [];
+  const runCommand = async (command, args) => {
+    commands.push([command, ...args]);
+    if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
+    if (args[0] === "pack") return { stdout: JSON.stringify([{ filename }]) };
+    return { stdout: "" };
+  };
+  const registryPackage = await resolveNpmRegistryPackage({
+    coordinate,
+    registry: fixtureContract.registry,
+    root,
+    runCommand,
+  });
+  assert.equal(registryPackage.provenanceUrl, provenanceUrl);
+
+  const identity = expected("ui", integrity);
+  const [workflowLocation, workflowRef] = identity.workflow.split("@");
+  const statement = {
+    subject: [{ digest: { sha512: integrity.slice("sha512-".length) } }],
+    predicate: {
+      buildDefinition: {
+        externalParameters: {
+          workflow: {
+            repository: identity.repository,
+            path: workflowLocation.slice(`${identity.repository}/`.length),
+            ref: workflowRef,
+          },
+        },
+        resolvedDependencies: [
+          { digest: { gitCommit: identity.sourceCommit } },
+        ],
+      },
+    },
+  };
+  const document = {
+    attestations: [
+      {
+        predicateType: "https://slsa.dev/provenance/v1",
+        bundle: {
+          dsseEnvelope: {
+            payloadType: "application/vnd.in-toto+json",
+            payload: Buffer.from(JSON.stringify(statement)).toString("base64"),
+          },
+        },
+      },
+    ],
+  };
+  let fetched;
+  const result = await verifyNpmPackageProvenance(registryPackage, {
+    registry: fixtureContract.registry,
+    expectedProvenance: identity,
+    certificateIssuer: fixtureContract.expectedProvenance.certificateIssuer,
+    runCommand,
+    fetchAttestation: async (url) => {
+      fetched = url;
+      return { ok: true, status: 200, json: async () => document };
+    },
+    verifyBundle: async () => {},
+  });
+  assert.equal(fetched.href, provenanceUrl);
+  assert.deepEqual(result.identity, identity);
+  assert(commands.some(([, command]) => command === "audit"));
+});
+
+test("rejects missing, malformed, and disallowed npm attestation URLs", async (context) => {
+  const selected = fixtureContract.packages.ui;
+  const coordinate = `${selected.name}@${selected.version}`;
+  for (const [label, attestations, error] of [
+    ["missing", { provenance: {} }, /attestation URL is missing/],
+    ["malformed", { url: "not a URL" }, /attestation URL is malformed/],
+    [
+      "protocol",
+      { url: "file:///tmp/attestations" },
+      /attestation URL protocol is disallowed/,
+    ],
+    [
+      "path",
+      { url: "https://registry.npmjs.org/unapproved/attestations" },
+      /attestation URL path is disallowed/,
+    ],
+    [
+      "credentials",
+      {
+        url: "https://user:secret@registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development",
+      },
+      /attestation URL credentials are disallowed/,
+    ],
+    [
+      "fragment",
+      {
+        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development#other",
+      },
+      /attestation URL fragment is disallowed/,
+    ],
+    [
+      "coordinate",
+      {
+        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fother@0.0.0-development",
+      },
+      /attestation URL coordinate differs/,
+    ],
+  ]) {
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), `fred-npm-metadata-${label}-`),
+    );
+    context.after(() => rm(root, { recursive: true, force: true }));
+    const filename = `${label}.tgz`;
+    const archivePath = path.join(root, filename);
+    await writeFile(archivePath, `${label} archive`);
+    const metadata = {
+      name: selected.name,
+      version: selected.version,
+      dist: {
+        integrity: await sha512Integrity(archivePath),
+        attestations,
+      },
+    };
+    await assert.rejects(
+      resolveNpmRegistryPackage({
+        coordinate,
+        registry: fixtureContract.registry,
+        root,
+        runCommand: async (_command, args) => {
+          if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
+          if (args[0] === "pack")
+            return { stdout: JSON.stringify([{ filename }]) };
+          return { stdout: "" };
+        },
+      }),
+      error,
+    );
+  }
+});
 
 test("controlled provenance fixtures perform a real cryptographic signature check", () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");

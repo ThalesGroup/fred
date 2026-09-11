@@ -188,11 +188,17 @@ The disposable consumer is allowed to name only its copied candidate `.tgz` file
 npm's generated `file:` manifest or lockfile representation. Before installation, the
 orchestrator resolves each target without following an escape, requires it to be a regular
 tarball file within the temporary consumer, and compares its SHA-512 with candidate evidence.
-The generated lock is then allowed to retain that exact archive reference. A `file:` target
-to a directory, a different file, a symlink, any checkout path, or an archive whose bytes do
-not match is rejected. Installed FRED packages themselves must be ordinary extracted
-directories, not symlinks. Registry dependencies such as React continue to resolve from the
-prepared cache during candidate validation.
+The generated manifest and lock are validated before `npm ci` or any build consumes the graph.
+Every local reference in root or nested dependency fields and every local lock resolution must
+map by package name to one approved evidence record, resolve to a contained non-symlink regular
+file, and match both the recorded archive bytes and lock integrity. A matching basename alone
+is never sufficient. Because npm URL-decodes `file:` specifications, the narrow generated
+consumer contract rejects percent encoding, query strings, fragments, and backslashes rather
+than validating a different literal pathname. A `file:` target to a directory, a different or
+additional file, a symlink, any checkout path, an unapproved package identity, a nested unmatched
+dependency, or an archive whose bytes do not match is rejected. Installed FRED packages
+themselves must be ordinary extracted directories, not symlinks. Registry dependencies such as
+React continue to resolve from the prepared cache during candidate validation.
 
 Provisioning remains a distinct network-capable operation. Browser execution performs no
 installation. Package renaming cannot be accomplished by blind string replacement inside
@@ -222,6 +228,16 @@ equal the candidate commit, and the publisher identity must equal the specifical
 Trusted Publishing workflow identity. Expected values are never populated from the downloaded
 attestation. A correctly signed statement for another repository, commit, workflow, or artifact
 is therefore rejected as the wrong release.
+
+Provenance discovery follows npm's actual registry metadata contract: `npm view --json` exposes
+the attestation endpoint at `dist.attestations.url`, while the sibling `provenance` object only
+describes its predicate type. Matching npm/pacote's registry restriction, the verifier parses
+the advertised absolute HTTP(S) URL, requires the npm attestation endpoint and exact coordinate,
+then re-roots only its pathname onto the explicitly approved registry. Missing, malformed,
+credential-bearing, non-HTTP(S), fragment-bearing, endpoint-mismatched, or coordinate-mismatched
+values fail before provenance is fetched. Controlled adapter tests feed representative raw npm
+metadata and continue through the same fetch and cryptographic-verification path used by the CLI;
+they do not mock an already normalized `resolvePackage` result.
 
 It then materializes clean versions of the existing consumers using exact registry
 coordinates, creates/uses their registry-derived lock graphs, and runs the applicable
@@ -303,7 +319,12 @@ operation only.
   comparison after cryptographic verification.
 - **[Broad local-reference rejection would reject npm's intended graphs]** → Validate each
   boundary separately: allow only declared producer links and integrity-matched disposable
-  tarballs, while keeping published manifests and registry consumers local-reference-free.
+  tarballs whose package identity, contained real path, bytes, and lock integrity all match
+  approved evidence, rejecting npm-decoded path ambiguity, while keeping published manifests and
+  registry consumers local-reference-free.
+- **[Registry metadata shape is handled incorrectly or points elsewhere]** → Read npm's
+  `dist.attestations.url`, validate its endpoint and coordinate, re-root the pathname to the
+  approved registry, and exercise raw npm-shaped responses in controlled adapter tests.
 - **[Staged publishing may appear to solve bootstrap]** → State explicitly that it requires an
   existing package and separate initial package creation authority.
 - **[Independent versions add release coordination]** → Encode the selected UI/token pairing

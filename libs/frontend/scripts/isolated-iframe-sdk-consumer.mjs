@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { parameterizeConsumerSources } from "./consumer-contract.mjs";
-import { assertOfflineConsumerReferences } from "./dependency-boundaries.mjs";
+import { installAfterOfflineReferenceValidation } from "./dependency-boundaries.mjs";
 import { packIframeSdk } from "./pack-iframe-sdk.mjs";
 import { run } from "./process.mjs";
 import { iframeSdkConsumerCache } from "./provision-iframe-sdk-consumer.mjs";
@@ -140,6 +140,15 @@ export async function stageIsolatedIframeSdkConsumer({
     );
     const archiveTarget = path.join(consumerRoot, "iframe-sdk.tgz");
     await cp(archivePath, archiveTarget);
+    const candidateEvidence = {
+      packages: {
+        iframeSdk: {
+          coordinate: `${contract.packages.iframeSdk.name}@${contract.packages.iframeSdk.version}`,
+          filename: path.basename(archiveTarget),
+          integrity: await sha512Integrity(archiveTarget),
+        },
+      },
+    };
     const env = offlineEnvironment(cachePath);
     try {
       await run(
@@ -155,21 +164,32 @@ export async function stageIsolatedIframeSdkConsumer({
         ],
         { cwd: consumerRoot, env },
       );
-      await run(
-        "npm",
-        [
-          "ci",
-          "--offline",
-          "--include=dev",
-          "--ignore-scripts",
-          "--no-audit",
-          "--no-fund",
-        ],
-        {
-          cwd: consumerRoot,
-          env,
-        },
-      );
+      await installAfterOfflineReferenceValidation({
+        manifest: JSON.parse(
+          await readFile(path.join(consumerRoot, "package.json"), "utf8"),
+        ),
+        lockfile: JSON.parse(
+          await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
+        ),
+        consumerRoot,
+        evidence: candidateEvidence,
+        installDependencies: () =>
+          run(
+            "npm",
+            [
+              "ci",
+              "--offline",
+              "--include=dev",
+              "--ignore-scripts",
+              "--no-audit",
+              "--no-fund",
+            ],
+            {
+              cwd: consumerRoot,
+              env,
+            },
+          ),
+      });
     } catch (error) {
       throw new Error(
         `Offline iframe SDK consumer installation failed using ${cachePath}. Run npm run consumer:provision:iframe-sdk with network access, then retry.\n${error.message}`,
@@ -201,24 +221,6 @@ export async function stageIsolatedIframeSdkConsumer({
             name !== contract.packages.iframeSdk.name),
       ),
     );
-    await assertOfflineConsumerReferences({
-      manifest: JSON.parse(
-        await readFile(path.join(consumerRoot, "package.json"), "utf8"),
-      ),
-      lockfile: JSON.parse(
-        await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
-      ),
-      consumerRoot,
-      evidence: {
-        packages: {
-          iframeSdk: {
-            coordinate: `${contract.packages.iframeSdk.name}@${contract.packages.iframeSdk.version}`,
-            filename: path.basename(archiveTarget),
-            integrity: await sha512Integrity(archiveTarget),
-          },
-        },
-      },
-    });
     await assertNoLinks(
       path.join(consumerRoot, "node_modules", contract.packages.iframeSdk.name),
     );

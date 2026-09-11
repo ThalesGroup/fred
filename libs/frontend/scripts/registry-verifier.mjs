@@ -254,6 +254,163 @@ export async function buildRegistryConsumers({
   return results;
 }
 
+export async function resolveNpmRegistryPackage({
+  coordinate,
+  registry,
+  root,
+  runCommand = run,
+}) {
+  const { stdout: metadataJson } = await runCommand(
+    "npm",
+    ["view", coordinate, "--json", "--registry", registry],
+    { cwd: root },
+  );
+  const metadata = JSON.parse(metadataJson);
+  const coordinateSeparator = coordinate.lastIndexOf("@");
+  assert(coordinateSeparator > 0, `invalid registry coordinate ${coordinate}`);
+  assert.equal(
+    metadata.name,
+    coordinate.slice(0, coordinateSeparator),
+    `${coordinate} metadata name differs`,
+  );
+  assert.equal(
+    metadata.version,
+    coordinate.slice(coordinateSeparator + 1),
+    `${coordinate} metadata version differs`,
+  );
+  const { stdout: packJson } = await runCommand(
+    "npm",
+    [
+      "pack",
+      coordinate,
+      "--json",
+      "--ignore-scripts",
+      "--pack-destination",
+      root,
+      "--registry",
+      registry,
+    ],
+    { cwd: root },
+  );
+  const [packed] = JSON.parse(packJson);
+  const archivePath = path.join(root, packed.filename);
+  const integrity = await sha512Integrity(archivePath);
+  assert.equal(
+    metadata.dist?.integrity,
+    integrity,
+    `${coordinate} metadata integrity differs`,
+  );
+  const advertisedAttestationUrl = metadata.dist?.attestations?.url;
+  assert.equal(
+    typeof advertisedAttestationUrl,
+    "string",
+    `${coordinate} attestation URL is missing`,
+  );
+  let advertised;
+  try {
+    advertised = new URL(advertisedAttestationUrl);
+  } catch (error) {
+    throw new Error(`${coordinate} attestation URL is malformed`, {
+      cause: error,
+    });
+  }
+  assert(
+    ["http:", "https:"].includes(advertised.protocol),
+    `${coordinate} attestation URL protocol is disallowed`,
+  );
+  assert.equal(
+    advertised.username || advertised.password,
+    "",
+    `${coordinate} attestation URL credentials are disallowed`,
+  );
+  assert.equal(
+    advertised.hash,
+    "",
+    `${coordinate} attestation URL fragment is disallowed`,
+  );
+  assert(
+    advertised.pathname.startsWith("/-/npm/v1/attestations/"),
+    `${coordinate} attestation URL path is disallowed`,
+  );
+  let attestedCoordinate;
+  try {
+    attestedCoordinate = decodeURIComponent(
+      advertised.pathname.slice("/-/npm/v1/attestations/".length),
+    );
+  } catch (error) {
+    throw new Error(`${coordinate} attestation URL is malformed`, {
+      cause: error,
+    });
+  }
+  assert.equal(
+    attestedCoordinate,
+    coordinate,
+    `${coordinate} attestation URL coordinate differs`,
+  );
+  const provenanceUrl = new URL(advertised.pathname, registry);
+  assert.equal(
+    provenanceUrl.origin,
+    new URL(registry).origin,
+    `${coordinate} attestation URL escaped the approved registry`,
+  );
+  await writeFile(
+    path.join(root, "package.json"),
+    `${JSON.stringify({ private: true, dependencies: { [metadata.name]: metadata.version } })}\n`,
+  );
+  await runCommand(
+    "npm",
+    [
+      "install",
+      "--package-lock-only",
+      "--ignore-scripts",
+      "--registry",
+      registry,
+    ],
+    { cwd: root },
+  );
+  return {
+    coordinate,
+    archivePath,
+    integrity,
+    metadata,
+    provenanceUrl: provenanceUrl.href,
+    root,
+  };
+}
+
+export async function verifyNpmPackageProvenance(
+  registryPackage,
+  {
+    registry,
+    expectedProvenance,
+    certificateIssuer,
+    runCommand = run,
+    fetchAttestation = fetch,
+    verifyBundle = verifySigstoreBundle,
+  },
+) {
+  await runCommand("npm", ["audit", "signatures", "--registry", registry], {
+    cwd: registryPackage.root,
+  });
+  const attestationUrl = new URL(registryPackage.provenanceUrl);
+  assert.equal(
+    attestationUrl.origin,
+    new URL(registry).origin,
+    "provenance URL escaped the approved registry",
+  );
+  const response = await fetchAttestation(attestationUrl);
+  assert.equal(
+    response.ok,
+    true,
+    `provenance fetch failed: ${response.status}`,
+  );
+  return verifyProvenanceAttestation(await response.json(), {
+    expectedWorkflow: expectedProvenance.workflow,
+    certificateIssuer,
+    verifyBundle,
+  });
+}
+
 function optionValue(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
@@ -284,89 +441,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           path.join(os.tmpdir(), "fred-registry-package-"),
         );
         roots.push(root);
-        const { stdout: metadataJson } = await run(
-          "npm",
-          ["view", coordinate, "--json", "--registry", registry],
-          { cwd: root },
-        );
-        const metadata = JSON.parse(metadataJson);
-        const { stdout: packJson } = await run(
-          "npm",
-          [
-            "pack",
-            coordinate,
-            "--json",
-            "--ignore-scripts",
-            "--pack-destination",
-            root,
-            "--registry",
-            registry,
-          ],
-          { cwd: root },
-        );
-        const [packed] = JSON.parse(packJson);
-        const archivePath = path.join(root, packed.filename);
-        const integrity = await sha512Integrity(archivePath);
-        assert.equal(
-          metadata.dist?.integrity,
-          integrity,
-          `${coordinate} metadata integrity differs`,
-        );
-        const provenanceUrl = metadata.dist?.attestations?.provenance?.url;
-        assert(provenanceUrl, `${coordinate} provenance URL is missing`);
-        await writeFile(
-          path.join(root, "package.json"),
-          `${JSON.stringify({ private: true, dependencies: { [metadata.name]: metadata.version } })}\n`,
-        );
-        await run(
-          "npm",
-          [
-            "install",
-            "--package-lock-only",
-            "--ignore-scripts",
-            "--registry",
-            registry,
-          ],
-          { cwd: root },
-        );
-        return {
-          coordinate,
-          archivePath,
-          integrity,
-          metadata,
-          provenanceUrl,
-          root,
-        };
+        return resolveNpmRegistryPackage({ coordinate, registry, root });
       },
       verifyPackageSignature: async (
         registryPackage,
         { expectedProvenance, certificateIssuer },
-      ) => {
-        await run(
-          "npm",
-          ["audit", "signatures", "--registry", contract.registry],
-          { cwd: registryPackage.root },
-        );
-        const attestationUrl = new URL(
-          new URL(registryPackage.provenanceUrl).pathname,
-          contract.registry,
-        );
-        assert.equal(
-          attestationUrl.origin,
-          new URL(contract.registry).origin,
-          "provenance URL escaped the approved registry",
-        );
-        const response = await fetch(attestationUrl);
-        assert.equal(
-          response.ok,
-          true,
-          `provenance fetch failed: ${response.status}`,
-        );
-        return verifyProvenanceAttestation(await response.json(), {
-          expectedWorkflow: expectedProvenance.workflow,
+      ) =>
+        verifyNpmPackageProvenance(registryPackage, {
+          registry: contract.registry,
+          expectedProvenance,
           certificateIssuer,
-        });
-      },
+        }),
       installConsumers: async ({ contract: selected, evidence: candidate }) => {
         const consumers = await buildRegistryConsumers({
           contract: selected,

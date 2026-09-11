@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { parameterizeConsumerSources } from "./consumer-contract.mjs";
-import { assertOfflineConsumerReferences } from "./dependency-boundaries.mjs";
+import { installAfterOfflineReferenceValidation } from "./dependency-boundaries.mjs";
 import { packDesignTokens } from "./pack-design-tokens.mjs";
 import { packUi } from "./pack-ui.mjs";
 import { run } from "./process.mjs";
@@ -180,6 +180,20 @@ export async function stageIsolatedReactConsumer({
     const tokenTarget = path.join(consumerRoot, "design-tokens.tgz");
     const uiTarget = path.join(consumerRoot, "ui.tgz");
     await Promise.all([cp(tokenArchive, tokenTarget), cp(uiArchive, uiTarget)]);
+    const candidateEvidence = {
+      packages: {
+        designTokens: {
+          coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+          filename: path.basename(tokenTarget),
+          integrity: await sha512Integrity(tokenTarget),
+        },
+        ui: {
+          coordinate: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
+          filename: path.basename(uiTarget),
+          integrity: await sha512Integrity(uiTarget),
+        },
+      },
+    };
     const env = offlineEnvironment(cachePath);
     let archiveResolution;
     let dependencyInstall;
@@ -199,18 +213,29 @@ export async function stageIsolatedReactConsumer({
         ],
         { cwd: consumerRoot, env },
       );
-      dependencyInstall = await run(
-        "npm",
-        [
-          "ci",
-          "--offline",
-          "--include=dev",
-          "--ignore-scripts",
-          "--no-audit",
-          "--no-fund",
-        ],
-        { cwd: consumerRoot, env },
-      );
+      dependencyInstall = await installAfterOfflineReferenceValidation({
+        manifest: JSON.parse(
+          await readFile(path.join(consumerRoot, "package.json"), "utf8"),
+        ),
+        lockfile: JSON.parse(
+          await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
+        ),
+        consumerRoot,
+        evidence: candidateEvidence,
+        installDependencies: () =>
+          run(
+            "npm",
+            [
+              "ci",
+              "--offline",
+              "--include=dev",
+              "--ignore-scripts",
+              "--no-audit",
+              "--no-fund",
+            ],
+            { cwd: consumerRoot, env },
+          ),
+      });
     } catch (error) {
       throw new Error(
         `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. Run npm run consumer:provision with network access, then retry offline validation.\n${error.message}`,
@@ -259,29 +284,6 @@ export async function stageIsolatedReactConsumer({
       originalLock,
       "offline validation changed the committed pinned lockfile",
     );
-    await assertOfflineConsumerReferences({
-      manifest: JSON.parse(
-        await readFile(path.join(consumerRoot, "package.json"), "utf8"),
-      ),
-      lockfile: JSON.parse(
-        await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
-      ),
-      consumerRoot,
-      evidence: {
-        packages: {
-          designTokens: {
-            coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
-            filename: path.basename(tokenTarget),
-            integrity: await sha512Integrity(tokenTarget),
-          },
-          ui: {
-            coordinate: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
-            filename: path.basename(uiTarget),
-            integrity: await sha512Integrity(uiTarget),
-          },
-        },
-      },
-    });
     await Promise.all([
       assertNoLinks(
         path.join(

@@ -215,6 +215,22 @@
   modes, and documentation; resolve every in-scope finding and record any genuinely external
   maintainer gate without weakening acceptance criteria.
 
+## 10. Confirmed release-validation corrections
+
+- [x] 10.1 Correct the real npm registry adapter to consume raw `dist.attestations.url`
+  metadata, validate and re-root only the allowed exact-coordinate endpoint onto the approved
+  registry, and continue through npm signature audit, Sigstore verification, and independent
+  digest/repository/commit/workflow comparison; verify controlled adapter-level tests accept the
+  representative npm shape and reject missing, malformed, disallowed, and coordinate-mismatched
+  URLs without mocking an already normalized registry result.
+- [x] 10.2 Replace basename-only offline lock acceptance with complete package-identity,
+  manifest/lock consistency, contained realpath, non-symlink regular-file, archive-integrity,
+  lock-integrity, version, and root/nested dependency-field validation; verify same-basename
+  escapes, npm-decoded traversal/separator ambiguity, query/fragment forms, additional different
+  bytes, directory and symlink targets, unmatched nested/local dependencies, and mismatched
+  integrity fail before `npm ci`, while approved candidate tarballs and private producer workspace
+  links retain their separate valid boundaries.
+
 ## Coordinate-independent phase evidence (2026-09-11)
 
 - Tracking: [ThalesGroup/fred#2630](https://github.com/ThalesGroup/fred/issues/2630).
@@ -232,6 +248,34 @@
   policy binding, fixture-to-approved promotion prevention, exact application Node/npm evidence,
   genuine registry browser/host execution, and public-evidence labelling. Final re-review found
   no remaining in-scope correctness or security issue.
+- Follow-up review corrections reproduce the npm endpoint bug against raw
+  `dist.attestations.url` metadata and the same-basename offline-lock bypass before their fixes.
+  Focused tests then verify npm/pacote-compatible registry re-rooting plus attestation URL
+  failures, and complete local-reference identity/realpath/bytes/integrity validation before
+  offline dependency installation.
+- Independent follow-up review reproduced a percent-encoded `file:` traversal that npm resolves
+  differently from a literal filesystem path. The narrow offline archive contract now rejects
+  percent encoding, query strings, fragments, and backslashes, with encoded traversal and
+  separator regressions proving validation cannot authorize different installer bytes.
 - Tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain gated on maintainer-confirmed scope,
   coordinates, owners, bootstrap authority, registry policy, and publishing workflow identity.
   No provisional contract may satisfy them.
+
+## Confirmed-correction evidence (2026-09-11)
+
+- The focused regression commands initially failed four cases: raw npm-shaped metadata reported
+  the attestation URL missing, while same-basename escaping and directory local lock entries did
+  not reject, and npm-decoded traversal was accepted. After correction it passes 18/18 tests,
+  including the npm adapter, provenance
+  continuation, URL failure modes, local-reference identity/realpath/bytes/version/integrity,
+  root/nested fields, and validation-before-install ordering.
+- `npm run release:check`, `npm run release:test` (38 tests), `npm run lint`, `npm run format`,
+  and `npm test` (232 tests) pass with Node `22.13.0` and npm `10.9.2`.
+- `npm run pack:check` validates the actual development token, UI, and iframe SDK archives;
+  separately provisioned caches then support `npm run test:consumer` entirely offline.
+  `npm run test:host-integration` and the pre-provisioned `npm run test:browser` pass, with the
+  browser evidence reporting zero dependency installations, browser provisioning, or external
+  requests during smoke execution.
+- These remain fixture/development results. Node `24.21.0` and npm `11.19.0` are not installed in
+  this checkout, and no confirmed coordinates or authorized identities exist, so tasks 9.1 and
+  9.2 remain correctly unchecked rather than being satisfied by development evidence.

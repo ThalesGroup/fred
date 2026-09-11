@@ -30,11 +30,14 @@ resolve inside this checkout. Published manifests reject `workspace:`, `file:`, 
 directory, or source-checkout dependency references.
 
 Disposable offline consumers may contain npm-generated `file:` references to the exact
-candidate tarballs named by verified evidence. Those references must remain inside the
-isolated consumer and match the recorded SHA-512 integrity. Directory dependencies, workspace
-links, checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry
-consumer has a stricter boundary: every FRED dependency must resolve to the exact expected
-registry coordinate and integrity without a local fallback.
+candidate tarballs named by verified evidence. Before `npm ci`, every root or nested local
+manifest/lock reference must map to an approved package identity, remain a non-symlink regular
+file inside the isolated consumer, and match the recorded filename, package version, archive
+SHA-512, and lock integrity. A matching basename alone is insufficient. Directory dependencies,
+percent-encoded/query/fragment/backslash path ambiguity, additional local archives, workspace
+links, checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry consumer
+has a stricter boundary: every FRED dependency must resolve to the exact expected registry
+coordinate and integrity without a local fallback.
 
 ## Coordinate-independent checks
 
@@ -92,7 +95,10 @@ The verifier does not fall back to local tarballs or workspace sources. Signatur
 necessary but insufficient: Sigstore verification first requires the expected workflow
 certificate URI and issuer, then the attested artifact digest, source repository, source commit,
 and authorized workflow identity must independently match the confirmed contract and candidate
-evidence. Controlled local tests of this behavior are not a successful public-registry run.
+evidence. Provenance discovery reads npm's `dist.attestations.url`, validates its npm endpoint
+and exact coordinate, and re-roots only its pathname onto the approved registry before fetching;
+missing, malformed, or disallowed endpoint metadata fails closed. Controlled local tests of this
+behavior are not a successful public-registry run.
 
 ## Maintainer decisions and sequencing
 

@@ -21,7 +21,56 @@ function fileTarget(specifier) {
     specifier.startsWith("file:"),
     "candidate dependency must use npm file: syntax",
   );
-  return specifier.slice("file:".length);
+  const target = specifier.slice("file:".length);
+  assert(
+    !/[\\%?#]/.test(target),
+    "candidate file reference must use an unencoded, unambiguous path",
+  );
+  return target;
+}
+
+const dependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
+
+function isLocalReference(specifier) {
+  return (
+    typeof specifier === "string" &&
+    (/^(?:file|workspace|link):/i.test(specifier) ||
+      specifier.startsWith("./") ||
+      specifier.startsWith("../") ||
+      path.isAbsolute(specifier))
+  );
+}
+
+function packageNameFromLockPath(lockPath) {
+  const marker = "node_modules/";
+  const index = lockPath.lastIndexOf(marker);
+  if (index === -1) return undefined;
+  const segments = lockPath.slice(index + marker.length).split("/");
+  const length = segments[0]?.startsWith("@") ? 2 : 1;
+  if (segments.length !== length) return undefined;
+  return segments.slice(0, length).join("/");
+}
+
+function dependencyEntryPaths(lockPath, packageName) {
+  const paths = [];
+  let parent = lockPath;
+  while (true) {
+    paths.push(
+      parent
+        ? `${parent}/node_modules/${packageName}`
+        : `node_modules/${packageName}`,
+    );
+    const nestedIndex = parent.lastIndexOf("/node_modules/");
+    if (nestedIndex !== -1) parent = parent.slice(0, nestedIndex);
+    else if (parent.startsWith("node_modules/")) parent = "";
+    else break;
+  }
+  return paths;
 }
 
 export async function validateCandidateTarballReference({
@@ -80,23 +129,52 @@ export async function assertOfflineConsumerReferences({
   const allowed = new Map();
   for (const record of Object.values(evidence.packages ?? {})) {
     const separator = record.coordinate.lastIndexOf("@");
+    assert(separator > 0, `invalid candidate coordinate ${record.coordinate}`);
     const name = record.coordinate.slice(0, separator);
-    allowed.set(name, record);
+    assert(!allowed.has(name), `duplicate candidate identity ${name}`);
+    allowed.set(name, {
+      ...record,
+      version: record.coordinate.slice(separator + 1),
+    });
   }
-  for (const [name, record] of allowed) {
+
+  async function validateReference(name, specifier, integrity) {
+    const record = allowed.get(name);
+    assert(record, `unapproved local dependency identity ${name}`);
+    assert.equal(
+      typeof specifier,
+      "string",
+      `${name} local dependency reference is missing`,
+    );
+    assert(
+      specifier.startsWith("file:"),
+      `${name} local dependency must use an approved file: tarball`,
+    );
+    await validateCandidateTarballReference({
+      specifier,
+      consumerRoot,
+      expectedFilename: record.filename,
+      expectedIntegrity: record.integrity,
+    });
+    if (integrity !== undefined)
+      assert.equal(
+        integrity,
+        record.integrity,
+        `${name} lock integrity differs`,
+      );
+    return record;
+  }
+
+  const rootLock = lockfile.packages?.[""] ?? {};
+  for (const name of allowed.keys()) {
     const manifestReference = manifest.dependencies?.[name];
-    const lockReference = lockfile.packages?.[""]?.dependencies?.[name];
+    const lockReference = rootLock.dependencies?.[name];
     assert.equal(
       manifestReference,
       lockReference,
       `${name} manifest/lock reference differs`,
     );
-    await validateCandidateTarballReference({
-      specifier: manifestReference,
-      consumerRoot,
-      expectedFilename: record.filename,
-      expectedIntegrity: record.integrity,
-    });
+    await validateReference(name, manifestReference);
     const installed = lockfile.packages?.[`node_modules/${name}`];
     assert(installed, `${name} lock entry is missing`);
     assert.equal(
@@ -104,38 +182,94 @@ export async function assertOfflineConsumerReferences({
       undefined,
       `${name} must not be a consumer link`,
     );
-    assert.equal(
-      installed.integrity,
-      record.integrity,
-      `${name} lock integrity differs`,
-    );
-    await validateCandidateTarballReference({
-      specifier: installed.resolved,
-      consumerRoot,
-      expectedFilename: record.filename,
-      expectedIntegrity: record.integrity,
-    });
+    await validateReference(name, installed.resolved, installed.integrity);
   }
+
+  for (const field of dependencyFields) {
+    const manifestDependencies = manifest[field] ?? {};
+    const rootDependencies = rootLock[field] ?? {};
+    for (const [name, specifier] of Object.entries(manifestDependencies)) {
+      if (!isLocalReference(specifier)) continue;
+      assert.equal(
+        rootDependencies[name],
+        specifier,
+        `${name} ${field} manifest/lock reference differs`,
+      );
+      await validateReference(name, specifier);
+    }
+    for (const [name, specifier] of Object.entries(rootDependencies)) {
+      if (!isLocalReference(specifier)) continue;
+      assert.equal(
+        manifestDependencies[name],
+        specifier,
+        `${name} ${field} lock/manifest reference differs`,
+      );
+      await validateReference(name, specifier);
+    }
+  }
+
   for (const [lockPath, entry] of Object.entries(lockfile.packages ?? {})) {
     assert.notEqual(
       entry?.link,
       true,
       `isolated consumer contains link ${lockPath}`,
     );
-    if (
-      typeof entry?.resolved === "string" &&
-      entry.resolved.startsWith("file:")
-    ) {
-      const matched = [...allowed.values()].some(
-        (record) =>
-          path.basename(fileTarget(entry.resolved)) === record.filename,
+    if (isLocalReference(entry?.resolved)) {
+      const name = packageNameFromLockPath(lockPath);
+      assert(name, `local lock entry has no package identity ${lockPath}`);
+      const record = await validateReference(
+        name,
+        entry.resolved,
+        entry.integrity,
       );
-      assert(
-        matched,
-        `isolated consumer contains unexpected local reference ${entry.resolved}`,
+      assert.equal(
+        entry.version,
+        record.version,
+        `${name} lock version differs`,
       );
     }
+    if (isLocalReference(entry?.version)) {
+      const name = packageNameFromLockPath(lockPath);
+      assert(name, `local lock version has no package identity ${lockPath}`);
+      await validateReference(name, entry.version, entry.integrity);
+    }
+    for (const field of dependencyFields) {
+      for (const [name, specifier] of Object.entries(entry?.[field] ?? {})) {
+        if (!isLocalReference(specifier)) continue;
+        await validateReference(name, specifier);
+        const installedPath = dependencyEntryPaths(lockPath, name).find(
+          (candidate) => lockfile.packages?.[candidate],
+        );
+        assert(
+          installedPath,
+          `${name} local ${field} lock entry is missing from ${lockPath || "root"}`,
+        );
+        const installed = lockfile.packages[installedPath];
+        await validateReference(name, installed.resolved, installed.integrity);
+      }
+    }
   }
+}
+
+export async function installAfterOfflineReferenceValidation({
+  manifest,
+  lockfile,
+  consumerRoot,
+  evidence,
+  installDependencies,
+}) {
+  assert.equal(
+    typeof installDependencies,
+    "function",
+    "offline dependency installer is required",
+  );
+  await assertOfflineConsumerReferences({
+    manifest,
+    lockfile,
+    consumerRoot,
+    evidence,
+  });
+  return installDependencies();
 }
 
 export function assertRegistryConsumer({

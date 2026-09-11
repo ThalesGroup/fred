@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   assertOfflineConsumerReferences,
   assertRegistryConsumer,
+  installAfterOfflineReferenceValidation,
   validateCandidateTarballReference,
 } from "../scripts/dependency-boundaries.mjs";
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
@@ -55,6 +56,41 @@ test("accepts npm file references to the integrity-verified candidate tarball", 
       evidence: value.evidence,
     }),
   );
+});
+
+test("validates the complete offline graph before dependency installation", async (context) => {
+  const value = await fixture(context);
+  let installed = false;
+  await installAfterOfflineReferenceValidation({
+    manifest: value.manifest,
+    lockfile: value.lockfile,
+    consumerRoot: value.root,
+    evidence: value.evidence,
+    installDependencies: async () => {
+      installed = true;
+    },
+  });
+  assert.equal(installed, true);
+
+  installed = false;
+  value.lockfile.packages["node_modules/unapproved"] = {
+    version: contract.packages.ui.version,
+    resolved: `file:${value.filename}`,
+    integrity: value.integrity,
+  };
+  await assert.rejects(
+    installAfterOfflineReferenceValidation({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+      installDependencies: async () => {
+        installed = true;
+      },
+    }),
+    /unapproved local dependency identity/,
+  );
+  assert.equal(installed, false);
 });
 
 test("rejects modified, directory, escaping, symlink, and unexpected tarball references", async (context) => {
@@ -111,7 +147,215 @@ test("rejects modified, directory, escaping, symlink, and unexpected tarball ref
       consumerRoot: value.root,
       evidence: value.evidence,
     }),
-    /unexpected local reference/,
+    /unexpected local reference|unapproved local dependency identity/,
+  );
+});
+
+test("rejects npm-decoded traversal and separator ambiguity in file references", async (context) => {
+  const value = await fixture(context);
+  const encodedTraversalDirectory = path.join(value.root, "%2e%2e");
+  await mkdir(encodedTraversalDirectory);
+  const literalTraversalArchive = path.join(
+    encodedTraversalDirectory,
+    value.filename,
+  );
+  await writeFile(literalTraversalArchive, "encoded traversal bytes");
+  await assert.rejects(
+    validateCandidateTarballReference({
+      specifier: `file:%2e%2e/${value.filename}`,
+      consumerRoot: value.root,
+      expectedFilename: value.filename,
+      expectedIntegrity: await sha512Integrity(literalTraversalArchive),
+    }),
+    /encoded|ambiguous/,
+  );
+
+  const encodedSeparatorFilename = `stage%2f${value.filename}`;
+  const literalSeparatorArchive = path.join(
+    value.root,
+    encodedSeparatorFilename,
+  );
+  await writeFile(literalSeparatorArchive, "encoded separator bytes");
+  await assert.rejects(
+    validateCandidateTarballReference({
+      specifier: `file:${encodedSeparatorFilename}`,
+      consumerRoot: value.root,
+      expectedFilename: encodedSeparatorFilename,
+      expectedIntegrity: await sha512Integrity(literalSeparatorArchive),
+    }),
+    /encoded|ambiguous/,
+  );
+
+  for (const suffix of ["?other", "#other", "\\other"]) {
+    await assert.rejects(
+      validateCandidateTarballReference({
+        specifier: `file:${value.filename}${suffix}`,
+        consumerRoot: value.root,
+        expectedFilename: `${value.filename}${suffix}`,
+        expectedIntegrity: value.integrity,
+      }),
+      /encoded|ambiguous/,
+    );
+  }
+});
+
+test("rejects unapproved local lock entries even when candidate filenames match", async (context) => {
+  let value = await fixture(context);
+  const outsideRoot = await mkdtemp(
+    path.join(os.tmpdir(), "fred-offline-boundary-outside-"),
+  );
+  context.after(() => rm(outsideRoot, { recursive: true, force: true }));
+  const outsideArchive = path.join(outsideRoot, value.filename);
+  await writeFile(outsideArchive, "different outside bytes");
+  value.lockfile.packages[
+    `node_modules/holder/node_modules/${contract.packages.ui.name}`
+  ] = {
+    resolved: `file:${path.relative(value.root, outsideArchive)}`,
+    integrity: await sha512Integrity(outsideArchive),
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /escapes/,
+  );
+
+  value = await fixture(context);
+  await mkdir(path.join(value.root, "extra"));
+  await writeFile(
+    path.join(value.root, "extra", value.filename),
+    "other bytes",
+  );
+  value.lockfile.packages["node_modules/unapproved"] = {
+    resolved: `file:extra/${value.filename}`,
+    integrity: await sha512Integrity(
+      path.join(value.root, "extra", value.filename),
+    ),
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /unexpected local reference|unapproved|identity/,
+  );
+});
+
+test("rejects directory, symlink, nested, and integrity-bypassing local lock entries", async (context) => {
+  let value = await fixture(context);
+  await mkdir(path.join(value.root, "extra"));
+  await mkdir(path.join(value.root, "extra", value.filename));
+  value.lockfile.packages[
+    `node_modules/holder/node_modules/${contract.packages.ui.name}`
+  ] = {
+    resolved: `file:extra/${value.filename}`,
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /regular file/,
+  );
+
+  value = await fixture(context);
+  await mkdir(path.join(value.root, "linked"));
+  await symlink(value.archive, path.join(value.root, "linked", value.filename));
+  value.lockfile.packages[
+    `node_modules/holder/node_modules/${contract.packages.ui.name}`
+  ] = {
+    resolved: `file:linked/${value.filename}`,
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /symlink/,
+  );
+
+  value = await fixture(context);
+  await mkdir(path.join(value.root, "extra"));
+  await writeFile(
+    path.join(value.root, "extra", value.filename),
+    "nested bytes",
+  );
+  value.lockfile.packages["node_modules/holder"] = {
+    dependencies: { unapproved: `file:extra/${value.filename}` },
+  };
+  value.lockfile.packages["node_modules/holder/node_modules/unapproved"] = {
+    resolved: `file:extra/${value.filename}`,
+    integrity: await sha512Integrity(
+      path.join(value.root, "extra", value.filename),
+    ),
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /unapproved|unexpected local reference|identity/,
+  );
+
+  value = await fixture(context);
+  value.lockfile.packages[
+    `node_modules/holder/node_modules/${contract.packages.ui.name}`
+  ] = {
+    resolved: `file:${value.filename}`,
+    integrity: "sha512-wrong",
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /integrity differs/,
+  );
+});
+
+test("inspects local references in root and nested dependency fields", async (context) => {
+  let value = await fixture(context);
+  value.manifest.optionalDependencies = {
+    unapproved: `file:${value.filename}`,
+  };
+  value.lockfile.packages[""].optionalDependencies = {
+    unapproved: `file:${value.filename}`,
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /unapproved local dependency identity/,
+  );
+
+  value = await fixture(context);
+  value.lockfile.packages["node_modules/holder"] = {
+    optionalDependencies: { unapproved: `file:${value.filename}` },
+  };
+  await assert.rejects(
+    assertOfflineConsumerReferences({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+    }),
+    /unapproved local dependency identity/,
   );
 });
 
