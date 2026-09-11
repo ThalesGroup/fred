@@ -190,6 +190,10 @@ jobs:
           - name: fred-core
             directory: libs/fred-core
             unit-target: test
+            # Authorization is enforced by the OpenFGA schema, so the ReBAC
+            # rules are only really covered by resolving them against a live
+            # server; the target starts and stops it via docker compose.
+            integration-target: test-integration
             needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - name: knowledge-flow-backend
@@ -253,6 +257,14 @@ jobs:
       - name: Run unit tests
         if: ${{ matrix.should-run }}
         run: make ${{ matrix.unit-target }}
+        working-directory: ${{ matrix.directory }}
+        env:
+          UV: uv
+
+      - name: Run integration tests
+        if: ${{ matrix.should-run && matrix.integration-target != '' }}
+        timeout-minutes: 15
+        run: make ${{ matrix.integration-target }}
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv

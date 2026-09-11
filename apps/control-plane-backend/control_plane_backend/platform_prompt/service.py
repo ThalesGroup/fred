@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import httpx
 from fred_core import KeycloakUser
 
-from control_plane_backend.organization_authz import require_manage_any
+from control_plane_backend.organization_authz import require_edit_platform_prompt
 from control_plane_backend.platform_prompt.schemas import (
     PlatformInstructions,
     PlatformPrompt,
@@ -125,9 +125,14 @@ def _to_platform_prompt(
 async def get_platform_prompt(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> PlatformPrompt:
-    """Org-admin-gated read of the platform-wide platform prompt."""
+    """`can_edit_platform_prompt`-gated read of the platform-wide prompt.
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    Same gate as the write below, not a laxer one: an editor who cannot read
+    what they are about to overwrite is useless, and this was never readable
+    below the admin tier anyway.
+    """
+
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
     stored = await deps.get_platform_prompt_store().get()
     if stored is not None:
         # A saved row answers the question by itself — skip the pod round-trip.
@@ -141,7 +146,7 @@ async def get_platform_prompt(
 async def set_platform_prompt(
     *, user: KeycloakUser, text: str, deps: ProductServiceDependencies
 ) -> PlatformPrompt:
-    """Org-admin-gated write of the platform-wide platform prompt.
+    """`can_edit_platform_prompt`-gated write of the platform-wide prompt.
 
     `text` arrives length-checked by `SetPlatformPromptRequest` at
     request-parsing time. Saving `""` is a supported, meaningful operation —
@@ -149,7 +154,7 @@ async def set_platform_prompt(
     delete" shortcut here.
     """
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
     stored = await deps.get_platform_prompt_store().set(text=text, updated_by=user.uid)
     return _to_platform_prompt(stored)
 
@@ -183,17 +188,18 @@ async def resolve_platform_prompt_text(
 async def get_platform_instructions(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> PlatformInstructions:
-    """Org-admin-gated read of the shipped, read-only platform instructions.
+    """`can_edit_platform_prompt`-gated read of the shipped instructions.
 
     Gated like its editable sibling even though it reveals nothing secret: it is
     an `/admin/platform/...` route, and keeping one permission for the whole
-    surface is easier to reason about than two. Reads the same pod file the
+    surface is easier to reason about than two — and this pane is the reference
+    an editor needs to know what agents are already told. Reads the same pod file the
     runtime composes into every prompt, so the UI cannot drift from what agents
     are actually told — and reports `source_unavailable` rather than an empty
     block when no pod answers, since "no instructions" would be a lie.
     """
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
     pod_file = await fetch_pod_platform_prompt_file(deps)
     if pod_file is None:
         return PlatformInstructions(text="", source_unavailable=True)

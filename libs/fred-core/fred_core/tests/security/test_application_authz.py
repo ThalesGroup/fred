@@ -199,10 +199,15 @@ def test_use_is_decided_by_team_grants_without_a_platform_wide_marker(
     assert "difference" in relations["can_use"]
 
 
-def test_application_can_manage_is_platform_admin() -> None:
-    can_manage = _app_type()["relations"]["can_manage"]["tupleToUserset"]
-    assert can_manage["tupleset"]["relation"] == "organization"
-    assert can_manage["computedUserset"]["relation"] == "platform_admin"
+def test_application_can_manage_follows_capability_governance() -> None:
+    """App rows are toggled from the same admin page, behind the same org gate."""
+    can_manage = _app_type()["relations"]["can_manage"]
+    assert can_manage["tupleToUserset"]["tupleset"]["relation"] == "organization"
+    assert (
+        can_manage["tupleToUserset"]["computedUserset"]["relation"]
+        == "can_manage_capabilities"
+    )
+    assert can_manage == _type_definition("capability")["relations"]["can_manage"]
 
 
 @pytest.mark.asyncio

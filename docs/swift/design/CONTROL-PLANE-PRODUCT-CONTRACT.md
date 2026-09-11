@@ -139,15 +139,16 @@ branding channel in control-plane.
 Permissions are exposed via:
 
 - `PermissionSummary`
-  - `is_platform_admin`, `is_platform_observer` — the only fields, both
-    OpenFGA-derived (organization `platform_admin`/`platform_observer`
-    relations). See Contract Note §14 (AUTHZ-05 review item 11): the former
-    `items` flattened-permission list and six unwired `can_*` booleans were
-    removed — they were Keycloak-role-derived and had gone permanently empty
-    once AUTHZ-05 removed Keycloak app roles.
+  - `platform_roles: PlatformRoleRelation[]` — the only field, OpenFGA-derived
+    (the organization role relations) and union-resolved, so a `platform_admin`
+    carries every role. See Contract Note §51: it replaced the
+    `is_platform_admin` / `is_platform_observer` booleans when the admin tier
+    split into five delegated roles. Contract Note §14 records the earlier
+    removal of the Keycloak-derived `items` list and six unwired `can_*`
+    booleans.
   - no raw RBAC/REBAC graph internals
 
-Org-level gating stops at these two booleans. Team-scoped gating (agents,
+Org-level gating stops at this one list. Team-scoped gating (agents,
 resources, member administration, evaluation, …) does not belong on
 `PermissionSummary` at all — it is exposed per team on
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
@@ -1147,7 +1148,9 @@ Live impact before the fix: 6 frontend routes and 3 in-page controls were
 unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
-`is_platform_observer` — unchanged, already OpenFGA-derived since review item 4. Team-scoped gating was never this field's job; it goes through
+`is_platform_observer` — unchanged, already OpenFGA-derived since review item
+4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
+Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
 
@@ -1320,7 +1323,7 @@ so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
 projection — never a runtime pod change), enabled/disabled through the exact
 same `PUT`/`DELETE .../teams/{team_id}` and gated the exact same way. The
-frontend (`CapabilitiesPage.tsx`) filters the one dataset by `kind` (a
+frontend (`FeaturesPage.tsx`) filters the one dataset by `kind` (a
 "Tools"/"Agents" toggle) rather than adding a second page or route. Also
 newly gated on `can_use`, using the same `capability` object space with id
 `f"{runtime_id}__{agent_id}"`: `GET /teams/{team_id}/agent-templates` (hides
@@ -1364,7 +1367,7 @@ manifest** — like `kind="agent"`, no one hand-writes a `kind="model"`
 `fred_runtime.model_routing.catalog`) stays the sole source of truth for
 routing. Every mechanism already built for `kind="tool"`/`kind="agent"` —
 schema, `can_use`, the enablement write path, the admin dashboard — governs
-`kind="model"` uniformly; `CapabilitiesPage.tsx` needed only a widened
+`kind="model"` uniformly; `FeaturesPage.tsx` needed only a widened
 `KIND_FILTERS` value and one i18n key, no `kind`-specific branch anywhere
 else (the team matrix, health column, and default-on toggle are all
 kind-agnostic).
@@ -1447,7 +1450,7 @@ stated for the other per-kind fields. This is the missing half of the
 capabilities were not usable by the target team, but the list contract carried
 no way for the dashboard to know it.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
 the drawer disables "Enable" and names the blocking dependencies for a team
 that cannot use them; the personal-space class row does the same against the
@@ -1496,7 +1499,7 @@ personal_disabled`): default-on reaches every team _present and future_, so a
 dependency merely granted to the teams that exist today would still leave
 tomorrow's team inheriting a template it cannot use.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
 `capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
 is **replaced by an "Enable all" confirmation** on all three paths. The
@@ -2682,11 +2685,11 @@ retries once on the concurrent first-insert race (two admins, or a client
 retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
-**Authorization:** `organization_authz.require_manage_any`
-(`organization#can_manage_platform`), the same shared gate as
-`GET /admin/capabilities` — org-admin only, no team dimension (this is a
-platform-wide routing assertion, not a per-team permission, same reasoning
-as `model_reasoning`).
+**Authorization:** `organization_authz.require_manage_capabilities`
+(`organization#can_manage_capabilities`, §51), the same shared gate as
+`GET /admin/capabilities` — no team dimension (this is a platform-wide
+routing assertion, not a per-team permission, same reasoning as
+`model_reasoning`).
 
 **API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
 — no `{model_capability}` path segment (chat-only, nothing to select
@@ -2700,7 +2703,7 @@ time, before this route's authz even runs, so a 422 on a bad binding never
 reaches the store.
 
 **Frontend:** `PlatformModelBindingsPanel` — an `InlineDrawer` opened from
-`CapabilitiesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
+`FeaturesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
 Renders exactly one row (chat), never a 4-capability list. Settings are
 edited as raw JSON text (not a key/value rows editor, since
 `ModelBindingSettings` is a strict typed shape a rows editor storing
@@ -3343,13 +3346,14 @@ template. Runtime side, block ordering and trust boundary:
 
 **Endpoints.**
 
-| Method | Path                                      | Permission                                   |
-| ------ | ----------------------------------------- | -------------------------------------------- |
-| GET    | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
-| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+| Method | Path                                      | Permission                                                    |
+| ------ | ----------------------------------------- | ------------------------------------------------------------- |
+| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
+| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
 
-Same shared org-admin gate as the platform model-binding trio (§40). Both are
-registered in `authz-endpoint-matrix.yaml`.
+Both are registered in `authz-endpoint-matrix.yaml`. The gate was
+`can_manage_platform` until §51 carved this surface out of that catch-all so a
+`prompt_editor` could hold it without import/export, tasks and platform reset.
 
 **No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
 field has a natural "off" value, and `""` is it. Keeping `DELETE` would give
@@ -3801,3 +3805,90 @@ not move (a validator adds no field), so `controlPlaneOpenApi.ts` is
 byte-identical. The frontend mirrors the check
 (`rework/utils/promptValidation.ts`) to show the refusal while typing; the
 backend remains the reference.
+
+---
+
+## 51. Contract Notes — the admin tier splits into delegated roles (2026-09-09, issue #2592)
+
+**Extends §43.** `organization:fred` gains three role relations, each
+`[user] or platform_admin` in `schema.fga` — `team_manager`,
+`feature_manager`, `prompt_editor` — plus two computed relations carved out
+of the `can_manage_platform` catch-all: `can_manage_capabilities` and
+`can_edit_platform_prompt`. `can_create_team` now reads `platform_admin or
+team_manager` and `can_list_all_teams` `platform_admin or team_manager or
+feature_manager` (see the capability paragraph below); `can_delete_team` and
+`can_rescue_team_admin` stay `platform_admin`-only, so registry governance is
+deliberately split from team creation. `can_manage_platform` is unchanged and
+still gates import/export, tasks and platform reset.
+
+**Re-gated endpoints — feature governance.** The whole `/admin/features`
+surface moves off `can_manage_platform` onto `can_manage_capabilities`: the
+seven `/control-plane/v1/admin/capabilities*` routes (aggregate list,
+revoke-impact preview, per-team enable/disable, default-on, personal-scope,
+model reasoning) and the `GET`/`PUT`/`DELETE`
+`/control-plane/v1/admin/platform/model-bindings` trio, which is a panel of
+that same page. Paths are unchanged. `capability#can_manage` — the per-object
+gate every enablement mutation resolves through — is redefined from
+`platform_admin from organization` to `can_manage_capabilities from
+organization`; without that, a `feature_manager` would pass the org gate and
+fail the object gate on the very next line. `app#can_manage` follows the same
+redefinition: `app__` rows are listed and toggled on the same page, behind the
+same org gate. `can_list_all_teams` joins the
+role for the same reason: the per-team enablement matrix is a team picker, and
+it renders empty without the roster. That listing is read-only and carries no
+authority over any team's data, but it is the full `Team` DTO rather than bare
+names and ids — see `REBAC.md` for exactly what a holder sees. Nothing else moves — import/export,
+platform reset, tasks, platform stats and corpus audit stay on
+`can_manage_platform`, which is what makes this delegation safe.
+
+**New endpoint — `GET /teams/candidate-admins?query=<string>`** →
+`list[UserSummary]`, gated on `can_create_team`. `POST /teams` requires at
+least one `initial_team_admin_ids` entry, and the only org-wide directory
+(`GET /users`) is gated on `can_administer_users`, which stays
+`platform_admin`-only — so `/admin/teams` rendered for a `team_manager` with a
+permanently empty admin picker and a submit button that could never enable.
+The search is bounded exactly like `GET /teams/{team_id}/candidate-members`
+(§ above): minimum 2 non-whitespace characters, at most 20 Keycloak matches,
+never a full directory listing. Registered before `/teams/{team_id}` so the
+literal segment is not captured as a team id.
+
+**Re-gated endpoints — platform prompt.** All three routes of the
+platform-prompt surface move off `can_manage_platform` onto
+`can_edit_platform_prompt`: `GET` and `PUT
+/control-plane/v1/admin/platform/prompt`, and the read-only `GET
+/control-plane/v1/admin/platform/instructions`. The read moves with the write
+deliberately — an editor who cannot see what they are overwriting is useless,
+and the instructions pane is the reference they write against; neither was
+readable below the admin tier before, so this widens rather than narrows. The
+runtime path is untouched: `resolve_platform_prompt_text` is a server-side
+platform assertion resolved per turn and has never been gated on the caller.
+Team-scoped prompts (`/teams/{id}/prompts`) are unaffected — they are governed
+by team relations, and `prompt_editor` grants nothing there.
+
+`PlatformRoleRelation` grows the three values, so §43's three routes accept
+them with no other change. The service layer iterates the enum instead of
+naming roles, and the root guards remain scoped to `platform_admin` alone:
+**any `platform_admin` grants and revokes the three new roles**, exactly as
+for `platform_observer`. §43's direct-tuple rule now carries five relations'
+worth of weight — every non-admin role unions in `platform_admin`, so an
+expanded read would list every admin as a holder of all five and offer four
+revokes that delete nothing.
+
+**Breaking (frontend bootstrap):** `PermissionSummary` replaces
+`is_platform_admin` / `is_platform_observer` with
+`platform_roles: PlatformRoleRelation[]` — the roles the caller
+*effectively* holds, union-resolved, so a `platform_admin` carries all five.
+That is deliberately unlike `GET /users/platform-roles`, which reports
+directly-granted tuples only because those are what a revoke can delete.
+Five parallel `is_*` booleans over one closed enum is a list, and each future
+role would otherwise have cost a field, a codegen run and an edit in every
+consumer. The generated client, the frontend capability hook and the CLI
+bootstrap summary move with it.
+
+**Frontend surface renamed:** the admin page `feature_manager` owns moves from
+`/admin/capabilities` to `/admin/features` (`FeaturesPage`, i18n key
+`rework.sidebar.admin.menu.features`). "Capabilities" already means the ReBAC
+computed relations and the agent-capability packages; the page governs
+platform features — capabilities, agent templates and models — so it takes the
+name of the role that governs it. The backend endpoints keep their
+`/admin/capabilities` prefix: there the word is accurate.
