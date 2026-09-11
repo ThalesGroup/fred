@@ -100,13 +100,14 @@ x-kf-embedding-model: &kf-embedding-model
 
 x-kf-chat-model: &kf-chat-model
   provider: openai
-  name: mistral-medium-latest
+  name: mistral-small-latest
   settings:
     base_url: https://api.mistral.ai/v1
 
 x-kf-vision-model: &kf-vision-model
   provider: openai
-  name: mistral-medium-latest
+  # mistral-medium is not vision-capable: pixtral-12b or mistral-small-3.1 only.
+  name: pixtral-12b-2409
   settings:
     base_url: https://api.mistral.ai/v1
 
@@ -126,7 +127,7 @@ x-kf-crossencoder-model: &kf-crossencoder-model
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 30.0
+      read: 120.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
@@ -159,10 +160,13 @@ x-kf-storage: &kf-storage
     duckdb_path: null
   vector_store:
     type: opensearch
-    index: vector-index
+    # Must match the index the ingestion worker writes to, otherwise the API
+    # searches an empty index and every RAG query returns nothing.
+    index: vector-index-mistral
     bulk_size: 1000
   log_store:
-    type: "in_memory"
+    type: opensearch
+    index: app-logs-index
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -174,10 +178,29 @@ x-kf-storage: &kf-storage
       internal_presigned_ttl_seconds: 3600
       default_max_rows: 200
       max_rows: 1000
+      # Bounded DuckDB pool: max_concurrent_queries x duckdb_memory_limit bounds
+      # the buffer manager, not scalar allocation.
+      max_concurrent_queries: 2
+      max_queued_queries: 4
+      query_timeout_seconds: 30.0
+      duckdb_threads: 1
+      duckdb_memory_limit: "256MB"
+      max_selected_datasets: 50
+
 x-kf-mcp: &kf-mcp
+  reports_enabled: true
   tabular_enabled: true
   text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  opensearch_ops_enabled: true
+  # Unlike the docker-compose dev stack, Prometheus runs in-cluster here.
   prometheus_ops_enabled: true
+  filesystem_enabled: true
+  filesystem_read_default_limit: 100
+  filesystem_read_max_limit: 500
+  filesystem_read_default_max_chars: 20000
+  filesystem_read_absolute_max_chars: 50000
 
 x-cp-scheduler: &cp-scheduler
   enabled: true
@@ -200,6 +223,14 @@ x-cp-storage: &cp-storage
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
+  opensearch:
+    host: https://opensearch:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  log_store:
+    type: opensearch
+    index: app-logs-index
   content_storage:
     type: minio
     root_path: null
@@ -273,7 +304,8 @@ applications:
         opensearch:
           host: https://opensearch:9200
         log_store:
-          type: "in_memory"
+          type: opensearch
+          index: app-logs-index
       platform:
         control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
 
@@ -302,9 +334,12 @@ applications:
           keepalive_expiry_seconds: 10
         temperature: 0.0
       default_profile_by_capability:
-        chat: default.chat.mistral
+        chat: default.chat.mistral-medium
       profiles:
-        - profile_id: default.chat.mistral
+        # Mirrors apps/fred-agents/config/models_catalog.yaml. Medium is the
+        # non-reasoning profile on purpose: a reasoning model emits its content
+        # as `thinking` blocks, which breaks structured output and the tool loop.
+        - profile_id: default.chat.mistral-medium
           capability: chat
           model_display_name: "Mistral Medium 3.5"
           model:
@@ -312,7 +347,20 @@ applications:
             name: mistral-medium-latest
             settings:
               base_url: https://api.mistral.ai/v1
-
+        # supports_thinking declares the aptitude, it does not switch reasoning
+        # on: that stays the platform admin's per-model toggle. A profile
+        # shipping reasoning_effort without the flag fails at pod boot.
+        - profile_id: default.chat.mistral-small
+          capability: chat
+          model_display_name: "Mistral Small 4"
+          description: "Faster and lower-cost Mistral Small profile for everyday chat tasks."
+          supports_thinking: true
+          model:
+            provider: openai
+            name: mistral-small-latest
+            settings:
+              base_url: https://api.mistral.ai/v1
+              reasoning_effort: high
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
@@ -406,6 +454,11 @@ applications:
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
+      app:
+        # The control-plane displays this quota, knowledge-flow enforces it.
+        # Unset on either side, uploads sail past the limit the UI advertises.
+        default_team_max_resources_storage_size: 5368709120
+        personal_max_resources_storage_size: 5368709120
       security:        *kf-security
       scheduler:       *kf-scheduler
       content_storage: *kf-content-storage
@@ -437,7 +490,7 @@ applications:
       PROMETHEUS_BEARER_TOKEN: "" # pragma: allowlist secret
 
   # ===========================================================================
-  # KNOWLEDGE FLOW WORKER — disabled for now
+  # KNOWLEDGE FLOW WORKER
   # ===========================================================================
   knowledge-flow-worker:
     enabled: true
@@ -473,7 +526,20 @@ applications:
       tag: "0.2"
     migration:
       enabled: true
+    # The chart never creates this Secret and the backend fails closed without it,
+    # so the k3d path has to supply its own: `make k3d-bootstrap-secret`.
+    extraEnvVars:
+      - name: FRED_BOOTSTRAP_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: fred-bootstrap
+            key: token
+            optional: false
     configuration:
+      app:
+        # Must mirror knowledge-flow-backend above: displayed here, enforced there.
+        default_team_max_resources_storage_size: 5368709120
+        personal_max_resources_storage_size: 5368709120
       security:  *kf-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
