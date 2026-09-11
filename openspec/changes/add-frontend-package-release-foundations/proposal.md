@@ -15,11 +15,13 @@ authorize any publication.
   consumers with an explicit release contract that synchronizes manifests, peer dependencies,
   and the producer lockfile.
 - Validate dependency references by boundary: permit only npm-generated links for the declared
-  private-workspace members; reject local dependency protocols from published manifests; permit
+  private-workspace members; reject local and local-Git dependency protocols from published
+  manifests; permit
   integrity-verified candidate-tarball references in disposable offline consumers only when every
-  manifest and lock entry uses an unambiguous path and matches an approved package identity and
-  archive; validate that graph before dependency installation; and require registry-installed
-  consumers to resolve exact registry versions without local fallback.
+  declaration uses the exact generated `file:<approved filename>` form, every package-resolution
+  entry supplies matching SHA-512 integrity, and the reference matches an approved package
+  identity and archive; validate that graph before dependency installation; and require
+  registry-installed consumers to resolve exact registry versions without local fallback.
 - Validate actual candidate tarballs against selected expected coordinates and the complete
   existing archive contracts rather than trusting metadata declared by an archive.
 - Record immutable candidate evidence: source commit, exact Node/npm versions, package

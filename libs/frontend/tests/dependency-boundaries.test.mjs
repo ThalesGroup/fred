@@ -46,6 +46,32 @@ async function fixture(context) {
   };
 }
 
+function setCandidateReference(value, reference) {
+  value.manifest.dependencies[contract.packages.ui.name] = reference;
+  value.lockfile.packages[""].dependencies[contract.packages.ui.name] =
+    reference;
+  value.lockfile.packages[
+    `node_modules/${contract.packages.ui.name}`
+  ].resolved = reference;
+}
+
+async function rejectsBeforeInstall(value, error) {
+  let installed = false;
+  await assert.rejects(
+    installAfterOfflineReferenceValidation({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+      installDependencies: async () => {
+        installed = true;
+      },
+    }),
+    error,
+  );
+  assert.equal(installed, false);
+}
+
 test("accepts npm file references to the integrity-verified candidate tarball", async (context) => {
   const value = await fixture(context);
   await assert.doesNotReject(
@@ -56,6 +82,95 @@ test("accepts npm file references to the integrity-verified candidate tarball", 
       evidence: value.evidence,
     }),
   );
+});
+
+test("rejects a tilde file reference before dependency installation", async (context) => {
+  const value = await fixture(context);
+  await mkdir(path.join(value.root, "~"));
+  await writeFile(
+    path.join(value.root, "~", value.filename),
+    "fixture archive bytes",
+  );
+  setCandidateReference(value, `file:~/${value.filename}`);
+  await rejectsBeforeInstall(value, /canonical candidate archive reference/);
+});
+
+test("rejects an actual-tab file reference before dependency installation", async (context) => {
+  const value = await fixture(context);
+  await mkdir(path.join(value.root, "\t.."));
+  await writeFile(
+    path.join(value.root, "\t..", value.filename),
+    "fixture archive bytes",
+  );
+  setCandidateReference(value, `file:\t../${value.filename}`);
+  await rejectsBeforeInstall(value, /canonical candidate archive reference/);
+});
+
+test("rejects other noncanonical spellings of an approved archive", async (context) => {
+  const value = await fixture(context);
+  setCandidateReference(value, `file:./${value.filename}`);
+  await rejectsBeforeInstall(value, /canonical candidate archive reference/);
+});
+
+test("rejects local Git checkout dependencies before installation", async (context) => {
+  for (const prefix of ["git+file:", "\tGiT+FiLe:"]) {
+    const value = await fixture(context);
+    const reference = `${prefix}//${value.root}/source-checkout`;
+    value.manifest.dependencies.unapproved = reference;
+    value.lockfile.packages[""].dependencies.unapproved = reference;
+    value.lockfile.packages["node_modules/unapproved"] = {
+      version: "1.0.0",
+      resolved: reference,
+      integrity: value.integrity,
+    };
+    await rejectsBeforeInstall(value, /unapproved local dependency identity/);
+  }
+});
+
+test("requires integrity on direct and nested local package resolutions", async (context) => {
+  let value = await fixture(context);
+  delete value.lockfile.packages[`node_modules/${contract.packages.ui.name}`]
+    .integrity;
+  await rejectsBeforeInstall(value, /resolution integrity is required/);
+
+  value = await fixture(context);
+  value.lockfile.packages["node_modules/holder"] = {
+    dependencies: {
+      [contract.packages.ui.name]: `file:${value.filename}`,
+    },
+  };
+  value.lockfile.packages[
+    `node_modules/holder/node_modules/${contract.packages.ui.name}`
+  ] = {
+    version: contract.packages.ui.version,
+    resolved: `file:${value.filename}`,
+  };
+  await rejectsBeforeInstall(value, /resolution integrity is required/);
+});
+
+test("rejects null, empty, malformed, and mismatched resolution integrity", async (context) => {
+  for (const integrity of [null, "", "not-an-integrity", "sha512-d3Jvbmc="]) {
+    const value = await fixture(context);
+    value.lockfile.packages[
+      `node_modules/${contract.packages.ui.name}`
+    ].integrity = integrity;
+    await rejectsBeforeInstall(value, /resolution integrity/);
+  }
+});
+
+test("dependency declarations need no integrity when their resolution is complete", async (context) => {
+  const value = await fixture(context);
+  let installed = false;
+  await installAfterOfflineReferenceValidation({
+    manifest: value.manifest,
+    lockfile: value.lockfile,
+    consumerRoot: value.root,
+    evidence: value.evidence,
+    installDependencies: async () => {
+      installed = true;
+    },
+  });
+  assert.equal(installed, true);
 });
 
 test("validates the complete offline graph before dependency installation", async (context) => {
@@ -124,7 +239,7 @@ test("rejects modified, directory, escaping, symlink, and unexpected tarball ref
       expectedFilename: "outside.tgz",
       expectedIntegrity: value.integrity,
     }),
-    /escapes/,
+    /canonical candidate archive reference/,
   );
   const link = path.join(value.root, "linked.tgz");
   await symlink(value.archive, link);
@@ -167,23 +282,18 @@ test("rejects npm-decoded traversal and separator ambiguity in file references",
       expectedFilename: value.filename,
       expectedIntegrity: await sha512Integrity(literalTraversalArchive),
     }),
-    /encoded|ambiguous/,
+    /canonical candidate archive reference/,
   );
 
   const encodedSeparatorFilename = `stage%2f${value.filename}`;
-  const literalSeparatorArchive = path.join(
-    value.root,
-    encodedSeparatorFilename,
-  );
-  await writeFile(literalSeparatorArchive, "encoded separator bytes");
   await assert.rejects(
     validateCandidateTarballReference({
       specifier: `file:${encodedSeparatorFilename}`,
       consumerRoot: value.root,
-      expectedFilename: encodedSeparatorFilename,
-      expectedIntegrity: await sha512Integrity(literalSeparatorArchive),
+      expectedFilename: value.filename,
+      expectedIntegrity: value.integrity,
     }),
-    /encoded|ambiguous/,
+    /canonical candidate archive reference/,
   );
 
   for (const suffix of ["?other", "#other", "\\other"]) {
@@ -191,10 +301,10 @@ test("rejects npm-decoded traversal and separator ambiguity in file references",
       validateCandidateTarballReference({
         specifier: `file:${value.filename}${suffix}`,
         consumerRoot: value.root,
-        expectedFilename: `${value.filename}${suffix}`,
+        expectedFilename: value.filename,
         expectedIntegrity: value.integrity,
       }),
-      /encoded|ambiguous/,
+      /canonical candidate archive reference/,
     );
   }
 });
@@ -220,7 +330,7 @@ test("rejects unapproved local lock entries even when candidate filenames match"
       consumerRoot: value.root,
       evidence: value.evidence,
     }),
-    /escapes/,
+    /canonical candidate archive reference/,
   );
 
   value = await fixture(context);
@@ -248,12 +358,12 @@ test("rejects unapproved local lock entries even when candidate filenames match"
 
 test("rejects directory, symlink, nested, and integrity-bypassing local lock entries", async (context) => {
   let value = await fixture(context);
-  await mkdir(path.join(value.root, "extra"));
-  await mkdir(path.join(value.root, "extra", value.filename));
+  await rm(value.archive);
+  await mkdir(value.archive);
   value.lockfile.packages[
     `node_modules/holder/node_modules/${contract.packages.ui.name}`
   ] = {
-    resolved: `file:extra/${value.filename}`,
+    resolved: `file:${value.filename}`,
   };
   await assert.rejects(
     assertOfflineConsumerReferences({
@@ -266,12 +376,14 @@ test("rejects directory, symlink, nested, and integrity-bypassing local lock ent
   );
 
   value = await fixture(context);
-  await mkdir(path.join(value.root, "linked"));
-  await symlink(value.archive, path.join(value.root, "linked", value.filename));
+  const linkTarget = path.join(value.root, "link-target.tgz");
+  await writeFile(linkTarget, "fixture archive bytes");
+  await rm(value.archive);
+  await symlink(linkTarget, value.archive);
   value.lockfile.packages[
     `node_modules/holder/node_modules/${contract.packages.ui.name}`
   ] = {
-    resolved: `file:linked/${value.filename}`,
+    resolved: `file:${value.filename}`,
   };
   await assert.rejects(
     assertOfflineConsumerReferences({
@@ -395,5 +507,20 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
         evidence: { packages },
       }),
     /Invalid URL|registry|local fallback/,
+  );
+  lockPackages["node_modules/@fred/ui"].resolved =
+    "https://registry.npmjs.org/@fred/ui/-/ui.tgz";
+  lockPackages["node_modules/unapproved"] = {
+    resolved: "\tGiT+FiLe:///tmp/source-checkout",
+  };
+  assert.throws(
+    () =>
+      assertRegistryConsumer({
+        manifest,
+        lockfile,
+        contract: confirmed,
+        evidence: { packages },
+      }),
+    /local fallback/,
   );
 });

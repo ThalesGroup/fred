@@ -19,6 +19,7 @@ import { TOKEN_SOURCE_PATHS, UI_FONT_SOURCE } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
 import {
   assertExpectedManifest,
+  isLocalDependencyReference,
   loadReleaseContract,
   packageContract,
 } from "./release-contract.mjs";
@@ -331,7 +332,7 @@ export async function validateUiArchive(
     ]) {
       for (const version of Object.values(fields ?? {}))
         assert(
-          !/^(?:file:|workspace:|link:)/.test(String(version)),
+          !isLocalDependencyReference(String(version)),
           "local dependency protocol",
         );
     }

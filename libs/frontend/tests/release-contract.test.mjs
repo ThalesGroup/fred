@@ -156,6 +156,8 @@ test("published manifests reject every local dependency boundary", () => {
     "workspace:*",
     "file:archive.tgz",
     "link:../package",
+    "git+file:///tmp/package",
+    "\tGiT+FiLe:///tmp/package",
     "../package",
     "./package",
     "/tmp/package",

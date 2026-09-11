@@ -27,17 +27,21 @@ this change. They are deliberately separate from FRED application's existing Nod
 The workspace root remains `private: true` and is never a release member. npm-generated
 workspace links are allowed only for the three explicitly declared producer members and must
 resolve inside this checkout. Published manifests reject `workspace:`, `file:`, `link:`,
-directory, or source-checkout dependency references.
+`git+file:`, directory, or source-checkout dependency references.
 
 Disposable offline consumers may contain npm-generated `file:` references to the exact
 candidate tarballs named by verified evidence. Before `npm ci`, every root or nested local
-manifest/lock reference must map to an approved package identity, remain a non-symlink regular
-file inside the isolated consumer, and match the recorded filename, package version, archive
-SHA-512, and lock integrity. A matching basename alone is insufficient. Directory dependencies,
-percent-encoded/query/fragment/backslash path ambiguity, additional local archives, workspace
-links, checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry consumer
-has a stricter boundary: every FRED dependency must resolve to the exact expected registry
-coordinate and integrity without a local fallback.
+manifest/lock reference must map to an approved package identity and use exactly
+`file:<approved filename>`. It must remain a non-symlink regular file inside the isolated
+consumer and match the recorded filename, package version, and archive SHA-512. Dependency
+declarations have no integrity field; every direct or nested local package-resolution entry must
+contain valid SRI SHA-512 integrity exactly matching the approved record. A matching basename
+alone is insufficient. Tilde, whitespace/control-character, dot-segment, encoded, query,
+fragment, backslash, absolute, and escaping alternatives are noncanonical. Directory
+dependencies, local Git checkout references, additional local archives, workspace links,
+checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry consumer has
+a stricter boundary: every FRED dependency must resolve to the exact expected registry coordinate
+and integrity without a local fallback.
 
 ## Coordinate-independent checks
 

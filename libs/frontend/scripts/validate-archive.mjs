@@ -18,6 +18,7 @@ import { FONT_SOURCES, LICENSE_FILES } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
 import {
   assertExpectedManifest,
+  isLocalDependencyReference,
   loadReleaseContract,
   packageContract,
 } from "./release-contract.mjs";
@@ -159,7 +160,7 @@ export async function validateArchive(
     const dependencies = dependencyEntries(manifest);
     for (const dependency of dependencies) {
       assert(
-        !/^(?:file:|workspace:|link:)/.test(String(dependency.version)),
+        !isLocalDependencyReference(String(dependency.version)),
         `${dependency.field}.${dependency.name} uses a local dependency protocol`,
       );
     }

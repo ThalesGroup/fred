@@ -16,7 +16,11 @@ const exactVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const exactToolVersionPattern = /^\d+\.\d+\.\d+$/;
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const localDependencyPattern =
-  /^(?:workspace|file|link):|^(?:\.{0,2}[\\/]|[\\/])|^[a-z]:[\\/]/i;
+  /^\s*(?:(?:workspace|file|link|git\+file):|\.{0,2}[\\/]|[\\/]|[a-z]:[\\/])/i;
+
+export function isLocalDependencyReference(value) {
+  return typeof value === "string" && localDependencyPattern.test(value);
+}
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -278,7 +282,7 @@ export function assertExactRegistryCoordinate(coordinate, expectedPackage) {
     `registry coordinate must be exact ${expectedPackage.name}@${expectedPackage.version}`,
   );
   assert(
-    !localDependencyPattern.test(coordinate),
+    !isLocalDependencyReference(coordinate),
     "registry coordinate is local",
   );
 }
@@ -292,7 +296,7 @@ export function assertPublishedDependencyReferences(manifest) {
   ]) {
     for (const [name, value] of Object.entries(manifest[field] ?? {})) {
       assert(
-        typeof value === "string" && !localDependencyPattern.test(value),
+        typeof value === "string" && !isLocalDependencyReference(value),
         `${field}.${name} uses a local dependency reference`,
       );
     }

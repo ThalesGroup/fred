@@ -230,6 +230,16 @@
   bytes, directory and symlink targets, unmatched nested/local dependencies, and mismatched
   integrity fail before `npm ci`, while approved candidate tarballs and private producer workspace
   links retain their separate valid boundaries.
+- [x] 10.3 Require every offline candidate declaration and resolution to use exactly
+  `file:<approved-record-filename>`; reproduce and reject npm-normalized tilde and actual-tab
+  spellings plus other noncanonical forms before dependency installation; classify and reject
+  case-insensitive, leading-whitespace `git+file:` checkout dependencies across offline and
+  published/archive boundaries; retain exact generated consumer references and all containment,
+  realpath, file-type, identity, version, and archive-integrity checks.
+- [x] 10.4 Separate declaration validation from package-resolution validation and require every
+  direct or nested local package-resolution entry to contain valid SRI SHA-512 integrity exactly
+  matching candidate evidence; verify missing, null, empty, malformed, and mismatched values fail
+  before dependency installation while declarations without integrity remain valid.
 
 ## Coordinate-independent phase evidence (2026-09-11)
 
@@ -279,3 +289,23 @@
 - These remain fixture/development results. Node `24.21.0` and npm `11.19.0` are not installed in
   this checkout, and no confirmed coordinates or authorized identities exist, so tasks 9.1 and
   9.2 remain correctly unchecked rather than being satisfied by development evidence.
+
+## Final offline-validation correction evidence (2026-09-11)
+
+- Before correction, the focused boundary suite passed 9/14 tests and failed five: literal-path
+  validation accepted tilde, actual-tab, and dot-segment references that npm normalizes
+  differently; a direct package resolution without integrity was accepted; and the invalid-
+  integrity regression observed the old undifferentiated lock-integrity error. The corrected
+  focused boundary suite passes 14/14 and exercises direct and nested missing integrity,
+  null/empty/malformed/mismatched values, declarations without integrity, and callback ordering.
+- Independent review then reproduced acceptance of a `git+file:` checkout dependency. The shared
+  local-reference classifier now rejects plain, mixed-case, and leading-whitespace local Git
+  references across offline graphs, published manifests, and token/UI/SDK archive validation.
+  Final independent re-review found no remaining correctness or security issue.
+- With Node `22.13.0` and npm `10.9.2`, `npm run release:check`, `npm run release:test` (45 tests),
+  `npm run lint`, `npm run format`, and `npm test` (241 tests) pass. `npm run pack:check` validates
+  all three development archives, and separately provisioned caches support the offline token,
+  UI, and SDK consumers. Production-host integration passes 4/4 tests; pre-provisioned browser
+  smoke records zero dependency installations, browser provisioning, and external requests.
+- These are fixture/development results, not exact-release-toolchain candidate or genuine public-
+  registry evidence. Tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain gated and unchecked.

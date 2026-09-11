@@ -11,7 +11,7 @@ contract rather than accepting metadata declared by an archive as its own expect
 The producer workspace root MUST remain `private: true`, MUST NOT be a release
 candidate, and MUST be distinguished from the publication eligibility and configuration
 of each member package. Published member manifests MUST agree with the selected contract,
-MUST contain no `workspace:`, `file:`, `link:`, directory, source-checkout, or other local
+MUST contain no `workspace:`, `file:`, `link:`, `git+file:`, directory, source-checkout, or other local
 dependency reference, and MUST preserve the existing exports, asset, license, notice,
 CSS, React-peer, and protocol contracts.
 
@@ -165,12 +165,17 @@ Disposable offline consumer manifests and lockfiles MAY contain npm-generated `f
 references to the exact staged candidate `.tgz` files. Each permitted reference MUST
 map by package identity to an approved candidate evidence record, identify a regular
 non-symlink tarball file whose real path remains inside the disposable consumer, and match
-the recorded archive filename, bytes, and lock integrity. Validation MUST inspect all
+the recorded archive filename and bytes. Every permitted declaration MUST use exactly
+`file:<approved-record-filename>`; alternative spellings MUST be rejected rather than
+normalized. A dependency declaration legitimately has no integrity field, but every direct or
+nested local package-resolution entry MUST contain a valid SRI SHA-512 integrity value and it
+MUST exactly match the approved record. Validation MUST inspect all
 applicable root and nested manifest/lock dependency fields and local lock resolutions before
 dependency installation; a matching archive basename alone MUST NOT authorize a reference.
-Permitted generated `file:` references MUST use unencoded, unambiguous relative paths; percent
-encoding, query strings, fragments, and backslashes MUST be rejected so validation and npm
-cannot resolve different targets.
+Noncanonical tilde, whitespace or control-character, dot-segment, percent-encoded, query,
+fragment, backslash, absolute, or escaping forms MUST be rejected so validation and npm cannot
+resolve different targets. Local Git checkout references such as `git+file:` MUST be rejected
+case-insensitively, including leading whitespace that npm may normalize.
 No directory target, unexpected or additional local file, checkout path, unmatched nested
 dependency, symlinked package, or reused FRED dependency tree is permitted.
 Production-host integration MUST run the host with dependencies installed from the FRED
@@ -213,6 +218,27 @@ or exact registry installation.
 - **WHEN** a local tarball reference uses encoded traversal or separators, a query, a fragment,
   or a backslash that npm could interpret differently from a literal filesystem check
 - **THEN** isolated-consumer validation rejects the ambiguous reference before dependency use
+
+#### Scenario: npm would normalize a noncanonical local reference
+
+- **WHEN** a local declaration or resolution uses a tilde, an actual tab, a dot segment, or any
+  spelling other than `file:<approved-record-filename>`
+- **THEN** isolated-consumer validation rejects it before dependency installation even if a
+  literal filesystem lookup would find bytes matching the candidate
+
+#### Scenario: A local Git checkout is declared
+
+- **WHEN** an offline or published-package dependency uses `git+file:` with any casing or
+  leading whitespace
+- **THEN** validation rejects the local checkout reference before dependency installation or
+  archive acceptance
+
+#### Scenario: A local package resolution omits integrity
+
+- **WHEN** a direct or nested local package-resolution entry has missing, null, empty, malformed,
+  or mismatched integrity
+- **THEN** isolated-consumer validation rejects the graph before dependency installation while
+  continuing to permit declarations without their own integrity field
 
 #### Scenario: A consumer resolves a development or workspace package
 
