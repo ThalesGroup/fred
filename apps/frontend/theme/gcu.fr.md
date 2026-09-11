@@ -1,12 +1,19 @@
-# Exemple de conditions générales d'utilisation
+# TEST DE SURCHARGE DU THÈME - ceci ne remplace pas de vraies conditions générales d'utilisation
 
-**Contenu d'exemple, à remplacer avant de servir ce thème à qui que ce soit.**
-Il existe pour que l'archive soit complète et vérifiable : si vous lisez cette
-page, l'overlay fonctionne.
+**Si vous lisez cette page, l'overlay de thème fonctionne.** Ce texte est servi
+depuis une archive de thème stockée en objet, pas depuis l'image du frontend.
+Rien n'a été reconstruit ni forké pour l'afficher.
 
-Le fichier a été récupéré depuis le stockage objet au démarrage du conteneur et
-a recouvert celui embarqué dans l'image. Remplacer l'archive et redémarrer les
-pods, c'est toute la procédure de mise à jour - aucun rebuild, aucun fork.
+Ce qui s'est passé, dans l'ordre :
 
-Gardez les variantes de langue côte à côte. L'application demande d'abord
-`gcu.<langue>.md`, et l'image d'origine en embarque une version française.
+1. Le conteneur a démarré et récupéré l'archive depuis `FRONTEND_THEME_URL`.
+2. Il a extrait `gcu.fr.md` dans le répertoire d'overlay, hors de la racine web.
+3. nginx sert désormais ce fichier à la place de celui embarqué dans l'image.
+
+**Remplacez ce fichier avant qu'un vrai utilisateur ne le voie.** Il se trouve
+dans `apps/frontend/theme/gcu.fr.md` et n'existe que pour rendre l'archive
+complète et la surcharge vérifiable de bout en bout.
+
+Gardez `gcu.md` à côté. L'application demande d'abord `gcu.<langue>.md` : sans
+cette variante française, le texte d'origine l'emporterait alors même que le
+thème est correctement installé.

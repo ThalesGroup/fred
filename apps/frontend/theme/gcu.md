@@ -1,13 +1,20 @@
-# Example terms of use
+# THEME OVERRIDE TEST - these are not real terms of use
 
-**Example content, replace it before serving this theme to anyone.** It exists
-so the archive is complete and verifiable: if you can read this page, the
-overlay works.
+**If you are reading this page, the theme overlay works.** This text is served
+from a theme archive in object storage, not from the frontend image. Nothing
+was rebuilt and nothing was forked to put it here.
 
-The file was fetched from object storage at container startup and shadowed the
-one baked into the image. Replacing the archive and restarting the pods is the
-whole update procedure - no rebuild, no fork.
+What happened, in order:
 
-Keep the language variants beside it. The app asks for `gcu.<lang>.md` first,
-and the stock image ships a French one, so an English-only override never
-reaches a French reader.
+1. The container started and fetched the archive from `FRONTEND_THEME_URL`.
+2. It unpacked `gcu.md` into the overlay directory, outside the web root.
+3. nginx now serves that file instead of the one baked into the image.
+
+**Replace this file before any real user sees it.** It lives in
+`apps/frontend/theme/gcu.md` and exists only so the archive is complete and
+the override is verifiable end to end.
+
+Keep `gcu.fr.md` beside it. The application asks for `gcu.<lang>.md` first, and
+the stock image ships a French one, so an English-only override silently loses
+to the built-in text for a French reader - with the theme still reported as
+installed.
