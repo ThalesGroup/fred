@@ -677,3 +677,37 @@ async def test_two_providers_may_expose_the_same_definition_name() -> None:
         (PROVIDER, "http-markdown"),
         ("globex-kb", "http-markdown"),
     }
+
+
+def test_publication_does_not_gate_a_machine_on_human_gcu_admission() -> None:
+    """The publisher is a confidential client, not a person.
+
+    `get_current_user` enforces persisted GCU acceptance, which needs a user row
+    and somebody to accept terms. A Knowledge Base pod has neither, so gating
+    publication on it makes the route unreachable wherever `app.gcu_version` is
+    configured — as the repository's own default control-plane profile does.
+    Asserted on the route, because the service-level tests below sit under the
+    dependency and cannot see it.
+    """
+    from collections.abc import Iterator
+
+    from control_plane_backend.knowledge_bases.api import router
+    from fastapi.dependencies.models import Dependant
+    from fastapi.routing import APIRoute
+    from fred_core import get_current_user, get_current_user_without_gcu
+
+    route = next(
+        candidate
+        for candidate in router.routes
+        if isinstance(candidate, APIRoute) and "providers" in candidate.path
+    )
+
+    def dependency_calls(dependant: Dependant) -> Iterator[object]:
+        yield dependant.call
+        for sub in dependant.dependencies:
+            yield from dependency_calls(sub)
+
+    resolved = set(dependency_calls(route.dependant))
+
+    assert get_current_user_without_gcu in resolved
+    assert get_current_user not in resolved

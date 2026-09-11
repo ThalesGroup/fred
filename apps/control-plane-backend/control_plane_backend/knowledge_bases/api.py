@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user_without_gcu
 from fred_core.security.models import AuthorizationError
 from fred_sdk.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
@@ -68,7 +68,10 @@ async def put_knowledge_base_definition(
     definition_id: Annotated[str, Path(min_length=1)],
     body: KnowledgeBasePublicationRequest,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    # Not `get_current_user`: that dependency enforces persisted GCU acceptance,
+    # which is a human admission control. The publisher is a confidential client
+    # with no user row and nobody to accept anything — it would always be 403.
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
 ) -> KnowledgeBasePublicationResult:
     """Idempotent upsert, so every deployment of the image replays it.
 
