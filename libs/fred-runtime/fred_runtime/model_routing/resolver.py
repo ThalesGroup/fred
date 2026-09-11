@@ -133,6 +133,7 @@ class ModelRoutingResolver:
                         capability=request.capability,
                         profile_id=profile.profile_id,
                         model=profile.model.model_copy(deep=True),
+                        capability_id=profile.capability_id,
                     )
 
         return self._default_selection(capability=request.capability)
@@ -151,6 +152,7 @@ class ModelRoutingResolver:
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            capability_id=profile.capability_id,
         )
 
     def _profile(self, profile_id: str) -> ModelProfile:

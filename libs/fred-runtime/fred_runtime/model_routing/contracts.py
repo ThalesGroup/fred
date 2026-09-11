@@ -37,6 +37,7 @@ from __future__ import annotations
 from enum import Enum
 
 from fred_core.common import ModelConfiguration
+from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import FrozenModel, ModelCapability
 from pydantic import Field, model_validator
 
@@ -157,6 +158,20 @@ class ModelProfile(FrozenModel):
     capability: ModelCapability
     model: ModelConfiguration
     description: str | None = None
+    model_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Explicit model IDENTITY, replacing `model.name` in the capability "
+            "id (`model__{provider}__{model_id}`). Exists for OpenAI-compatible "
+            "gateways that serve several models on distinct `base_url`s while "
+            "expecting the same wire `model` value: without it those profiles "
+            "collapse into one model, so they share a display name, one "
+            "reasoning toggle and one `can_use` decision. `model.name` stays "
+            "what is sent to the provider. Absent means the identity is "
+            "`model.name`, exactly as before."
+        ),
+    )
     model_display_name: str | None = Field(
         default=None,
         min_length=1,
@@ -165,7 +180,7 @@ class ModelProfile(FrozenModel):
             "derives one by splitting `model.name` — a heuristic that cannot "
             "tell a version separator from a variant one ('claude-sonnet-4-6' "
             "renders 'Claude Sonnet 4 6'). Display only. Declared per profile, "
-            "but describes the model: siblings sharing one (provider, name) "
+            "but describes the model: siblings sharing one model identity "
             "should agree, and the catalog projection takes the first declared."
         ),
     )
@@ -184,8 +199,23 @@ class ModelProfile(FrozenModel):
         ),
     )
 
+    @property
+    def capability_id(self) -> str:
+        """This profile's model identity as a capability id — the ONE derivation
+        every site must use, so the catalog projection, the `can_use` gate and
+        the reasoning toggle can never disagree about which model this is."""
+
+        return model_capability_id(
+            self.model.provider or "", self.model_id or self.model.name or ""
+        )
+
     @model_validator(mode="after")
     def validate_model(self) -> "ModelProfile":
+        if self.model_id is not None and not self.model_id.strip():
+            raise ValueError(
+                f"ModelProfile {self.profile_id!r} declares a blank model_id; omit "
+                "it to keep model.name as the model identity."
+            )
         if not self.model.provider or not self.model.provider.strip():
             raise ValueError(
                 f"ModelProfile {self.profile_id!r} must define model.provider."
@@ -294,3 +324,14 @@ class ModelSelection(FrozenModel):
     capability: ModelCapability
     profile_id: str
     model: ModelConfiguration
+    capability_id: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Model identity of the winning profile (`ModelProfile.capability_id`), "
+            "carried on the decision so downstream gates never re-derive it from "
+            "`model.name` — which is the wire value, not the identity. For a "
+            "platform binding there is no profile and it is "
+            "`model_capability_id(provider, name)`."
+        ),
+    )

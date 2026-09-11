@@ -1778,7 +1778,7 @@ needed a redeploy.
    silently is what made the current situation invisible.
 2. **`_ModelCatalogEntry.thinking_profile_ids`** (`agent_app.py`,
    `GET /agents/models-catalog`) — the `supports_thinking` subset of
-   `profile_ids`, derived inside the existing `(provider, name)` grouping
+   `profile_ids`, derived inside the existing model-identity grouping
    (RFC §5.3). Aptitude stays per profile, where it is true; the admin toggle
    is keyed per model, where the capability id space is. Never authored twice.
    Reaches control-plane on `CapabilityCatalogEntry.model_thinking_profile_ids`,
@@ -3540,11 +3540,11 @@ model knows which it is.
 **What survives.**
 
 - `ModelProfile.model_display_name` (optional, per profile) in
-  `models_catalog.yaml`. Display only: routing, enablement and the capability id
-  still key on `(provider, name)`.
+  `models_catalog.yaml`. Display only: routing keys on `profile_id`, enablement
+  and the capability id on the model identity (§8.78).
 - `GET /agents/models-catalog` carries it as `ModelCatalogEntry.display_name`,
-  taken from the first profile in the `(provider, name)` group that declares one
-  — same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
+  taken from the first profile in the model-identity group that declares one —
+  same first-seen rule as `description`. `CapabilityCatalogEntry` carries it
   as `model_display_name`; the multi-pod union keeps a name authored on one pod
   when another serves the model unnamed.
 - The frontend prefers that string verbatim, then prettifies the real model
@@ -4068,8 +4068,9 @@ skipped, not fatal. An entry naming a profile absent from the catalog is dropped
 for the same reason: neither can ever route a chat turn.
 
 **No new field for the concrete pair.** `CapabilityCatalogEntry.name` already
-carries the model name for a `kind="model"` entry, and `id` identifies the
-`(provider, name)` pair uniquely, so the composer needs nothing more. Worth
+carries the model name for a `kind="model"` entry, and `id` identifies the model
+uniquely (§8.78: the identity, which `model_id` may separate from the name), so
+the composer needs nothing more. Worth
 recording for whoever ever needs the provider on its own:
 `model_capability_id` NORMALIZES characters outside the id charset to `-`, so
 `id` is **not reversible** into the real pair and a split will not recover
@@ -5764,3 +5765,41 @@ architecture summary; it does not carry the implementation chronology.
 `libs/fred-runtime/fred_runtime/deep/deep_runtime.py` (`DeepAgentRuntime.build_executor`,
 `_build_deepagent_runtime_middleware`), `libs/fred-runtime/fred_runtime/react/react_runtime.py`
 (shared executor, runtime-class-name logging only — no ReAct behavior change).
+
+---
+
+### 8.78 ✅ `ModelProfile.model_id` — an explicit model identity, separate from the wire name (2026-09-11)
+
+Some OpenAI-compatible gateways serve each model on its own `base_url` while
+expecting the same `model` value for all of them. Two such profiles shared one
+capability id (`model__{provider}__{name}`), so they merged into a single model:
+one composer label, one reasoning toggle, one `can_use` decision. `model.name`
+could not be renamed apart — it is the value `ChatOpenAI(model=cfg.name)` sends.
+
+- `ModelProfile.model_id` (optional, `models_catalog.yaml`). When set it
+  replaces `model.name` in the capability id; `model.name` stays the wire value.
+  Absent means the identity is `model.name` — unchanged for every existing
+  catalog. Blank is rejected at pod boot.
+- `ModelProfile.capability_id` is the single derivation of that id. Three sites
+  consume it: `_project_model_catalog_entries` groups and ids entries by it,
+  `ModelSelection.capability_id` carries the winning profile's, and
+  `RoutedChatModelFactory.build_for_chat` gates `usable_model_ids` and
+  `reasoning_enabled_model_ids` on that field instead of re-deriving from
+  `selection.model`. A platform binding has no profile, so its selection carries
+  `model_capability_id(provider, name)` — the derivation control-plane already
+  uses for it.
+- No control-plane or frontend change: the effective-chat-model read finds the
+  entry whose `model_chat_profile_ids` contains the winning profile, and reads
+  the label, `enabled_for_team` and `reasoning_enabled` off it. The id fixes
+  enablement and the toggle; it does NOT fix the label on its own — the composer
+  prefers `model_display_name` and falls back to the wire `name`, which gateway
+  siblings share, so each such profile must also declare one (§8.54).
+
+**Upgrade note.** Adopting `model_id` gives those models NEW capability ids, so
+their team enablement and reasoning toggle have to be set again.
+
+**Scope.** `libs/fred-runtime/fred_runtime/model_routing/contracts.py`,
+`.../model_routing/resolver.py`, `.../model_routing/provider.py`,
+`libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
+OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
+until archived).
