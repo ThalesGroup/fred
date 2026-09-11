@@ -91,6 +91,31 @@ test("every release-readiness input selects package validation", () => {
   );
 });
 
+test("release-readiness CI provisions isolated consumers before tests", () => {
+  const steps = workflow.jobs["frontend-package-release-readiness"].steps;
+  const producerInstallIndex = steps.findIndex(
+    (step) =>
+      step.name === "Install producer dependencies" &&
+      step.run === "npm ci" &&
+      step["working-directory"] === "libs/frontend",
+  );
+  const consumerProvisionIndex = steps.findIndex(
+    (step) =>
+      step.name === "Provision isolated consumer cache" &&
+      step.run === "make consumer-provision" &&
+      step["working-directory"] === "libs/frontend",
+  );
+  const consumerDependentTestIndex = steps.findIndex(
+    (step) => step.run === "make code-quality test pack-check",
+  );
+
+  assert.notEqual(producerInstallIndex, -1);
+  assert.notEqual(consumerProvisionIndex, -1);
+  assert.notEqual(consumerDependentTestIndex, -1);
+  assert(producerInstallIndex < consumerProvisionIndex);
+  assert(consumerProvisionIndex < consumerDependentTestIndex);
+});
+
 test("every consumed canonical stylesheet selects package validation", () => {
   for (const sourcePath of TOKEN_SOURCE_PATHS) {
     assert(selectsPackageJob([sourcePath]), sourcePath);

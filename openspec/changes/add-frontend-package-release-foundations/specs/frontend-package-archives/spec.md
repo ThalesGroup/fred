@@ -429,6 +429,16 @@ verifier, release runbook, or release-specific orchestration changes. It MAY ski
 job for application changes that affect neither package generation nor package/host
 compatibility or release validation. Existing frontend selection MUST continue to run
 the FRED host, request, path, and proxy regressions when their application inputs change.
+Every selected job that executes isolated-consumer validation MUST provision its own exact
+consumer prerequisites in a distinct network-capable step before offline tests begin; it MUST
+NOT depend on another job's filesystem or introduce network fallback into validation.
+
+#### Scenario: Release readiness provisions its isolated consumers
+
+- **WHEN** the release-readiness job installs producer dependencies and will subsequently run
+  consumer-dependent package tests
+- **THEN** it provisions the isolated-consumer caches in that job before those tests, after which
+  archive installation and validation remain offline
 
 #### Scenario: The producer workspace changes
 

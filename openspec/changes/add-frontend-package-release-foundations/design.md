@@ -161,7 +161,10 @@ The exact release toolchain is recorded in the release contract and checked by t
 candidate command before it mutates `target/`. A dedicated release-readiness CI job uses
 Node `24.21.0` with npm `11.19.0` for manifest synchronization checks, packing, archive
 validation, and candidate evidence. Existing package quality and negative tests continue
-to run as regression gates.
+to run as regression gates. Because GitHub Actions jobs do not share a filesystem, this job
+provisions its own isolated-consumer dependency caches in a separate network-capable step after
+installing producer dependencies and before any consumer-dependent tests. The tests continue to
+install and validate archives offline and do not bootstrap a missing cache themselves.
 
 Checks that execute FRED application tests remain in an environment provisioned from
 `apps/frontend/package-lock.json` and the application's separately controlled Node/npm
@@ -297,7 +300,8 @@ the release contract, member manifests/lockfile, release helpers, evidence schem
 verifier and fixtures, release documentation, and release-readiness workflow wiring. These
 inputs select both release-readiness and applicable existing archive regression jobs.
 Unrelated application changes may continue to skip package work; canonical package and host
-inputs retain their existing selection behavior.
+inputs retain their existing selection behavior. Workflow-contract tests also require every job
+that runs consumer-dependent package tests to provision its own caches before those tests.
 
 ### 10. Make only a targeted RFC sequencing correction
 

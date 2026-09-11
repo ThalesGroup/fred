@@ -348,6 +348,10 @@ jobs:
         run: npm ci
         working-directory: libs/frontend
 
+      - name: Provision isolated consumer cache
+        run: make consumer-provision
+        working-directory: libs/frontend
+
       - name: Validate release contracts
         run: make release-check
         working-directory: libs/frontend

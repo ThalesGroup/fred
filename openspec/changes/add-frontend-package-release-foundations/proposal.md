@@ -39,9 +39,10 @@ authorize any publication.
   missing, malformed, disallowed, or coordinate-mismatched attestation endpoints.
 - Pin the producer release toolchain exactly and preserve the separately controlled tooling
   used by CI jobs that also run FRED application tests.
-- Extend CI selection and regression coverage for release inputs, and add a compact release
-  runbook plus a targeted RFC sequencing clarification separating readiness, publication,
-  FRED adoption, and external adoption.
+- Extend CI selection and regression coverage for release inputs, keep release-readiness jobs
+  self-contained by provisioning their isolated-consumer caches before offline package tests,
+  and add a compact release runbook plus a targeted RFC sequencing clarification separating
+  readiness, publication, FRED adoption, and external adoption.
 - Keep `@fred/design-tokens`, `@fred/ui`, `@fred/iframe-sdk`, `0.1.0-alpha.1`, and the `next`
   dist-tag as proposals until maintainers confirm scope ownership, coordinates, access,
   publishing owners, registry settings, the distinct bootstrap and Trusted Publishing

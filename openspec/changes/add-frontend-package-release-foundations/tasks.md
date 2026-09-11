@@ -240,6 +240,10 @@
   direct or nested local package-resolution entry to contain valid SRI SHA-512 integrity exactly
   matching candidate evidence; verify missing, null, empty, malformed, and mismatched values fail
   before dependency installation while declarations without integrity remain valid.
+- [x] 10.5 Make the release-readiness CI job provision its own isolated-consumer cache in a
+  distinct network-capable step after producer dependency installation and before
+  consumer-dependent tests; add a workflow-contract regression that proves the exact command,
+  working directory, and ordering while preserving offline validation.
 
 ## Coordinate-independent phase evidence (2026-09-11)
 
@@ -309,3 +313,19 @@
   smoke records zero dependency installations, browser provisioning, and external requests.
 - These are fixture/development results, not exact-release-toolchain candidate or genuine public-
   registry evidence. Tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain gated and unchecked.
+
+## Release-readiness consumer-provisioning correction evidence (2026-09-11)
+
+- GitHub Actions run `34612396682`, job `103305995127`, installed Node `24.21.0` and npm
+  `11.19.0`, installed producer dependencies, passed release-contract validation and all 45
+  controlled release-tooling tests, then failed the 241-test producer suite at 240/241 because
+  `target/iframe-sdk-consumer-cache` was absent.
+- The workflow-contract regression failed before correction because the release-readiness job had
+  no `make consumer-provision` step. It now verifies that the exact command runs from
+  `libs/frontend` after producer installation and before `make code-quality test pack-check`.
+- Separate `make consumer-provision` succeeds, followed by the release checks, the complete
+  producer/archive suite, offline isolated consumers, production-host integration, and
+  pre-provisioned browser smoke. Browser evidence reports zero dependency installations, browser
+  provisioning, or external requests during smoke execution.
+- The original maintainer-gated tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain unchecked;
+  this CI prerequisite correction does not produce approved candidate or public-registry evidence.
