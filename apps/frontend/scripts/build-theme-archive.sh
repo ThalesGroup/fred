@@ -25,7 +25,17 @@ if [ -z "${source_directory}" ] || [ -z "${output}" ]; then
     exit 2
 fi
 if [ ! -d "${source_directory}" ]; then
-    echo "No such directory: ${source_directory}" >&2
+    cat >&2 <<EOF
+No such directory: ${source_directory}
+
+A theme directory mirrors apps/frontend/public/, and only these are served:
+
+  images/<file>          logos, favicons, avatars, icons/<name>.svg
+  contrib/<brand>/<file> per-brand markdown
+  <name>.md              gcu, gcu.fr, gdpr, gdpr.fr, release
+
+apps/frontend/theme/ is a working example to copy and edit.
+EOF
     exit 2
 fi
 if ! command -v zip >/dev/null 2>&1; then
