@@ -1299,6 +1299,19 @@ inline popover into a full-height right-side push panel (#2259).
 **Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`
 **Status:** `Functional`
 
+Opening a conversation puts the cursor in the composer (2026-09-11). That used
+to fall out of the field being RE-ENABLED after a history load, so it happened
+only when a load actually ran — a conversation served from the session cache
+silently got none, and which conversations those are is arbitrary. The page asks
+for it outright on every conversation change; a field still disabled by a
+loading history takes it on re-enable.
+
+Loading a conversation shows a centred `Spinner` in the lane (2026-09-11),
+replacing the italic pulsing line of text. What drives it is not "a fetch is in
+flight" but "this conversation has not answered yet" — `isLoadingHistory` is
+false BEFORE a load starts and stays false on a cache hit, so reading it left a
+gap in which the page believed the conversation was empty.
+
 #### Open UX issues
 
 _(none)_
@@ -3154,6 +3167,13 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 
 - **Hierarchy debt** (2026-05-24) — moved from `shared/organisms/` to `pages/ManagedChatPage/ConversationThread/`. Organism→organism imports eliminated. `ThreadMessage` extracted to `@rework/types/thread`.
 - **Empty state** (2026-05-24) — `ChatMessagesArea` renders `t("chatbot.startConversationHint")` when `!isLoading && isEmpty`. EN + FR translations present.
+- **Welcome stage flashed on the way into a conversation (2026-09-11)** — entering an existing
+  conversation showed the "start a new conversation" stage for the moment between the click and
+  the messages landing. Emptiness alone does not mean empty: the page now waits for the history to
+  answer (`isHistorySettled`) before claiming a conversation has nothing, and shows the loading
+  state until then. A chat with no session id is settled on the spot — it has no history to
+  resolve, and making it wait would put a spinner in front of the one screen that is empty by
+  nature.
 
 ---
 

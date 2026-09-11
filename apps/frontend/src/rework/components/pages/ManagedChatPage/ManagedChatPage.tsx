@@ -158,6 +158,13 @@ export default function ManagedChatPage() {
     lastDrawerSessionId.current = chat.sessionId;
     if (wasBound) setActivePushDrawer(null);
   }, [chat.sessionId]);
+
+  // Has this conversation answered yet? `isLoadingHistory` cannot say: it is
+  // false BEFORE a load starts and stays false on a cache hit, so an empty
+  // thread never means an empty conversation on its own. Drives the loading
+  // state, the welcome stage and the hold below. Rationale: COMPONENT-UX.md.
+  const conversationUnresolved = chat.threadMessages.length === 0 && !chat.isHistorySettled;
+
   // The model this agent's next turn will actually route to (#2387) — the
   // composer's label. Its own read rather than part of prepare-execution:
   // prepare runs on every send and is contractually free of pod-catalog
@@ -169,7 +176,7 @@ export default function ManagedChatPage() {
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const isInitialState =
-    chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
+    chat.threadMessages.length === 0 && !chat.waitResponse && !conversationUnresolved && chat.pendingHitl == null;
 
   const attachmentsCount = chat.persistedAttachments.length;
 
@@ -267,9 +274,20 @@ export default function ManagedChatPage() {
   // full record, not the summary, so we fetch it on demand; personal-scope prompts
   // are stored under the user's personal team, team-scope under the chat team.
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
-  // Bumped alongside chat.setInput below to ask RichInputField to refocus with
-  // the caret at the end of the just-inserted prompt (batched into one render).
+  // Asks RichInputField to focus with the caret at the end of the draft: bumped
+  // alongside chat.setInput below (an inserted prompt, batched into one render)
+  // and on entering a conversation.
   const [focusEndRequestId, setFocusEndRequestId] = useState(0);
+
+  // Opening a conversation puts the cursor in the composer. Focus used to fall
+  // out of the composer being RE-ENABLED after a load, so a conversation served
+  // from cache silently got none. Rationale: COMPONENT-UX.md.
+  const focusedForSessionRef = useRef(chat.sessionId);
+  useEffect(() => {
+    if (focusedForSessionRef.current === chat.sessionId) return;
+    focusedForSessionRef.current = chat.sessionId;
+    setFocusEndRequestId((n) => n + 1);
+  }, [chat.sessionId]);
   // Resolves true once the text is in the composer. The prompt panel closes on
   // true only, so a failed fetch leaves the user where they were instead of
   // dismissing the list under them.
@@ -575,7 +593,7 @@ export default function ManagedChatPage() {
                       <ConversationThread
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
-                        isLoading={chat.isLoadingHistory}
+                        isLoading={conversationUnresolved}
                         isStreaming={chat.waitResponse}
                         scrollContainerRef={scrollContainerRef}
                         onHitlAnswer={chat.handleHitlAnswer}

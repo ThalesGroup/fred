@@ -26,20 +26,12 @@
   text-align: center;
 }
 
-.hint {
-  align-self: flex-start;
-  animation: pulse 1.2s ease-in-out infinite;
+/* Centred in the lane, on the axis the first message will occupy — the thread
+   replaces it in place rather than pushing it aside. */
+.loading {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-  font-style: italic;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }

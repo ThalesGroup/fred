@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,9 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { type ReactNode } from "react";
+import { act, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 vi.mock("react-redux", () => ({ useSelector: () => ({ requestId: 0, key: null }) }));
@@ -25,22 +33,34 @@ vi.mock("react-i18next", () => ({
 let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
-  RichInputField: (props: { sendDisabled?: boolean; characterCount?: number; characterLimit?: number }) => (
+  RichInputField: (props: {
+    sendDisabled?: boolean;
+    characterCount?: number;
+    characterLimit?: number;
+    focusEndRequestId?: number;
+  }) => (
     <div
       data-testid="composer"
       data-send-disabled={props.sendDisabled}
       data-character-count={props.characterCount}
       data-character-limit={props.characterLimit}
+      data-focus-request={props.focusEndRequestId}
     />
   ),
 }));
 vi.mock("./ConversationThread/ConversationThread", () => ({
-  ConversationThread: (props: { maxChatInputChars?: number; hitlFreeText: string; onHitlFreeTextChange: unknown }) => (
+  ConversationThread: (props: {
+    maxChatInputChars?: number;
+    hitlFreeText: string;
+    onHitlFreeTextChange: unknown;
+    isLoading?: boolean;
+  }) => (
     <div
       data-testid="thread"
       data-character-limit={props.maxChatInputChars}
       data-hitl-draft={props.hitlFreeText}
       data-has-hitl-change-handler={typeof props.onHitlFreeTextChange === "function"}
+      data-loading={props.isLoading}
     />
   ),
 }));
@@ -116,6 +136,10 @@ vi.mock("@shared/molecules/ComposerActionsMenu/ComposerActionsMenu", () => ({
 
 import ManagedChatPage from "./ManagedChatPage";
 
+// The page reads the last turn (auto-scroll, outline rail), so a stand-in has
+// to carry the fields it looks at, not just an id.
+const renderedTurn = { id: "m1", role: "assistant", text: "hello", isStreaming: false, traceMessages: [] };
+
 describe("ManagedChatPage chat-input policy wiring", () => {
   it("passes the runtime policy to both the composer and active HITL prompt", () => {
     const noop = () => undefined;
@@ -169,5 +193,124 @@ describe("ManagedChatPage chat-input policy wiring", () => {
     expect(html).toContain('data-testid="thread"');
     expect(html).toContain('data-hitl-draft="complete HITL draft"');
     expect(html).toContain('data-has-hitl-change-handler="true"');
+  });
+});
+
+// Entering a conversation, its messages land a moment after the click. For that
+// moment the page held no messages and nothing said a load was under way, so it
+// rendered the welcome stage — "start a new conversation" flashing on the way
+// into an existing one.
+describe("ManagedChatPage — the welcome stage waits for the history to answer", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const show = () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+  };
+
+  const threadEl = () => container.querySelector('[data-testid="thread"]');
+  const welcomeIsShown = () => threadEl() === null;
+
+  beforeEach(() => {
+    chatValue = {
+      ...chatValue,
+      capabilityIds: [],
+      pendingHitl: null,
+      waitResponse: false,
+      threadMessages: [],
+      sessionId: "session-1",
+      isHistorySettled: false,
+    };
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("shows the loading state, not the welcome, while the conversation is unresolved", () => {
+    show();
+
+    expect(welcomeIsShown()).toBe(false);
+    expect(threadEl()?.getAttribute("data-loading")).toBe("true");
+  });
+
+  it("shows the welcome once the history has answered that there is nothing", () => {
+    chatValue = { ...chatValue, isHistorySettled: true };
+    show();
+
+    expect(welcomeIsShown()).toBe(true);
+  });
+
+  it("stops loading as soon as the messages are there", () => {
+    chatValue = { ...chatValue, threadMessages: [renderedTurn] };
+    show();
+
+    expect(threadEl()?.getAttribute("data-loading")).toBe("false");
+  });
+
+  // A chat with no session has no history to resolve — making it wait would put
+  // a spinner in front of the one screen that is genuinely empty by nature.
+  it("shows the welcome straight away on a conversation that has not been minted yet", () => {
+    chatValue = { ...chatValue, sessionId: null, isHistorySettled: true };
+    show();
+
+    expect(welcomeIsShown()).toBe(true);
+  });
+});
+
+// Focus used to fall out of the composer being RE-ENABLED after a history load,
+// so it happened only when a load actually ran — a conversation served from the
+// cache silently got none, and which conversations those are is arbitrary.
+describe("ManagedChatPage — entering a conversation puts the cursor in the composer", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const show = () =>
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+
+  const focusRequest = () => container.querySelector('[data-testid="composer"]')?.getAttribute("data-focus-request");
+
+  beforeEach(() => {
+    chatValue = { ...chatValue, capabilityIds: [], sessionId: "session-1", isHistorySettled: true };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    show();
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("asks the composer to focus when the conversation changes", () => {
+    const before = focusRequest();
+
+    chatValue = { ...chatValue, sessionId: "session-2" };
+    show();
+
+    expect(focusRequest()).not.toBe(before);
+  });
+
+  it("does not ask again while the same conversation stays open", () => {
+    chatValue = { ...chatValue, sessionId: "session-2" };
+    show();
+    const after = focusRequest();
+
+    show();
+
+    expect(focusRequest()).toBe(after);
   });
 });
