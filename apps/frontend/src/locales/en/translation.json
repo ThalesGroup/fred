@@ -1872,6 +1872,7 @@
         "newSubfolder": "New subfolder in \"{{name}}\"",
         "preview": "Preview",
         "process": "Process",
+        "refresh": "Refresh this view",
         "rename": "Rename",
         "reprocess": "Reprocess",
         "searchable": "Exclude from search",
