@@ -51,6 +51,14 @@ one-occurrence-per-task invariant still holds, so `interrupt_id` alone remains s
 Validation therefore requires the pair only when the pending occurrence declares one,
 which is what keeps this change invisible to today's flows.
 
+The same replay rule constrains who may raise a pause at all, which is why the contract
+is worded around a tool call rather than an arbitrary call site: any side effect performed
+inside a tool *before* its pause is replayed when the resumed task re-executes. A pause is
+therefore only safe in a tool that does nothing but ask. That rules out pausing in the
+middle of an effectful business tool, and it is the reason the epic's trigger is a
+dedicated, pure tool rather than a `request_human_input()` an author could call from
+anywhere.
+
 ### Extract pending occurrences, not just pending ids
 
 `_pending_react_v2_interrupt_ids` returns a set of ids read from the pending writes. It
