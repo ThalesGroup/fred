@@ -28,12 +28,11 @@ from typing import Any, Mapping
 
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId, is_personal_team_id
-from fred_core.security.models import Resource
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
+from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
     RebacEngine,
     Relation,
     RelationType,
@@ -51,7 +50,6 @@ from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     ReasoningNotSupported,
     cap_ref,
-    capability_relation_subjects,
     disable_capability_for_team,
     enable_capability_for_team,
     enablement_ref,
@@ -224,23 +222,33 @@ def _canonical_team_id_for_entry(
     return resolve_system_team_id(user, team_id) or team_id
 
 
-def _fold_personal_scope(
-    relations: list[Relation] | RebacDisabledResult,
-) -> PersonalScope:
-    """Derive the personal-space class tri-state from the two org-subject
-    tuples (RFC §8.4), folded from an already-fetched relation set. `enabled`
-    wins if both are somehow present (matches the FGA setter, which never
-    leaves both)."""
+def _fold_personal_scope(facts: CapabilityEnablementFacts) -> PersonalScope:
+    """Derive the personal-space class tri-state (RFC §8.4) from the shared
+    fold. `enabled` wins if both markers are somehow present (matches the FGA
+    setter, which never leaves both)."""
 
-    if ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.PERSONAL_ON, Resource.ORGANIZATION
-    ):
+    if facts.personal_on:
         return "enabled"
-    if ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.PERSONAL_DISABLED, Resource.ORGANIZATION
-    ):
+    if facts.personal_disabled:
         return "disabled"
     return "default"
+
+
+def _enablement_facts(
+    relations: list[Relation] | RebacDisabledResult,
+) -> CapabilityEnablementFacts:
+    """The five `can_use` facts for one capability. ReBAC disabled folds to the
+    all-empty shape, which every caller already renders as "nothing granted"."""
+
+    if isinstance(relations, RebacDisabledResult):
+        return CapabilityEnablementFacts(
+            enabled=frozenset(),
+            disabled=frozenset(),
+            default_on=False,
+            personal_on=False,
+            personal_disabled=False,
+        )
+    return CapabilityEnablementFacts.from_relations(relations)
 
 
 async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> PersonalScope:
@@ -264,7 +272,7 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     relations = await rebac.list_direct_relations(
         cap_ref(capability_id), subject=ORG_REF
     )
-    return _fold_personal_scope(relations)
+    return _fold_personal_scope(_enablement_facts(relations))
 
 
 async def _build_enablement_item(
@@ -279,28 +287,20 @@ async def _build_enablement_item(
     """Build one row's ReBAC-derived fields.
 
     #2089: originally 4 concurrent `lookup_subjects` reads per row. #2181
-    follow-up: `enabled`/`disabled` team grants and `default_on`/personal-scope
-    org markers all live on the SAME literal tuple set for this capability, so
-    they no longer need 4 separate OpenFGA round-trips (5, counting
-    `_read_personal_scope`'s own pair) — one cached `list_direct_relations`
-    Read (`get_capability_relations_cached`) is fetched ONCE here and folded
-    locally, the same "fetch once, derive many" shape `_bulk_team_membership`/
-    `_fold_team_role_relations` already use for teams. Fetching once (instead
-    of gathering several calls that would each independently race the same
-    cache key) also avoids a per-row thundering herd on a cold cache.
+    follow-up: every field below lives on the SAME literal tuple set, so one
+    cached `list_direct_relations` Read is fetched ONCE here and folded
+    locally - the same "fetch once, derive many" shape
+    `_fold_team_role_relations` uses for teams, and through the same
+    `CapabilityEnablementFacts` the health column derives `can_use` from, so
+    the two cannot drift.
     """
 
     relations = await get_enablement_relations_cached(rebac, enablement_ref(entry))
-    default_on = ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.DEFAULT_ON, Resource.ORGANIZATION
-    )
-    enabled_team_ids = sorted(
-        capability_relation_subjects(relations, RelationType.ENABLED, Resource.TEAM)
-    )
-    disabled_team_ids = sorted(
-        capability_relation_subjects(relations, RelationType.DISABLED, Resource.TEAM)
-    )
-    personal_scope = _fold_personal_scope(relations)
+    facts = _enablement_facts(relations)
+    default_on = facts.default_on
+    enabled_team_ids = sorted(facts.enabled)
+    disabled_team_ids = sorted(facts.disabled)
+    personal_scope = _fold_personal_scope(facts)
     if entry.kind == "app":
         enabled_team_ids = [
             team_id
@@ -381,9 +381,9 @@ async def list_capability_enablement(
     # so run them concurrently instead of one after another (#2089). Platform-
     # wide denominators (collaborative teams for default-on inheritance §8.5,
     # personal spaces for personal-class access §8.4) and resting health
-    # (#1975: one ReBAC `ListObjects` per team holding instances, `collect_instances`
-    # names the broken agents inline so the health-column drill-down needs no
-    # second endpoint) all fold into the same gather as the catalog fetch.
+    # (`collect_instances` names the broken agents inline, so the health-column
+    # drill-down needs no second endpoint) all fold into the same gather as the
+    # catalog fetch.
     # `_pod_catalog_fetch_scope()` de-dupes the pod `/agents/templates` fetch
     # that `aggregate_capability_catalog` and `compute_capability_impact`
     # would otherwise each make independently (#2089).
