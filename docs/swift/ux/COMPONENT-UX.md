@@ -3357,14 +3357,64 @@ a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
+Restored behind the conversation (2026-09-11): the chat page holds a panel-open
+request until the thread has something on screen (messages rendered, or history
+settled with none), then applies it. Mounting the editor is one long synchronous
+task, and landing it on a still-loading thread delays the messages — which is
+what the user opened the conversation for. The request is held, not dropped, so
+it applies the moment the thread is there. Leaving the conversation drops it,
+and so does opening another push drawer while it waits — the hold opens a window
+in which the user can act, and it must yield to them rather than land on top of
+what they chose a second later. A request made mid-conversation (an agent
+writing a document) is long past that point and stays immediate. Code-splitting alone did not achieve this: it only
+delayed the editor on the FIRST page load, and click-navigation — which does not
+remount the page — found the chunk already in memory.
+
+The drawer animates before the pane mounts (2026-09-11): `CapabilitySidePanelHost`
+opens the drawer empty and mounts the panel once the slide has landed
+(`--duration-medium-1`), mirroring the lag it already had on the way down. A
+pane's first render can be a long synchronous task — this editor parses the
+whole document at mount — and anything synchronous during the slide stops it
+dead, so a large document made the drawer snap open instead of animating.
+Swapping between two panels while the drawer is already open is immediate:
+nothing is sliding. A loading placeholder fills the drawer for the whole wait —
+the slide, and the chunk fetch when there is one. The `Suspense` fallback alone
+would not do: a code-split pane suspends only on the first open of a page load,
+so every later open showed an empty drawer. The drawer's chrome (title band,
+inset) is dressed from the panel it is opening onto, not from the one mounted,
+or it flips mid-slide.
+
 Mounted by `CapabilitySidePanelHost` when the capability is active.
 
-Auto-open (2026-07-22): opening a conversation that already holds a document
-opens the editor pane immediately (`WritableDocumentAutoOpenProbe`, a headless
-`sessionProbes` plugin entry evaluated once per conversation-open against the
-authoritative list API). Live writes mid-conversation keep their existing pop
-via the card renderer; a list refresh never re-opens a pane the user closed.
-writable_document only — the PPT preview declares no probe.
+Resume-if-left-open (2026-07-22, default inverted and generalised 2026-09-11):
+re-opening a conversation restores the editor pane only where the user had it
+open, and only once `useHasContent` confirms there is still something to show.
+**Closed is the default** — holding a document is not reason enough to push the
+editor in front of someone reading the thread; the launcher rail offers it.
+Live writes mid-conversation keep their existing pop via the card renderer.
+
+Nothing here is specific to this capability any more: `CapabilitySidePanelHost`
+restores **every** declared panel the same way, so the HTML artifact viewer and
+the PPT preview resume too. The `sessionProbes` plugin contract this used to
+need is gone — it had exactly one implementation, and its two jobs were already
+expressible: "has this conversation got content" is `useHasContent` (which the
+launcher rail already asks), and "was it left open" is the record below. The
+probe's once-per-conversation guard went with it: closing clears the record, so
+the record is the guard.
+
+What "left open" means is recorded per conversation and per browser
+(`capabilityPanelMemory.ts`, bounded localStorage, the same class of UI
+preference as the persisted drawer width). The chat page derives it from the
+push-drawer state rather than recording at each of the dozen call sites that
+change it, so every route to the same outcome agrees: the launcher, the pane's
+✕, a capability's own `requestSidePanelOpen`, a switch to another capability
+panel, and opening the attachments drawer over the editor all land correctly,
+and only one panel is ever remembered because only one drawer is ever open. The
+page's own close on a conversation switch is excluded — it lands while the state
+still describes the conversation being left, and must touch neither side's
+record. With no record — a new machine, cleared storage, blocked storage — the
+answer is the default, closed. Capability-agnostic by construction: every
+declared panel is restored from the same record.
 
 Double close removed (2026-07-22): the pane (and `PptPreviewPane`) shipped its
 own header close button — a Kea-port leftover from `ResizablePaneShell`, which

@@ -263,6 +263,14 @@ sidePanels: {
   launcher is right as soon as the conversation loads, while `ppt_filler` has to wait
   for its chat cards to render and register their deck.
 
+`useHasContent` also gates **restoring** the panel: re-opening a conversation
+brings back whichever panel the user left open there, and this hook is what says
+the content is still around. So answer `false` while it is on its way, never
+"probably not" — the host waits for a `true` rather than concluding there is
+nothing. Nothing else is needed to take part: a panel is restored because it is
+declared, not because the capability wired anything up (2026-09-11 — this
+replaced a `sessionProbes` plugin field that only one capability ever used).
+
 ---
 
 ## Ships a router? Regenerate its API slice (#1979)
