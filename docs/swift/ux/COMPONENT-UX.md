@@ -3483,6 +3483,22 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+### `DocumentWorkspace` — refresh control (2026-09-11)
+
+The knowledge-flow query slice used to refetch on every mount and keep nothing
+between them, so each arrival on the Resources page reloaded the folder tree,
+the ingestion history and the folder sizes from scratch. It now serves the
+retained answer and only revalidates once it has aged past a short window,
+which makes walking to the chat and back instant — at the cost of a change made
+from another screen staying invisible for that window.
+
+The toolbar therefore carries an explicit refresh action, left of new-folder
+and upload. One press refetches the tree, the open folder's current page (its
+offset preserved), the usage stats and the team's storage quota. It sits
+**outside** the `canUpdateResources` gate the two actions beside it use:
+refreshing is not a mutation, and a read-only member needs it as much as
+anyone. The button shows its spinner while the round trip is in flight.
+
 ### `DocumentWorkspace` — library deletion
 
 Corpus library folders now carry a delete action (same `canUpdateResources`

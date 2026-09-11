@@ -13,12 +13,18 @@ export const knowledgeFlowApi = createApi({
   // back to a full loading state — a page that briefly unmounts its own body
   // reloaded itself in full.
   //
-  // So: keep revalidating on mount, but serve the cached answer while it runs.
-  // Replacing the mount revalidation with real tag invalidation is still the
-  // goal (see the slice README) — that is what would let this become a plain
-  // cache instead of a stale-while-revalidate one.
+  // So: retain the answer, and revalidate on mount only once it has aged past
+  // the window below rather than on every single mount. Walking from a page to
+  // the chat and back is then free, where it used to reload everything.
+  //
+  // The window is what bounds the staleness that buys: a change made from
+  // another screen can stay invisible for that long. The resources workspace
+  // carries an explicit refresh control for the times that is not good enough,
+  // and the mutations that happen on a page still refetch their own lists.
+  // Replacing this with real tag invalidation is still the goal (see the slice
+  // README) — that is what would make the window unnecessary.
   keepUnusedDataFor: 60,
-  refetchOnMountOrArgChange: true,
+  refetchOnMountOrArgChange: 30,
 
   endpoints: () => ({}),
   reducerPath: "knowledgeFlowApi",
