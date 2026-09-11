@@ -86,10 +86,13 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     async (doc: DocumentMetadata, tag: TagWithItemsId) => {
       try {
         const newItemIds = (tag.item_ids || []).filter((id) => id !== doc.identity.document_uid);
+        // PUT replaces every editable field: omitting `path` re-parents the folder
+        // to the root, so the current path must travel with the new item_ids.
         await updateTag({
           tagId: tag.id,
           tagUpdate: {
             name: tag.name,
+            path: tag.path,
             description: tag.description,
             type: tag.type,
             item_ids: newItemIds,
@@ -129,10 +132,12 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
       try {
         const idsToRemove = new Set(docs.map((d) => d.identity.document_uid));
         const newItemIds = (tag.item_ids || []).filter((id) => !idsToRemove.has(id));
+        // Same as removeFromLibrary: keep the folder path.
         await updateTag({
           tagId: tag.id,
           tagUpdate: {
             name: tag.name,
+            path: tag.path,
             description: tag.description,
             type: tag.type,
             item_ids: newItemIds,
