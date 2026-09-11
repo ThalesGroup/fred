@@ -1872,6 +1872,7 @@
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
         "process": "Traiter",
+        "refresh": "Rafraîchir cette vue",
         "rename": "Renommer",
         "reprocess": "Retraiter",
         "searchable": "Exclure de la recherche",

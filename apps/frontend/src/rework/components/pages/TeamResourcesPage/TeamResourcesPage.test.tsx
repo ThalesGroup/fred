@@ -50,6 +50,8 @@ const probe = vi.hoisted(() => ({
   // pinning, and it is invisible in the DOM.
   corpusStatsSkip: true,
   fsStatsSkip: {} as Record<string, boolean>,
+  // Lifecycle flags of the KF health probe that gates the whole page.
+  kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -83,12 +85,7 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
-    isLoading: false,
-    isFetching: false,
-    isUninitialized: false,
-    isError: false,
-  }),
+  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => probe.kfProbe,
   useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery: (_arg: unknown, options?: { skip?: boolean }) => {
     probe.corpusStatsSkip = options?.skip ?? false;
     return {
@@ -148,6 +145,7 @@ beforeEach(() => {
   probe.bootstrapPending = false;
   probe.corpusStatsSkip = true;
   probe.fsStatsSkip = {};
+  probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
 });
 
 afterEach(() => {
@@ -338,5 +336,41 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(probe.corpusStatsSkip).toBe(true);
     expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBe(false);
     expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(true);
+  });
+});
+
+describe("TeamResourcesPage health gate", () => {
+  function rerender() {
+    act(() => {
+      root.render(<TeamResourcesPage />);
+    });
+  }
+
+  it("blocks the page until the probe has answered once", () => {
+    probe.kfProbe = { isLoading: true, isFetching: true, isUninitialized: false, isError: false };
+    render();
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
+  });
+
+  it("keeps the workspace mounted through a background revalidation", () => {
+    // The workspace owns the folder you are standing in, its loaded document
+    // pages and its resolved folder sizes. Sending the page back to a spinner
+    // on a refetch threw all of that away — and, with no subscribers left,
+    // dropped its queries' cache entries too, so everything reloaded.
+    render();
+    const panel = container.querySelector('[data-testid="panel-resources"]');
+    expect(panel).not.toBeNull();
+
+    probe.kfProbe = { isLoading: false, isFetching: true, isUninitialized: false, isError: false };
+    rerender();
+
+    // Same DOM node, not a fresh one: a remount would have replaced it.
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBe(panel);
+  });
+
+  it("shows the service notice once a failed probe has settled", () => {
+    probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: true };
+    render();
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
   });
 });

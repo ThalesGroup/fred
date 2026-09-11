@@ -15,6 +15,12 @@
 // NOT GENERATED. Safe to edit.
 import { knowledgeFlowApi as api } from "./knowledgeFlowApi";
 
+// Every endpoint here resolves to a whole file held in the Redux store, so none
+// of them takes the slice's retention: a browse through a handful of large PDFs
+// would otherwise pin each one in memory for a minute after the last viewer
+// unmounted. Re-requesting a file is cheap next to keeping it.
+const BLOB_KEEP_UNUSED_DATA_FOR = 0;
+
 export const blobApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Raw file download as Blob
@@ -24,6 +30,7 @@ export const blobApi = api.injectEndpoints({
         // Force Blob at runtime
         responseHandler: (response) => response.blob(),
       }),
+      keepUnusedDataFor: BLOB_KEEP_UNUSED_DATA_FOR,
     }),
 
     // Markdown media file as Blob
@@ -32,6 +39,7 @@ export const blobApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/markdown/${documentUid}/media/${mediaId}`,
         responseHandler: (response) => response.blob(),
       }),
+      keepUnusedDataFor: BLOB_KEEP_UNUSED_DATA_FOR,
     }),
 
     // User asset download as Blob (supports optional explicit owner header)
@@ -41,6 +49,7 @@ export const blobApi = api.injectEndpoints({
         headers: assetOwnerId ? { "X-Asset-User-ID": assetOwnerId } : undefined,
         responseHandler: (response) => response.blob(),
       }),
+      keepUnusedDataFor: BLOB_KEEP_UNUSED_DATA_FOR,
     }),
 
     // Generic download by absolute URL (workspace assets, config, etc.)
@@ -50,6 +59,7 @@ export const blobApi = api.injectEndpoints({
         headers: assetOwnerId ? { "X-Asset-User-ID": assetOwnerId } : undefined,
         responseHandler: (response) => response.blob(),
       }),
+      keepUnusedDataFor: BLOB_KEEP_UNUSED_DATA_FOR,
     }),
   }),
   overrideExisting: false,

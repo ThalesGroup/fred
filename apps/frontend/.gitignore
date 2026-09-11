@@ -25,3 +25,5 @@ stats.html
 
 # test coverage
 /coverage
+# Archive produced by make theme-bundle
+/theme.zip
