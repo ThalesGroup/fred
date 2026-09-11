@@ -32,6 +32,7 @@ jobs:
       fred-agents: ${{ steps.changes.outputs.fred-agents }}
       platform-ops: ${{ steps.changes.outputs.platform-ops }}
       html-artifact: ${{ steps.changes.outputs.html-artifact }}
+      python-packages: ${{ steps.python-packages.outputs.selected }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -100,15 +101,48 @@ jobs:
             html-artifact:
               - 'libs/fred-capability-html-artifact/**'
 
+      # One matrix entry per package that actually needs checking. Gating the
+      # steps instead would still start a runner per cell and report it green,
+      # which is what made a frontend-only pull request show 40 passing Python
+      # checks. Conditions mirror each module's path dependencies.
+      - name: Select the Python packages to check
+        id: python-packages
+        env:
+          KNOWLEDGE_FLOW: ${{ steps.changes.outputs.knowledge-flow }}
+          FRED_CORE: ${{ steps.changes.outputs.fred-core }}
+          CONTROL_PLANE: ${{ steps.changes.outputs.control-plane }}
+          FRED_SDK: ${{ steps.changes.outputs.fred-sdk }}
+          FRED_RUNTIME: ${{ steps.changes.outputs.fred-runtime }}
+          FRED_AGENTS: ${{ steps.changes.outputs.fred-agents }}
+          PLATFORM_OPS: ${{ steps.changes.outputs.platform-ops }}
+          HTML_ARTIFACT: ${{ steps.changes.outputs.html-artifact }}
+        run: |
+          selected=""
+          add() { selected="${selected}${selected:+,}\"$1\""; }
+          core=false; sdk=false; runtime=false
+          [ "${FRED_CORE}" = true ] && core=true
+          { [ "${FRED_SDK}" = true ] || [ "${core}" = true ]; } && sdk=true
+          { [ "${FRED_RUNTIME}" = true ] || [ "${sdk}" = true ]; } && runtime=true
+          [ "${core}" = true ] && add libs/fred-core
+          [ "${sdk}" = true ] && add libs/fred-sdk
+          [ "${runtime}" = true ] && add libs/fred-runtime
+          { [ "${KNOWLEDGE_FLOW}" = true ] || [ "${core}" = true ]; } && add apps/knowledge-flow-backend
+          { [ "${CONTROL_PLANE}" = true ] || [ "${sdk}" = true ]; } && add apps/control-plane-backend
+          { [ "${FRED_AGENTS}" = true ] || [ "${runtime}" = true ]; } && add apps/fred-agents
+          { [ "${PLATFORM_OPS}" = true ] || [ "${runtime}" = true ]; } && add libs/fred-capability-platform-ops
+          { [ "${HTML_ARTIFACT}" = true ] || [ "${runtime}" = true ]; } && add libs/fred-capability-html-artifact
+          echo "selected=[${selected}]" >> "$GITHUB_OUTPUT"
+          echo "Python packages to check: [${selected}]"
+
   # Job to run code quality checks on the entire repository
   code-quality:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.html-artifact == 'true'
+    if: needs.detect-changes.outputs.python-packages != '[]'
     strategy:
       fail-fast: false
       matrix:
-        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents, libs/fred-capability-platform-ops, libs/fred-capability-html-artifact]
+        directory: ${{ fromJson(needs.detect-changes.outputs.python-packages) }}
         check:
           - lint
           - format
@@ -116,42 +150,19 @@ jobs:
           - sast
           # - detect-secret # todo: baseline not working, fix it and re enable this check
           - type-check
-        # The ${{ }} wrapper is what makes should-run a real boolean: an
-        # unwrapped expression stays a string, and every non-empty string is
-        # true to `if:`. Conditions mirror each module's path dependencies.
-        include:
-          - directory: apps/knowledge-flow-backend
-            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-core
-            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: apps/control-plane-backend
-            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
-          - directory: libs/fred-sdk
-            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-runtime
-            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: apps/fred-agents
-            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-capability-platform-ops
-            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-capability-html-artifact
-            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
 
     steps:
       - uses: actions/checkout@v4
-        if: ${{ matrix.should-run }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python environment
-        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.directory }}
 
       - name: Run ${{ matrix.check }}
-        if: ${{ matrix.should-run }}
         run: |
           cd ${{ matrix.directory }}/
           make ${{ matrix.check }}
