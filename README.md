@@ -12,7 +12,7 @@
 [![Stars](https://img.shields.io/github/stars/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/stargazers)
 [![Contributors](https://img.shields.io/github/contributors/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/graphs/contributors)
 [![Last commit](https://img.shields.io/github/last-commit/ThalesGroup/fred/swift?label=last%20commit)](https://github.com/ThalesGroup/fred/commits/swift)
-[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
+[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/FDSEvNarG)
 
 > **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
 
@@ -753,7 +753,7 @@ We welcome pull requests and issues. Start with the [Contributing guide](./CONTR
 
 ## Community
 
-Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
+Join the discussion on our [Discord server](https://discord.gg/FDSEvNarG)!
 
 ## Contacts
 
