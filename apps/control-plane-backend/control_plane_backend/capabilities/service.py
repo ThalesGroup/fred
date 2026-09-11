@@ -381,9 +381,9 @@ async def list_capability_enablement(
     # so run them concurrently instead of one after another (#2089). Platform-
     # wide denominators (collaborative teams for default-on inheritance §8.5,
     # personal spaces for personal-class access §8.4) and resting health
-    # (#1975: one ReBAC `ListObjects` per team holding instances, `collect_instances`
-    # names the broken agents inline so the health-column drill-down needs no
-    # second endpoint) all fold into the same gather as the catalog fetch.
+    # (`collect_instances` names the broken agents inline, so the health-column
+    # drill-down needs no second endpoint) all fold into the same gather as the
+    # catalog fetch.
     # `_pod_catalog_fetch_scope()` de-dupes the pod `/agents/templates` fetch
     # that `aggregate_capability_catalog` and `compute_capability_impact`
     # would otherwise each make independently (#2089).
