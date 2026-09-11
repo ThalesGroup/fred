@@ -334,7 +334,7 @@ applications:
           keepalive_expiry_seconds: 10
         temperature: 0.0
       default_profile_by_capability:
-        chat: default.chat.mistral-medium
+        chat: default.chat.mistral-small
       profiles:
         # Mirrors apps/fred-agents/config/models_catalog.yaml. Medium is the
         # non-reasoning profile on purpose: a reasoning model emits its content
