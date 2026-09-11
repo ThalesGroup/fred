@@ -109,17 +109,23 @@ export default function TeamResourcesPage() {
 
   // Usage-by-type stats (§13.5/13.7 FRONT-09.I) — one query per tab's data source,
   // each skipped unless it's the active tab so switching tabs never fires every query
-  // at once. "Agents" has no single filesystem root (its table's root is virtual,
-  // fanning out per agent instance — see AgentsWorkspace) so it has no stats source
-  // yet — RFC §13.5.
+  // at once, and unless the cards are actually open: the panel starts collapsed, and
+  // the corpus query walks every library the user can read and every document in each
+  // of them, so leaving it on the mount path scanned the whole corpus on each visit
+  // and threw the answer away. "Agents" has no single filesystem root (its table's
+  // root is virtual, fanning out per agent instance — see AgentsWorkspace) so it has
+  // no stats source yet — RFC §13.5.
   const corpusStats = useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery(
     { teamId: fsTeamId },
-    { skip: activeTab !== "resources" },
+    { skip: !statsOpen || activeTab !== "resources" },
   );
-  const mineStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery({ path: userRoot }, { skip: activeTab !== "mine" });
+  const mineStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery(
+    { path: userRoot },
+    { skip: !statsOpen || activeTab !== "mine" },
+  );
   const teamStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery(
     { path: sharedRoot },
-    { skip: activeTab !== "team" },
+    { skip: !statsOpen || activeTab !== "team" },
   );
   const activeStats =
     activeTab === "resources"

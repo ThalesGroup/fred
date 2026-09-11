@@ -86,7 +86,7 @@
 /* Team reach and personal-space reach are different denominators, so they get
  * their own badge each rather than an inline "A + B" that reads as a single
  * count. Row, not a column stack, so the two short badges sit side by side.
- * `nowrap` + the column's widened `1.6fr` (CapabilitiesPage.tsx) keep them on
+ * `nowrap` + the column's widened `1.6fr` (FeaturesPage.tsx) keep them on
  * one line instead of falling back to a two-line stack. */
 .countStack {
   display: flex;

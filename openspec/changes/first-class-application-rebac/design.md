@@ -44,7 +44,7 @@ The app model is:
 ```text
 inherited = team from default_on
 can_use = (enabled or inherited) but not disabled
-can_manage = platform_admin from organization
+can_manage = can_manage_capabilities from organization
 ```
 
 There is no `active` marker or additional lifecycle adoption prerequisite.

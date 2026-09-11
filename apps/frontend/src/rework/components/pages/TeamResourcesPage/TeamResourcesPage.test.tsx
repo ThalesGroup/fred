@@ -45,6 +45,11 @@ const probe = vi.hoisted(() => ({
   // True while useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery
   // hasn't resolved yet — bootstrap is undefined during that window.
   bootstrapPending: false,
+  // Last `skip` each stats query was rendered with — the stats endpoints are
+  // whole-corpus scans, so whether they run at all is the behaviour worth
+  // pinning, and it is invisible in the DOM.
+  corpusStatsSkip: true,
+  fsStatsSkip: {} as Record<string, boolean>,
   // Lifecycle flags of the KF health probe that gates the whole page.
   kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
 }));
@@ -81,14 +86,20 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListAllTagsKnowledgeFlowV1TagsGetQuery: () => probe.kfProbe,
-  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery: () => ({
-    data: { entries: [] },
-    isLoading: false,
-    isError: false,
-    isUninitialized: probe.corpusStatsUninitialized,
-    refetch: probe.corpusStatsRefetch,
-  }),
-  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery: () => ({ data: { entries: [] }, isLoading: false, isError: false }),
+  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery: (_arg: unknown, options?: { skip?: boolean }) => {
+    probe.corpusStatsSkip = options?.skip ?? false;
+    return {
+      data: { entries: [] },
+      isLoading: false,
+      isError: false,
+      isUninitialized: probe.corpusStatsUninitialized,
+      refetch: probe.corpusStatsRefetch,
+    };
+  },
+  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery: (arg: { path: string }, options?: { skip?: boolean }) => {
+    probe.fsStatsSkip[arg.path] = options?.skip ?? false;
+    return { data: { entries: [] }, isLoading: false, isError: false };
+  },
 }));
 vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
   default: (props: { onDocumentsChanged?: () => void }) => {
@@ -132,6 +143,8 @@ beforeEach(() => {
   probe.onDocumentsChanged = undefined;
   probe.enableAllResourceSpaces = true;
   probe.bootstrapPending = false;
+  probe.corpusStatsSkip = true;
+  probe.fsStatsSkip = {};
   probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
 });
 
@@ -295,6 +308,34 @@ describe("TeamResourcesPage stats toggle", () => {
 
     click(statsToggle());
     expect(container.querySelector('[data-testid="stats-cards"]')).toBeNull();
+  });
+
+  it("does not query the corpus stats until the cards are opened", () => {
+    // The endpoint walks every library the user can read and every document in
+    // each of them; running it on mount scanned the whole corpus for a panel
+    // nobody had opened.
+    render();
+    expect(probe.corpusStatsSkip).toBe(true);
+
+    click(statsToggle());
+    expect(probe.corpusStatsSkip).toBe(false);
+
+    click(statsToggle());
+    expect(probe.corpusStatsSkip).toBe(true);
+  });
+
+  it("queries only the open tab's stats source", () => {
+    render();
+    click(statsToggle());
+
+    // "Mon espace" and "Espace partagé" both read /fs stats, on different roots.
+    expect(probe.corpusStatsSkip).toBe(false);
+    expect(Object.values(probe.fsStatsSkip).every((skipped) => skipped)).toBe(true);
+
+    click(tabButtons()[1]);
+    expect(probe.corpusStatsSkip).toBe(true);
+    expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBe(false);
+    expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(true);
   });
 });
 

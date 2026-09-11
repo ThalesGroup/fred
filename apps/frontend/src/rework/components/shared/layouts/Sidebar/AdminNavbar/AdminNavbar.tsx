@@ -17,31 +17,31 @@ import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/N
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { isProtectedAllowed, type ProtectedRequirement } from "@core/guards/Protected";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
 import styles from "./AdminNavbar.module.css";
 
-// Analytics (`can_observe_platform`, item 16) is the one `/admin` page a
-// platform_observer may see — everything else here is `Protected
-// requires="admin"` (router.tsx) and would just bounce them to
-// `/unauthorized` if shown, so it's hidden rather than left as a dead link.
+// `requires` is the same value the page's route guard in router.tsx passes to
+// `Protected`, resolved through the same `isProtectedAllowed` — a page the
+// caller cannot open is hidden rather than left as a link to `/unauthorized`.
 export default function AdminNavbar() {
   const { t } = useTranslation();
   const activeTaskCount = useSelector(selectActiveCount);
-  const { canAdmin, canObservePlatform } = useUserCapabilities();
-  const allItems: (NavigationMenuItemProps & { visible: boolean })[] = [
+  const capabilities = useUserCapabilities();
+  const allItems: (NavigationMenuItemProps & { requires: ProtectedRequirement })[] = [
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/admin/teams" },
-      visible: canAdmin,
+      requires: "teams",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.platformRoles"),
       icon: { category: "outlined", type: "admin_panel_settings", filled: false },
       linkProps: { to: "/admin/platform-roles" },
-      visible: canAdmin,
+      requires: "admin",
     },
     {
       type: "link",
@@ -49,52 +49,54 @@ export default function AdminNavbar() {
       icon: { category: "outlined", type: "build", filled: false },
       linkProps: { to: "/admin/tasks" },
       badge: activeTaskCount > 0 ? activeTaskCount : undefined,
-      visible: canAdmin,
+      requires: "admin",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.analytics"),
       icon: { category: "outlined", type: "analytics", filled: false },
       linkProps: { to: "/admin/analytics" },
-      visible: canAdmin || canObservePlatform,
+      requires: "observer",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.platformPrompt"),
       icon: { category: "outlined", type: "auto_awesome", filled: false },
       linkProps: { to: "/admin/platform-prompt" },
-      visible: canAdmin,
+      requires: "platformPrompt",
     },
     {
       type: "link",
-      label: t("rework.sidebar.admin.menu.capabilities"),
+      label: t("rework.sidebar.admin.menu.features"),
       icon: { category: "outlined", type: "tune", filled: false },
-      linkProps: { to: "/admin/capabilities" },
-      visible: canAdmin,
+      linkProps: { to: "/admin/features" },
+      requires: "features",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.migration"),
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },
-      visible: canAdmin,
+      requires: "admin",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.corpusAudit"),
       icon: { category: "outlined", type: "find_in_page", filled: false },
       linkProps: { to: "/admin/corpus-audit" },
-      visible: canAdmin,
+      requires: "admin",
     },
     {
       type: "link",
       label: t("rework.sidebar.admin.menu.selftest"),
       icon: { category: "outlined", type: "check_circle", filled: false },
       linkProps: { to: "/admin/self-test" },
-      visible: canAdmin,
+      requires: "admin",
     },
   ];
-  const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) => item.visible);
+  const navigationItems: NavigationMenuItemProps[] = allItems.filter((item) =>
+    isProtectedAllowed(item.requires, capabilities),
+  );
 
   return (
     <div className={styles.adminNavbarContainer}>
