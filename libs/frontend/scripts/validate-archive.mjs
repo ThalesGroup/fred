@@ -17,6 +17,11 @@ import {
 import { FONT_SOURCES, LICENSE_FILES } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
 import {
+  assertExpectedManifest,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
+import {
   assertNoCssImports,
   assertTokenCssContract,
 } from "./token-css-contract.mjs";
@@ -86,7 +91,12 @@ async function validateCssAssets(packageRoot, relativePath) {
   return assets.sort();
 }
 
-export async function validateArchive(archivePath) {
+export async function validateArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "designTokens");
   const archive = path.resolve(archivePath);
   const temporaryRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-package-archive-"),
@@ -109,7 +119,7 @@ export async function validateArchive(archivePath) {
     );
     assert.equal(
       manifest.name,
-      "@fred/design-tokens",
+      expectedPackage.name,
       "archive is not the design-token member",
     );
     assert.notEqual(
@@ -249,6 +259,8 @@ export async function validateArchive(archivePath) {
       licenseHashes[license.packedPath] = actualHash;
     }
 
+    assertExpectedManifest(manifest, expectedPackage);
+
     return {
       archive,
       package: `${manifest.name}@${manifest.version}`,
@@ -270,6 +282,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("Usage: node scripts/validate-archive.mjs <archive.tgz>");
   }
   process.stdout.write(
-    `${JSON.stringify(await validateArchive(archivePath), null, 2)}\n`,
+    `${JSON.stringify(
+      await validateArchive(archivePath, {
+        contract: await loadReleaseContract(
+          process.argv.includes("--contract")
+            ? process.argv[process.argv.indexOf("--contract") + 1]
+            : undefined,
+        ),
+      }),
+      null,
+      2,
+    )}\n`,
   );
 }

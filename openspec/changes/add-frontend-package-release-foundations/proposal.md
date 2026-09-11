@@ -24,7 +24,8 @@ authorize any publication.
   coordinates, archive filenames, and SHA-512 integrity. Any rebuilt or modified archive
   requires new validation and evidence.
 - Add a registry-verification command that requires exact package coordinates and recorded
-  integrity, rejects local/workspace fallback, cryptographically verifies provenance, compares
+  integrity, rejects local/workspace fallback, cryptographically verifies provenance against
+  the expected signer certificate URI and issuer, compares
   its artifact digest, source repository, source commit, and publishing workflow identity with
   explicit release expectations, and exercises clean registry-installed consumers. A valid
   signature alone does not establish the intended release identity. Local tests of the command
@@ -69,5 +70,6 @@ None.
   publication, adoption, and future package work.
 - No application or RAGS source changes, registry mutation, package publication, protocol
   ownership transfer, or package adoption are part of this change.
-- Tracking issue to create after approval: **Frontend packages: establish release-ready
-  manifests, versioned archives, and registry verification foundations**.
+- Tracking: [ThalesGroup/fred#2630](https://github.com/ThalesGroup/fred/issues/2630) —
+  **Frontend packages: establish release-ready manifests, versioned archives, and registry
+  verification foundations**.

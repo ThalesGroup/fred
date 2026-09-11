@@ -325,6 +325,41 @@ jobs:
         run: make browser-smoke
         working-directory: libs/frontend
 
+  frontend-package-release-readiness:
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-packages == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup release Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+
+      - name: Pin release npm
+        run: npm install --global npm@11.19.0
+
+      - name: Install producer dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Validate release contracts
+        run: make release-check
+        working-directory: libs/frontend
+
+      - name: Run controlled release tooling tests
+        run: make release-test
+        working-directory: libs/frontend
+
+      - name: Preserve package archive regressions
+        run: make code-quality test pack-check
+        working-directory: libs/frontend
+
   # Job to run code quality checks on the frontend
   frontend-code-quality:
     runs-on: ubuntu-24.04

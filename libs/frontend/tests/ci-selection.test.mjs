@@ -12,6 +12,7 @@ import {
   IFRAME_SDK_CANONICAL_SOURCE_PATH,
   IFRAME_SDK_SOURCE_PATHS,
   PACKAGE_WORKSPACE_PATTERN,
+  RELEASE_TOOLING_INPUTS,
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
   UI_COMPONENT_SOURCE_PATHS,
@@ -68,6 +69,25 @@ test("producer workspace changes select package validation", () => {
     selectsPackageJob([
       PACKAGE_WORKSPACE_PATTERN.replace("**", "scripts/new-check.mjs"),
     ]),
+  );
+});
+
+test("every release-readiness input selects package validation", () => {
+  for (const sourcePath of RELEASE_TOOLING_INPUTS) {
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+  }
+  const releaseJob = workflow.jobs["frontend-package-release-readiness"];
+  assert(releaseJob.if.includes("frontend-packages"));
+  assert.equal(
+    releaseJob.steps.find((step) => step.name === "Setup release Node.js").with[
+      "node-version"
+    ],
+    "24.21.0",
+  );
+  assert(
+    releaseJob.steps.some(
+      (step) => step.run === "npm install --global npm@11.19.0",
+    ),
   );
 });
 

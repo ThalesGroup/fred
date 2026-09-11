@@ -72,6 +72,13 @@ MUST NOT represent such a test as an approved release candidate.
   scope, package names, versions, or bootstrap authorization remain provisional
 - **THEN** it fails actionably and does not label the archives release candidates
 
+#### Scenario: A fixture contract is relabelled without maintainer decisions
+
+- **WHEN** a fixture contract's state is changed while it retains fixture approval
+  identities, development versions or tag, or non-authoritative provenance identities
+- **THEN** validation rejects it before packing and it cannot produce approved candidate
+  evidence
+
 ### Requirement: Candidate archives and evidence are immutable
 
 Release-candidate validation SHALL operate on the actual packed bytes for all three
@@ -119,7 +126,8 @@ npm Trusted Publishing and staged publishing; changing either pin MUST be a revi
 contract change with renewed validation.
 
 FRED application tests that participate in compatibility validation MUST remain under
-their separately controlled application toolchain. Release orchestration MUST identify
+their separately controlled application toolchain. Release evidence MUST record exact
+Node and npm versions for that application-test environment. Release orchestration MUST identify
 which toolchain produced each item of evidence and MUST pass immutable candidate
 archives between producer and application-test environments rather than resolving the
 producer's installed dependencies from the application environment.
@@ -208,8 +216,11 @@ package. Against a real public registry, it MUST resolve those exact versions, v
 registry-reported and downloaded-byte integrity, cryptographically verify provenance for
 each package, and exercise fresh clean consumers installed from the registry.
 
-Cryptographic signature validity alone MUST NOT establish a matching release. For every
-package, verification MUST compare the attested artifact digest, source repository,
+Cryptographic signature validity alone MUST NOT establish a matching release. Cryptographic
+verification MUST require the signing certificate identity to equal the explicitly authorized
+GitHub workflow URI and its issuer to equal the explicitly expected GitHub Actions OIDC issuer.
+For every package, verification MUST then independently compare the attested artifact digest,
+source repository,
 source commit, and publishing workflow identity with the explicit expected values bound
 to the approved release contract and candidate evidence. It MUST NOT accept values merely
 because they appear in a validly signed downloaded attestation. The expected bootstrap
@@ -246,6 +257,12 @@ not as proof that packages were genuinely published.
 - **WHEN** a provenance statement is cryptographically valid but its publishing workflow
   identity differs from the explicitly authorized Trusted Publishing identity
 - **THEN** registry verification fails the release-identity comparison
+
+#### Scenario: A valid Sigstore bundle has an unauthorized signer identity
+
+- **WHEN** a provenance bundle is cryptographically valid but its signing certificate URI
+  or issuer differs from the expected Trusted Publishing workflow certificate policy
+- **THEN** registry verification fails before accepting statement identity claims
 
 #### Scenario: Valid provenance names an unexpected artifact digest
 

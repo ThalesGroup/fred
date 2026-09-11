@@ -139,7 +139,8 @@ Node `24.21.0` and npm `11.19.0`. It validates each tarball against the selected
 runs all existing positive and negative archive checks, and computes SHA-512 directly
 from each completed file. One JSON evidence record contains:
 
-- schema version, UTC creation time, clean source commit, and exact Node/npm versions;
+- schema version, UTC creation time, clean source commit, and exact producer and
+  application-test Node/npm versions;
 - selected contract identity and decision status;
 - exact package coordinate, archive filename, byte length, and SRI-formatted SHA-512;
 - references/results for archive, isolated-consumer, browser, and host-compatibility gates.
@@ -211,7 +212,9 @@ only exact registry versions and reject every tarball, directory, workspace, sou
 or reused-dependency-tree fallback.
 
 Provenance verification is two separate gates. First, the verifier cryptographically checks
-the signature and attestation chain using the pinned supported tooling. Second, it compares
+the signature and attestation chain using the pinned supported tooling, requiring the signer
+certificate SAN to equal the authorized GitHub workflow identity and its issuer to equal the
+explicit expected GitHub Actions OIDC issuer. Second, it compares
 the verified statement with values that were already bound to the approved release contract
 and candidate evidence: the subject/artifact digest must equal the candidate tarball digest,
 the source repository must equal the approved FRED repository identity, the source commit must

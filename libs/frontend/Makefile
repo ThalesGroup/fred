@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke clean
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test release-candidate release-verify-evidence registry-verify clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,6 +60,21 @@ browser-install: ## Provision Chromium separately from browser-smoke execution
 
 browser-smoke: ## Run local-only browser checks against staged consumer output
 	npm run test:browser
+
+release-check: ## Validate release contracts and dependency boundaries
+	npm run release:check
+
+release-test: ## Run controlled release tooling tests without registry access
+	npm run release:test
+
+release-candidate: ## Build evidence under an explicitly selected contract
+	npm run release:candidate --
+
+release-verify-evidence: ## Recompute integrity for an existing candidate set
+	npm run release:verify-evidence --
+
+registry-verify: ## Verify exact published coordinates (network; never local fallback)
+	npm run registry:verify --
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

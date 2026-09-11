@@ -14,9 +14,13 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+import { parameterizeConsumerSources } from "./consumer-contract.mjs";
+import { assertOfflineConsumerReferences } from "./dependency-boundaries.mjs";
 import { packIframeSdk } from "./pack-iframe-sdk.mjs";
 import { run } from "./process.mjs";
 import { iframeSdkConsumerCache } from "./provision-iframe-sdk-consumer.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { sha512Integrity } from "./release-evidence.mjs";
 import { validateIframeSdkArchive } from "./validate-iframe-sdk-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -98,15 +102,26 @@ export async function stageIsolatedIframeSdkConsumer({
   evidencePath,
   stagedOutputPath,
   cachePath = iframeSdkConsumerCache,
+  contract: selectedContract,
+  archivePath: suppliedArchive,
+  expectedIntegrity,
 } = {}) {
+  const contract = selectedContract ?? (await loadReleaseContract());
   await assertIframeSdkConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
     throw new Error(
       `iframe SDK consumer cache is missing at ${cachePath}; run npm run consumer:provision:iframe-sdk first`,
     );
   });
-  const { archivePath } = await packIframeSdk();
-  await validateIframeSdkArchive(archivePath);
+  const archivePath =
+    suppliedArchive ?? (await packIframeSdk({ contract })).archivePath;
+  await validateIframeSdkArchive(archivePath, { contract });
+  if (expectedIntegrity)
+    assert.equal(
+      await sha512Integrity(archivePath),
+      expectedIntegrity,
+      "iframe SDK candidate integrity differs",
+    );
   const consumerRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-iframe-sdk-consumer-"),
   );
@@ -119,6 +134,7 @@ export async function stageIsolatedIframeSdkConsumer({
       recursive: true,
       filter: (source) => !source.includes("node_modules"),
     });
+    await parameterizeConsumerSources(consumerRoot, contract, ["iframeSdk"]);
     const originalLock = await readFile(
       path.join(fixtureRoot, "package-lock.json"),
     );
@@ -174,18 +190,37 @@ export async function stageIsolatedIframeSdkConsumer({
       ).stdout,
     );
     assert.equal(
-      graph.dependencies?.["@fred/iframe-sdk"]?.version,
-      "0.0.0-development",
+      graph.dependencies?.[contract.packages.iframeSdk.name]?.version,
+      contract.packages.iframeSdk.version,
     );
     assert(
       !Object.keys(graph.dependencies ?? {}).some(
         (name) =>
           name === "react" ||
-          (name.startsWith("@fred/") && name !== "@fred/iframe-sdk"),
+          (name.startsWith("@fred/") &&
+            name !== contract.packages.iframeSdk.name),
       ),
     );
+    await assertOfflineConsumerReferences({
+      manifest: JSON.parse(
+        await readFile(path.join(consumerRoot, "package.json"), "utf8"),
+      ),
+      lockfile: JSON.parse(
+        await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
+      ),
+      consumerRoot,
+      evidence: {
+        packages: {
+          iframeSdk: {
+            coordinate: `${contract.packages.iframeSdk.name}@${contract.packages.iframeSdk.version}`,
+            filename: path.basename(archiveTarget),
+            integrity: await sha512Integrity(archiveTarget),
+          },
+        },
+      },
+    });
     await assertNoLinks(
-      path.join(consumerRoot, "node_modules/@fred/iframe-sdk"),
+      path.join(consumerRoot, "node_modules", contract.packages.iframeSdk.name),
     );
     const typecheck = await run(
       path.join(consumerRoot, "node_modules/.bin/tsc"),
@@ -253,6 +288,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         keep: process.argv.includes("--keep"),
         evidencePath: optionValue("--evidence"),
         stagedOutputPath: optionValue("--stage"),
+        contract: await loadReleaseContract(optionValue("--contract")),
       }),
       null,
       2,
