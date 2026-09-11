@@ -17,6 +17,11 @@ import {
 } from "./package-inputs.mjs";
 import { inspectModuleReferences } from "./module-references.mjs";
 import { run } from "./process.mjs";
+import {
+  assertExpectedManifest,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -176,7 +181,12 @@ async function assertExportTarget(packageRoot, exportName, condition, target) {
   }
 }
 
-export async function validateIframeSdkArchive(archivePath) {
+export async function validateIframeSdkArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "iframeSdk");
   const temporary = await mkdtemp(
     path.join(os.tmpdir(), "fred-iframe-sdk-archive-"),
   );
@@ -196,8 +206,8 @@ export async function validateIframeSdkArchive(archivePath) {
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),
     );
-    assert.equal(manifest.name, "@fred/iframe-sdk");
-    assert.equal(manifest.version, "0.0.0-development");
+    assert.equal(manifest.name, expectedPackage.name);
+    assert.equal(manifest.version, expectedPackage.version);
     assert.equal(
       manifest.description,
       "Framework-independent child client for FRED application iframes",
@@ -282,6 +292,7 @@ export async function validateIframeSdkArchive(archivePath) {
       !/\bRAGS\b|rags-|rag[_-]specific/i.test(combined.join("\n")),
       "iframe SDK archive contains consumer-specific identity",
     );
+    assertExpectedManifest(manifest, expectedPackage);
     return {
       package: `${manifest.name}@${manifest.version}`,
       files,

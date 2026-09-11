@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { buildUi } from "./build-ui.mjs";
 import { run } from "./process.mjs";
+import { loadReleaseContract, packageContract } from "./release-contract.mjs";
 import { validateUiArchive } from "./validate-ui-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -14,7 +15,13 @@ function optionValue(name) {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
-export async function packUi({ validate = false, evidencePath } = {}) {
+export async function packUi({
+  validate = false,
+  evidencePath,
+  contract: selectedContract,
+} = {}) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expected = packageContract(contract, "ui");
   const rootManifest = JSON.parse(
     await readFile(path.join(workspaceRoot, "package.json"), "utf8"),
   );
@@ -29,18 +36,21 @@ export async function packUi({ validate = false, evidencePath } = {}) {
       "pack",
       "--json",
       "--workspace",
-      "@fred/ui",
+      expected.name,
       "--pack-destination",
       archiveDirectory,
     ],
     { cwd: workspaceRoot },
   );
   const [packResult] = JSON.parse(stdout);
-  if (packResult.name !== "@fred/ui")
+  if (
+    packResult.name !== expected.name ||
+    packResult.version !== expected.version
+  )
     throw new Error(`npm selected unexpected package: ${packResult.name}`);
   const archivePath = path.join(archiveDirectory, packResult.filename);
   const validation = validate
-    ? await validateUiArchive(archivePath)
+    ? await validateUiArchive(archivePath, { contract })
     : undefined;
   const evidence = { packResult, validation };
   if (evidencePath) {
@@ -55,6 +65,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await packUi({
     validate: process.argv.includes("--validate"),
     evidencePath: optionValue("--evidence"),
+    contract: await loadReleaseContract(optionValue("--contract")),
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

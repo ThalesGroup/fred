@@ -14,10 +14,14 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+import { parameterizeConsumerSources } from "./consumer-contract.mjs";
+import { installAfterOfflineReferenceValidation } from "./dependency-boundaries.mjs";
 import { packDesignTokens } from "./pack-design-tokens.mjs";
 import { packUi } from "./pack-ui.mjs";
 import { run } from "./process.mjs";
 import { consumerCache } from "./provision-react-consumer.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { sha512Integrity } from "./release-evidence.mjs";
 import { validateArchive } from "./validate-archive.mjs";
 import { validateUiArchive } from "./validate-ui-archive.mjs";
 
@@ -124,17 +128,36 @@ export async function stageIsolatedReactConsumer({
   evidencePath,
   stagedOutputPath,
   cachePath = consumerCache,
+  contract: selectedContract,
+  tokenArchivePath: suppliedTokenArchive,
+  uiArchivePath: suppliedUiArchive,
+  expectedIntegrities = {},
 } = {}) {
+  const contract = selectedContract ?? (await loadReleaseContract());
   await assertReactConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
     throw new Error(
       `React consumer cache is missing at ${cachePath}; run npm run consumer:provision first`,
     );
   });
-  const { archivePath: tokenArchive } = await packDesignTokens();
-  await validateArchive(tokenArchive);
-  const { archivePath: uiArchive } = await packUi();
-  await validateUiArchive(uiArchive);
+  const tokenArchive =
+    suppliedTokenArchive ?? (await packDesignTokens({ contract })).archivePath;
+  await validateArchive(tokenArchive, { contract });
+  const uiArchive =
+    suppliedUiArchive ?? (await packUi({ contract })).archivePath;
+  await validateUiArchive(uiArchive, { contract });
+  if (expectedIntegrities.designTokens)
+    assert.equal(
+      await sha512Integrity(tokenArchive),
+      expectedIntegrities.designTokens,
+      "design-token candidate integrity differs",
+    );
+  if (expectedIntegrities.ui)
+    assert.equal(
+      await sha512Integrity(uiArchive),
+      expectedIntegrities.ui,
+      "UI candidate integrity differs",
+    );
   const consumerRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-react-consumer-"),
   );
@@ -147,12 +170,30 @@ export async function stageIsolatedReactConsumer({
       recursive: true,
       filter: (source) => !source.includes("node_modules"),
     });
+    await parameterizeConsumerSources(consumerRoot, contract, [
+      "designTokens",
+      "ui",
+    ]);
     const originalLock = await readFile(
       path.join(fixtureRoot, "package-lock.json"),
     );
     const tokenTarget = path.join(consumerRoot, "design-tokens.tgz");
     const uiTarget = path.join(consumerRoot, "ui.tgz");
     await Promise.all([cp(tokenArchive, tokenTarget), cp(uiArchive, uiTarget)]);
+    const candidateEvidence = {
+      packages: {
+        designTokens: {
+          coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+          filename: path.basename(tokenTarget),
+          integrity: await sha512Integrity(tokenTarget),
+        },
+        ui: {
+          coordinate: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
+          filename: path.basename(uiTarget),
+          integrity: await sha512Integrity(uiTarget),
+        },
+      },
+    };
     const env = offlineEnvironment(cachePath);
     let archiveResolution;
     let dependencyInstall;
@@ -172,18 +213,29 @@ export async function stageIsolatedReactConsumer({
         ],
         { cwd: consumerRoot, env },
       );
-      dependencyInstall = await run(
-        "npm",
-        [
-          "ci",
-          "--offline",
-          "--include=dev",
-          "--ignore-scripts",
-          "--no-audit",
-          "--no-fund",
-        ],
-        { cwd: consumerRoot, env },
-      );
+      dependencyInstall = await installAfterOfflineReferenceValidation({
+        manifest: JSON.parse(
+          await readFile(path.join(consumerRoot, "package.json"), "utf8"),
+        ),
+        lockfile: JSON.parse(
+          await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
+        ),
+        consumerRoot,
+        evidence: candidateEvidence,
+        installDependencies: () =>
+          run(
+            "npm",
+            [
+              "ci",
+              "--offline",
+              "--include=dev",
+              "--ignore-scripts",
+              "--no-audit",
+              "--no-fund",
+            ],
+            { cwd: consumerRoot, env },
+          ),
+      });
     } catch (error) {
       throw new Error(
         `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. Run npm run consumer:provision with network access, then retry offline validation.\n${error.message}`,
@@ -196,8 +248,9 @@ export async function stageIsolatedReactConsumer({
     });
     const parsedGraph = JSON.parse(resolvedGraph.stdout);
     for (const [dependency, version] of Object.entries({
-      "@fred/design-tokens": "0.0.0-development",
-      "@fred/ui": "0.0.0-development",
+      [contract.packages.designTokens.name]:
+        contract.packages.designTokens.version,
+      [contract.packages.ui.name]: contract.packages.ui.version,
       react: "19.2.4",
       "react-dom": "19.2.4",
     }))
@@ -233,9 +286,15 @@ export async function stageIsolatedReactConsumer({
     );
     await Promise.all([
       assertNoLinks(
-        path.join(consumerRoot, "node_modules/@fred/design-tokens"),
+        path.join(
+          consumerRoot,
+          "node_modules",
+          contract.packages.designTokens.name,
+        ),
       ),
-      assertNoLinks(path.join(consumerRoot, "node_modules/@fred/ui")),
+      assertNoLinks(
+        path.join(consumerRoot, "node_modules", contract.packages.ui.name),
+      ),
     ]);
     const typecheck = await run(
       path.join(consumerRoot, "node_modules/.bin/tsc"),
@@ -307,6 +366,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     keep: process.argv.includes("--keep"),
     evidencePath: optionValue("--evidence"),
     stagedOutputPath: "target/staged-consumers/react",
+    contract: await loadReleaseContract(optionValue("--contract")),
   });
   process.stdout.write(`${JSON.stringify(result.evidence, null, 2)}\n`);
 }
