@@ -74,11 +74,17 @@ export interface UserCapabilities {
   canDebug: boolean;
   canAdmin: boolean;
   canObservePlatform: boolean;
+  /** Delegated admin-tier roles, one per admin surface. A `platform_admin`
+   * holds all three (the backend resolves the schema union), so a narrower
+   * flag never takes a surface away from an admin. */
+  canManageTeams: boolean;
+  canManageFeatures: boolean;
+  canEditPlatformPrompt: boolean;
   canEditSessions: boolean;
   canDeleteSessions: boolean;
-  /** True until `/frontend/bootstrap` has resolved at least once. `canAdmin`/
-   * `canObservePlatform` default to `false` while this is true — callers that
-   * gate access (e.g. `Protected`) must not treat that default as a denial. */
+  /** True until `/frontend/bootstrap` has resolved at least once. Every role
+   * flag defaults to `false` while this is true — callers that gate access
+   * (e.g. `Protected`) must not treat that default as a denial. */
   isLoading: boolean;
 }
 

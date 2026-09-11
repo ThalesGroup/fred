@@ -1,6 +1,6 @@
 # RFC: Versioned frontend packages for external application integration with FRED
 
-**Status:** Partially implemented — design-token and initial UI archive foundations are implemented; iframe SDK, publication, FRED registry adoption, catalog expansion, and external adoption remain open
+**Status:** Partially implemented — design-token, initial UI, and protocol-`"1"` iframe SDK archive foundations are implemented; theme/live-locale extensions, publication, FRED registry adoption, catalog expansion, and external adoption remain open
 **Date:** 2026-09-07  
 **Area:** FRED frontend, design system, application integration, package delivery  
 **Scope:** Common frontend integration contract for independently deployed external applications  
@@ -16,11 +16,11 @@ Develop and maintain shared frontend code in FRED, publish it as versioned packa
 
 Start with three bounded packages:
 
-| Proposed package | Responsibility | Consumer requirements |
-| --- | --- | --- |
-| `@fred/design-tokens` | Existing visual tokens, theme selectors, and optional typography assets | CSS; no React dependency |
-| `@fred/ui` | A small, reviewed set of existing presentation components and all their runtime assets | Supported React and React DOM versions |
-| `@fred/iframe-sdk` | Framework-independent client and shared wire definitions for FRED's existing iframe protocol | Browser; no React, Redux, or Keycloak dependency |
+| Proposed package      | Responsibility                                                                               | Consumer requirements                            |
+| --------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `@fred/design-tokens` | Existing visual tokens, theme selectors, and optional typography assets                      | CSS; no React dependency                         |
+| `@fred/ui`            | A small, reviewed set of existing presentation components and all their runtime assets       | Supported React and React DOM versions           |
+| `@fred/iframe-sdk`    | Framework-independent client and shared wire definitions for FRED's existing iframe protocol | Browser; no React, Redux, or Keycloak dependency |
 
 FRED must consume the extracted implementations itself. External applications consume published versions without copying FRED files or requiring a sibling FRED checkout.
 
@@ -44,16 +44,16 @@ Versioning makes differences visible and upgrades controlled. It does not guaran
 
 The following are source observations, not proposed features.
 
-| Existing element | Evidence and implication |
-| --- | --- |
-| One private frontend application | [`apps/frontend/package.json`][source-package] declares `fred-ui`, version `1.5.2`, `private: true`, React/React DOM `^19.2.4`, TypeScript `^5.9.3`, and Vite `^6.4.2`. These are manifest declarations, not a proposed library version. |
-| A native design system | Tokens are in [`src/styles/`][source-styles]; components are in [`src/rework/components/shared/`][source-shared]. Extract these implementations; do not introduce MUI or redesign the system. |
-| Global styles mixed with reusable assets | [`src/styles/index.css`][source-styles-index] combines tokens, font faces, semantic color helpers, and shell-wide rules such as `html` overflow and text selection. It cannot be published wholesale as a neutral stylesheet. |
-| Asset paths tied to the application | [`Icon.tsx`][source-icon] resolves custom icons under `/images/icons/`; font declarations reference `src/assets/fonts`. Published components must resolve their own assets. |
-| Existing iframe protocol | [`applicationHost.ts`][source-host-contract] defines protocol `"1"`, context, navigation, request/response, and open-chat messages. There is no theme field, resize message, or notification message in that contract. |
-| Existing authenticated request broker | [`applicationRequest.ts`][source-request] keeps Keycloak integration in the host and builds team-scoped service requests. It is not suitable for publication as a child-side API client. |
-| Existing runtime application host | [`TeamApplicationHostPage.tsx`][source-host-page] validates both message origin and source window, uses a 15-second handshake timeout, and limits concurrent proxied requests to 16. |
-| Existing generic gateway configuration | [`config/.env.template`][source-env], [`application-proxy.mjs`][source-proxy], and [`docker-entrypoint.sh`][source-entrypoint] already support multiple applications using `FRONTEND_APPLICATIONS_JSON`. No per-application Makefile target is required. |
+| Existing element                         | Evidence and implication                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| One private frontend application         | [`apps/frontend/package.json`][source-package] declares `fred-ui`, version `1.5.2`, `private: true`, React/React DOM `^19.2.4`, TypeScript `^5.9.3`, and Vite `^6.4.2`. These are manifest declarations, not a proposed library version.                                                                                                                                 |
+| A native design system                   | Tokens are in [`src/styles/`][source-styles]; components are in [`src/rework/components/shared/`][source-shared]. Extract these implementations; do not introduce MUI or redesign the system.                                                                                                                                                                            |
+| Global styles mixed with reusable assets | [`src/styles/index.css`][source-styles-index] combines tokens, font faces, semantic color helpers, and shell-wide rules such as `html` overflow and text selection. It cannot be published wholesale as a neutral stylesheet.                                                                                                                                            |
+| Asset paths tied to the application      | [`Icon.tsx`][source-icon] resolves custom icons under `/images/icons/`; font declarations reference `src/assets/fonts`. Published components must resolve their own assets.                                                                                                                                                                                              |
+| Existing iframe protocol                 | [`applicationProtocol.ts`][source-protocol-contract] is the canonical transport-neutral source for protocol `"1"`, context, navigation, request/response, and open-chat messages; [`applicationHost.ts`][source-host-contract] retains host-only policy and compatibility re-exports. There is no theme field, resize message, or notification message in that contract. |
+| Existing authenticated request broker    | [`applicationRequest.ts`][source-request] keeps Keycloak integration in the host and builds team-scoped service requests. It is not suitable for publication as a child-side API client.                                                                                                                                                                                 |
+| Existing runtime application host        | [`TeamApplicationHostPage.tsx`][source-host-page] validates both message origin and source window, uses a 15-second handshake timeout, and limits concurrent proxied requests to 16.                                                                                                                                                                                     |
+| Existing generic gateway configuration   | [`config/.env.template`][source-env], [`application-proxy.mjs`][source-proxy], and [`docker-entrypoint.sh`][source-entrypoint] already support multiple applications using `FRONTEND_APPLICATIONS_JSON`. No per-application Makefile target is required.                                                                                                                 |
 
 The authority for the shipped application integration is [the control-plane product contract, §46][source-product-contract], checked against the code. The [application-hosting RFC][source-hosting-rfc] still contains draft and deferred material; it must not be interpreted as evidence that hosting remains entirely unimplemented.
 
@@ -91,13 +91,13 @@ Runtime module federation; a new application registry; a new permission model; p
 
 Use a small private npm workspace under `libs/frontend/`, consistent with FRED maintaining reusable code under `libs/`:
 
-| Proposed path | Contents |
-| --- | --- |
+| Proposed path                                        | Contents                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `libs/frontend/package.json` and `package-lock.json` | Private workspace root, shared build/test scripts, pinned development toolchain |
-| `libs/frontend/design-tokens/` | Publishable token package |
-| `libs/frontend/ui/` | Publishable React component package |
-| `libs/frontend/iframe-sdk/` | Publishable framework-independent SDK |
-| `libs/frontend/fixtures/` | Private integration fixtures; never published |
+| `libs/frontend/design-tokens/`                       | Publishable token package                                                       |
+| `libs/frontend/ui/`                                  | Publishable React component package                                             |
+| `libs/frontend/iframe-sdk/`                          | Publishable framework-independent SDK                                           |
+| `libs/frontend/fixtures/`                            | Private integration fixtures; never published                                   |
 
 Keep `apps/frontend` as a normal package consumer with its existing independent lockfile. This avoids making the entire FRED application part of a new repository-wide JavaScript workspace solely to release three libraries. npm workspaces provide local linking for development within the producer workspace. ([npm workspaces documentation](https://docs.npmjs.com/cli/v11/using-npm/workspaces/))
 
@@ -105,15 +105,15 @@ For production, FRED and each external application declare registry versions. Fo
 
 ### 5.2 Allowed dependencies
 
-| Package | Allowed | Excluded |
-| --- | --- | --- |
-| Design tokens | CSS and distributable typography assets | React, application state, network access |
-| UI | React peers; token peer; extracted presentation utilities and assets | Redux, Keycloak, FRED routers, backend clients, application contexts, team/session business models |
-| Iframe SDK | Browser primitives, shared protocol types and validation | React, UI components, Keycloak, host store, FRED backend clients |
+| Package       | Allowed                                                              | Excluded                                                                                           |
+| ------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Design tokens | CSS and distributable typography assets                              | React, application state, network access                                                           |
+| UI            | React peers; token peer; extracted presentation utilities and assets | Redux, Keycloak, FRED routers, backend clients, application contexts, team/session business models |
+| Iframe SDK    | Browser primitives, shared protocol types and validation             | React, UI components, Keycloak, host store, FRED backend clients                                   |
 
-The host keeps catalog resolution, authorization-related hooks, `applicationFrameTarget`, routing decisions, and `createApplicationRequest`. Move only the transport-neutral wire definitions and suitable pure parsers from `applicationHost.ts` into the SDK's `./protocol` export. Its current import of the generated `ApplicationSummary` type must remain on the host side, not leak into the public package.
+The host keeps catalog resolution, authorization-related hooks, `applicationFrameTarget`, routing decisions, and `createApplicationRequest`. The implemented archive generator copies only the transport-neutral canonical `applicationProtocol.ts` source into disposable build input for the SDK's `./protocol` export. The generated `ApplicationSummary` type remains host-side and does not leak into the public package.
 
-Temporary internal re-exports can preserve FRED imports during migration. They must point to the package; maintaining copied implementations in both locations is prohibited. Remove the re-exports once callers migrate.
+Temporary application re-exports preserve FRED imports without making FRED consume an unpublished workspace package. They point to the canonical application protocol module; maintaining copied protocol implementations is prohibited. Registry consumption and removal of compatibility re-exports remain later migration work.
 
 ## 6. Design tokens and UI contract
 
@@ -143,12 +143,12 @@ Compiled CSS modules remain the component implementation technique. Their genera
 
 Start from these existing components, subject to dependency and accessibility checks:
 
-| First extraction | Required treatment |
-| --- | --- |
-| `Button`, `IconButton`, `Icon` | Include visual types, icon styling and assets; resolve custom SVGs through package-owned imports or an explicit consumer asset adapter. Never require `/images/icons` on the consumer server. |
-| `TextInput`, `TextArea`, `Checkbox`, `Switch` | Preserve labels, disabled/error behavior, keyboard behavior, and current public props where practical. |
-| `Chip`, `Spinner` | Carry all token/style dependencies and accessible status semantics. |
-| `PageEmptyState` | Keep message text and actions supplied by the consumer; no FRED translation catalog dependency. |
+| First extraction                              | Required treatment                                                                                                                                                                            |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`, `IconButton`, `Icon`                | Include visual types, icon styling and assets; resolve custom SVGs through package-owned imports or an explicit consumer asset adapter. Never require `/images/icons` on the consumer server. |
+| `TextInput`, `TextArea`, `Checkbox`, `Switch` | Preserve labels, disabled/error behavior, keyboard behavior, and current public props where practical.                                                                                        |
+| `Chip`, `Spinner`                             | Carry all token/style dependencies and accessible status semantics.                                                                                                                           |
+| `PageEmptyState`                              | Keep message text and actions supplied by the consumer; no FRED translation catalog dependency.                                                                                               |
 
 Add `Tooltip`, menus, selects, and modal molecules only after their extracted utilities, focus behavior, and portal ownership pass the external fixture. Do not publish a component just because it sits in an `atoms` or `molecules` folder: several current components encode domain concepts or depend on other infrastructure.
 
@@ -170,17 +170,17 @@ Use a peer dependency on `@fred/design-tokens` to express a tested compatible ra
 
 The initial SDK must implement the existing message names and serialized shapes:
 
-| Direction | Existing message | SDK responsibility |
-| --- | --- | --- |
-| Child → host | `fred:ready` | Announce supported protocol after installing the receive listener |
-| Host → child | `fred:context` | Validate and expose application identity, team, route, and locale |
-| Host → child | `fred:route` | Notify the application's own router without navigation loops |
-| Child → host | `fred:navigate` | Request a relative route inside the application's subtree |
-| Child → host | `fred:open-chat` | Pass an optional session candidate; the host decides the destination |
-| Child → host | `fred:request` | Send a unique request ID, relative path, allowed method, ordinary headers, and string/null body |
+| Direction    | Existing message                       | SDK responsibility                                                                                |
+| ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Child → host | `fred:ready`                           | Announce supported protocol after installing the receive listener                                 |
+| Host → child | `fred:context`                         | Validate and expose application identity, team, route, and locale                                 |
+| Host → child | `fred:route`                           | Notify the application's own router without navigation loops                                      |
+| Child → host | `fred:navigate`                        | Request a relative route inside the application's subtree                                         |
+| Child → host | `fred:open-chat`                       | Pass an optional session candidate; the host decides the destination                              |
+| Child → host | `fred:request`                         | Send a unique request ID, relative path, allowed method, ordinary headers, and string/null body   |
 | Host → child | `fred:response`, `fred:response-error` | Correlate replies, settle pending requests, and distinguish HTTP responses from transport failure |
 
-These shapes come from the existing implementation, not a new API family. New convenience method names below are illustrative public SDK proposals:
+These shapes come from the existing implementation, not a new API family. The bounded archive foundation now exposes this public child API:
 
 ```ts
 import { createFredApplicationClient } from "@fred/iframe-sdk";
@@ -246,10 +246,10 @@ UI visibility, context fields, and SDK use do not authorize backend access. The 
 
 ### 8.1 Two supported UI delivery modes
 
-| Deployment | Browser loads iframe from | Consequences |
-| --- | --- | --- |
-| Existing gateway mode | `https://fred.example.com/apps/example-app/` | The gateway forwards to the independently deployed external UI server. That server receives the complete `/apps/example-app/` prefix; build assets and SPA fallback must support it. |
-| Separate browser origin | An absolute configured URL such as `https://external-app.example.com/` | The browser fetches UI assets from the external application server directly. Host-to-child messages use the two actual origins. The authenticated API broker remains in FRED. |
+| Deployment              | Browser loads iframe from                                              | Consequences                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Existing gateway mode   | `https://fred.example.com/apps/example-app/`                           | The gateway forwards to the independently deployed external UI server. That server receives the complete `/apps/example-app/` prefix; build assets and SPA fallback must support it. |
+| Separate browser origin | An absolute configured URL such as `https://external-app.example.com/` | The browser fetches UI assets from the external application server directly. Host-to-child messages use the two actual origins. The authenticated API broker remains in FRED.        |
 
 A different server behind the FRED gateway is still the same browser origin. An absolute iframe URL can create a genuinely different origin. The current same-origin frame is a rendering/lifecycle boundary for trusted applications, not security isolation against malicious same-origin code. Its current sandbox includes `allow-scripts` and `allow-same-origin`; do not claim otherwise. ([MDN iframe documentation](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe))
 
@@ -320,11 +320,11 @@ Frontend maintainers own the token/UI public API. Application-host maintainers o
 
 ### 9.3 Keep three version axes separate
 
-| Version | Meaning | Compatibility rule |
-| --- | --- | --- |
-| npm package SemVer | Public code, CSS, asset, and type contract | Consumers choose compatible releases and commit lockfiles |
-| iframe protocol version | Serialized host/child message contract | Host accepts an explicit set; unsupported versions fail visibly |
-| FRED or external application version | Deployed product/image | Independent release lifecycle; record package versions used |
+| Version                              | Meaning                                    | Compatibility rule                                              |
+| ------------------------------------ | ------------------------------------------ | --------------------------------------------------------------- |
+| npm package SemVer                   | Public code, CSS, asset, and type contract | Consumers choose compatible releases and commit lockfiles       |
+| iframe protocol version              | Serialized host/child message contract     | Host accepts an explicit set; unsupported versions fail visibly |
+| FRED or external application version | Deployed product/image                     | Independent release lifecycle; record package versions used     |
 
 Start with explicit prereleases such as `0.1.0-alpha.1`; freeze `1.0.0` only after FRED, the neutral external fixture, and the first-adopter pilot satisfy the acceptance criteria. Stable package publication does not require migrating every screen of the first adopter. These are planning examples. Do not inherit `fred-ui`'s application version `1.5.2` or Python package versions.
 
@@ -340,15 +340,15 @@ Upgrade through a reviewed dependency PR with changelog and visual/contract chec
 
 Each row is a proposed implementation slice, not a claim of completed work or a substitute for GitHub issue tracking.
 
-| Slice | Work | Exit condition |
-| --- | --- | --- |
-| 1. Confirm the boundary | Agree scope/ownership; inventory source dependencies and asset notices; establish existing host fixtures, a neutral consumer fixture, and the first-adopter screen | Reviewed public export list and compatibility baseline |
-| 2. Package tokens and initial UI | Create the producer workspace; extract the selected implementation and complete assets; create an isolated consumer fixture | Packed artifacts render light/dark correctly with no source checkout |
-| 3. Package protocol and child SDK | Extract shared wire definitions; implement the child client against protocol `"1"`; keep authenticated host adapters internal | Existing host plus packed SDK passes messaging and API tests |
-| 4. Publish prereleases and migrate FRED | Publish validated prereleases before committing FRED dependencies on them; replace FRED implementations with package imports; retain temporary re-exports only where necessary | FRED uses the packaged implementation; current host/UI behavior remains supported |
-| 5. Add synchronized context | Implement optional theme and live locale updates; update the existing contract and compatibility fixtures | Old/new client and host combinations behave as specified |
-| 6. Validate external adoption | Audit the pilot application's dependencies/OpenAPI; migrate one real screen; build its own UI image; exercise both hosting modes and a neutral fixture under another application identity | The pilot builds independently; the fixture integrates through the same contract without consumer-specific host or package changes |
-| 7. Stabilize and remove migration code | Satisfy the platform acceptance criteria; publish stable packages; remove redundant shared implementations/re-exports and record support policy | One owner per implementation; stable artifacts and documented upgrade path; further consumer migration follows each application's roadmap |
+| Slice                                   | Work                                                                                                                                                                                      | Exit condition                                                                                                                            |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Confirm the boundary                 | Agree scope/ownership; inventory source dependencies and asset notices; establish existing host fixtures, a neutral consumer fixture, and the first-adopter screen                        | Reviewed public export list and compatibility baseline                                                                                    |
+| 2. Package tokens and initial UI        | Create the producer workspace; extract the selected implementation and complete assets; create an isolated consumer fixture                                                               | Packed artifacts render light/dark correctly with no source checkout                                                                      |
+| 3. Package protocol and child SDK       | Extract shared wire definitions; implement the child client against protocol `"1"`; keep authenticated host adapters internal                                                             | Existing host plus packed SDK passes messaging and API tests                                                                              |
+| 4. Publish prereleases and migrate FRED | Publish validated prereleases before committing FRED dependencies on them; replace FRED implementations with package imports; retain temporary re-exports only where necessary            | FRED uses the packaged implementation; current host/UI behavior remains supported                                                         |
+| 5. Add synchronized context             | Implement optional theme and live locale updates; update the existing contract and compatibility fixtures                                                                                 | Old/new client and host combinations behave as specified                                                                                  |
+| 6. Validate external adoption           | Audit the pilot application's dependencies/OpenAPI; migrate one real screen; build its own UI image; exercise both hosting modes and a neutral fixture under another application identity | The pilot builds independently; the fixture integrates through the same contract without consumer-specific host or package changes        |
+| 7. Stabilize and remove migration code  | Satisfy the platform acceptance criteria; publish stable packages; remove redundant shared implementations/re-exports and record support policy                                           | One owner per implementation; stable artifacts and documented upgrade path; further consumer migration follows each application's roadmap |
 
 Each adopter inventories its dependencies and confirms React compatibility before installing `@fred/ui`. A representative pilot screen should include a read, a form or mutation, loading/error/empty states, route navigation, and a team switch.
 
@@ -370,19 +370,20 @@ Track the detailed RAGS migration in its own implementation work. Completion of 
 
 ## 11. Files affected by later implementation
 
-| Location | Intended change |
-| --- | --- |
-| `libs/frontend/` | Existing private package producer workspace; extend its build configuration, public exports, fixtures, release notes, and tests |
-| `apps/frontend/src/styles/` and `src/assets/fonts/` | Transfer reusable ownership; retain shell-specific styling; remove redundant assets once migrated |
-| `apps/frontend/src/rework/components/shared/` | Transfer selected presentation components and utilities; replace internal imports or use temporary re-exports |
-| `apps/frontend/src/rework/features/applications/applicationHost.ts` | Import shared protocol definitions; keep catalog/frame resolution host-local |
-| `apps/frontend/src/rework/features/applications/applicationRequest.ts` | Preserve host-only token and authenticated-request behavior |
-| `apps/frontend/src/rework/components/pages/TeamApplicationHostPage/` | Consume protocol exports, preserve host constraints, and add tested context synchronization |
-| `apps/frontend/package.json`, `package-lock.json`, entry styles | Consume released package versions and import complete package assets |
-| `.github/workflows/` | Dedicated frontend-package validation and publication workflow |
-| Existing frontend Makefile/Docker/CI integration | Verify registry consumption and add only generic package-test wiring where required; no per-application targets |
-| Product contract §46 and frontend guidance | Record the approved public package boundary and context extension; keep the existing generated backend API types authoritative |
-| Each adopting external frontend | Consumer-owned dependency, UI, transport, configuration, and Docker changes; exact paths require inspecting its repository |
+| Location                                                                | Intended change                                                                                                                          |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `libs/frontend/`                                                        | Implemented private producer for design-token, initial UI, and iframe SDK archives; future work adds releases and later package surfaces |
+| `apps/frontend/src/styles/` and `src/assets/fonts/`                     | Transfer reusable ownership; retain shell-specific styling; remove redundant assets once migrated                                        |
+| `apps/frontend/src/rework/components/shared/`                           | Transfer selected presentation components and utilities; replace internal imports or use temporary re-exports                            |
+| `apps/frontend/src/rework/features/applications/applicationProtocol.ts` | Implemented canonical protocol source consumed by FRED and copied into disposable SDK build input                                        |
+| `apps/frontend/src/rework/features/applications/applicationHost.ts`     | Implemented compatibility imports/re-exports; catalog/frame resolution stays host-local                                                  |
+| `apps/frontend/src/rework/features/applications/applicationRequest.ts`  | Host-only token and authenticated-request behavior remains in place                                                                      |
+| `apps/frontend/src/rework/components/pages/TeamApplicationHostPage/`    | Consume protocol exports, preserve host constraints, and add tested context synchronization                                              |
+| `apps/frontend/package.json`, `package-lock.json`, entry styles         | Consume released package versions and import complete package assets                                                                     |
+| `.github/workflows/`                                                    | Dedicated frontend-package validation and publication workflow                                                                           |
+| Existing frontend Makefile/Docker/CI integration                        | Verify registry consumption and add only generic package-test wiring where required; no per-application targets                          |
+| Product contract §46 and frontend guidance                              | Record the approved public package boundary and context extension; keep the existing generated backend API types authoritative           |
+| Each adopting external frontend                                         | Consumer-owned dependency, UI, transport, configuration, and Docker changes; exact paths require inspecting its repository               |
 
 No backend endpoint change is required for package extraction. If external adoption reveals an API shape change, handle it in its owning backend and regenerate the relevant client; do not hand-edit generated FRED API files.
 
@@ -390,36 +391,36 @@ After implementation, move settled decisions into compact contract/package docum
 
 ## 12. Acceptance criteria
 
-| Area | Required evidence |
-| --- | --- |
-| Artifact completeness | `npm pack` contents include declarations, CSS, fonts, icons, and required notices; no unresolved aliases, local paths, undeclared dependencies, or missing URLs |
-| Independent consumption | A temporary external project installs only tarballs, then published prereleases, and builds without access to the FRED tree |
-| Tokens without React | A plain HTML/CSS fixture loads the token package and both themes without React or the SDK |
-| React packaging | UI peers resolve within the tested range; no bundled second React; consumer build and hook usage pass |
-| Visual behavior | FRED and pilot screen verify light/dark, font/icon loading, focus, keyboard use, disabled/error states, narrow viewport, and themed portals for any exported overlays |
-| Wire compatibility | Existing host accepts the new SDK; new host supports existing protocol-1 clients; unsupported versions produce the existing mismatch state |
-| Messaging resilience | Wrong origin/source, malformed payloads, duplicate IDs, excess concurrency, timeout, reload/disposal, and late responses behave predictably |
-| Authority boundary | No bearer in child context/messages; protected headers and escaping routes are rejected; team changes clear child work; existing backend denial and host refresh behavior are preserved |
-| Theme extension | New host/old client, old host/new client, and new/new combinations verify optional fields, repeated context delivery, and explicit fallback |
-| Network and deployment | Browser tests exercise real different HTTPS origins, framing policy, nested-path assets, authenticated broker calls, back/forward navigation, and revoked team access |
-| First-adopter proof | Its own CI builds and runs a usable pilot from its repository and registry artifacts alone; no manual FRED asset copying |
+| Area                     | Required evidence                                                                                                                                                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Artifact completeness    | `npm pack` contents include declarations, CSS, fonts, icons, and required notices; no unresolved aliases, local paths, undeclared dependencies, or missing URLs                                                                                                                            |
+| Independent consumption  | A temporary external project installs only tarballs, then published prereleases, and builds without access to the FRED tree                                                                                                                                                                |
+| Tokens without React     | A plain HTML/CSS fixture loads the token package and both themes without React or the SDK                                                                                                                                                                                                  |
+| React packaging          | UI peers resolve within the tested range; no bundled second React; consumer build and hook usage pass                                                                                                                                                                                      |
+| Visual behavior          | FRED and pilot screen verify light/dark, font/icon loading, focus, keyboard use, disabled/error states, narrow viewport, and themed portals for any exported overlays                                                                                                                      |
+| Wire compatibility       | Existing host accepts the new SDK; new host supports existing protocol-1 clients; unsupported versions produce the existing mismatch state                                                                                                                                                 |
+| Messaging resilience     | Wrong origin/source, malformed payloads, duplicate IDs, excess concurrency, timeout, reload/disposal, and late responses behave predictably                                                                                                                                                |
+| Authority boundary       | No bearer in child context/messages; protected headers and escaping routes are rejected; team changes clear child work; existing backend denial and host refresh behavior are preserved                                                                                                    |
+| Theme extension          | New host/old client, old host/new client, and new/new combinations verify optional fields, repeated context delivery, and explicit fallback                                                                                                                                                |
+| Network and deployment   | Browser tests exercise real different HTTPS origins, framing policy, nested-path assets, authenticated broker calls, back/forward navigation, and revoked team access                                                                                                                      |
+| First-adopter proof      | Its own CI builds and runs a usable pilot from its repository and registry artifacts alone; no manual FRED asset copying                                                                                                                                                                   |
 | Application independence | A neutral fixture with a different application ID, UI origin, and service upstream integrates alongside the pilot using documented registration and dependencies; no consumer-specific branches in FRED or public packages; context, routes, and API calls target the selected application |
-| Release operation | Maintainers can identify versions in the deployed build and roll back using a previous image; publication and support owners are recorded |
+| Release operation        | Maintainers can identify versions in the deployed build and roll back using a previous image; publication and support owners are recorded                                                                                                                                                  |
 
 During implementation, retain and run FRED's existing application protocol, request, path, host-page, and proxy tests. Run `make code-quality` and `make test` in the touched frontend project, plus the new producer package and isolated artifact checks. A successful workspace build alone is insufficient evidence of correct packaging.
 
 ## 13. Alternatives and trade-offs
 
-| Alternative | Assessment |
-| --- | --- |
-| Copy CSS/components into external applications | Reject: hidden dependencies and permanent duplicate maintenance |
-| Publish all of `apps/frontend` | Reject: application state, heavy features, authentication, and business clients become accidental public APIs |
-| One combined frontend package | Reject initially: couples non-React consumers, React components, and wire protocol releases unnecessarily |
-| Tokens only | Useful first slice, insufficient as the final result because components and iframe helpers still diverge |
-| Inject host CSS into the child | Reject: relies on shared-origin access and leaves version ownership undefined |
-| Load application modules into the host at runtime | Retain the iframe choice: shared runtime/framework assumptions are unnecessary for independently deployed external applications |
-| Repository-wide JavaScript workspace | Defer: broader lockfile/build migration than needed; the producer workspace plus ordinary consumers establishes the required boundary |
-| Separate repository for shared packages | Defer: adds coordination before the first public boundary is proven; FRED remains the canonical source today |
+| Alternative                                       | Assessment                                                                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Copy CSS/components into external applications    | Reject: hidden dependencies and permanent duplicate maintenance                                                                       |
+| Publish all of `apps/frontend`                    | Reject: application state, heavy features, authentication, and business clients become accidental public APIs                         |
+| One combined frontend package                     | Reject initially: couples non-React consumers, React components, and wire protocol releases unnecessarily                             |
+| Tokens only                                       | Useful first slice, insufficient as the final result because components and iframe helpers still diverge                              |
+| Inject host CSS into the child                    | Reject: relies on shared-origin access and leaves version ownership undefined                                                         |
+| Load application modules into the host at runtime | Retain the iframe choice: shared runtime/framework assumptions are unnecessary for independently deployed external applications       |
+| Repository-wide JavaScript workspace              | Defer: broader lockfile/build migration than needed; the producer workspace plus ordinary consumers establishes the required boundary |
+| Separate repository for shared packages           | Defer: adds coordination before the first public boundary is proven; FRED remains the canonical source today                          |
 
 The chosen design adds release ownership and compatibility testing. It also means each deployed application includes the shared code and assets it needs. These costs are explicit and proportionate to eliminating source-checkout dependencies and giving consumers controlled upgrades.
 
@@ -439,6 +440,7 @@ Approval authorizes the staged implementation described here. This document itse
 [source-styles-index]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/src/styles/index.css
 [source-icon]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/src/rework/components/shared/atoms/Icon/Icon.tsx
 [source-host-contract]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/src/rework/features/applications/applicationHost.ts
+[source-protocol-contract]: ../../apps/frontend/src/rework/features/applications/applicationProtocol.ts
 [source-request]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/src/rework/features/applications/applicationRequest.ts
 [source-host-page]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx
 [source-env]: https://github.com/ThalesGroup/fred/blob/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55/apps/frontend/config/.env.template

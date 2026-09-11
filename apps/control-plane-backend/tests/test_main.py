@@ -50,7 +50,7 @@ from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import Team
-from control_plane_backend.users.schemas import UserSummary
+from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 from fred_core import (
     JoiningMode,
     KeycloakUser,
@@ -862,13 +862,14 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["feature_flags"]["enableK8Features"] is False
     assert payload["feature_flags"]["enableApplications"] is False
     assert "ui_settings" not in payload
-    # AUTHZ-05 review item 11: `permissions` only ever carries the two
-    # OpenFGA-derived flags now — the Keycloak-role-derived `items` list and
-    # its six always-empty `can_*` booleans were removed as dead weight.
-    assert set(payload["permissions"]) == {"is_platform_admin", "is_platform_observer"}
+    # AUTHZ-05 review item 11: `permissions` only ever carries the
+    # OpenFGA-derived role list now — the Keycloak-role-derived `items` list
+    # and its six always-empty `can_*` booleans were removed as dead weight.
+    assert set(payload["permissions"]) == {"platform_roles"}
     # Rebac disabled in test config -> NoopRebacEngine authorizes everything.
-    assert payload["permissions"]["is_platform_admin"] is True
-    assert payload["permissions"]["is_platform_observer"] is True
+    assert payload["permissions"]["platform_roles"] == [
+        r.value for r in list(PlatformRoleRelation)
+    ]
 
 
 @pytest.mark.asyncio
@@ -900,11 +901,13 @@ async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed
 async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """AUTHZ-05 review item 4: `is_platform_admin` must come from the OpenFGA
-    `platform_admin` relation (via `CAN_MANAGE_PLATFORM`), not from the caller's
-    Keycloak roles. A user with no Keycloak `admin` role but an OpenFGA
-    `platform_admin` relation must still see `is_platform_admin=True`, and a
-    distinct `CAN_READ_KPI` check must drive `is_platform_observer` independently.
+    """AUTHZ-05 review item 4: the admin role must come from the OpenFGA
+    `platform_admin` relation (via `CAN_MANAGE_PLATFORM`), not from the
+    caller's Keycloak roles. A user with no Keycloak `admin` role but an
+    OpenFGA `platform_admin` relation must still see `platform_admin` in
+    `platform_roles`, and each other role is driven by its own independent
+    check — a fake that answers only `CAN_MANAGE_PLATFORM` yields exactly one
+    role, never the schema union the real engine would resolve.
     """
 
     class _FakePlatformAdminRebac:
@@ -950,8 +953,7 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
 
     assert resp.status_code == 200
     permissions = resp.json()["permissions"]
-    assert permissions["is_platform_admin"] is True
-    assert permissions["is_platform_observer"] is False
+    assert permissions["platform_roles"] == [PlatformRoleRelation.PLATFORM_ADMIN.value]
 
 
 @pytest.mark.asyncio

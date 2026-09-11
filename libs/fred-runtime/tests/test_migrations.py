@@ -14,10 +14,12 @@
 
 from __future__ import annotations
 
+import fnmatch
 import sqlite3
 from pathlib import Path
 
 import fred_runtime
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR, upgrade_sqlite_database
@@ -78,3 +80,35 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "agent_instance_id",
     }
     assert revision == ("c3d4b5a6f7e8",)  # pragma: allowlist secret
+
+
+def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:
+    """
+    Being packaged is not enough: the prod image installs fred-runtime from the
+    source tree it COPYs, so a `.dockerignore` rule that drops a directory name
+    also drops the migration tree - and `python -m fred_runtime migrate` then
+    fails with ModuleNotFoundError in the pod while every test here still passes.
+
+    This is not a full Docker matcher: it covers whole-name exclusions, the class
+    of rule that can silently swallow the tree.
+    """
+
+    # Anchored on the test file, not the package: an editable install can resolve
+    # fred_runtime into a different checkout than the one under test.
+    dockerignore = Path(__file__).resolve().parents[3] / ".dockerignore"
+    if not dockerignore.is_file():
+        pytest.skip("fred-runtime consumed outside the monorepo build context")
+
+    segments = {"fred_runtime", RUNTIME_ALEMBIC_DIR.name, "versions"}
+    offenders = []
+    for raw in dockerignore.read_text().splitlines():
+        rule = raw.strip()
+        if not rule or rule.startswith(("#", "!")):
+            continue
+        name = rule.removeprefix("**/").rstrip("/")
+        if any(fnmatch.fnmatch(segment, name) for segment in segments):
+            offenders.append(rule)
+
+    assert offenders == [], (
+        f"{dockerignore} excludes the packaged Alembic tree: {offenders}"
+    )

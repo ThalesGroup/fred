@@ -76,6 +76,17 @@ jobs:
               - 'apps/frontend/src/assets/fonts/material-symbols-outlined.woff2'
               - 'apps/frontend/package.json'
               - 'apps/frontend/package-lock.json'
+              - 'apps/frontend/src/rework/features/applications/applicationProtocol.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationProtocol.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationHost.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationHost.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationPath.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationPath.test.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationRequest.ts'
+              - 'apps/frontend/src/rework/features/applications/applicationRequest.test.ts'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx'
+              - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.sdk-integration.test.tsx'
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
@@ -108,7 +119,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents, libs/fred-capability-platform-ops, libs/fred-capability-html-artifact]
+        directory:
+          [
+            apps/knowledge-flow-backend,
+            libs/fred-core,
+            apps/control-plane-backend,
+            libs/fred-sdk,
+            libs/fred-runtime,
+            apps/fred-agents,
+            libs/fred-capability-platform-ops,
+            libs/fred-capability-html-artifact,
+          ]
         check:
           - lint
           - format
@@ -169,6 +190,10 @@ jobs:
           - name: fred-core
             directory: libs/fred-core
             unit-target: test
+            # Authorization is enforced by the OpenFGA schema, so the ReBAC
+            # rules are only really covered by resolving them against a live
+            # server; the target starts and stops it via docker compose.
+            integration-target: test-integration
             needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - name: knowledge-flow-backend
@@ -236,6 +261,14 @@ jobs:
         env:
           UV: uv
 
+      - name: Run integration tests
+        if: ${{ matrix.should-run && matrix.integration-target != '' }}
+        timeout-minutes: 15
+        run: make ${{ matrix.integration-target }}
+        working-directory: ${{ matrix.directory }}
+        env:
+          UV: uv
+
   frontend-package-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
@@ -256,6 +289,10 @@ jobs:
         run: npm ci
         working-directory: libs/frontend
 
+      - name: Install frontend host-integration dependencies
+        run: npm ci
+        working-directory: apps/frontend
+
       - name: Provision Chromium
         run: make browser-install
         working-directory: libs/frontend
@@ -274,6 +311,10 @@ jobs:
 
       - name: Validate packed archive
         run: make pack-check
+        working-directory: libs/frontend
+
+      - name: Run packed SDK with production host integration
+        run: make host-integration
         working-directory: libs/frontend
 
       - name: Build isolated consumer offline

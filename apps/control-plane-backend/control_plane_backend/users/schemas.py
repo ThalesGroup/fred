@@ -91,14 +91,19 @@ class PlatformRolesRebacDisabledError(Exception):
 
 
 class PlatformRoleRelation(str, Enum):
-    """The two org-level relations the platform-roles surface manages.
+    """The org-level role relations the platform-roles surface manages.
 
     Deliberately narrower than `RelationType`: this surface must never write
-    any other relation shape onto `organization:fred`.
+    any other relation shape onto `organization:fred`. A new role costs a
+    member here *and* an entry in `product/service.py::_PLATFORM_ROLE_CHECKS`
+    — without the second, bootstrap never reports the role as held.
     """
 
     PLATFORM_ADMIN = RelationType.PLATFORM_ADMIN.value
     PLATFORM_OBSERVER = RelationType.PLATFORM_OBSERVER.value
+    TEAM_MANAGER = RelationType.TEAM_MANAGER.value
+    FEATURE_MANAGER = RelationType.FEATURE_MANAGER.value
+    PROMPT_EDITOR = RelationType.PROMPT_EDITOR.value
 
     def to_relation(self) -> RelationType:
         return RelationType(self.value)

@@ -22,7 +22,7 @@
   padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
-  /* Same reasoning as CapabilitiesPage.module.css: DataTable claims 100% of
+  /* Same reasoning as FeaturesPage.module.css: DataTable claims 100% of
    * this container's height, so the container needs a concrete height of its
    * own (via the shared layout's flex:1) or the table becomes a disconnected
    * scroll region and the header above it becomes unreachable. */

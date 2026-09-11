@@ -24,7 +24,7 @@
  * shrink to that height rather than growing to fit its children — without it a
  * flex item's implicit `min-height: auto` makes it grow and the whole page
  * scrolls. Same reasoning, and same pair of declarations, as
- * `CapabilitiesPage.module.css`. */
+ * `FeaturesPage.module.css`. */
 .page {
   display: flex;
   flex: 1;
