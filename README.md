@@ -1,12 +1,13 @@
 # Fred
 
 [![Docker images](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Build-and-push-docker.yml?branch=swift&label=docker%20images)](https://github.com/ThalesGroup/fred/actions/workflows/Build-and-push-docker.yml)
-[![Migrations](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-migrations.yml?branch=swift&label=migrations)](https://github.com/ThalesGroup/fred/actions/workflows/Check-migrations.yml)
-[![Config schemas](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-config-schema.yml?branch=swift&label=config%20schemas)](https://github.com/ThalesGroup/fred/actions/workflows/Check-config-schema.yml)
-[![Release](https://img.shields.io/github/v/release/ThalesGroup/fred?filter=code/v*&label=release)](https://github.com/ThalesGroup/fred/releases/latest)
-[![fred-sdk on PyPI](https://img.shields.io/pypi/v/fred-sdk?label=fred-sdk)](https://pypi.org/project/fred-sdk/)
-[![License](https://img.shields.io/github/license/ThalesGroup/fred)](LICENSE)
-![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+[![Alembic migrations](https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-migrations.yml?branch=swift&label=alembic%20migrations)](https://github.com/ThalesGroup/fred/actions/workflows/Check-migrations.yml)
+
+[![Docker image version](https://img.shields.io/github/v/release/ThalesGroup/fred?filter=code/v*&label=docker%20image&logo=docker&logoColor=white)](https://github.com/orgs/ThalesGroup/packages?repo_name=fred)
+[![Helm chart version](https://img.shields.io/github/v/release/ThalesGroup/fred?filter=chart/v*&label=helm%20chart&logo=helm&logoColor=white)](https://github.com/ThalesGroup/fred/releases)
+[![fred-sdk on PyPI](https://img.shields.io/pypi/v/fred-sdk?label=fred-sdk&logo=pypi&logoColor=white)](https://pypi.org/project/fred-sdk/)
+
+[![License](https://img.shields.io/github/license/ThalesGroup/fred?label=license)](LICENSE)
 
 [![Stars](https://img.shields.io/github/stars/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/stargazers)
 [![Contributors](https://img.shields.io/github/contributors/ThalesGroup/fred)](https://github.com/ThalesGroup/fred/graphs/contributors)
