@@ -30,9 +30,20 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
-}));
+vi.mock("react-i18next", () => {
+  // Only the wiki mode options are "translated" — every other key falls through
+  // to its defaultValue (or itself), which is what the enum fallback relies on.
+  const CATALOG: Record<string, string> = {
+    "capability.team_wiki.fields.mode.options.read": "Read only",
+    "capability.team_wiki.fields.mode.options.read_write": "Read and propose",
+  };
+  return {
+    useTranslation: () => ({
+      t: (key: string, opts?: { defaultValue?: string }) => CATALOG[key] ?? opts?.defaultValue ?? key,
+      i18n: { language: "en" },
+    }),
+  };
+});
 
 // One context prompt → the library exists (hasLibrary), so auto-open logic applies.
 vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
@@ -48,6 +59,33 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 vi.mock("@shared/molecules/PromptPicker/PromptPicker", () => ({
   PromptPicker: () => <div data-testid="prompt-picker" />,
 }));
+
+// Stand in for the CodeMirror editor with a textarea: what is under test here
+// is which of the two modes the field shows, not how the editor renders.
+vi.mock("@shared/molecules/PromptEditor/PromptEditor", () => ({
+  PROMPT_EDITOR_ROWS: 15,
+  PromptEditor: ({ value, onChange }: { value: string; onChange: (next: string) => void }) => (
+    <textarea data-testid="prompt-editor" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
+const WIKI_MODE_FIELD = {
+  key: "mode",
+  type: "string",
+  title: "capability.team_wiki.fields.mode.title",
+  enum: ["read", "read_write"],
+  default: "read",
+} as unknown as ManagedAgentFieldSpec;
+
+// Enum values are storage, not copy: a field whose title is an i18n key gets its
+// option labels from the same namespace.
+const LITERAL_ENUM_FIELD = {
+  key: "settings.output_language",
+  type: "select",
+  title: "Output language",
+  enum: ["auto", "fr"],
+  default: "auto",
+} as unknown as ManagedAgentFieldSpec;
 
 const PROMPT_FIELD = {
   key: "system_prompt",
@@ -165,5 +203,24 @@ describe("TuningFieldRenderer — prompt library auto-open", () => {
 
     expect(pickerShown()).toBe(false);
     expect(textareaShown()).toBe(true);
+  });
+});
+
+describe("TuningFieldRenderer enum labels", () => {
+  const renderField = (field: ManagedAgentFieldSpec, value: unknown) => {
+    act(() => {
+      root.render(<TuningFieldRenderer field={field} value={value} onChange={vi.fn()} disabled={false} />);
+    });
+    return container.textContent ?? "";
+  };
+
+  it("translates an option through the field's own namespace", () => {
+    expect(renderField(WIKI_MODE_FIELD, "read_write")).toContain("Read and propose");
+  });
+
+  it("falls back to the raw value when the title is a literal, not a key", () => {
+    const text = renderField(LITERAL_ENUM_FIELD, "auto");
+    expect(text).toContain("auto");
+    expect(text).not.toContain("options.auto");
   });
 });

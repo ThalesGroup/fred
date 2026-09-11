@@ -1187,6 +1187,182 @@ class PlatformSqlPort(ABC):
         """
 
 
+# --- Team wiki (WIKI-03) ----------------------------------------------------
+#
+# The team's shared knowledge base, read by an agent through the `team_wiki`
+# capability. Design: docs/swift/rfc/TEAM-WIKI-RFC.md.
+
+WIKI_RULES_MAX_CHARS: Final[int] = 4_000
+"""Cap the rules page is truncated to before it enters a prompt.
+
+Mirrors the control-plane's own `MAX_RULES_CHARS`, so a rules page that fits
+the editor always fits the prompt whole. Kept here because the capability
+composes the prompt and must not import a control-plane module.
+"""
+
+
+class WikiPageRef(FrozenModel):
+    """One page as it appears in a listing — never its content."""
+
+    page_id: str
+    slug: str
+    title: str
+    parent_slug: str | None = None
+    updated_at: str | None = None
+
+
+class WikiPageContent(FrozenModel):
+    """One bounded page of a wiki page's Markdown (`[offset : offset+max_chars]`
+    of `revision_id`'s content), with the identity needed to cite it and to
+    anchor a later edit to the exact text this read returned.
+
+    Pagination mirrors `DocumentMarkdownResult` (DOCREAD-01): `next_offset` is
+    the offset to pass to keep reading, or `None` once this segment reaches
+    the end of the page — the same explicit-completion shape, because a wiki
+    page can also exceed what one call should return (up to 100 000 chars,
+    control-plane's own cap) and a caller must be able to tell "the whole page
+    fit in this read" from "this is merely where the read was cut off".
+    `truncated` is kept as a convenience equal to `next_offset is not None`.
+    """
+
+    slug: str
+    title: str
+    content_md: str = ""
+    updated_at: str | None = None
+    truncated: bool = False
+    revision_id: str | None = None
+    offset: int = 0
+    next_offset: int | None = None
+    total_chars: int = 0
+
+
+class WikiProposalRef(FrozenModel):
+    """A stored suggestion awaiting a human's decision.
+
+    `summary` is a one-line description of what it would change, for the tool
+    result the model reads back — never the page itself, which the approval
+    modal fetches by id.
+    """
+
+    proposal_id: str
+    title: str
+    slug: str | None = None
+    summary: str = ""
+
+
+class TeamWikiPortError(Exception):
+    """
+    Typed transport failure raised by team wiki port adapters.
+
+    Same doctrine as `DocumentPortCallError`: a failing wiki tool surfaces a
+    clean `is_error` tool result carrying an actionable message, and the
+    capability reads the failure's shape off these attributes rather than
+    importing the adapter's HTTP stack.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.status_code = status_code
+
+
+class TeamWikiPort(ABC):
+    """
+    Read-only access to the calling team's wiki (WIKI-03).
+
+    Deliberately identity-free, like every other capability port: the team and
+    the caller's token bind privately inside the adapter, which is also where
+    the control-plane's own role checks are enforced. The capability names a
+    slug and nothing else — it cannot reach another team's wiki by asking.
+
+    The write half (WIKI-04) is two steps on purpose: `propose_*` stores a
+    suggestion that changes nothing, and `publish_proposal` — the call the
+    platform's approval gate pauses — is what makes it real. There is no
+    delete, rename or move method here, and adding one would be the wrong
+    move: §5.4's invariant is an absence, not a check that could be bypassed.
+    """
+
+    @abstractmethod
+    async def list_pages(self) -> tuple[WikiPageRef, ...]:
+        """Every page of the team's wiki, excluding the rules page.
+
+        Ordered as the wiki's own tree orders it (parents before children), so
+        a caller rendering an index gets the team's structure, not a shuffle.
+        """
+
+    @abstractmethod
+    async def read_page(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        """One bounded window `[offset : offset+max_chars]` of a page's
+        Markdown. `next_offset` on the result is the offset to pass to read
+        the following window, or `None` once the end of the page has been
+        reached — the same continuation contract as `DocumentMarkdownPort`.
+
+        An implementation MAY pin the content across calls within one turn
+        (the reference `TeamWikiAdapter` does, to avoid re-fetching a long
+        page whole on every continuation call) or MAY re-read fresh each
+        time — this contract does not require either. Callers reading a page
+        across several calls MUST therefore still compare `revision_id`
+        across them and treat a change as reason to discard the partial read
+        and start over from `offset=0`: content from two different revisions
+        must never be presented as one page.
+
+        Raises `TeamWikiPortError` with `status_code=404` when no page carries
+        this slug — an agent that guessed must be told, not handed an empty
+        page it would summarize as "this topic is undocumented".
+        """
+
+    @abstractmethod
+    async def read_rules(self) -> str:
+        """The team's rules for agents, or an empty string when unwritten.
+
+        Never raises for an absent rules page: a team that has not written one
+        is the normal state, not a failure.
+        """
+
+    @abstractmethod
+    async def propose_page(
+        self, *, title: str, content_md: str, parent_slug: str | None = None
+    ) -> WikiProposalRef:
+        """Store a suggestion for a page that does not exist yet.
+
+        Changes nothing: the page is created only if a human publishes the
+        proposal. Raises `TeamWikiPortError` with `status_code=404` when
+        `parent_slug` names no page.
+        """
+
+    @abstractmethod
+    async def propose_edit(
+        self, *, slug: str, content_md: str, base_revision_id: str
+    ) -> WikiProposalRef:
+        """Store a suggestion replacing one page's whole content, anchored to
+        the revision it was read from.
+
+        `base_revision_id` must be the `revision_id` a prior `read_page` call
+        on this exact slug returned. Changes nothing until published. Raises
+        `TeamWikiPortError` with `status_code=409` when the page has already
+        moved past that revision, and `status_code=403` for the rules page,
+        which no agent may touch under any configuration.
+        """
+
+    @abstractmethod
+    async def publish_proposal(self, proposal_id: str) -> str:
+        """Publish an approved proposal, returning the page's slug.
+
+        Called only after the platform's approval gate has let the tool run.
+        Raises `TeamWikiPortError` with `status_code=409` when the page moved
+        on while the proposal waited — the edit has to be redone on the new
+        text rather than overwriting whoever changed it.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1263,6 +1439,11 @@ class RuntimeServices:
     # enforced server-side in the adapter, never here. Appended after
     # `document_similarity` for the same positional-safety reason noted above.
     platform_sql: PlatformSqlPort | None = None
+    # The calling team's wiki (WIKI-03): powers the `team_wiki` capability.
+    # Same doctrine/optionality as the document ports — team and token bind
+    # privately in the adapter. Appended last for the same positional-safety
+    # reason noted above.
+    team_wiki: TeamWikiPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

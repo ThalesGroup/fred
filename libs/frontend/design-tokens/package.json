@@ -1,0 +1,21 @@
+{
+  "name": "@fred/design-tokens",
+  "version": "0.0.0-development",
+  "description": "FRED design tokens and optional packaged Geist fonts",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./dist/tokens.css",
+    "./fonts.css": "./dist/fonts.css"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses"
+  ],
+  "sideEffects": [
+    "./dist/*.css"
+  ]
+}

@@ -28,12 +28,13 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
+import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
-import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, type ToolPack } from "./toolPacks.ts";
+import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, CAP_TEAM_WIKI, type ToolPack } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
@@ -242,6 +243,15 @@ export function AgentFormBody({
     (selectedTemplate?.default_tuning_fields ?? []).map((f) => [f.key, tuningFieldValues[f.key] ?? f.default]),
   );
 
+  // A reserved system-prompt tag is refused by the backend (422) whichever way
+  // it is submitted; say so while typing rather than after the round-trip.
+  const fieldError = (field: ManagedAgentFieldSpec): string | undefined => {
+    const value = tuningFieldValues[field.key];
+    const reservedTag = reservedTagInPromptField(field, value);
+    if (reservedTag) return t("rework.promptEditor.reservedTag", { tag: reservedTag });
+    return submitAttempted && field.required && !value ? `${field.title} is required` : undefined;
+  };
+
   const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
     fields.map((field) => (
       <TuningFieldRenderer
@@ -254,9 +264,7 @@ export function AgentFormBody({
         allValues={effectiveTuningValues}
         pickerExplicit={promptPickerExplicit[field.key] ?? null}
         onPickerExplicitChange={(v) => setPromptPickerExplicit((prev) => ({ ...prev, [field.key]: v }))}
-        error={
-          submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
-        }
+        error={fieldError(field)}
       />
     ));
 
@@ -273,6 +281,24 @@ export function AgentFormBody({
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
           onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          teamId={teamId}
+        />
+      );
+    }
+    // Team wiki → the capability's own `mode` field, rendered by the same
+    // renderer the Advanced card uses so the two views share one control and one
+    // set of labels. Read from the live manifest rather than restated here.
+    if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
+      const modeField = capabilities
+        .find((capability) => capability.id === CAP_TEAM_WIKI)
+        ?.config_fields?.find((field) => field.key === "mode");
+      if (!modeField) return undefined;
+      return (
+        <TuningFieldRenderer
+          field={modeField}
+          value={capabilityConfigValues[CAP_TEAM_WIKI]?.[modeField.key]}
+          onChange={(key, value) => onCapabilityConfigChange(CAP_TEAM_WIKI, key, value)}
+          disabled={isSubmitting}
           teamId={teamId}
         />
       );

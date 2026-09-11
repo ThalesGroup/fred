@@ -156,6 +156,76 @@ _(none)_
 
 ---
 
+### `PromptEditor`
+
+**Location:** `src/rework/components/shared/molecules/PromptEditor/PromptEditor.tsx`
+**Status:** `Functional`
+
+The editing surface for anything an LLM reads as a prompt: the agent form's
+`type: "prompt"` tuning fields (`TuningFieldRenderer`) and the team prompt library's
+create/edit modal (`PromptsPage`). Replaces a plain `TextArea` of six lines with a
+CodeMirror document in markdown mode, `PROMPT_EDITOR_ROWS` (15) lines by default and resizable.
+A manifest's `ui.max_lines` can only grow the field, never shrink it below that floor.
+
+Markdown mode also colours inline HTML/XML tags, so one configuration serves both prompt
+styles in use — markdown prose and tag-structured prompts (`<instructions>`, for Mistral-family
+models). There is no language selector and no preview: the raw text is the only representation,
+and it round-trips byte for byte. That is the reason this is **not** built on MDXEditor
+(`writable_document`, wiki), whose MDX parser reads a bare tag as a JSX node and either throws
+or reformats the text on the way back through its Lexical AST — unacceptable for a string a
+model reads literally.
+
+The syntax palette is defined as CSS classes on semantic tokens rather than colours in JS, so
+the theme follows light/dark with no branch in the component. It deliberately uses only the
+neutral roles plus `primary`/`secondary`/`tertiary`: the feedback roles (`error`, `success`,
+`warning`, `info`) carry a status meaning that markdown structure does not have. The editor is
+the one place in a form that leaves `--font-family-base` for `--font-family-mono`, added for it.
+
+Chrome (label, border, focus ring, error state) mirrors the `TextArea` atom so a prompt field
+does not read as a foreign widget next to the other fields. The editing surface is a `contenteditable`,
+not a form control, so it is named with `aria-labelledby` rather than a `<label for>`, and
+`disabled` sets `EditorState.readOnly` alongside `EditorView.editable` — the drop handler gates on
+the former alone, so `editable` by itself still let a drop edit a locked field. Spell-checking is
+turned back on (CodeMirror defaults it off); `autocorrect`/`autocapitalize` stay off, since they
+rewrite what is typed and a prompt's tags must survive verbatim.
+
+A transparent (`variant="icon"`) copy button fades in over the top-right corner on hover, and on
+keyboard focus so it is reachable without a pointer. The reveal keys on `:focus-visible`, not
+`:focus-within`: a click leaves the button focused, which kept it on screen after the pointer had
+left. It copies the live CodeMirror document rather than the last `value` the parent rendered, and
+reports through the toast provider either way — a silent clipboard failure would look identical to
+success. On a successful copy the icon becomes a check for two seconds; a refused clipboard leaves
+it unchanged, so the icon never claims a copy that did not happen.
+
+Both list markers — a bullet's dash and an ordered item's number — are drawn in `primary`; the
+other syntax marks (`#`, `>`, `*`, backticks) stay in the muted marker colour. lezer gives both
+list markers the same `ListMark` node, so one non-contextual `styleTags` override on that node
+carries them out of the marker rule together. Note that a *contextual* selector cannot do this: a
+`"OrderedList/.../ListMark"` form does not override the parser's own rule for a node, only the
+whole-node form does — worth knowing before trying to colour the two list markers differently,
+which would need a `ViewPlugin` reading the syntax tree.
+
+**Reserved system-prompt tags (2026-09-09, #2595).** The runtime wraps the system
+prompt's four blocks in `<platform_instructions>`, `<platform_prompt>`, `<tools>` and
+`<agent_instructions>`, and control-plane refuses (422) a platform prompt or any
+string-valued agent tuning field that contains one of them. The editor itself stays neutral; the
+two call sites that are validated compute the message with `findReservedPromptTag`
+(`rework/utils/promptValidation.ts`, a mirror of the fred-sdk finder) and pass it through
+the existing `error` prop, so the refusal is visible while typing and Save is disabled
+until the tag is gone (`AgentFormBody` → `TuningFieldRenderer`, `PlatformPromptPage`).
+The prompt library is not validated and shows nothing: its text is either inserted into
+the user's message or copied into an agent field, where the check applies. Any other
+XML/HTML tag is accepted, which is what the tag colouring above is for.
+
+`PlatformPromptPage` (2026-09-09) edits in this editor too. The 0 / 20 000 counter the
+`TextArea` atom used to draw is re-implemented beside the editor, with the hint on the
+left; a draft over the cap is refused like a reserved tag. Its two panes now read left to
+right in the order the model receives the blocks — the read-only platform instructions,
+which carry the precedence rule, then the editable global prompt — and a backend 422 is
+shown under the editor rather than only as a toast.
+
+---
+
 ### `PromptPicker`
 
 **Location:** `src/rework/components/shared/molecules/PromptPicker/PromptPicker.tsx`
@@ -769,16 +839,18 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Open UX issues
 
-- **No syntax highlighting** — plain monospace only. Consider adding `react-syntax-highlighter`
-  (already in `package.json`) for a richer developer experience, especially for code-heavy agents.
-
-- **Fenced code without language** — renders as inline code (no language class, so the block
-  path is not triggered). Low-frequency edge case, but may surprise users who write unlabelled
-  fenced blocks. Discuss whether to detect by trailing `\n` heuristic.
+_(none)_
 
 #### Resolved
 
-_(none yet)_
+- **No syntax highlighting** — `CodeBlock` renders through `react-syntax-highlighter` (Prism,
+  `oneDark`/`oneLight` following the theme).
+
+- **Fenced code without language (2026-09-10)** — used to render as inline code because
+  `MarkdownRenderer` picked block vs inline from the presence of a `language-*` class.
+  Block routing now lives on the `pre` component (every fenced or indented block has one;
+  react-markdown v9 passes no `inline` prop), so an unlabelled fence renders as a
+  `plaintext` block and only backtick spans reach the inline path.
 
 ---
 
@@ -850,6 +922,36 @@ call site keeps rendering a bare `<button>`.
 It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
 otherwise a screen reader announces the button with no number, or reads a bare
 digit after the name.
+
+---
+
+### Package-foundation component corrections (2026-09-09)
+
+**Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
+
+**Status:** `Functional`
+
+- `Button` and `IconButton` expose their implemented `2xs`, `small`, and `medium`
+  sizes without narrowing the shared size scale used by fields. `IconButton` retains
+  caller classes alongside generated classes and now has a visible two-pixel
+  `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
+  on-surface-retreat state layers for hover and press.
+- Material and custom icons are decorative by default. A standalone informative icon
+  receives only an explicit caller-owned accessible name; glyph identifiers no longer
+  become user-facing labels. The unsupported legacy `infos` name was corrected to
+  `info` at its sole caller.
+- `TextInput` preserves caller IDs, refs, handlers, input type, autocomplete, and other
+  native props. Labels target the effective ID; help/error descriptions are merged with
+  caller descriptions; enabled errors set `aria-invalid`; and controlled/uncontrolled
+  counters follow the current value, including an uncontrolled input's actual value
+  after an uncancelled native form reset. A canceled reset leaves both value and count
+  unchanged. Compact presentation keeps any visually omitted help/error text associated
+  through `aria-describedby`.
+- `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
+  text, and remains label-free when decorative.
+
+These corrections support the initial `@fred/ui` archive only. They do not claim the
+deferred component catalog, overlays, iframe SDK, release, or adoption work as shipped.
 
 ---
 
@@ -1424,21 +1526,93 @@ _(none yet)_
 Shared, chrome-less document content renderer used by both `DocumentViewerPage`
 (`/documents/:uid`, chat-citation flow) and `DocumentWorkspace`'s corpus preview
 drawer (`InlineDrawer`). Picks a render strategy from the file's real extension
-(`isPdfFile` on `identity.document_name`, never the display title): `.pdf` renders
-natively via `PdfStreamingDocumentViewer` (`react-pdf`); every other format renders
-the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns no
-header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
-to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
+(`hasNativePreview` on `identity.document_name`, never the display title): a format
+with a native renderer goes to `PdfStreamingDocumentViewer` (`react-pdf`); every
+other one renders the existing markdown extraction
+(`GET /knowledge-flow/v1/markdown/{uid}`). Owns no header/close affordance — both
+hosts already provide one. Landed 2026-07-19 (FRONT-13) to close the "PDF viewer
+parity" regression from kea tracked on GitHub issue #1956.
 
-**Markdown toggle (2026-07-27).** A `mode` prop (`"original" | "markdown"`, default
-`"original"`) lets a host force the markdown extraction for a format that has a native
-renderer. The corpus preview drawer exposes it as an icon button in the `InlineDrawer`
-header (`headerActions`, left of the close button), gated on `hasNativePreview(fileName)`
-so it only appears for PDFs: `.docx`/`.xlsx`/`.csv` already display their markdown
-extraction, so a toggle there would be inert. Mode resets to `"original"` on every newly
-opened document. When the extraction is missing (endpoint 404s, or empty body), the body
-renders a `preview.markdownUnavailable` notice instead of the former literal
-"Error loading document." string, which read as document content.
+**File/Raw toggle (2026-07-27).** A `view` prop (`"file" | "raw"`) lets a host force
+the markdown extraction for a format that has a native renderer; omitting it keeps
+the single-strategy behaviour (`DocumentViewerPage`). The corpus preview drawer
+renders `DocumentViewerModeToggle` in the `InlineDrawer` header (`headerActions`,
+left of the close button) rather than inside the body, gated on
+`hasNativePreview(fileName)` so it never appears for a format that has nothing to
+toggle to (`.xlsx`/`.csv` already display their markdown extraction). The view resets
+to `"file"` on every newly opened document. When the extraction is missing (endpoint
+404s, or empty body), the body renders a `preview.markdownUnavailable` notice instead
+of the former literal "Error loading document." string, which read as document content.
+
+**Word/ODT native preview (2026-09-03).** `hasNativePreview` now also covers `.docx`,
+`.doc` and `.odt`, so the toggle's "Fichier" side shows the document itself rather
+than only its markdown extraction. Browsers cannot render a Word file, so
+`documentPdfSourceUrl` sends those formats to `GET /knowledge-flow/v1/raw_content/pdf/{uid}`
+(headless LibreOffice, converted once and cached under the document's own `output/`
+prefix) while a `.pdf` keeps streaming untouched from `/raw_content/stream/{uid}`. The
+viewer component itself is unchanged apart from a `sourceUrl` prop — it stays a PDF
+renderer and knows nothing about formats — so virtualization, byte-range fetching and
+the large-document guards below apply to Word documents for free. The frontend's
+accepted-suffix list is deliberately the same one `PDF_RENDERABLE_SUFFIXES`
+(`content_service.py`) accepts: a format offered here but refused there would show a
+toggle that 415s.
+
+**PowerPoint on the same path (2026-09-04).** `.pptx` and `.ppt` joined
+`PDF_RENDERABLE_SUFFIXES` and `OFFICE_DOCUMENT_SUFFIXES`; the render endpoint, cache
+and viewer are format-agnostic and needed no change. `.odp` is in neither list: the
+LibreOffice helper can convert it, but no ingestion processor accepts it, so it never
+reaches the library. The shared helper also stopped asking for Writer's PDF export
+filter on every format and now picks Impress' or Calc's from the source suffix —
+LibreOffice builds differ on how they treat that mismatch, and a refused export would
+surface here as a 503 behind a toggle the UI had offered.
+
+**Renders expire after 30 days (2026-09-07).** The cached `render.pdf` used to live as
+long as its document. It is now deleted by a nightly Temporal Schedule
+(`pipeline-pdf-render-expiry`, 03:00 UTC) once its write date is older than
+`app.pdf_render_ttl_days` (knowledge-flow configuration, default 30, `0` removes the
+Schedule at worker start). The TTL is read by the activity on every run, not stored in
+the Schedule, so changing it only takes a worker restart. The next viewer of an expired
+document pays one fresh conversion (a few seconds), nothing else changes: the render
+stays under the document's `output/` prefix, so deleting the document still removes it,
+and it is never charged to the storage quota. One pass per night, `SKIP` overlap and a
+one-hour catch-up window: after a long worker outage the first pass cleans everything
+older than the TTL at once instead of replaying each missed night. Local `memory`
+scheduler setups have no Schedule and therefore no expiry; k3d and fredlab run Temporal
+and do. Listing is server-side on GCS (`match_glob`), a full document-bucket walk on
+SeaweedFS/MinIO.
+
+`DocumentViewerPage` carries the same toggle in its top bar, not just the corpus
+drawer. A citation opens the document at the passage it quotes, and that passage
+lives in the markdown extraction — so the reader needs a route back to it, including
+when the render endpoint is down. Without it a 503 would leave a dead error pane
+where the cited text used to be.
+
+Two properties of the render endpoint are load-bearing for the viewer and easy to
+break. **Byte ranges are only ever cut from a cached render.** LibreOffice stamps
+`/CreationDate` and `/ID` per run, so two renders of one document differ in length
+and in every offset; if the cache write failed, each chunk request would re-convert
+and pdf.js would stitch windows from different files into one corrupt document. The
+service therefore reports whether the bytes it returned are persisted
+(`PdfRender.cached`) and the controller degrades to a full 200 body when they are
+not — which pdf.js handles the same way it handles a proxy that strips ranges.
+**Cold renders of one document are serialized per worker**, so a document opened by
+several viewers at once is converted once rather than once per viewer.
+
+Conversions also run on a dedicated two-worker pool
+(`PDF_RENDER_MAX_CONCURRENCY`), never on the default executor `asyncio.to_thread`
+would pick. That executor is shared with RAG search, summarization, metadata
+deletes and ingestion, and a `soffice` run holds its worker for up to the full 60 s
+timeout — left there, a handful of Word previews would stall the retrieval path of
+every agent turn on the pod. The same worker count caps how many `soffice` processes
+(hundreds of MB of RSS each) can exist at once. The path emits
+`content.pdf_render_latency_ms` with `file_type`/`status`, both already in
+`PROMETHEUS_ALLOWED_LABELS`, so it is Grafana-visible without an allow-list change.
+
+Known cost, not yet addressed: a ranged request reads the whole cached PDF and
+slices it, because the content store has no ranged read for derived artifacts (only
+for a document's primary file). Serving an N-MB render in 1 MB chunks therefore
+costs ~N store reads. The viewer's 20 MB opt-in guard bounds the practical exposure;
+the fix is a ranged `get_output_artifact`, mirroring `get_content_range`.
 
 **Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
 previously mounted one live `<canvas>` per page of the document the moment it
@@ -1934,7 +2108,7 @@ it's now redundant with the default.
 
 `DataTable` gained an optional `pageSize` prop. Omitted (the default), it
 renders exactly as before — every consumer that doesn't pass it
-(`AdminTeamsPage`, `MigrationPage`, `CapabilitiesPage`) is unaffected. When
+(`AdminTeamsPage`, `MigrationPage`, `FeaturesPage`) is unaffected. When
 set, the table slices `data` to one page and renders a persistent pagination
 footer, height `3.75rem` — same height as a table row — with two flex
 containers:
@@ -2008,7 +2182,7 @@ names, `MigrationPage` team names):
 - Primitive `cellRenderer` values (string/number) are wrapped by DataTable
   in a `.cell-text` span: single-line `text-overflow: ellipsis`, full value
   readable via the span's native `title` on hover — same idiom as
-  `CorpusAuditPage`/`CapabilitiesPage` name cells. Element values pass
+  `CorpusAuditPage`/`FeaturesPage` name cells. Element values pass
   through untouched (the caller owns their layout).
 
 `TeamSettingsMembersTable`'s three text columns (Identifiant, First name,
@@ -2514,14 +2688,14 @@ now share one consistent header pattern instead of diverging per page:
 | `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
 | `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
 | `SelfTestPage` | title only |
-| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
+| `FeaturesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
 | `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
 | `AdminTeamsPage` | title only (new — page previously had no page-level header) |
 | `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
 | `TeamSettingsParameters` | title only (new) |
 | `TeamSettingsRouting` | title only (new) |
 
-Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
 visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
 filter, not a tab strip.
@@ -2613,6 +2787,23 @@ Non-interactive lock icon + label. Uses `material-symbols-outlined` `lock` icon 
 #### Open UX issues
 
 - **Label truncation** — no max-width set. Validate with long label text (`"Administrateur seulement"`) inside narrow `SourceCard` widths.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `BetaBadge`
+
+**Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
 
 #### Resolved
 
@@ -3749,10 +3940,10 @@ lands on the exact section.
 
 ### `PlatformModelBindingsPanel`
 
-**Location:** `src/rework/components/pages/admin/CapabilitiesPage/PlatformModelBindingsPanel/`
+**Location:** `src/rework/components/pages/admin/FeaturesPage/PlatformModelBindingsPanel/`
 **Status:** `Functional`
 
-`InlineDrawer` opened from `CapabilitiesPage`'s Models tab, sibling to
+`InlineDrawer` opened from `FeaturesPage`'s Models tab, sibling to
 `CapabilityTeamMatrixDrawer`. Renders exactly one row — chat — never a
 4-capability list; V1 has no `language`/`embedding`/`image` binding to show.
 Row states: bound (`{{provider}} / {{name}}`), unset ("Using pod default"),
@@ -4057,3 +4248,272 @@ conversation that produced them (the slice only drops them when the next convers
 upserts one of its own). A conversation whose documents all come from the API never
 upserts, so the previous conversation's document showed up as an extra tab - someone
 else's document, in an editor that autosaves.
+
+---
+
+## Team wiki (2026-09-06, WIKI-02, issue #2572)
+
+### `TeamWikiPage`
+
+**Location:** `src/rework/components/pages/TeamWikiPage/`
+**Status:** `Functional` — all four delivery slices shipped (RFC §14): human
+CRUD, revision history and restore, agent read, and agent proposals gated
+behind a human's HITL approval.
+
+`/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
+tree, the article, and the version history when it is open. The layout is
+`HelpCenterPage`'s, which already solves this shape; reading uses
+`MarkdownRenderer` and editing uses `MDXEditor`, the same component
+`writable_document` uses. Nothing new was built where something existed.
+
+**The slug is in the URL**, so a wiki page is deep-linkable and the browser's
+back button walks the pages. A rename does not change the slug, so links
+survive it — nothing here maps an old slug to a page, so re-minting one would
+be a hard 404 for every link already shared.
+
+**Titles are unique among siblings** (2026-09-07): creating, renaming or
+moving a page onto a sibling's title is refused with a translated message. That
+is what makes a page's path — its titles from the root — a unique address, which
+is how an agent names one; the slug never reaches the model at all.
+
+**The slug is opaque** (2026-09-07): eight random hex characters, minted at
+creation and never derived from the title. Because a rename cannot change it, a
+title-derived slug outlives the title it was named for — a page renamed to "Les
+Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every reader,
+and it misled a model too: handed `Les Shinigamis — sous-page-11` in its index,
+it read the pair as one name and called back with a slug that did not exist. An
+identifier that never claimed to mean anything cannot go stale. Pages created
+before this keep the slugs they have; changing them would break their links.
+
+**Every editor-only control is absent, not disabled**, for a member — except
+the version history, which is deliberately open to everyone: the endpoint is
+member-readable, and who wrote a page and when is exactly what a reader needs
+to judge one an agent may have touched. Restore stays editor-only, inside the
+panel. Hiding is courtesy; the server decides either way.
+
+**The rules page is not a node of the tree.** It sits below a separator with its
+own icon, because it is not content the team browses — it is the instruction
+sheet every agent reads — and putting it in the tree would invite moving or
+deleting it like an ordinary page. Its article carries a one-line notice saying
+what it does and that no agent can write to it.
+
+**The review mark** shows as a dot in the rail and a chip on the article, with a
+filter above the tree that lists every page waiting for a human read. The filter
+control stays rendered while the filter is ON even when the count reaches zero —
+clearing the last mark would otherwise remove the only way to turn the filter
+off and strand the reader on an empty rail.
+
+### The rules page's starting draft (2026-09-07, WIKI-05)
+
+Opening the rules page for the first time seeds the editor with a short
+outline: three empty headings for the team's own material, and two rules that
+are true for any team and that the capability's prompt block does not already
+say. Nothing is written until the editor saves, so a team that never opens the
+page keeps no rules — agents are told about rules the team actually wrote,
+never about a default nobody chose.
+
+**Emptiness is not the test** — `revision_id` is. A page saved empty was
+emptied on purpose, and handing the outline back would undo that decision every
+time it is reopened.
+
+**Placeholders would have been worse than nothing.** This page's text is
+injected verbatim into every agent's system prompt, under a heading saying to
+follow it and never act against it. A conventional template of the
+`_(describe your team here)_ ` kind would reach the model as a standing
+instruction on every question, for every team that never cleaned it up. That
+is why the guidance on how to fill the page sits in the editor UI
+(`rules.templateHint`) instead of in the page's own content.
+
+### Version history (2026-09-07, WIKI-05)
+
+Each tile says in words what happened — `Édition manuelle`, `Édition par agent
+(<name>)`, `Validation de l'édition de l'agent` — because a column of
+timestamps and names does not tell a reader which changes were an agent's, and
+that is the one thing they open the history to find out. The agent's display
+name is resolved from the team's instances, and only fetched once a page
+actually has an agent revision.
+
+**A validation is its own entry**, not a line inside the edit it approves. The
+approval happens later than the write and often by someone else, so folding the
+two together would lose both facts. Event entries carry no preview and no
+restore: no content of their own belongs to them.
+
+**The whole tile opens the version**, and restore is a small icon button in the
+corner the current-version tag would otherwise occupy — the two never appear on
+the same tile. A row of text buttons under every entry cost more height than
+the history it was listing.
+
+### Paged history (2026-09-08, WIKI-05)
+
+`GET .../revisions` is bounded server-side (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49), so `WikiRevisions` owns the walk backward through it rather than
+receiving a finished list. Pagination logic is pulled into pure functions in
+`historyPages.ts` (`mergeHistoryPage`), matching this feature's existing
+convention (`historyEntries.ts`, `wikiTree.ts`) of testing the logic without
+rendering the component.
+
+**A base page (`cursor` omitted) always replaces the accumulated state
+outright**, never merges with an older tail. This is both the first load and
+every later re-arrival of that same query — a restore, an edit, another
+viewer's write invalidating the `HISTORY-*` tag while the reader is still
+parked on it. Replacing is what keeps a stale second/third page from surviving
+next to a freshly-invalidated first one.
+
+**"Load older" is disabled while a request for it is in flight**, the
+codebase's usual guard against a second click firing a concurrent duplicate.
+Three terminal states share one area below the list: a `Réessayer` (`common.
+retry`) button on error, `Charger les versions antérieures` while
+`next_cursor` is non-null, and `Début de l'historique.` once it is null —
+never more than one at a time.
+
+**Follow-up (2026-09-08, WIKI-05): three gaps in "every later re-arrival"
+above.** The paragraph's claim only held while the reader stayed on the base
+page — walking to an older one unsubscribes it, so nothing was left to
+re-arrive on. (1) Closing and reopening the panel left `fetchCursor` and the
+accumulated `pages` exactly where they were; `WikiRevisions` now resets both
+on the close→open transition (a ref tracking the previous `open`). Resetting
+state alone is not enough when the panel was already on the base page:
+`fetchCursor` staying `undefined` is a no-op that triggers no request, so
+reopening explicitly calls the query's own `refetch()` once it is confirmed
+bound to `cursor: undefined` — the one case a plain state reset cannot reach.
+The merge effect also gained `fulfilledTimeStamp` as a dependency, since RTK
+Query's structural sharing can keep the same object reference when a refetch
+returns byte-identical content, and reopening must still show it. (2) A local
+mutation this page's OWNER knows about but
+`WikiRevisions` does not (the review mark, an edit or rules save) is handled
+by `TeamWikiPage` remounting the panel on a `key` of
+`` `${pageId}-${historyGeneration}` `` — a full remount resets the walk the
+same way a fresh page does, so "the page changed" and "a save changed this
+page's history" are one mechanism, not two. Restore's own explicit reset
+(inside `WikiRevisions`) still fires directly, since restore is this
+component's own mutation. (3) The merge effect read RTK Query's `data`, which
+keeps the PREVIOUS args' value while a new one is in flight; pairing it with
+the `fetchCursor` that had just changed could merge a response into the walk
+under the wrong cursor. It now reads `currentData`, which is only ever set
+from the args the hook was just called with. None of the three add polling, a
+second cache, or a reconciliation layer — an explicit reset stays the
+accepted trade-off over merging two walks.
+
+### Conflict handling in the editor
+
+A stale save returns 409 carrying the current text and revision. The editor
+shows a banner and keeps the user's own draft on screen and editable: nothing is
+discarded for them, and "Load their version" is a choice, not a consequence.
+
+Two things that had to be right for it to work at all:
+
+- **The editor remounts on a new `key`** when the server's version is loaded.
+  `MDXEditor` reads `markdown` only at mount (`WritableDocumentPane` documents
+  the same constraint), so changing the prop alone would leave the user's text
+  on screen while claiming to have loaded someone else's.
+- **The conflict's `current_revision_id` becomes the next save's base.** Without
+  it every retry after a conflict conflicts again, and the banner promises an
+  outcome the code cannot reach.
+
+Navigating to another page closes the editor. Left open, its draft would still
+be in state while the save now targets the new page id — one click from
+overwriting page B with page A's text.
+
+### Cache tags
+
+The page read is addressed by slug but tagged by `page_id` off the **result**:
+every mutation knows the page id and none of them knows the slug, so tagging by
+slug leaves a write unable to invalidate the page it just changed — the article
+keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
+the *next* save conflict every time.
+
+---
+
+## Conversation outline rail (2026-09-09, CHAT-OUTLINE-01, issue #2602)
+
+### `ConversationOutlineRail`
+
+**Location:** `src/rework/components/shared/molecules/ConversationOutlineRail/`
+**Status:** `Functional` — V1. Design and the deferred parts: RFC
+`CONVERSATION-OUTLINE-RAIL-RFC.md`.
+
+A rail of graphical marks along the left edge of `ManagedChatPage`'s
+conversation, one per turn. No text: the marks sit in the gutter left by the
+720px message lane, so they take no width from the reading column. Hovering one
+magnifies it and its two neighbours each side and opens a preview tile to its
+right — the question's first sentence over the answer's first two. Clicking one
+jumps to that turn.
+
+**The rail sits against the page's left edge**, at the top bar's inset, not
+against the reading column: it is chrome for the page, and anchoring it to the
+lane made it drift inward with the column instead of staying where the eye
+learns to find it. On a column barely wider than the lane it therefore overlaps
+the first characters of each line — a known cost, and the case to answer when
+narrow viewports are taken on.
+
+**Every mark is the same size.** Encoding the answer's length in a mark's
+height was built and then dropped: it turned the rail into a second thing to
+read rather than a place to aim. The rail says where the turns are, and nothing
+about them.
+
+**The rail has no gaps.** Each mark's button is a full-width row with no gap
+between rows and no padding around the list, and the visible bar is a
+pseudo-element inside it. Anywhere the pointer lands on the rail it is on
+exactly one mark — otherwise travelling down the rail crosses slivers where the
+tile closes and the magnification collapses.
+
+**The rail is inert while a turn is live** (`isStreaming || pendingHitl`):
+visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
+what makes the whole feature safe. `useChatAutoScroll` re-decides the
+conversation's scroll position every animation frame while a turn runs, so a
+jump written from outside would be overwritten a frame later — a frame-timing
+bug, therefore intermittent. The hook writes *only* while live, so a rail that
+can only be clicked when it is quiescent never overlaps it: the single-owner
+invariant holds by construction rather than by timing. `useChatAutoScroll`'s
+ownership comment states the refined rule.
+
+**The active mark** (`--primary`) follows two rules, and the second is not a
+special case — it is the common one. *At the bottom of the conversation, the
+last turn is active*: a short final turn never climbs to any reading line,
+because there is not enough content below it to push it there, so without this
+the rail points at the previous turn while the reader sits on the newest one.
+Otherwise, *the last turn whose question has passed a line 35% down the
+viewport* — not the topmost anchor still on screen, since the anchors sit on the
+user message and partway through a long answer none is visible at all.
+
+This is driven by a scroll listener, not an `IntersectionObserver`. An observer
+only fires when something crosses a boundary, and the first rule turns on the
+scroll position: no anchor crosses anything over the last stretch to the bottom,
+so an observer stays silent through precisely the case that has to be right. The
+cost is paid off instead by binary search — anchors are in document order, so
+their positions are monotonic and the line is found in about eight measurements
+for a two-hundred-turn conversation — and by not measuring at all while a turn
+is live, which is when the autoscroll is writing every frame.
+
+**Streaming costs the rail nothing.** The message list is replaced on every
+token, so: the fold's result is handed back by identity when it describes the
+same rail (keeping the component's `memo` alive), the preview callback is
+ref-backed so its identity never changes, and extracts are derived on hover for
+the hovered turn only, from a bounded 500-character slice.
+
+**Sized to its marks, not full height.** The rail is a sibling of the scroll
+container, so a wheel gesture over it has no scrollable ancestor to chain to and
+the conversation would not move — the dead left gutter of #654. Hugging the
+marks keeps that surface to the few pixels the reader is deliberately pointing
+at. Once the marks outgrow the available height the rail scrolls itself, and
+follows the active mark.
+
+**`aria-hidden`, and the marks are out of the tab order.** Keyboard access is a
+V1 omission, and the RFC says what taking it on would involve: with no labels or
+tab order a screen reader would announce a row of silent marks, and a focusable
+control inside an aria-hidden subtree is a trap. The conversation itself stays fully readable in the thread.
+
+### `Tooltip` — `gapPx`, `placement="right"`, and closing on window blur
+
+Three additions, all made for the rail and all useful beyond it:
+
+- an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for every existing
+  caller) — the rail's preview tile reads as its own card rather than a hint
+  stuck to its trigger, and takes 12;
+- `placement="right"`, the mirror of `"left"`: beside the trigger, vertically
+  centred, flipping to the other side when there is no room;
+- **the panel now closes when the window loses focus or the page is hidden.**
+  Leaving the window produces no `mouseleave`, so a tooltip hovered at the
+  moment of an alt-tab was still open on return and — its own leave event
+  having been lost for good — stayed open alongside the next one hovered. On a
+  rail of many triggers that meant two panels on screen at once.

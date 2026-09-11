@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.common.fastapi_handlers import register_exception_handlers
@@ -43,7 +44,8 @@ def test_authorization_error_handler_returns_team_specific_detail(
     assert response.json() == {
         "detail": "You are not allowed to manage agents in this team. Ask a team admin or editor."
     }
-    assert "Authorization denied for user alice" in caplog.text
+    assert "Authorization denied" in caplog.text
+    assert "alice" not in caplog.text
 
 
 def test_authorization_error_handler_humanizes_generic_resource_action() -> None:
@@ -84,8 +86,8 @@ def test_authorization_error_handler_does_not_label_a_team_subject_as_a_user(
         response = TestClient(app, raise_server_exceptions=False).get("/capability")
 
     assert response.status_code == 403
-    assert "Authorization denied for team team-1 (no user actor)" in caplog.text
-    assert "Authorization denied for user team-1" not in caplog.text
+    assert "Authorization denied" in caplog.text
+    assert "team-1" not in caplog.text
 
 
 def test_authorization_error_handler_distinguishes_actor_from_team_subject(
@@ -109,10 +111,9 @@ def test_authorization_error_handler_distinguishes_actor_from_team_subject(
         response = TestClient(app, raise_server_exceptions=False).get("/capability")
 
     assert response.status_code == 403
-    assert (
-        "Authorization denied for user alice (checked subject team team-1)"
-        in caplog.text
-    )
+    assert "Authorization denied" in caplog.text
+    assert "alice" not in caplog.text
+    assert "team-1" not in caplog.text
 
 
 def test_generic_exception_handler_returns_internal_server_error(caplog) -> None:
@@ -128,7 +129,73 @@ def test_generic_exception_handler_returns_internal_server_error(caplog) -> None
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
-    assert "Unhandled exception in GET http://testserver/explode: boom" in caplog.text
+    assert "Unhandled request failure" in caplog.text
+    assert "boom" not in caplog.text
+
+
+@pytest.mark.parametrize("with_actor", [False, True])
+def test_authorization_handler_logs_no_identity_or_exception_chain(
+    caplog, with_actor: bool
+) -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+    canaries = ("actor-canary", "subject-canary", "cause-canary")
+
+    @app.get("/denied")
+    async def denied() -> None:
+        raise AuthorizationError(
+            user_id=canaries[0],
+            action="can_use",
+            resource=Resource.APP,
+            actor_uid=canaries[0] if with_actor else None,
+            subject_type=Resource.TEAM,
+            subject_id=canaries[1],
+        ) from RuntimeError(canaries[2])
+
+    with caplog.at_level(logging.WARNING):
+        response = TestClient(app, raise_server_exceptions=False).get("/denied")
+
+    assert response.status_code == 403
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "fred_core.common.fastapi_handlers"
+    ]
+    assert [record.getMessage() for record in records] == ["Authorization denied"]
+    for record in records:
+        assert not record.args
+        assert record.exc_info is None
+        rendered = logging.Formatter().format(record)
+        assert all(canary not in rendered for canary in canaries)
+
+
+def test_generic_handler_logs_no_request_or_chained_exception_details(caplog) -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+    canaries = ("route-canary", "query-canary", "error-canary", "cause-canary")
+
+    @app.get("/route-canary")
+    async def failure() -> None:
+        raise RuntimeError(canaries[2]) from ValueError(canaries[3])
+
+    with caplog.at_level(logging.ERROR):
+        response = TestClient(app, raise_server_exceptions=False).get(
+            "/route-canary?key=query-canary"
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "fred_core.common.fastapi_handlers"
+    ]
+    assert [record.getMessage() for record in records] == ["Unhandled request failure"]
+    for record in records:
+        assert not record.args
+        assert record.exc_info is None
+        rendered = logging.Formatter().format(record)
+        assert all(canary not in rendered for canary in canaries)
 
 
 def test_authorization_error_is_a_permission_error() -> None:

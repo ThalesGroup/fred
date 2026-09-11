@@ -166,6 +166,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   ],
 }));
 
+import { EditorView } from "@codemirror/view";
 import PromptsPage from "./PromptsPage";
 
 // FullPageModal renders through a `createPortal` into a div appended
@@ -176,11 +177,13 @@ function formValues() {
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null;
   if (!dialog) return { name: "", description: "", text: "" };
   const inputs = dialog.querySelectorAll("input");
-  const textarea = dialog.querySelector("textarea");
+  // The prompt text is a CodeMirror document, not a form control: read it from
+  // the editor's own state rather than off the DOM.
+  const editor = dialog.querySelector(".cm-editor");
   return {
     name: (inputs[0] as HTMLInputElement | undefined)?.value ?? "",
     description: (inputs[1] as HTMLInputElement | undefined)?.value ?? "",
-    text: (textarea as HTMLTextAreaElement | null)?.value ?? "",
+    text: editor ? (EditorView.findFromDOM(editor as HTMLElement)?.state.doc.toString() ?? "") : "",
   };
 }
 

@@ -33,33 +33,25 @@ teams into every team context they browse.
 
 from __future__ import annotations
 
-from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.models import Resource
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
     CapabilityPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
     Relation,
-    RelationType,
+    team_subject_and_context,
 )
 
-# Reserved id prefix for `kind="app"` catalog entries. Tools, templates,
-# models and applications share one flat `capability:<id>` namespace, so an
-# unprefixed app id can collide with any of them.
-APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
-
-
-def application_capability_id(app_id: str) -> str:
-    """Capability id one registered application's team grants are written against.
-
-    Derived, never authored: team admission filters on exactly this id. The
-    input is not normalized -- an id needing repair is one no catalog
-    accepted, and failing closed beats resolving onto a neighbouring id.
-    """
-
-    return f"{APPLICATION_CAPABILITY_NAMESPACE_PREFIX}{app_id}"
+__all__ = [
+    "APPLICATION_CAPABILITY_NAMESPACE_PREFIX",
+    "can_team_use_capability",
+    "team_capability_subject_and_context",
+    "usable_capability_ids",
+]
 
 
 def team_capability_subject_and_context(
@@ -75,18 +67,7 @@ def team_capability_subject_and_context(
     every team belongs to the singleton organization by construction.
     """
 
-    team_ref = RebacReference(type=Resource.TEAM, id=team_id)
-    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
-    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
-    if is_personal_team_id(team_id):
-        context.append(
-            Relation(
-                subject=team_ref,
-                relation=RelationType.PERSONAL_TEAM,
-                resource=org_ref,
-            )
-        )
-    return team_ref, context
+    return team_subject_and_context(team_id)
 
 
 async def usable_capability_ids(rebac: RebacEngine, team_id: str) -> set[str] | None:

@@ -370,6 +370,20 @@
           "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
         }
       }
+    },
+    "team_wiki": {
+      "name": "Team wiki",
+      "description": "Gives the agent access to the team's wiki: it reads the pages the team has written and follows the rules the team set there. Enabling this capability for a team is also what gives its members a wiki.",
+      "fields": {
+        "mode": {
+          "title": "What the agent may do",
+          "description": "Read lets the agent consult the wiki. Read and propose also lets it suggest pages and edits — you are always asked to approve them before anything is written. No mode can delete, rename or move a page.",
+          "options": {
+            "read": "Read only",
+            "read_write": "Read and propose"
+          }
+        }
+      }
     }
   },
   "chatbot": {
@@ -2037,8 +2051,8 @@
         },
         "menu": {
           "analytics": "Analytics",
-          "capabilities": "Features",
           "corpusAudit": "Corpus audit",
+          "features": "Features",
           "migration": "Platform data",
           "platformRoles": "Platform roles",
           "selftest": "Self-test",
@@ -2072,7 +2086,8 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Resources"
+          "resources": "Resources",
+          "wiki": "Wiki"
         },
         "teamLabel": "Team",
         "userTeam": "Personal space"
@@ -2230,7 +2245,17 @@
       },
       "roles": {
         "platform_admin": "Platform admin",
-        "platform_observer": "Platform observer"
+        "platform_observer": "Platform observer",
+        "team_manager": "Team manager",
+        "feature_manager": "Feature manager",
+        "prompt_editor": "Prompt editor"
+      },
+      "roleDescriptions": {
+        "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
+        "platform_observer": "Read-only access to platform-wide analytics.",
+        "team_manager": "Create teams and see every team on the platform.",
+        "feature_manager": "Enable or disable capabilities, agent templates and models.",
+        "prompt_editor": "Edit the platform prompt prepended to every agent."
       },
       "grant": {
         "title": "Grant a role",
@@ -2273,7 +2298,7 @@
         "nameLabel": "Team name",
         "namePlaceholder": "e.g. swiftpost",
         "adminsLabel": "Initial team admin(s)",
-        "adminsPlaceholder": "Search users...",
+        "adminsPlaceholder": "Enter a name, first name, or user ID",
         "submit": "Create team",
         "successSummary": "Team created",
         "errors": {
@@ -2494,6 +2519,10 @@
             "teamResources": {
               "title": "Access to team resources",
               "description": "Lets the agent use the team's resources to carry out its mission."
+            },
+            "teamWiki": {
+              "title": "Access to the team wiki",
+              "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
             },
             "conversationAttachments": {
               "title": "Attachments in a conversation",
@@ -3018,15 +3047,16 @@
     },
     "platformPrompt": {
       "title": "Platform global prompt",
-      "subtitle": "The personality and standardised instructions of this platform. It is the first block of every agent's system prompt, before each agent's own instructions.",
+      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
         "badge": "Editable",
-        "subtitle": "Your platform's personality and its own standards. Sent first, ahead of everything else, on every call of every agent."
+        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
       },
       "field": {
         "label": "Prompt text",
-        "explanation": "Keep it short: every character here is permanent context."
+        "explanation": "Keep it short: every character here is permanent context.",
+        "tooLong": "The prompt exceeds {{max}} characters."
       },
       "save": "Save",
       "saving": "Saving...",
@@ -3039,11 +3069,131 @@
       "instructions": {
         "title": "Platform operating instructions",
         "badge": "Read-only",
-        "subtitle": "Shipped with the platform and rendered immediately after your prompt, for every agent. It can only change with a deployment.",
+        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
         "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
         "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
       "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
+    },
+    "wiki": {
+      "title": "Wiki",
+      "betaBadge": {
+        "label": "Beta",
+        "tooltip": "This is a proposal, not a finished feature. We're collecting feedback before committing to its design — tell us what works and what doesn't."
+      },
+      "resizeRail": "Resize the page list",
+      "newPage": "New page",
+      "missingTeam": "Missing team id in route.",
+      "notFound": "This page does not exist.",
+      "empty": {
+        "editor": "Your team's wiki is empty. Create the first page to start writing down what the team knows.",
+        "member": "Your team's wiki is empty. An editor can create the first page."
+      },
+      "tree": {
+        "ariaLabel": "Wiki pages",
+        "empty": "No pages yet.",
+        "expand": "Expand",
+        "collapse": "Collapse",
+        "needsReview": "An agent wrote this page and nobody has reviewed it yet",
+        "pendingReview": "{{count}} page to review",
+        "pendingReview_other": "{{count}} pages to review",
+        "nothingToReview": "Nothing waiting for a review.",
+        "addChild": "Add a sub-page to {{title}}",
+        "addChildTooltip": "Add a sub-page"
+      },
+      "article": {
+        "breadcrumb": "Breadcrumb",
+        "edit": "Edit",
+        "rename": "Rename or move this page",
+        "delete": "Delete this page",
+        "history": "Version history",
+        "empty": "This page is empty.",
+        "writtenByAgent": "Written by an agent",
+        "lastEditedBy": "Last edited by {{user}}",
+        "lastEditedByAt": "Last edited by {{user}} on {{when}}",
+        "lastEditedAt": "Last edited on {{when}}",
+        "awaitingReview": "Awaiting review",
+        "markReviewed": "Mark as reviewed",
+        "clearReviewHint": "Clear the review mark once you have read this page"
+      },
+      "editor": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",
+        "loadCurrent": "Load their version",
+        "tooLong": "This page is too long. Keep it under {{max}} characters — a wiki page is a summary, not a document."
+      },
+      "history": {
+        "title": "Version history",
+        "close": "Close the history",
+        "empty": "No earlier versions.",
+        "current": "Current",
+        "restore": "Restore",
+        "loadMore": "Load older versions",
+        "end": "Beginning of history.",
+        "event": {
+          "humanEdit": "Manual edit",
+          "agentEdit": "Edited by agent ({{agent}})",
+          "agentEditUnnamed": "Edited by an agent",
+          "agentReview": "Agent edit validated",
+          "review": "Content validated"
+        }
+      },
+      "rules": {
+        "title": "Agent rules",
+        "notice": "Every agent with wiki access reads this page before answering. Only editors can change it, and no agent can ever write to it.",
+        "empty": "No rules written yet. An editor can add the instructions every agent should follow.",
+        "template": "## What this team does\n\n## Team vocabulary\n\n## How to answer\n\n- A wiki page can be out of date or wrong. If it contradicts what the conversation says, say so rather than silently picking one.\n- Never invent an acronym, a tool name or an internal process: if it is not in the wiki, say you do not know it.\n\n## Never do this\n",
+        "templateHint": "This page starts from an outline. Fill in the empty sections and delete the ones you do not need: every agent reads this text on every question, so keep it short and imperative, and spell out what a new colleague would have guessed on their own."
+      },
+      "proposal": {
+        "newPage": "This agent proposes a new page “{{title}}” ({{added}} lines).",
+        "edit": "This agent proposes changing “{{title}}”: {{added}} lines added, {{removed}} removed.",
+        "seeChanges": "See the changes",
+        "dialogTitle": "Proposed changes — {{title}}",
+        "close": "Close",
+        "unavailable": "This proposal is no longer available."
+      },
+      "newPageDialog": {
+        "title": "New wiki page",
+        "childTitle": "New page under “{{parent}}”",
+        "label": "Page title",
+        "confirm": "Create page"
+      },
+      "renameDialog": {
+        "title": "Title and location",
+        "label": "Page title",
+        "parentLabel": "Parent page",
+        "root": "None — top level",
+        "confirm": "Save"
+      },
+      "leaveDialog": {
+        "title": "Discard your changes?",
+        "message": "You are editing “{{title}}”. Opening another page will lose the text you have not saved.",
+        "confirm": "Discard changes",
+        "cancel": "Keep writing"
+      },
+      "deleteDialog": {
+        "title": "Delete this page?",
+        "message": "\"{{title}}\" and all of its versions will be deleted permanently. This cannot be undone.",
+        "confirm": "Delete page"
+      },
+      "errors": {
+        "save": "Could not save this page",
+        "create": "Could not create the page",
+        "rename": "Could not save the page’s title or location",
+        "delete": "Could not delete the page",
+        "duplicateTitle": "A page with this title already exists at the same level. Pick another one.",
+        "review": "Could not save the review mark",
+        "reviewConflict": "This page has changed since you looked at it. Reload it and check the new version before validating.",
+        "restore": "Could not restore this version"
+      }
+    },
+    "promptEditor": {
+      "copy": "Copy the prompt",
+      "copied": "Prompt copied to the clipboard",
+      "copyFailed": "Could not copy the prompt",
+      "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
     }
   },
   "runtime": {

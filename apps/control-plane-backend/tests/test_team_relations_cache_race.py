@@ -129,3 +129,37 @@ async def test_read_started_after_invalidation_caches_normally() -> None:
     assert len(engine.list_direct_relations_calls) == calls_before, (
         "a read that starts after the last invalidation must still be cached"
     )
+
+
+@pytest.mark.asyncio
+async def test_repeated_write_then_read_cycles_always_cache() -> None:
+    """The cache must populate under ordinary write/read traffic.
+
+    Each cycle invalidates and then reads, with no overlap. A guard that
+    compares two wall-clock readings taken a few statements apart treats most
+    of these as overlapping, so the cache silently never populates and every
+    read pays a round-trip.
+    """
+    gate = asyncio.Event()
+    gate.set()
+    engine = _SlowRebacEngine(
+        gate=gate,
+        direct_relations=[
+            Relation(
+                subject=RebacReference(Resource.USER, "admin"),
+                relation=RelationType.TEAM_ADMIN,
+                resource=RebacReference(Resource.TEAM, TeamId("team-cycles")),
+            )
+        ],
+    )
+    team_id = TeamId("team-cycles")
+
+    cached_after_cycle = []
+    for _ in range(25):
+        teams_service.invalidate_team_relations_cache(team_id)
+        await teams_service._get_team_relations_cached(engine, team_id)
+        cached_after_cycle.append(team_id in teams_service._TEAM_RELATIONS_CACHE)
+
+    assert all(cached_after_cycle), (
+        f"only {sum(cached_after_cycle)}/25 non-overlapping reads were cached"
+    )

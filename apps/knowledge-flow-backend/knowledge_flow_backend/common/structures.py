@@ -646,6 +646,11 @@ class AppConfig(BaseModel):
         default=None,
         description="Maximum resources storage size in bytes for a personal space",
     )
+    pdf_render_ttl_days: int = Field(
+        default=30,
+        ge=0,
+        description="Days a cached Word/PowerPoint PDF render is kept before the nightly sweep deletes it. 0 disables the sweep.",
+    )
 
 
 class PrometheusConfig(BaseModel):

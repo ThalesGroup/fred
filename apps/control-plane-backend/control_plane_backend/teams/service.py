@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -213,12 +215,16 @@ async def list_all_teams_for_registry(
     """List every team in the registry (RFC §32, `GET /teams/all`).
 
     Why this function exists:
-    - platform_admin needs a registry-governance view of every team that is
-      gated on `can_list_all_teams`, distinct from `can_manage_platform`
+    - the registry-governance view of every team is gated on
+      `can_list_all_teams`, distinct from `can_manage_platform`
       (`compute_platform_stats`'s caller) — narrower intent, own capability
 
     How to use it:
-    - call from the platform-admin-gated `GET /teams/all` route
+    - call from the `can_list_all_teams`-gated `GET /teams/all` route, which
+      `team_manager` and `feature_manager` reach as well as `platform_admin`
+    - the response is the full `Team` DTO (admins roster, storage usage,
+      description), not bare names and ids — read-only registry metadata that
+      still grants nothing over a team's agents, prompts or files
 
     Example:
     - `teams = await list_all_teams_for_registry(user, deps)`
@@ -266,11 +272,7 @@ async def delete_team(
     )
     await store.delete(team_id)
 
-    logger.info(
-        "Deleted team %s (%s) via platform-admin registry action",
-        team_id,
-        metadata.name,
-    )
+    logger.info("Deleted one team via platform-admin registry action")
 
 
 async def rescue_team_admin(
@@ -328,11 +330,8 @@ async def rescue_team_admin(
         )
 
     logger.info(
-        "Rescued team %s (%s): granted team_admin to %s via platform-admin "
-        "registry action (team had zero team_admin)",
-        team_id,
-        metadata.name,
-        user_id,
+        "Rescued one orphaned team via platform-admin registry action: "
+        "granted team_admin to one account"
     )
 
 
@@ -485,12 +484,13 @@ async def create_team(
       Keycloak root group, discovered lazily, and every membership endpoint
       requires the group (and a `team_admin`) to already exist — a freshly
       created Keycloak group was unreachable by any of them
-    - `platform_admin` must not gain a standing team relation from creating a
-      team (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples
-      only for the subjects named in the request
+    - the creator must not gain a standing team relation from creating a team
+      (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples only
+      for the subjects named in the request
 
     How to use it:
-    - call from the platform-admin-gated `POST /teams` route
+    - call from the `can_create_team`-gated `POST /teams` route, which a
+      `team_manager` reaches as well as a `platform_admin`
     - one-shot by construction: `team_metadata.name`'s DB-level unique
       constraint (migration a8b9c0d1e2f3) makes a second call for the same
       name fail with `TeamAlreadyExistsError` (409) rather than silently
@@ -1057,6 +1057,51 @@ async def add_team_member(
     )
 
 
+async def _search_users_bounded(
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """Shared Keycloak lookup behind both candidate searches.
+
+    The minimum length is enforced here, not only by the API layer's
+    `min_length`: that validates the raw string, so `"  "` alone would reach
+    Keycloak's search un-narrowed and degrade it into a full directory dump.
+    """
+    stripped_query = query.strip()
+    if len(stripped_query) < 2:
+        return []
+    return await deps.search_users(stripped_query)
+
+
+async def search_candidate_team_admins(
+    user: KeycloakUser,
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """
+    Search Keycloak users eligible to be a brand-new team's first `team_admin`.
+
+    Why this function exists:
+    - `create_team` requires at least one `initial_team_admin_ids` entry, and
+      the only org-wide directory (`GET /users`) is gated on
+      `can_administer_users` — `platform_admin`-only. A `team_manager` could
+      reach `/admin/teams` and hold `can_create_team`, yet had no way to name
+      an admin, so the form was unusable for the very role that owns the page.
+
+    How to use it:
+    - call from `GET /teams/candidate-admins`
+    - gated on the same `can_create_team` as the action it feeds, and bounded
+      like the team-scoped search rather than widening the directory listing
+
+    Example:
+    - `matches = await search_candidate_team_admins(user, "cohen", deps)`
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+    )
+    return await _search_users_bounded(query, deps)
+
+
 async def search_candidate_team_members(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1078,10 +1123,8 @@ async def search_candidate_team_members(
 
     How to use it:
     - call from `GET /teams/{team_id}/candidate-members`
-    - `query` must have at least 2 non-whitespace characters — checked here,
-      not just via the API layer's `min_length` (which validates the raw
-      string, so " " alone would otherwise pass through and reach Keycloak's
-      search un-widened)
+    - `query` must have at least 2 non-whitespace characters (enforced by
+      `_search_users_bounded`)
     - users already holding any role on the team are filtered out of the
       result
 
@@ -1097,8 +1140,8 @@ async def search_candidate_team_members(
         deps,
     )
 
-    stripped_query = query.strip()
-    if len(stripped_query) < 2:
+    matches = await _search_users_bounded(query, deps)
+    if not matches:
         return []
 
     admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
@@ -1109,7 +1152,6 @@ async def search_candidate_team_members(
     )
     existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
 
-    matches = await deps.search_users(stripped_query)
     return [
         candidate for candidate in matches if candidate.id not in existing_member_ids
     ]
@@ -1335,14 +1377,25 @@ _TEAM_RELATIONS_CACHE_TTL_SECONDS = 45
 _TEAM_RELATIONS_CACHE: ThreadSafeLRUCache[
     TeamId, tuple[float, list[Relation] | RebacDisabledResult]
 ] = ThreadSafeLRUCache(max_size=2000)
-# PR #2160 review (Codex, P2): a read that starts before a write's
-# invalidation but finishes after it would otherwise re-`set` the pre-write
-# snapshot, silently undoing the invalidation for a full TTL. Tracking the
-# last invalidation time per team lets a read recognize this and skip
-# publishing its (now provably stale) result — see `_get_team_relations_cached`.
-_TEAM_RELATIONS_LAST_INVALIDATED: ThreadSafeLRUCache[TeamId, float] = (
+# Monotonic tickets distinguish overlapping invalidations without timestamp ties.
+# A changed ticket prevents publication of an in-flight stale read.
+_TEAM_RELATIONS_INVALIDATION_TICKET: ThreadSafeLRUCache[TeamId, int] = (
     ThreadSafeLRUCache(max_size=2000)
 )
+_TEAM_RELATIONS_TICKETS = itertools.count(1)
+# Serializes issue-and-store so a slow writer cannot stamp a team with an
+# older ticket than one already stored, which would hide an invalidation.
+_TEAM_RELATIONS_TICKET_LOCK = Lock()
+
+
+def _stamp_team_invalidation(team_id: TeamId) -> None:
+    with _TEAM_RELATIONS_TICKET_LOCK:
+        _TEAM_RELATIONS_INVALIDATION_TICKET.set(team_id, next(_TEAM_RELATIONS_TICKETS))
+
+
+def _team_invalidation_ticket(team_id: TeamId) -> int:
+    # Absent means no invalidation has been recorded for this team.
+    return _TEAM_RELATIONS_INVALIDATION_TICKET.get(team_id) or 0
 
 
 def invalidate_team_relations_cache(team_id: TeamId) -> None:
@@ -1358,7 +1411,7 @@ def invalidate_team_relations_cache(team_id: TeamId) -> None:
       calls this right after its write succeeds
     """
     _TEAM_RELATIONS_CACHE.delete(team_id)
-    _TEAM_RELATIONS_LAST_INVALIDATED.set(team_id, time.time())
+    _stamp_team_invalidation(team_id)
 
 
 async def _get_team_relations_cached(
@@ -1379,15 +1432,8 @@ async def _get_team_relations_cached(
       change is reflected without waiting on the TTL. No authorization
       decision is ever served from this cache — `Check` calls stay live.
 
-    PR #2160 review (Codex, P2): between the cache-miss check and the final
-    `.set()` below there's a real `await` — a concurrent write can invalidate
-    this team while this call is in flight, and this call would otherwise
-    re-`set` the pre-write snapshot it already had in hand, undoing that
-    invalidation for a full TTL. `read_started_at` is captured before the
-    `await`; if `invalidate_team_relations_cache` ran for this team at or
-    after that moment, this result is provably stale and is returned to the
-    caller without being published back into the cache — the next call
-    starts clean instead of resurrecting it.
+    In-flight reads whose invalidation ticket changed are returned without
+    publication, so the next read fetches current state.
     """
     read_started_at = time.time()
     cached = _TEAM_RELATIONS_CACHE.get(team_id)
@@ -1397,12 +1443,12 @@ async def _get_team_relations_cached(
             return relations
         _TEAM_RELATIONS_CACHE.delete(team_id)
 
+    ticket_before = _team_invalidation_ticket(team_id)
     relations = await rebac.list_direct_relations(
         RebacReference(Resource.TEAM, team_id)
     )
 
-    last_invalidated = _TEAM_RELATIONS_LAST_INVALIDATED.get(team_id)
-    if last_invalidated is not None and last_invalidated >= read_started_at:
+    if _team_invalidation_ticket(team_id) != ticket_before:
         return relations
 
     _TEAM_RELATIONS_CACHE.set(

@@ -64,6 +64,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
+from control_plane_backend.team_wiki.store import TeamWikiStore
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ class ApplicationContext:
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
+        self._team_wiki_store: TeamWikiStore | None = None
         self._prompt_category_store: PromptCategoryStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
@@ -385,6 +387,11 @@ class ApplicationContext:
         if self._prompt_store is None:
             self._prompt_store = PromptStore(engine=self.get_pg_async_engine())
         return self._prompt_store
+
+    def get_team_wiki_store(self) -> TeamWikiStore:
+        if self._team_wiki_store is None:
+            self._team_wiki_store = TeamWikiStore(engine=self.get_pg_async_engine())
+        return self._team_wiki_store
 
     def get_prompt_category_store(self) -> PromptCategoryStore:
         if self._prompt_category_store is None:

@@ -25,6 +25,7 @@ import type {
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
+import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -364,6 +365,11 @@ export default function AgentFormModal({
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
   const requiredFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => f.required && !f.ui?.hide);
   const missingRequired = requiredFields.some((f) => !form.tuningValues[f.key]);
+  // Mirrors the backend's 422 on reserved system-prompt tags (AgentFormBody
+  // shows the message under the field); saving would only bounce.
+  const reservedTagFields = (selectedTemplate?.default_tuning_fields ?? []).filter(
+    (f) => !f.ui?.hide && reservedTagInPromptField(f, form.tuningValues[f.key]) !== null,
+  );
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
   const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
@@ -372,34 +378,27 @@ export default function AgentFormModal({
     !!form.displayName.trim() &&
     !!form.usageStatement.trim() &&
     !missingRequired &&
+    reservedTagFields.length === 0 &&
     !capabilityBlocked;
   const canSave = isFormValid && !isSubmitting;
 
-  const errorSections = new Set<SectionKey>(
-    submitAttempted
-      ? [
-          ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
-          ...(!form.displayName.trim() ? (["general"] as const) : []),
-          ...(capabilityBlocked ? (["tools"] as const) : []),
-          ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
-        ]
-      : [],
-  );
+  // Every section holding a blocking problem, computed once: the tab badges
+  // (after a submit attempt) and the tab the failed submit jumps to read it.
+  const sectionsWithErrors = new Set<SectionKey>([
+    ...requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)),
+    ...reservedTagFields.map((f) => sectionOfField(f)),
+    ...(!form.displayName.trim() ? (["general"] as const) : []),
+    ...(capabilityBlocked ? (["tools"] as const) : []),
+    ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
+  ]);
+  const errorSections = submitAttempted ? sectionsWithErrors : new Set<SectionKey>();
 
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (!canSave) {
-      const firstErrorSection = (["general", "prompts", "tools", "commitments"] as const).find((s) => {
-        if (s === "general") {
-          return (
-            !form.displayName.trim() ||
-            requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === "general")
-          );
-        }
-        if (s === "tools") return capabilityBlocked;
-        if (s === "commitments") return !form.usageStatement.trim();
-        return requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === s);
-      });
+      const firstErrorSection = (["general", "prompts", "tools", "commitments"] as const).find((s) =>
+        sectionsWithErrors.has(s),
+      );
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }

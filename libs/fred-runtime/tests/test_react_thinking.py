@@ -373,6 +373,7 @@ async def _run_stream(events: list[object]) -> list[object]:
         compiled_agent=_FakeCompiledAgent(events),  # type: ignore[arg-type]
         binding=_FakeBinding(),  # type: ignore[arg-type]
         services=_FakeServices(),  # type: ignore[arg-type]
+        runtime_class_name="ReActRuntime",
     )
     input_model = ReActInput(
         messages=(ReActMessage(role=ReActMessageRole.USER, content="hi"),)

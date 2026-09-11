@@ -289,13 +289,18 @@ operations:
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams
-    review_status: pending_review
-    required_permission: pending_review
+    review_status: approved
+    required_permission: can_create_team
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/all
     review_status: approved
     required_permission: can_list_all_teams
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/candidate-admins
+    review_status: approved
+    required_permission: can_create_team
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}
@@ -305,7 +310,7 @@ operations:
     method: GET
     path: /control-plane/v1/teams/{team_id}/applications
     review_status: approved
-    required_permission: can_use_team_applications # Response items are additionally filtered by capability#can_use.
+    required_permission: can_use_team_applications # Response items are additionally filtered by app#can_use on app:<raw-app-id>.
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/teams/{team_id}
@@ -346,6 +351,86 @@ operations:
     path: /control-plane/v1/teams/{team_id}/routing-policy/effective-chat-model
     review_status: approved
     required_permission: can_read_members # #2387 — DELIBERATELY the plain-membership gate, not the elevated-role gate the two reads above use: this reports which model answers a conversation, and anyone entitled to hold that conversation is entitled to know. Editing the policy stays team_editor-only; this is read-only and derives nothing a chat participant cannot already observe from the turn itself
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/page
+    review_status: approved
+    required_permission: can_read_members # member-level on purpose: a proposal changes nothing in the wiki, and the HITL approval is the authority rather than the role of whoever drove the agent
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/edit
+    review_status: approved
+    required_permission: can_read_members # same as the page proposal; the rules page is refused by its kind, so no agent can reach it under any configuration
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}
+    review_status: approved
+    required_permission: can_read_members # what the approval modal reads to render the diff
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/proposals/{proposal_id}/publish
+    review_status: approved
+    required_permission: can_read_members # the member driving the conversation approves their own agent's proposal (RFC §9); the published revision carries their identity and leaves the page marked for review
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/availability
+    review_status: approved
+    required_permission: can_read_members # member-only, like every wiki read. Answers whether the team_wiki capability is enabled; deliberately NOT behind the capability gate itself, since answering "no" is its whole purpose
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{slug}
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: PATCH
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/content
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/review
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/revisions
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, like every other team content surface; team_admin has zero write authority here (hard cross-write rule)
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/wiki/rules
+    review_status: approved
+    required_permission: can_read_members # DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a team's internal knowledge to non-members. Member-only read, same gate the routing-policy reads use
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/wiki/rules
+    review_status: approved
+    required_permission: can_update_resources # team_editor only, and there is deliberately no agent path to this endpoint at all: the rules page steers every agent holding the wiki capability, so no agent tool may ever target it
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/{team_id}/agent-instances
@@ -624,67 +709,67 @@ operations:
     method: GET
     path: /control-plane/v1/admin/capabilities
     review_status: approved
-    required_permission: can_manage_platform # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_platform (_require_manage_any)
+    required_permission: can_manage_capabilities # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — aggregate list gated on organization#can_manage_capabilities (organization_authz.require_manage_capabilities), the org twin of the per-object capability#can_manage below
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — read-only revoke-impact preview gated on capability#can_manage, same as the disable mutation it precedes (preview_capability_revoke)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution. Same gate as the disable mutation this preview precedes.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.5 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
     review_status: approved
-    required_permission: can_manage # CAPAB-01 / RFC AGENT-CAPABILITY §8.4 — capability#can_manage (platform_admin from organization)
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows pass organization#can_manage_capabilities and then fail because applications have no personal scope.
   - service: control-plane
     method: PATCH
     path: /control-plane/v1/admin/capabilities/{capability_id}/reasoning
     review_status: approved
-    required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (platform_admin from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
+    required_permission: can_manage # REASON-01 / RFC MODEL-REASONING-ENABLEMENT §5 — capability#can_manage (can_manage_capabilities from organization). Global activation, not a per-team grant: writes a plain table row, never an FGA tuple (§5.1).
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # platform-wide chat model binding (chat-only) — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as GET /admin/capabilities. binding=null when unset.
+    required_permission: can_manage_capabilities # platform-wide chat model binding (chat-only) — organization_authz.require_manage_capabilities; the model bindings are a panel of the same features page as GET /admin/capabilities and share its gate. binding=null when unset.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
+    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. ModelBinding's own strict settings contract (ModelBindingSettings, extra="forbid") rejects credential-shaped or unknown settings keys at request-body parsing (422), before this route's authz even runs.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/model-bindings
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
+    required_permission: can_manage_capabilities # organization_authz.require_manage_capabilities. Unsets the binding (row deletion — no off-sentinel) and echoes the now-unset state.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/prompt
     review_status: approved
-    required_permission: can_manage_platform # platform-wide platform prompt — organization_authz.require_manage_any (organization#can_manage_platform), same shared gate as the model-bindings trio above. is_default=true when no row was ever saved.
+    required_permission: can_edit_platform_prompt # platform-wide platform prompt — organization_authz.require_edit_platform_prompt (organization#can_edit_platform_prompt = platform_admin or prompt_editor). Read shares the write's gate on purpose: an editor who cannot read what they overwrite is useless, and this was never readable below the admin tier. is_default=true when no row was ever saved.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/prompt
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Carved out of can_manage_platform so this one surface can be delegated to a prompt_editor without import/export, tasks and platform reset coming with it. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
-    required_permission: can_manage_platform # organization_authz.require_manage_any, same gate as its editable sibling above. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
+    required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
 
   - service: knowledge-flow
     method: GET
@@ -1134,6 +1219,11 @@ operations:
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/quota/precheck
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/raw_content/pdf/{document_uid}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

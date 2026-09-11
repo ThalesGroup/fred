@@ -43,7 +43,7 @@ from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
     universally_available_chat_model_profile_ids,
 )
-from control_plane_backend.organization_authz import require_manage_any
+from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,
@@ -492,10 +492,10 @@ def _to_platform_model_binding(
 async def get_platform_model_binding(
     *, user: KeycloakUser, deps: ProductServiceDependencies
 ) -> PlatformModelBinding:
-    """Org-admin-gated read of the platform-wide `chat` binding state
+    """Feature-governance-gated read of the platform-wide `chat` binding state
     (chat-only)."""
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     stored = await store.get()
     return _to_platform_model_binding(stored)
@@ -507,7 +507,7 @@ async def set_platform_model_binding(
     binding: ModelBinding,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Org-admin-gated write of the platform-wide `chat` binding.
+    """Feature-governance-gated write of the platform-wide `chat` binding.
 
     `binding` arrives already validated by `ModelBinding` (provider
     restricted to `fred_core.model.models.ModelProvider`, settings
@@ -516,7 +516,7 @@ async def set_platform_model_binding(
     that same validated object — see `PlatformModelBindingStore.set`.
     """
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     stored = await store.set(binding=binding, updated_by=user.uid)
     return _to_platform_model_binding(stored)
@@ -527,7 +527,7 @@ async def delete_platform_model_binding(
     user: KeycloakUser,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Org-admin-gated unset of the platform-wide `chat` binding.
+    """Feature-governance-gated unset of the platform-wide `chat` binding.
 
     Returns the now-unset state (`binding=None`) rather than nothing, so the
     caller can render the row without a second read — same result shape as
@@ -535,7 +535,7 @@ async def delete_platform_model_binding(
     delete.
     """
 
-    await require_manage_any(deps.team_dependencies.rebac, user)
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     await store.delete()
     return PlatformModelBinding(binding=None)

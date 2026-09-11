@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
     data?: { items: Array<Record<string, unknown>> };
     isError: boolean;
   },
+  wikiEnabled: undefined as boolean | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -55,6 +56,11 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
+}));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useWikiAvailabilityQuery: () => ({
+    data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
+  }),
 }));
 vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div data-chat-list /> }));
 
@@ -115,5 +121,34 @@ describe("TeamContentNavbar applications entry", () => {
   it("hides Apps behind the default-off deployment switch despite a compatible cached catalog", () => {
     h.result.data = { items: [application] };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  });
+});
+
+// WIKI-03: the wiki exists for a team only where an admin enabled the
+// `team_wiki` capability. The entry has to follow that, or a member clicks
+// into a page the control-plane refuses.
+describe("TeamContentNavbar — the wiki entry", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.applicationsEnabled = false;
+    h.result = { data: undefined, isError: false };
+    h.wikiEnabled = undefined;
+  });
+
+  it("offers the wiki when the capability is enabled for the team", () => {
+    h.wikiEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/wiki");
+  });
+
+  it("hides it when the capability is off", () => {
+    h.wikiEnabled = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
+  });
+
+  it("hides it while the answer is still unknown", () => {
+    // Showing it optimistically means an entry that appears and then vanishes
+    // on a slow answer — worse than one that arrives a moment late.
+    h.wikiEnabled = undefined;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
   });
 });

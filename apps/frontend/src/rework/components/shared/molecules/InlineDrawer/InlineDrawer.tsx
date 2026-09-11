@@ -14,7 +14,7 @@
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import { useInlineDrawerResize } from "./useInlineDrawerResize";
+import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import styles from "./InlineDrawer.module.css";
 
 interface InlineDrawerResizeSpec {
@@ -105,13 +105,13 @@ export function InlineDrawer({
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
   const seedWidthPx = Number.parseInt(width, 10);
-  const resize = useInlineDrawerResize({
-    persistKey: resizable?.persistKey ?? "unused",
+  const resize = usePaneResize({
+    storageKey: `inline-drawer:${resizable?.persistKey ?? "unused"}:width`,
     initialWidth: Number.isFinite(seedWidthPx) ? seedWidthPx : 480,
     minWidth: resizable?.minWidth,
     maxWidth: resizable?.maxWidth,
     maxViewportFraction: resizable?.maxViewportFraction,
-    drawerRef,
+    paneRef: drawerRef,
   });
   const resizeEnabled = resizable !== undefined && layout === "push";
   const capVw = (resizable?.maxViewportFraction ?? 0.45) * 100;

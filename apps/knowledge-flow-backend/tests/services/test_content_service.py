@@ -72,7 +72,7 @@ class _ContentStoreStub:
         self.preview_calls: list[str] = []
         self.stored_file_name = stored_file_name
 
-    def get_preview_bytes(self, doc_path: str) -> bytes:
+    def get_output_artifact(self, doc_path: str) -> bytes:
         self.preview_calls.append(doc_path)
         if self.payload:
             return self.payload

@@ -19,7 +19,12 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { PdfStreamingDocumentViewer } from "../../../../../common/PdfStreamingDocumentViewer";
 import { useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { decodeMaybeBase64Utf8, isPdfFile, isTabularFile } from "../../../../utils/documentViewerUtils";
+import {
+  decodeMaybeBase64Utf8,
+  documentPdfSourceUrl,
+  hasNativePreview,
+  isTabularFile,
+} from "../../../../utils/documentViewerUtils";
 import styles from "./DocumentViewer.module.css";
 
 export type ViewMode = "file" | "raw";
@@ -38,8 +43,8 @@ interface DocumentViewerProps {
    *  automatically — the corpus workspace preview drawer pairs this with a
    *  `DocumentViewerModeToggle` rendered in its own header (left of the
    *  close button), so the toggle isn't fighting the document for vertical
-   *  space inside this "chrome-less" body. Ignored for non-PDF files: every
-   *  other format already renders nothing but its markdown extraction, so
+   *  space inside this "chrome-less" body. Ignored for formats with no native
+   *  renderer: they already render nothing but their markdown extraction, so
    *  there is nothing to toggle to. Omit to keep the pre-FRONT-09 single-
    *  strategy behavior (`DocumentViewerPage`). */
   view?: ViewMode;
@@ -48,32 +53,34 @@ interface DocumentViewerProps {
 /**
  * Shared document content renderer used by both the chat-citation viewer
  * (`DocumentViewerPage`) and the corpus workspace preview drawer
- * (`DocumentWorkspace`). Picks a native PDF renderer or the markdown
- * extraction based on the file's extension — see FRONT-13.
+ * (`DocumentWorkspace`). Picks a native renderer or the markdown extraction
+ * based on the file's extension — see FRONT-13.
+ *
+ * The native renderer is always the PDF one: a PDF streams from storage
+ * untouched, a Word or PowerPoint document goes through the backend's render endpoint,
+ * and `documentPdfSourceUrl` decides which.
  *
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
 export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
-  const isPdf = isPdfFile(fileName);
-
-  if (!isPdf) {
+  if (!hasNativePreview(fileName)) {
     return (
       <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
     );
   }
 
+  const nativeBody = (
+    <PdfStreamingDocumentViewer documentUid={documentUid} sourceUrl={documentPdfSourceUrl(documentUid, fileName)} />
+  );
+
   if (!view) {
-    return <PdfStreamingDocumentViewer documentUid={documentUid} />;
+    return nativeBody;
   }
 
   return (
     <div className={styles.viewerBody}>
-      {view === "file" ? (
-        <PdfStreamingDocumentViewer documentUid={documentUid} />
-      ) : (
-        <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />
-      )}
+      {view === "file" ? nativeBody : <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />}
     </div>
   );
 }

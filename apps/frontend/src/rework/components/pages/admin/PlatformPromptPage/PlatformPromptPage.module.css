@@ -24,7 +24,7 @@
  * shrink to that height rather than growing to fit its children — without it a
  * flex item's implicit `min-height: auto` makes it grow and the whole page
  * scrolls. Same reasoning, and same pair of declarations, as
- * `CapabilitiesPage.module.css`. */
+ * `FeaturesPage.module.css`. */
 .page {
   display: flex;
   flex: 1;
@@ -132,6 +132,34 @@
 .editorSlot > * {
   flex: 1;
   min-width: 0;
+}
+
+.editorFooter {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-s);
+}
+
+.hint {
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.counter {
+  flex: none;
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.counterOver {
+  color: var(--error);
 }
 
 .paneFooter {

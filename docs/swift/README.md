@@ -50,6 +50,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
+| Build distributable frontend packages                | [`../../libs/frontend/README.md`](../../libs/frontend/README.md)   |
 | See what the team is working on now                   | GitHub Issues/Milestones                                            |
 | Understand the migration backlog                      | [`backlog/`](#backlog--project-state-and-sequencing)               |
 | Check UX status of a chat component                   | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md)                         |
@@ -196,6 +197,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)     | Multi-agent memory hardening: checkpoint isolation, remote/local execution convergence, TeamAgent history cap, invocation depth/cycle limit                                                            |
 | [`PROMPT-SYSTEM-HARDENING-RFC.md`](rfc/PROMPT-SYSTEM-HARDENING-RFC.md)               | Prompt-system completion and hardening: agent-form prompt UX, scoped resolution, promotion metadata, marketplace, token KPIs                                                     |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                                                                                                                                  |
+| [`SYSTEM-PROMPT-LAYERING-RFC.md`](rfc/SYSTEM-PROMPT-LAYERING-RFC.md)                 | PROMPT-10 — four XML-delimited system-prompt blocks with a written precedence (platform instructions > platform prompt > tools > agent), heading demotion in one wrapper, reserved-tag 422 on the platform prompt and agent prompt fields; implemented 2026-09-09, archived by #2595 step 6 |
 | [`TASK-EVENT-STREAM-RFC.md`](rfc/TASK-EVENT-STREAM-RFC.md)                           | OPS-04 — unified task event stream, worker-action audit log, and the shared admin Activity surface                                                                                                      |
 | [`TEAM-PLATFORM-POLICY-RFC.md`](rfc/TEAM-PLATFORM-POLICY-RFC.md)                     | Team platform policy — storage, ingestion, size, deletion retention, tool guardrails (model/MCP allowlisting is out of scope, governed by the capability system instead)                                |
 

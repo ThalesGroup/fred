@@ -21,13 +21,17 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fred_core.conversion import convert_pptx_file_to_pdf
+from fred_core import convert_office_file_to_pdf
 
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
     render_pdf_pages_to_png,
 )
 
 logger = logging.getLogger(__name__)
+
+# Slide rendering during ingestion had no deadline before the conversion helper
+# was shared with the interactive preview path; keep it generous here.
+INGESTION_PDF_TIMEOUT_SECONDS = 600.0
 
 
 @dataclass
@@ -50,9 +54,10 @@ def enrich_slides_with_vision(
         logger.warning("[PROCESSOR][PPTX] No image describer available for vision enrichment.")
         return PptxVisionEnrichmentResult()
 
-    # Ingestion is batch work, not an agent turn: give a large deck room to convert
-    # rather than losing all its slide vision enrichment on the interactive default.
-    pdf_path = convert_pptx_file_to_pdf(pptx_path, timeout_seconds=300.0)
+    # Ingestion is a batch path, not an interactive one: a big deck legitimately
+    # takes minutes, and the shared helper's interactive default would silently
+    # drop every slide description on a slow conversion.
+    pdf_path = convert_office_file_to_pdf(pptx_path, timeout_seconds=INGESTION_PDF_TIMEOUT_SECONDS)
     if pdf_path is None:
         logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping vision enrichment.")
         return PptxVisionEnrichmentResult()

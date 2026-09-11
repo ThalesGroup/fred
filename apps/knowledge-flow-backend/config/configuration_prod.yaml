@@ -26,6 +26,7 @@ app:
   # the UI shows "x / 5 GB" while uploads sail past it.
   default_team_max_resources_storage_size: 5368709120
   personal_max_resources_storage_size: 5368709120
+  pdf_render_ttl_days: 30
 
 observability:
   kpi:

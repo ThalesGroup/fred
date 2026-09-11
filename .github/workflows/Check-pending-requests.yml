@@ -21,6 +21,7 @@ jobs:
     # Those outputs are variables that will be shared to the check
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
+      frontend-packages: ${{ steps.changes.outputs.frontend-packages }}
       agentic: ${{ steps.changes.outputs.agentic }}
       knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
       deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
@@ -44,6 +45,40 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+            frontend-packages:
+              - 'libs/frontend/**'
+              - 'apps/frontend/src/styles/color-ramps.css'
+              - 'apps/frontend/src/styles/colors-semantic-light.css'
+              - 'apps/frontend/src/styles/colors-semantic-dark.css'
+              - 'apps/frontend/src/styles/colors-state-semantic.css'
+              - 'apps/frontend/src/styles/shadow-light.css'
+              - 'apps/frontend/src/styles/shadow-dark.css'
+              - 'apps/frontend/src/styles/spacings.css'
+              - 'apps/frontend/src/styles/radius.css'
+              - 'apps/frontend/src/styles/motion.css'
+              - 'apps/frontend/src/styles/gradients.css'
+              - 'apps/frontend/src/styles/typography.css'
+              - 'apps/frontend/src/rework/components/shared/utils/Type.ts'
+              - 'apps/frontend/src/rework/components/shared/atoms/Icon/Icon.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Icon/Icon.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/Spinner/Spinner.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Spinner/Spinner.module.css'
+              - 'apps/frontend/src/rework/components/shared/atoms/Button/Button.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Button/Button.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.module.scss'
+              - 'apps/frontend/src/index.scss'
+              - 'apps/frontend/src/styles/index.css'
+              - 'apps/frontend/src/assets/fonts/Geist.woff2'
+              - 'apps/frontend/src/assets/fonts/Geist-Italic.woff2'
+              - 'apps/frontend/src/assets/fonts/material-symbols-outlined.woff2'
+              - 'apps/frontend/package.json'
+              - 'apps/frontend/package-lock.json'
+              - 'LICENSE'
+              - 'Makefile'
+              - '.github/workflows/Check-pending-requests.yml'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
@@ -134,6 +169,10 @@ jobs:
           - name: fred-core
             directory: libs/fred-core
             unit-target: test
+            # Authorization is enforced by the OpenFGA schema, so the ReBAC
+            # rules are only really covered by resolving them against a live
+            # server; the target starts and stops it via docker compose.
+            integration-target: test-integration
             needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - name: knowledge-flow-backend
@@ -200,6 +239,62 @@ jobs:
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
+
+      - name: Run integration tests
+        if: ${{ matrix.should-run && matrix.integration-target != '' }}
+        timeout-minutes: 15
+        run: make ${{ matrix.integration-target }}
+        working-directory: ${{ matrix.directory }}
+        env:
+          UV: uv
+
+  frontend-package-checks:
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-packages == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Install producer dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Provision Chromium
+        run: make browser-install
+        working-directory: libs/frontend
+
+      - name: Provision isolated consumer cache
+        run: make consumer-provision
+        working-directory: libs/frontend
+
+      - name: Check producer quality
+        run: make code-quality
+        working-directory: libs/frontend
+
+      - name: Run producer unit tests
+        run: make test
+        working-directory: libs/frontend
+
+      - name: Validate packed archive
+        run: make pack-check
+        working-directory: libs/frontend
+
+      - name: Build isolated consumer offline
+        run: make isolated-consumer
+        working-directory: libs/frontend
+
+      - name: Run browser smoke offline
+        run: make browser-smoke
+        working-directory: libs/frontend
 
   # Job to run code quality checks on the frontend
   frontend-code-quality:

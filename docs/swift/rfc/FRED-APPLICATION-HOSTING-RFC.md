@@ -4,7 +4,7 @@
 
 **Author:** Fred platform team
 
-**Area:** `control-plane-backend`, `frontend`, deployment
+**Area:** `fred-core`, `control-plane-backend`, `frontend`, deployment
 
 ---
 
@@ -19,8 +19,10 @@ Registration is deployment configuration. Adding, updating or removing an
 application is a configuration change and a redeploy of the owner's images —
 never a rebuild of Fred.
 
-Access is team-scoped and reuses the existing capability enablement model
-rather than introducing a second entitlement system.
+Access is team-scoped. Applications reuse the existing enablement workflow and
+administration surface, but are first-class `app` resources in OpenFGA rather
+than capability objects. The shared catalog keeps `app__<app_id>` as its flat
+administrative identifier; authorization uses `app:<app_id>`.
 
 ---
 
@@ -48,8 +50,8 @@ like a plugin system for untrusted publishers.
   cycle, with no Fred rebuild and no Fred source edited.
 - Registration is deployment configuration, readable and reversible by an
   operator without touching code.
-- Access is granted per collaborative team through the existing capability
-  model, and administered on the surface administrators already use.
+- Access is granted per collaborative team through a first-class OpenFGA
+  application object, administered on the surface administrators already use.
 - The interface is contained: a failing application must not take down the
   Fred shell around it.
 - The boundary is written so that serving an application from its own origin
@@ -93,8 +95,9 @@ Registration is split by responsibility, and the split is deliberate:
 
 - **Control plane** — the catalog entry an operator authors: the application id,
   the browser-facing prefix, version, icon, localized display strings, and
-  whether the entry is active. This half owns what teams see and the capability
-  that authorization is granted against. It registers no proxy upstream.
+  whether the entry is active. This half owns what teams see, maps the shared
+  catalog id `app__<app_id>` to the authorization object `app:<app_id>`, and
+  registers no proxy upstream.
 - **Frontend gateway** — the server-side addresses to proxy to. This half never
   reaches the browser and never authorizes anything.
 
@@ -203,8 +206,8 @@ contract at all.
 
 The carrier question that blocked this dissolved rather than being answered.
 Nothing about the record travels on the message: an application records what
-the conversation should be about through its own service, and its capability
-resolves it on the agent side from the runtime identity. No session-scoped
+the conversation should be about through its own service, and the receiving
+agent capability resolves it from the runtime identity. No session-scoped
 context channel was needed after all.
 
 The durable description now lives in `CONTROL-PLANE-PRODUCT-CONTRACT.md` (frame
@@ -212,46 +215,56 @@ contract).
 
 ## 5. Authorization
 
-Each registered application derives a capability from its id. Registration
-alone grants nothing: a platform administrator enables that capability per
-collaborative team on the existing administration surface.
+Application authorization is now a settled dependency of this still-open
+hosting proposal. The shared administration catalog keeps `app__<app_id>`,
+while OpenFGA uses the first-class object `app:<app_id>`. Registration alone
+grants nothing, and V1 applications are collaborative-team-only.
 
-Discovery must authorize before reading anything else. A caller who is not a
-member of a team is refused without learning whether the team or any
-application exists; a member sees only applications their team has been granted.
-Personal spaces return nothing.
+The current reader, writer, personal-space and model-first rollout contracts
+live in `CONTROL-PLANE-PRODUCT-CONTRACT.md` §46 and `REBAC.md`; this RFC does
+not duplicate those validated details. The remaining proposal concerns in §8
+must build on that authorization boundary rather than treating an application
+as a capability object.
 
-Grants are held **team to capability**, never user to capability, so any
-correct check answers two questions: is this caller a member of the team, and
-does the team hold the application.
+### 5.1 Authorization delivery boundary
 
----
+The current app-type change provides configuration-based registration and
+existing team entitlement controls only. Its model has no app-wide active
+marker and it requires no lifecycle registry or reconciliation command.
+Higher-consistency app admission and independently useful security hardening
+remain. The product contract and ReBAC guide carry the current behavior.
 
-## 6. Lifecycle
+Config withdrawal is not global revocation or permission cleanup. A directly
+reachable first-party backend can still accept surviving entitlement; re-adding
+the same identifier can reuse it. Existing entitlement revocation and route
+restrictions remain the available controls.
 
-Registration begins as configuration only: an entry removed from configuration
-disappears at the next load, and nothing records that it once existed.
+## 6. Deferred shared resource lifecycle
 
-A durable lifecycle is required before removal can be considered safe, and is
-proposed as follow-up work:
+Global **Deactivate**, later **Activate**, and **Delete** are explicitly
+deferred from this application feature. The follow-up must be a generic design
+for all or most applicable ReBAC resource types, with documented exceptions
+where their ownership or permission models differ.
 
-- Durable state keyed by application id. An id seen previously and now absent
-  becomes a tombstone — unavailable to teams even if authorization relations
-  remain, but visible to administrators for cleanup.
-- A tombstoned id that reappears enters a pending state and cannot be listed,
-  loaded or proxied until an administrator re-establishes its relations. A
-  version update that stays continuously registered must not create a new
-  generation or discard valid grants.
-- Removal is two-stage: revoke access, confirm no team retains it, then remove
-  the registration.
+The open design must cover:
 
-The source boundary discovery reads from should be defined narrowly enough that
-a durable implementation can replace a configured one without changing the
-discovery service or the API contract.
+- Desired-state ownership and precedence between configuration and future UI actions.
+- Global denial overriding explicit grants and inherited defaults.
+- Retained settings during deactivation and their reactivation semantics.
+- Trustworthy inventory, deliberate removal and protection against incomplete configuration.
+- Exact permission cleanup, unrelated-resource protection and re-registration.
+- Uncertain writes, resumable recovery, stale or incompatible writers and cache freshness.
+- Migration, mixed-version rollout, rollback and operational verification.
 
-**Related asymmetry to resolve:** because the two halves are independent,
-deactivating a catalog entry stops teams seeing an application but does not stop
-the gateway serving its routes. Retiring an application requires removing both.
+No database registry, global-gate representation, recovery flag or per-type
+rollout is selected for the future lifecycle design. A generic cleanup primitive does
+not by itself implement safe resource deletion. Workload, gateway and owned
+data retirement require separately defined authority as applicable.
+
+The [OpenSpec gap](../../../openspec/changes/first-class-application-rebac/design.md#deferred-gap--shared-resource-lifecycle)
+records this boundary. Deployment requires schema and authorization-model
+compatibility; incompatible state requires a separately approved state-preserving
+migration plan. This RFC supplies no automatic downgrade or deployed-state change.
 
 ---
 
@@ -270,9 +283,9 @@ framework, router or design system. With forks on independent cadences that is a
 standing coordination cost rather than a one-off. Rejected as a standing
 position, not only as a design-time comparison — see §4.3.
 
-**A separate entitlement system for applications.** Rejected: administrators
-would learn a second model, and grants would drift from the capability model
-already used for every other team-scoped feature.
+**A separate administration system for applications.** Rejected:
+administrators would learn a second workflow, and its enablement state could
+drift from the shared administration surface used for team-scoped features.
 
 **Signed packaging with supply-chain attestation.** Appropriate for untrusted
 publishers, and disproportionate here. Applications are built by teams who
@@ -287,8 +300,8 @@ belongs to several teams.
 
 ## 8. Open questions
 
-1. The durable registration and removal lifecycle (§6), including the catalog
-   and gateway asymmetry.
+1. Shared resource lifecycle in §6: determine applicable resource types, authority,
+   global denial, cleanup and recovery without an app-only subsystem.
 2. ~~Whether to let an application hand a record to a conversation (§4.5).~~
    Decided — granted as `fred:open-chat`, with the bound and its two runtime
    dependencies recorded in §4.5. Kept in this list only until §4.5 is folded
@@ -301,6 +314,8 @@ belongs to several teams.
    surfaces.
 6. Personal-space availability, and how it would interact with the existing
    personal capability class.
+7. Future lifecycle UI/API actions and configuration precedence belong to the
+   shared design in §6; they are not prerequisites for the app-type feature.
 
 Items 4 through 6 want evidence from more than one independently developed
 application before being standardized.
@@ -310,7 +325,8 @@ application before being standardized.
 ## 9. Acceptance
 
 This RFC is complete when §4.5 has a recorded decision and rationale, and §6
-has either an owner or an explicit deferral. §4.5 in particular should be
-decided against a real application that wanted it, not in the abstract.
+has either an owner or an explicit deferral. The app-type delivery boundary
+in §5.1 does not claim shared lifecycle implementation. §4.5 in particular
+should be decided against a real application that wanted it, not in the abstract.
 Anything settled moves into the relevant contract or platform document and is
 removed from this RFC rather than amended in place.

@@ -44,6 +44,7 @@ STORE_SESSION_METADATA = "session_metadata"
 STORE_KPI = "kpi"
 STORE_CHECKPOINT = "runtime_checkpoint"
 STORE_HISTORY = "runtime_history"
+STORE_WIKI_PROPOSALS = "wiki_proposals"
 
 # Per-runtime-call timeout, matching the Knowledge Flow cleanup helper.
 _RUNTIME_TIMEOUT_SECONDS = 15.0
@@ -148,6 +149,32 @@ class ConversationErasureService:
                     store=STORE_ATTACHMENTS,
                     ok=False,
                     error=f"attachment erase failed: {exc}",
+                )
+            )
+
+        # --- wiki proposals (WIKI-05) -------------------------------------
+        # A pending proposal whose conversation no longer exists is
+        # unambiguously abandoned — reject it now rather than making it wait
+        # out the ordinary retention window (CONTROL-PLANE-PRODUCT-CONTRACT.md
+        # §49). Isolated like every store; idempotent, so a retry after a
+        # partial erasure simply finds nothing left to reject.
+        try:
+            rejected = await deps.get_team_wiki_store().reject_proposals_for_session(
+                team_id=team_id, session_id=session_id
+            )
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_WIKI_PROPOSALS,
+                    deleted_count=rejected,
+                    ok=True,
+                )
+            )
+        except Exception as exc:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_WIKI_PROPOSALS,
+                    ok=False,
+                    error=f"wiki proposal rejection failed: {exc}",
                 )
             )
 

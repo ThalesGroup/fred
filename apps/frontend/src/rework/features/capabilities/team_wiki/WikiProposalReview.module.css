@@ -1,0 +1,44 @@
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-2xs);
+}
+
+.summary {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The change itself. Monospace because alignment is the point, and scrolling
+   in its own box so a long page never widens the dialog. */
+.diff {
+  margin: 0;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s);
+  width: 100%;
+  max-height: 60vh;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-code-small, var(--font-body-small));
+  font-family: monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.same {
+  color: var(--on-surface-retreat);
+}
+
+.added {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+.removed {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
