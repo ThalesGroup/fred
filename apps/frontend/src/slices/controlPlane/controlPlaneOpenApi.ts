@@ -676,6 +676,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
+    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
+        method: "PUT",
+        body: queryArg.knowledgeBasePublicationRequest,
+      }),
+    }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -1799,6 +1809,12 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
+  /** status 200 Successful Response */ KnowledgeBasePublicationResult;
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+  name: string;
+  knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -2737,7 +2753,7 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
-  kind?: "tool" | "agent" | "model" | "app";
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
@@ -3276,8 +3292,8 @@ export type CapabilityEnablementItem = {
   personal_scope?: "enabled" | "disabled" | "default";
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
-  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. */
-  kind?: "tool" | "agent" | "model" | "app";
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. "knowledge_base": a control-plane projection of one published Knowledge Base definition — same enablement shape as an application, on its own ReBAC type so no capability or application grant can make one usable. */
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
   default_capability_ids?: string[];
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
@@ -3349,6 +3365,18 @@ export type ModelReasoningResult = {
 };
 export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
+};
+export type KnowledgeBasePublicationResult = {
+  id: string;
+  prefix: string;
+  version: string;
+};
+export type KnowledgeBasePublicationRequest = {
+  prefix: string;
+  version: string;
+  name: string;
+  description: string;
+  configuration_fields?: FieldSpec[];
 };
 export type TeamRoutingPolicy = {
   team_id: string;
@@ -3976,6 +4004,7 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,

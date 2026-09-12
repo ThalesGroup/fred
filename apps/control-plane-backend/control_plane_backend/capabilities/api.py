@@ -25,11 +25,12 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, Path, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError
 
+from control_plane_backend.app.route_errors import map_error as _map_error
 from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.enablement import (
     AgentCapabilityDependencyNotSatisfied,
@@ -62,15 +63,6 @@ ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
 ]
-
-
-def _map_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, AuthorizationError):
-        return HTTPException(status_code=403, detail=str(exc))
-    status = getattr(exc, "http_status", None)
-    if isinstance(status, int):
-        return HTTPException(status_code=status, detail=str(exc))
-    raise exc
 
 
 @router.get(

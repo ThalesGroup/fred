@@ -166,3 +166,21 @@ def _clear_module_level_caches() -> None:
     capabilities_enablement._CAPABILITY_RELATIONS_CACHE.clear()
     capabilities_enablement._CAPABILITY_RELATIONS_INVALIDATION_TICKET.clear()
     users_service._USER_SUMMARY_CACHE.clear()
+
+
+class _NoPublishedKnowledgeBases:
+    """Knowledge Base store stub: nothing published."""
+
+    async def list_all(self) -> list:
+        return []
+
+
+def no_knowledge_base_store() -> _NoPublishedKnowledgeBases:
+    """`deps.get_knowledge_base_definition_store` for capability-catalog tests.
+
+    `aggregate_capability_catalog` projects published Knowledge Base
+    definitions alongside applications, so any deps double it is handed needs
+    this accessor. Tests asserting on the catalog's other kinds publish none.
+    """
+
+    return _NoPublishedKnowledgeBases()

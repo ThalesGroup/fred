@@ -357,9 +357,9 @@ class CapabilityCatalogEntry(BaseModel):
     # or "model" (pod-advertised projection of one models_catalog.yaml
     # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
     # `CapabilityManifest.kind`. "app" is a control-plane-side projection of
-    # a registered product application; no CapabilityManifest of kind "app"
-    # is authorable.
-    kind: Literal["tool", "agent", "model", "app"] = "tool"
+    # a registered product application, and "knowledge_base" of a published
+    # Knowledge Base definition; neither is authorable as a CapabilityManifest.
+    kind: Literal["tool", "agent", "model", "app", "knowledge_base"] = "tool"
     # See `CapabilityManifest.execution_models` (CAPAB-02). Advertised so a
     # future catalog/UI filter can hide a ReAct-only capability from a Graph
     # template's picker instead of only failing loud at selection time.

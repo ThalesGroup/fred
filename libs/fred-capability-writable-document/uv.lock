@@ -547,7 +547,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -621,7 +621,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "3.10.0"
+version = "3.10.1"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -716,7 +716,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "3.5.1"
+version = "3.5.2"
 source = { editable = "../fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -777,7 +777,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "3.6.0"
+version = "3.7.0"
 source = { editable = "../fred-sdk" }
 dependencies = [
     { name = "fred-core" },
@@ -803,8 +803,9 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.7.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["knowledge-base", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

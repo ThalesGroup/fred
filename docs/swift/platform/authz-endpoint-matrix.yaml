@@ -714,22 +714,27 @@ operations:
     method: GET
     path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution. Same gate as the disable mutation this preview precedes.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/knowledge-bases/definitions/{name}
+    review_status: approved
+    required_permission: none # Deliberately not a ReBAC check. A Knowledge Base image publishes its own declaration with its confidential M2M client; the first publication claims the declared PREFIX for that client and every later publication under it must present the same client, so nobody writes under another contributor's prefix. The binding is enforced inside the writing transaction, so two concurrent first publications cannot both win. A broad service role alone never authorizes. Existence is not usage: a published definition stays unusable until a platform admin enables it for a team. Deliberately outside the GCU gate: accepting conditions of use is a human admission control, and the publisher is a confidential client with no user row and nobody to accept them — `get_current_user` would make the route unreachable wherever `app.gcu_version` is set.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope

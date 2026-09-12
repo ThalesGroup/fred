@@ -34,6 +34,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from conftest import no_knowledge_base_store
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
 from control_plane_backend.capabilities import enablement, seeding
 from control_plane_backend.capabilities.enablement import (
@@ -1152,6 +1153,7 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(
@@ -1164,7 +1166,7 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
                     )
                 ],
             )
-        )
+        ),
     )
 
     catalog = await aggregate_capability_catalog(deps)
@@ -1235,6 +1237,7 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(
@@ -1247,7 +1250,7 @@ async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
                     )
                 ],
             )
-        )
+        ),
     )
 
     catalog = await aggregate_capability_catalog(deps)
@@ -1318,6 +1321,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(
@@ -1330,7 +1334,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_agent_namespa
                     )
                 ],
             )
-        )
+        ),
     )
 
     catalog = await aggregate_capability_catalog(deps)
@@ -1396,6 +1400,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(
@@ -1408,7 +1413,7 @@ async def test_aggregation_refuses_tool_id_colliding_with_reserved_model_namespa
                     )
                 ],
             )
-        )
+        ),
     )
 
     catalog = await aggregate_capability_catalog(deps)
@@ -1478,6 +1483,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(
@@ -1493,7 +1499,7 @@ async def test_aggregation_unions_model_profile_ids_across_pods(monkeypatch) -> 
                     ),
                 ],
             )
-        )
+        ),
     )
 
     catalog = await aggregate_capability_catalog(deps)
@@ -1554,6 +1560,7 @@ async def test_universally_available_chat_model_profile_ids_intersects_across_po
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -1565,7 +1572,7 @@ async def test_universally_available_chat_model_profile_ids_intersects_across_po
                     ),
                 ]
             )
-        )
+        ),
     )
 
     universal = await universally_available_chat_model_profile_ids(deps)
@@ -1612,6 +1619,7 @@ async def test_universal_chat_profile_requires_same_model_on_every_pod(
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -1623,7 +1631,7 @@ async def test_universal_chat_profile_requires_same_model_on_every_pod(
                     ),
                 ]
             )
-        )
+        ),
     )
 
     universal = await universally_available_chat_model_profile_ids(deps)
@@ -1671,6 +1679,7 @@ async def test_universally_available_chat_model_profile_ids_skips_unreachable_po
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -1682,7 +1691,7 @@ async def test_universally_available_chat_model_profile_ids_skips_unreachable_po
                     ),
                 ]
             )
-        )
+        ),
     )
 
     universal = await universally_available_chat_model_profile_ids(deps)
@@ -1733,6 +1742,7 @@ async def test_universally_available_chat_model_profile_ids_scoped_to_team_pods(
         product_service, "_model_capabilities_for_source", _fake_fetch_models
     )
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -1744,7 +1754,7 @@ async def test_universally_available_chat_model_profile_ids_scoped_to_team_pods(
                     ),
                 ]
             )
-        )
+        ),
     )
 
     universal = await universally_available_chat_model_profile_ids(

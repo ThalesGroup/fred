@@ -50,6 +50,10 @@ from fred_core.security.rebac.application_authz import (
     app_ref,
     application_id_from_catalog_id,
 )
+from fred_core.security.rebac.knowledge_base_authz import (
+    knowledge_base_definition_ref,
+    knowledge_base_name_from_catalog_id,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
@@ -277,17 +281,39 @@ def cap_ref(capability_id: str) -> RebacReference:
     return RebacReference(type=Resource.CAPABILITY, id=capability_id)
 
 
+def is_projected_product_object(catalog_entry: CapabilityCatalogEntry) -> bool:
+    """True for a control-plane projection a team is simply enabled for.
+
+    Applications and Knowledge Base definitions share this shape: no agent
+    selects them, so no instance suspends when access is revoked; they carry no
+    team-settings payload; their ReBAC types have no personal-space class; and
+    their authorization object is anchored on demand rather than by a pod
+    registration. Everything an agent capability needs and these two do not
+    hangs off this one question — ask it here rather than re-testing `kind`.
+    """
+
+    return catalog_entry.kind in ("app", "knowledge_base")
+
+
 def enablement_ref(catalog_entry: CapabilityCatalogEntry) -> RebacReference:
     """Resolve a shared-catalog entry to its typed authorization object.
 
     The admin API intentionally keeps one flat catalog whose application ids
-    are namespaced as ``app__<app_id>``. OpenFGA has a real ``app`` type, so
-    only this boundary removes the catalog namespace; all other entries remain
+    are namespaced as ``app__<app_id>`` and whose Knowledge Base ids as
+    ``kb__<provider>__<definition>``. OpenFGA has a real type for each, so only this
+    boundary removes the catalog namespace; all other entries remain
     capabilities with their catalog id verbatim.
+
+    This is what lets those two kinds share one admin surface without sharing
+    an authorization object: no capability grant can reach them.
     """
 
     if catalog_entry.kind == "app":
         return app_ref(application_id_from_catalog_id(catalog_entry.id))
+    if catalog_entry.kind == "knowledge_base":
+        return knowledge_base_definition_ref(
+            knowledge_base_name_from_catalog_id(catalog_entry.id)
+        )
     return cap_ref(catalog_entry.id)
 
 
@@ -295,20 +321,26 @@ def _team_ref(team_id: TeamId) -> RebacReference:
     return RebacReference(type=Resource.TEAM, id=str(team_id))
 
 
-def _is_personal_application_team(team_id: TeamId) -> bool:
+def _is_personal_team(team_id: TeamId) -> bool:
     # The admin API accepts the same reserved alias as other team routes. It
     # cannot canonicalize it without the target user's identity, but it can
     # still fail closed before writing any application grant.
     return is_personal_team_ref(str(team_id))
 
 
-def _reject_personal_team_application_grant(
+def _reject_personal_team_projected_grant(
     catalog_entry: CapabilityCatalogEntry, team_id: TeamId
 ) -> None:
-    if catalog_entry.kind == "app" and _is_personal_application_team(team_id):
+    """Refuse a personal-space grant on a kind whose type has no personal class.
+
+    Writing one would produce a tuple that reads back as enabled while
+    resolving for nobody — the failure mode the ReBAC type comments call out.
+    """
+
+    if is_projected_product_object(catalog_entry) and _is_personal_team(team_id):
         raise ApplicationTeamScopeNotAllowed(
-            f"Application {catalog_entry.id!r} cannot be enabled for personal "
-            "teams; V1 applications are collaborative-team-only."
+            f"{catalog_entry.id!r} cannot be enabled for a personal space; "
+            "this kind is collaborative-team-only."
         )
 
 
@@ -383,15 +415,17 @@ def _suspension_store(
     agent_instance_store: AgentInstanceStore | None,
 ) -> AgentInstanceStore | None:
     """The store a revoke suspends dependents with, or `None` when there are
-    none: applications reuse only the authorization tuple, so they alone may
-    omit it. Callers resolve this BEFORE their tuple writes — refusing after
-    them would leave access revoked and its dependents still running.
+    none: a projected product object reuses only the authorization tuple, so
+    those alone may omit it. Callers resolve this BEFORE their tuple writes —
+    refusing after them would leave access revoked and its dependents running.
     """
 
-    if catalog_entry.kind == "app":
+    if is_projected_product_object(catalog_entry):
         return None
     if agent_instance_store is None:
-        raise RuntimeError("agent_instance_store is required for non-app capabilities")
+        raise RuntimeError(
+            "agent_instance_store is required for agent-capability kinds"
+        )
     return agent_instance_store
 
 
@@ -416,48 +450,20 @@ async def ensure_capability_anchor(rebac: RebacEngine, capability_id: str) -> No
     await ensure_enablement_anchor(rebac, cap_ref(capability_id))
 
 
-async def enable_capability_for_team(
-    *,
+async def grant_team_enablement(
     rebac: RebacEngine,
-    settings_store: TeamCapabilitySettingsStore | None,
-    catalog_entry: CapabilityCatalogEntry,
+    *,
+    resource: RebacReference,
     team_id: TeamId,
-    settings: Mapping[str, Any],
     updated_by: str | None,
-) -> dict[str, Any]:
-    """Enable one capability for one team with validated settings (RFC §8.2).
+) -> None:
+    """Grant one team the `enabled` position on an enablement resource.
 
-    Write ordering: the settings row is persisted FIRST, then the `enabled`
-    tuple — so a crash between the two leaves the capability disabled, never
-    enabled-without-settings.
-
-    Reviving the instances this grant unblocks is the CALLER's second step (see
-    `revive_dependent_instances`): it needs the live ReBAC + pod facts, which
-    this module deliberately does not fetch, and it must run AFTER the tuple
-    write below so the `can_use` lookup observes the new grant.
+    Shared by every resource family using the enabled/disabled/default_on
+    shape, so the tuple ordering and the cache invalidation below have exactly
+    one implementation. Callers own whatever configuration half they have.
     """
 
-    _reject_personal_team_application_grant(catalog_entry, team_id)
-    validated = validate_team_settings(
-        list(catalog_entry.team_settings_fields), settings
-    )
-    await _require_agent_capability_dependencies_usable_by_team(
-        rebac, catalog_entry, team_id
-    )
-    # 1. Settings row first (configuration half). V1 applications deliberately
-    # have no generic team-settings payload: this store is also consumed by
-    # agent-runtime paths that applications do not use.
-    if catalog_entry.kind != "app":
-        if settings_store is None:
-            raise RuntimeError("settings_store is required for non-app capabilities")
-        await settings_store.upsert(
-            team_id=team_id,
-            capability_id=catalog_entry.id,
-            settings=validated,
-            updated_by=updated_by,
-        )
-    # 2. Authorization half: anchor, clear any opt-out, then grant.
-    resource = enablement_ref(catalog_entry)
     await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
@@ -480,6 +486,92 @@ async def enable_capability_for_team(
         # half-failure too: a stale cached reader would otherwise hold the
         # pre-write state for a full TTL. An extra refetch is the only cost.
         invalidate_enablement_relations_cache(resource)
+
+
+async def revoke_team_enablement(
+    rebac: RebacEngine,
+    *,
+    resource: RebacReference,
+    team_id: TeamId,
+    updated_by: str | None,
+    ensure_anchor: bool,
+) -> None:
+    """Move one team to the explicit `disabled` position on a resource.
+
+    The opt-out is written, not merely the grant deleted, so the decision
+    survives a later default-on flip and reads back as "disabled" rather than
+    "default" in the admin tri-state.
+    """
+
+    if ensure_anchor:
+        await ensure_enablement_anchor(rebac, resource)
+    try:
+        await rebac.delete_relation(
+            Relation(
+                subject=_team_ref(team_id),
+                relation=RelationType.ENABLED,
+                resource=resource,
+            )
+        )
+        await rebac.add_relation(
+            Relation(
+                subject=_team_ref(team_id),
+                relation=RelationType.DISABLED,
+                resource=resource,
+            ),
+            actor_uid=updated_by,
+        )
+    finally:
+        invalidate_enablement_relations_cache(resource)
+
+
+async def enable_capability_for_team(
+    *,
+    rebac: RebacEngine,
+    settings_store: TeamCapabilitySettingsStore | None,
+    catalog_entry: CapabilityCatalogEntry,
+    team_id: TeamId,
+    settings: Mapping[str, Any],
+    updated_by: str | None,
+) -> dict[str, Any]:
+    """Enable one capability for one team with validated settings (RFC §8.2).
+
+    Write ordering: the settings row is persisted FIRST, then the `enabled`
+    tuple — so a crash between the two leaves the capability disabled, never
+    enabled-without-settings.
+
+    Reviving the instances this grant unblocks is the CALLER's second step (see
+    `revive_dependent_instances`): it needs the live ReBAC + pod facts, which
+    this module deliberately does not fetch, and it must run AFTER the tuple
+    write below so the `can_use` lookup observes the new grant.
+    """
+
+    _reject_personal_team_projected_grant(catalog_entry, team_id)
+    validated = validate_team_settings(
+        list(catalog_entry.team_settings_fields), settings
+    )
+    await _require_agent_capability_dependencies_usable_by_team(
+        rebac, catalog_entry, team_id
+    )
+    # 1. Settings row first (configuration half). A projected product object
+    # deliberately has no generic team-settings payload: this store is also
+    # consumed by agent-runtime paths those kinds never reach.
+    if not is_projected_product_object(catalog_entry):
+        if settings_store is None:
+            raise RuntimeError("settings_store is required for agent-capability kinds")
+        await settings_store.upsert(
+            team_id=team_id,
+            capability_id=catalog_entry.id,
+            settings=validated,
+            updated_by=updated_by,
+        )
+    # 2. Authorization half: anchor, clear any opt-out, then grant.
+    await grant_team_enablement(
+        rebac,
+        resource=enablement_ref(catalog_entry),
+        team_id=team_id,
+        updated_by=updated_by,
+    )
     logger.info("[capability-enablement] enabled one capability for one team")
     return validated
 
@@ -510,40 +602,31 @@ async def disable_capability_for_team(
 
     suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     resource = enablement_ref(catalog_entry)
-    personal_app_cleanup = catalog_entry.kind == "app" and (
-        _is_personal_application_team(team_id)
+    personal_cleanup = is_projected_product_object(catalog_entry) and (
+        _is_personal_team(team_id)
     )
-    if catalog_entry.kind == "app" and not personal_app_cleanup:
-        await ensure_enablement_anchor(rebac, resource)
-    try:
-        await rebac.delete_relation(
-            Relation(
-                subject=_team_ref(team_id),
-                relation=RelationType.ENABLED,
-                resource=resource,
-            )
-        )
-        if personal_app_cleanup:
-            await rebac.delete_relation(
-                Relation(
-                    subject=_team_ref(team_id),
-                    relation=RelationType.DISABLED,
-                    resource=resource,
+    if personal_cleanup:
+        # Stale tuple cleanup, not a disable: applications have no personal
+        # scope, so both team relations go and no opt-out is written.
+        try:
+            for relation in (RelationType.ENABLED, RelationType.DISABLED):
+                await rebac.delete_relation(
+                    Relation(
+                        subject=_team_ref(team_id),
+                        relation=relation,
+                        resource=resource,
+                    )
                 )
-            )
-        else:
-            await rebac.add_relation(
-                Relation(
-                    subject=_team_ref(team_id),
-                    relation=RelationType.DISABLED,
-                    resource=resource,
-                ),
-                actor_uid=updated_by,
-            )
-    finally:
-        # Invalidate on the half-failure too: one write landing without the
-        # other must not leave a cached reader on the pre-write state.
-        invalidate_enablement_relations_cache(resource)
+        finally:
+            invalidate_enablement_relations_cache(resource)
+    else:
+        await revoke_team_enablement(
+            rebac,
+            resource=resource,
+            team_id=team_id,
+            updated_by=updated_by,
+            ensure_anchor=is_projected_product_object(catalog_entry),
+        )
     del settings_store  # settings row is intentionally retained (re-enable restores)
     if suspend_store is None:
         return 0
@@ -576,16 +659,17 @@ async def reset_capability_for_team(
     """
 
     if (
-        catalog_entry.kind == "app"
+        is_projected_product_object(catalog_entry)
         and default_on
-        and _is_personal_application_team(team_id)
+        and _is_personal_team(team_id)
     ):
         # Resetting a personal-team opt-out while default-on is active would
         # recreate inherited access. Cleanup is still allowed when default-on
         # is off, and explicit disable always remains available.
         raise ApplicationTeamScopeNotAllowed(
-            f"Application {catalog_entry.id!r} cannot reset personal team "
-            f"{str(team_id)!r} to an enabled platform default."
+            f"{catalog_entry.id!r} cannot reset personal space "
+            f"{str(team_id)!r} to an enabled platform default: this kind has "
+            "no personal class to fall back on."
         )
     # A default-ON reset keeps access by inheritance, so it suspends nothing
     # and needs no store.
@@ -593,7 +677,7 @@ async def reset_capability_for_team(
         None if default_on else _suspension_store(catalog_entry, agent_instance_store)
     )
     resource = enablement_ref(catalog_entry)
-    if catalog_entry.kind == "app" and not _is_personal_application_team(team_id):
+    if is_projected_product_object(catalog_entry) and not _is_personal_team(team_id):
         await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
@@ -876,7 +960,7 @@ async def set_capability_default_on(
 
     suspend_store = _suspension_store(catalog_entry, agent_instance_store)
     resource = enablement_ref(catalog_entry)
-    if catalog_entry.kind == "app":
+    if is_projected_product_object(catalog_entry):
         await ensure_enablement_anchor(rebac, resource)
     try:
         await rebac.delete_relation(
@@ -942,10 +1026,10 @@ async def set_capability_personal_scope(
     the number of instances suspended.
     """
 
-    if catalog_entry.kind == "app":
+    if is_projected_product_object(catalog_entry):
         raise PersonalScopeNotAllowed(
-            f"Application {catalog_entry.id!r} has no personal-space scope; "
-            "V1 applications are collaborative-team-only."
+            f"{catalog_entry.id!r} has no personal-space scope: its type "
+            "carries no personal class, so there is nothing to set."
         )
     if scope == "enabled" and team_settings_has_required_fields(
         catalog_entry.team_settings_fields

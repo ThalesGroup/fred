@@ -29,6 +29,7 @@ from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.security.structure import (
+    LOCAL_DEV_CLIENT_ID,
     KeycloakUser,
     SecurityConfiguration,
     UserSecurity,
@@ -312,11 +313,17 @@ def decode_jwt(token: str) -> KeycloakUser:
         logger.debug(
             "[AUTH] Authentication is DISABLED. Returning mock user: %s", username
         )
+        # Carries a client id so routes gated on ONE exact client stay reachable
+        # locally, but deliberately NOT the service_agent role: granting it here
+        # would flip every `is_service_agent` bypass — team reads, runtime
+        # execution, tag and tabular access — for every local caller, and a
+        # per-team authorization regression would stop failing in development.
         return KeycloakUser(
             uid=username,
             username=username,
             roles=["admin"],
             email=f"{username}@localhost",
+            client_id=LOCAL_DEV_CLIENT_ID,
         )
 
     cached_user = _get_cached_user(token)
@@ -486,6 +493,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         username=payload.get("preferred_username", ""),
         roles=client_roles,
         email=payload.get("email"),
+        client_id=payload.get("azp"),
     )
     logger.debug("KeycloakUser built: %s", user)
     _cache_user(token, payload, user)

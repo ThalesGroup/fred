@@ -32,6 +32,10 @@ from fred_core.security.models import Resource
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
+from fred_core.security.rebac.knowledge_base_authz import (
+    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
+    knowledge_base_name_from_catalog_id,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     RebacEngine,
@@ -59,6 +63,7 @@ from control_plane_backend.capabilities.enablement import (
     get_enablement_relations_cached,
     has_enablement_org_relation,
     has_org_relation,
+    is_projected_product_object,
     is_template_capability_instance,
     reset_capability_for_team,
     revive_dependent_instances,
@@ -107,11 +112,11 @@ async def _require_can_manage(
     """Gate a feature-governance mutation on the org's `can_manage_capabilities`.
 
     Capabilities are checked through ``capability#can_manage``, which the
-    schema resolves through that relation. Applications
-    first pass the equivalent organization gate, then resolve an exact
-    configured ``app__`` catalog entry. Their typed anchor is left to the
-    mutation itself, after any team-scope guard has run, so a rejected request
-    cannot write an application tuple.
+    schema resolves through that relation. Applications and Knowledge Base
+    definitions first pass the equivalent organization gate, then resolve an
+    exact ``app__`` / ``kb__`` entry. Their typed anchor is left to the mutation
+    itself, after any team-scope guard has run, so a rejected request cannot
+    write a tuple of either type.
     """
 
     if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
@@ -140,6 +145,27 @@ async def _require_can_manage(
         if application is None:
             raise CapabilityNotFound(
                 f"Application catalog entry {capability_id!r} is not installed."
+            )
+        return
+
+    if capability_id.startswith(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX):
+        # Same shape, same reason as the application branch above: gate on the
+        # organization relation BEFORE touching the id, so an unauthorized
+        # caller can never anchor an arbitrary path parameter — and never on
+        # the `capability` type, which is not this id's authorization object.
+        await require_manage_capabilities(rebac, user)
+        try:
+            name = knowledge_base_name_from_catalog_id(capability_id)
+        except ValueError as exc:
+            # A malformed reserved id is a 404, never an unhandled ValueError:
+            # this runs on every capability mutation route.
+            raise CapabilityNotFound(
+                f"Knowledge Base catalog id {capability_id!r} is malformed."
+            ) from exc
+        definition = await deps.get_knowledge_base_definition_store().get(name)
+        if definition is None:
+            raise CapabilityNotFound(
+                f"Knowledge Base definition {capability_id!r} is not published."
             )
         return
 
@@ -217,9 +243,14 @@ def _canonical_team_id_for_entry(
     entry: CapabilityCatalogEntry,
     team_id: TeamId,
 ) -> TeamId:
-    """Canonicalize reserved team aliases before application tuple writes."""
+    """Canonicalize reserved team aliases before a projected tuple write.
 
-    if entry.kind != "app":
+    The alias is a route placeholder for the caller's own space; written
+    verbatim it would produce a tuple matching no team and reading back
+    enabled forever.
+    """
+
+    if not is_projected_product_object(entry):
         return team_id
     return resolve_system_team_id(user, team_id) or team_id
 
@@ -301,7 +332,7 @@ async def _build_enablement_item(
         capability_relation_subjects(relations, RelationType.DISABLED, Resource.TEAM)
     )
     personal_scope = _fold_personal_scope(relations)
-    if entry.kind == "app":
+    if is_projected_product_object(entry):
         enabled_team_ids = [
             team_id
             for team_id in enabled_team_ids
@@ -313,10 +344,10 @@ async def _build_enablement_item(
             if team_id != "personal" and not is_personal_team_id(team_id)
         ]
         personal_scope = "default"
-    # Applications do not participate in agent health. Even malformed/stale
-    # agent tuning that happens to mention an ``app__`` id must not leak into
-    # their admin health counters or impact details.
-    entry_impact = None if entry.kind == "app" else impact.get(entry.id)
+    # A projected product object does not participate in agent health. Even
+    # malformed/stale agent tuning that happens to mention an ``app__``/``kb__``
+    # id must not leak into their admin health counters or impact details.
+    entry_impact = None if is_projected_product_object(entry) else impact.get(entry.id)
     return CapabilityEnablementItem(
         id=entry.id,
         name=entry.name,
@@ -328,7 +359,7 @@ async def _build_enablement_item(
         disabled_team_ids=disabled_team_ids,
         total_team_count=total_team_count,
         total_personal_space_count=(
-            0 if entry.kind == "app" else total_personal_space_count
+            0 if is_projected_product_object(entry) else total_personal_space_count
         ),
         personal_scope=personal_scope,
         team_settings_fields=list(entry.team_settings_fields),
@@ -354,11 +385,15 @@ async def _build_enablement_item(
         # kind but "model", and for models with no thinking-capable profile —
         # which is exactly when the admin row shows no reasoning control.
         thinking_profile_ids=(
-            [] if entry.kind == "app" else list(entry.model_thinking_profile_ids)
+            []
+            if is_projected_product_object(entry)
+            else list(entry.model_thinking_profile_ids)
         ),
         # §5.6 — no stored row means off. One pre-fetched set for the whole
         # list, not a per-row query.
-        reasoning_enabled=(entry.kind != "app" and entry.id in reasoning_enabled_ids),
+        reasoning_enabled=(
+            not is_projected_product_object(entry) and entry.id in reasoning_enabled_ids
+        ),
     )
 
 
@@ -478,7 +513,9 @@ async def enable_team_capability(
     validated = await enable_capability_for_team(
         rebac=rebac,
         settings_store=(
-            None if entry.kind == "app" else deps.get_team_capability_settings_store()
+            None
+            if is_projected_product_object(entry)
+            else deps.get_team_capability_settings_store()
         ),
         catalog_entry=entry,
         team_id=team_id,
@@ -487,7 +524,7 @@ async def enable_team_capability(
     )
     revived = (
         0
-        if entry.kind == "app"
+        if is_projected_product_object(entry)
         else await _revive_after_grant(
             capability_id=capability_id, team_id=team_id, deps=deps
         )
@@ -516,10 +553,14 @@ async def disable_team_capability(
     suspended = await disable_capability_for_team(
         rebac=rebac,
         settings_store=(
-            None if entry.kind == "app" else deps.get_team_capability_settings_store()
+            None
+            if is_projected_product_object(entry)
+            else deps.get_team_capability_settings_store()
         ),
         agent_instance_store=(
-            None if entry.kind == "app" else deps.get_agent_instance_store()
+            None
+            if is_projected_product_object(entry)
+            else deps.get_agent_instance_store()
         ),
         catalog_entry=entry,
         team_id=team_id,
@@ -555,7 +596,9 @@ async def reset_team_capability(
     suspended = await reset_capability_for_team(
         rebac=rebac,
         agent_instance_store=(
-            None if entry.kind == "app" else deps.get_agent_instance_store()
+            None
+            if is_projected_product_object(entry)
+            else deps.get_agent_instance_store()
         ),
         catalog_entry=entry,
         team_id=team_id,
@@ -569,7 +612,7 @@ async def reset_team_capability(
         await _revive_after_grant(
             capability_id=capability_id, team_id=team_id, deps=deps
         )
-        if default_on and entry.kind != "app"
+        if default_on and not is_projected_product_object(entry)
         else 0
     )
     return TeamCapabilityEnablementResult(
@@ -603,7 +646,9 @@ async def set_default_on(
     suspended = await set_capability_default_on(
         rebac=rebac,
         agent_instance_store=(
-            None if entry.kind == "app" else deps.get_agent_instance_store()
+            None
+            if is_projected_product_object(entry)
+            else deps.get_agent_instance_store()
         ),
         catalog_entry=entry,
         on=default_on,
@@ -617,7 +662,7 @@ async def set_default_on(
     # reconcile re-suspends rather than clears. That is the tri-state working,
     # not a special case.
     revived = 0
-    if default_on and entry.kind != "app":
+    if default_on and not is_projected_product_object(entry):
         agent_instance_store = deps.get_agent_instance_store()
         # A team is a revive candidate whether its dependent selected
         # `capability_id` as a TOOL, or IS an instance of it as a
@@ -746,7 +791,7 @@ async def preview_capability_revoke(
     entry = _catalog_entry_for_revoke(
         await aggregate_capability_catalog(deps), capability_id
     )
-    if entry.kind == "app":
+    if is_projected_product_object(entry):
         return CapabilityImpactPreview(capability_id=capability_id)
     impact = await preview_revoke_impact(
         deps, capability_id=capability_id, team_id=team_id
@@ -815,14 +860,14 @@ async def set_personal_scope(
     await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
-    if entry.kind == "app":
+    if is_projected_product_object(entry):
         from control_plane_backend.capabilities.enablement import (
             PersonalScopeNotAllowed,
         )
 
         raise PersonalScopeNotAllowed(
-            f"Application {entry.id!r} has no personal-space scope; "
-            "V1 applications are collaborative-team-only."
+            f"{entry.id!r} has no personal-space scope: its type carries no "
+            "personal class, so there is nothing to set."
         )
 
     # Peeked BEFORE the write (same "peek, mutate, decide" shape as

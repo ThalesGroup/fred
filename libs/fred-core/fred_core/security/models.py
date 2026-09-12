@@ -59,6 +59,10 @@ class Resource(str, Enum):
     # Product applications use the same team-enablement relations but remain
     # a distinct authorization resource from agent capabilities.
     APP = "app"
+    # Knowledge Base definitions configured into a deployment. Same enablement
+    # relations again, distinct type again: the authorized object is the
+    # definition, and instances are not authorization objects at all.
+    KNOWLEDGE_BASE_DEFINITION = "knowledge_base_definition"
 
     # Authorization subject
     USER = "user"

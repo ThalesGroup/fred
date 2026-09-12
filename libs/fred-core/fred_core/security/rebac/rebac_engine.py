@@ -309,6 +309,17 @@ class AppPermission(str, Enum):
     CAN_MANAGE = "can_manage"
 
 
+class KnowledgeBaseDefinitionPermission(str, Enum):
+    """Actions allowed on one configured Knowledge Base definition.
+
+    The target is always ``knowledge_base_definition:<definition_id>``, and the
+    ``can_use`` subject is the TEAM — never the user.
+    """
+
+    CAN_USE = "can_use"
+    CAN_MANAGE = "can_manage"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
@@ -318,6 +329,7 @@ RebacPermission = (
     | OrganizationPermission
     | CapabilityPermission
     | AppPermission
+    | KnowledgeBaseDefinitionPermission
 )
 
 
@@ -344,6 +356,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.CAPABILITY
     if isinstance(permission, AppPermission):
         return Resource.APP
+    if isinstance(permission, KnowledgeBaseDefinitionPermission):
+        return Resource.KNOWLEDGE_BASE_DEFINITION
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
