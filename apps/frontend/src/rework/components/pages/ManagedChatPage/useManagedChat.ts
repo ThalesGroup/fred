@@ -398,7 +398,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [replaceAllMessages],
   );
 
-  const { isLoading: isLoadingHistory } = useSessionHistory({
+  const { isLoading: isLoadingHistory, isSettled: isHistorySettled } = useSessionHistory({
     sessionId,
     teamId,
     agentInstanceId,
@@ -779,6 +779,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     messages,
     waitResponse,
     isLoadingHistory,
+    isHistorySettled,
     handleSend,
     handleHitlAnswer,
     handleAbort: abort,

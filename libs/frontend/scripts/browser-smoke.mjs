@@ -903,16 +903,15 @@ async function verifyUi(browser, origin) {
   }
 }
 
-export async function runBrowserSmoke({ evidencePath } = {}) {
-  const tokenOutput = path.join(
-    workspaceRoot,
-    "target/staged-consumers/tokens",
-  );
-  const reactOutput = path.join(workspaceRoot, "target/staged-consumers/react");
-  const iframeSdkOutput = path.join(
+export async function runBrowserSmoke({
+  evidencePath,
+  tokenOutput = path.join(workspaceRoot, "target/staged-consumers/tokens"),
+  reactOutput = path.join(workspaceRoot, "target/staged-consumers/react"),
+  iframeSdkOutput = path.join(
     workspaceRoot,
     "target/staged-consumers/iframe-sdk",
-  );
+  ),
+} = {}) {
   await assertBrowserPrerequisites({
     tokenOutput,
     reactOutput,

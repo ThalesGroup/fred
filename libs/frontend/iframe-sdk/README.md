@@ -89,3 +89,7 @@ ESM grammar check, covering invalid JavaScript constructs that TypeScript's perm
 represent. The direct host-integration command extracts the actual tarball and exercises FRED's
 production host-page handler. It complements rather than replaces the legacy raw-client host tests
 and the simulated cross-origin browser harness.
+
+The checked-in manifest remains a development coordinate. Release candidates and registry
+verification use the externally approved expectations described in
+[../RELEASE.md](../RELEASE.md).

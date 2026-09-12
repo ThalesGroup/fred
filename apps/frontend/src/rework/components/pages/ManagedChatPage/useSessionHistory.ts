@@ -41,6 +41,10 @@ export function useSessionHistory({
   isTurnActive,
 }: UseSessionHistoryArgs) {
   const [isLoading, setIsLoading] = useState(false);
+  // The session this hook has finished answering for — "nothing more is
+  // coming", which `isLoading` cannot say (it is also false before a load
+  // starts). Callers sequencing work behind the thread need that difference.
+  const [settledFor, setSettledFor] = useState<string | null>(null);
   // Session whose fetch this mount has already started — keeps an effect
   // re-fire (a dep identity change, not a genuine switch) from re-fetching.
   const startedForRef = useRef<string | null>(null);
@@ -52,10 +56,23 @@ export function useSessionHistory({
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId;
 
+  // Deliberately session-less: history needs only `messages_url_template`,
+  // which does not depend on the session — and asking for a session the caller
+  // has only just minted (the URL is bound before the row is written) would be
+  // refused, costing the thread its history.
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
 
+  // The conversation this effect last saw. `startedForRef` suppresses a re-fire
+  // WITHIN a visit; leaving and coming back is a NEW visit and must load again,
+  // or a conversation left mid-load never revalidates and never settles.
+  const visitingRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (visitingRef.current !== sessionId) {
+      visitingRef.current = sessionId;
+      startedForRef.current = null;
+    }
     if (!sessionId || !teamId || !agentInstanceId) return;
 
     // #2239 instant switch: a previously opened conversation renders straight
@@ -67,6 +84,10 @@ export function useSessionHistory({
 
     if (startedForRef.current === sessionId) return;
     startedForRef.current = sessionId;
+    // This session's own load is what settles it. Without clearing, an A→B→A
+    // round trip where B never settled comes back to A still flagged settled
+    // from its first visit, while the load that would say so is in flight.
+    setSettledFor(null);
 
     const load = async () => {
       // A cache hit downgrades the fetch to a silent background revalidation:
@@ -74,9 +95,14 @@ export function useSessionHistory({
       // already-rendered thread.
       if (cached === undefined) setIsLoading(true);
       try {
+        // Started before the token refresh so the two overlap instead of
+        // queueing. Claimed right away so a rejection while we are suspended is
+        // not seen as unhandled; the await below still throws into this try.
+        const preparation = prepareExecution({ teamId, agentInstanceId }).unwrap();
+        preparation.catch(() => {});
         await KeyCloakService.ensureFreshToken(30);
         const token = KeyCloakService.GetToken() ?? "";
-        const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+        const prep = await preparation;
         const url = new URL(expandMessagesUrl(prep.messages_url_template, sessionId), window.location.origin);
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
         if (!resp.ok) return;
@@ -99,11 +125,17 @@ export function useSessionHistory({
         // (or empty) view.
       } finally {
         setIsLoading(false);
+        // Only for the session still on screen: a slow answer for one the user
+        // has left would otherwise report ITS completion as the current
+        // conversation's.
+        if (activeSessionIdRef.current === sessionId) setSettledFor(sessionId);
       }
     };
 
     void load();
   }, [sessionId, teamId, agentInstanceId, prepareExecution, onLoaded, isTurnActive]);
 
-  return { isLoading };
+  // No session is not "waiting": a fresh chat has no history to resolve, and
+  // the marker left by the conversation just left says nothing about it.
+  return { isLoading, isSettled: sessionId === null || settledFor === sessionId };
 }

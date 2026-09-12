@@ -15,6 +15,9 @@ import path from "node:path";
 
 import { packDesignTokens, workspaceRoot } from "./pack-design-tokens.mjs";
 import { run } from "./process.mjs";
+import { parameterizeConsumerSources } from "./consumer-contract.mjs";
+import { sha512Integrity } from "./release-evidence.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
 import { validateArchive } from "./validate-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -84,9 +87,20 @@ export async function stageIsolatedConsumer({
   keep = false,
   evidencePath,
   stagedOutputPath,
+  contract: selectedContract,
+  archivePath: suppliedArchive,
+  expectedIntegrity,
 } = {}) {
-  const { archivePath } = await packDesignTokens();
-  await validateArchive(archivePath);
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const archivePath =
+    suppliedArchive ?? (await packDesignTokens({ contract })).archivePath;
+  await validateArchive(archivePath, { contract });
+  if (expectedIntegrity)
+    assert.equal(
+      await sha512Integrity(archivePath),
+      expectedIntegrity,
+      "design-token candidate integrity differs",
+    );
   const consumerRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-neutral-consumer-"),
   );
@@ -98,6 +112,11 @@ export async function stageIsolatedConsumer({
   );
   try {
     await cp(fixtureRoot, consumerRoot, { recursive: true });
+    await parameterizeConsumerSources(consumerRoot, contract, ["designTokens"]);
+    const originalManifest = await readFile(
+      path.join(consumerRoot, "package.json"),
+      "utf8",
+    );
     const stagedArchive = path.join(consumerRoot, "design-tokens.tgz");
     await cp(archivePath, stagedArchive);
     const environment = isolatedEnvironment(consumerRoot);
@@ -117,11 +136,15 @@ export async function stageIsolatedConsumer({
     );
     assert.equal(
       await readFile(path.join(consumerRoot, "package.json"), "utf8"),
-      await readFile(path.join(fixtureRoot, "package.json"), "utf8"),
+      originalManifest,
       "offline install must not add a local-file dependency",
     );
     await assertNoLinks(
-      path.join(consumerRoot, "node_modules/@fred/design-tokens"),
+      path.join(
+        consumerRoot,
+        "node_modules",
+        contract.packages.designTokens.name,
+      ),
     );
     const build = await run("node", ["build.mjs"], {
       cwd: consumerRoot,
@@ -210,6 +233,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await stageIsolatedConsumer({
     evidencePath: optionValue("--evidence"),
     stagedOutputPath: "target/staged-consumers/tokens",
+    contract: await loadReleaseContract(optionValue("--contract")),
   });
   process.stdout.write(`${JSON.stringify(result.evidence, null, 2)}\n`);
 }

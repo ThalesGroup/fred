@@ -200,6 +200,9 @@ _INLINE = re.compile(
     r"|`(?P<code>[^`]+)`"
     r"|\*\*(?P<strong>[^*]+)\*\*"
     r"|(?<!\*)\*(?P<em>[^*\s][^*]*)\*(?!\*)"
+    # Bare URL: ADF posted over REST is stored as-is, Jira never auto-links it.
+    # Trailing punctuation stays text, so "see https://x/1." links only the URL.
+    r"|(?P<url>https?://[^\s<>()\[\]]*[^\s<>()\[\].,;:!?'\"])"
 )
 
 
@@ -223,6 +226,8 @@ def _inline(text: str) -> list:
             out.append({"type": "text", "text": m.group("strong"), "marks": [{"type": "strong"}]})
         elif m.group("em"):
             out.append({"type": "text", "text": m.group("em"), "marks": [{"type": "em"}]})
+        elif m.group("url"):
+            out.append({"type": "text", "text": m.group("url"), "marks": [{"type": "link", "attrs": {"href": m.group("url")}}]})
         else:
             out.append(
                 {

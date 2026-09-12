@@ -1,0 +1,55 @@
+{
+  "$schema": "./release-contract.schema.json",
+  "schemaVersion": 1,
+  "state": "proposed",
+  "registry": "https://registry.npmjs.org/",
+  "distTag": "next",
+  "releaseToolchain": {
+    "node": "24.21.0",
+    "npm": "11.19.0"
+  },
+  "maintainerApproval": {
+    "scopeOwner": null,
+    "owners": {
+      "packageApi": null,
+      "sdkProtocol": null,
+      "release": null,
+      "npmPublishing": null
+    },
+    "bootstrapIdentity": null,
+    "bootstrapAuthorityVerified": false,
+    "registryAccess": null,
+    "publishingPolicy": null
+  },
+  "expectedProvenance": {
+    "repository": "https://github.com/ThalesGroup/fred",
+    "workflow": null,
+    "certificateIssuer": "https://token.actions.githubusercontent.com"
+  },
+  "packages": {
+    "designTokens": {
+      "workspace": "design-tokens",
+      "name": "@fred/design-tokens",
+      "version": "0.1.0-alpha.1",
+      "expectedManifest": {}
+    },
+    "ui": {
+      "workspace": "ui",
+      "name": "@fred/ui",
+      "version": "0.1.0-alpha.1",
+      "expectedManifest": {
+        "peerDependencies": {
+          "@fred/design-tokens": "^0.1.0-alpha.1",
+          "react": "^19.2.4",
+          "react-dom": "^19.2.4"
+        }
+      }
+    },
+    "iframeSdk": {
+      "workspace": "iframe-sdk",
+      "name": "@fred/iframe-sdk",
+      "version": "0.1.0-alpha.1",
+      "expectedManifest": {}
+    }
+  }
+}

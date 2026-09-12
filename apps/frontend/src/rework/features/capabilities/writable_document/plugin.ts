@@ -17,11 +17,18 @@
 // `writable_document` capability: the `writable_document` chat part (the card) and
 // the collaborative Markdown editor side pane. No config widget, no chat control.
 
+import { lazy } from "react";
 import type { CapabilityUiPlugin } from "../types";
-import { WritableDocumentAutoOpenProbe } from "./WritableDocumentAutoOpenProbe";
 import { WritableDocumentCardRenderer } from "./WritableDocumentCardRenderer";
-import { WritableDocumentPane } from "./WritableDocumentPane";
 import { useHasWritableDocuments } from "./useHasWritableDocuments";
+
+// Split out: the pane pulls MDXEditor and the whole lexical graph, and a static
+// import puts all of it in the chunk every chat page loads — including the
+// conversations that never open an editor. The host renders panels inside a
+// Suspense boundary.
+const WritableDocumentPane = lazy(async () => ({
+  default: (await import("./WritableDocumentPane")).WritableDocumentPane,
+}));
 
 export const writableDocumentCapability: CapabilityUiPlugin = {
   id: "writable_document",
@@ -37,6 +44,4 @@ export const writableDocumentCapability: CapabilityUiPlugin = {
       ownsHeader: true,
     },
   },
-  // A conversation that already holds documents re-opens straight in the editor.
-  sessionProbes: [WritableDocumentAutoOpenProbe],
 };

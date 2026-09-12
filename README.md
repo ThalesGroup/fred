@@ -1,4 +1,18 @@
-# Fred
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/fred-banner-dark.svg">
+    <img alt="Fred" src="docs/assets/fred-banner.svg" width="300">
+  </picture>
+</p>
+
+<p align="center"><strong>Build, run and operate multi-agent AI applications.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/ThalesGroup/fred/releases/latest"><img alt="version" src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fgithub.com%2FThalesGroup%2Ffred%2Freleases.atom&search=code%2Fv%28%5B0-9.%5D%2B%29&replace=v%241&label=version&color=blue"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/ThalesGroup/fred?label=license"></a>
+  <a href="https://github.com/ThalesGroup/fred/actions/workflows/Build-and-push-docker.yml"><img alt="docker images" src="https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Build-and-push-docker.yml?branch=swift&label=docker%20images&color=yellow"></a>
+  <a href="https://github.com/ThalesGroup/fred/actions/workflows/Check-migrations.yml"><img alt="alembic migrations" src="https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-migrations.yml?branch=swift&label=alembic%20migrations&color=yellow"></a>
+</p>
 
 > **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
 
@@ -739,9 +753,7 @@ We welcome pull requests and issues. Start with the [Contributing guide](./CONTR
 
 ## Community
 
-Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
-
-[![Join our Discord](https://img.shields.io/badge/chat-on%20Discord-7289da?logo=discord&logoColor=white)](https://discord.gg/F6qh4Bnk)
+Join the discussion on our [Discord server](https://discord.gg/FDSEvNarG)!
 
 ## Contacts
 

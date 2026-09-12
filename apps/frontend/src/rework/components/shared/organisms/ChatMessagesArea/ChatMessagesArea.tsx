@@ -14,6 +14,7 @@
 
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import styles from "./ChatMessagesArea.module.css";
 
 interface ChatMessagesAreaProps {
@@ -32,7 +33,11 @@ export function ChatMessagesArea({ children, isEmpty, isLoading, emptyState }: C
   return (
     <div className={styles.area} role="log" aria-live="polite" aria-label={t("chatbot.conversationAriaLabel")}>
       <div className={styles.lane}>
-        {isLoading && <p className={styles.hint}>{t("chatbot.loadingHistory")}</p>}
+        {isLoading && (
+          <div className={styles.loading}>
+            <Spinner size={28} statusText={t("chatbot.loadingHistory")} />
+          </div>
+        )}
         {!isLoading && isEmpty && (emptyState ?? <p className={styles.empty}>{t("chatbot.startConversationHint")}</p>)}
         {children}
       </div>

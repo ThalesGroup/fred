@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ThalesGroup/fred/libs/frontend/release/fixture-transfer.schema.json",
+  "title": "FRED frontend fixture archive transfer metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "artifactName",
+    "createdAt",
+    "sourceCommit",
+    "sourceTreeClean",
+    "contract",
+    "producerToolchain",
+    "execution",
+    "producerValidation",
+    "packages"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "fixture-archive-transfer" },
+    "artifactName": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceTreeClean": { "type": "boolean" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "digest"],
+      "properties": {
+        "state": { "const": "fixture" },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256-[A-Za-z0-9+/]{43}=$"
+        }
+      }
+    },
+    "producerToolchain": { "$ref": "#/$defs/toolchain" },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "repository", "workflow", "runId", "runAttempt"],
+      "properties": {
+        "provider": { "enum": ["github-actions", "local-rehearsal"] },
+        "repository": { "type": "string", "minLength": 1 },
+        "workflow": { "type": "string", "minLength": 1 },
+        "runId": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "runAttempt": { "type": "string", "pattern": "^[1-9][0-9]*$" }
+      }
+    },
+    "producerValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archives", "consumers", "browser", "host"],
+      "properties": {
+        "archives": { "const": true },
+        "consumers": { "const": false },
+        "browser": { "const": false },
+        "host": { "const": false }
+      }
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["designTokens", "ui", "iframeSdk"],
+      "properties": {
+        "designTokens": { "$ref": "#/$defs/package" },
+        "ui": { "$ref": "#/$defs/package" },
+        "iframeSdk": { "$ref": "#/$defs/package" }
+      }
+    }
+  },
+  "$defs": {
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "npm"],
+      "properties": {
+        "node": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "npm": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "name",
+        "version",
+        "coordinate",
+        "filename",
+        "bytes",
+        "integrity"
+      ],
+      "properties": {
+        "role": { "enum": ["designTokens", "ui", "iframeSdk"] },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "coordinate": { "type": "string", "minLength": 1 },
+        "filename": { "type": "string", "pattern": "^[A-Za-z0-9._-]+\\.tgz$" },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "integrity": {
+          "type": "string",
+          "pattern": "^sha512-[A-Za-z0-9+/]{86}==$"
+        }
+      }
+    }
+  }
+}

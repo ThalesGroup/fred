@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,9 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RichInputField } from "./RichInputField";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -83,5 +92,82 @@ describe("RichInputField send gating", () => {
       describedBy(render({ characterCount: 5, characterLimit: 5 })),
     );
     expect(describedBy(render({ characterCount: 6 }))).toBeUndefined();
+  });
+});
+
+// Focus on entering a conversation used to be a side effect of the field being
+// RE-ENABLED after a history load, so it happened only when a load actually ran
+// — a conversation served from cache silently got none. The page now asks for it
+// outright, which only works if the request survives a field that is still
+// disabled while its history loads.
+describe("RichInputField focus requests", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const show = (props: { focusEndRequestId?: number; disabled?: boolean; value?: string }) =>
+    act(() => {
+      root.render(
+        <RichInputField
+          value={props.value ?? "draft"}
+          onChange={() => undefined}
+          onSend={() => undefined}
+          showSendButton
+          disabled={props.disabled}
+          focusEndRequestId={props.focusEndRequestId}
+        />,
+      );
+    });
+
+  const textarea = () => container.querySelector("textarea") as HTMLTextAreaElement;
+  const isFocused = () => document.activeElement === textarea();
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("focuses an enabled field on mount — the page-reload case", () => {
+    show({ focusEndRequestId: 0 });
+
+    expect(isFocused()).toBe(true);
+  });
+
+  it("focuses with the caret at the end when a request arrives", () => {
+    show({ focusEndRequestId: 0 });
+    textarea().blur();
+
+    show({ focusEndRequestId: 1 });
+
+    expect(isFocused()).toBe(true);
+    expect(textarea().selectionStart).toBe("draft".length);
+  });
+
+  // The path a conversation whose history is still loading takes: the field is
+  // disabled when the page asks, and comes back focused once it is usable.
+  it("focuses on re-enable, so a request made while disabled is not lost", () => {
+    show({ focusEndRequestId: 1, disabled: true });
+
+    expect(isFocused()).toBe(false); // a disabled field cannot take focus
+
+    show({ focusEndRequestId: 1, disabled: false });
+
+    expect(isFocused()).toBe(true);
+  });
+
+  it("ignores a request that has already been applied", () => {
+    show({ focusEndRequestId: 1 });
+    textarea().blur();
+
+    show({ focusEndRequestId: 1 });
+
+    expect(isFocused()).toBe(false);
   });
 });

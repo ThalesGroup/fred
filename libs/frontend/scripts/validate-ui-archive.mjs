@@ -17,6 +17,12 @@ import {
 } from "./archive-safety.mjs";
 import { TOKEN_SOURCE_PATHS, UI_FONT_SOURCE } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
+import {
+  assertExpectedManifest,
+  isLocalDependencyReference,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -266,7 +272,12 @@ async function validateCss(packageRoot) {
   return { css, assets };
 }
 
-export async function validateUiArchive(archivePath) {
+export async function validateUiArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "ui");
   const temporary = await mkdtemp(path.join(os.tmpdir(), "fred-ui-archive-"));
   try {
     const { stdout } = await run("tar", ["-tzf", path.resolve(archivePath)]);
@@ -284,7 +295,7 @@ export async function validateUiArchive(archivePath) {
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),
     );
-    assert.equal(manifest.name, "@fred/ui");
+    assert.equal(manifest.name, expectedPackage.name);
     assert.notEqual(
       manifest.private,
       true,
@@ -321,15 +332,14 @@ export async function validateUiArchive(archivePath) {
     ]) {
       for (const version of Object.values(fields ?? {}))
         assert(
-          !/^(?:file:|workspace:|link:)/.test(String(version)),
+          !isLocalDependencyReference(String(version)),
           "local dependency protocol",
         );
     }
-    assert.deepEqual(manifest.peerDependencies, {
-      "@fred/design-tokens": "0.0.0-development",
-      react: "^19.2.4",
-      "react-dom": "^19.2.4",
-    });
+    assert.deepEqual(
+      manifest.peerDependencies,
+      expectedPackage.expectedManifest.peerDependencies,
+    );
 
     const js = await assertRelativeReferences(
       packageRoot,
@@ -459,6 +469,7 @@ export async function validateUiArchive(archivePath) {
       "build evidence and declared glyph inventory differ",
     );
     assert.match(js, /from\s+"react\/jsx-runtime"/);
+    assertExpectedManifest(manifest, expectedPackage);
     return {
       archive: path.resolve(archivePath),
       package: `${manifest.name}@${manifest.version}`,
