@@ -19,7 +19,7 @@ Every call is outbound and authenticated with the pod's own confidential M2M
 client — never a user token, because a dispatched run has no user present.
 One instance holds one connection pool and one cached token, so a long-lived
 worker does not re-handshake per run.
-Fred binds a definition to the client that first publishes it, so the same
+Fred binds a prefix to the client that first publishes under it, so the same
 identity authorizes publication, run context and result reporting.
 """
 
@@ -47,7 +47,7 @@ class ControlPlaneClient:
 
     def __init__(self, environment: PodEnvironment) -> None:
         self._base_url = environment.control_plane_url
-        self._provider_id = environment.provider_id
+        self._prefix = environment.prefix
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
         self._tokens: M2MTokenProvider | None = None
         if environment.authenticated:
@@ -68,9 +68,8 @@ class ControlPlaneClient:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""
         await self._request(
             "PUT",
-            f"/knowledge-bases/providers/{self._provider_id}"
-            f"/definitions/{declaration.id}",
-            json=declaration.to_payload(),
+            f"/knowledge-bases/definitions/{declaration.id}",
+            json={"prefix": self._prefix, **declaration.to_payload()},
         )
 
     async def fetch_run_context(
@@ -79,8 +78,7 @@ class ControlPlaneClient:
         """Fetch one run's configuration, scoped to that active run."""
         payload = await self._request(
             "GET",
-            f"/knowledge-bases/providers/{self._provider_id}"
-            f"/definitions/{definition_id}/runs/{run_id}/context",
+            f"/knowledge-bases/definitions/{definition_id}/runs/{run_id}/context",
         )
         return KnowledgeBaseRunContext.model_validate(payload)
 
@@ -90,8 +88,7 @@ class ControlPlaneClient:
         """Report the terminal state and bounded result of one run."""
         await self._request(
             "POST",
-            f"/knowledge-bases/providers/{self._provider_id}"
-            f"/definitions/{definition_id}/runs/{run_id}/result",
+            f"/knowledge-bases/definitions/{definition_id}/runs/{run_id}/result",
             json=result.model_dump(mode="json"),
         )
 

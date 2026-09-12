@@ -34,24 +34,24 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.knowledge_base_models import (
     KnowledgeBaseDefinitionRow,
+    KnowledgeBasePrefixRow,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class KnowledgeBaseProviderConflict(Exception):
-    """A client published into a provider namespace bound to another client."""
+class KnowledgeBasePrefixConflict(Exception):
+    """A client published a name under a prefix another client owns."""
 
     http_status = 403
 
 
 class PublishedDefinition:
-    """One stored declaration, with the client bound to it."""
+    """One stored declaration."""
 
     def __init__(self, row: KnowledgeBaseDefinitionRow) -> None:
-        self.provider_id = row.provider_id
-        self.definition_id = row.definition_id
-        self.client_id = row.client_id
+        self.id = row.id
+        self.prefix = row.prefix
         self.version = row.version
         self.name = row.name
         self.description = row.description
@@ -75,17 +75,12 @@ class KnowledgeBaseDefinitionStore:
     async def upsert(
         self,
         *,
-        provider_id: str,
+        prefix: str,
         declaration: KnowledgeBaseDeclaration,
         client_id: str,
         session: AsyncSession | None = None,
     ) -> PublishedDefinition:
-        """Replace this definition's row wholesale, inside the binding check.
-
-        The check lives HERE, in the transaction that writes, not in the caller:
-        reading the owner in one transaction and writing in another lets two
-        concurrent first publications both see "unclaimed" and the loser
-        silently overwrite the winner's content.
+        """Replace this definition's row wholesale, inside the prefix claim.
 
         No history of previous declarations is kept and nothing compares a
         publication against what it replaces: a changed set of declared fields
@@ -93,17 +88,17 @@ class KnowledgeBaseDefinitionStore:
         Fred reconciles.
         """
         async with use_session(self._sessions, session) as active:
-            await self._require_provider_binding(active, provider_id, client_id)
-            row = await active.get(
-                KnowledgeBaseDefinitionRow, (provider_id, declaration.id)
-            )
+            await self._claim_prefix(active, prefix, client_id)
+            row = await active.get(KnowledgeBaseDefinitionRow, declaration.id)
             if row is None:
-                row = KnowledgeBaseDefinitionRow(
-                    provider_id=provider_id,
-                    definition_id=declaration.id,
-                    client_id=client_id,
-                )
+                row = KnowledgeBaseDefinitionRow(id=declaration.id, prefix=prefix)
                 active.add(row)
+            elif row.prefix != prefix:
+                # A name belongs to one prefix for life. Letting a shorter or
+                # longer prefix adopt it would move it between owners silently.
+                raise KnowledgeBasePrefixConflict(
+                    f"{declaration.id!r} already belongs to prefix {row.prefix!r}"
+                )
             row.version = declaration.version
             row.name = declaration.name
             row.description = declaration.description
@@ -113,48 +108,43 @@ class KnowledgeBaseDefinitionStore:
                     for field in declaration.configuration_fields
                 ]
             )
-            try:
-                await active.flush()
-            except IntegrityError as exc:
-                # Another first publication for the same provider committed
-                # between the check above and this flush. Re-run the check so
-                # a different client gets the refusal, never a raw SQL error.
-                raise KnowledgeBaseProviderConflict(
-                    f"Provider {provider_id!r} was claimed concurrently"
-                ) from exc
+            await active.flush()
             return PublishedDefinition(row)
 
     @staticmethod
-    async def _require_provider_binding(
-        active: AsyncSession, provider_id: str, client_id: str
-    ) -> None:
-        """Refuse a client writing into a provider namespace bound elsewhere.
+    async def _claim_prefix(active: AsyncSession, prefix: str, client_id: str) -> None:
+        """Claim the prefix for this client, or verify it already holds it.
 
-        One provider, one client: any row already stored for this provider
-        names its owner, so a single lookup decides.
+        The claim is a row whose primary key IS the prefix, so two pods claiming
+        it at the same instant collide in PostgreSQL — one commits, the other is
+        refused. An application-level check could not do this: it would read
+        "unclaimed" in both transactions and let both write.
         """
 
-        owner = await active.scalar(
-            select(KnowledgeBaseDefinitionRow.client_id)
-            .where(KnowledgeBaseDefinitionRow.provider_id == provider_id)
-            .limit(1)
-        )
-        if owner is not None and owner != client_id:
-            raise KnowledgeBaseProviderConflict(
-                f"Provider {provider_id!r} is bound to another client"
-            )
+        owner = await active.get(KnowledgeBasePrefixRow, prefix)
+        if owner is not None:
+            if owner.client_id != client_id:
+                raise KnowledgeBasePrefixConflict(
+                    f"Prefix {prefix!r} is owned by another client"
+                )
+            return
+
+        active.add(KnowledgeBasePrefixRow(prefix=prefix, client_id=client_id))
+        try:
+            await active.flush()
+        except IntegrityError as exc:
+            raise KnowledgeBasePrefixConflict(
+                f"Prefix {prefix!r} was claimed concurrently"
+            ) from exc
 
     async def get(
         self,
-        provider_id: str,
-        definition_id: str,
+        name: str,
         *,
         session: AsyncSession | None = None,
     ) -> PublishedDefinition | None:
         async with use_session(self._sessions, session) as active:
-            row = await active.get(
-                KnowledgeBaseDefinitionRow, (provider_id, definition_id)
-            )
+            row = await active.get(KnowledgeBaseDefinitionRow, name)
             return None if row is None else PublishedDefinition(row)
 
     async def list_all(
@@ -163,8 +153,7 @@ class KnowledgeBaseDefinitionStore:
         async with use_session(self._sessions, session) as active:
             rows = await active.scalars(
                 select(KnowledgeBaseDefinitionRow).order_by(
-                    KnowledgeBaseDefinitionRow.provider_id,
-                    KnowledgeBaseDefinitionRow.definition_id,
+                    KnowledgeBaseDefinitionRow.id
                 )
             )
             return [PublishedDefinition(row) for row in rows]

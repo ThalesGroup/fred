@@ -16,13 +16,20 @@
 
 from __future__ import annotations
 
+from fred_core import PREFIX_PATTERN
 from fred_sdk.contracts.models import FieldSpec
 from pydantic import BaseModel, Field
 
 
 class KnowledgeBasePublicationRequest(BaseModel):
-    """What an image publishes about itself at deployment time."""
+    """What an image publishes about itself at deployment time.
 
+    `prefix` is declared, never derived: only the image knows how much of its
+    own name it claims — `fred` or `fred.samples` are both plausible readings
+    of `fred.samples.local-folder`.
+    """
+
+    prefix: str = Field(min_length=1, max_length=256, pattern=PREFIX_PATTERN)
     version: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -30,6 +37,6 @@ class KnowledgeBasePublicationRequest(BaseModel):
 
 
 class KnowledgeBasePublicationResult(BaseModel):
-    provider_id: str
-    definition_id: str
+    id: str
+    prefix: str
     version: str

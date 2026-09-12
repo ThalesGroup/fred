@@ -23,22 +23,20 @@ declaration its image publishes is projected from it (see `declaration.py`).
 from __future__ import annotations
 
 import inspect
-import re
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
 
-from fred_sdk.contracts.capability.manifest import CAPABILITY_ID_PATTERN
+from fred_core import CONTRIBUTED_NAME_PATTERN, require_contributed_name
+
 from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base.models import (
     KnowledgeBaseRunContext,
     KnowledgeBaseSyncResult,
 )
 
-# The identifier shape is shared with capabilities on purpose: one namespace
-# convention across everything a deployment configures.
-KNOWLEDGE_BASE_ID_PATTERN = CAPABILITY_ID_PATTERN
-
-_ID_RE = re.compile(KNOWLEDGE_BASE_ID_PATTERN)
+# One naming rule across everything a contributor adds to Fred: a dotted name
+# under a prefix they own. See fred_core.common.naming.
+KNOWLEDGE_BASE_ID_PATTERN = CONTRIBUTED_NAME_PATTERN
 
 # `Coroutine`, not `Awaitable`: the resolved handler is handed straight to
 # `asyncio.run` (and to the SDK's own activity adapter), which accepts a
@@ -81,10 +79,12 @@ class KnowledgeBase:
         description: str,
         configuration_fields: Sequence[FieldSpec] = (),
     ) -> None:
-        if not _ID_RE.match(id):
+        try:
+            require_contributed_name(id)
+        except ValueError as error:
             raise KnowledgeBaseDeclarationError(
-                f"Knowledge Base id {id!r} must match {KNOWLEDGE_BASE_ID_PATTERN}"
-            )
+                f"Knowledge Base id is not a contributed name: {error}"
+            ) from error
         for label, value in (
             ("version", version),
             ("name", name),

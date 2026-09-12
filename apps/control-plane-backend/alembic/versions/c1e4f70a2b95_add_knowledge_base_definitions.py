@@ -22,20 +22,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Two tables, because ownership is a fact about a prefix, not about each
+    # definition: one row per prefix makes a concurrent first claim collide in
+    # PostgreSQL instead of in application code.
     op.create_table(
-        "knowledge_base_definitions",
-        sa.Column("provider_id", sa.String(length=256), nullable=False),
-        sa.Column("definition_id", sa.String(length=256), nullable=False),
+        "knowledge_base_prefixes",
+        sa.Column("prefix", sa.String(length=256), nullable=False),
         sa.Column(
             "client_id",
             sa.String(length=255),
             nullable=False,
             comment=(
-                "Confidential M2M client bound to this provider at its first "
-                "publication. Every publication for this provider is checked "
-                "against it."
+                "Confidential M2M client that claimed this prefix first. Every "
+                "later publication under it is checked against this value."
             ),
         ),
+        sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("prefix"),
+    )
+    op.create_table(
+        "knowledge_base_definitions",
+        sa.Column(
+            "id",
+            sa.String(length=256),
+            nullable=False,
+            comment=("Contributed name, dotted, under a prefix its contributor owns."),
+        ),
+        sa.Column("prefix", sa.String(length=256), nullable=False),
         sa.Column("version", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
@@ -49,9 +62,20 @@ def upgrade() -> None:
             ),
         ),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("provider_id", "definition_id"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(["prefix"], ["knowledge_base_prefixes.prefix"]),
+    )
+    op.create_index(
+        "ix_knowledge_base_definitions_prefix",
+        "knowledge_base_definitions",
+        ["prefix"],
     )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_knowledge_base_definitions_prefix",
+        table_name="knowledge_base_definitions",
+    )
     op.drop_table("knowledge_base_definitions")
+    op.drop_table("knowledge_base_prefixes")

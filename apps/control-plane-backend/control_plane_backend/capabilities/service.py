@@ -34,7 +34,7 @@ from fred_core.security.rebac.application_authz import (
 )
 from fred_core.security.rebac.knowledge_base_authz import (
     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
-    knowledge_base_provider_and_definition,
+    knowledge_base_name_from_catalog_id,
 )
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -155,18 +155,14 @@ async def _require_can_manage(
         # the `capability` type, which is not this id's authorization object.
         await require_manage_capabilities(rebac, user)
         try:
-            provider_id, definition_id = knowledge_base_provider_and_definition(
-                capability_id
-            )
+            name = knowledge_base_name_from_catalog_id(capability_id)
         except ValueError as exc:
             # A malformed reserved id is a 404, never an unhandled ValueError:
             # this runs on every capability mutation route.
             raise CapabilityNotFound(
                 f"Knowledge Base catalog id {capability_id!r} is malformed."
             ) from exc
-        definition = await deps.get_knowledge_base_definition_store().get(
-            provider_id, definition_id
-        )
+        definition = await deps.get_knowledge_base_definition_store().get(name)
         if definition is None:
             raise CapabilityNotFound(
                 f"Knowledge Base definition {capability_id!r} is not published."

@@ -40,7 +40,7 @@ def _fields() -> list[FieldSpec]:
 
 def _declaration(**overrides: Any) -> KnowledgeBase:
     kwargs: dict[str, Any] = {
-        "id": "http-markdown",
+        "id": "acme.kb.http-markdown",
         "version": "1.0.0",
         "name": "HTTP Markdown",
         "description": "Synchronize Markdown documents",
@@ -57,14 +57,38 @@ def _declaration(**overrides: Any) -> KnowledgeBase:
 
 def test_valid_declaration_keeps_its_fields() -> None:
     kb = _declaration()
-    assert kb.id == "http-markdown"
+    assert kb.id == "acme.kb.http-markdown"
     assert kb.version == "1.0.0"
     assert [f.key for f in kb.configuration_fields] == ["base_url", "token"]
 
 
-@pytest.mark.parametrize("bad_id", ["", "-leading-dash", "has space", "sla/sh"])
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "",
+        "-leading-dash",
+        "has space",
+        "sla/sh",
+        "assistant",
+        "acme.kb.local__folder",
+        "Acme.Kb.Local",
+        "acme.kb.local-",
+        "acme..local",
+    ],
+    ids=[
+        "empty",
+        "leading-separator",
+        "space",
+        "slash",
+        "one-segment-carries-no-provenance",
+        "doubled-underscore",
+        "uppercase",
+        "trailing-separator",
+        "empty-segment",
+    ],
+)
 def test_malformed_identifier_is_rejected(bad_id: str) -> None:
-    with pytest.raises(KnowledgeBaseDeclarationError, match="must match"):
+    with pytest.raises(KnowledgeBaseDeclarationError, match="contributed name"):
         _declaration(id=bad_id)
 
 
@@ -151,7 +175,7 @@ def test_resolution_without_a_handler_fails_clearly() -> None:
 
 def test_run_context_is_json_safe_and_carries_identifiers() -> None:
     context = KnowledgeBaseRunContext(
-        definition_id="http-markdown",
+        definition_id="acme.kb.http-markdown",
         instance_id="inst-1",
         team_id="team-1",
         run_id="run-1",
@@ -341,7 +365,7 @@ def test_resolved_handler_is_accepted_by_asyncio_run_without_a_cast() -> None:
         )
 
     context = KnowledgeBaseRunContext(
-        definition_id="http-markdown", instance_id="i", team_id="t", run_id="r"
+        definition_id="acme.kb.http-markdown", instance_id="i", team_id="t", run_id="r"
     )
     result = asyncio.run(kb.resolve_handler()(context))
     assert result.outcome is KnowledgeBaseRunOutcome.succeeded
@@ -538,23 +562,23 @@ def test_content_one_under_its_bound_is_untouched() -> None:
 # 2c.4 routing is derived, identically on both sides
 
 
-def test_task_queue_is_a_pure_function_of_the_two_segment_identity() -> None:
+def test_task_queue_is_a_pure_function_of_the_name() -> None:
     from fred_sdk.knowledge_base.routing import task_queue_for
 
-    assert task_queue_for("acme", "local-folder") == task_queue_for(
-        "acme", "local-folder"
+    assert task_queue_for("acme.kb.local-folder") == task_queue_for(
+        "acme.kb.local-folder"
     )
-    assert task_queue_for("acme", "local-folder") != task_queue_for(
-        "acme", "http-markdown"
+    assert task_queue_for("acme.kb.local-folder") != task_queue_for(
+        "acme.kb.http-markdown"
     )
-    assert "local-folder" in task_queue_for("acme", "local-folder")
+    assert "acme.kb.local-folder" in task_queue_for("acme.kb.local-folder")
 
 
-def test_task_queue_separates_two_providers_exposing_the_same_definition() -> None:
+def test_task_queue_separates_two_contributors_using_the_same_last_segment() -> None:
     from fred_sdk.knowledge_base.routing import task_queue_for
 
-    assert task_queue_for("acme", "local-folder") != task_queue_for(
-        "globex", "local-folder"
+    assert task_queue_for("acme.kb.local-folder") != task_queue_for(
+        "globex.kb.local-folder"
     )
 
 
@@ -562,18 +586,16 @@ def test_task_queue_matches_the_catalog_id_control_plane_derives() -> None:
     from fred_core import knowledge_base_catalog_id
     from fred_sdk.knowledge_base.routing import task_queue_for
 
-    assert task_queue_for("acme", "local-folder") == knowledge_base_catalog_id(
-        "acme", "local-folder"
+    assert task_queue_for("acme.kb.local-folder") == knowledge_base_catalog_id(
+        "acme.kb.local-folder"
     )
 
 
-def test_task_queue_refuses_an_incomplete_identity() -> None:
+def test_task_queue_refuses_an_empty_name() -> None:
     from fred_sdk.knowledge_base.routing import task_queue_for
 
     with pytest.raises(ValueError):
-        task_queue_for("", "local-folder")
-    with pytest.raises(ValueError):
-        task_queue_for("acme", "")
+        task_queue_for("")
 
 
 # 2c.5 the pod environment contract
@@ -586,7 +608,7 @@ def test_publish_needs_no_workflow_engine_in_its_environment(
 
     for name in (env.CONTROL_PLANE_URL_ENV, env.KEYCLOAK_REALM_URL_ENV):
         monkeypatch.setenv(name, "http://example.invalid/x/")
-    monkeypatch.setenv(env.PROVIDER_ID_ENV, "acme")
+    monkeypatch.setenv(env.PREFIX_ENV, "acme.kb")
     monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
     monkeypatch.setenv(env.CLIENT_SECRET_ENV, "shh")
     monkeypatch.delenv(env.TEMPORAL_HOST_ENV, raising=False)
@@ -626,7 +648,7 @@ def test_a_local_stack_needs_neither_keycloak_nor_a_secret(
     monkeypatch.setenv(
         env.CONTROL_PLANE_URL_ENV, "http://localhost:8222/control-plane/v1"
     )
-    monkeypatch.setenv(env.PROVIDER_ID_ENV, "acme")
+    monkeypatch.setenv(env.PREFIX_ENV, "acme.kb")
     monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
     for name in (env.CLIENT_SECRET_ENV, env.KEYCLOAK_REALM_URL_ENV):
         monkeypatch.delenv(name, raising=False)

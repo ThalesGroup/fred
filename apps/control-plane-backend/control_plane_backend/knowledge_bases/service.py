@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, prefix_covers
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 from fred_sdk.knowledge_base import KnowledgeBaseDeclaration
 
@@ -48,17 +48,17 @@ class KnowledgeBaseClientMismatch(Exception):
 async def publish_definition(
     *,
     user: KeycloakUser,
-    provider_id: str,
+    prefix: str,
     declaration: KnowledgeBaseDeclaration,
     deps: ProductServiceDependencies,
 ) -> KnowledgeBasePublicationResult:
     """Record what an image declares about itself, at deployment time.
 
-    A provider owns a namespace and publishes as many definitions as it wants
-    inside it. The first publication binds that provider to the calling client;
-    every later one must present the same client, so no workload can write into
-    another's namespace. The binding itself is enforced in the store, inside the
-    transaction that writes — checking it here would be racy.
+    A contributor owns a prefix and publishes as many names under it as it
+    wants. The first publication claims that prefix for the calling client;
+    every later one must present the same client, so nobody writes under
+    another's prefix. The claim itself is enforced in the store, by a row whose
+    primary key is the prefix — checking it here would be racy.
     """
 
     # A workload identity, not a person: without this an ordinary signed-in
@@ -76,17 +76,19 @@ async def publish_definition(
             "Publishing requires a confidential client identity"
         )
 
+    if not prefix_covers(prefix, declaration.id):
+        raise KnowledgeBaseClientMismatch(
+            f"{declaration.id!r} is not under the declared prefix {prefix!r}"
+        )
+
     published = await deps.get_knowledge_base_definition_store().upsert(
-        provider_id=provider_id, declaration=declaration, client_id=caller
+        prefix=prefix, declaration=declaration, client_id=caller
     )
     logger.info(
-        "[knowledge-base-publication] stored declaration for %s/%s version %s",
-        published.provider_id,
-        published.definition_id,
+        "[knowledge-base-publication] stored declaration for %s version %s",
+        published.id,
         published.version,
     )
     return KnowledgeBasePublicationResult(
-        provider_id=published.provider_id,
-        definition_id=published.definition_id,
-        version=published.version,
+        id=published.id, prefix=published.prefix, version=published.version
     )

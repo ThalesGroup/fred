@@ -51,8 +51,8 @@ from fred_core.security.rebac.application_authz import (
     application_id_from_catalog_id,
 )
 from fred_core.security.rebac.knowledge_base_authz import (
-    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
     knowledge_base_definition_ref,
+    knowledge_base_name_from_catalog_id,
 )
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -312,7 +312,7 @@ def enablement_ref(catalog_entry: CapabilityCatalogEntry) -> RebacReference:
         return app_ref(application_id_from_catalog_id(catalog_entry.id))
     if catalog_entry.kind == "knowledge_base":
         return knowledge_base_definition_ref(
-            catalog_entry.id[len(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX) :]
+            knowledge_base_name_from_catalog_id(catalog_entry.id)
         )
     return cap_ref(catalog_entry.id)
 

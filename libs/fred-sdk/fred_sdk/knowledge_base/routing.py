@@ -26,16 +26,14 @@ from __future__ import annotations
 from fred_core import knowledge_base_catalog_id
 
 
-def task_queue_for(provider_id: str, definition_id: str) -> str:
+def task_queue_for(name: str) -> str:
     """Return the task queue a definition's runs are dispatched on.
 
-    The queue *is* the catalog id — `kb__<provider>__<definition>` — built by
-    the same fred-core function Control Plane uses, so the dispatching side and
-    the worker side cannot disagree by construction. It carries the provider
-    because a definition id alone is not unique: two providers may each expose
-    one of the same name, and a queue without the provider would hand them each
-    other's runs.
+    The queue *is* the catalog id built by the same fred-core function Control
+    Plane uses, so the dispatching side and the worker side cannot disagree by
+    construction. The contributed name already carries its prefix, so two
+    contributors never share a queue.
     """
-    if not provider_id or not definition_id:
-        raise ValueError("provider_id and definition_id must not be empty")
-    return knowledge_base_catalog_id(provider_id, definition_id)
+    if not name:
+        raise ValueError("name must not be empty")
+    return knowledge_base_catalog_id(name)

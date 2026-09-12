@@ -117,6 +117,82 @@ still accepted directly for local Vite and standalone-container parity, where
 the operator must keep it aligned with the control-plane field; it also defaults
 to `false`.
 
+## Contributed Identity Naming
+
+Everything a contributor adds to a deployed Fred — an agent, a Knowledge Base,
+an application — is named with **dotted segments, under a prefix that
+contributor owns**:
+
+```
+fred.github.assistant          fred.github.sql_expert
+fred.samples.hello_graph       fred.samples.local-folder
+thales.prism.triage
+```
+
+Read left to right: the project, then where it comes from, then the thing.
+`fred.github.*` is the open-source core; `fred.samples.*` is the samples
+repository; `thales.*` is an in-house component. Provenance is in the name, and
+nobody has to look it up.
+
+This is how Java packages, Maven `groupId`s and npm scopes work, for the same
+reason: **uniqueness comes from owning the prefix, not from a registry someone
+has to keep.** Two contributors cannot collide without claiming the same
+prefix, so cloudops never arbitrates a name.
+
+### Ownership is a prefix, not a segment to parse
+
+A confidential Keycloak client owns a prefix. Anything named under it belongs
+to that client, and nothing else may write there. There is no separator to
+find and no boundary to compute — Fred checks that a name starts with a prefix
+the caller owns.
+
+That is why the names need no `__`. It existed to mark where a publisher ended
+and a thing began; with an owned prefix there is nothing to mark.
+
+### Characters
+
+Lowercase letters, digits, `-` and `_` inside a segment; `.` between segments.
+The single underscore is deliberate: real identifiers already use it
+(`sql_expert`, `hello_graph`, `bank_transfer.graph`).
+
+**A double underscore is forbidden.** It carries no meaning now that names are
+not split, and it is the one sequence that made older composite forms
+ambiguous.
+
+### The version is not in the name
+
+A declaration carries its own `version`. A redeployment replaces an entry, it
+never creates a second one. Maven coordinates end in a version; these do not.
+
+### The Kubernetes namespace is not the name
+
+Fred sees no part of the cluster. Two Deployments in two Kubernetes namespaces
+carrying the same prefix are one contributor to Fred; a Deployment renamed or
+scaled to ten replicas is unchanged. Identity travels in the token and the
+declaration.
+
+### What this rule governs, and what it does not
+
+It governs **the name a contributor chooses**. It does not govern the keys Fred
+builds internally — the shared administration catalog, for instance, prefixes
+its dictionary keys per kind so an agent and a tool cannot collide in one flat
+dict. Those keys are implementation details, they differ by kind, and a
+contributor neither writes nor reads them.
+
+Concretely: `fred.github.assistant` is the name, and it is already correct.
+That the catalog stores it under a longer internal key is not a naming
+question.
+
+### What a contributor hands over, and what cloudops does
+
+A contributor delivers the **image**, the **prefix** it claims, and the **list
+of what it exposes**.
+
+Cloudops creates one confidential Keycloak client per prefix, sets the prefix
+and the client credentials in the Deployment's environment, and deploys. The
+only check is a lookup, never a judgement: *is this prefix already owned by a
+different client?*
+
 ## Application Registration
 
 Applications are registered in deployment configuration, not built into Fred.
@@ -125,7 +201,9 @@ and released by the team that owns it. Fred compiles no application code, so
 there is no manifest, no generator, and no generated artifact to keep in sync.
 
 Registration has two halves, one per process. `app_id` is the only key they
-share, and it must match across them:
+share, it must match across them, and its shape follows the naming rule above —
+a dotted name under a prefix its contributor owns, such as
+`fred.samples.document-triage`:
 
 - **Control plane** — `platform.application_sources[]`, expressed like
   `platform.runtime_catalog_sources[]`. Each entry carries `app_id`,

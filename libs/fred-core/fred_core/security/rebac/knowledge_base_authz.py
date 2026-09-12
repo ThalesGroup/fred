@@ -28,8 +28,6 @@ consumption helper belongs with whatever first needs it.
 
 from __future__ import annotations
 
-import re
-
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     RebacReference,
@@ -41,55 +39,42 @@ __all__ = [
     "KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX",
     "knowledge_base_catalog_id",
     "knowledge_base_definition_ref",
-    "knowledge_base_provider_and_definition",
+    "knowledge_base_name_from_catalog_id",
 ]
 
 
-def _id_safe(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]", "-", value)
+def knowledge_base_catalog_id(name: str) -> str:
+    """Return the key this definition takes in the shared administration catalog.
 
-
-def knowledge_base_catalog_id(provider_id: str, definition_id: str) -> str:
-    """Return the collision-free id used by the shared administration catalog.
-
-    Two segments, because a provider exposes several Knowledge Bases and two
-    providers may each expose one of the same name. Mirrors
-    `agent__<runtime_id>__<agent_id>` and `model__<provider>__<name>`: the
-    provider names where it comes from, the second segment what it is.
+    The catalog is one flat dictionary shared with capabilities, agents and
+    applications, so each kind reserves a prefix and no two kinds can collide in
+    it. That prefix is an internal key, never part of the contributed name — see
+    `fred_core.common.naming`.
     """
 
-    return (
-        f"{KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX}"
-        f"{_id_safe(provider_id)}__{_id_safe(definition_id)}"
-    )
+    return f"{KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX}{name}"
 
 
-def knowledge_base_provider_and_definition(catalog_id: str) -> tuple[str, str]:
-    """Split an exact Knowledge Base catalog id into (provider, definition).
+def knowledge_base_name_from_catalog_id(catalog_id: str) -> str:
+    """Return the contributed name a catalog key carries.
 
-    Splits on the FIRST separator after the prefix, exactly as the model
-    namespace does: a definition id may itself contain ``_``, a provider may
-    not be empty.
+    A removal, not a split: the name keeps whatever depth its contributor chose,
+    and nothing here has to guess where a prefix ends.
     """
 
     if not catalog_id.startswith(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX):
         raise ValueError(f"Not a Knowledge Base catalog id: {catalog_id!r}")
-    rest = catalog_id[len(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX) :]
-    provider_id, separator, definition_id = rest.partition("__")
-    if not separator or not provider_id or not definition_id:
-        raise ValueError(
-            "Knowledge Base catalog id must be "
-            f"{KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX}<provider>__<definition>: "
-            f"{catalog_id!r}"
-        )
-    return provider_id, definition_id
+    name = catalog_id[len(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX) :]
+    if not name:
+        raise ValueError(f"Knowledge Base catalog id carries no name: {catalog_id!r}")
+    return name
 
 
-def knowledge_base_definition_ref(object_id: str) -> RebacReference:
-    """Return the typed authorization reference for one definition object id.
+def knowledge_base_definition_ref(name: str) -> RebacReference:
+    """Return the typed authorization reference for one definition.
 
-    `object_id` is `<provider>__<definition>` — the catalog id minus its
+    The object id is the contributed name itself — the catalog key minus its
     namespace prefix, the same relationship `app__<app_id>` has to `app:<id>`.
     """
 
-    return RebacReference(type=Resource.KNOWLEDGE_BASE_DEFINITION, id=object_id)
+    return RebacReference(type=Resource.KNOWLEDGE_BASE_DEFINITION, id=name)

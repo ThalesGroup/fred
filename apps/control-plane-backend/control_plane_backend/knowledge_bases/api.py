@@ -45,7 +45,7 @@ from control_plane_backend.knowledge_bases.schemas import (
 from control_plane_backend.knowledge_bases.service import (
     KnowledgeBaseClientMismatch,
 )
-from control_plane_backend.knowledge_bases.store import KnowledgeBaseProviderConflict
+from control_plane_backend.knowledge_bases.store import KnowledgeBasePrefixConflict
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
@@ -59,13 +59,12 @@ ProductDependencies = Annotated[
 
 
 @router.put(
-    "/knowledge-bases/providers/{provider_id}/definitions/{definition_id}",
+    "/knowledge-bases/definitions/{name}",
     response_model=KnowledgeBasePublicationResult,
     summary="Publish a Knowledge Base declaration from its own image.",
 )
 async def put_knowledge_base_definition(
-    provider_id: Annotated[str, Path(min_length=1, pattern=KNOWLEDGE_BASE_ID_PATTERN)],
-    definition_id: Annotated[str, Path(min_length=1)],
+    name: Annotated[str, Path(min_length=1, pattern=KNOWLEDGE_BASE_ID_PATTERN)],
     body: KnowledgeBasePublicationRequest,
     deps: ProductDependencies,
     # Not `get_current_user`: that dependency enforces persisted GCU acceptance,
@@ -75,13 +74,13 @@ async def put_knowledge_base_definition(
 ) -> KnowledgeBasePublicationResult:
     """Idempotent upsert, so every deployment of the image replays it.
 
-    The provider is a path segment rather than a body field: it is the
-    namespace the calling client is bound to, and it belongs to the address of
-    what is being written, not to its content.
+    The name addresses what is written, so it is the path. The prefix is in the
+    body because it is a claim the image makes about itself — a name alone
+    cannot say how much of it its contributor owns.
     """
     try:
         declaration = KnowledgeBaseDeclaration(
-            id=definition_id,
+            id=name,
             version=body.version,
             name=body.name,
             description=body.description,
@@ -91,11 +90,11 @@ async def put_knowledge_base_definition(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         return await knowledge_base_service.publish_definition(
-            user=user, provider_id=provider_id, declaration=declaration, deps=deps
+            user=user, prefix=body.prefix, declaration=declaration, deps=deps
         )
     except (
         KnowledgeBaseClientMismatch,
-        KnowledgeBaseProviderConflict,
+        KnowledgeBasePrefixConflict,
         AuthorizationError,
     ) as exc:
         raise _map_error(exc) from exc

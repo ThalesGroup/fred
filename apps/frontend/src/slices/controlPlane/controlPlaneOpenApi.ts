@@ -676,12 +676,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
-    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPut: build.mutation<
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPutApiResponse,
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPutApiArg
+    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/knowledge-bases/providers/${queryArg.providerId}/definitions/${queryArg.definitionId}`,
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
         method: "PUT",
         body: queryArg.knowledgeBasePublicationRequest,
       }),
@@ -1809,14 +1809,12 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPutApiResponse =
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPutApiArg =
-  {
-    providerId: string;
-    definitionId: string;
-    knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
-  };
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+  name: string;
+  knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -3369,11 +3367,12 @@ export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
 };
 export type KnowledgeBasePublicationResult = {
-  provider_id: string;
-  definition_id: string;
+  id: string;
+  prefix: string;
   version: string;
 };
 export type KnowledgeBasePublicationRequest = {
+  prefix: string;
   version: string;
   name: string;
   description: string;
@@ -4005,7 +4004,7 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
-  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesProvidersProviderIdDefinitionsDefinitionIdPutMutation,
+  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,

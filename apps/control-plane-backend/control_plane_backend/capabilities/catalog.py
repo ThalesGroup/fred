@@ -246,9 +246,7 @@ async def aggregate_capability_catalog(
     # application grant can ever make one usable.
     for definition in await deps.get_knowledge_base_definition_store().list_all():
         entry = CapabilityCatalogEntry(
-            id=knowledge_base_catalog_id(
-                definition.provider_id, definition.definition_id
-            ),
+            id=knowledge_base_catalog_id(definition.id),
             version=definition.version,
             name=definition.name,
             description=definition.description,

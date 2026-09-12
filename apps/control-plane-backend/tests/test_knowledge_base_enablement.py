@@ -19,14 +19,14 @@ from control_plane_backend.capabilities.enablement import (
     revoke_team_enablement,
 )
 from control_plane_backend.knowledge_bases.store import (
-    KnowledgeBaseProviderConflict,
+    KnowledgeBasePrefixConflict,
 )
 from fred_core import Resource
 from fred_core.security.models import AuthorizationError
 from fred_core.security.rebac.knowledge_base_authz import (
     knowledge_base_catalog_id,
     knowledge_base_definition_ref,
-    knowledge_base_provider_and_definition,
+    knowledge_base_name_from_catalog_id,
 )
 from fred_core.security.rebac.rebac_engine import (
     KnowledgeBaseDefinitionPermission,
@@ -110,7 +110,7 @@ class _User:
     uid = "admin-1"
 
 
-def _manifest_payload(definition_id: str = "http-markdown") -> dict[str, Any]:
+def _manifest_payload(definition_id: str = "acme.kb.http-markdown") -> dict[str, Any]:
     return {
         "id": definition_id,
         "version": "1.0.0",
@@ -120,7 +120,9 @@ def _manifest_payload(definition_id: str = "http-markdown") -> dict[str, Any]:
     }
 
 
-def _declaration(definition_id: str = "http-markdown") -> KnowledgeBaseDeclaration:
+def _declaration(
+    definition_id: str = "acme.kb.http-markdown",
+) -> KnowledgeBaseDeclaration:
     return KnowledgeBaseDeclaration.model_validate(_manifest_payload(definition_id))
 
 
@@ -131,7 +133,7 @@ def _declaration(definition_id: str = "http-markdown") -> KnowledgeBaseDeclarati
 
 # The authorization object id is the catalog id minus its `kb__` prefix, so two
 # segments: a definition id alone does not identify an object.
-DEFINITION_OBJECT_ID = "acme-kb__http-markdown"
+DEFINITION_OBJECT_ID = "acme.kb.http-markdown"
 
 
 def test_definition_reference_uses_its_own_resource_type() -> None:
@@ -244,22 +246,22 @@ async def test_enablement_is_scoped_to_one_team_and_one_definition() -> None:
 # --------------------------------------------------------------------------
 
 
-PROVIDER = "acme-kb"
-PROVIDER_CLIENT = "kb-acme"
+PREFIX = "acme.kb"
+PREFIX_CLIENT = "kb-acme"
 
 
 class _FakeStore:
     """In-memory stand-in, enforcing the same provider binding as the real one."""
 
     def __init__(self, declarations: list[KnowledgeBaseDeclaration]) -> None:
-        self.rows: dict[tuple[str, str], Any] = {}
+        self.rows: dict[str, Any] = {}
+        self.prefixes: dict[str, str] = {}
         for declaration in declarations:
-            self.rows[(PROVIDER, declaration.id)] = _published(
-                PROVIDER, declaration, PROVIDER_CLIENT
-            )
+            self.prefixes[PREFIX] = PREFIX_CLIENT
+            self.rows[declaration.id] = _published(PREFIX, declaration, PREFIX_CLIENT)
 
-    async def get(self, provider_id: str, definition_id: str) -> Any:
-        return self.rows.get((provider_id, definition_id))
+    async def get(self, name: str) -> Any:
+        return self.rows.get(name)
 
     async def list_all(self) -> list[Any]:
         return [self.rows[key] for key in sorted(self.rows)]
@@ -267,33 +269,35 @@ class _FakeStore:
     async def upsert(
         self,
         *,
-        provider_id: str,
+        prefix: str,
         declaration: KnowledgeBaseDeclaration,
         client_id: str,
     ) -> Any:
-        owner = next(
-            (row.client_id for key, row in self.rows.items() if key[0] == provider_id),
-            None,
-        )
-        if owner is not None and owner != client_id:
-            raise KnowledgeBaseProviderConflict(
-                f"Provider {provider_id!r} is bound to another client"
+        owner = self.prefixes.get(prefix)
+        if owner is None:
+            self.prefixes[prefix] = client_id
+        elif owner != client_id:
+            raise KnowledgeBasePrefixConflict(
+                f"Prefix {prefix!r} is owned by another client"
             )
-        self.rows[(provider_id, declaration.id)] = _published(
-            provider_id, declaration, client_id
-        )
-        return self.rows[(provider_id, declaration.id)]
+        existing = self.rows.get(declaration.id)
+        if existing is not None and existing.prefix != prefix:
+            raise KnowledgeBasePrefixConflict(
+                f"{declaration.id!r} already belongs to prefix {existing.prefix!r}"
+            )
+        self.rows[declaration.id] = _published(prefix, declaration, client_id)
+        return self.rows[declaration.id]
 
 
 def _published(
-    provider_id: str, declaration: KnowledgeBaseDeclaration, client_id: str
+    prefix: str, declaration: KnowledgeBaseDeclaration, client_id: str
 ) -> Any:
     return type(
         "_Published",
         (),
         {
-            "provider_id": provider_id,
-            "definition_id": declaration.id,
+            "id": declaration.id,
+            "prefix": prefix,
             "client_id": client_id,
             "version": declaration.version,
             "name": declaration.name,
@@ -349,7 +353,7 @@ async def test_published_definitions_are_projected_into_the_admin_catalog() -> N
         cast(Any, _CatalogDeps([_declaration()]))
     )
 
-    entry = catalog[knowledge_base_catalog_id("acme-kb", "http-markdown")]
+    entry = catalog[knowledge_base_catalog_id("acme.kb.http-markdown")]
     assert entry.kind == "knowledge_base"
     # Existence is not availability: nothing here reports on a pod.
     assert not {"online", "healthy", "connected", "status"} & set(entry.model_dump())
@@ -367,16 +371,14 @@ async def test_the_projection_never_collides_with_a_pod_advertised_id() -> None:
         cast(Any, _CatalogDeps([_declaration()]))
     )
 
-    assert "http-markdown" not in catalog
-    catalog_id = knowledge_base_catalog_id("acme-kb", "http-markdown")
-    assert catalog_id == "kb__acme-kb__http-markdown"
-    # The provider is a segment of its own, so two providers may each expose a
-    # definition of the same name without colliding.
-    assert catalog_id != knowledge_base_catalog_id("globex-kb", "http-markdown")
-    assert knowledge_base_provider_and_definition(catalog_id) == (
-        "acme-kb",
-        "http-markdown",
-    )
+    assert "acme.kb.http-markdown" not in catalog
+    catalog_id = knowledge_base_catalog_id("acme.kb.http-markdown")
+    assert catalog_id == "kb__acme.kb.http-markdown"
+    # The name carries its own prefix, so two contributors may each expose a
+    # definition ending the same way without colliding.
+    assert catalog_id != knowledge_base_catalog_id("globex.kb.http-markdown")
+    # A removal, never a split: the name keeps whatever depth it was given.
+    assert knowledge_base_name_from_catalog_id(catalog_id) == "acme.kb.http-markdown"
 
 
 def test_the_catalog_admits_knowledge_bases_as_their_own_kind() -> None:
@@ -403,7 +405,7 @@ def test_enablement_routes_a_definition_to_its_own_rebac_type() -> None:
     )
 
     entry = CapabilityCatalogEntry(
-        id=knowledge_base_catalog_id("acme-kb", "http-markdown"),
+        id=knowledge_base_catalog_id("acme.kb.http-markdown"),
         version="1.0.0",
         name="HTTP Markdown",
         description="HTTP Markdown",
@@ -440,15 +442,15 @@ async def test_first_publication_creates_the_definition_and_binds_its_client() -
 
     deps = _FakeDeps(_FakeRebac(), [])
     result = await service.publish_definition(
-        user=_Client(PROVIDER_CLIENT),  # type: ignore[arg-type]
-        provider_id=PROVIDER,
+        user=_Client(PREFIX_CLIENT),  # type: ignore[arg-type]
+        prefix=PREFIX,
         declaration=_declaration(),
         deps=deps,  # type: ignore[arg-type]
     )
-    assert (result.provider_id, result.definition_id) == (PROVIDER, "http-markdown")
-    stored = await deps.store.get(PROVIDER, "http-markdown")
+    assert (result.prefix, result.id) == (PREFIX, "acme.kb.http-markdown")
+    stored = await deps.store.get("acme.kb.http-markdown")
     assert stored is not None
-    assert stored.client_id == PROVIDER_CLIENT
+    assert stored.client_id == PREFIX_CLIENT
 
 
 @pytest.mark.asyncio
@@ -458,8 +460,8 @@ async def test_the_same_client_may_republish() -> None:
     deps = _FakeDeps(_FakeRebac(), [])
     for _ in range(2):
         await service.publish_definition(
-            user=_Client(PROVIDER_CLIENT),  # type: ignore[arg-type]
-            provider_id=PROVIDER,
+            user=_Client(PREFIX_CLIENT),  # type: ignore[arg-type]
+            prefix=PREFIX,
             declaration=_declaration(),
             deps=deps,  # type: ignore[arg-type]
         )
@@ -471,10 +473,10 @@ async def test_another_client_cannot_take_over_a_definition() -> None:
     from control_plane_backend.knowledge_bases import service
 
     deps = _FakeDeps(_FakeRebac(), [_declaration()])
-    with pytest.raises(KnowledgeBaseProviderConflict):
+    with pytest.raises(KnowledgeBasePrefixConflict):
         await service.publish_definition(
             user=_Client("kb-somebody-else"),  # type: ignore[arg-type]
-            provider_id=PROVIDER,
+            prefix=PREFIX,
             declaration=_declaration(),
             deps=deps,  # type: ignore[arg-type]
         )
@@ -488,7 +490,7 @@ async def test_publishing_without_a_client_identity_is_refused() -> None:
     with pytest.raises(service.KnowledgeBaseClientMismatch):
         await service.publish_definition(
             user=_Client(None),  # type: ignore[arg-type]
-            provider_id=PROVIDER,
+            prefix=PREFIX,
             declaration=_declaration(),
             deps=deps,  # type: ignore[arg-type]
         )
@@ -505,7 +507,7 @@ async def test_a_user_session_cannot_publish() -> None:
     with pytest.raises(service.KnowledgeBaseClientMismatch):
         await service.publish_definition(
             user=_Client("app", service=False),  # type: ignore[arg-type]
-            provider_id=PROVIDER,
+            prefix=PREFIX,
             declaration=_declaration(),
             deps=deps,  # type: ignore[arg-type]
         )
@@ -529,9 +531,7 @@ async def test_the_admin_surface_carries_no_declared_fields() -> None:
         cast(Any, _CatalogDeps([_declaration()]))
     )
 
-    presented = catalog[
-        knowledge_base_catalog_id("acme-kb", "http-markdown")
-    ].model_dump()
+    presented = catalog[knowledge_base_catalog_id("acme.kb.http-markdown")].model_dump()
     assert "configuration_fields" not in presented
     assert not {"fields", "field_count"} & set(presented)
 
@@ -587,7 +587,7 @@ def test_a_definition_has_no_personal_space_scope() -> None:
     )
 
     entry = CapabilityCatalogEntry(
-        id=knowledge_base_catalog_id("acme-kb", "http-markdown"),
+        id=knowledge_base_catalog_id("acme.kb.http-markdown"),
         version="1.0.0",
         name="HTTP Markdown",
         description="HTTP Markdown",
@@ -622,7 +622,7 @@ async def test_managing_an_unpublished_definition_anchors_nothing() -> None:
         await _require_can_manage(
             rebac,  # type: ignore[arg-type]
             _User(),  # type: ignore[arg-type]
-            knowledge_base_catalog_id("acme-kb", "never-published"),
+            knowledge_base_catalog_id("acme.kb.never-published"),
             deps=cast(Any, deps),
         )
     assert rebac.relations == set()
@@ -630,7 +630,7 @@ async def test_managing_an_unpublished_definition_anchors_nothing() -> None:
 
 @pytest.mark.asyncio
 async def test_a_provider_namespace_belongs_to_one_client() -> None:
-    """The binding is per PROVIDER, not per definition.
+    """The binding is per PREFIX, not per definition.
 
     A provider exposes several Knowledge Bases; claiming the namespace once is
     what stops a second workload writing anywhere inside it — including under a
@@ -641,41 +641,44 @@ async def test_a_provider_namespace_belongs_to_one_client() -> None:
 
     deps = _FakeDeps(_FakeRebac(), [])
     await service.publish_definition(
-        user=_Client(PROVIDER_CLIENT),  # type: ignore[arg-type]
-        provider_id=PROVIDER,
+        user=_Client(PREFIX_CLIENT),  # type: ignore[arg-type]
+        prefix=PREFIX,
         declaration=_declaration(),
         deps=deps,  # type: ignore[arg-type]
     )
 
     # Same provider, a definition id that does not exist yet: still refused.
-    with pytest.raises(KnowledgeBaseProviderConflict):
+    with pytest.raises(KnowledgeBasePrefixConflict):
         await service.publish_definition(
             user=_Client("kb-somebody-else"),  # type: ignore[arg-type]
-            provider_id=PROVIDER,
-            declaration=_declaration(definition_id="sharepoint"),
+            prefix=PREFIX,
+            declaration=_declaration("acme.kb.sharepoint"),
             deps=deps,  # type: ignore[arg-type]
         )
     assert len(deps.store.rows) == 1
 
 
 @pytest.mark.asyncio
-async def test_two_providers_may_expose_the_same_definition_name() -> None:
-    """Namespacing by provider is what makes this possible at all."""
+async def test_two_contributors_may_expose_the_same_last_segment() -> None:
+    """Carrying the prefix in the name is what makes this possible at all."""
 
     from control_plane_backend.knowledge_bases import service
 
     deps = _FakeDeps(_FakeRebac(), [])
-    for provider, client in ((PROVIDER, PROVIDER_CLIENT), ("globex-kb", "kb-globex")):
+    for prefix, client, name in (
+        (PREFIX, PREFIX_CLIENT, "acme.kb.http-markdown"),
+        ("globex.kb", "kb-globex", "globex.kb.http-markdown"),
+    ):
         await service.publish_definition(
             user=_Client(client),  # type: ignore[arg-type]
-            provider_id=provider,
-            declaration=_declaration(),
+            prefix=prefix,
+            declaration=_declaration(name),
             deps=deps,  # type: ignore[arg-type]
         )
 
     assert set(deps.store.rows) == {
-        (PROVIDER, "http-markdown"),
-        ("globex-kb", "http-markdown"),
+        "acme.kb.http-markdown",
+        "globex.kb.http-markdown",
     }
 
 
@@ -699,7 +702,8 @@ def test_publication_does_not_gate_a_machine_on_human_gcu_admission() -> None:
     route = next(
         candidate
         for candidate in router.routes
-        if isinstance(candidate, APIRoute) and "providers" in candidate.path
+        if isinstance(candidate, APIRoute)
+        and "knowledge-bases/definitions" in candidate.path
     )
 
     def dependency_calls(dependant: Dependant) -> Iterator[object]:

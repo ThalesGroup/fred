@@ -89,7 +89,7 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
 
 async def serve(knowledge_base: KnowledgeBase, environment: PodEnvironment) -> None:
     """Poll this definition's queue until the process is stopped."""
-    task_queue = task_queue_for(environment.provider_id, knowledge_base.id)
+    task_queue = task_queue_for(knowledge_base.id)
     client = await Client.connect(
         environment.temporal_host, namespace=environment.temporal_namespace
     )

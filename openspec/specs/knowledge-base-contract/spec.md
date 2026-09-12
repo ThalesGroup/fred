@@ -16,11 +16,18 @@ A Knowledge Base definition SHALL exist in a deployment only because the image
 implementing it published a declaration to Control Plane. Control Plane
 deployment configuration SHALL carry no Knowledge Base entry of any kind.
 
-The first publication for a definition identity SHALL bind that definition to
-the publishing client's identity. A later publication for the same identity
-SHALL be refused unless it presents the same client. This binding is the only
-thing preventing one workload from overwriting another's declaration, so it
-SHALL NOT be satisfied by membership of a broad service role.
+A definition SHALL be named the way everything a contributor adds to Fred is
+named: dotted segments under a prefix that contributor owns, such as
+`fred.samples.local-folder`. A name SHALL carry at least two segments, so it
+always states its provenance, and SHALL contain no double underscore.
+
+The first publication under a prefix SHALL claim that prefix for the publishing
+client. A later publication of any name under that prefix SHALL be refused
+unless it presents the same client, and a name SHALL be refused when the prefix
+the publisher declares does not cover it. The claim is the only thing preventing
+one workload from overwriting another's declaration, so it SHALL NOT be
+satisfied by membership of a broad service role, and it SHALL be recorded so
+that two simultaneous first claims cannot both succeed.
 
 Existence SHALL mean only that the definition is visible to a Platform Admin,
 may be enabled for a team, and may be instantiated by an enabled team. It SHALL
@@ -28,18 +35,23 @@ NOT imply that a pod exists, that a worker is connected, or that the Knowledge
 Base is reachable. Fred SHALL NOT check worker availability, and no surface
 SHALL present a definition as online.
 
-#### Scenario: First publication binds the definition to its client
+#### Scenario: First publication claims the prefix for its client
 
-- **WHEN** a definition identity is published for the first time
+- **WHEN** a name is published under a prefix nothing has claimed yet
 - **THEN** the definition exists, and the publishing client is recorded as the
-  only client that may publish that identity again
+  only client that may publish under that prefix again
 
-#### Scenario: Another client cannot take over a definition
+#### Scenario: Another client cannot write under a claimed prefix
 
-- **WHEN** a client publishes a declaration for a definition identity already
-  bound to a different client
+- **WHEN** a client publishes any name under a prefix claimed by a different
+  client
 - **THEN** the request is refused, and holding a broad service role does not make
   it succeed
+
+#### Scenario: A name outside the declared prefix is refused
+
+- **WHEN** a client publishes a name the prefix it declares does not cover
+- **THEN** the request is refused, so a claim can never be widened by naming
 
 #### Scenario: A published definition is not reported as online
 

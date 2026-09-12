@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 CONTROL_PLANE_URL_ENV = "FRED_CONTROL_PLANE_URL"
 KEYCLOAK_REALM_URL_ENV = "FRED_KEYCLOAK_REALM_URL"
-PROVIDER_ID_ENV = "FRED_KB_PROVIDER_ID"
+PREFIX_ENV = "FRED_KB_PREFIX"
 CLIENT_ID_ENV = "FRED_KB_CLIENT_ID"
 # The name of the variable, never its value — both scanners flag the word alone.
 CLIENT_SECRET_ENV = "FRED_KB_CLIENT_SECRET"  # nosec B105  # pragma: allowlist secret
@@ -45,14 +45,13 @@ class MissingPodEnvironment(RuntimeError):
 class PodEnvironment:
     """The deployment values a KB pod needs to reach Fred and Temporal.
 
-    `provider_id` names the namespace this image owns in Fred's catalog — the
-    Knowledge Base counterpart of an agent pod's `runtime_id`. Every definition
-    it publishes lives under it, and Fred binds it to this pod's client on the
-    first publication, so no other workload can write there.
+    `prefix` is the dotted prefix this image owns — `fred.samples`. Every name
+    it publishes lives under it, Fred binds the prefix to this pod's client on
+    the first publication, and no other client may write there afterwards.
     """
 
     control_plane_url: str
-    provider_id: str
+    prefix: str
     client_id: str
     keycloak_realm_url: str = ""
     temporal_host: str = ""
@@ -78,7 +77,7 @@ class PodEnvironment:
         it never starts. Keycloak is required only when a client secret is set,
         so a local stack with authentication off needs neither.
         """
-        required = [CONTROL_PLANE_URL_ENV, PROVIDER_ID_ENV, CLIENT_ID_ENV]
+        required = [CONTROL_PLANE_URL_ENV, PREFIX_ENV, CLIENT_ID_ENV]
         if os.getenv(CLIENT_SECRET_ENV):
             required.append(KEYCLOAK_REALM_URL_ENV)
         if require_temporal:
@@ -92,7 +91,7 @@ class PodEnvironment:
 
         return cls(
             control_plane_url=os.environ[CONTROL_PLANE_URL_ENV].rstrip("/"),
-            provider_id=os.environ[PROVIDER_ID_ENV],
+            prefix=os.environ[PREFIX_ENV],
             client_id=os.environ[CLIENT_ID_ENV],
             keycloak_realm_url=os.getenv(KEYCLOAK_REALM_URL_ENV, "").rstrip("/"),
             temporal_host=os.getenv(TEMPORAL_HOST_ENV, ""),

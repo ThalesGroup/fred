@@ -11,6 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from fred_core.common.naming import (
+    CONTRIBUTED_NAME_PATTERN,
+    PREFIX_PATTERN,
+    InvalidContributedName,
+    is_valid_contributed_name,
+    is_valid_prefix,
+    prefix_covers,
+    require_contributed_name,
+)
 from fred_core.conversion import (
     DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
     convert_office_bytes_to_pdf,
@@ -106,7 +115,7 @@ from fred_core.security.rebac.knowledge_base_authz import (
     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
     knowledge_base_catalog_id,
     knowledge_base_definition_ref,
-    knowledge_base_provider_and_definition,
+    knowledge_base_name_from_catalog_id,
 )
 from fred_core.security.rebac.openfga_engine import (
     OpenFgaRebacEngine,
@@ -236,7 +245,14 @@ __all__ = [
     "KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX",
     "knowledge_base_catalog_id",
     "knowledge_base_definition_ref",
-    "knowledge_base_provider_and_definition",
+    "knowledge_base_name_from_catalog_id",
+    "CONTRIBUTED_NAME_PATTERN",
+    "PREFIX_PATTERN",
+    "InvalidContributedName",
+    "is_valid_contributed_name",
+    "is_valid_prefix",
+    "prefix_covers",
+    "require_contributed_name",
     "usable_application_ids",
     "OpenFgaRebacEngine",
     "RebacCleanupIncomplete",
