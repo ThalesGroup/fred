@@ -1917,13 +1917,20 @@
         "atRoot": "À la racine",
         "cancel": "Annuler",
         "create": "Créer",
+        "definitionsFailed": "Impossible de charger la liste",
+        "definitionsLoading": "Chargement…",
         "error": "Impossible de créer le dossier",
         "inFolder": "Dans",
         "nameLabel": "Nom",
-        "namePlaceholder": "ex. Rapports 2026",
         "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
+        "namePlaceholder": "ex. Rapports 2026",
+        "noDefinitions": "Aucune Knowledge Base activée pour cette équipe",
+        "notSynchronized": "Rien — un dossier ordinaire",
+        "synchronizedBy": "Synchronisé par",
         "title": "Nouveau dossier",
-        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence.",
+        "zoneFred": "Fréquence de synchronisation",
+        "zoneSource": "Origine des documents"
       },
       "renameModal": {
         "title": "Renommer",

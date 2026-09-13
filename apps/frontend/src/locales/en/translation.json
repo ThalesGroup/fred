@@ -1917,13 +1917,20 @@
         "atRoot": "At the top level",
         "cancel": "Cancel",
         "create": "Create",
+        "definitionsFailed": "Could not load the list",
+        "definitionsLoading": "Loading…",
         "error": "Could not create the folder",
         "inFolder": "In",
         "nameLabel": "Name",
-        "namePlaceholder": "e.g. Reports 2026",
         "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
+        "namePlaceholder": "e.g. Reports 2026",
+        "noDefinitions": "No Knowledge Base enabled for this team",
+        "notSynchronized": "Nothing — an ordinary folder",
+        "synchronizedBy": "Synchronized by",
         "title": "New folder",
-        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up.",
+        "zoneFred": "How often it runs",
+        "zoneSource": "Where its documents come from"
       },
       "renameModal": {
         "title": "Rename",
