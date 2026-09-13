@@ -240,20 +240,32 @@ class TagService:
         if team_id == "personal":
             team_id = None
 
-        # If team_id is provided, check user has permission to manage team resources
-        if team_id:
-            await self.rebac.check_user_team_permission_or_raise(
-                user=user,
-                permission=TeamPermission.CAN_UPDATE_RESOURCES,
-                team_id=team_id,
-            )
-
         # owner_id is the team or user, used for uniqueness scoping
         owner_id = team_id or user.uid
 
         # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
+
+        # Resolved before authorization, not only for the ReBAC link below: a
+        # folder inside another is authorized by the right to write in that
+        # parent, which is how one grant over a library reaches its whole
+        # subtree. A top-level folder still takes the team-level right, so being
+        # able to fill one folder never becomes being able to add folders to a
+        # team.
+        parent_tag = None
+        if norm_path:
+            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=norm_path)
+
+        if team_id:
+            authorized_by_parent = parent_tag is not None and await self.rebac.has_user_permission(user, TagPermission.UPDATE, parent_tag.id)
+            if not authorized_by_parent:
+                await self.rebac.check_user_team_permission_or_raise(
+                    user=user,
+                    permission=TeamPermission.CAN_UPDATE_RESOURCES,
+                    team_id=team_id,
+                )
+
         await self._ensure_unique_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
@@ -285,7 +297,6 @@ class TagService:
 
         # Link to parent tag in ReBAC when the new tag is nested.
         if norm_path:
-            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=norm_path)
             if parent_tag:
                 await self.rebac.add_relation(
                     Relation(
