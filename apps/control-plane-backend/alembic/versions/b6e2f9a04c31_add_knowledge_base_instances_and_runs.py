@@ -61,6 +61,18 @@ def upgrade() -> None:
                 "supplied."
             ),
         ),
+        sa.Column(
+            "granted_subject",
+            sa.String(length=255),
+            nullable=True,
+            comment=(
+                "Service account this instance's library was granted to. Kept "
+                "here rather than read back from the definition: a "
+                "republication can move a definition onto a new account, and "
+                "deleting the relation that exists is the only way to leave "
+                "none behind."
+            ),
+        ),
         sa.Column("created_by", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

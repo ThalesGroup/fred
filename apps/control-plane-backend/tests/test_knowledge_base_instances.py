@@ -135,6 +135,7 @@ class _FakeDefinitionStore:
 class _StoredInstance:
     id: str
     team_id: str
+    granted_subject: str | None
 
     def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
@@ -160,6 +161,7 @@ class _FakeInstanceStore:
             cadence=kwargs["cadence"],
             suspended=kwargs["suspended"],
             configuration=kwargs["configuration"],
+            granted_subject=kwargs["granted_subject"],
             created_by=kwargs["created_by"],
         )
         self.rows[row.id] = row
@@ -916,3 +918,158 @@ def test_the_workflow_bounds_its_activity_with_that_budget():
 
     source = inspect.getsource(_workflow.SynchronizeWorkflow)
     assert "retry_policy=RetryPolicy(maximum_attempts=payload.max_attempts)" in source
+
+
+# --------------------------------------------------------------------------
+# What an edit and a deletion must not destroy
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_editing_an_instance_keeps_a_secret_the_form_could_not_show():
+    """A display read never returns a secret, so a round-trip comes back empty.
+
+    Taking that as "cleared" destroys the value on any edit — and refuses the
+    edit outright when the field is required.
+    """
+    deps = _deps()
+    instance = await _create(
+        deps, configuration={"base_url": "https://x.test", "token": "s3cret"}
+    )
+
+    await update_instance(
+        user=_user(),
+        instance_id=instance.id,
+        cadence=RunCadence.weekly,
+        suspended=False,
+        configuration={"base_url": "https://x.test"},
+        deps=deps,
+    )
+
+    context = await build_run_context(
+        user=_pod(),
+        definition_id=DEFINITION,
+        instance_id=instance.id,
+        run_id="run-1",
+        execution_id="cp-kb-1",
+        deps=deps,
+    )
+    assert context.configuration["token"] == "s3cret"
+
+
+@pytest.mark.asyncio
+async def test_a_secret_can_still_be_replaced():
+    deps = _deps()
+    instance = await _create(
+        deps, configuration={"base_url": "https://x.test", "token": "old"}
+    )
+
+    await update_instance(
+        user=_user(),
+        instance_id=instance.id,
+        cadence=RunCadence.daily,
+        suspended=False,
+        configuration={"base_url": "https://x.test", "token": "new"},
+        deps=deps,
+    )
+
+    assert deps.instances.rows[instance.id].configuration["token"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_library_deletion_leaves_the_instance_whole():
+    """A member without the right to delete the folder must not half-delete it."""
+    deps = _deps()
+    instance = await _create(deps)
+
+    class _RefusingLibrary(_FakeLibraryClient):
+        async def delete(self, library_id: str) -> None:
+            raise PermissionError("knowledge-flow refused the folder deletion")
+
+    instances_module.LibraryClient = _RefusingLibrary
+    try:
+        with pytest.raises(PermissionError):
+            await delete_instance(
+                user=_user(),
+                authorization="Bearer alice",
+                instance_id=instance.id,
+                deps=deps,
+            )
+    finally:
+        instances_module.LibraryClient = _FakeLibraryClient
+
+    assert deps.instances.rows[instance.id] is not None
+    assert deps.temporal.schedules[f"cp-kb-{instance.id}"] is not None
+    assert deps.team_dependencies.rebac.may_write_in(instance.library_id)
+
+
+@pytest.mark.asyncio
+async def test_deletion_removes_the_grant_that_was_made_not_the_one_named_today():
+    """A republication can move a definition onto a new service account."""
+    deps = _deps()
+    instance = await _create(deps)
+    deps.definitions.rows[DEFINITION].subject = "service-account-recreated"
+
+    await delete_instance(
+        user=_user(), authorization="Bearer alice", instance_id=instance.id, deps=deps
+    )
+
+    assert deps.team_dependencies.rebac.relations == set()
+
+
+@pytest.mark.asyncio
+async def test_an_edit_repairs_a_schedule_that_went_missing():
+    """Otherwise every later edit of that instance fails for ever."""
+    deps = _deps()
+    instance = await _create(deps)
+    deps.temporal.schedules.clear()
+
+    await update_instance(
+        user=_user(),
+        instance_id=instance.id,
+        cadence=RunCadence.hourly,
+        suspended=False,
+        configuration={"base_url": "https://x.test"},
+        deps=deps,
+    )
+
+    assert f"cp-kb-{instance.id}" in deps.temporal.schedules
+
+
+@pytest.mark.asyncio
+async def test_a_stale_stored_configuration_is_a_bad_request_not_a_server_fault():
+    """The documented republished-definition case reaches the pod as a 422."""
+    from control_plane_backend.knowledge_bases.validation import (
+        InstanceConfigurationInvalid as _Invalid,
+    )
+
+    assert _Invalid("x").http_status == 422
+
+
+@pytest.mark.asyncio
+async def test_two_instances_of_one_cadence_do_not_fire_on_the_same_second():
+    """An interval with no offset is measured from the epoch, for everyone."""
+    deps = _deps()
+
+    first = await _create(deps, folder_name="First")
+    second = await _create(deps, folder_name="Second")
+
+    offsets = {
+        deps.temporal.schedules[f"cp-kb-{i.id}"].spec.intervals[0].offset
+        for i in (first, second)
+    }
+    assert len(offsets) == 2
+
+
+def test_a_badly_typed_declared_default_is_refused_rather_than_handed_over():
+    """A default is the author's, and would otherwise be the one unchecked value."""
+    from control_plane_backend.knowledge_bases.validation import (
+        validate_instance_configuration,
+    )
+
+    with pytest.raises(InstanceConfigurationInvalid) as raised:
+        validate_instance_configuration(
+            [FieldSpec(key="depth", type="integer", title="Depth", default="five")], {}
+        )
+
+    assert raised.value.field_key == "depth"

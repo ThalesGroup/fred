@@ -26,6 +26,7 @@ that fact.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from enum import StrEnum
 from typing import Any
@@ -203,10 +204,17 @@ async def list_runs(
     if not records:
         return []
     client = await deps.get_temporal_client()
-    resolved: list[tuple[str, RunState, Any]] = []
-    for record in records:
-        state = await resolve_run_state(
-            client=client, execution_id=record.execution_id, run_id=record.run_id
+    # Concurrently: each run costs a round trip to the engine, and a listing of
+    # fifty served one at a time is fifty latencies stacked end to end.
+    states = await asyncio.gather(
+        *(
+            resolve_run_state(
+                client=client, execution_id=record.execution_id, run_id=record.run_id
+            )
+            for record in records
         )
-        resolved.append((record.run_id, state, record.started_at))
-    return resolved
+    )
+    return [
+        (record.run_id, state, record.started_at)
+        for record, state in zip(records, states)
+    ]

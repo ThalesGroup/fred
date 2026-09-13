@@ -49,7 +49,6 @@ from fred_sdk.knowledge_base.schedule import RunCadence
 from control_plane_backend.knowledge_bases.cadence import (
     drop_cadence,
     register_cadence,
-    update_cadence,
 )
 from control_plane_backend.knowledge_bases.instance_store import KnowledgeBaseInstance
 from control_plane_backend.knowledge_bases.library import LibraryClient
@@ -202,11 +201,32 @@ async def create_instance(
             cadence=cadence.value,
             suspended=suspended,
             configuration=values,
+            granted_subject=definition.subject,
             created_by=user.uid,
         )
     except Exception:
         await undo.run()
         raise
+
+
+def _carry_secrets_forward(
+    declared: list[Any], *, submitted: dict[str, Any], stored: KnowledgeBaseInstance
+) -> dict[str, Any]:
+    """Keep a secret the submission left empty.
+
+    A display read never returns a secret, so a form round-trip comes back
+    without it. Taking that as "cleared" would destroy the value on any edit —
+    and refuse the edit outright when the field is required. An empty secret
+    field therefore means "unchanged", and clearing one is not offered here.
+    """
+    carried = dict(submitted)
+    held = stored.configuration
+    for field in declared:
+        if str(field.type) != "secret" or carried.get(field.key) is not None:
+            continue
+        if field.key in held:
+            carried[field.key] = held[field.key]
+    return carried
 
 
 async def update_instance(
@@ -228,11 +248,17 @@ async def update_instance(
             f"No definition published as {instance.definition_id!r}"
         )
     values = validate_instance_configuration(
-        definition.configuration_fields, configuration
+        definition.configuration_fields,
+        _carry_secrets_forward(
+            definition.configuration_fields, submitted=configuration, stored=instance
+        ),
     )
 
     client = await deps.get_temporal_client()
-    await update_cadence(
+    # Register rather than update: it creates or aligns, so an instance whose
+    # schedule has gone missing is repaired by the next edit instead of failing
+    # every one of them for ever.
+    await register_cadence(
         client,
         deps.configuration.scheduler.temporal,
         instance_id=instance_id,
@@ -260,31 +286,38 @@ async def delete_instance(
     instance_id: str,
     deps: Any,
 ) -> None:
-    """Undo a creation, in reverse, taking the documents with it.
+    """Undo a creation, taking the documents with it.
 
-    The row goes last again, for the same reason it was written last: while it
-    exists the deletion can be asked for again, and every step below is safe to
-    repeat. Stopping a synchronization while keeping what it brought is
+    The library goes FIRST, because it is the step that asks whether this
+    person may delete anything at all: knowledge-flow checks the right to
+    delete that folder, and a member who does not hold it must be refused
+    before the schedule and the grant are torn off an instance that then
+    survives — visible, never running, and unfillable.
+
+    The row goes last, for the same reason it was written last: while it
+    exists the deletion can be asked for again, and every step below is safe
+    to repeat. Stopping a synchronization while keeping what it brought is
     deliberately not offered — deleting the folder is deleting its documents.
     """
     instance = await _readable_instance(user=user, instance_id=instance_id, deps=deps)
+
+    await LibraryClient(
+        deps.configuration.platform.knowledge_flow_base_url, authorization
+    ).delete(instance.library_id)
 
     client = await deps.get_temporal_client()
     await drop_cadence(
         client, deps.configuration.scheduler.temporal, instance_id=instance_id
     )
 
-    definition = await deps.get_knowledge_base_definition_store().get(
-        instance.definition_id
-    )
-    if definition is not None and definition.subject:
+    # The account recorded when the grant was written, not whatever the
+    # definition names today: a republication can move a definition onto a new
+    # service account, and deleting the relation that exists is the only way to
+    # leave none behind.
+    if instance.granted_subject:
         await deps.team_dependencies.rebac.delete_relation(
-            knowledge_base_library_grant(definition.subject, instance.library_id)
+            knowledge_base_library_grant(instance.granted_subject, instance.library_id)
         )
-
-    await LibraryClient(
-        deps.configuration.platform.knowledge_flow_base_url, authorization
-    ).delete(instance.library_id)
 
     await deps.get_knowledge_base_instance_store().delete(instance_id)
 

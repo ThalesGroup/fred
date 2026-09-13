@@ -143,6 +143,14 @@ class KnowledgeBaseInstanceRow(Base):
         "Validated on write and again before a handler is invoked; never "
         "interpreted, and handed back to the pod exactly as supplied.",
     )
+    granted_subject: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Service account this instance's library was granted to. Kept "
+        "here rather than read back from the definition: a republication can "
+        "move a definition onto a new account, and deleting the relation that "
+        "exists is the only way to leave none behind.",
+    )
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

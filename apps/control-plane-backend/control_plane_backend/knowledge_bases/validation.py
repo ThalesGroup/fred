@@ -141,6 +141,10 @@ def validate_instance_configuration(
         value = submitted.get(key)
         if value is None:
             if field.default is not None:
+                # Checked like any other value: a default is the author's, and
+                # a badly typed one would otherwise be the single way an
+                # unvalidated value reaches a handler promised validated ones.
+                _check(key, field, field.default)
                 resolved[key] = field.default
                 continue
             if field.required:

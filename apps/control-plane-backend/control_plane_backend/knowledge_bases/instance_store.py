@@ -50,6 +50,7 @@ class KnowledgeBaseInstance:
         self.library_name = row.library_name
         self.cadence = row.cadence
         self.suspended = row.suspended
+        self.granted_subject = row.granted_subject
         self.created_by = row.created_by
         self.created_at = row.created_at
         self.updated_at = row.updated_at
@@ -85,6 +86,7 @@ class KnowledgeBaseInstanceStore:
         cadence: str,
         suspended: bool,
         configuration: dict[str, TuningValue],
+        granted_subject: str | None,
         created_by: str | None,
         session: AsyncSession | None = None,
     ) -> KnowledgeBaseInstance:
@@ -98,6 +100,7 @@ class KnowledgeBaseInstanceStore:
                 cadence=cadence,
                 suspended=suspended,
                 configuration_json=json.dumps(configuration),
+                granted_subject=granted_subject,
                 created_by=created_by,
             )
             active.add(row)

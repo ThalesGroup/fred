@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from hashlib import sha256
 
 from fred_core.common import TemporalSchedulerConfig
 from fred_sdk.knowledge_base.schedule import RunCadence
@@ -57,6 +58,21 @@ _EVERY: dict[RunCadence, timedelta] = {
     RunCadence.daily: timedelta(days=1),
     RunCadence.weekly: timedelta(days=7),
 }
+
+
+def _interval(instance_id: str, cadence: RunCadence) -> ScheduleIntervalSpec:
+    """When inside its interval this instance runs.
+
+    An interval with no offset is measured from the epoch, so every hourly
+    Knowledge Base in the deployment would fire on the same second — and the
+    more there are, the worse it gets. The offset is derived from the instance
+    id, so each one keeps its own slot for life and nothing has to be stored.
+    """
+    every = _EVERY[cadence]
+    slot = int(sha256(instance_id.encode()).hexdigest(), 16)
+    return ScheduleIntervalSpec(
+        every=every, offset=timedelta(seconds=slot % int(every.total_seconds()))
+    )
 
 
 def schedule_id(config: TemporalSchedulerConfig, instance_id: str) -> str:
@@ -93,7 +109,7 @@ async def register_cadence(
             id=identifier,
             task_queue=task_queue_for_definition(definition_id),
         ),
-        spec=ScheduleSpec(intervals=[ScheduleIntervalSpec(every=_EVERY[cadence])]),
+        spec=ScheduleSpec(intervals=[_interval(instance_id, cadence)]),
         state=ScheduleState(paused=suspended),
     )
     try:
@@ -147,9 +163,7 @@ async def update_cadence(
                     id=schedule_id(config, instance_id),
                     task_queue=task_queue_for_definition(definition_id),
                 ),
-                spec=ScheduleSpec(
-                    intervals=[ScheduleIntervalSpec(every=_EVERY[cadence])]
-                ),
+                spec=ScheduleSpec(intervals=[_interval(instance_id, cadence)]),
                 state=ScheduleState(paused=suspended),
             )
         )

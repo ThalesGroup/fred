@@ -310,5 +310,5 @@ async def get_knowledge_base_run_context(
             execution_id=execution_id,
             deps=deps,
         )
-    except (RunAccessDenied, RunNotFound) as exc:
+    except (InstanceConfigurationInvalid, RunAccessDenied, RunNotFound) as exc:
         raise _map_error(exc) from exc

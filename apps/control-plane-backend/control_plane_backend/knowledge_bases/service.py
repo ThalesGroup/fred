@@ -186,7 +186,17 @@ async def list_instances_for_team(
     *, user: KeycloakUser, team_id: str, deps: Any
 ) -> list[KnowledgeBaseInstanceSummary]:
     instances = await list_instances(user=user, team_id=team_id, deps=deps)
-    return [await _summarize(instance, deps=deps) for instance in instances]
+    # Read each definition once: a team with twenty folders of one Knowledge
+    # Base would otherwise fetch the same declaration twenty times.
+    store = deps.get_knowledge_base_definition_store()
+    definitions = {
+        definition_id: await store.get(definition_id)
+        for definition_id in {instance.definition_id for instance in instances}
+    }
+    return [
+        _summary_of(instance, definitions.get(instance.definition_id))
+        for instance in instances
+    ]
 
 
 async def update_instance_for_team(
@@ -233,6 +243,10 @@ async def _summarize(instance: Any, *, deps: Any) -> KnowledgeBaseInstanceSummar
     definition = await deps.get_knowledge_base_definition_store().get(
         instance.definition_id
     )
+    return _summary_of(instance, definition)
+
+
+def _summary_of(instance: Any, definition: Any) -> KnowledgeBaseInstanceSummary:
     declared = [] if definition is None else definition.configuration_fields
     return KnowledgeBaseInstanceSummary(
         id=instance.id,
