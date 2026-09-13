@@ -80,6 +80,21 @@ class BaseDocumentMetadataStore:
         return [document for document in documents if document is not None]
 
     @abstractmethod
+    async def get_metadata_by_source_key(
+        self,
+        source_library_id: str,
+        source_key: str,
+        session: AsyncSession | None = None,
+    ) -> DocumentMetadata | None:
+        """Return the document a synchronizing caller addressed by this key, if any.
+
+        The pair is unique (see `DocumentMetadataRow`), so a write resolves to
+        the document already there and reuses its identifier rather than
+        deriving one from the key. A document stored without a source key is
+        never matched: its columns are NULL and NULL matches nothing.
+        """
+
+    @abstractmethod
     async def get_metadata_in_tag(
         self, tag_id: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:

@@ -1062,6 +1062,8 @@ async def _run_import_body(
                         source_tag=row.get("source_tag"),
                         date_added_to_kb=_coerce_dt(row.get("date_added_to_kb")),
                         tag_ids=row.get("tag_ids") or [],
+                        source_library_id=row.get("source_library_id"),
+                        source_key=row.get("source_key"),
                         doc=_reset_transported_stages(row.get("doc")),
                     )
                 )
