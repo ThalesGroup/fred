@@ -1803,7 +1803,7 @@
     "resources": {
       "workspaceTitle": "Files",
       "pageTitle": "Knowledge Bases",
-      "pageSubtitle": "The corpus your agents search",
+      "pageSubtitle": "What your agents can search",
       "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
@@ -1819,7 +1819,7 @@
         "empty": "empty"
       },
       "knowledgeBases": {
-        "nativeName": "Fred",
+        "nativeName": "Corpus",
         "manualDeposit": "Manual deposit",
         "readOnly": "read only"
       },
@@ -2040,7 +2040,7 @@
         "stopIngestionRequested": "Ingestion stop requested"
       },
       "pageTitlePersonal": "Your Knowledge Bases",
-      "pageSubtitlePersonal": "The corpus your agents search, in your personal space"
+      "pageSubtitlePersonal": "What your agents can search, in your personal space"
     },
     "save": "Save",
     "serviceNotice": {

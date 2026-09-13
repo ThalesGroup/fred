@@ -19,7 +19,6 @@ import { useSelector } from "react-redux";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
 import type { BreadcrumbSegment } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import type { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
-import Chip from "@shared/atoms/Chip/Chip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -137,6 +136,11 @@ interface DocumentWorkspaceProps {
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
+
+/** One glyph for "documents come from here", whoever fills it — Fred's own base
+ * and a contributed one are the same kind of thing. The folder glyph stays for
+ * what is inside them. */
+const KNOWLEDGE_BASE_ICON = "database" as const;
 
 /** A row of the folder table. `knowledgeBase` heads the corpus root's own
  * folders — the team's documents no longer all come from the same place, and
@@ -379,6 +383,10 @@ function DocumentWorkspace({
   // when the drawer closes: a folder deleted later must not resurrect its id.
   const pendingFolderTagIds = useRef(new Map<string, string>());
   const [createOpen, setCreateOpen] = useState(false);
+  // Whether the corpus root's own folders are folded under the row naming
+  // their knowledge base. View state only — nothing is unloaded, and a
+  // collapsed folder simply leaves the row list.
+  const [nativeCollapsed, setNativeCollapsed] = useState(false);
   // Client-side filter over the current folder's already-loaded rows — not
   // the deferred server-side search from RFC §13.4 (POST .../browse's
   // `query` field), which would search across the whole library, not just
@@ -995,11 +1003,11 @@ function DocumentWorkspace({
     const contributed = (row: Row) => row.kind === "folder" && contributorName(row.node) !== null;
     return [
       { kind: "knowledgeBase" },
-      ...folderRows.filter((row) => !contributed(row)),
+      ...(nativeCollapsed ? [] : folderRows.filter((row) => !contributed(row))),
       ...folderRows.filter(contributed),
       ...docRows,
     ];
-  }, [childFolders, page?.docs, grouped, contributorName]);
+  }, [childFolders, page?.docs, grouped, nativeCollapsed, contributorName]);
 
   const filteredRows = useMemo(() => {
     const trimmed = search.trim().toLowerCase();
@@ -1300,11 +1308,20 @@ function DocumentWorkspace({
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
     // Sub-folders inside a synchronized one are created by the pod as it
     // mirrors the source tree, so they are no more a person's to rename or
-    // delete than the documents in them. The library at the top of one is not
-    // either, and it is reached from the corpus root, where the check on the
-    // folder being VIEWED cannot see it.
-    if (inSynchronizedFolder || contributorName(node)) return [];
+    // delete than the documents in them.
+    if (inSynchronizedFolder) return [];
     if (!canCreateFolder || !node.tagsHere[0]) return [];
+    const remove: OptionModel<"rename" | "delete"> = {
+      value: "delete",
+      key: "delete",
+      label: t("rework.resources.action.delete"),
+      icon: { category: "outlined", type: "delete" },
+      destructive: true,
+    };
+    // A contributed library can be dropped — a team must be able to stop
+    // taking a source — but not renamed: its name is how its Knowledge Base
+    // was declared, and changing it here would say nothing to the source.
+    if (contributorName(node)) return [remove];
     return [
       {
         value: "rename",
@@ -1312,13 +1329,7 @@ function DocumentWorkspace({
         label: t("rework.resources.action.rename"),
         icon: { category: "outlined", type: "drive_file_rename_outline" },
       },
-      {
-        value: "delete",
-        key: "delete",
-        label: t("rework.resources.action.delete"),
-        icon: { category: "outlined", type: "delete" },
-        destructive: true,
-      },
+      remove,
     ];
   };
 
@@ -1435,18 +1446,28 @@ function DocumentWorkspace({
         // folders below it and goes nowhere: they are already on screen.
         if (row.kind === "knowledgeBase") {
           return (
-            <span className={styles.nameCell}>
-              <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
-                <Icon category="outlined" type="database" />
+            <button
+              type="button"
+              className={styles.knowledgeBaseToggle}
+              aria-expanded={!nativeCollapsed}
+              onClick={() => setNativeCollapsed((collapsed) => !collapsed)}
+            >
+              <span className={styles.leadingSlot} data-expanded={!nativeCollapsed || undefined} aria-hidden>
+                <Icon category="outlined" type="chevron_right" />
+              </span>
+              <span className={styles.knowledgeBaseIcon} aria-hidden>
+                <Icon category="outlined" type={KNOWLEDGE_BASE_ICON} />
               </span>
               <span className={styles.knowledgeBaseName}>{t("rework.resources.knowledgeBases.nativeName")}</span>
-              <Chip label={t("rework.resources.knowledgeBases.manualDeposit")} />
-            </span>
+              <span className={styles.sourceBadge}>{t("rework.resources.knowledgeBases.manualDeposit")}</span>
+            </button>
           );
         }
         if (row.kind === "folder") {
-          // A contributed library carries the name its contributor declared and
-          // reads as read-only; Fred's own folders are set in under its row.
+          // A contributed library IS a knowledge base, so it takes the same
+          // symbol as Fred's own row rather than a folder's — one glyph for
+          // "documents come from here", the folder glyph for what is inside.
+          // Fred's own folders are set in under its row.
           const contributor = contributorName(row.node);
           const name = (
             <button
@@ -1456,17 +1477,29 @@ function DocumentWorkspace({
               onClick={() => navigateTo(row.node.full)}
               {...folderDropProps(row.node, canCreateFolder && !contributor)}
             >
-              <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
-                <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
-              </span>
-              <span>{row.node.name}</span>
+              {contributor ? (
+                <>
+                  {/* Empty, but the same box the collapse chevron occupies on
+                      the row above — otherwise the two bases' symbols would
+                      sit 28px apart. */}
+                  <span className={styles.leadingSlot} aria-hidden />
+                  <span className={styles.knowledgeBaseIcon} aria-hidden>
+                    <Icon category="outlined" type={KNOWLEDGE_BASE_ICON} />
+                  </span>
+                </>
+              ) : (
+                <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
+                  <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
+                </span>
+              )}
+              <span className={contributor ? styles.knowledgeBaseName : undefined}>{row.node.name}</span>
             </button>
           );
           if (!contributor) return name;
           return (
             <span className={styles.nameCell}>
               {name}
-              <Chip label={contributor} />
+              <span className={styles.sourceBadge}>{contributor}</span>
               <span className={styles.readOnlyHint}>{t("rework.resources.knowledgeBases.readOnly")}</span>
             </span>
           );
@@ -1885,10 +1918,10 @@ function DocumentWorkspace({
         columns={columns}
         rows={filteredRows}
         rowKey={rowKey}
-        // Neither the grouping row nor a contributed library is the team's to
-        // act on in bulk — deleting that library's tag from here would leave
-        // its Knowledge Base filling a folder that no longer exists.
-        rowSelectable={(row) => row.kind !== "knowledgeBase" && !(row.kind === "folder" && !!contributorName(row.node))}
+        // No knowledge base carries a checkbox: there is no action worth
+        // applying to several of them at once, and a dead control on the rows
+        // that head the list is worse than none. Their folders keep theirs.
+        rowSelectable={(row) => row.kind === "document" || (row.kind === "folder" && !contributorName(row.node))}
         selectedKeys={selectedKeys}
         onSelectedKeysChange={setSelectedKeys}
         serverPagination={

@@ -113,12 +113,35 @@ function rowTexts(): string[] {
   return Array.from(container.querySelectorAll('[class*="datatable-row"]')).map((row) => row.textContent ?? "");
 }
 
+/** A row's name button. Its icon glyph renders as text before the name —
+ *  "folder" for a folder, "database" for a knowledge base. */
 function folderButton(name: string): HTMLElement {
   const button = Array.from(container.querySelectorAll('[class*="nameButton"]')).find(
-    (candidate) => (candidate.textContent ?? "").replace(/^folder/, "") === name,
+    (candidate) => (candidate.textContent ?? "").replace(/^(folder|database)/, "") === name,
   );
   if (!button) throw new Error(`"${name}" row not rendered`);
   return button as HTMLElement;
+}
+
+/** Every navigable row's name, glyph prefix stripped. */
+function folderNames(): string[] {
+  return Array.from(container.querySelectorAll('[class*="nameButton"]')).map((cell) =>
+    (cell.textContent ?? "").replace(/^(folder|database)/, ""),
+  );
+}
+
+/** The row menu portals into document.body, outside `container`. */
+function openRowMenu(row: HTMLElement): string[] {
+  const trigger = row
+    .closest('[class*="datatable-row"]')
+    ?.querySelector('button[aria-label="rework.resources.action.more"]');
+  if (!trigger) throw new Error("row menu trigger not rendered");
+  click(trigger);
+  return [
+    ...document.querySelectorAll(
+      '[role="presentation"] [role="menuitem"], [role="presentation"] li, [role="presentation"] button',
+    ),
+  ].map((item) => item.textContent ?? "");
 }
 
 function click(element: Element) {
@@ -132,6 +155,7 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  document.querySelectorAll('[role="presentation"]').forEach((el) => el.remove());
 });
 
 describe("DocumentWorkspace corpus root — knowledge bases", () => {
@@ -164,18 +188,46 @@ describe("DocumentWorkspace corpus root — knowledge bases", () => {
     expect(contributed).toBeGreaterThan(rows.findIndex((row) => row.includes("Rags")));
   });
 
-  it("offers neither a row menu nor a checkbox over a contributed library", async () => {
+  it("lets a contributed library be dropped but not renamed", async () => {
     await render(CONTRIBUTED);
 
-    // Deleting that library's tag from here would leave its Knowledge Base
-    // filling a folder that no longer exists.
-    const boxes = container.querySelectorAll('input[type="checkbox"]');
-    // select-all + CIR + Rags — not the grouping row, not Local-2.
-    expect(boxes).toHaveLength(3);
+    // A team must be able to stop taking a source; renaming it here would say
+    // nothing to that source, and its name is how the base was declared.
+    const items = openRowMenu(folderButton("Local-2"));
+    expect(items.some((item) => item.includes("rework.resources.action.delete"))).toBe(true);
+    expect(items.some((item) => item.includes("rework.resources.action.rename"))).toBe(false);
+  });
 
+  it("gives no knowledge base a checkbox, and starts them where the checkboxes do", async () => {
+    await render(CONTRIBUTED);
+
+    // No action is worth applying to several bases at once. select-all + CIR +
+    // Rags only — neither Corpus nor Local-2.
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(3);
+    // Both base rows take the checkbox's own track, so neither reads as
+    // indented under the folders it heads.
+    expect(container.querySelectorAll('[class*="datatable-cell-unselectable-first"]')).toHaveLength(2);
+  });
+
+  it("still withholds every action inside a contributed library", async () => {
+    await render(CONTRIBUTED);
     click(folderButton("Local-2"));
-    // Inside it, the actions are withheld as they already were.
+
     expect(container.querySelector('[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
+  });
+
+  it("folds a base's own folders away, leaving its siblings alone", async () => {
+    await render(CONTRIBUTED);
+    const toggle = Array.from(container.querySelectorAll("button")).find((b) => b.hasAttribute("aria-expanded"));
+    if (!toggle) throw new Error("the knowledge base row is not a collapse toggle");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(folderNames()).toEqual(["Local-2"]);
+
+    click(toggle);
+    expect(folderNames().sort()).toEqual(["CIR", "Local-2", "Rags"]);
   });
 
   it("keeps the folder view itself untouched one level in", async () => {

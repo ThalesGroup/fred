@@ -137,12 +137,25 @@
   padding: 0 var(--spacing-2xs) 0 var(--spacing-m);
 }
 
+/* A row with no checkbox: its first cell takes the checkbox's track and its
+ * exact left padding, so the row starts where every other row's checkbox does.
+ * Left after the select cell instead, it would sit 36px right of the
+ * checkboxes of the rows it heads and read as indented under its own children.
+ * `.datatable-row` is `display: contents`, so the cell is a grid item of the
+ * body grid and spans its tracks directly. The first-column inset below
+ * excludes this cell by name rather than by specificity — it used to win here,
+ * which is what put the content 8px right of the checkboxes. */
+.datatable-cell-unselectable-first {
+  grid-column: 1 / 3;
+  padding-left: var(--spacing-m);
+}
+
 /* The inset belongs to the first real content column. When a selection
  * checkbox is present it becomes the DOM's first cell, so apply the inset
  * to whichever cell is first among the non-checkbox ones instead of
  * literally `:first-child` — otherwise the checkbox itself gets shoved
  * off-center by padding meant for the Name/label column next to it. */
-.first-column-inset .datatable-cell:first-child:not(.datatable-cell-select) {
+.first-column-inset .datatable-cell:first-child:not(.datatable-cell-select):not(.datatable-cell-unselectable-first) {
   padding-left: var(--spacing-l);
 }
 

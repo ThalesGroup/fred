@@ -1803,7 +1803,7 @@
     "resources": {
       "workspaceTitle": "Fichiers",
       "pageTitle": "Knowledge Bases",
-      "pageSubtitle": "Le corpus interrogé par vos agents",
+      "pageSubtitle": "Ce que vos agents peuvent interroger",
       "rootsAria": "Espaces de ressources",
       "storageQuota": "Stockage",
       "roots": {
@@ -1819,7 +1819,7 @@
         "empty": "vide"
       },
       "knowledgeBases": {
-        "nativeName": "Fred",
+        "nativeName": "Corpus",
         "manualDeposit": "Dépôt manuel",
         "readOnly": "lecture seule"
       },
@@ -2040,7 +2040,7 @@
         "stopIngestionRequested": "Arrêt de l'ingestion demandé"
       },
       "pageTitlePersonal": "Vos Knowledge Bases",
-      "pageSubtitlePersonal": "Le corpus interrogé par vos agents, dans votre espace personnel"
+      "pageSubtitlePersonal": "Ce que vos agents peuvent interroger, dans votre espace personnel"
     },
     "save": "Sauvegarder",
     "serviceNotice": {

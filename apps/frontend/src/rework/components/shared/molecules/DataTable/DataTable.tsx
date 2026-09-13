@@ -88,9 +88,11 @@ interface DataTableProps<T> {
    *  fight with those instead of being an unambiguous convenience. */
   selectable?: boolean;
   /** Withholds the checkbox from the rows this returns false for — a grouping
-   *  header, or a row nothing in the bulk bar could act on. Those rows are left
-   *  out of "select all on page" too, so it can still reach its all-selected
-   *  state. Omit and every row is selectable, as before. */
+   *  header, or a row no bulk action could do anything with. Such a row starts
+   *  at the checkbox's own left edge rather than after it, so it never reads as
+   *  indented under the rows it heads, and it is left out of "select all on
+   *  page" so that can still reach its all-selected state. Omit and every row
+   *  is selectable, as before. */
   rowSelectable?: (element: T) => boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
@@ -346,25 +348,28 @@ export default function DataTable<T>({
                   : undefined
               }
             >
-              {/* The cell itself stays for a row that cannot be selected — the
-                  header and body are two grids sharing one column template, so
-                  dropping it would shift that row's every column. */}
-              {selectable && (
+              {lineSelectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-                  {lineSelectable && (
-                    <Checkbox
-                      checked={selectedKeys?.has(key) ?? false}
-                      onChange={() => toggleRow(key)}
-                      aria-label={t("dataTable.selection.selectRow")}
-                    />
-                  )}
+                  <Checkbox
+                    checked={selectedKeys?.has(key) ?? false}
+                    onChange={() => toggleRow(key)}
+                    aria-label={t("dataTable.selection.selectRow")}
+                  />
                 </div>
               )}
               {columns.map((column, columnIndex) => {
                 const cellContent = column.cellRenderer?.(line);
                 const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
+                // No checkbox on this row: its first cell takes that track,
+                // so the row starts where every other row's checkbox does.
+                const takesSelectTrack = selectable && !lineSelectable && columnIndex === 0;
                 return (
-                  <div className={styles["datatable-cell"]} key={columnIndex}>
+                  <div
+                    className={`${styles["datatable-cell"]}${
+                      takesSelectTrack ? ` ${styles["datatable-cell-unselectable-first"]}` : ""
+                    }`}
+                    key={columnIndex}
+                  >
                     {/* Primitive cell values get single-line ellipsis
                      * truncation, with the full value readable via the
                      * native title tooltip — free-length text (usernames,
