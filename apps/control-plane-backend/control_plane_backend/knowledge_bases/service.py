@@ -47,6 +47,7 @@ from control_plane_backend.knowledge_bases.instances import (
 )
 from control_plane_backend.knowledge_bases.runs import list_runs
 from control_plane_backend.knowledge_bases.schemas import (
+    KnowledgeBaseDefinitionChoice,
     KnowledgeBaseInstanceCreate,
     KnowledgeBaseInstanceFields,
     KnowledgeBaseInstanceSummary,
@@ -126,6 +127,31 @@ async def publish_definition(
 # ---------------------------------------------------------------------------
 # Team instances — a folder that fills itself
 # ---------------------------------------------------------------------------
+
+
+async def definitions_a_team_may_use(
+    *, user: KeycloakUser, team_id: str, deps: Any
+) -> list[KnowledgeBaseDefinitionChoice]:
+    """What a folder-creation form offers under "synchronized by".
+
+    A team member's view, not an administrator's: the admin catalog lists every
+    published definition, and a member may only see the ones their team was
+    enabled for.
+    """
+    await require_team_member(user=user, team_id=team_id, deps=deps)
+    rebac = deps.team_dependencies.rebac
+    published = await deps.get_knowledge_base_definition_store().list_all()
+    return [
+        KnowledgeBaseDefinitionChoice(
+            definition_id=definition.id,
+            name=definition.name,
+            description=definition.description,
+        )
+        for definition in published
+        if await can_team_use_knowledge_base(
+            rebac, team_id, definition_id=definition.id
+        )
+    ]
 
 
 async def definition_fields(

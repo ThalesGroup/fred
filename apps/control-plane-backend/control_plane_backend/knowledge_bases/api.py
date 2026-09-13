@@ -53,6 +53,7 @@ from control_plane_backend.knowledge_bases.runs import (
     build_run_context,
 )
 from control_plane_backend.knowledge_bases.schemas import (
+    KnowledgeBaseDefinitionChoice,
     KnowledgeBaseInstanceCreate,
     KnowledgeBaseInstanceFields,
     KnowledgeBaseInstanceSummary,
@@ -134,6 +135,29 @@ async def put_knowledge_base_definition(
 # ---------------------------------------------------------------------------
 # Team instances: a folder that fills itself
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/knowledge-bases/definitions",
+    response_model=list[KnowledgeBaseDefinitionChoice],
+    summary="Definitions this team may synchronize a folder from.",
+)
+async def list_knowledge_base_definitions(
+    team_id: Annotated[str, Query(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[KnowledgeBaseDefinitionChoice]:
+    """What a folder-creation form offers under "synchronized by".
+
+    Distinct from the admin catalog on purpose: that one lists everything
+    published, this one only what the caller's team was enabled for.
+    """
+    try:
+        return await knowledge_base_service.definitions_a_team_may_use(
+            user=user, team_id=team_id, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
 
 
 @router.get(

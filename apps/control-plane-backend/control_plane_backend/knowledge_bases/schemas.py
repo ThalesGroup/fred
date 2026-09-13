@@ -98,6 +98,18 @@ class KnowledgeBaseInstanceSummary(BaseModel):
     updated_at: datetime
 
 
+class KnowledgeBaseDefinitionChoice(BaseModel):
+    """One definition a team may synchronize a folder from.
+
+    What a folder-creation form needs to offer the choice, and nothing else:
+    the fields to fill in are fetched only once one is chosen.
+    """
+
+    definition_id: str
+    name: str
+    description: str = ""
+
+
 class KnowledgeBaseInstanceFields(BaseModel):
     """The two zones an instance form renders.
 

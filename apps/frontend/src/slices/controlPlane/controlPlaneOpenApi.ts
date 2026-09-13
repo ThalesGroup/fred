@@ -686,6 +686,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.knowledgeBasePublicationRequest,
       }),
     }),
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: build.query<
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse,
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     getDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGet: build.query<
       GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse,
       GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiArg
@@ -1889,6 +1900,11 @@ export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNam
 export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
   name: string;
   knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
+};
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseDefinitionChoice[];
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg = {
+  teamId: string;
 };
 export type GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse =
   /** status 200 Successful Response */ KnowledgeBaseInstanceFields;
@@ -3498,6 +3514,11 @@ export type KnowledgeBasePublicationRequest = {
   description: string;
   configuration_fields?: FieldSpec[];
 };
+export type KnowledgeBaseDefinitionChoice = {
+  definition_id: string;
+  name: string;
+  description?: string;
+};
 export type KnowledgeBaseInstanceFields = {
   definition_id: string;
   definition_name: string;
@@ -4188,6 +4209,8 @@ export const {
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
   usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
+  useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
   useLazyGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
   useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery,
