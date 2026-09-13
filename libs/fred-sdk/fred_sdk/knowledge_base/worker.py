@@ -13,27 +13,33 @@
 # limitations under the License.
 
 """
-The execution plumbing an author never sees.
+The execution plumbing an author never sees: the activity side.
 
-All I/O lives in the activity: the workflow only sequences, so an author cannot
-break replay determinism because an author never writes workflow code. Nothing
-in this module is exported from the package's public surface.
-
-No heartbeat is configured: a heartbeat timeout without an activity that
-actually heartbeats kills every long run. Heartbeating arrives with the
-Control Plane run endpoints that report progress.
+All I/O lives here, in the activity, so an author never writes workflow code and
+cannot break replay determinism. The workflow itself sits in `_workflow.py`
+because Temporal re-imports a workflow's module inside its sandbox — this one is
+free to import whatever it needs, that one is not. Nothing here is exported from
+the package's public surface.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from dataclasses import dataclass
-from datetime import timedelta
 
-from temporalio import activity, workflow
+from temporalio import activity
 from temporalio.client import Client
 from temporalio.worker import Worker
+from temporalio.worker.workflow_sandbox import (
+    SandboxedWorkflowRunner,
+    SandboxRestrictions,
+)
 
+from fred_sdk.knowledge_base._workflow import (
+    SYNCHRONIZE_ACTIVITY,
+    SynchronizeInput,
+    SynchronizeWorkflow,
+)
 from fred_sdk.knowledge_base.client import ControlPlaneClient
 from fred_sdk.knowledge_base.environment import PodEnvironment
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
@@ -41,33 +47,22 @@ from fred_sdk.knowledge_base.routing import task_queue_for
 
 logger = logging.getLogger(__name__)
 
-SYNCHRONIZE_ACTIVITY = "fred_knowledge_base_synchronize"
-SYNCHRONIZE_WORKFLOW = "FredKnowledgeBaseSynchronize"
 
-_ACTIVITY_TIMEOUT = timedelta(hours=6)
+def build_workflow_runner() -> SandboxedWorkflowRunner:
+    """The sandbox configuration `serve()` runs under, shared with its test.
 
+    `fred_sdk` is passed through because importing it is not sandbox-safe at
+    any depth: the package initializer reaches `sniffio`, which subclasses a
+    proxied `threading.local`, and calls `datetime.date.today()`. Re-importing
+    it per run would fail before a Knowledge Base ever received work.
 
-@dataclass
-class SynchronizeInput:
-    """Identifiers only. Configuration and secrets never enter workflow history."""
-
-    definition_id: str
-    instance_id: str
-    team_id: str
-
-
-@workflow.defn(name=SYNCHRONIZE_WORKFLOW)
-class SynchronizeWorkflow:
-    @workflow.run
-    async def run(self, payload: SynchronizeInput) -> str:
-        # The run id comes from the workflow's own identity, so every occurrence
-        # is distinguishable without anything being frozen into a schedule.
-        run_id = workflow.info().run_id
-        return await workflow.execute_activity(
-            SYNCHRONIZE_ACTIVITY,
-            args=[payload, run_id],
-            start_to_close_timeout=_ACTIVITY_TIMEOUT,
-        )
+    What this costs is determinism checking on `_workflow.py` itself, which is
+    why that module stays small enough to audit by eye — an author writes the
+    handler, never workflow code, so nothing an author writes relies on it.
+    """
+    return SandboxedWorkflowRunner(
+        restrictions=SandboxRestrictions.default.with_passthrough_modules("fred_sdk")
+    )
 
 
 def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneClient):
@@ -101,13 +96,8 @@ async def serve(knowledge_base: KnowledgeBase, environment: PodEnvironment) -> N
             task_queue=task_queue,
             workflows=[SynchronizeWorkflow],
             activities=[_build_activity(knowledge_base, control_plane)],
+            workflow_runner=build_workflow_runner(),
         ):
-            await _run_forever()
+            await asyncio.Event().wait()
     finally:
         await control_plane.aclose()
-
-
-async def _run_forever() -> None:
-    import asyncio
-
-    await asyncio.Event().wait()

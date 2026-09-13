@@ -39,6 +39,10 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  # Not a runtime dependency of the SDK (see `knowledge-base` above), but the
+  # test suite validates the Knowledge Base workflow inside a real Temporal
+  # sandbox — a guard that only protects anything if it actually runs.
+  "temporalio>=1.7.0",
 ]
 
 [build-system]
@@ -72,4 +76,5 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  "temporalio>=1.7.0",
 ]

@@ -48,6 +48,11 @@ deployment time, `run` serves runs. Configuration is declared with the same
 """
 
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
+from fred_sdk.knowledge_base.documents import (
+    DocumentPublisher,
+    DocumentPublishError,
+    DocumentRetractError,
+)
 from fred_sdk.knowledge_base.entrypoints import (
     knowledge_base_main,
     publish_knowledge_base,
@@ -77,6 +82,9 @@ __all__ = [
     "MAX_ISSUE_MESSAGE_CHARS",
     "MAX_ISSUE_SUBJECT_CHARS",
     "MAX_SUMMARY_CHARS",
+    "DocumentPublishError",
+    "DocumentPublisher",
+    "DocumentRetractError",
     "KnowledgeBase",
     "KnowledgeBaseDeclaration",
     "KnowledgeBaseDeclarationError",

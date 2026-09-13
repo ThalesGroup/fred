@@ -26,6 +26,9 @@ import os
 from dataclasses import dataclass
 
 CONTROL_PLANE_URL_ENV = "FRED_CONTROL_PLANE_URL"
+# Optional: only a pod that ingests through Knowledge Flow needs it. One that
+# keeps its own store never sets it — the service is an offer, not a contract.
+KNOWLEDGE_FLOW_URL_ENV = "FRED_KNOWLEDGE_FLOW_URL"
 KEYCLOAK_REALM_URL_ENV = "FRED_KEYCLOAK_REALM_URL"
 PREFIX_ENV = "FRED_KB_PREFIX"
 CLIENT_ID_ENV = "FRED_KB_CLIENT_ID"
@@ -53,6 +56,7 @@ class PodEnvironment:
     control_plane_url: str
     prefix: str
     client_id: str
+    knowledge_flow_url: str = ""
     keycloak_realm_url: str = ""
     temporal_host: str = ""
     temporal_namespace: str = DEFAULT_TEMPORAL_NAMESPACE
@@ -93,6 +97,7 @@ class PodEnvironment:
             control_plane_url=os.environ[CONTROL_PLANE_URL_ENV].rstrip("/"),
             prefix=os.environ[PREFIX_ENV],
             client_id=os.environ[CLIENT_ID_ENV],
+            knowledge_flow_url=os.getenv(KNOWLEDGE_FLOW_URL_ENV, "").rstrip("/"),
             keycloak_realm_url=os.getenv(KEYCLOAK_REALM_URL_ENV, "").rstrip("/"),
             temporal_host=os.getenv(TEMPORAL_HOST_ENV, ""),
             temporal_namespace=os.getenv(

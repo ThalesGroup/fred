@@ -1,0 +1,62 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+The workflow, held apart from everything it must not reach.
+
+Replay determinism is the rule here: no clock, no randomness, no I/O — all of
+that belongs to the activity in `worker.py`. Nothing enforces it automatically,
+because `fred_sdk` is passed through the sandbox wholesale (the reason is in
+`worker.build_workflow_runner`), so this module stays stdlib-only and small
+enough that the rule can be checked by eye. Authors never write workflow code,
+so nothing an author writes depends on what is in this file.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import timedelta
+
+from temporalio import workflow
+
+SYNCHRONIZE_ACTIVITY = "fred_knowledge_base_synchronize"
+SYNCHRONIZE_WORKFLOW = "FredKnowledgeBaseSynchronize"
+
+# No heartbeat is configured: a heartbeat timeout without an activity that
+# actually heartbeats kills every long run. Heartbeating arrives with the
+# Control Plane run endpoints that report progress.
+ACTIVITY_TIMEOUT = timedelta(hours=6)
+
+
+@dataclass
+class SynchronizeInput:
+    """Identifiers only. Configuration and secrets never enter workflow history."""
+
+    definition_id: str
+    instance_id: str
+    team_id: str
+
+
+@workflow.defn(name=SYNCHRONIZE_WORKFLOW)
+class SynchronizeWorkflow:
+    @workflow.run
+    async def run(self, payload: SynchronizeInput) -> str:
+        # The run id comes from the workflow's own identity, so every occurrence
+        # is distinguishable without anything being frozen into a schedule.
+        run_id = workflow.info().run_id
+        return await workflow.execute_activity(
+            SYNCHRONIZE_ACTIVITY,
+            args=[payload, run_id],
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+        )

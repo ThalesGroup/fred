@@ -98,6 +98,10 @@ class KnowledgeBaseRunContext(BaseModel):
     instance_id: str = Field(min_length=1)
     team_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
+    # Where this run writes, created by Fred with the instance and handed over
+    # here rather than declared: an implementation that could name its own
+    # destination could name somebody else's.
+    library_id: str = Field(min_length=1)
     configuration: dict[str, TuningValue] = Field(default_factory=dict)
 
 

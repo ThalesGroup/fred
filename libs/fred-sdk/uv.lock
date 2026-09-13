@@ -616,6 +616,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-socket" },
     { name = "ruff" },
+    { name = "temporalio" },
 ]
 knowledge-base = [
     { name = "temporalio" },
@@ -630,6 +631,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-socket" },
     { name = "ruff" },
+    { name = "temporalio" },
 ]
 
 [package.metadata]
@@ -647,6 +649,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "temporalio", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.7.0" },
 ]
 provides-extras = ["knowledge-base", "dev"]
@@ -660,6 +663,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "pytest-socket", specifier = ">=0.7.0" },
     { name = "ruff", specifier = ">=0.12.5" },
+    { name = "temporalio", specifier = ">=1.7.0" },
 ]
 
 [[package]]

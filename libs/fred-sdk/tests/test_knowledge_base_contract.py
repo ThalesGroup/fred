@@ -179,6 +179,7 @@ def test_run_context_is_json_safe_and_carries_identifiers() -> None:
         instance_id="inst-1",
         team_id="team-1",
         run_id="run-1",
+        library_id="lib-1",
         configuration={"base_url": "https://example.invalid", "depth": 3},
     )
     dumped = context.model_dump(mode="json")
@@ -343,6 +344,67 @@ def test_public_signatures_and_model_fields_carry_no_engine_terms() -> None:
 
 
 # --------------------------------------------------------------------------
+# 1.6 the execution boundary a pod's startup depends on
+# --------------------------------------------------------------------------
+
+
+def test_the_workflow_validates_under_the_sandbox_serve_actually_uses() -> None:
+    """The check every pod runs at startup, run here where it is cheap.
+
+    Worker construction validates the workflow against the sandbox, so a broken
+    sandbox configuration takes `serve()` down for every Knowledge Base at once
+    and the only symptom is a pod dying one log line in. The runner comes from
+    `serve()`'s own builder, so narrowing the real passthrough cannot leave this
+    passing, and `_Definition` is Temporal's own internal accessor so this runs
+    against the real sandbox. What it does not cover — the contents of
+    `_workflow.py`, which the passthrough hides — is the test below.
+    """
+    from fred_sdk.knowledge_base._workflow import SynchronizeWorkflow
+    from fred_sdk.knowledge_base.worker import build_workflow_runner
+    from temporalio.workflow import _Definition
+
+    async def validate() -> None:
+        # Temporal reads the running loop while preparing, exactly as it does
+        # inside `serve()`.
+        build_workflow_runner().prepare_workflow(
+            _Definition.must_from_class(SynchronizeWorkflow)
+        )
+
+    asyncio.run(validate())
+
+
+def test_the_workflow_module_imports_only_what_the_sandbox_would_allow() -> None:
+    """Reads by hand what the sandbox is configured not to check.
+
+    `build_workflow_runner` passes all of `fred_sdk` through, so an import added
+    to `_workflow.py` reaches a deployed pod unchecked — `httpx`, and through it
+    `sniffio`, is exactly what broke worker startup once. Imports are the failure
+    mode that actually occurred; a non-deterministic *call* on an allowed module
+    stays out of reach of any check short of sandboxing the module itself, which
+    Temporal's prefix-only passthrough cannot express.
+    """
+    import ast
+    from pathlib import Path
+
+    from fred_sdk.knowledge_base import _workflow
+
+    allowed = {"__future__", "dataclasses", "datetime", "temporalio"}
+    tree = ast.parse(Path(_workflow.__file__).read_text(encoding="utf-8"))
+
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            imported.add(node.module.split(".")[0])
+
+    assert imported <= allowed, (
+        f"_workflow.py may not import {sorted(imported - allowed)}: the sandbox "
+        "passes fred_sdk through, so nothing else will catch it"
+    )
+
+
+# --------------------------------------------------------------------------
 # Corrections found by the first real consumer (fred-samples proof)
 # --------------------------------------------------------------------------
 
@@ -365,7 +427,11 @@ def test_resolved_handler_is_accepted_by_asyncio_run_without_a_cast() -> None:
         )
 
     context = KnowledgeBaseRunContext(
-        definition_id="acme.kb.http-markdown", instance_id="i", team_id="t", run_id="r"
+        definition_id="acme.kb.http-markdown",
+        instance_id="i",
+        team_id="t",
+        run_id="r",
+        library_id="l",
     )
     result = asyncio.run(kb.resolve_handler()(context))
     assert result.outcome is KnowledgeBaseRunOutcome.succeeded
