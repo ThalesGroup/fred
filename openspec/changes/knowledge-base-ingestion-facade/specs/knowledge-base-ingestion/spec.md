@@ -9,10 +9,14 @@ record of Fred-side identifiers.
 
 ### Requirement: A document is addressed by the caller's source key, and writing it twice updates one document
 
-A caller SHALL address each document by a source key of its own choosing, unique
-within the target library. Fred SHALL derive the document's identity from the
-library and that key, so that writing the same key again updates the same
-document rather than creating another.
+A caller SHALL address each document by a source key of its own choosing. A
+source key SHALL be unique within its library, and writing one that is already
+held SHALL update that document rather than create another.
+
+A document's own identifier SHALL NOT be derived from its source key. A document
+keeps the identifier it was given, so that this surface introduces no second
+identity scheme and the existing one is untouched. A document holding no source
+key SHALL never be matched by one.
 
 The caller SHALL NOT be required to learn, store or return any Fred-side
 identifier in order to update or remove what it wrote.
@@ -25,7 +29,13 @@ interpreted: its meaning belongs to the caller.
 - **WHEN** a caller writes a document at a source key, and later writes different
   content at that same key
 - **THEN** the library holds one document for that key, carrying the later
-  content, and no second document was created
+  content and the identifier it already had, and no second document was created
+
+#### Scenario: A document with no source key is never adopted by one
+
+- **WHEN** a library holds a document that was stored without a source key, and a
+  caller writes a document whose key resembles its name
+- **THEN** the existing document is left untouched and a separate one is created
 
 #### Scenario: A caller needs no Fred-side identifier to maintain its documents
 

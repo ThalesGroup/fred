@@ -29,15 +29,27 @@ the first.
 
 ## Decisions
 
-### 1. Identity is the source's, and it is stable
+### 1. Identity is the source's, and it is looked up rather than derived
 
 A document is addressed by `(library, source key)`. The source key is the
-caller's — for most sources the path relative to the library — and Fred derives
-the document's own identity from the pair, deterministically.
+caller's — for most sources the path relative to the library — and it is unique
+within its library, enforced in the database.
 
-Writing the same key again therefore updates one document rather than creating a
-second. That is the whole point: a source has one version of a file, and a
-library that mirrors it should hold one document for it.
+Writing a key already held updates that document rather than creating a second.
+That is the whole point: a source has one version of a file, and a library that
+mirrors it should hold one document for it.
+
+**The document's own identifier is not derived from the key.** An earlier draft
+derived it, which bought a scheme to design, a collision question to answer
+against the identifiers already stored, and a coexistence story to test. Storing
+the key and looking the pair up buys none of that: a document keeps the opaque
+identifier it was given, reused on update instead of regenerated, and the
+existing per-upload scheme is untouched rather than avoided.
+
+A document stored without a source key is therefore never matched by one. A
+library is written by one caller in practice — a synchronized folder offers no
+deposit action — so this is a property that holds by construction rather than a
+case to manage.
 
 *Why not keep the per-upload identity and have the caller clean up:* the caller
 would have to publish the new document, then retract the old one, keeping the
