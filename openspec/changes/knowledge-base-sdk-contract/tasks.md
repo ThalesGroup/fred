@@ -9,9 +9,10 @@ A first consumer proof already exists outside this repository — a complete
 local-folder Knowledge Base written against the published surface. Group 2b
 records what building it found.
 
-Recurring schedules are **not** in this plan. An instance carries configuration
-and runs, not a cadence; the scheduling surface is its own change, scoped once
-this slice has shown what Knowledge Flow's REST API actually needs.
+Recurring schedules **are** in this plan, as tasks 3.6 and 3.7 — calling a pod on
+a cadence is one of the three things Fred offers a Knowledge Base, so an instance
+carries one. The surface stays narrow on purpose: a cadence and a suspend switch,
+no time zones and no calendar recurrence.
 
 ## 1. SDK author contract and the declaration's JSON-safe projection
 
@@ -58,7 +59,7 @@ side reuses the `M2MTokenProvider` client-credentials pattern of task 4.3.
 - [x] 2c.5 Add the SDK's two entry points so one image either publishes or serves: a `publish` command posting the declaration and terminating on its exit status, and the run entry point of task 4.6. `publish` is the only way to publish — the worker does not publish at startup, because during a rolling upgrade a restarting old-image replica would write the retired declaration back over the new one. Both entry points authenticate with the `M2MTokenProvider` client-credentials pattern of task 4.3, and the SDK documents the pod's environment contract — what it reads to reach Control Plane, to authenticate and to reach the workflow engine — since Fred neither reads nor knows it. Document the deployment shape this produces: a `post-install,post-upgrade` hook Job runs `publish`, the long-running Deployment runs the worker, modelled on the existing `deploy/charts/fred/templates/hook-migration.yaml`; the Job belongs to the chart deploying the pod, which for a third-party Knowledge Base is outside this repository. Nothing is installed any more, so the "manifest" and "installable" vocabulary leaves the Knowledge Base surface: rename `KnowledgeBaseManifest` and `to_installable()` onto the contract's own word — the declaration an image publishes — and carry the rename through the sample consumers. Compatibility with what already imports the old names is not a consideration. Verify with tests that `publish` starts no worker and reports through its exit status, that starting the worker publishes nothing, and that neither entry point opens an inbound listener
 - [x] 2c.6 Remove the Fields column from the Platform Admin Knowledge Base page and its `columns.fields` key from both translation files, and drop `configuration_fields` from `KnowledgeBaseDefinitionSummary`, regenerating the control-plane client with the documented make target. That surface collects no configuration value, so shipping it the declared fields is dead payload. Verify with a frontend test that the page offers identity and the enable/disable toggle only
 
-- [ ] 2c.7 Persist the publishing identity's subject alongside its client id on the prefix claim. The token that authorizes a publication already carries both — `azp` names the client the prefix is bound to, `sub` names the service account, and only the second is something the authorization engine can be told to grant. Without it, creating an instance would have to ask Keycloak's admin API which account backs a client, a dependency bought for nothing. Verify with tests that a publication records both, that replaying it leaves them unchanged, and that a publication by another client is still refused
+- [x] 2c.7 Persist the publishing identity's subject alongside its client id on the prefix claim. The token that authorizes a publication already carries both — `azp` names the client the prefix is bound to, `sub` names the service account, and only the second is something the authorization engine can be told to grant. Without it, creating an instance would have to ask Keycloak's admin API which account backs a client, a dependency bought for nothing. Verify with tests that a publication records both, that replaying it leaves them unchanged, and that a publication by another client is still refused
 
 ## 3. Team instances and their configuration form
 
