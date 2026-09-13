@@ -21,7 +21,7 @@ scheduler:
   # memory: execute lifecycle pass in API process (no worker needed)
   backend: temporal
   temporal:
-    host: temporal:7233
+    host: localhost:7233
     namespace: default
     task_queue: control-plane-lifecycle
     workflow_id_prefix: control-plane
