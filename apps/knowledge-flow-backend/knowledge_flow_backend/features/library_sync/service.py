@@ -132,6 +132,8 @@ class LibrarySyncService:
 
             await asyncio.to_thread(self._ingestion_service.save_input, user, metadata, input_file.parent)
             await self._ingestion_service.save_metadata(user, metadata=metadata)
+            if existing is not None:
+                await self._drop_previous_vectors(metadata.document_uid)
             metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_file), profile=profile)
             await output_process(
                 file=FileToProcess(
@@ -186,8 +188,19 @@ class LibrarySyncService:
             # A source that removes what it already removed is still in sync.
             return DocumentRemoved(source_key=source_key, removed=False)
 
-        for tag_id in list(existing.tags.tag_ids or []):
-            await self._metadata_service.remove_tag_id_from_document(user, existing, tag_id)
+        folders = list(existing.tags.tag_ids or [])
+        if folders:
+            # Taking its last folder away is what deletes a document, and what
+            # moves the storage charge and drops the permission links with it.
+            for tag_id in folders:
+                await self._metadata_service.remove_tag_id_from_document(user, existing, tag_id)
+        else:
+            # A keyed document in no folder at all — a platform import that
+            # carried the key but not the membership. There is no folder to take
+            # away, so removing one would report success and leave the document,
+            # its content and the key it holds behind. Authorization was the
+            # library's, which is the library this document names as its own.
+            await self._metadata_service.delete_document_and_artifacts_trusted(user.uid, existing.document_uid)
         logger.info("[LIBRARY SYNC] library=%s key=%s removed by=%s", library_id, source_key, user.uid)
         return DocumentRemoved(source_key=source_key, removed=True)
 
@@ -248,6 +261,22 @@ class LibrarySyncService:
                 folder_id = existing.id
             parent_path = full_path
         return folder_id
+
+    async def _drop_previous_vectors(self, document_uid: str) -> None:
+        """Take the revision being replaced out of the index before re-embedding.
+
+        A chunk's id is derived from where it sits in the content, so a new
+        revision's chunks land beside the old ones instead of over them. Left
+        alone, search keeps returning text the document no longer contains, and
+        a source watched for months grows an index of every revision it ever
+        had — which is the defect this surface exists to remove, one layer down.
+
+        The same step the revectorize workflow takes before re-embedding a
+        document it is rebuilding from stored content.
+        """
+        context = ApplicationContext.get_instance()
+        vector_store = context.get_create_vector_store(context.get_embedder())
+        await asyncio.to_thread(vector_store.delete_vectors_for_document, document_uid=document_uid)
 
     async def _refile(self, user: KeycloakUser, existing: DocumentMetadata, folder_id: str) -> None:
         """Put a document where its source now says it is.

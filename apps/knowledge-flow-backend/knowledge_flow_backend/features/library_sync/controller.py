@@ -39,19 +39,19 @@ from knowledge_flow_backend.features.library_sync.structures import (
 
 logger = logging.getLogger(__name__)
 
-# What a caller is told about a failure it did not cause. The full exception,
-# with whatever server-side paths it carries, goes to the log instead.
-_MAX_ERROR_MESSAGE = 200
-
 
 def _bounded_failure(exc: Exception) -> HTTPException:
-    message = " ".join(str(exc).split())[:_MAX_ERROR_MESSAGE]
+    """What a caller is told about a failure it did not cause.
+
+    The kind of failure and nothing else. An exception's message is written for
+    whoever reads the log — it carries server paths, connection strings and
+    driver text — and a caller that cannot act on it has no business seeing it.
+    The kind is enough to decide: retry a timeout, give up on a value error,
+    raise a ticket for anything else. The rest is logged.
+    """
     return HTTPException(
         status_code=500,
-        detail={
-            "code": "document_write_failed",
-            "message": f"{type(exc).__name__}: {message}" if message else type(exc).__name__,
-        },
+        detail={"code": "document_write_failed", "failure": type(exc).__name__},
     )
 
 

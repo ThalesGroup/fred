@@ -691,3 +691,74 @@ async def test_a_failed_rewrite_does_not_destroy_the_document_it_was_replacing(t
 
     still_there = await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md")
     assert still_there is not None
+
+
+# --------------------------------------------------------------------------
+# What a rewrite leaves behind
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_store, monkeypatch):
+    """A chunk's id comes from where it sits in the content.
+
+    So a new revision's chunks land beside the old ones, not over them, and a
+    source watched for months would grow an index of every revision it ever had
+    while search kept answering from text the document no longer contains.
+    """
+    dropped: list[str] = []
+
+    class _VectorStore:
+        def delete_vectors_for_document(self, *, document_uid):
+            dropped.append(document_uid)
+
+    ctx = ApplicationContext.get_instance()
+    monkeypatch.setattr(ctx, "get_create_vector_store", lambda embedder: _VectorStore())
+    monkeypatch.setattr(ctx, "get_embedder", lambda: object())
+
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+
+    await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="1", source_tag="fred", upload=upload())
+    # Nothing was there to replace, so nothing was dropped.
+    assert dropped == []
+
+    await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="2", source_tag="fred", upload=upload())
+
+    document = await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md")
+    assert document is not None
+    assert dropped == [document.identity.document_uid]
+
+
+@pytest.mark.asyncio
+async def test_removing_a_keyed_document_that_sits_in_no_folder_still_removes_it(tag_store):
+    """A platform import can carry the key without the membership.
+
+    Removing a folder it is not in would report success and leave the document,
+    its content, and the key it holds behind — so the next write would collide
+    with a document nobody can reach.
+    """
+    from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
+
+    lib = library(tag_store)
+    await _metadata_store().save_metadata(
+        DocumentMetadata(
+            identity=Identity(document_name="orphan.md", document_uid="imported-orphan"),
+            source=SourceInfo(
+                source_type=SourceType.PUSH,
+                source_tag="fred",
+                pull_location=None,
+                source_library_id=lib.id,
+                source_key="orphan.md",
+            ),
+            tags=Tagging(tag_ids=[]),
+        )
+    )
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+
+    outcome = await service.remove_document(pod(), library_id=lib.id, source_key="orphan.md")
+
+    assert outcome.removed is True
+    assert await _metadata_store().get_metadata_by_source_key(lib.id, "orphan.md") is None
+    assert await _metadata_store().get_metadata_by_uid("imported-orphan") is None

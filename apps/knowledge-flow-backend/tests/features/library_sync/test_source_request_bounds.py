@@ -22,7 +22,7 @@ failure the caller did not cause is bounded too.
 
 import pytest
 
-from knowledge_flow_backend.features.library_sync.controller import _MAX_ERROR_MESSAGE, _bounded_failure
+from knowledge_flow_backend.features.library_sync.controller import _bounded_failure
 from knowledge_flow_backend.features.library_sync.structures import (
     MAX_SOURCE_KEY_LENGTH,
     MAX_VERSION_LENGTH,
@@ -101,17 +101,16 @@ def test_a_path_that_could_leave_the_library_is_refused(path):
         split_document_path(path)
 
 
-def test_a_failure_the_caller_did_not_cause_comes_back_bounded_and_flat():
-    """Enough to log and act on; not the server's internals, and not unbounded."""
-    failure = _bounded_failure(RuntimeError("boom\n  at /srv/kf/tmp/" + "x" * 500))
+def test_a_failure_says_its_kind_and_none_of_the_server_s_business():
+    """Enough to decide what to do, and nothing a caller could not act on."""
+    secret = "/srv/kf/tmp/x1y2 password=hunter2"
+    failure = _bounded_failure(RuntimeError(f"boom at {secret}"))
 
     assert failure.status_code == 500
-    detail = failure.detail
-    assert detail["code"] == "document_write_failed"
-    assert detail["message"].startswith("RuntimeError: boom")
-    assert "\n" not in detail["message"]
-    assert len(detail["message"]) <= len("RuntimeError: ") + _MAX_ERROR_MESSAGE
+    assert failure.detail == {"code": "document_write_failed", "failure": "RuntimeError"}
+    assert secret not in str(failure.detail)
 
 
-def test_a_failure_with_nothing_to_say_still_names_itself():
-    assert _bounded_failure(TimeoutError()).detail["message"] == "TimeoutError"
+def test_the_kind_is_what_tells_a_retry_from_a_dead_end():
+    assert _bounded_failure(TimeoutError()).detail["failure"] == "TimeoutError"
+    assert _bounded_failure(ValueError("x")).detail["failure"] == "ValueError"
