@@ -735,3 +735,85 @@ def test_a_client_secret_makes_keycloak_required(
 
     with pytest.raises(env.MissingPodEnvironment, match=env.KEYCLOAK_REALM_URL_ENV):
         env.PodEnvironment.from_env(require_temporal=False)
+
+
+# --------------------------------------------------------------------------
+# 3.7 the zone Fred declares, on every form
+# --------------------------------------------------------------------------
+
+
+def test_an_author_who_declares_nothing_still_gets_the_platform_zone() -> None:
+    """Recurrence is Fred's to own, so it is not an author's to remember."""
+    from fred_sdk.knowledge_base.schedule import (
+        CADENCE_KEY,
+        SUSPENDED_KEY,
+        platform_fields,
+    )
+
+    kb = KnowledgeBase(
+        id="acme.kb.bare",
+        version="1.0.0",
+        name="Bare",
+        description="Declares no field of its own",
+    )
+
+    assert kb.configuration_fields == []
+    assert [field.key for field in platform_fields()] == [CADENCE_KEY, SUSPENDED_KEY]
+
+
+def test_every_knowledge_base_offers_the_same_cadence_vocabulary() -> None:
+    from fred_sdk.knowledge_base.schedule import (
+        CADENCE_KEY,
+        RunCadence,
+        platform_fields,
+    )
+
+    cadence = next(f for f in platform_fields() if f.key == CADENCE_KEY)
+
+    assert cadence.type == "select"
+    assert cadence.enum == [c.value for c in RunCadence]
+    assert cadence.required is True
+
+
+def test_the_platform_zone_is_returned_fresh_each_time() -> None:
+    """A caller annotating its copy must not edit the next caller's."""
+    from fred_sdk.knowledge_base.schedule import platform_fields
+
+    platform_fields()[0].title = "Mutated"
+
+    assert platform_fields()[0].title != "Mutated"
+
+
+@pytest.mark.parametrize(
+    "key", ["fred.cadence", "fred.suspended", "fred.anything", "fred"]
+)
+def test_an_author_cannot_declare_a_field_that_collides_with_it(key: str) -> None:
+    with pytest.raises(KnowledgeBaseDeclarationError) as raised:
+        KnowledgeBase(
+            id="acme.kb.greedy",
+            version="1.0.0",
+            name="Greedy",
+            description="Tries to own a key Fred acts on",
+            configuration_fields=[FieldSpec(key=key, type="string", title="Mine")],
+        )
+
+    assert key in str(raised.value)
+
+
+def test_a_key_merely_starting_with_the_namespace_is_still_the_author_s() -> None:
+    """`fred` is a segment, not a prefix match: `fredsource` belongs to nobody else."""
+    kb = KnowledgeBase(
+        id="acme.kb.fine",
+        version="1.0.0",
+        name="Fine",
+        description="Declares a key that only looks reserved",
+        configuration_fields=[FieldSpec(key="fredsource", type="string", title="Mine")],
+    )
+
+    assert [field.key for field in kb.configuration_fields] == ["fredsource"]
+
+
+def test_the_platform_zone_stays_out_of_the_author_facing_exports() -> None:
+    """It is Fred's vocabulary, and task 1.5's surface assertion depends on it."""
+    assert "platform_fields" not in kb_module.__all__
+    assert not any("cadence" in name.lower() for name in kb_module.__all__)

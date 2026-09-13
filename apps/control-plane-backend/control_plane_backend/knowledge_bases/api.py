@@ -27,20 +27,39 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path
-from fred_core import KeycloakUser, get_current_user_without_gcu
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fred_core import KeycloakUser, get_current_user, get_current_user_without_gcu
 from fred_core.security.models import AuthorizationError
 from fred_sdk.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
     KnowledgeBaseDeclaration,
 )
+from fred_sdk.knowledge_base.models import KnowledgeBaseRunContext
 from pydantic import ValidationError
 
 from control_plane_backend.app.route_errors import map_error as _map_error
 from control_plane_backend.knowledge_bases import service as knowledge_base_service
+from control_plane_backend.knowledge_bases.instances import (
+    InstanceConfigurationInvalid,
+    KnowledgeBaseInstanceNotFound,
+    KnowledgeBaseNotEnabled,
+    KnowledgeBasePodIdentityMissing,
+    UnknownDefinition,
+)
+from control_plane_backend.knowledge_bases.library import LibraryRequestFailed
+from control_plane_backend.knowledge_bases.runs import (
+    RunAccessDenied,
+    RunNotFound,
+    build_run_context,
+)
 from control_plane_backend.knowledge_bases.schemas import (
+    KnowledgeBaseInstanceCreate,
+    KnowledgeBaseInstanceFields,
+    KnowledgeBaseInstanceSummary,
+    KnowledgeBaseInstanceUpdate,
     KnowledgeBasePublicationRequest,
     KnowledgeBasePublicationResult,
+    KnowledgeBaseRunSummary,
 )
 from control_plane_backend.knowledge_bases.service import (
     KnowledgeBaseClientMismatch,
@@ -52,6 +71,18 @@ from control_plane_backend.product.dependencies import (
 )
 
 router = APIRouter(tags=["Knowledge Bases"])
+
+# Everything the instance surface raises, mapped to its own status by
+# `route_errors.map_error` reading each exception's `http_status`.
+_INSTANCE_ERRORS = (
+    AuthorizationError,
+    InstanceConfigurationInvalid,
+    KnowledgeBaseInstanceNotFound,
+    KnowledgeBaseNotEnabled,
+    KnowledgeBasePodIdentityMissing,
+    LibraryRequestFailed,
+    UnknownDefinition,
+)
 ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
@@ -97,4 +128,187 @@ async def put_knowledge_base_definition(
         KnowledgeBasePrefixConflict,
         AuthorizationError,
     ) as exc:
+        raise _map_error(exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# Team instances: a folder that fills itself
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/knowledge-bases/definitions/{definition_id}/fields",
+    response_model=KnowledgeBaseInstanceFields,
+    summary="The two zones an instance form renders for one definition.",
+)
+async def get_definition_fields(
+    definition_id: str,
+    team_id: Annotated[str, Query(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> KnowledgeBaseInstanceFields:
+    """Served from the stored declaration, so the form renders whether or not
+    the definition's pod is running — and only to a member of a team it is
+    enabled for, because a declaration names what a source expects."""
+    try:
+        return await knowledge_base_service.definition_fields(
+            user=user, definition_id=definition_id, team_id=team_id, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/knowledge-bases/instances",
+    response_model=list[KnowledgeBaseInstanceSummary],
+    summary="Synchronized folders of one team.",
+)
+async def list_knowledge_base_instances(
+    team_id: Annotated[str, Query(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[KnowledgeBaseInstanceSummary]:
+    try:
+        return await knowledge_base_service.list_instances_for_team(
+            user=user, team_id=team_id, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post(
+    "/knowledge-bases/instances",
+    response_model=KnowledgeBaseInstanceSummary,
+    status_code=201,
+    summary="Create a folder synchronized by a Knowledge Base.",
+)
+async def create_knowledge_base_instance(
+    body: KnowledgeBaseInstanceCreate,
+    request: Request,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> KnowledgeBaseInstanceSummary:
+    """One gesture, four effects, or none.
+
+    The caller's own token is forwarded to knowledge-flow, so the right to add
+    a folder to this team is checked where it always is.
+    """
+    try:
+        return await knowledge_base_service.create_instance_for_team(
+            user=user,
+            authorization=request.headers.get("Authorization", ""),
+            body=body,
+            deps=deps,
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/knowledge-bases/instances/{instance_id}",
+    response_model=KnowledgeBaseInstanceSummary,
+    summary="One synchronized folder.",
+)
+async def get_knowledge_base_instance(
+    instance_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> KnowledgeBaseInstanceSummary:
+    try:
+        return await knowledge_base_service.read_instance_for_team(
+            user=user, instance_id=instance_id, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.put(
+    "/knowledge-bases/instances/{instance_id}",
+    response_model=KnowledgeBaseInstanceSummary,
+    summary="Change when a synchronized folder runs, and with what.",
+)
+async def update_knowledge_base_instance(
+    instance_id: str,
+    body: KnowledgeBaseInstanceUpdate,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> KnowledgeBaseInstanceSummary:
+    try:
+        return await knowledge_base_service.update_instance_for_team(
+            user=user, instance_id=instance_id, body=body, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.delete(
+    "/knowledge-bases/instances/{instance_id}",
+    status_code=204,
+    summary="Delete a synchronized folder, its documents and its grant.",
+)
+async def delete_knowledge_base_instance(
+    instance_id: str,
+    request: Request,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Stopping a synchronization while keeping what it brought is deliberately
+    not offered: deleting the folder deletes its documents."""
+    try:
+        await knowledge_base_service.delete_instance_for_team(
+            user=user,
+            authorization=request.headers.get("Authorization", ""),
+            instance_id=instance_id,
+            deps=deps,
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/knowledge-bases/instances/{instance_id}/runs",
+    response_model=list[KnowledgeBaseRunSummary],
+    summary="Runs of one synchronized folder, with the state the engine reports.",
+)
+async def list_knowledge_base_runs(
+    instance_id: str,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[KnowledgeBaseRunSummary]:
+    try:
+        return await knowledge_base_service.list_runs_for_team(
+            user=user, instance_id=instance_id, deps=deps
+        )
+    except _INSTANCE_ERRORS as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get(
+    "/knowledge-bases/definitions/{definition_id}/instances/{instance_id}"
+    "/runs/{run_id}/context",
+    response_model=KnowledgeBaseRunContext,
+    summary="One run's configuration, for the pod serving it.",
+)
+async def get_knowledge_base_run_context(
+    definition_id: str,
+    instance_id: str,
+    run_id: str,
+    execution_id: Annotated[str, Query(min_length=1)],
+    deps: ProductDependencies,
+    # Not `get_current_user`: the caller is a confidential client with no user
+    # row, so persisted GCU acceptance would refuse it for ever.
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
+) -> KnowledgeBaseRunContext:
+    """Authorized by the exact client this definition is bound to — never by a
+    broad service role, since this is where a source's secrets are."""
+    try:
+        return await build_run_context(
+            user=user,
+            definition_id=definition_id,
+            instance_id=instance_id,
+            run_id=run_id,
+            execution_id=execution_id,
+            deps=deps,
+        )
+    except (RunAccessDenied, RunNotFound) as exc:
         raise _map_error(exc) from exc

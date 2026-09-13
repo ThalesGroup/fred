@@ -3198,6 +3198,11 @@ class _FakeTeamWikiStore:
         return self.rejected
 
 
+async def _no_temporal() -> Any:
+    """Erasure never dispatches a run, so it never reaches the workflow engine."""
+    raise AssertionError("erase_session must not reach the workflow engine")
+
+
 def _build_erasure_deps(
     session_store: _FakeSessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
@@ -3226,6 +3231,8 @@ def _build_erasure_deps(
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_knowledge_base_definition_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_knowledge_base_instance_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_temporal_client=_no_temporal,
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]

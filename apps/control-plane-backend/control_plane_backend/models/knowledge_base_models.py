@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -95,4 +95,87 @@ class KnowledgeBaseDefinitionRow(Base):
         nullable=False,
         default=utcnow,
         onupdate=utcnow,
+    )
+
+
+class KnowledgeBaseInstanceRow(Base):
+    """ORM model for the ``knowledge_base_instances`` table.
+
+    One synchronized folder: the library it fills, the definition that fills
+    it, the team that owns both, and the cadence Fred runs it on. The library
+    id is knowledge-flow's tag id — this row is what binds the two together,
+    and deleting it is what ends the synchronization.
+
+    A team may hold several instances of one definition, each with its own
+    library and its own grant, so nothing here is unique per (team, definition).
+    """
+
+    __tablename__ = "knowledge_base_instances"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    definition_id: Mapped[str] = mapped_column(
+        String(256),
+        ForeignKey("knowledge_base_definitions.id"),
+        nullable=False,
+        index=True,
+    )
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    library_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        unique=True,
+        comment="knowledge-flow tag this instance fills. Unique: two instances "
+        "sharing a library would each grant a different pod over it.",
+    )
+    library_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    cadence: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        comment="How often Fred dispatches a run. One of the SDK's declared "
+        "cadences — the vocabulary is the platform's, not each author's.",
+    )
+    suspended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    configuration_json: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="{}",
+        comment="JSON-serialized values for the definition's declared fields. "
+        "Validated on write and again before a handler is invoked; never "
+        "interpreted, and handed back to the pod exactly as supplied.",
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class KnowledgeBaseRunRow(Base):
+    """ORM model for the ``knowledge_base_runs`` table.
+
+    What Fred remembers of a run so it can find it again: which instance it
+    belongs to and which workflow execution carries it. Deliberately NOT its
+    state — that is read from the workflow engine, which is the side Fred runs
+    and the only one a killed pod cannot leave wrong.
+    """
+
+    __tablename__ = "knowledge_base_runs"
+
+    run_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("knowledge_base_instances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    execution_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        comment="Workflow id this run belongs to. With run_id it addresses one "
+        "execution in the engine, which is where the run's state is read from.",
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )

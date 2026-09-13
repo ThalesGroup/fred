@@ -731,6 +731,46 @@ operations:
     review_status: approved
     required_permission: none # Deliberately not a ReBAC check. A Knowledge Base image publishes its own declaration with its confidential M2M client; the first publication claims the declared PREFIX for that client and every later publication under it must present the same client, so nobody writes under another contributor's prefix. The binding is enforced inside the writing transaction, so two concurrent first publications cannot both win. A broad service role alone never authorizes. Existence is not usage: a published definition stays unusable until a platform admin enables it for a team. Deliberately outside the GCU gate: accepting conditions of use is a human admission control, and the publisher is a confidential client with no user row and nobody to accept them — `get_current_user` would make the route unreachable wherever `app.gcu_version` is set.
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/fields
+    review_status: approved
+    required_permission: team.can_read + knowledge_base_definition.can_use # The declared fields an instance form renders. Served only to a member of a team the definition is enabled for: a declaration names what a source expects, which is a hint about somebody's infrastructure. Read from the stored declaration, so it renders whether or not the definition's pod is running.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/instances
+    review_status: approved
+    required_permission: team.can_read # Synchronized folders of one team, to a member of that team. An instance is not an authorization object of its own — the definition is, and everything an instance holds belongs to the team that created it.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/knowledge-bases/instances
+    review_status: approved
+    required_permission: team.can_read + knowledge_base_definition.can_use + tag.create # Creating a folder that fills itself. Team membership and enablement are checked here; the right to add a folder to this team is checked by knowledge-flow's own folder endpoint, which this route calls with the caller's own token rather than a service identity. The pod's `editor` grant over the new library is written as part of the same transaction and is never broader than that one library.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
+    review_status: approved
+    required_permission: team.can_read # Scoped to the instance's own team. A non-member is answered not-found rather than forbidden: whether a team holds an instance is itself the team's business.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
+    review_status: approved
+    required_permission: team.can_read # Changes the cadence and the author-declared configuration, never the library or the definition. Submitted values pass the same strict validation applied again before a handler is invoked.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
+    review_status: approved
+    required_permission: team.can_read + tag.delete # Undoes the creation in reverse: cadence, grant, library, row. The library deletion goes through knowledge-flow with the caller's own token, so the right to delete the folder is checked there, and its existing cascade takes the documents with it.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}/runs
+    review_status: approved
+    required_permission: team.can_read # Runs of one instance, to a member of its team. Each run's state is read from the workflow engine rather than stored, so a pod killed mid-run cannot leave one looking unfinished.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/instances/{instance_id}/runs/{run_id}/context
+    review_status: approved
+    required_permission: none # Deliberately not a ReBAC check, and the same exact-client verification publication uses: the caller must be the confidential client this definition was published by. A broad service role alone never authorizes — every backend workload holds one, and this route serves the instance configuration, which is where a source's secrets are. The instance must belong to the named definition, so one pod cannot read another's. Outside the GCU gate for the same reason publication is: the caller is a client with no user row.
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved

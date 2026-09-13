@@ -33,6 +33,7 @@ from fred_sdk.knowledge_base.models import (
     KnowledgeBaseRunContext,
     KnowledgeBaseSyncResult,
 )
+from fred_sdk.knowledge_base.schedule import FRED_FIELD_PREFIX, is_platform_field
 
 # One naming rule across everything a contributor adds to Fred: a dotted name
 # under a prefix they own. See fred_core.common.naming.
@@ -100,6 +101,14 @@ class KnowledgeBase:
             if field.key in seen:
                 raise KnowledgeBaseDeclarationError(
                     f"Duplicate configuration field key {field.key!r}"
+                )
+            if is_platform_field(field.key):
+                # The form has two zones and they share one key space. Fred acts
+                # on what it declares there, so an author reusing one of those
+                # keys would silently change when their own Knowledge Base runs.
+                raise KnowledgeBaseDeclarationError(
+                    f"Configuration field key {field.key!r} is reserved: "
+                    f"{FRED_FIELD_PREFIX!r} names the fields Fred declares"
                 )
             seen.add(field.key)
 

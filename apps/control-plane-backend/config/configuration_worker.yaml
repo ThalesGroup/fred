@@ -50,6 +50,13 @@ storage:
     type: opensearch
     index: app-logs-index
 
+knowledge_bases:
+  # How many times one synchronization run is attempted before Fred records it
+  # as failed. Without a bound the workflow engine retries for ever, so a
+  # handler that fails the same way every time never reaches a terminal state.
+  # Counts the first attempt: 1 means no retry.
+  run_max_attempts: 2
+
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml
 

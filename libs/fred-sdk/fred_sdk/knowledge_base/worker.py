@@ -69,14 +69,22 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
     handler = knowledge_base.resolve_handler()
 
     @activity.defn(name=SYNCHRONIZE_ACTIVITY)
-    async def synchronize(payload: SynchronizeInput, run_id: str) -> str:
-        context = await control_plane.fetch_run_context(payload.definition_id, run_id)
-        # A raised handler is reported by nobody here on purpose: this activity
-        # runs again on retry, and reporting a terminal `failed` per attempt
-        # would record a run as failed that later succeeds. Terminal failure
-        # after exhausted retries is the workflow's outcome to report.
+    async def synchronize(
+        payload: SynchronizeInput, run_id: str, execution_id: str
+    ) -> str:
+        context = await control_plane.fetch_run_context(
+            payload.definition_id,
+            payload.instance_id,
+            run_id,
+            execution_id=execution_id,
+        )
         result = await handler(context)
-        await control_plane.report_result(payload.definition_id, run_id, result)
+        # Nothing is reported back. Fred runs the workflow engine, so it already
+        # knows this run started, is still running, ended or crashed, and a pod
+        # killed mid-run reports nothing at all — a second source for a fact
+        # Fred already holds would disagree exactly when it matters. The
+        # outcome returned here is the workflow's own result, which Fred reads
+        # from the engine like everything else about the run.
         return result.outcome.value
 
     return synchronize

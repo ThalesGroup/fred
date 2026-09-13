@@ -20,25 +20,32 @@ The authorized object is the definition, and its type is distinct from
 usable. Instances are not authorization objects: they are team-scoped rows
 whose access follows their team.
 
-This module covers the WRITE and DISPLAY side only: composing the catalog id
-and naming the authorization object. Nothing here answers "may this team use
-this definition?" — no caller asks yet, because instances do not exist. The
-consumption helper belongs with whatever first needs it.
+Three things live here: composing the catalog id, naming the authorization
+object, and the two questions instances ask of it — may this team use this
+definition, and what grant lets its pod fill one library.
 """
 
 from __future__ import annotations
 
-from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
+    KnowledgeBaseDefinitionPermission,
+    RebacDisabledResult,
+    RebacEngine,
     RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    team_subject_and_context,
 )
 
 KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX = "kb__"
 
 __all__ = [
     "KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX",
+    "can_team_use_knowledge_base",
     "knowledge_base_catalog_id",
     "knowledge_base_definition_ref",
+    "knowledge_base_library_grant",
     "knowledge_base_name_from_catalog_id",
 ]
 
@@ -78,3 +85,50 @@ def knowledge_base_definition_ref(name: str) -> RebacReference:
     """
 
     return RebacReference(type=Resource.KNOWLEDGE_BASE_DEFINITION, id=name)
+
+
+async def can_team_use_knowledge_base(
+    rebac: RebacEngine, team_id: str, *, definition_id: str
+) -> bool:
+    """Whether this team may hold an instance of this definition.
+
+    Unlike applications, a personal space is not excluded: a Knowledge Base is
+    enabled one definition at a time, for any team, and a personal space is a
+    team like another here — nothing reaches every personal space at once.
+
+    A disabled ReBAC engine answers True, which is the established local-dev
+    signal: authorization is off, so nothing is refused for lack of it.
+    """
+
+    team_ref, context = team_subject_and_context(team_id)
+    allowed = await rebac.has_permission(
+        team_ref,
+        KnowledgeBaseDefinitionPermission.CAN_USE,
+        knowledge_base_definition_ref(definition_id),
+        contextual_relations=context,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+    )
+    if isinstance(allowed, RebacDisabledResult):
+        return True
+    return bool(allowed)
+
+
+def knowledge_base_library_grant(subject: str, library_id: str) -> Relation:
+    """The one right a Knowledge Base pod needs, over one library.
+
+    `editor` on a tag is what `update` resolves through, and `update` inherits
+    downward through `parent`, so this single statement reaches every folder
+    nested under that library and nothing outside it. The subject is the pod's
+    service account — a client cannot be the subject of a relation, which is
+    why a publication records the account behind it.
+
+    Never a team-level right: that would let a pod write into the folder beside
+    its own, in the same team, and the whole point of granting it here rather
+    than at deployment is that a team decides which folders it may fill.
+    """
+
+    return Relation(
+        subject=RebacReference(type=Resource.USER, id=subject),
+        relation=RelationType.EDITOR,
+        resource=RebacReference(type=Resource.TAGS, id=library_id),
+    )

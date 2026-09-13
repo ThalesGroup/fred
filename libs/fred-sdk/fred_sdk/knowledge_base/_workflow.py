@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 SYNCHRONIZE_ACTIVITY = "fred_knowledge_base_synchronize"
 SYNCHRONIZE_WORKFLOW = "FredKnowledgeBaseSynchronize"
@@ -38,25 +39,46 @@ SYNCHRONIZE_WORKFLOW = "FredKnowledgeBaseSynchronize"
 # Control Plane run endpoints that report progress.
 ACTIVITY_TIMEOUT = timedelta(hours=6)
 
+# Used only when a dispatcher sends no budget of its own. The real value is
+# Fred's, read from its configuration and carried on the input below — a budget
+# frozen into a third-party image would be a number Fred could never change.
+FALLBACK_MAX_ATTEMPTS = 2
+
 
 @dataclass
 class SynchronizeInput:
-    """Identifiers only. Configuration and secrets never enter workflow history."""
+    """What a run is told about itself.
+
+    Identifiers, and the attempt budget Fred set. No configuration and no
+    secret: workflow history is replicated and retained for as long as a
+    retention policy says, so what enters it must be safe to keep for ever.
+    """
 
     definition_id: str
     instance_id: str
     team_id: str
+    max_attempts: int = FALLBACK_MAX_ATTEMPTS
 
 
 @workflow.defn(name=SYNCHRONIZE_WORKFLOW)
 class SynchronizeWorkflow:
     @workflow.run
     async def run(self, payload: SynchronizeInput) -> str:
-        # The run id comes from the workflow's own identity, so every occurrence
-        # is distinguishable without anything being frozen into a schedule.
-        run_id = workflow.info().run_id
+        # Both come from the workflow's own identity, so every occurrence is
+        # distinguishable without anything being frozen into a schedule. They
+        # travel as arguments rather than being read from ambient context in the
+        # activity: the workflow is the side that knows them for certain.
+        info = workflow.info()
         return await workflow.execute_activity(
             SYNCHRONIZE_ACTIVITY,
-            args=[payload, run_id],
+            args=[payload, info.run_id, info.workflow_id],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
+            # Without a policy Temporal retries an activity for ever, so a
+            # handler that fails the same way every time never reaches the
+            # terminal failure the contract promises. Bounding the attempts is
+            # what makes exhaustion — and therefore a failed run — reachable.
+            # Retried at the activity, not at the workflow: a workflow retry
+            # would mint a new run id per attempt, and one run would be reported
+            # to Fred as several.
+            retry_policy=RetryPolicy(maximum_attempts=payload.max_attempts),
         )
