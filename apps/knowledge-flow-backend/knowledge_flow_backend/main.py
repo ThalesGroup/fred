@@ -69,6 +69,7 @@ from knowledge_flow_backend.features.kpi.opensearch_controller import (
 from knowledge_flow_backend.features.kpi.prometheus_controller import (
     PrometheusOpsController,
 )
+from knowledge_flow_backend.features.library_sync.controller import LibrarySyncController
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
@@ -286,6 +287,7 @@ def create_app() -> FastAPI:
     ContentController(router)
     AudioTranscriptionController(router)
     IngestionController(router)
+    LibrarySyncController(router)
     TagController(app, router)
     VectorSearchController(router)
     CorpusTreeController(router)

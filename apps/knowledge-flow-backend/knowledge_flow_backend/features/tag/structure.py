@@ -145,6 +145,15 @@ class Tag(BaseModelWithId):
     description: Optional[str] = None
     type: TagType
 
+    # Where the system that synchronizes into this library last got to: a commit
+    # sha, a cursor, a timestamp its own source understands. Fred stores it and
+    # hands it back, and never reads meaning into it — that is what lets a pull
+    # of a Git branch ask its own source what changed rather than keep a ledger.
+    # Absent on every library nothing synchronizes into, and not part of
+    # TagCreate/TagUpdate: it is recorded through its own endpoint, so a caller
+    # never has to restate a folder's name or description to move its cursor.
+    source_version: Optional[str] = None
+
     @property
     def full_path(self) -> str:
         """Canonical hierarchical identifier (used for uniqueness & permissions)."""
