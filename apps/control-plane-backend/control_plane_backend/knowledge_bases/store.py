@@ -49,12 +49,22 @@ class KnowledgeBasePrefixConflict(Exception):
 class PublishedDefinition:
     """One stored declaration."""
 
-    def __init__(self, row: KnowledgeBaseDefinitionRow) -> None:
+    def __init__(
+        self,
+        row: KnowledgeBaseDefinitionRow,
+        claim: KnowledgeBasePrefixRow | None = None,
+    ) -> None:
         self.id = row.id
         self.prefix = row.prefix
         self.version = row.version
         self.name = row.name
         self.description = row.description
+        # Both identities of the pod that published this definition, carried
+        # from the prefix its name sits under. `client_id` is what a later
+        # publication is checked against; `subject` is what a grant over a
+        # library names, since a relation's subject is an account, not a client.
+        self.client_id = None if claim is None else claim.client_id
+        self.subject = None if claim is None else claim.subject
         self._configuration_fields_json = row.configuration_fields_json
 
     @property
@@ -78,6 +88,7 @@ class KnowledgeBaseDefinitionStore:
         prefix: str,
         declaration: KnowledgeBaseDeclaration,
         client_id: str,
+        subject: str,
         session: AsyncSession | None = None,
     ) -> PublishedDefinition:
         """Replace this definition's row wholesale, inside the prefix claim.
@@ -88,7 +99,7 @@ class KnowledgeBaseDefinitionStore:
         Fred reconciles.
         """
         async with use_session(self._sessions, session) as active:
-            await self._claim_prefix(active, prefix, client_id)
+            claim = await self._claim_prefix(active, prefix, client_id, subject)
             row = await active.get(KnowledgeBaseDefinitionRow, declaration.id)
             if row is None:
                 row = KnowledgeBaseDefinitionRow(id=declaration.id, prefix=prefix)
@@ -109,16 +120,22 @@ class KnowledgeBaseDefinitionStore:
                 ]
             )
             await active.flush()
-            return PublishedDefinition(row)
+            return PublishedDefinition(row, claim)
 
     @staticmethod
-    async def _claim_prefix(active: AsyncSession, prefix: str, client_id: str) -> None:
+    async def _claim_prefix(
+        active: AsyncSession, prefix: str, client_id: str, subject: str
+    ) -> KnowledgeBasePrefixRow:
         """Claim the prefix for this client, or verify it already holds it.
 
         The claim is a row whose primary key IS the prefix, so two pods claiming
         it at the same instant collide in PostgreSQL — one commits, the other is
         refused. An application-level check could not do this: it would read
         "unclaimed" in both transactions and let both write.
+
+        The client is what the prefix is bound to and what a later publication
+        is checked against. The subject rides along because it is the identity a
+        grant can name, and only a publication carries it.
         """
 
         owner = await active.get(KnowledgeBasePrefixRow, prefix)
@@ -127,15 +144,25 @@ class KnowledgeBaseDefinitionStore:
                 raise KnowledgeBasePrefixConflict(
                     f"Prefix {prefix!r} is owned by another client"
                 )
-            return
+            # Written only when it actually differs, so replaying a publication
+            # leaves the row untouched — and a prefix claimed before the subject
+            # was recorded is healed by the next one.
+            if owner.subject != subject:
+                owner.subject = subject
+                await active.flush()
+            return owner
 
-        active.add(KnowledgeBasePrefixRow(prefix=prefix, client_id=client_id))
+        owner = KnowledgeBasePrefixRow(
+            prefix=prefix, client_id=client_id, subject=subject
+        )
+        active.add(owner)
         try:
             await active.flush()
         except IntegrityError as exc:
             raise KnowledgeBasePrefixConflict(
                 f"Prefix {prefix!r} was claimed concurrently"
             ) from exc
+        return owner
 
     async def get(
         self,
@@ -145,15 +172,26 @@ class KnowledgeBaseDefinitionStore:
     ) -> PublishedDefinition | None:
         async with use_session(self._sessions, session) as active:
             row = await active.get(KnowledgeBaseDefinitionRow, name)
-            return None if row is None else PublishedDefinition(row)
+            if row is None:
+                return None
+            claim = await active.get(KnowledgeBasePrefixRow, row.prefix)
+            return PublishedDefinition(row, claim)
 
     async def list_all(
         self, *, session: AsyncSession | None = None
     ) -> list[PublishedDefinition]:
+        """Every definition with the identities that published it.
+
+        One join rather than a claim lookup per row: this runs on every admin
+        list and every capability-catalog projection.
+        """
         async with use_session(self._sessions, session) as active:
-            rows = await active.scalars(
-                select(KnowledgeBaseDefinitionRow).order_by(
-                    KnowledgeBaseDefinitionRow.id
+            rows = await active.execute(
+                select(KnowledgeBaseDefinitionRow, KnowledgeBasePrefixRow)
+                .join(
+                    KnowledgeBasePrefixRow,
+                    KnowledgeBaseDefinitionRow.prefix == KnowledgeBasePrefixRow.prefix,
                 )
+                .order_by(KnowledgeBaseDefinitionRow.id)
             )
-            return [PublishedDefinition(row) for row in rows]
+            return [PublishedDefinition(row, claim) for row, claim in rows]

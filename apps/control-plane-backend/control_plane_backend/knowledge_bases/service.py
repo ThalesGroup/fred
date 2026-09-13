@@ -75,6 +75,15 @@ async def publish_definition(
         raise KnowledgeBaseClientMismatch(
             "Publishing requires a confidential client identity"
         )
+    # The same token carries both: `azp` names the client a prefix is bound to,
+    # `sub` names the account it authenticates as. Only the second can be the
+    # subject of a grant, so it is recorded now rather than looked up in
+    # Keycloak's admin API when an instance later needs to hand a pod a library.
+    subject = user.uid
+    if not subject:
+        raise KnowledgeBaseClientMismatch(
+            "Publishing requires an identity with a subject"
+        )
 
     if not prefix_covers(prefix, declaration.id):
         raise KnowledgeBaseClientMismatch(
@@ -82,7 +91,7 @@ async def publish_definition(
         )
 
     published = await deps.get_knowledge_base_definition_store().upsert(
-        prefix=prefix, declaration=declaration, client_id=caller
+        prefix=prefix, declaration=declaration, client_id=caller, subject=subject
     )
     logger.info(
         "[knowledge-base-publication] stored declaration for %s version %s",

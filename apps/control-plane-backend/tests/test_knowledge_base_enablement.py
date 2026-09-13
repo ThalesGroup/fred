@@ -248,6 +248,7 @@ async def test_enablement_is_scoped_to_one_team_and_one_definition() -> None:
 
 PREFIX = "acme.kb"
 PREFIX_CLIENT = "kb-acme"
+PREFIX_SUBJECT = "service-account-kb-acme"
 
 
 class _FakeStore:
@@ -256,9 +257,13 @@ class _FakeStore:
     def __init__(self, declarations: list[KnowledgeBaseDeclaration]) -> None:
         self.rows: dict[str, Any] = {}
         self.prefixes: dict[str, str] = {}
+        self.subjects: dict[str, str] = {}
         for declaration in declarations:
             self.prefixes[PREFIX] = PREFIX_CLIENT
-            self.rows[declaration.id] = _published(PREFIX, declaration, PREFIX_CLIENT)
+            self.subjects[PREFIX] = PREFIX_SUBJECT
+            self.rows[declaration.id] = _published(
+                PREFIX, declaration, PREFIX_CLIENT, PREFIX_SUBJECT
+            )
 
     async def get(self, name: str) -> Any:
         return self.rows.get(name)
@@ -272,10 +277,12 @@ class _FakeStore:
         prefix: str,
         declaration: KnowledgeBaseDeclaration,
         client_id: str,
+        subject: str,
     ) -> Any:
         owner = self.prefixes.get(prefix)
         if owner is None:
             self.prefixes[prefix] = client_id
+            self.subjects[prefix] = subject
         elif owner != client_id:
             raise KnowledgeBasePrefixConflict(
                 f"Prefix {prefix!r} is owned by another client"
@@ -285,12 +292,16 @@ class _FakeStore:
             raise KnowledgeBasePrefixConflict(
                 f"{declaration.id!r} already belongs to prefix {existing.prefix!r}"
             )
-        self.rows[declaration.id] = _published(prefix, declaration, client_id)
+        self.subjects[prefix] = subject
+        self.rows[declaration.id] = _published(prefix, declaration, client_id, subject)
         return self.rows[declaration.id]
 
 
 def _published(
-    prefix: str, declaration: KnowledgeBaseDeclaration, client_id: str
+    prefix: str,
+    declaration: KnowledgeBaseDeclaration,
+    client_id: str,
+    subject: str,
 ) -> Any:
     return type(
         "_Published",
@@ -299,6 +310,7 @@ def _published(
             "id": declaration.id,
             "prefix": prefix,
             "client_id": client_id,
+            "subject": subject,
             "version": declaration.version,
             "name": declaration.name,
             "description": declaration.description,
@@ -715,3 +727,22 @@ def test_publication_does_not_gate_a_machine_on_human_gcu_admission() -> None:
 
     assert get_current_user_without_gcu in resolved
     assert get_current_user not in resolved
+
+
+@pytest.mark.asyncio
+async def test_publication_records_the_account_a_grant_will_name() -> None:
+    """`azp` binds the prefix; `sub` is what a relation can be written against."""
+    from control_plane_backend.knowledge_bases import service
+
+    deps = _FakeDeps(_FakeRebac(), [])
+    await service.publish_definition(
+        user=_Client(PREFIX_CLIENT),  # type: ignore[arg-type]
+        prefix=PREFIX,
+        declaration=_declaration(),
+        deps=deps,  # type: ignore[arg-type]
+    )
+
+    stored = await deps.store.get("acme.kb.http-markdown")
+    assert stored is not None
+    assert stored.client_id == PREFIX_CLIENT
+    assert stored.subject == _Client(PREFIX_CLIENT).uid

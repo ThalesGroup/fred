@@ -39,6 +39,16 @@ class KnowledgeBasePrefixRow(Base):
         comment="Confidential M2M client that claimed this prefix first. Every "
         "later publication under it is checked against this value.",
     )
+    subject: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Service account the claiming client authenticates as (`sub`). "
+        "The client is what a prefix is bound to; this is the only one of the "
+        "two the authorization engine can be told to grant, so creating an "
+        "instance reads it here instead of asking Keycloak's admin API which "
+        "account backs a client. Nullable for prefixes claimed before it was "
+        "recorded; the next publication fills it in.",
+    )
     claimed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
