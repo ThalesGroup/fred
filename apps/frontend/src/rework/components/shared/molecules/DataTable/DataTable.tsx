@@ -87,6 +87,11 @@ interface DataTableProps<T> {
    *  clickable actions (preview, menu), so a whole-row click target would
    *  fight with those instead of being an unambiguous convenience. */
   selectable?: boolean;
+  /** Withholds the checkbox from the rows this returns false for — a grouping
+   *  header, or a row nothing in the bulk bar could act on. Those rows are left
+   *  out of "select all on page" too, so it can still reach its all-selected
+   *  state. Omit and every row is selectable, as before. */
+  rowSelectable?: (element: T) => boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
@@ -148,6 +153,7 @@ export default function DataTable<T>({
   serverPagination,
   rowKey,
   selectable = false,
+  rowSelectable,
   selectedKeys,
   onSelectionChange,
   sortState: controlledSortState,
@@ -227,7 +233,8 @@ export default function DataTable<T>({
     }
   };
 
-  const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
+  const pageKeys =
+    selectable && rowKey ? pageData.filter((row) => rowSelectable?.(row) ?? true).map((row) => rowKey(row)) : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
@@ -308,14 +315,15 @@ export default function DataTable<T>({
       <div className={styles["datatable-body"]}>
         {pageData.map((line, lineIndex) => {
           const key = rowKey ? rowKey(line) : lineIndex;
-          const isSelected = selectable && (selectedKeys?.has(key) ?? false);
+          const lineSelectable = selectable && (rowSelectable?.(line) ?? true);
+          const isSelected = lineSelectable && (selectedKeys?.has(key) ?? false);
           return (
             <div
               className={styles["datatable-row"]}
               key={key}
               data-selected={isSelected || undefined}
               onClick={
-                selectable
+                lineSelectable
                   ? (event) => {
                       // Clicking an interactive control inside the row (a
                       // preview button, a folder-name link, the checkbox
@@ -338,13 +346,18 @@ export default function DataTable<T>({
                   : undefined
               }
             >
+              {/* The cell itself stays for a row that cannot be selected — the
+                  header and body are two grids sharing one column template, so
+                  dropping it would shift that row's every column. */}
               {selectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-                  <Checkbox
-                    checked={selectedKeys?.has(key) ?? false}
-                    onChange={() => toggleRow(key)}
-                    aria-label={t("dataTable.selection.selectRow")}
-                  />
+                  {lineSelectable && (
+                    <Checkbox
+                      checked={selectedKeys?.has(key) ?? false}
+                      onChange={() => toggleRow(key)}
+                      aria-label={t("dataTable.selection.selectRow")}
+                    />
+                  )}
                 </div>
               )}
               {columns.map((column, columnIndex) => {

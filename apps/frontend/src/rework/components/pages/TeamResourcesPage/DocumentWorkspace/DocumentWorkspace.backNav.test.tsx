@@ -177,10 +177,11 @@ describe("DocumentWorkspace back navigation", () => {
     click(folderButton("CIR"));
     expect(backButtonIsHidden()).toBe(false);
 
-    // The breadcrumb's root segment — not the back button — brings us home.
-    // (`t` is mocked to return the raw key, so the root label is the key itself.)
+    // The breadcrumb's first segment — not the back button — brings us home.
+    // It names the knowledge base the folder belongs to, Fred's own here.
+    // (`t` is mocked to return the raw key, so the label is the key itself.)
     const rootCrumb = [...container.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("rework.resources.roots.resources"),
+      b.textContent?.includes("rework.resources.knowledgeBases.nativeName"),
     );
     if (!rootCrumb) throw new Error("breadcrumb root segment not rendered");
     click(rootCrumb);

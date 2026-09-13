@@ -59,6 +59,9 @@ export interface ResourceExplorerProps<T> {
   rows: T[];
   rowKey: (row: T) => string | number;
   selectable?: boolean;
+  /** Withholds the checkbox from the rows this returns false for — same
+   * contract as DataTable's own. */
+  rowSelectable?: (row: T) => boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
   /** Mutually exclusive with `pageSize` — same contract as DataTable. */
@@ -91,6 +94,7 @@ export default function ResourceExplorer<T>({
   rows,
   rowKey,
   selectable = true,
+  rowSelectable,
   selectedKeys,
   onSelectedKeysChange,
   serverPagination,
@@ -173,6 +177,7 @@ export default function ResourceExplorer<T>({
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
             selectable={selectable}
+            rowSelectable={rowSelectable}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
             backgroundColor={tableBackgroundColor}

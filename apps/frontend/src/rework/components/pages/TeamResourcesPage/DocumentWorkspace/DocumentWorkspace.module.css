@@ -70,6 +70,23 @@
   min-width: 0;
 }
 
+/* Fred's own folders, set in under the row naming their knowledge base — the
+ * corpus root is the only level where a folder belongs to something above it. */
+.nameButton[data-nested] {
+  padding-left: var(--spacing-l);
+}
+
+.knowledgeBaseName {
+  font: var(--font-title-small);
+}
+
+.readOnlyHint {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
 /* The file/folder icon's own color wrapper (the <span style={{color}}> in
  * DocumentWorkspace.tsx): a genuine fixed 18x18 box, not just an 18px
  * font-size on the glyph itself — width/height + flex-shrink: 0 mean this

@@ -1802,8 +1802,8 @@
     },
     "resources": {
       "workspaceTitle": "Files",
-      "pageTitle": "Team resources",
-      "pageSubtitle": "Manage local resources, manually added to the team",
+      "pageTitle": "Knowledge Bases",
+      "pageSubtitle": "The corpus your agents search",
       "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
@@ -1819,13 +1819,9 @@
         "empty": "empty"
       },
       "knowledgeBases": {
-        "title": "Knowledge bases",
         "nativeName": "Fred",
         "manualDeposit": "Manual deposit",
-        "origin": "Origin",
-        "access": "Access",
-        "readOnly": "read only",
-        "open": "Open {{name}}"
+        "readOnly": "read only"
       },
       "hints": {
         "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
@@ -2043,8 +2039,8 @@
         "stopIngestionError": "Could not stop the ingestion",
         "stopIngestionRequested": "Ingestion stop requested"
       },
-      "pageTitlePersonal": "Your personal resources",
-      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
+      "pageTitlePersonal": "Your Knowledge Bases",
+      "pageSubtitlePersonal": "The corpus your agents search, in your personal space"
     },
     "save": "Save",
     "serviceNotice": {
@@ -2107,7 +2103,7 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Resources",
+          "resources": "Knowledge Base",
           "wiki": "Wiki"
         },
         "teamLabel": "Team",
