@@ -37,7 +37,7 @@ from fred_core.kpi.kpi_writer_structures import (
     Trace,
 )
 from fred_core.logs.log_setup import KPI_LOGGER_NAME
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, is_service_agent
 
 logger = logging.getLogger(__name__)
 summary_logger = logging.getLogger(KPI_LOGGER_NAME)
@@ -118,12 +118,19 @@ def _now_iso() -> str:
 
 def to_kpi_actor(user: KeycloakUser) -> KPIActor:
     """
-    Convert an authenticated Keycloak user into a KPIActor.
+    Convert an authenticated caller into a KPIActor.
 
     Why:
     - Fred’s KPI model is actor-centric (human/agent/system). We always attribute
       costs and usage to an actor to support per-user chargeback and audits.
+    - A service identity is not a person. Recording one as `human` makes any
+      split of human against automated traffic wrong by exactly the machine
+      volume — which is what a synchronizing workload contributes most of. The
+      actor type says what the caller is; `user_id` still says which one, so a
+      service's activity stays attributable without being counted as somebody's.
     """
+    if is_service_agent(user):
+        return KPIActor(type="system", user_id=user.uid)
     return KPIActor(type="human", user_id=user.uid)
 
 
