@@ -17,6 +17,7 @@ import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
+import type { BreadcrumbSegment } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import type { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
@@ -117,19 +118,39 @@ interface PageState {
   loading: boolean;
 }
 
+/**
+ * The knowledge base this workspace shows. Resolved by the page, never here:
+ * which libraries a Knowledge Base fills is a Control Plane fact, and one such
+ * query buried in this workspace would follow every one of its consumers.
+ */
+export type KnowledgeBaseScope =
+  /** The team's own corpus. The libraries a Knowledge Base fills are kept out
+   * of its tree — each of those is a knowledge base of its own, one level up. */
+  | { kind: "native"; label: string; contributedLibraryIds: ReadonlySet<string> }
+  /** One library a Knowledge Base fills: the tree is rooted there, and every
+   * action over it is withheld — its contents mirror a source. */
+  | { kind: "contributed"; label: string; libraryId: string };
+
 interface DocumentWorkspaceProps {
   teamId: string;
   isPersonalTeam: boolean;
-  /** Notified after any action that adds or removes a document (upload,
-   * single/bulk removal, folder deletion) — lets the parent page's storage
-   * stats cards (file count/size by type) refresh without owning any of
-   * this workspace's own mutation plumbing. */
+  /** Notified after any action that adds or removes a document or a folder
+   * (upload, single/bulk removal, folder creation/deletion) — lets the page
+   * refresh what it owns (storage stats, the knowledge bases themselves)
+   * without owning any of this workspace's own mutation plumbing. */
   onDocumentsChanged?: () => void;
-  /** Libraries this team synchronizes from a Knowledge Base. Owned by the
-   * page rather than fetched here: this workspace reads Knowledge Flow, and
-   * one Control Plane query buried in it would follow every consumer. */
-  synchronizedLibraryIds?: ReadonlySet<string>;
+  /** Omit to show the team's whole corpus, hiding nothing — what this
+   * workspace did before it sat one level below a list of knowledge bases. */
+  knowledgeBase?: KnowledgeBaseScope;
+  /** Back to that list. Omit and no segment above the root is offered. */
+  onLeaveKnowledgeBase?: () => void;
 }
+
+const NO_LIBRARIES: ReadonlySet<string> = new Set();
+/** Stands in for the root of a knowledge base whose library is not in the
+ * loaded tags — a fresh instance, or one deleted elsewhere. Deliberately not
+ * the tree root, which would show the whole corpus under another KB's name. */
+const UNRESOLVED_ROOT: TagNode = { name: "", full: "", children: new Map(), tagsHere: [] };
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
@@ -210,7 +231,8 @@ function DocumentWorkspace({
   teamId,
   isPersonalTeam,
   onDocumentsChanged,
-  synchronizedLibraryIds,
+  knowledgeBase,
+  onLeaveKnowledgeBase,
 }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn, showInfo } = useToast();
@@ -241,12 +263,43 @@ function DocumentWorkspace({
     return refetchTagsQuery();
   }, [refetchTagsQuery, onDocumentsChanged]);
 
+  // A contributed knowledge base's contents mirror a source, so anything a
+  // person did to them here would be undone on the next run — or worse,
+  // silently kept while the source says otherwise. Every action is therefore
+  // withheld rather than offered and then fought over. Labels too, for now:
+  // they would be genuinely useful, but what becomes of a label when its
+  // document leaves the source has to be decided before they can be offered.
+  const rootLibraryId = knowledgeBase?.kind === "contributed" ? knowledgeBase.libraryId : null;
+  const readOnly = rootLibraryId !== null;
+  const rootLabel = knowledgeBase?.label ?? t("rework.resources.roots.resources");
+  const contributedLibraryIds = knowledgeBase?.kind === "native" ? knowledgeBase.contributedLibraryIds : NO_LIBRARIES;
+
   const tree = useMemo(() => {
     const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
-    return buildTree(documentTags);
-  }, [tags]);
+    const built = buildTree(documentTags);
+    if (contributedLibraryIds.size === 0) return built;
+    // Dropping the library's own node drops its whole subtree with it, and does
+    // so by tag id — matching on the library's name instead would break the
+    // moment two folders shared one.
+    return {
+      ...built,
+      children: new Map(
+        [...built.children].filter(([, node]) => !node.tagsHere.some((tag) => contributedLibraryIds.has(tag.id))),
+      ),
+    };
+  }, [tags, contributedLibraryIds]);
 
-  // null => at the Corpus root (the tree's synthetic top node).
+  // Where this workspace's root sits in the tree — "" for the team's own
+  // corpus, null while a contributed library's tag is not in the loaded tags.
+  const rootFull = useMemo(() => {
+    if (rootLibraryId === null) return "";
+    const tag = (tags ?? []).find((candidate) => candidate.id === rootLibraryId);
+    return tag ? fullPath(tag) : null;
+  }, [tags, rootLibraryId]);
+  const rootPath = rootFull ?? "";
+
+  // null => at this knowledge base's root (the whole corpus, or the library a
+  // contributor fills).
   const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
   // Stack of previously-viewed folders, oldest first — the back button pops
   // the most recent one. Not "go to parent": if you drilled in from a
@@ -392,17 +445,10 @@ function DocumentWorkspace({
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
 
-  const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
+  // findNode falls back to the tree root for a path it cannot walk, so an
+  // unresolved library must be caught before it reaches here.
+  const currentNode = rootFull === null ? UNRESOLVED_ROOT : findNode(tree, currentFolderFull ?? rootPath);
   const currentTag = currentNode.tagsHere[0] ?? null;
-
-  // A synchronized folder is filled by its Knowledge Base and by nobody else:
-  // its contents mirror a source, so anything a person did to them here would
-  // be undone on the next run — or worse, silently kept while the source says
-  // otherwise. Every action over it is therefore withheld rather than offered
-  // and then fought over. Labels are withheld too, for now: they would be
-  // genuinely useful, but what becomes of a label when its document leaves the
-  // source has to be decided before they can be offered.
-  const inSynchronizedFolder = !!currentTag && (synchronizedLibraryIds?.has(currentTag.id) ?? false);
 
   const loadTagPage = useCallback(
     async (tagId: string, offset: number, limit: number = rowsPerPage) => {
@@ -680,8 +726,10 @@ function DocumentWorkspace({
             .unwrap()
             .then(() => {
               showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
-              if (currentFolderFull === node.full)
-                navigateTo(node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : null);
+              if (currentFolderFull === node.full) {
+                const parent = node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : "";
+                navigateTo(parent === rootPath ? null : parent);
+              }
               void refetchTags();
             })
             .catch((e: unknown) => {
@@ -702,6 +750,7 @@ function DocumentWorkspace({
       t,
       refetchTags,
       currentFolderFull,
+      rootPath,
       navigateTo,
     ],
   );
@@ -1262,10 +1311,9 @@ function DocumentWorkspace({
   };
 
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
-    // Sub-folders inside a synchronized one are created by the pod as it
-    // mirrors the source tree, so they are no more a person's to rename or
-    // delete than the documents in them.
-    if (inSynchronizedFolder) return [];
+    // Sub-folders here are created by the pod as it mirrors the source tree, so
+    // they are no more a person's to rename or delete than the documents in them.
+    if (readOnly) return [];
     if (!canCreateFolder || !node.tagsHere[0]) return [];
     return [
       {
@@ -1287,7 +1335,7 @@ function DocumentWorkspace({
   const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
     // Nothing here applies to a document a Knowledge Base put there: renaming
     // or deleting it fights the next run, and the rest is not specified yet.
-    if (inSynchronizedFolder) return [];
+    if (readOnly) return [];
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
@@ -1398,7 +1446,7 @@ function DocumentWorkspace({
               type="button"
               className={styles.nameButton}
               onClick={() => navigateTo(row.node.full)}
-              {...folderDropProps(row.node, canCreateFolder)}
+              {...folderDropProps(row.node, canCreateFolder && !readOnly)}
             >
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
@@ -1605,11 +1653,17 @@ function DocumentWorkspace({
   ];
 
   const breadcrumbSegments = useMemo(() => {
-    const rootLabel = t("rework.resources.roots.resources");
-    if (!currentFolderFull) return [{ label: rootLabel }];
-    const parts = currentFolderFull.split("/");
-    const segments = [{ label: rootLabel, onClick: () => navigateTo(null) }];
-    let acc = "";
+    const segments: BreadcrumbSegment[] = [];
+    if (onLeaveKnowledgeBase)
+      segments.push({ label: t("rework.resources.knowledgeBases.title"), onClick: onLeaveKnowledgeBase });
+    segments.push({ label: rootLabel, ...(currentFolderFull ? { onClick: () => navigateTo(null) } : {}) });
+    // Only the folders below this knowledge base's root: the ones above belong
+    // to the corpus, not to the base the user opened.
+    const prefix = rootPath ? `${rootPath}/` : "";
+    const relative = currentFolderFull?.startsWith(prefix) ? currentFolderFull.slice(prefix.length) : "";
+    if (!relative) return segments;
+    const parts = relative.split("/");
+    let acc = rootPath;
     parts.forEach((part, i) => {
       acc = acc ? `${acc}/${part}` : part;
       // Snapshot this iteration's path: every segment's onClick otherwise
@@ -1619,10 +1673,10 @@ function DocumentWorkspace({
       // folder — instead of the segment that was actually clicked.
       const stepPath = acc;
       const isLast = i === parts.length - 1;
-      segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
+      segments.push({ label: part, ...(isLast ? {} : { onClick: () => navigateTo(stepPath) }) });
     });
     return segments;
-  }, [currentFolderFull, t, navigateTo]);
+  }, [currentFolderFull, rootPath, rootLabel, onLeaveKnowledgeBase, t, navigateTo]);
 
   const isEmpty = !tagsLoading && !page?.loading && childFolders.length === 0 && (page?.docs.length ?? 0) === 0;
 
@@ -1689,7 +1743,7 @@ function DocumentWorkspace({
   // FOLDERS are accepted there — each one becomes a library mirroring its
   // structure (openDrawerWithDroppedFiles filters loose files out).
   const atRoot = !currentFolderFull;
-  const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
+  const pageDroppable = canCreateFolder && !readOnly && (!!currentTag || atRoot);
   const pageDropProps = pageDroppable
     ? {
         onDragOver: (event: React.DragEvent) => {
@@ -1730,7 +1784,7 @@ function DocumentWorkspace({
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
         }}
         toolbarActions={
-          hasSelection && !inSynchronizedFolder ? (
+          hasSelection && !readOnly ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length + selectedFolders.length}
               onDelete={bulkDelete}
@@ -1766,7 +1820,7 @@ function DocumentWorkspace({
               {/* A synchronized folder is the pod's to fill: adding a file or a
                   sub-folder by hand would put something there the source never
                   knows about. Withheld rather than offered and then reconciled. */}
-              {canCreateFolder && !inSynchronizedFolder && (
+              {canCreateFolder && !readOnly && (
                 <>
                   <Tooltip text={t("rework.resources.menu.newFolder")}>
                     <IconButton
@@ -1799,9 +1853,10 @@ function DocumentWorkspace({
         loading={tagsLoading}
         loadingMessage={t("rework.resources.loading")}
         empty={isEmpty}
-        emptyMessage={
-          currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")
-        }
+        // Keyed on the folder's tag, not on the depth: the corpus root is the
+        // one place with no tag to hold documents, so it is the one place that
+        // asks for a library. A contributed base's own root is a real folder.
+        emptyMessage={currentTag ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")}
         columns={columns}
         rows={filteredRows}
         rowKey={rowKey}
@@ -1873,7 +1928,7 @@ function DocumentWorkspace({
       <CreateFolderModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        parentPath={currentFolderFull ?? undefined}
+        parentPath={(currentFolderFull ?? rootPath) || undefined}
         teamId={isPersonalTeam ? undefined : teamId}
         onCreated={() => void refetchTags()}
       />

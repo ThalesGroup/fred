@@ -1818,6 +1818,15 @@
         "fileCount": "{{count}} files",
         "empty": "empty"
       },
+      "knowledgeBases": {
+        "title": "Knowledge bases",
+        "nativeName": "Fred",
+        "manualDeposit": "Manual deposit",
+        "origin": "Origin",
+        "access": "Access",
+        "readOnly": "read only",
+        "open": "Open {{name}}"
+      },
       "hints": {
         "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
         "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",

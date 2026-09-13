@@ -34,7 +34,8 @@ import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
-import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import DocumentWorkspace, { type KnowledgeBaseScope } from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import KnowledgeBaseList, { type KnowledgeBaseChoice } from "./KnowledgeBaseList/KnowledgeBaseList.tsx";
 import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
 import AgentsWorkspace from "./AgentsWorkspace/AgentsWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
@@ -70,16 +71,26 @@ export default function TeamResourcesPage() {
   // hiding "Espace partagé" for a legitimate team.
   const isPersonalTeam = isPersonalTeamId(teamId);
 
-  // Which of this team's folders a Knowledge Base fills. Read here and handed
+  // The knowledge bases a contributor fills for this team. Read here and handed
   // down: the workspace below speaks to Knowledge Flow, and a Control Plane
   // query placed inside it would become every one of its consumers' problem.
-  const { data: synchronizedInstances } = useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery(
+  // `refetch` as well as `data`, for the same reason the team row below needs
+  // one: the folder-creation form creates the instance through the control
+  // plane, but the workspace's own change signal is a Knowledge Flow tag
+  // refetch, which cannot reach this cache entry. Without it a just-connected
+  // base is missing from the list and its library shows up inside Fred's own
+  // base as an ordinary folder, actions and all, until the page is reloaded.
+  const {
+    data: contributedInstances,
+    refetch: refetchKnowledgeBases,
+    isUninitialized: knowledgeBasesUninitialized,
+  } = useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery(
     { teamId },
     { skip: !teamId || isPersonalTeam },
   );
-  const synchronizedLibraryIds = useMemo(
-    () => new Set((synchronizedInstances ?? []).map((instance) => instance.library_id)),
-    [synchronizedInstances],
+  const contributedLibraryIds = useMemo(
+    () => new Set((contributedInstances ?? []).map((instance) => instance.library_id)),
+    [contributedInstances],
   );
   const userId = KeyCloakService.GetUserId() ?? "";
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
@@ -100,6 +111,19 @@ export default function TeamResourcesPage() {
 
   const [activeTab, setActiveTab] = useState<ResourceRootTab>("resources");
   const [statsOpen, setStatsOpen] = useState(false);
+  // null while the list of knowledge bases itself is showing.
+  const [openKnowledgeBase, setOpenKnowledgeBase] = useState<KnowledgeBaseChoice | null>(null);
+  const knowledgeBaseScope = useMemo<KnowledgeBaseScope | null>(() => {
+    if (!openKnowledgeBase) return null;
+    if (openKnowledgeBase.kind === "native")
+      return { kind: "native", label: t("rework.resources.knowledgeBases.nativeName"), contributedLibraryIds };
+    const instance = (contributedInstances ?? []).find(
+      (candidate) => candidate.library_id === openKnowledgeBase.libraryId,
+    );
+    // Gone while it was open (deleted from another tab): back to the list,
+    // rather than an empty folder that never says why it is empty.
+    return instance ? { kind: "contributed", label: instance.library_name, libraryId: instance.library_id } : null;
+  }, [openKnowledgeBase, contributedInstances, contributedLibraryIds, t]);
   // "Espace partagé" only exists for a real team — if the active team turns out to be
   // personal (e.g. navigating here via a stale tab from a different team), fall back
   // rather than leave a tab selected that's about to disappear from the switcher.
@@ -245,10 +269,15 @@ export default function TeamResourcesPage() {
       )}
 
       <div className={styles.panel}>
-        {activeTab === "resources" && (
+        {activeTab === "resources" && !knowledgeBaseScope && (
+          <KnowledgeBaseList instances={contributedInstances ?? []} onOpen={setOpenKnowledgeBase} />
+        )}
+
+        {activeTab === "resources" && knowledgeBaseScope && (
           <DocumentWorkspace
             teamId={teamId}
-            synchronizedLibraryIds={synchronizedLibraryIds}
+            knowledgeBase={knowledgeBaseScope}
+            onLeaveKnowledgeBase={() => setOpenKnowledgeBase(null)}
             isPersonalTeam={isPersonalTeam}
             // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
             // catch-up fire on mount for any task target already in the
@@ -263,6 +292,7 @@ export default function TeamResourcesPage() {
             onDocumentsChanged={() => {
               if (!corpusStats.isUninitialized) void corpusStats.refetch();
               if (!teamUninitialized) void refetchTeam();
+              if (!knowledgeBasesUninitialized) void refetchKnowledgeBases();
             }}
           />
         )}

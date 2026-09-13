@@ -16,6 +16,9 @@
 // Coverage for FRONT-09.G: the tab switcher replaces the always-expanded root
 // tree — only the active tab's browser renders, "Espace partagé" is hidden
 // for a personal team, and the team storage quota shows in the header.
+//
+// Plus the level above the folders: Corpus d'équipe opens on the team's
+// knowledge bases, and the document workspace mounts one level in.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -52,6 +55,13 @@ const probe = vi.hoisted(() => ({
   fsStatsSkip: {} as Record<string, boolean>,
   // Lifecycle flags of the KF health probe that gates the whole page.
   kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
+  // The knowledge bases a contributor fills for this team, as
+  // GET /knowledge-bases/instances returns them.
+  knowledgeBases: [] as Record<string, unknown>[],
+  knowledgeBasesUninitialized: false,
+  knowledgeBasesRefetch: () => {},
+  // Last `knowledgeBase` scope the document workspace was mounted with.
+  workspaceScope: undefined as Record<string, unknown> | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -81,10 +91,14 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-// Which folders a Knowledge Base fills is read here and handed to the
-// workspace; these tests are about the tab switcher, so nothing is synchronized.
+// The team's knowledge bases are read here and handed down — the workspace
+// below speaks to Knowledge Flow only.
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: () => ({ data: [] }),
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: () => ({
+    data: probe.knowledgeBases,
+    isUninitialized: probe.knowledgeBasesUninitialized,
+    refetch: probe.knowledgeBasesRefetch,
+  }),
 }));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
@@ -107,8 +121,9 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   },
 }));
 vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
-  default: (props: { onDocumentsChanged?: () => void }) => {
+  default: (props: { onDocumentsChanged?: () => void; knowledgeBase?: Record<string, unknown> }) => {
     probe.onDocumentsChanged = props.onDocumentsChanged;
+    probe.workspaceScope = props.knowledgeBase;
     return <div data-testid="panel-resources" />;
   },
 }));
@@ -125,13 +140,24 @@ import TeamResourcesPage from "./TeamResourcesPage.tsx";
 let container: HTMLDivElement;
 let root: Root;
 
-function render() {
+/** Corpus d'équipe now opens on the list of knowledge bases. Every assertion
+ *  below about the document workspace is about the level under one of them, so
+ *  `render` walks into Fred's unless told to stay on the list. */
+function render({ enter = true }: { enter?: boolean } = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root.render(<TeamResourcesPage />);
   });
+  if (enter) openKnowledgeBase("rework.resources.knowledgeBases.nativeName");
+}
+
+/** Clicks the row for the knowledge base whose name cell reads `name`. A
+ *  no-op when the list isn't showing (a blocked page, a non-corpus tab). */
+function openKnowledgeBase(name: string) {
+  const row = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes(name));
+  if (row) click(row);
 }
 
 beforeEach(() => {
@@ -151,6 +177,10 @@ beforeEach(() => {
   probe.corpusStatsSkip = true;
   probe.fsStatsSkip = {};
   probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
+  probe.knowledgeBases = [];
+  probe.knowledgeBasesUninitialized = false;
+  probe.knowledgeBasesRefetch = vi.fn();
+  probe.workspaceScope = undefined;
 });
 
 afterEach(() => {
@@ -275,6 +305,28 @@ describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
     expect(() => probe.onDocumentsChanged?.()).not.toThrow();
     expect(probe.teamRefetch).not.toHaveBeenCalled();
   });
+
+  // The folder-creation form creates a knowledge base instance through the
+  // control plane, but the only change signal that comes back out of the
+  // workspace is a Knowledge Flow tag refetch — which cannot invalidate this
+  // page's control-plane cache entry. Without this the just-connected base is
+  // missing from the list, and its library shows inside Fred's own base as an
+  // ordinary folder with every action offered over it, until a page reload.
+  it("refetches the knowledge bases so a just-connected one is not left out of the list", () => {
+    render();
+
+    probe.onDocumentsChanged?.();
+    expect(probe.knowledgeBasesRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not call the knowledge-bases refetch while that query has not started yet", () => {
+    // Skipped entirely in a personal space, where it never starts.
+    probe.knowledgeBasesUninitialized = true;
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.knowledgeBasesRefetch).not.toHaveBeenCalled();
+  });
 });
 
 // The storage meter reads the control-plane team row, but every write to its
@@ -341,6 +393,81 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(probe.corpusStatsSkip).toBe(true);
     expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBe(false);
     expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(true);
+  });
+});
+
+// The first level of Corpus d'équipe is the team's knowledge bases, not its
+// folders: Fred's own next to every library a contributor fills. The folder
+// view is unchanged — it simply mounts one level in, scoped to the base that
+// was opened.
+describe("TeamResourcesPage knowledge bases", () => {
+  const localFolder = {
+    id: "kb-1",
+    library_id: "lib-local",
+    library_name: "Local-2",
+    definition_name: "GitHub",
+    definition_id: "some.contributor.local-folder",
+  };
+
+  function rowNames(): string[] {
+    return Array.from(container.querySelectorAll("button"))
+      .map((button) => button.textContent ?? "")
+      .filter((text) => text.includes("knowledgeBases.nativeName") || text.includes("Local-2"));
+  }
+
+  it("lists Fred's knowledge base and every contributed one, before any folder", () => {
+    probe.knowledgeBases = [localFolder];
+    render({ enter: false });
+
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
+    expect(rowNames()).toHaveLength(2);
+    expect(container.textContent).toContain("rework.resources.knowledgeBases.nativeName");
+    expect(container.textContent).toContain("Local-2");
+  });
+
+  it("badges Fred's with a Fred concept and a contributed one with the name it declared", () => {
+    probe.knowledgeBases = [localFolder];
+    render({ enter: false });
+
+    expect(container.textContent).toContain("rework.resources.knowledgeBases.manualDeposit");
+    // Straight from the data — no mapping from "GitHub" to anything this
+    // frontend knows, which is what lets the next contributor publish
+    // something nobody here has heard of.
+    expect(container.textContent).toContain("GitHub");
+    expect(container.textContent).toContain("rework.resources.knowledgeBases.readOnly");
+  });
+
+  it("hands Fred's own base the contributed libraries so its tree can leave them out", () => {
+    probe.knowledgeBases = [localFolder];
+    render();
+
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
+    expect(probe.workspaceScope).toMatchObject({ kind: "native" });
+    expect([...((probe.workspaceScope?.contributedLibraryIds as Set<string>) ?? [])]).toEqual(["lib-local"]);
+  });
+
+  it("roots the same workspace at the library when a contributed base is opened", () => {
+    probe.knowledgeBases = [localFolder];
+    render({ enter: false });
+    openKnowledgeBase("Local-2");
+
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
+    expect(probe.workspaceScope).toMatchObject({ kind: "contributed", libraryId: "lib-local", label: "Local-2" });
+  });
+
+  it("returns to the list when the open base is gone from the instance list", () => {
+    probe.knowledgeBases = [localFolder];
+    render({ enter: false });
+    openKnowledgeBase("Local-2");
+    expect(container.querySelector('[data-testid="panel-resources"]')).not.toBeNull();
+
+    probe.knowledgeBases = [];
+    act(() => {
+      root.render(<TeamResourcesPage />);
+    });
+
+    expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
+    expect(container.textContent).toContain("rework.resources.knowledgeBases.nativeName");
   });
 });
 

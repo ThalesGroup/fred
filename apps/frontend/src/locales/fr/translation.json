@@ -1818,6 +1818,15 @@
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
       },
+      "knowledgeBases": {
+        "title": "Bases de connaissance",
+        "nativeName": "Fred",
+        "manualDeposit": "Dépôt manuel",
+        "origin": "Origine",
+        "access": "Accès",
+        "readOnly": "lecture seule",
+        "open": "Ouvrir {{name}}"
+      },
       "hints": {
         "resources": "La base de connaissances de l'équipe, indexée pour la recherche IA. Créez d'abord une bibliothèque (dossier), puis ajoutez les documents à l'intérieur. Un fichier au niveau supérieur n'a pas de bibliothèque et ne sera pas indexé.",
         "mine": "Vos fichiers privés dans cette équipe. Vous seul·e les voyez. Brouillons, modèles, tout ce qui est personnel.",
