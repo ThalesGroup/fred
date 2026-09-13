@@ -125,6 +125,10 @@ interface DocumentWorkspaceProps {
    * stats cards (file count/size by type) refresh without owning any of
    * this workspace's own mutation plumbing. */
   onDocumentsChanged?: () => void;
+  /** Libraries this team synchronizes from a Knowledge Base. Owned by the
+   * page rather than fetched here: this workspace reads Knowledge Flow, and
+   * one Control Plane query buried in it would follow every consumer. */
+  synchronizedLibraryIds?: ReadonlySet<string>;
 }
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
@@ -202,7 +206,12 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
  * children (subfolders + documents). Heavy listing stays on the backend:
  * folders lazy-load their first document page on entry.
  */
-function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
+function DocumentWorkspace({
+  teamId,
+  isPersonalTeam,
+  onDocumentsChanged,
+  synchronizedLibraryIds,
+}: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -385,6 +394,15 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
 
   const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
+
+  // A synchronized folder is filled by its Knowledge Base and by nobody else:
+  // its contents mirror a source, so anything a person did to them here would
+  // be undone on the next run — or worse, silently kept while the source says
+  // otherwise. Every action over it is therefore withheld rather than offered
+  // and then fought over. Labels are withheld too, for now: they would be
+  // genuinely useful, but what becomes of a label when its document leaves the
+  // source has to be decided before they can be offered.
+  const inSynchronizedFolder = !!currentTag && (synchronizedLibraryIds?.has(currentTag.id) ?? false);
 
   const loadTagPage = useCallback(
     async (tagId: string, offset: number, limit: number = rowsPerPage) => {
@@ -1244,6 +1262,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   };
 
   const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
+    // Sub-folders inside a synchronized one are created by the pod as it
+    // mirrors the source tree, so they are no more a person's to rename or
+    // delete than the documents in them.
+    if (inSynchronizedFolder) return [];
     if (!canCreateFolder || !node.tagsHere[0]) return [];
     return [
       {
@@ -1263,6 +1285,9 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   };
 
   const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
+    // Nothing here applies to a document a Knowledge Base put there: renaming
+    // or deleting it fights the next run, and the rest is not specified yet.
+    if (inSynchronizedFolder) return [];
     // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
     // document that already succeeded, not a first ingestion. Any other status
     // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
@@ -1705,7 +1730,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
         }}
         toolbarActions={
-          hasSelection ? (
+          hasSelection && !inSynchronizedFolder ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length + selectedFolders.length}
               onDelete={bulkDelete}
@@ -1738,7 +1763,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
                   onClick={() => void refreshView()}
                 />
               </Tooltip>
-              {canCreateFolder && (
+              {/* A synchronized folder is the pod's to fill: adding a file or a
+                  sub-folder by hand would put something there the source never
+                  knows about. Withheld rather than offered and then reconciled. */}
+              {canCreateFolder && !inSynchronizedFolder && (
                 <>
                   <Tooltip text={t("rework.resources.menu.newFolder")}>
                     <IconButton

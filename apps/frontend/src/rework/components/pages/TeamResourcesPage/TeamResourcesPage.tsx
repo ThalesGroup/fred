@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
@@ -68,6 +69,18 @@ export default function TeamResourcesPage() {
   // whenever you viewed the Resources page for your currently active team,
   // hiding "Espace partagé" for a legitimate team.
   const isPersonalTeam = isPersonalTeamId(teamId);
+
+  // Which of this team's folders a Knowledge Base fills. Read here and handed
+  // down: the workspace below speaks to Knowledge Flow, and a Control Plane
+  // query placed inside it would become every one of its consumers' problem.
+  const { data: synchronizedInstances } = useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery(
+    { teamId },
+    { skip: !teamId || isPersonalTeam },
+  );
+  const synchronizedLibraryIds = useMemo(
+    () => new Set((synchronizedInstances ?? []).map((instance) => instance.library_id)),
+    [synchronizedInstances],
+  );
   const userId = KeyCloakService.GetUserId() ?? "";
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
   // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
@@ -235,6 +248,7 @@ export default function TeamResourcesPage() {
         {activeTab === "resources" && (
           <DocumentWorkspace
             teamId={teamId}
+            synchronizedLibraryIds={synchronizedLibraryIds}
             isPersonalTeam={isPersonalTeam}
             // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
             // catch-up fire on mount for any task target already in the

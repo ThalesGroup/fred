@@ -81,6 +81,11 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
+// Which folders a Knowledge Base fills is read here and handed to the
+// workspace; these tests are about the tab switcher, so nothing is synchronized.
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: () => ({ data: [] }),
+}));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
