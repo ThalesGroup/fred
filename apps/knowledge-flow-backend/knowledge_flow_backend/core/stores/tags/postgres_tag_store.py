@@ -110,7 +110,39 @@ class PostgresTagStore(BaseTagStore):
             await s.delete(row)
 
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
+        """Find one tag by the path that identifies it within its owner.
+
+        A full path is a parent path and a leaf name, and both are indexed
+        columns, so the pair is looked up directly. That matters because this is
+        asked once per folder of every document a synchronizing caller writes —
+        as a scan of every tag its owner has, a bulk run cost one full read of
+        the table per path segment per document.
+
+        The scan is kept as a fallback for the one case the columns cannot
+        answer: a tag stored before names were validated may carry "/" in its
+        own name, and splitting its full path then lands on the wrong halves.
+        A column hit is never wrong — both are written from the same model — so
+        the fallback only ever runs on a miss.
+        """
+        parent_path, _, name = full_path.rpartition("/")
         async with use_session(self._sessions, session) as s:
+            row = (
+                (
+                    await s.execute(
+                        select(TagRow).where(
+                            TagRow.owner_id == owner_id,
+                            TagRow.type == tag_type.value,
+                            TagRow.name == name,
+                            TagRow.path == (parent_path or None),
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row is not None:
+                return self._row_to_tag(row)
+
             rows = (
                 (
                     await s.execute(
