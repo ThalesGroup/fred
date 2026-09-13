@@ -11,8 +11,8 @@ Two outcomes, narrowly scoped, define this change.
 **For the user.** A Platform Admin sees the Knowledge Base definitions available
 in this deployment and enables one for a team. A member of that team creates a
 Knowledge Base instance and fills in a form Fred renders from the definition's
-declared fields, then sees when it ran, whether it succeeded, and what it
-changed.
+declared fields — including how often it should run — then sees when it ran,
+whether it succeeded, and whatever the implementation chose to report.
 
 **For the SDK author.** Someone outside this repository writes a declaration and
 one asynchronous synchronization handler, and deploys an image that publishes
@@ -62,17 +62,38 @@ never chosen or manipulated by an operator, an SDK author or a Fred user.
 identifier, version, display metadata and one list of instance configuration
 fields declared with the existing `FieldSpec` vocabulary; a decorator
 registering exactly one synchronization handler; a context handed to that
-handler; a bounded result returned from it; and two entry points — one
-publishing the declaration, one starting the pod's worker. No Temporal type or
-term appears in this surface, though fred-sdk depends on `temporalio`
-internally.
+handler; an optional self-describing report returned from it; and two entry
+points — one publishing the declaration, one starting the pod's worker. No
+Temporal type or term appears in this surface, though fred-sdk depends on
+`temporalio` internally.
+
+The contract stays deliberately thin. Fred provides three conveniences — it
+calls the pod on a schedule, it gives the pod an identity for Fred's APIs, and
+it offers Knowledge Flow's REST API as an available service. Everything a source
+actually requires is the author's, by design.
+
+**The instance form has two zones.** Periodicity, which the SDK declares and
+Fred acts on because recurrence is Temporal's business; and the author's own
+declared fields, which Fred stores, hands back at call time, and never
+interprets.
 
 **Execution.** A run starts an SDK-provided generic workflow on the definition's
 derived task queue. The workflow input carries stable identifiers only; a run
 identifier is derived internally when the workflow starts. An SDK-provided
 activity adapter fetches that run's configuration from Control Plane over the
-pod's own confidential M2M client, invokes the handler, and reports the terminal
-state and bounded result back.
+pod's own confidential M2M client and invokes the handler.
+
+**Run state comes from Temporal, not from the pod.** Fred runs Temporal, so it
+already knows a run started, is still running, ended or crashed. The pod is
+never asked, so it can never get it wrong.
+
+**What a run reports travels on the shared task surface.** Wanting to say what a
+background job did is not a Knowledge Base problem — a control-plane job erasing
+a team from a Temporal worker has the same need, and Fred already has generic
+task APIs for it across UI, backends and SDK. Their one closed part is the
+detail payload, whose every arm is a class written inside fred-core, so a
+contributed pod has no lane. This change opens one self-describing lane and the
+generic renderer that draws it, serving any externally-contributed job.
 
 **Ingestion.** A Knowledge Base implementation never receives OpenSearch or
 S3/SeaweedFS credentials through the Fred SDK contract. It ingests and deletes
@@ -87,10 +108,11 @@ the pod's workload identity used only against Fred APIs.
 | --- | --- | --- |
 | Stored published declarations and their client binding | Author-facing declaration and handler API | Hosts the SDK's worker; publishes on deploy |
 | Platform Admin visibility, team enablement | Publish the declaration; define the pod's environment contract | The synchronization handler |
-| Team-scoped instances and their configuration | Start the worker; derive task-queue identity | HTTP/WebDAV access, Markdown parsing |
-| Run records and bounded run results | Generic workflow + activity adapter | Discovery and filtering |
-| Authenticated publication, run-context and result endpoints | Fetch run context; invoke handler | Change detection, hashes, ETags, cursors |
-| | Report terminal state and result | Reconciliation decisions |
+| Team-scoped instances, their configuration and their schedule | Start the worker; derive task-queue identity | HTTP/WebDAV access, Markdown parsing |
+| Run state, read from Temporal rather than reported | Generic workflow + activity adapter | Discovery and filtering |
+| Authenticated publication and run-context endpoints | Fetch run context; invoke handler | Change detection, hashes, ETags, cursors |
+| Rendering the author's report without interpreting it | Emit that report on the shared task surface | What is worth reporting, and in what words |
+| | | Reconciliation decisions |
 | | Heartbeat, cancellation, retry plumbing | Source credentials and source state |
 
 Knowledge Flow owns document ingestion through its REST API, isolation of stored
@@ -107,7 +129,13 @@ documents, and the OpenSearch and S3/SeaweedFS integration behind it.
 
 ### Modified Capabilities
 
-None. No existing capability spec changes.
+- **Background task reporting (shared).** The task event model gains one open,
+  self-describing detail lane so a job contributed from outside this repository
+  can report what it did, plus the generic renderer that draws it. Fred's own
+  typed details are untouched — for a job Fred writes, a precise type is better
+  than a generic shape. The lane is not Knowledge Base-specific and is expected
+  to serve every future externally-contributed job; it ships here so that its
+  first consumer proves it.
 
 ## Impact
 
@@ -122,8 +150,16 @@ Affected areas, none of which exists yet:
   configuration validation, run records, and the authenticated publication,
   run-context and result-reporting endpoints. The configured-definition parsing
   and startup validation built earlier in this change are deleted, not extended.
+- **`libs/fred-core`** — one open, self-describing detail lane on the shared
+  task event model. `_TaskEventBase` already carries everything generic a
+  background job needs and is reused as-is; only the closed detail union is
+  opened.
+- **`apps/frontend`** — the generic renderer for that lane. The task kind
+  registry already degrades to a default for a kind it does not know, so what is
+  missing is the drawing of a declared report, not the routing to it.
 - **Persistence** — new tables for published declarations, instances and runs,
-  therefore Alembic migrations in control-plane.
+  and the schedule an instance carries, therefore Alembic migrations in
+  control-plane.
 - **Generated API client** — new control-plane controllers change the OpenAPI
   spec, so the frontend client is regenerated in the same change.
 - **Knowledge Flow** — none. A KB pod uses the REST API that already exists.
@@ -135,11 +171,12 @@ Explicit non-goals:
 - No pod discovery, liveness registry or "online" status anywhere in the
   product. A pod publishes a declaration at deployment; it never reports that it
   is running, and Fred never asks.
-- **No recurring schedules.** Typed daily/weekly recurrence, time zones,
-  suspend/resume and overlap policy are deliberately out. An instance carries
-  configuration and runs, not a cadence. The scheduling surface is scoped as its
-  own change once this one has shown what Knowledge Flow's REST API needs from a
-  pod that really ingests.
+- **No interpretation of what a run reports.** Fred renders the author's report
+  and never reads it, aggregates it, searches it or acts on it. The schedule
+  zone stays small for the same reason the cadence was once deferred — a
+  scheduling surface reaches the user, the database and Temporal at once — so
+  time zones, overlap policy and calendar recurrence beyond a simple cadence and
+  a suspend switch stay out.
 - **No new Knowledge Flow ingestion boundary.** An implementation uses the REST
   API Knowledge Flow already exposes; whatever it enforces is what is enforced.
 - **No reconciliation of a changed declaration against existing instances.** A

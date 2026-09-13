@@ -43,7 +43,10 @@ the UI must never imply otherwise.
 
 - An author writes a declaration and one handler, and never encounters Temporal.
 - A team creates and configures its own instances, from a form Fred renders out
-  of the fields the pod declared.
+  of the fields the pod declared — and chooses on that same form when the
+  instance runs.
+- A run reports what its author thinks is worth reporting, in the author's own
+  vocabulary, and Fred displays it well without interpreting it.
 - One vertical slice provable end to end: published → enabled → instance
   configured → dispatched → handler called → documents ingested through
   Knowledge Flow's REST API → result recorded.
@@ -60,12 +63,8 @@ the UI must never imply otherwise.
 - Liveness, leases, heartbeat registries, deregistration, "online" status.
 - Scale-to-zero and schedule-time pod activation.
 - An asynchronous result callback protocol.
-- **Recurring schedules and their lifecycle** — typed daily/weekly recurrence,
-  time zones, suspend/resume, overlap policy — and the instance-level schedule
-  state behind them. Deferred deliberately: this slice exists to find out what
-  Knowledge Flow's REST API actually needs from a real ingesting pod, and a
-  scheduling surface built before that answer is surface built on a guess. It is
-  scoped as its own change once this one has run.
+- Interpreting what a run reports. Fred renders the author's report; it never
+  reads it, aggregates it, or acts on it.
 - **A new Knowledge Flow ingestion boundary.** An implementation uses the REST
   API Knowledge Flow already exposes. Whatever that API enforces is what is
   enforced; improving it is an outcome of this slice, not a precondition of it.
@@ -153,18 +152,31 @@ a Fred instance field.
 *Why:* three levels for one set of values is a precedence rule nobody will
 remember. One level keeps "where does this value live?" answerable.
 
-### 4. Recurring schedules are deferred, not designed here
+### 4. Periodicity is Fred's to own; the rest of the form is opaque to it
 
-An instance carries configuration and runs; it does not yet carry a recurrence.
-Typed daily/weekly cadence, time zones, suspend/resume and overlap policy are
-their own change, scoped once this slice has shown what Knowledge Flow's REST
-API needs from a pod that really ingests.
+This contract is deliberately thin. A source's business is too subtle and too
+diverse for Fred to model, so the contract says so: that part is the author's
+problem. Fred provides exactly three conveniences, because they are the ones
+nobody wants to deal with — it calls the pod on a schedule, it gives the pod an
+identity so it can consume Fred's APIs without fighting Keycloak, and it offers
+Knowledge Flow's REST API as an available service. That third one is an offer,
+not an obligation: a Knowledge Base may bring its own stack and never call it.
 
-*Why defer rather than design now:* a scheduling surface is cheap to write and
-expensive to have written wrongly — it reaches the user, the database and
-Temporal at once. Nothing here forecloses it: an instance is the object a
-recurrence will hang from, and the dispatch path a schedule would trigger is
-the same one this slice builds.
+The instance form therefore has two zones. **Periodicity**, which the SDK
+declares because recurrence is Temporal's business and Temporal is Fred's:
+Fred understands it and acts on it. And **everything the author declared** — a
+token, a recursion depth — which is completely opaque: Fred stores it, hands it
+back to the pod at call time, and never interprets it.
+
+*Why Fred owns the cadence:* a pod that scheduled itself would have to stay up
+between runs, which contradicts a pod that only dials out and exposes nothing.
+Fred already runs Temporal, so the cadence costs it a schedule and costs the
+author nothing.
+
+*What the earlier deferral was right about:* a scheduling surface reaches the
+user, the database and Temporal at once, so it is cheap to write and expensive
+to have written wrongly. That argues for keeping this zone small — a recurrence
+and the ability to suspend it — not for leaving the author to invent one.
 
 ### 5. Dedicated confidential M2M client, verified exactly
 
@@ -212,27 +224,75 @@ that make it a hostile place to store facts, and grows without bound if used
 this way. What crosses between runs through Fred is the materialized document
 projection — nothing else.
 
-### 7. Activity result plus bounded Control Plane reporting
+### 7. The run's state is Fred's; the run's report is the author's
 
-The handler returns a bounded result to the activity adapter. The adapter
-returns it to the generic workflow and reports the terminal state and bounded
-result to Control Plane. Heartbeat, cancellation and retry plumbing live inside
-the adapter, never in the handler signature.
+Fred owns Temporal, so Fred already knows that a run started, is still running,
+ended or crashed. That is the state an instance shows in the UI, and it is
+obtained from the side Fred controls — the pod is never asked for it and can
+never get it wrong. A handler that returns nothing at all still produces a
+correct state.
 
-A long synchronization stays one heartbeat-enabled activity with an explicit
-timeout. No asynchronous callback or job protocol is designed for the MVP.
+What the handler may return is a **report**: whatever its author judges worth
+showing, in the author's own vocabulary. It is optional, and Fred never reads
+it (decision 8).
+
+Heartbeat, cancellation and retry plumbing live inside the adapter, never in the
+handler signature. A long synchronization stays one heartbeat-enabled activity
+with an explicit timeout. No asynchronous callback or job protocol is designed
+for the MVP.
 
 *Why keep I/O in the activity:* Temporal's determinism constraint is a real
 trap. All side effects in the activity means the author cannot break replay,
 because the author never writes workflow code.
 
-### 8. Bounded, extensible result
+*Why not have the pod report its own terminal state:* it would be a second
+source of truth for something Fred already knows, and the two would disagree
+exactly when it matters — a pod killed mid-run reports nothing, and the run
+would look unfinished forever rather than failed.
 
-A terminal outcome; a bounded human-readable summary; generic counters for
-discovered, created, updated, removed and unchanged; bounded structured
-warnings and errors; and an optional JSON-safe map of implementation-defined
-metrics. Nothing HTTP- or Markdown-specific. Bounds are contract, not courtesy:
-an unbounded summary is how a run result becomes a payload incident.
+### 8. The report is self-describing, and the lane it travels is not KB-specific
+
+Fred's earlier vocabulary for a run result — counters for documents discovered,
+created, updated, removed and unchanged, plus a reconciliation-completeness
+flag — is removed. It forced every author to translate their business into terms
+that were not theirs, to produce numbers Fred cannot verify and does not use. A
+Knowledge Base that maintains a graph has no "documents removed" to report, and
+inventing a zero there is worse than reporting nothing.
+
+What replaces it is a report the author **declares the shape of**, exactly as
+they already declare the shape of their configuration: "a measure named *Nodes*,
+value 412". Fred renders it without knowing what a node is. This is the same
+mechanism as the instance form, used in the other direction — `FieldSpec` is the
+vocabulary to reuse, not a second one to invent. Free text or raw JSON is
+explicitly rejected: neither can be displayed well by something that does not
+understand it, and "Fred displays it correctly" is the requirement.
+
+Bounds survive the change. An unbounded report is how a run result becomes a
+payload incident, so the report stays bounded and the truncation indicator stays
+runtime-set.
+
+**This report does not travel on a Knowledge Base surface.** A background job
+that wants to say what it did is not a Knowledge Base problem: a control-plane
+admin job deleting a team from a Temporal worker has exactly the same need, and
+Fred has already built generic task APIs across UI, backends and SDK for it.
+`_TaskEventBase` in `libs/fred-core/fred_core/tasks/models.py` is already fully
+generic — state, sequence, timestamp, progress, step, error, target, owner — and
+the frontend's `taskKinds.ts` already degrades gracefully to a default renderer
+for a kind it does not know.
+
+The one closed part is the detail payload: `TaskEvent` is a discriminated union
+whose every arm (ingestion, evaluation, log, migration, erasure) is a class
+written inside fred-core. A third party cannot add one, so a contributed pod has
+no lane. This change opens exactly one: a self-describing detail kind, plus the
+generic renderer that draws it.
+
+Fred's own typed details do not change. For a job Fred writes, a precise type is
+better than a generic shape; the open lane exists for jobs Fred does not write.
+
+*Scope note:* this lands in the shared task surface rather than the Knowledge
+Base one, so this change declares that capability as modified. It was weighed as
+its own change and deliberately kept here, so that the first consumer proving
+the lane ships with it.
 
 ### 9. Temporal stays internal; fred-sdk may import it
 
@@ -347,6 +407,12 @@ report, and Fred never deletes anything by reading it. An absence in the
 source proves a deletion only after a complete, authoritative inventory, which
 is exactly what this flag asserts. An explicit tombstone stays actionable even
 during a partial pass, because it is evidence rather than inference.
+
+> **Superseded by decision 8.** These two fields shipped and are now being
+> removed: the deletion-safety property they protected is obtained more simply by
+> Fred never interpreting a run's report at all, which leaves no flag to misread.
+> Kept here as the record of what the first consumer corrected, not as current
+> contract.
 
 **Truncation is observable.** Bounds are unchanged, but a bounded result now
 carries a serialized `content_truncated`, computed by the SDK from whether a
@@ -499,6 +565,81 @@ the divergence rather than adding a consistency check. Decision 2 has since
 removed that configuration entirely, which settles the question from the other
 end as well.
 
+### 17. An instance is a folder, and creating it is what grants the pod
+
+A team does not create "a Knowledge Base instance" and then point it somewhere.
+It creates a **folder that fills itself**. One gesture, one object: the folder
+creation form gains a "synchronized by" field listing the definitions enabled
+for that team, and choosing one makes the whole thing an instance.
+
+That single gesture is where the last missing right is created. Fred creates the
+library, so Fred is the one that can grant the pod `editor` on it — the relation
+`update` resolves through, and the only one a pod needs. Library, instance,
+grant and cadence are one transaction: a library its pod cannot write to is
+useless, and a grant with no library is a right left lying around.
+
+The grant is **per instance and never broader**. A pod is editor on the
+libraries of its own instances and nothing else, so it cannot write into the
+folder beside it in the same team. This is why the right is created here rather
+than handed to the client once at deployment: cloudops decides that a pod may
+talk to Fred at all, a team decides which folders it may fill.
+
+*What makes this cheap:* the publication already carries both identities the
+control plane needs — `azp` names the client the prefix is bound to, and `sub`
+names the service account, which is what the authorization engine can be told to
+grant. Persisting the second alongside the first (task 2c.7) is the whole
+prerequisite. Without it, creating an instance would have to ask Keycloak's
+admin API which account backs a client — a dependency bought for nothing.
+
+Deleting the folder deletes its documents, which is what the tag's existing
+cascade already does. **Stopping a synchronization while keeping what it brought
+is deliberately not offered here**; it is a real question and it gets its own
+change, once there is something to stop.
+
+### 18. A source tree becomes a folder tree, on one grant
+
+A Knowledge Base synchronizes a tree, not a flat list, because folders already
+nest and a source that has structure should keep it.
+
+The authorization model carries this for free: a tag records a `parent`
+relation, and `update` inherits through it. One `editor` tuple on the instance's
+root library therefore reaches every folder beneath it, however deep, with no
+further grant. The narrow-grant property of decision 17 survives intact — the
+pod's reach is exactly its own subtree.
+
+Two things were missing, both found by running the sample rather than by
+reading:
+
+**Creating a sub-folder is gated on a team-level right**, not on the right to
+write where it goes. A pod holding `editor` on its library can write in the
+whole subtree but cannot create the first folder in it, and giving it the team
+right would let it create folders anywhere in that team — destroying the
+isolation decision 17 exists to provide. So: **creating a folder inside another
+is authorized by `update` on the parent**; the team-level right stays required
+to create a top-level folder. This is not a Knowledge Base rule. It repairs an
+asymmetry that already applied to people — a member who may write in a folder
+still needs a team right to make a sub-folder there, while every other
+permission in the model inherits downward.
+
+**An author knows paths, not tags.** So the pod sends a path relative to its
+library and ingestion materializes whatever folders are missing along it, rather
+than the pod creating tags itself. Tags stay plumbing the SDK hides, the way
+task queues are. Each folder it creates is authorized by `update` on its parent,
+which the single root grant already provides.
+
+*Why this supersedes task 5.2's instruction not to extend Knowledge Flow here:*
+that instruction existed to stop the API being gold-plated on speculation. It
+has done its job — these gaps were measured against a running pod, and they are
+what "record what that API turned out to lack" was asking for.
+
+The second of them turned out to be larger than a missing parameter. Ingestion
+mints a fresh document identity per upload, deliberately, so a synchronizing pod
+duplicates a document every time its source changes it — a defect the first
+Knowledge Base shipped with. That is a different shape of API, not a missing
+option on this one, and it is built as its own change:
+`knowledge-base-ingestion-facade`. This change consumes it (task 5.1) and adds
+the parent-authorized folder creation it relies on (task 5.3).
+
 ## Risks / Trade-offs
 
 **A definition can have no running pod, and nothing detects it.** → Accepted and
@@ -525,8 +666,24 @@ secrets.** → The direct consequence of keeping secrets out of workflow history
 Risk is concentrated in one route, so exact-client verification plus run
 scoping are contract requirements, not implementation details.
 
+**The prefix claim does not hold for unpublished names — the code and this spec
+disagree today.** → `_claim_prefix` in
+`apps/control-plane-backend/control_plane_backend/knowledge_bases/store.py`
+looks a prefix up by exact key, so a second client may declare
+`prefix="fred.samples.payroll"` and publish inside an existing `fred.samples`
+namespace. Only already-published *names* are protected, while the requirement
+below asserts that a name is refused when its prefix is claimed by another
+client. Found by review, not yet fixed; recorded here so the divergence is not
+mistaken for a spec that the code already satisfies.
+
 ## Open Questions
 
 1. **What is the activity timeout ceiling for one synchronization run?** The MVP
    commits to one heartbeat-enabled activity with an explicit timeout, but the
    value bounds what a first full sync can achieve and has not been chosen.
+2. **How many times should a failing run be retried before it is failed?** The
+   generic workflow starts its activity with no retry policy, so Temporal's
+   default unlimited attempts apply and the terminal failure decision 13
+   describes never arrives — a deterministically failing handler retries for
+   ever. The attempt budget is a product decision, not a default to inherit
+   silently.

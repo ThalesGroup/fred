@@ -8,163 +8,215 @@ handler and a team controls its own configuration.
 
 ## ADDED Requirements
 
-### Requirement: Definitions exist because their image published them, and existence is not a liveness signal
+### Requirement: A run's state comes from the platform, its report from its author
 
-A Knowledge Base definition SHALL exist in a deployment only because the image
-implementing it published a declaration to Control Plane. Control Plane
-deployment configuration SHALL carry no Knowledge Base entry of any kind.
+A run SHALL reach a terminal state — succeeded, failed or cancelled — which
+Control Plane records and exposes. That state SHALL be derived from the platform's
+own execution record and SHALL NOT depend on the implementation reporting it, so a
+run whose pod stopped without reporting still reaches a correct terminal state
+rather than appearing unfinished.
 
-A definition SHALL be named the way everything a contributor adds to Fred is
-named: dotted segments under a prefix that contributor owns, such as
-`fred.samples.local-folder`. A name SHALL carry at least two segments, so it
-always states its provenance, and SHALL contain no double underscore.
+A run MAY additionally carry a **report**: content the implementation chose to
+show, described by the implementation using the same `FieldSpec` vocabulary that
+describes instance configuration. Fred SHALL render that report without
+interpreting it, and SHALL NOT require it — a handler returning nothing SHALL be
+valid. The platform SHALL NOT impose a vocabulary of its own on that report, and
+in particular SHALL NOT require counts of documents discovered, created, updated,
+removed or unchanged: an implementation that maintains something other than a
+document collection has no such quantities to state.
 
-The first publication under a prefix SHALL claim that prefix for the publishing
-client. A later publication of any name under that prefix SHALL be refused
-unless it presents the same client, and a name SHALL be refused when the prefix
-the publisher declares does not cover it. The claim is the only thing preventing
-one workload from overwriting another's declaration, so it SHALL NOT be
-satisfied by membership of a broad service role, and it SHALL be recorded so
-that two simultaneous first claims cannot both succeed.
+The report SHALL be self-describing rather than free text or opaque JSON, so that
+it can be displayed well by a platform that does not understand it. Content
+exceeding the declared bounds SHALL be truncated rather than stored or
+transmitted unbounded.
 
-Existence SHALL mean only that the definition is visible to a Platform Admin,
-may be enabled for a team, and may be instantiated by an enabled team. It SHALL
-NOT imply that a pod exists, that a worker is connected, or that the Knowledge
-Base is reachable. Fred SHALL NOT check worker availability, and no surface
-SHALL present a definition as online.
+This report SHALL travel the platform's shared background-task surface rather than
+a reporting surface specific to Knowledge Bases, since reporting what a background
+job did is not particular to them.
 
-#### Scenario: First publication claims the prefix for its client
+Whenever any free-form content is truncated, the result SHALL carry a serialized
+indicator saying so. That indicator SHALL be computed by the platform-provided
+runtime and SHALL NOT be settable by the implementation, so a clipped report can
+never be presented as a complete one. It SHALL report truncation only when
+content was actually clipped: content whose length exactly reaches its bound, or
+a number of issues exactly reaching the cap, SHALL NOT be reported as truncated.
 
-- **WHEN** a name is published under a prefix nothing has claimed yet
-- **THEN** the definition exists, and the publishing client is recorded as the
-  only client that may publish under that prefix again
+Bounded warnings and errors SHALL remain part of the contract, unlike the domain
+counts removed from it: a severity is not a source's vocabulary but every job's,
+and the shared task surface already carries an error of its own. A structured
+warning or error SHALL be able to name what it concerns through an optional,
+bounded, implementation-defined subject that the platform does not parse or
+resolve. Severity SHALL be carried by whether the issue is reported as a warning
+or an error, never by a field on the issue.
 
-#### Scenario: Another client cannot write under a claimed prefix
+#### Scenario: The truncation indicator tracks actual clipping
 
-- **WHEN** a client publishes any name under a prefix claimed by a different
-  client
-- **THEN** the request is refused, and holding a broad service role does not make
-  it succeed
+- **WHEN** a handler returns content over its bound — a summary, an issue message
+  or subject, or more issues than the cap allows — and, separately, content
+  whose length exactly reaches its bound
+- **THEN** the first is recorded truncated to the bounds with its indicator true,
+  and the second is recorded unchanged with its indicator false
 
-#### Scenario: A name outside the declared prefix is refused
+#### Scenario: The truncation indicator cannot be forced
 
-- **WHEN** a client publishes a name the prefix it declares does not cover
-- **THEN** the request is refused, so a claim can never be widened by naming
+- **WHEN** an implementation returns a truncated result while also asserting
+  that nothing was truncated
+- **THEN** the recorded indicator still reads true
 
-#### Scenario: A published definition is not reported as online
+#### Scenario: A run's report is rendered without being understood
 
-- **WHEN** a Platform Admin views a definition whose pod is not running
-- **THEN** the definition is shown as available, with no claim about
-  connectivity, health or worker presence
+- **WHEN** a handler completes successfully describing a report in its own terms —
+  a measure it named itself, over a quantity Fred has no concept of
+- **THEN** the run is recorded as succeeded and the report is rendered from its own
+  description, without Fred interpreting or aggregating it
 
-### Requirement: Declarations are published by the definition's own image
+#### Scenario: A handler that reports nothing is still a complete run
 
-A definition's declaration SHALL be published by the image that implements it,
-through an outbound call to Control Plane, and publishing SHALL be the only way
-a declaration reaches Fred. Publication SHALL be a deployment step rather than a
-side effect of executing a run: the image SHALL expose one command that
-publishes the declaration and one that serves runs, and the publishing command
-SHALL terminate, reporting success or failure through its exit status. It SHALL
-run on every deployment of the image, so that what Fred stores is what is
-deployed. There SHALL be exactly one way to publish.
+- **WHEN** a handler completes successfully and returns no report at all
+- **THEN** the run is recorded as succeeded and displays its state, with no report
+  section and no error
 
-Publication SHALL be an idempotent upsert keyed by definition identity, stamped
-with the published version, so repeating it leaves exactly one stored
-declaration.
+#### Scenario: State survives a pod that never reported
 
-Publishing SHALL NOT require any inbound network service on the Knowledge Base
-pod, and Fred SHALL NOT read a declaration from the pod. A stored declaration
-SHALL NOT expire, SHALL NOT be deregistered, and SHALL NOT be presented or
-interpreted as evidence that a pod exists or a worker is running.
+- **WHEN** a run's pod stops without reporting anything
+- **THEN** the run still reaches a terminal state derived from the platform's
+  execution record, rather than remaining indefinitely in progress
 
-A definition's declared configuration fields SHALL be treated as fixed for the
-lifetime of its instances. Deploying a version whose declared fields differ
-while instances still exist is outside the supported operation of this contract:
-the supported sequence is to delete those instances first. Fred SHALL NOT
-detect, reconcile, migrate or mitigate such a change, and SHALL NOT hold state
-describing one.
+#### Scenario: Failure and cancellation are terminal, distinguishable, and never partial success
 
-#### Scenario: Publishing and serving are separate commands
+- **WHEN** one run's handler raises after creating some documents and describing
+  an over-long report, and a different run is cancelled
+- **THEN** the first reaches a terminal failed state with its content truncated
+  to the declared bounds and not presented as successful, and the
+  second reaches a terminal cancelled state distinguishable from failure
 
-- **WHEN** the image is run with its publishing command
-- **THEN** the declaration is posted to Control Plane, the command terminates
-  with a success exit status, and no worker is started
+### Requirement: Deletion is never inferred from a run
 
-#### Scenario: Publication is an idempotent upsert
+Fred SHALL NOT delete, retract or expire any document as a consequence of a run —
+neither from what the run reported nor from what it did not report. Retractions
+SHALL be actions the implementation carries out itself through Knowledge Flow's
+REST API.
 
-- **WHEN** a declaration is published, and later published again unchanged, and
-  later still published with changed display metadata
-- **THEN** exactly one stored declaration exists for that definition throughout,
-  unchanged by the repeat and replaced and restamped by the change
+Whether an absence from a source justifies a retraction SHALL therefore be the
+implementation's decision alone, made against its own ledger. An implementation
+that covers only part of its source in one pass SHALL be able to do so without
+that pass being treated as degraded, and without any deletion following from it.
 
-#### Scenario: Changing declared fields is an operator sequence, not a Fred behaviour
+*This requirement grew simpler, not weaker: with the platform no longer imposing a
+result vocabulary, there is no completeness flag for Fred to act on, and so no
+path by which a misreported inventory could cause data loss.*
 
-- **WHEN** a definition's instances are deleted and a version declaring
-  different configuration fields is then deployed and published
-- **THEN** the stored declaration is replaced, and Fred holds no record of the
-  previous fields and performs no reconciliation of its own
+#### Scenario: A bounded pass is an ordinary success
 
-### Requirement: Platform Admin visibility and team enablement
+- **WHEN** a handler covers only part of its source — a page limit, a filter or
+  a budget — and returns successfully
+- **THEN** the run is recorded as succeeded, and no document is deleted on the
+  strength of what it did not see
 
-A published definition SHALL be visible to a Platform Admin on a surface
-dedicated to Knowledge Bases, who alone may enable it for a team. A definition
-SHALL NOT be usable by a team until enabled for that team. Enablement SHALL be
-an availability decision only and SHALL store no configuration values. Disabling
-SHALL prevent creation of new instances for that team.
+#### Scenario: A retraction is executed by the implementation, never by Fred
 
-The Platform Admin surface SHALL present a definition's identity and its
-enablement state only. A definition's declared configuration fields SHALL NOT
-appear on it, in any form, since that surface neither collects nor stores a
-configuration value.
+- **WHEN** an implementation retracts documents during a run
+- **THEN** those retractions happened through Knowledge Flow's REST API, and Fred
+  performs no deletion of its own as a result
 
-A Knowledge Base definition SHALL be authorized as its own resource type. It
-SHALL NOT appear in the agent capability catalog or the application catalog, and
-a grant on an agent capability or an application SHALL NOT make a Knowledge Base
-usable.
+### Requirement: Creating a synchronized folder is what authorizes its pod to fill it
 
-#### Scenario: The admin surface offers enablement and nothing else
+A team SHALL create a Knowledge Base instance by creating a folder and naming
+the definition that synchronizes it, not through a separate Knowledge Base
+surface. Where no definition is enabled for that team, folder creation SHALL be
+unchanged.
 
-- **WHEN** a Platform Admin views the published definitions for a team
-- **THEN** each definition shows its identity and whether it is enabled, and
-  neither its declared configuration fields nor any count or summary of them is
-  presented
+That creation SHALL, as one transaction, create the library owned by the team,
+record the instance against it, grant the definition's publishing identity the
+permission to write into that library, and register the instance's cadence. If
+any part fails, none SHALL take effect: a library its pod cannot write to is
+useless, and a grant over no library is a standing right with no purpose.
 
-#### Scenario: Definition is unusable before enablement
+The grant SHALL be scoped to that one library. A pod SHALL be able to write into
+the libraries of its own instances and SHALL be refused on every other library,
+including another instance's within the same team. Authorization to reach Fred
+at all SHALL remain separate from, and insufficient for, writing into any
+library.
 
-- **WHEN** a definition is published but not enabled for a team
-- **THEN** a member of that team cannot create an instance of it
+Deleting the folder SHALL undo all of it and SHALL take its documents with it.
 
-#### Scenario: Enablement grants availability without storing configuration
+#### Scenario: Creating the folder is what makes the pod able to fill it
 
-- **WHEN** a Platform Admin enables a definition for a team
-- **THEN** members of that team can create instances of it, and no configuration
-  values are recorded by the enablement itself
+- **WHEN** a team member creates a folder synchronized by a definition enabled
+  for that team, and a run is then dispatched
+- **THEN** the library exists, the instance records it, and the pod writes into
+  it with its own identity without any further grant being made by hand
 
-#### Scenario: Definitions stay out of the capability and application catalogs
+#### Scenario: A partial creation leaves nothing behind
 
-- **WHEN** the agent capability catalog and the application catalog are listed
-- **THEN** no Knowledge Base definition appears in either, and no grant on an
-  agent capability or an application makes a Knowledge Base usable
+- **WHEN** any step of that creation fails
+- **THEN** no library, no instance, no grant and no cadence remain
 
-### Requirement: Team-scoped instances, more than one per definition
+#### Scenario: A pod cannot write outside its own instances
 
-A team SHALL be able to create more than one instance of the same enabled
-definition, each carrying its own configuration and run history. Every instance
-SHALL belong to exactly one team, and its configuration and runs SHALL be
-accessible only within that team.
+- **WHEN** a pod attempts to write into a library belonging to another instance,
+  including one in the same team
+- **THEN** the write is refused
 
-#### Scenario: Two instances of one definition coexist
+#### Scenario: Deleting the folder takes the documents and the grant
 
-- **WHEN** a team creates two instances of the same definition with different
-  configuration values
-- **THEN** both exist independently with their own run histories, and neither
-  overwrites the other
+- **WHEN** a team member deletes a synchronized folder
+- **THEN** its documents are gone, its instance and cadence are gone, and no
+  authorization over the deleted library remains
 
-#### Scenario: Another team cannot reach an instance
+### Requirement: A synchronized folder carries a tree, reached by one grant
 
-- **WHEN** a user outside the owning team attempts to read, modify or list runs
-  for an instance
-- **THEN** the attempt is refused
+A Knowledge Base SHALL be able to reproduce the structure of its source, not
+only a flat set of documents. Writing anywhere beneath an instance's library
+SHALL require no grant beyond the one made when the folder was created, since
+permission over a folder SHALL reach the folders inside it.
+
+An implementation SHALL express where a document goes as a path relative to its
+library, and SHALL never be required to know how folders are stored. Folders
+missing along that path SHALL be created as part of delivering the document.
+
+Creating a folder inside another SHALL be authorized by permission to write in
+that parent. Creating a top-level folder SHALL keep requiring the team-level
+right, so that being able to fill one folder never becomes being able to add
+folders to a team.
+
+A path that would leave the instance's library SHALL be refused.
+
+#### Scenario: A nested source path creates the folders it needs
+
+- **WHEN** a run delivers a document at a path two folders deep in its library,
+  one of which already exists
+- **THEN** only the missing folder is created, the document lands in the deepest
+  one, and no grant beyond the library's was required
+
+#### Scenario: Writing in a folder does not confer adding folders to the team
+
+- **WHEN** a subject holding only permission to write in one folder creates a
+  folder inside it, and separately attempts to create a top-level folder
+- **THEN** the first succeeds and the second is refused
+
+#### Scenario: A path cannot escape its library
+
+- **WHEN** a run delivers a document at a path that would place it outside its
+  instance's library
+- **THEN** the delivery is refused and no folder is created
+
+### Requirement: A publication records the identity that can later be granted
+
+A publication SHALL record both the client the prefix is bound to and the
+subject that client authenticates as, since only the second is something the
+authorization engine can be told to grant. Both SHALL come from the token that
+authorized the publication, so that no directory lookup is needed to grant a
+pod access to a library it is later given.
+
+#### Scenario: Publication records what a later grant will need
+
+- **WHEN** a definition is published, and the same publication is replayed on a
+  later deployment
+- **THEN** the client and its subject are both recorded, replaying leaves them
+  unchanged, and a publication presenting a different client is still refused
+
+## MODIFIED Requirements
 
 ### Requirement: Per-instance configuration is validated and passed through unchanged
 
@@ -173,6 +225,18 @@ fields, as resolved from its stored declaration, and SHALL do so whether or not
 the definition's pod is running. Control Plane SHALL serve those declared fields
 per definition to the members of a team the definition is enabled for, and to
 nobody else.
+
+That form SHALL have two distinguishable zones. A **schedule** zone, declared by
+the platform rather than by each author, stating when the instance runs — which
+Fred understands and acts upon. And the **author's own declared fields**, which
+Fred stores, hands back to the pod at invocation, and never interprets. An author
+SHALL NOT need to declare anything to obtain the schedule zone, and an
+author-declared field SHALL NOT be able to collide with it.
+
+The schedule zone SHALL stay narrow — a cadence and the ability to suspend it.
+Time zones, overlap policy and calendar recurrence beyond that are out of scope,
+because a scheduling surface reaches the user, the database and the workflow
+engine at once and is expensive to have got wrong.
 
 Fred SHALL validate submitted values against those declarations before storing
 them, using one canonical strict validation applied both when an instance is
@@ -212,217 +276,20 @@ display.
 - **THEN** the implementation receives exactly the values the user supplied, and
   the display read contains no secret-declared value
 
-### Requirement: Runs are dispatched to the definition's own worker
-
-A run SHALL be dispatched using the definition's internal execution routing, so
-that it reaches the worker hosting that definition. A run for one definition
-SHALL NOT be delivered to a worker hosting a different definition. When no
-worker is available, the run SHALL eventually reach a terminal failure according
-to the configured execution timeouts rather than being silently dropped.
-
-That routing SHALL be derived from the definition's identity, by one derivation
-shared by the dispatching side and the worker side, so that the two can never
-disagree. It SHALL NOT be authored, configured or otherwise stated a second time
-anywhere. The derivation SHALL be a pure function of the definition's identity
-and SHALL be part of the documented contract rather than a private
-implementation detail.
-
-#### Scenario: Routing is derived, so definitions cannot receive each other's runs
-
-- **WHEN** two Knowledge Base applications are published, each hosting a
-  different definition, and their workers start
-- **THEN** each side derives the same routing from the definition's identity with
-  no configuration or declaration value able to set it otherwise, and neither
-  application receives a run belonging to the other's definition
-
-#### Scenario: Missing worker fails observably, not immediately
-
-- **WHEN** a run is dispatched for a definition whose pod is not running
-- **THEN** the run is eventually recorded with a terminal failure state, and no
-  failure is reported at enablement or instance-creation time
-
-### Requirement: The author-facing API exposes no scheduling-engine concepts
-
-The published author-facing surface SHALL consist of the declaration and its
-configuration-field declarations, one synchronization handler, the context
-passed to it, the result returned from it, and the entry points that start the
-application — one publishing its declaration, one serving runs. A run entry
-point SHALL take the declaration and nothing else, deriving or reading from the
-pod's environment everything else it needs. The SDK SHALL define that
-environment contract — what the pod reads to reach Control Plane, to
-authenticate, and to reach the workflow engine — so that a third party deploys
-against a documented contract rather than guessed names. Fred SHALL neither read
-nor know that environment. Exported names and public signatures SHALL NOT
-contain workflow, activity, task-queue, retry, heartbeat or schedule types or
-terminology. Internal dependence on the workflow engine is permitted.
-
-#### Scenario: A complete implementation declares only a handler
-
-- **WHEN** a developer writes a declaration with configuration fields, one
-  synchronization handler, and the run entry point
-- **THEN** the application serves runs with no further code, its entry point
-  needs no argument beyond the declaration, and its handler signature contains no
-  retry, heartbeat, cancellation or queue parameter
-
-#### Scenario: Engine plumbing is handled outside the handler and absent from public exports
-
-- **WHEN** a run is retried, cancelled, or must remain observably alive during a
-  long synchronization
-- **THEN** the platform-provided runtime handles it without the handler
-  implementing or declaring it, and the package's public exports contain no
-  scheduling-engine type or term
-
-### Requirement: Run context is fetched per run and authorized to the exact client
-
-The dispatched run's input SHALL carry stable identifiers only — at minimum the
-definition, instance and team — and SHALL NOT carry the complete instance
-configuration or any plaintext secret.
-
-The runtime SHALL obtain the run's configuration through an authenticated call
-using its own confidential M2M client. Fred SHALL verify the signature-derived
-client identity against the client bound to that definition; a broad service
-role alone SHALL NOT authorize the call. A user access token SHALL NOT be used
-or propagated. Access SHALL be scoped to an active run, its instance and its
-team.
-
-What the handler receives SHALL NOT name any location for the implementation's
-own synchronization state, and Fred SHALL NOT provide a state directory or store
-for it.
-
-#### Scenario: Durable run history holds identifiers only
-
-- **WHEN** a run's durable execution history is inspected after completion
-- **THEN** it contains the definition, instance, team and run identifiers, and
-  no configuration values and no secret
-
-#### Scenario: A different definition's client is refused
-
-- **WHEN** a client bound to one definition requests the run context of another
-  definition's instance
-- **THEN** the request is refused, and holding a broad service role does not
-  make it succeed
-
-#### Scenario: No user token is involved
-
-- **WHEN** the runtime authenticates to Fred for run context or result reporting
-- **THEN** it uses its own workload identity and no user access token is present
-
-#### Scenario: Fred hands over no place to keep state
-
-- **WHEN** a handler is invoked
-- **THEN** nothing in what it receives names a location for its own
-  synchronization state, and the platform stores none on its behalf
-
-### Requirement: Documents are written through Knowledge Flow's REST API
-
-A Knowledge Base implementation SHALL NOT receive OpenSearch or object-storage
-credentials through the Fred SDK contract. It SHALL ingest and delete documents
-through Knowledge Flow's REST API, authenticating with its own workload
-identity. Direct infrastructure access SHALL be outside the supported portable
-contract.
-
-#### Scenario: Documents reach Fred only through that API
-
-- **WHEN** an implementation ingests or deletes documents during a run
-- **THEN** every such operation goes through Knowledge Flow's REST API and none
-  reaches storage or the index directly
-
-#### Scenario: Infrastructure credentials are never supplied
-
-- **WHEN** an implementation runs
-- **THEN** the SDK contract provides it no OpenSearch or object-storage
-  credential, and its source credential is used only against the external source
-
-### Requirement: Runs report a bounded structured result and a terminal state
-
-A run SHALL reach a terminal state — succeeded, failed or cancelled — which
-Control Plane records and exposes. A completed run SHALL report a bounded
-human-readable summary, generic counters covering discovered, created, updated,
-removed and unchanged, bounded structured warnings and errors, and an optional
-JSON-safe map of implementation-defined metrics. The result SHALL NOT model
-source-specific concepts, and content exceeding the declared bounds SHALL be
-truncated rather than stored or transmitted unbounded.
-
-Whenever any free-form content is truncated, the result SHALL carry a serialized
-indicator saying so. That indicator SHALL be computed by the platform-provided
-runtime and SHALL NOT be settable by the implementation, so a clipped report can
-never be presented as a complete one. It SHALL report truncation only when
-content was actually clipped: content whose length exactly reaches its bound, or
-a number of issues exactly reaching the cap, SHALL NOT be reported as truncated.
-
-A structured warning or error SHALL be able to name what it concerns through an
-optional, bounded, implementation-defined subject that the platform does not
-parse or resolve. Severity SHALL be carried by whether the issue is reported as a
-warning or an error, never by a field on the issue.
-
-#### Scenario: The truncation indicator tracks actual clipping
-
-- **WHEN** a handler returns content over its bound — a summary, an issue message
-  or subject, or more issues than the cap allows — and, separately, content
-  whose length exactly reaches its bound
-- **THEN** the first is recorded truncated to the bounds with its indicator true,
-  and the second is recorded unchanged with its indicator false
-
-#### Scenario: The truncation indicator cannot be forced
-
-- **WHEN** an implementation returns a truncated result while also asserting
-  that nothing was truncated
-- **THEN** the recorded indicator still reads true
-
-#### Scenario: Successful run records counters and passes metrics through
-
-- **WHEN** a handler completes successfully returning counters and
-  implementation-defined metrics
-- **THEN** the run is recorded as succeeded with its counters and summary
-  readable, and the metrics are recorded without Fred interpreting them
-
-#### Scenario: Failure and cancellation are terminal, distinguishable, and never partial success
-
-- **WHEN** one run's handler raises after creating some documents and returning
-  an over-long summary, and a different run is cancelled
-- **THEN** the first reaches a terminal failed state with its content truncated
-  to the declared bounds and its counters not marking it successful, and the
-  second reaches a terminal cancelled state distinguishable from failure
-
-### Requirement: Reconciliation completeness is stated, and deletion is never inferred
-
-A run's result SHALL state whether the run observed its source exhaustively and
-authoritatively. That statement SHALL be independent of the terminal outcome: a
-successful run MAY report an incomplete reconciliation, and that combination
-SHALL be a valid bounded pass rather than a degraded state.
-
-The removed counter SHALL report retractions the implementation actually
-executed through Knowledge Flow. Fred SHALL NOT delete, retract or expire any
-document by interpreting that counter. An absence from a source SHALL justify a
-deletion only when the run reported a complete, authoritative inventory; an
-explicit tombstone from the source MAY be acted on even during an incomplete
-pass.
-
-#### Scenario: A bounded pass succeeds without claiming completeness
-
-- **WHEN** a handler covers only part of its source — a page limit, a filter or
-  a budget — and returns successfully
-- **THEN** the run is recorded as succeeded with its reconciliation reported
-  incomplete, and no document is deleted on the strength of what it did not see
-
-#### Scenario: An executed retraction is reported, not requested
-
-- **WHEN** a run reports retractions it carried out
-- **THEN** Fred records the count and performs no deletion of its own as a
-  result
-
 ### Requirement: Failure is reported or raised, and both end terminally
 
-An implementation SHALL be able to report an expected business failure as a
-terminal failed result carrying bounded, sanitized error information. An
+An implementation SHALL be able to signal an expected business failure as
+terminal without being retried, carrying bounded, sanitized error information. An
 exception escaping the handler SHALL be treated as an execution failure that the
 platform-provided runtime retries internally, reaching a terminal failed state
 once retries are exhausted, again with bounded and sanitized error content.
-Neither path SHALL expose a secret or an unbounded payload.
+Retries SHALL be bounded, so that exhaustion is reachable and a deterministically
+failing handler terminates rather than retrying indefinitely. Neither path SHALL
+expose a secret or an unbounded payload.
 
 #### Scenario: A reported failure is terminal without being retried as a crash
 
-- **WHEN** a handler returns a failed result
+- **WHEN** a handler signals an expected business failure
 - **THEN** the run is recorded as failed with its bounded error information, and
   the platform does not retry it as though it had crashed
 
@@ -431,3 +298,14 @@ Neither path SHALL expose a secret or an unbounded payload.
 - **WHEN** a handler raises and its retries are exhausted
 - **THEN** the run reaches a terminal failed state carrying bounded, sanitized
   error information
+
+## REMOVED Requirements
+
+### Requirement: Runs report a bounded structured result and a terminal state
+
+**Reason**: the platform no longer imposes a result vocabulary on an implementation. Replaced by the two requirements added above.
+
+### Requirement: Reconciliation completeness is stated, and deletion is never inferred
+
+**Reason**: the platform no longer imposes a result vocabulary on an implementation. Replaced by the two requirements added above.
+
