@@ -23,7 +23,6 @@ identity, so an author writes no auth code and holds no store credential.
 
 from __future__ import annotations
 
-import json
 import logging
 import mimetypes
 
@@ -38,8 +37,6 @@ logger = logging.getLogger(__name__)
 # Control Plane call gets.
 _TIMEOUT = httpx.Timeout(300.0, connect=10.0)
 
-_FAILED_STATUSES = frozenset({"failed", "error"})
-
 
 class DocumentPublishError(RuntimeError):
     """One document could not be written. The run may continue without it."""
@@ -47,6 +44,14 @@ class DocumentPublishError(RuntimeError):
 
 class DocumentRetractError(RuntimeError):
     """One document could not be taken out of the library."""
+
+
+def _raise_for(
+    response: httpx.Response, error: type[RuntimeError], subject: str
+) -> None:
+    """The surface answers with an outcome, so a status is the whole story."""
+    if response.status_code >= 400:
+        raise error(f"{subject}: {response.status_code} {response.text[:300]}")
 
 
 class DocumentPublisher:
@@ -83,88 +88,49 @@ class DocumentPublisher:
                 "stack with authentication disabled will accept this."
             )
 
-    async def publish(self, *, relative_path: str, content: bytes) -> str | None:
+    async def publish(
+        self, *, relative_path: str, content: bytes, version: str | None = None
+    ) -> None:
         """Write one document, replacing what the same path held before.
 
-        Returns the identifier Fred assigned it, when the response carries one.
+        The source key is the caller's own name for it — writing the same key
+        again updates that document, so nothing about Fred's own identifiers
+        ever has to be remembered here.
         """
-        metadata = {"tags": [self._library_id], "source_tag": self._source_tag}
-        files = {
-            "files": (
-                relative_path,
-                content,
-                mimetypes.guess_type(relative_path)[0] or "application/octet-stream",
-            )
-        }
         response = await self._client.post(
-            f"{self._base_url}/upload-process-documents",
-            files=files,
-            data={"metadata_json": json.dumps(metadata)},
+            f"{self._base_url}/libraries/{self._library_id}/documents",
+            files={
+                "file": (
+                    relative_path,
+                    content,
+                    mimetypes.guess_type(relative_path)[0]
+                    or "application/octet-stream",
+                )
+            },
+            data={
+                "path": relative_path,
+                "source_key": relative_path,
+                "source_tag": self._source_tag,
+                **({"document_version": version} if version else {}),
+            },
             headers=await self._headers(),
         )
-        if response.status_code >= 400:
-            raise DocumentPublishError(
-                f"{relative_path}: {response.status_code} {response.text[:300]}"
-            )
-        return self._outcome(relative_path, response.text)
+        _raise_for(response, DocumentPublishError, relative_path)
 
-    async def retract(self, *, document_uid: str) -> None:
-        """Take one document out of the library, as the UI's delete does.
+    async def retract(self, *, relative_path: str) -> None:
+        """Take one document out of the library, by the key it was written under.
 
-        The document itself is not destroyed — it stops belonging to this
-        library, which is the only retraction a source's disappearance
-        justifies. A library this pod owns has one writer, so the
-        read-modify-write below races with nobody.
+        The document is not destroyed — it stops belonging to this library,
+        which is the only retraction a source's disappearance justifies. A key
+        the library does not hold is not an error.
         """
-        headers = await self._headers()
-        current = await self._client.get(
-            f"{self._base_url}/tags/{self._library_id}", headers=headers
+        response = await self._client.request(
+            "DELETE",
+            f"{self._base_url}/libraries/{self._library_id}/documents",
+            params={"source_key": relative_path},
+            headers=await self._headers(),
         )
-        if current.status_code >= 400:
-            raise DocumentRetractError(
-                f"cannot read library {self._library_id}: "
-                f"{current.status_code} {current.text[:200]}"
-            )
-        tag = current.json()
-        remaining = [uid for uid in tag.get("item_ids") or [] if uid != document_uid]
-        if len(remaining) == len(tag.get("item_ids") or []):
-            return  # already out of the library: nothing to write
-
-        updated = await self._client.put(
-            f"{self._base_url}/tags/{self._library_id}",
-            json={
-                "name": tag["name"],
-                "path": tag.get("path"),
-                "description": tag.get("description"),
-                "type": tag.get("type"),
-                "item_ids": remaining,
-            },
-            headers=headers,
-        )
-        if updated.status_code >= 400:
-            raise DocumentRetractError(
-                f"{document_uid}: {updated.status_code} {updated.text[:200]}"
-            )
-
-    @staticmethod
-    def _outcome(relative_path: str, body: str) -> str | None:
-        """Read the progress stream: a 200 still carries per-file failures."""
-        document_uid: str | None = None
-        for line in body.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event.get("status") in _FAILED_STATUSES:
-                raise DocumentPublishError(
-                    f"{relative_path}: {event.get('step', 'ingestion')} reported "
-                    f"{event.get('status')}"
-                )
-            document_uid = event.get("document_uid") or document_uid
-        return document_uid
+        _raise_for(response, DocumentRetractError, relative_path)
 
     async def _headers(self) -> dict[str, str]:
         if self._tokens is None:
