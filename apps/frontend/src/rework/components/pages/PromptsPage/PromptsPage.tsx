@@ -21,6 +21,7 @@ import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
@@ -376,43 +377,47 @@ export default function PromptsPage() {
           {/* ── Toolbar: title + create button, then search + category
               management grouped at the far right ── */}
           <div className={styles.pageTitle}>
-            <span className={styles.pageTitleText}>
-              {isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
-            </span>
-            {canManage && (
-              <Button
-                color="primary"
-                variant="filled"
-                size="medium"
-                icon={{ category: "outlined", type: "add" }}
-                onClick={openCreate}
-              >
-                {t("rework.teams.prompts.create")}
-              </Button>
-            )}
-            <div className={styles.titleActions}>
-              <div className={styles.searchBar}>
-                <SearchInput
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t("rework.teams.prompts.searchPlaceholder")}
-                  clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-                  size="small"
-                />
-              </div>
-              {canManage && (
-                <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
-                  <IconButton
-                    size="medium"
-                    color="on-surface-retreat"
-                    variant="icon"
-                    icon={{ category: "outlined", type: "tune" }}
-                    aria-label={t("rework.promptCategories.manage.buttonAria")}
-                    onClick={() => setIsManageCategoriesOpen(true)}
-                  />
-                </Tooltip>
-              )}
-            </div>
+            <PageHeader
+              title={isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
+              actions={
+                <>
+                  {canManage && (
+                    <Button
+                      color="primary"
+                      variant="filled"
+                      size="medium"
+                      icon={{ category: "outlined", type: "add" }}
+                      onClick={openCreate}
+                    >
+                      {t("rework.teams.prompts.create")}
+                    </Button>
+                  )}
+                  <div className={styles.titleActions}>
+                    <div className={styles.searchBar}>
+                      <SearchInput
+                        value={search}
+                        onChange={setSearch}
+                        placeholder={t("rework.teams.prompts.searchPlaceholder")}
+                        clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                        size="small"
+                      />
+                    </div>
+                    {canManage && (
+                      <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
+                        <IconButton
+                          size="medium"
+                          color="on-surface-retreat"
+                          variant="icon"
+                          icon={{ category: "outlined", type: "tune" }}
+                          aria-label={t("rework.promptCategories.manage.buttonAria")}
+                          onClick={() => setIsManageCategoriesOpen(true)}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
+                </>
+              }
+            />
           </div>
 
           {/* ── Category filter chips ── */}

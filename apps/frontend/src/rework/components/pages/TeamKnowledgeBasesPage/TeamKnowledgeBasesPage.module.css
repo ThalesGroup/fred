@@ -5,16 +5,10 @@
   min-height: 0;
 }
 
+/* Only the inset the header sits in: PageHeader owns its type, colour and the
+   right-alignment of the controls. */
 .title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
-  padding: var(--spacing-l);
-}
-
-.titleText {
-  font-weight: 600;
-  font-size: var(--font-size-l);
+  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
 }
 
 .loadingState {

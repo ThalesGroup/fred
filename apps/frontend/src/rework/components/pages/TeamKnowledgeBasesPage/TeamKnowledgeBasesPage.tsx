@@ -14,6 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import KnowledgeBaseCard from "@shared/organisms/KnowledgeBaseCard/KnowledgeBaseCard.tsx";
@@ -67,16 +68,20 @@ export default function TeamKnowledgeBasesPage() {
   return (
     <div className={styles.page}>
       <div className={styles.title}>
-        <span className={styles.titleText}>{t("rework.knowledgeBases.title")}</span>
-        <Button
-          color={"primary"}
-          variant={"filled"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "add" }}
-          onClick={() => setIsCreateOpen(true)}
-        >
-          {t("rework.knowledgeBases.create")}
-        </Button>
+        <PageHeader
+          title={t("rework.knowledgeBases.title")}
+          actions={
+            <Button
+              color={"primary"}
+              variant={"filled"}
+              size={"medium"}
+              icon={{ category: "outlined", type: "add" }}
+              onClick={() => setIsCreateOpen(true)}
+            >
+              {t("rework.knowledgeBases.create")}
+            </Button>
+          }
+        />
       </div>
 
       {isLoading ? (
