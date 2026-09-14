@@ -1,0 +1,235 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding-right: var(--spacing-3xs);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--spacing-m);
+}
+
+/* One pattern: the thumbnail is the click target to the detail; the settings
+   below it are the corrections (include, intent). */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-main);
+  padding: var(--spacing-xs);
+}
+
+.card[data-excluded] {
+  opacity: 0.6;
+}
+
+.thumbnailButton {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: 0;
+}
+
+.thumbnailButton:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.cardLabel {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3xs);
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.muted {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.preferred {
+  color: var(--primary);
+  font: var(--font-label-small);
+}
+
+.excluded {
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+
+.excludedSummary {
+  cursor: pointer;
+  margin-bottom: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Detail: the large thumbnail with numbered outlines on the left, the zone
+   list with a role per zone on the right. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.detailHeader {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.detailBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.zoneList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  min-width: 240px;
+  list-style: none;
+}
+
+.zoneRow {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(120px, auto);
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.zoneIndex {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-full);
+  background-color: var(--secondary-container);
+  width: 20px;
+  height: 20px;
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+}
+
+.zoneSample {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumbnail {
+  position: relative;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.thumbnailPlaceholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--on-surface-retreat);
+}
+
+/* Zone outlines are drawn from the analysis geometry (per mille of the slide),
+   colored by role so a heading and a body read apart at a glance. */
+.outline {
+  --outline-color: var(--primary);
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--outline-color);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.outline[data-role="title"],
+.outline[data-role="heading"],
+.outline[data-role="subtitle"] {
+  --outline-color: var(--primary);
+}
+
+.outline[data-role="body"],
+.outline[data-role="caption"],
+.outline[data-role="label"] {
+  --outline-color: var(--secondary);
+}
+
+.outline[data-role="number"] {
+  --outline-color: var(--tertiary);
+}
+
+.outline[data-role="image"] {
+  --outline-color: var(--success);
+}
+
+.outline[data-role="keep"] {
+  --outline-color: var(--outline);
+  border-style: dashed;
+}
+
+.outlineIndex {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  border-radius: 0 0 var(--radius-xs) 0;
+  background-color: var(--outline-color);
+  padding: 0 4px;
+  color: var(--on-primary);
+  font: var(--font-label-small);
+  line-height: 14px;
+}

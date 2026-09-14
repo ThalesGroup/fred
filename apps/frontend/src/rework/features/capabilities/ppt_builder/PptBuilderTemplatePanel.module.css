@@ -1,0 +1,54 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.fileInput {
+  display: none;
+}
+
+.buttonSpinner {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The summary and its action read as one line: the count on the left, the
+   review entry point on the right. */
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.summary {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.blocking,
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding-left: var(--spacing-m);
+}

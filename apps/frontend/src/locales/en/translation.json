@@ -384,6 +384,91 @@
           }
         }
       }
+    },
+    "ppt_builder": {
+      "name": "Generate a presentation",
+      "description": "Builds a PowerPoint deck from a chat request, on the team's template or a built-in theme.",
+      "fields": {
+        "inventory": {
+          "title": "PowerPoint template",
+          "description": "Slide patterns detected in the uploaded template."
+        },
+        "overrides": {
+          "title": "Pattern corrections",
+          "description": "Your corrections to the detected patterns."
+        }
+      },
+      "form": {
+        "uploadTemplate": "Upload a .pptx template",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A template is configured for this agent.",
+        "builtInTheme": "Built-in theme (no template)",
+        "templateInvalid": "This file could not be analysed. Pick another .pptx or remove it.",
+        "analyzeFailed": "The template could not be analysed. Check the file and try again.",
+        "uploadSuccessToast": "PowerPoint template analysed.",
+        "summary": "{{patterns}} slide patterns detected, {{fixed}} fixed slides, {{excluded}} excluded.",
+        "summaryTheme": "Built-in theme: {{patterns}} slide patterns, {{fixed}} fixed slide.",
+        "review": "Review patterns"
+      },
+      "review": {
+        "title": "Slide patterns",
+        "done": "Done",
+        "back": "Back to the patterns",
+        "labelField": "Pattern name",
+        "include": "Use {{label}}",
+        "intentFor": "Intent of {{label}}",
+        "roleFor": "Role of zone {{index}}",
+        "item": "Item {{index}}",
+        "emptyZone": "(empty)",
+        "noZone": "No editable zone",
+        "preferred": "Preferred",
+        "excluded": "Excluded patterns ({{count}})",
+        "loadingThumbnails": "Loading thumbnails…",
+        "thumbnailsUnavailable": "Thumbnails are not available for this template.",
+        "source": {
+          "layout": "Layout {{index}}",
+          "slide": "Slide {{index}}"
+        },
+        "exclusion": {
+          "chart": "Chart",
+          "table": "Table",
+          "icon_bank": "Icon bank",
+          "no_placeholder": "No placeholder",
+          "unsupported_parts": "Cannot be copied",
+          "author": "Excluded by you"
+        }
+      },
+      "intents": {
+        "title": "Title",
+        "section": "Section",
+        "agenda": "Agenda",
+        "content": "Content",
+        "two_columns": "Two columns",
+        "comparison": "Comparison",
+        "image_text": "Image and text",
+        "cards": "Cards",
+        "steps": "Steps",
+        "statement": "Statement",
+        "contact": "Contact",
+        "fixed": "Fixed slide"
+      },
+      "roles": {
+        "title": "Title",
+        "subtitle": "Subtitle",
+        "heading": "Heading",
+        "body": "Body",
+        "caption": "Caption",
+        "number": "Number",
+        "label": "Label",
+        "image": "Image",
+        "keep": "Do not touch"
+      },
+      "errors": {
+        "invalid_upload": "The file could not be read as a .pptx.",
+        "server_busy": "The server is busy. Try again in a moment."
+      }
     }
   },
   "chatbot": {
@@ -3360,6 +3445,10 @@
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
               "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+            },
+            "presentationBuilder": {
+              "title": "Generate a presentation",
+              "description": "Ability to build a PowerPoint deck from a request, on an optional corporate template."
             }
           }
         },

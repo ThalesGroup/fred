@@ -384,6 +384,91 @@
           }
         }
       }
+    },
+    "ppt_builder": {
+      "name": "Générer une présentation",
+      "description": "Génère une présentation PowerPoint à partir d'une demande, sur le modèle de l'équipe ou un thème intégré.",
+      "fields": {
+        "inventory": {
+          "title": "Modèle PowerPoint",
+          "description": "Patrons de slides détectés dans le modèle téléversé."
+        },
+        "overrides": {
+          "title": "Corrections des patrons",
+          "description": "Vos corrections aux patrons détectés."
+        }
+      },
+      "form": {
+        "uploadTemplate": "Téléverser un modèle .pptx",
+        "replaceTemplate": "Remplacer le modèle",
+        "uploadAria": "Fichier de modèle PowerPoint",
+        "clearAria": "Retirer le fichier sélectionné",
+        "currentTemplate": "Un modèle est configuré pour cet agent.",
+        "builtInTheme": "Thème intégré (sans modèle)",
+        "templateInvalid": "Ce fichier n'a pas pu être analysé. Choisissez un autre .pptx ou retirez-le.",
+        "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
+        "uploadSuccessToast": "Modèle PowerPoint analysé.",
+        "summary": "{{patterns}} patrons de slide détectés, {{fixed}} slides fixes, {{excluded}} exclus.",
+        "summaryTheme": "Thème intégré : {{patterns}} patrons de slide, {{fixed}} slide fixe.",
+        "review": "Vérifier les patrons"
+      },
+      "review": {
+        "title": "Patrons de slides",
+        "done": "Terminé",
+        "back": "Retour aux patrons",
+        "labelField": "Nom du patron",
+        "include": "Utiliser {{label}}",
+        "intentFor": "Intention de {{label}}",
+        "roleFor": "Rôle de la zone {{index}}",
+        "item": "Élément {{index}}",
+        "emptyZone": "(vide)",
+        "noZone": "Aucune zone modifiable",
+        "preferred": "Privilégié",
+        "excluded": "Patrons exclus ({{count}})",
+        "loadingThumbnails": "Chargement des vignettes…",
+        "thumbnailsUnavailable": "Les vignettes ne sont pas disponibles pour ce modèle.",
+        "source": {
+          "layout": "Masque {{index}}",
+          "slide": "Slide {{index}}"
+        },
+        "exclusion": {
+          "chart": "Graphique",
+          "table": "Tableau",
+          "icon_bank": "Banque d'icônes",
+          "no_placeholder": "Aucun espace réservé",
+          "unsupported_parts": "Non copiable",
+          "author": "Exclu par vous"
+        }
+      },
+      "intents": {
+        "title": "Titre",
+        "section": "Section",
+        "agenda": "Sommaire",
+        "content": "Contenu",
+        "two_columns": "Deux colonnes",
+        "comparison": "Comparaison",
+        "image_text": "Image et texte",
+        "cards": "Cartes",
+        "steps": "Étapes",
+        "statement": "Message clé",
+        "contact": "Contact",
+        "fixed": "Slide fixe"
+      },
+      "roles": {
+        "title": "Titre",
+        "subtitle": "Sous-titre",
+        "heading": "En-tête",
+        "body": "Corps",
+        "caption": "Légende",
+        "number": "Chiffre",
+        "label": "Libellé",
+        "image": "Image",
+        "keep": "Ne pas toucher"
+      },
+      "errors": {
+        "invalid_upload": "Le fichier n'a pas pu être lu comme un .pptx.",
+        "server_busy": "Le serveur est occupé. Réessayez dans un instant."
+      }
     }
   },
   "chatbot": {
@@ -3360,6 +3445,10 @@
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",
               "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
+            },
+            "presentationBuilder": {
+              "title": "Générer une présentation",
+              "description": "Capacité de construire une présentation PowerPoint à partir d'une demande, sur un modèle d'entreprise optionnel."
             }
           }
         },

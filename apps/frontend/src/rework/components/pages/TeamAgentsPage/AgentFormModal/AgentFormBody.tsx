@@ -37,12 +37,14 @@ import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilit
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { PptBuilderPackOptions } from "../../../../features/capabilities/ppt_builder/PptBuilderPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField.tsx";
 import { helpPagePath } from "@rework/features/helpCenter/content";
@@ -371,6 +373,19 @@ export function AgentFormBody({
           assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
           onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
           onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_FILLER, message)}
+        />
+      );
+    }
+    // Presentation builder → the optional template upload and the pattern review.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
+      return (
+        <PptBuilderPackOptions
+          disabled={isSubmitting}
+          configValues={capabilityConfigValues[CAP_PPT_BUILDER] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_PPT_BUILDER, key, value)}
+          assetFiles={capabilityAssetFiles[CAP_PPT_BUILDER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_BUILDER, slotKey, file)}
+          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_BUILDER, message)}
         />
       );
     }

@@ -1,0 +1,8 @@
+{
+  "schemaFile": "./openapi.json",
+  "apiFile": "./pptBuilderCapabilityApi.ts",
+  "apiImport": "pptBuilderCapabilityApi",
+  "outputFile": "pptBuilderCapabilityOpenApi.ts",
+  "exportName": "pptBuilderCapabilityApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

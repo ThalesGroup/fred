@@ -62,6 +62,7 @@ export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
+export const CAP_PPT_BUILDER = "ppt_builder";
 export const CAP_HTML_ARTIFACT = "html_artifact";
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
@@ -145,6 +146,15 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.powerpointDocument.description",
         includes: [{ capabilityId: CAP_PPT_FILLER, labelKey: "capability.ppt_filler.name" }],
         enablesCapabilityIds: [CAP_PPT_FILLER],
+      },
+      {
+        id: "presentation_builder",
+        kind: "capabilities",
+        icon: "co_present",
+        titleKey: "rework.teams.formAgent.capabilities.packs.presentationBuilder.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.presentationBuilder.description",
+        includes: [{ capabilityId: CAP_PPT_BUILDER, labelKey: "capability.ppt_builder.name" }],
+        enablesCapabilityIds: [CAP_PPT_BUILDER],
       },
       {
         id: "web_page",
