@@ -198,9 +198,7 @@ def _build_router() -> APIRouter:
 
     @router.get("/theme/preview.pdf", operation_id="previewPptBuilderTheme")
     async def theme_preview() -> Response:
-        template, inventory = default_theme()
-        deck = await asyncio.to_thread(build_patterns_deck, template, inventory)
-        pdf = await convert_office_bytes_to_pdf(deck, suffix=".pptx")
+        pdf = await theme_preview_pdf()
         if pdf is None:
             raise HTTPException(
                 status_code=503,
@@ -209,6 +207,32 @@ def _build_router() -> APIRouter:
         return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
 
     return router
+
+
+# The built-in theme is a process constant, so its thumbnails PDF is rendered
+# once per pod (pod-local by nature) instead of one LibreOffice run per request.
+_theme_pdf: Optional[bytes] = None
+_theme_pdf_lock = asyncio.Lock()
+
+
+async def theme_preview_pdf() -> Optional[bytes]:
+    global _theme_pdf
+    if _theme_pdf is not None:
+        return _theme_pdf
+    async with _theme_pdf_lock:
+        if _theme_pdf is not None:
+            return _theme_pdf
+        template, inventory = default_theme()
+        if not acquire_heavy_job_slot():
+            raise HTTPException(status_code=503, detail=_BUSY_MESSAGE)
+        try:
+            deck = await asyncio.to_thread(build_patterns_deck, template, inventory)
+        finally:
+            release_heavy_job_slot()
+        pdf = await convert_office_bytes_to_pdf(deck, suffix=".pptx")
+        if pdf is not None:
+            _theme_pdf = pdf
+        return pdf
 
 
 _BUILD_INSTRUCTIONS = (
@@ -307,6 +331,12 @@ class PptBuilderCapability(
         execution_models=("react",),
     )
     ConfigModel = PptBuilderConfig
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Warm the built-in theme at registration so its one-time build (tens
+        # of milliseconds of python-pptx work) never lands inside a turn.
+        default_theme()
 
     async def validate_config(
         self,

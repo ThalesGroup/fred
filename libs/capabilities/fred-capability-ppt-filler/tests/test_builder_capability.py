@@ -373,6 +373,27 @@ def test_preview_routes_return_pdf_or_503(monkeypatch):
     )
 
 
+def test_theme_preview_is_converted_once_per_process(monkeypatch):
+    calls = []
+
+    async def _counting(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+        calls.append(suffix)
+        return b"%PDF-theme"
+
+    monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _counting)
+    monkeypatch.setattr(capability_mod, "_theme_pdf", None)
+    client = _client()
+    assert (
+        client.get("/capabilities/ppt_builder/theme/preview.pdf").content
+        == b"%PDF-theme"
+    )
+    assert (
+        client.get("/capabilities/ppt_builder/theme/preview.pdf").content
+        == b"%PDF-theme"
+    )
+    assert calls == [".pptx"]
+
+
 def test_theme_route_lists_every_intent():
     body = _client().get("/capabilities/ppt_builder/theme").json()
     intents = {p["intent"] for p in body["inventory"]["patterns"] if p["included"]}

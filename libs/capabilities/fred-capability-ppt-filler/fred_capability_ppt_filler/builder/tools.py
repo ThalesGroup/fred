@@ -29,7 +29,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, List, Literal, Optional
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -189,6 +189,33 @@ def _image_ids(plan: DeckPlan) -> set[str]:
     return ids
 
 
+class _BadImage(ValueError):
+    def __init__(self, document_id: str, reason: str) -> None:
+        super().__init__(reason)
+        self.document_id = document_id
+
+
+async def _no_images() -> Dict[str, object]:
+    return {}
+
+
+def _prepare_and_render(
+    template_bytes: bytes,
+    inventory: TemplateInventory,
+    plan: DeckPlan,
+    prefetched: Dict[str, object],
+):
+    """Picture validation/transcoding and the render, together in one worker
+    thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU."""
+    images = {}
+    for document_id, raw in prefetched.items():
+        try:
+            images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
+        except NotAnImageError as exc:
+            raise _BadImage(document_id, str(exc)) from exc
+    return render_deck(template_bytes, inventory, plan, images)
+
+
 # --- tools ------------------------------------------------------------------------------------
 
 
@@ -272,29 +299,23 @@ def build_builder_tools(
             )
 
         started = time.monotonic()
+        # The template fetch and the image prefetch are independent I/O.
         try:
-            template_bytes = await template_bytes_loader()
+            template_bytes, prefetched = await asyncio.gather(
+                template_bytes_loader(),
+                _prefetch_image_bytes(image_ids, services)
+                if image_ids
+                else _no_images(),
+            )
         except Exception as exc:  # noqa: BLE001 - surfaced to the agent
             message = f"Could not load the presentation template [{type(exc).__name__}: {exc}]."
             logger.exception("[PPTBUILD][TOOL] template load FAILED -> %s", message)
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
-
-        prefetched = (
-            await _prefetch_image_bytes(image_ids, services) if image_ids else {}
-        )
-        images = {}
         for document_id, fetched in prefetched.items():
             if isinstance(fetched, Exception):
                 return (
                     f"Could not fetch the image document '{document_id}' [{type(fetched).__name__}: {fetched}]. "
                     "List the folder again with list_images_in_folder and pass a valid document_id.",
-                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
-                )
-            try:
-                images[document_id] = prepare_picture(fetched)  # type: ignore[arg-type]
-            except NotAnImageError as exc:
-                return (
-                    f"The document '{document_id}' is not a usable image [{exc}]. Pick an image document.",
                     ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
                 )
 
@@ -304,7 +325,12 @@ def build_builder_tools(
             )
         try:
             result = await asyncio.to_thread(
-                render_deck, template_bytes, inventory, plan, images
+                _prepare_and_render, template_bytes, inventory, plan, prefetched
+            )
+        except _BadImage as exc:
+            return (
+                f"The document '{exc.document_id}' is not a usable image [{exc}]. Pick an image document.",
+                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
             )
         except RenderError as exc:
             return str(exc), ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
