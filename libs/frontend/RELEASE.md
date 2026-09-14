@@ -229,6 +229,16 @@ exact-version endpoint means absent or temporarily invisible; redirects, authent
 HTTP failures, timeouts, malformed JSON, and identity/integrity drift fail immediately. The
 adapter follows no redirect and requires the response to remain on the selected registry request.
 
+Recovery workflow run `34873471933` subsequently downloaded and hash-verified the pinned original
+ZIP but failed during preparation with exit `13` and an unsettled top-level await. The recovery
+entry module was awaiting its dynamic registry-verifier import while the verifier imported
+recovery-evidence validation back from that still-evaluating entry module. Recovery plan and
+evidence validation now resides in an execution-independent module imported by both entry points;
+the registry verifier no longer imports the executable recovery module. Bounded fresh-process
+tests execute the real preparation, controlled publication, and recovery-aware verifier CLIs,
+including real existing-package resolution and cryptographically signed controlled provenance.
+Those local fixtures cannot contact a writable registry and remain tooling evidence only.
+
 The final original artifact is ID `10352121632`, named
 `frontend-packages-release-f49f2439d54b44f7739c5bd7fca3f789e0e528d6-34853407387-1`, with
 ZIP SHA-256 `25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82`.

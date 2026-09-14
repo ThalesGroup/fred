@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { verify as verifySigstoreBundle } from "sigstore";
 
-import { validateBootstrapRecoveryEvidence } from "./bootstrap-recovery.mjs";
+import { validateBootstrapRecoveryEvidence } from "./bootstrap-recovery-contract.mjs";
 import { assertRegistryConsumer } from "./dependency-boundaries.mjs";
 import {
   assertProvisionedChromium,

@@ -596,6 +596,14 @@ MUST reject any separately transferred candidate copy that differs from the ZIP 
 only archive paths derived from its fresh verified extraction. It MUST clean that extraction and
 MUST NOT regenerate or re-baseline the original evidence.
 
+Reusable recovery plan, identity, provenance-expectation, and evidence validation MUST be
+independent of either executable CLI module. Recovery preparation MUST be able to dynamically load
+the real registry verifier for existing-package provenance without a circular module-evaluation
+wait, while the registry-verifier CLI MUST continue to load and enforce recovery evidence. CLI
+errors MUST propagate as nonzero exits. Controlled acceptance tests MUST execute the actual entry
+points in fresh processes with bounded timeouts and MUST NOT replace or bypass the existing-package
+verification path.
+
 #### Scenario: Maintainers bootstrap a new public package
 
 - **WHEN** one of the selected package names does not yet exist in the approved npm scope
@@ -670,6 +678,26 @@ MUST NOT regenerate or re-baseline the original evidence.
 - **WHEN** the recovery ZIP contains traversal, a link or special file, an omitted expected file,
   or an additional candidate file
 - **THEN** recovery rejects it before extracting or resolving any registry state
+
+#### Scenario: Recovery preparation loads the real verifier in a fresh process
+
+- **WHEN** the recovery preparation CLI verifies the published design-token package and
+  dynamically loads the registry verifier from a fresh Node process
+- **THEN** module evaluation completes, cryptographic provenance is enforced, recovery evidence is
+  written only on success, and the process does not exit with an unsettled top-level await
+
+#### Scenario: Recovery-aware registry verification loads the shared evidence contract
+
+- **WHEN** the public-registry verifier CLI receives a recovery plan and evidence
+- **THEN** it imports the independent validation contract, rejects invalid recovery evidence, and
+  continues past valid evidence without importing the executable recovery entry module
+
+#### Scenario: A recovery subprocess encounters a validation or publication failure
+
+- **WHEN** the original artifact, transferred copies, existing-package provenance, or publication
+  operation fails in a fresh recovery CLI process
+- **THEN** it returns a nonzero exit, performs no forbidden or subsequent publication, and cannot
+  hang beyond the bounded test deadline
 
 #### Scenario: Recovery and original provenance have different source commits
 

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { validateBootstrapRecoveryPlan } from "./bootstrap-recovery.mjs";
+import { validateBootstrapRecoveryPlan } from "./bootstrap-recovery-contract.mjs";
 import {
   assertExpectedManifest,
   assertProducerLockfile,

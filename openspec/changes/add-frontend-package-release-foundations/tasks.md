@@ -381,6 +381,27 @@
   consumer/browser gates, the application-toolchain host integration, strict active/all OpenSpec
   validation, and `git diff --check`; obtain independent review and resolve every in-scope finding.
 
+## 16. Recovery CLI module-evaluation correction
+
+- [x] 16.1 Reproduce workflow run `34873471933` with the actual recovery preparation entry point
+  in a bounded fresh Node process; record exit `13`, the unsettled top-level await, and the
+  recovery-entry → registry-verifier → recovery-entry import cycle missed by function-level mocks.
+- [x] 16.2 Move reusable recovery plan, artifact/workflow identity, provenance-expectation, and
+  evidence validation into an execution-independent module; preserve existing recovery exports
+  while making the registry verifier import only the independent validation module.
+- [x] 16.3 Add bounded actual-entry-point subprocess coverage for successful preparation with real
+  existing-package verification, successful controlled UI-then-SDK publication with no design-
+  token publication, and recovery-aware registry-verifier evidence loading and enforcement.
+- [x] 16.4 Add fresh-process negative coverage proving invalid ZIP bytes, altered transferred
+  copies, existing-package provenance failures in both phases, and publication failure return
+  nonzero and stop before any forbidden or subsequent publication.
+- [x] 16.5 Keep controlled CLI fixtures local-only and visibly non-genuine, add every new module and
+  fixture to release CI selection, and update the release runbook, proposal, design, and normative
+  scenarios without changing coordinates, incident pins, workflow policy, or execution gates.
+- [x] 16.6 Run the exact release-toolchain focused/release/complete suites, lint, formatting,
+  strict active/all OpenSpec validation, and `git diff --check`; exercise the verifier CLI under
+  application Node/npm and obtain independent review of module evaluation and subprocess coverage.
+
 ## Fixture archive-transfer evidence (2026-09-11)
 
 - Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
@@ -696,3 +717,29 @@
 - Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain unchecked. No workflow was
   dispatched, no protected environment was approved, no recovery publication occurred, and
   genuine all-package public-registry/provenance/consumer evidence remains execution-dependent.
+
+## Recovery CLI module-evaluation evidence (2026-09-14)
+
+- Work started from clean reviewed commit `1d4334ac012bd9f896a093c0ff3cc8f53eb93883` on
+  `fix/frontend-recovery-cli-import-cycle`; issue
+  [ThalesGroup/fred#2630](https://github.com/ThalesGroup/fred/issues/2630) remains open and the
+  four pre-existing stashes remain untouched.
+- Before the module correction, the actual preparation entry point ran in a fresh process against
+  controlled exact-version HTTP 200 metadata under Node `24.21.0` and npm `11.19.0`. It reproduced
+  workflow run `34873471933`: exit `13`, `Detected unsettled top-level await`, and the await at
+  `bootstrap-recovery.mjs:586`. The process never produced recovery evidence.
+- Reusable recovery contract/evidence validation now resides outside both executable entry
+  modules. The bounded fresh-process suite passes 10/10 under both release Node `24.21.0` / npm
+  `11.19.0` and application Node `22.13.0` / npm `10.9.2`. It completes real preparation, invokes
+  controlled publication exactly once for UI then SDK, loads recovery-aware registry validation,
+  exercises signed controlled provenance through the real existing-package verifier, and proves
+  invalid ZIP/copy/provenance and publication failures exit nonzero before forbidden progression.
+- Under the exact release toolchain, the final focused bootstrap/recovery/metadata/registry/
+  workflow suite passes 80/80, `npm run release:check` passes, `npm run release:test` passes
+  122/122, lint and formatting pass, and the complete build/producer suite passes 327/327. Strict
+  active and repository-wide OpenSpec validation and `git diff --check` pass.
+- Independent cold review found no correctness, security, module-evaluation, subprocess-isolation,
+  test, specification, or documentation finding. The controlled fixture replaces only Sigstore's
+  external verifier with a local real-signature verifier and deliberately stops the recovery-aware
+  registry CLI at its missing-browser prerequisite; it is not genuine public-registry evidence.
+  Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain execution-dependent and unchecked.
