@@ -25,7 +25,8 @@ import logging
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, get_current_user_without_gcu
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 
 from knowledge_flow_backend.common.source_utils import UnknownSourceTagError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
@@ -38,6 +39,19 @@ from knowledge_flow_backend.features.library_sync.structures import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def require_sync_client(user: KeycloakUser = Depends(get_current_user_without_gcu)) -> KeycloakUser:
+    """Admit a workload identity, and only one, to mirror a source.
+
+    GCU admission is a person accepting terms; a service account has no such
+    record and would be refused outright. Skipping that check is only safe
+    because a human token is refused here too, the way the Control Plane's own
+    Knowledge Base routes refuse one.
+    """
+    if not is_service_agent(user) and user.client_id != LOCAL_DEV_CLIENT_ID:
+        raise HTTPException(status_code=403, detail="Library synchronization requires a service identity")
+    return user
 
 
 def _bounded_failure(exc: Exception) -> HTTPException:
@@ -83,7 +97,7 @@ class LibrarySyncController:
             source_key: Annotated[str, Form(description="The caller's own name for this document, unique within the library.")],
             document_version: Annotated[Optional[str], Form(description="The source's version of this document. Opaque to Fred.")] = None,
             source_tag: Annotated[str, Form(description="Which configured document source this caller is.")] = "fred",
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_sync_client),
         ) -> DocumentWritten:
             try:
                 return await self.service.write_document(
@@ -121,7 +135,7 @@ class LibrarySyncController:
         async def remove_document(
             library_id: str,
             source_key: Annotated[str, Query(description="The key the document was written under.")],
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_sync_client),
         ) -> DocumentRemoved:
             try:
                 return await self.service.remove_document(user, library_id=library_id, source_key=source_key)
@@ -141,7 +155,7 @@ class LibrarySyncController:
         )
         async def read_source_version(
             library_id: str,
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_sync_client),
         ) -> LibrarySourceVersion:
             return LibrarySourceVersion(source_version=await self.service.read_source_version(user, library_id))
 
@@ -154,7 +168,7 @@ class LibrarySyncController:
         async def record_source_version(
             library_id: str,
             body: LibrarySourceVersion,
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_sync_client),
         ) -> LibrarySourceVersion:
             try:
                 recorded = await self.service.record_source_version(user, library_id, body.source_version)

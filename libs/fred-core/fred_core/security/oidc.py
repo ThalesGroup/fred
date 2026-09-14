@@ -552,11 +552,16 @@ async def get_current_user_without_gcu(
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
+        # Same local-dev client id as `decode_jwt`'s mock, and for the same
+        # reason: this is the branch routes actually reach when authentication
+        # is off, so without it every route gated on one exact client — machine
+        # synchronization among them — is unreachable on a local stack.
         return KeycloakUser(
             uid="admin",
             username="admin",
             roles=["admin"],
             email="admin@mail.com",
+            client_id=LOCAL_DEV_CLIENT_ID,
         )
 
     if not token:
