@@ -2092,7 +2092,8 @@
         "menu": {
           "apps": "Apps",
           "resources": "Resources",
-          "wiki": "Wiki"
+          "wiki": "Wiki",
+          "knowledgeBases": "Knowledge Bases"
         },
         "teamLabel": "Team",
         "userTeam": "Personal space"
@@ -3199,6 +3200,40 @@
       "copied": "Prompt copied to the clipboard",
       "copyFailed": "Could not copy the prompt",
       "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
+    },
+    "knowledgeBases": {
+      "title": "Knowledge Bases",
+      "loading": "Loading the knowledge bases…",
+      "empty": "No knowledge base yet",
+      "deleted": "{{name}} deleted",
+      "deleteFailed": "Could not delete {{name}}",
+      "unavailable": {
+        "title": "Knowledge bases unavailable",
+        "description": "The list could not be loaded. Try again in a moment."
+      },
+      "cadence": {
+        "hourly": "Every hour",
+        "daily": "Every day",
+        "weekly": "Every week"
+      },
+      "card": {
+        "open": "Documents",
+        "delete": "Delete",
+        "suspended": "Synchronization suspended",
+        "noConfiguration": "No configuration",
+        "tooltip": {
+          "label": "Knowledge base details",
+          "kind": "Kind",
+          "cadence": "Runs",
+          "created": "Created"
+        }
+      },
+      "deleteDialog": {
+        "title": "Delete this knowledge base?",
+        "message": "{{name}} and every document it holds will be deleted. This cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      }
     }
   },
   "runtime": {

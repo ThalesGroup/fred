@@ -1,0 +1,36 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+}
+
+.titleText {
+  font-weight: 600;
+  font-size: var(--font-size-l);
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding: var(--spacing-l);
+}
+
+/* Same track as the agent list: the two screens are read side by side. */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 320px);
+  grid-auto-rows: minmax(210px, auto);
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-l);
+  overflow: auto;
+}

@@ -2092,7 +2092,8 @@
         "menu": {
           "apps": "Apps",
           "resources": "Ressources",
-          "wiki": "Wiki"
+          "wiki": "Wiki",
+          "knowledgeBases": "Bases de connaissance"
         },
         "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
@@ -3199,6 +3200,40 @@
       "copied": "Prompt copié dans le presse-papier",
       "copyFailed": "Impossible de copier le prompt",
       "reservedTag": "Ce texte ne peut pas contenir <{{tag}}> : c'est une balise réservée qui délimite un bloc du prompt système. Toute autre balise est acceptée."
+    },
+    "knowledgeBases": {
+      "title": "Bases de connaissance",
+      "loading": "Chargement des bases de connaissance…",
+      "empty": "Aucune base de connaissance",
+      "deleted": "{{name}} supprimée",
+      "deleteFailed": "Impossible de supprimer {{name}}",
+      "unavailable": {
+        "title": "Bases de connaissance indisponibles",
+        "description": "La liste n'a pas pu être chargée. Réessayez dans un instant."
+      },
+      "cadence": {
+        "hourly": "Toutes les heures",
+        "daily": "Tous les jours",
+        "weekly": "Toutes les semaines"
+      },
+      "card": {
+        "open": "Documents",
+        "delete": "Supprimer",
+        "suspended": "Synchronisation suspendue",
+        "noConfiguration": "Aucune configuration",
+        "tooltip": {
+          "label": "Détails de la base de connaissance",
+          "kind": "Type",
+          "cadence": "Exécution",
+          "created": "Créée le"
+        }
+      },
+      "deleteDialog": {
+        "title": "Supprimer cette base de connaissance ?",
+        "message": "{{name}} et tous ses documents seront supprimés. C'est irréversible.",
+        "confirm": "Supprimer",
+        "cancel": "Annuler"
+      }
     }
   },
   "runtime": {

@@ -1,0 +1,35 @@
+/* Reads inside the agent card's description slot, so it inherits that slot's
+   colour and size and only lays the pairs out. */
+.configuration {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.label {
+  flex: 0 0 auto;
+  opacity: 0.7;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label::after {
+  content: ":";
+}
+
+.value {
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
