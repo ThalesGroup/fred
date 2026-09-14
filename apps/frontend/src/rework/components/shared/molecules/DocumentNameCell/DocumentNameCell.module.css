@@ -1,0 +1,48 @@
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.nameCell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.rowIcon [class*="material-symbols"] {
+  font-size: 18px;
+}
+
+/* The Tooltip atom's own wrapper span is the actual flex item here (the icon
+   sits inside it), so the shrink guard belongs on the wrapper. */
+.titleHintWrapper {
+  flex-shrink: 0;
+}
+
+/* The embedded-title hint icon: same fixed-box treatment as .rowIcon so a
+ * narrow Name column/long filename can never crush or hide it — it's the
+ * filename label next to it that's allowed to truncate. */
+.titleHintIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--on-surface-retreat);
+}
+
+.titleHintIcon [class*="material-symbols"] {
+  font-size: 18px;
+}

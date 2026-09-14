@@ -37,3 +37,9 @@
   min-height: 0;
   overflow: auto;
 }
+
+/* Size and date: always on one line under a fixed-width column, as in a
+   team's resources. */
+.nowrapCell {
+  white-space: nowrap;
+}

@@ -23,7 +23,9 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
-import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
+import { FOLDER_ICON } from "../../../../utils/fileIconSpec.ts";
+import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
+import { documentDisplayName } from "@shared/molecules/DocumentNameCell/documentNaming.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import {
   MAX_FOLDER_DEPTH,
@@ -149,28 +151,6 @@ const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes
 function documentExtension(doc: DocumentMetadata): string {
   const dot = doc.identity.document_name.lastIndexOf(".");
   return dot > 0 ? doc.identity.document_name.slice(dot) : "";
-}
-
-// The Name column always shows document_name: identity.title is populated
-// ingestion-time straight from the file's own embedded metadata
-// (PDF /Title, docx core_properties.title) with no validation, so it's as
-// likely to be empty, a stale value copied from a shared template, or a
-// generic "Untitled" placeholder as it is a real paper/document title.
-function documentDisplayName(doc: DocumentMetadata): string {
-  return doc.identity.document_name;
-}
-
-// Surfaced as a hint next to the filename, not as the primary label: still
-// useful (e.g. an arXiv PDF's real paper title) when it isn't just noise —
-// filtered out when blank or when it doesn't actually add anything over the
-// filename itself (base_input_processor.py defaults title to the filename
-// stem, so most never-renamed, no-metadata documents would otherwise show an
-// identical-looking hint).
-function embeddedTitle(doc: DocumentMetadata): string | null {
-  const title = doc.identity.title?.trim();
-  if (!title) return null;
-  const stem = doc.identity.document_name.replace(/\.[^./]+$/, "");
-  return title === doc.identity.document_name || title === stem ? null : title;
 }
 
 function rowLabel(row: Row): string {
@@ -1382,29 +1362,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             </button>
           );
         }
-        const spec = fileIconSpec(row.doc.file?.file_type);
-        const title = embeddedTitle(row.doc);
-        return (
-          <span className={styles.nameCell}>
-            <span className={styles.rowIcon} style={{ color: spec.color }}>
-              <Icon category="outlined" type={spec.type} filled={spec.filled} />
-            </span>
-            <span>{documentDisplayName(row.doc)}</span>
-            {title && (
-              <span className={styles.titleHintWrapper}>
-                <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
-                  <span
-                    className={styles.titleHintIcon}
-                    tabIndex={0}
-                    aria-label={t("rework.resources.embeddedTitleHint", { title })}
-                  >
-                    <Icon category="outlined" type="info" />
-                  </span>
-                </Tooltip>
-              </span>
-            )}
-          </span>
-        );
+        return <DocumentNameCell doc={row.doc} />;
       },
     },
     {

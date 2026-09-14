@@ -3236,9 +3236,6 @@
       },
       "documents": {
         "back": "Bases de connaissance",
-        "name": "Document",
-        "size": "Taille",
-        "added": "Ajouté le",
         "empty": "Cette base de connaissance ne contient encore aucun document",
         "loadFailed": "Impossible de charger les documents",
         "unavailable": {

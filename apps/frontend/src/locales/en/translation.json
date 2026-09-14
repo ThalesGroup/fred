@@ -3236,9 +3236,6 @@
       },
       "documents": {
         "back": "Knowledge bases",
-        "name": "Document",
-        "size": "Size",
-        "added": "Added",
         "empty": "This knowledge base holds no document yet",
         "loadFailed": "Could not load the documents",
         "unavailable": {

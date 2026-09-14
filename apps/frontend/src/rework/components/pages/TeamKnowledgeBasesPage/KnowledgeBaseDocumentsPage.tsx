@@ -15,7 +15,9 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -24,28 +26,10 @@ import {
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   type DocumentMetadata,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { formatDateTime } from "../../../utils/formatDateTime.ts";
 import styles from "./KnowledgeBaseDocumentsPage.module.css";
 
 const PAGE_SIZE = 25;
-
-function formatSize(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
-}
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
-}
 
 /** What one Knowledge Base has put in its library, and nothing else.
  *
@@ -98,21 +82,23 @@ export default function KnowledgeBaseDocumentsPage() {
     if (libraryId) void loadPage(libraryId, offset);
   }, [libraryId, offset, loadPage]);
 
+  // The same columns a team's resources show, minus the ones that act: this is
+  // the same object, so it is read the same way.
   const columns: DataTableColumn<DocumentMetadata>[] = [
     {
-      label: t("rework.knowledgeBases.documents.name"),
-      size: "3fr",
-      cellRenderer: (doc) => doc.identity.title || doc.identity.document_name,
+      label: t("rework.resources.columns.name"),
+      size: "2fr",
+      cellRenderer: (doc) => <DocumentNameCell doc={doc} />,
     },
     {
-      label: t("rework.knowledgeBases.documents.size"),
-      size: "8rem",
-      cellRenderer: (doc) => formatSize(doc.file?.file_size_bytes),
+      label: t("rework.resources.columns.size"),
+      size: "6.5rem",
+      cellRenderer: (doc) => <span className={styles.nowrapCell}>{formatBytes(doc.file?.file_size_bytes ?? 0)}</span>,
     },
     {
-      label: t("rework.knowledgeBases.documents.added"),
-      size: "10rem",
-      cellRenderer: (doc) => formatDate(doc.source?.date_added_to_kb),
+      label: t("rework.resources.columns.created"),
+      size: "9rem",
+      cellRenderer: (doc) => <span className={styles.nowrapCell}>{formatDateTime(doc.source.date_added_to_kb)}</span>,
     },
   ];
 
