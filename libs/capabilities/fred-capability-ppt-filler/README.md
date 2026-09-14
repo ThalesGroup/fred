@@ -26,6 +26,22 @@ Markers split across runs in one paragraph are supported in text boxes, table
 text, and grouped shapes. Images use the containing shape's placement box;
 table cells remain invalid image locations. Chart text and SmartArt are unsupported.
 
+## `ppt_builder` (same package)
+
+A second capability, `ppt_builder` (`fred_capability_ppt_filler/builder/`),
+generates a deck from a chat plan on an _unannotated_ corporate template — or
+on a built-in theme when the agent has none. The template is analysed at save
+time into a pattern inventory (master layouts by placeholder type, example
+slides by placeholders, sample-text lexicon, geometry and repeated groups);
+the author can correct it in the agent form; the agent's `build_presentation`
+tool renders a typed plan by instantiating layouts or duplicating example
+slides and filling their zones by role. Delivery reuses the filler's preview
+part and pane. Design: `openspec/changes/ppt-builder-capability/`, issue #2679.
+
+Optional annotation channels the analysis honours: a shape name from the
+Selection pane (`title`, `body`, `number`, `keep`, `heading_2`…), and
+`intent:` / `label:` lines in a slide's speaker notes.
+
 ## Spec
 
 The current template contract is in
@@ -35,7 +51,7 @@ Author help: [English](../../../apps/frontend/public/ppt-filler-help.md) and
 
 ## Registration
 
-Installing this package *is* the registration: the fred-agents pod auto-discovers
+Installing this package _is_ the registration: the fred-agents pod auto-discovers
 the capability at boot via the `fred.capabilities` entry point declared in
 `pyproject.toml` (`ppt_filler = "fred_capability_ppt_filler.capability:PptFillerCapability"`).
 
