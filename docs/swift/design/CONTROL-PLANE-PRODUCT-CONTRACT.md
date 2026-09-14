@@ -3919,9 +3919,7 @@ owns that decision today.
 has no foreign key, since `teammetadata` belongs to the fred-core metadata: a
 deleted team is skipped on every read, so deleting a team needs no cleanup
 here. The setting stays out of `teammetadata` on purpose - a per-team flag would
-ship a field on every `Team` for a platform-wide choice. The first version kept
-one default team in a `platform_default_team` singleton (migration
-`9c41e7b2d58a`); `4e7a2c91d0b3` replaces it and carries that team over.
+ship a field on every `Team` for a platform-wide choice.
 
 **Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
 still empty:

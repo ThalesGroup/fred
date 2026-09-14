@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""add platform_default_team table
+"""add platform_default_teams table
 
-The team every user joins on first GCU acceptance, chosen by a platform admin.
-At most one row, keyed `id="default"` and CHECK-enforced like platform_prompt.
-No row is seeded: absence means no default team.
+The teams every user joins on first GCU acceptance, chosen by a platform admin.
+One row per team; no row is seeded, so no team is a default until an admin
+picks one.
 
-Revision ID: 9c41e7b2d58a
+Revision ID: 7b3f5e1a9c20
 Revises: d3f8a2c6e174
-Create Date: 2026-09-14 12:00:00.000000
+Create Date: 2026-09-14 13:30:00.000000
 
 """
 
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "9c41e7b2d58a"  # pragma: allowlist secret
+revision: str = "7b3f5e1a9c20"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
     "d3f8a2c6e174"  # pragma: allowlist secret
 )
@@ -41,8 +41,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table(
-        "platform_default_team",
-        sa.Column("id", sa.String(), nullable=False, server_default="default"),
+        "platform_default_teams",
         sa.Column("team_id", sa.String(), nullable=False),
         sa.Column("updated_by", sa.String(), nullable=True),
         sa.Column(
@@ -51,11 +50,10 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.CheckConstraint("id = 'default'", name="ck_platform_default_team_singleton"),
+        sa.PrimaryKeyConstraint("team_id"),
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_table("platform_default_team")
+    op.drop_table("platform_default_teams")
