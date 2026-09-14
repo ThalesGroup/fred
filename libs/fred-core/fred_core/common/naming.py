@@ -45,34 +45,11 @@ CONTRIBUTED_NAME_PATTERN = rf"^{_SEGMENT}(?:\.{_SEGMENT})+$"
 
 MAX_NAME_CHARS = 255
 
-_PREFIX_RE = re.compile(PREFIX_PATTERN)
 _NAME_RE = re.compile(CONTRIBUTED_NAME_PATTERN)
 
 
 class InvalidContributedName(ValueError):
     """Raised when a name or prefix does not follow the contributor rule."""
-
-
-def is_valid_prefix(prefix: str) -> bool:
-    """Whether this is a well-formed prefix a client could own."""
-    return (
-        len(prefix) <= MAX_NAME_CHARS
-        and "__" not in prefix
-        and _PREFIX_RE.match(prefix) is not None
-    )
-
-
-def is_valid_contributed_name(name: str) -> bool:
-    """Whether this is a well-formed contributed name.
-
-    A bare single segment is refused on purpose: a name carries its provenance,
-    and `assistant` says nothing about who ships it.
-    """
-    return (
-        len(name) <= MAX_NAME_CHARS
-        and "__" not in name
-        and _NAME_RE.match(name) is not None
-    )
 
 
 def require_contributed_name(name: str) -> str:

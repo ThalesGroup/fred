@@ -15,8 +15,6 @@ from fred_core.common.naming import (
     CONTRIBUTED_NAME_PATTERN,
     PREFIX_PATTERN,
     InvalidContributedName,
-    is_valid_contributed_name,
-    is_valid_prefix,
     prefix_covers,
     require_contributed_name,
 )
@@ -249,8 +247,6 @@ __all__ = [
     "CONTRIBUTED_NAME_PATTERN",
     "PREFIX_PATTERN",
     "InvalidContributedName",
-    "is_valid_contributed_name",
-    "is_valid_prefix",
     "prefix_covers",
     "require_contributed_name",
     "usable_application_ids",

@@ -31,6 +31,7 @@ from temporalio.client import (
     ScheduleAlreadyRunningError,
     SchedulePolicy,
     ScheduleSpec,
+    ScheduleState,
     ScheduleUpdate,
 )
 from temporalio.service import RPCError, RPCStatusCode
@@ -48,11 +49,14 @@ async def ensure_schedule(
     spec: ScheduleSpec,
     args: Sequence[Any] = (),
     policy: SchedulePolicy | None = None,
+    state: ScheduleState | None = None,
 ) -> str:
     """Create the Schedule, or bring an existing one in line with `spec`/`policy`.
 
     Updating on the already-exists path is what lets a task-queue or calendar
     change in configuration take effect on a deployment that already has it.
+    `state` carries what the caller wants of a schedule that exists but must
+    not fire, so pausing and resuming go through this same one path.
     """
     schedule = Schedule(
         action=ScheduleActionStartWorkflow(
@@ -63,6 +67,7 @@ async def ensure_schedule(
         ),
         spec=spec,
         policy=policy or SchedulePolicy(),
+        state=state or ScheduleState(),
     )
     try:
         await client.create_schedule(schedule_id, schedule)

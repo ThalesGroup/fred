@@ -19,12 +19,21 @@ import re
 import pytest
 from fred_core.common.naming import (
     CONTRIBUTED_NAME_PATTERN,
+    PREFIX_PATTERN,
     InvalidContributedName,
-    is_valid_contributed_name,
-    is_valid_prefix,
     prefix_covers,
     require_contributed_name,
 )
+
+
+def _accepted(name: str) -> bool:
+    """Whether the one public gate admits this name."""
+    try:
+        require_contributed_name(name)
+    except InvalidContributedName:
+        return False
+    return True
+
 
 VALID = [
     "fred.github.assistant",
@@ -53,13 +62,11 @@ INVALID = [
 
 @pytest.mark.parametrize("name", VALID)
 def test_real_identifiers_are_valid(name: str) -> None:
-    assert is_valid_contributed_name(name)
     assert require_contributed_name(name) == name
 
 
 @pytest.mark.parametrize("name", INVALID)
 def test_malformed_names_are_refused(name: str) -> None:
-    assert not is_valid_contributed_name(name)
     with pytest.raises(InvalidContributedName):
         require_contributed_name(name)
 
@@ -72,18 +79,16 @@ def test_the_pattern_alone_decides(name: str) -> None:
     caller who never calls `require_contributed_name` must still be unable to
     accept a malformed name.
     """
-    assert bool(re.match(CONTRIBUTED_NAME_PATTERN, name)) == is_valid_contributed_name(
-        name
-    )
+    assert bool(re.match(CONTRIBUTED_NAME_PATTERN, name)) == _accepted(name)
 
 
 def test_a_name_longer_than_the_bound_is_refused() -> None:
-    assert not is_valid_contributed_name("fred." + "a" * 300)
+    assert not _accepted("fred." + "a" * 300)
 
 
 def test_a_prefix_may_be_a_single_segment_but_a_name_may_not() -> None:
-    assert is_valid_prefix("fred")
-    assert not is_valid_contributed_name("fred")
+    assert re.match(PREFIX_PATTERN, "fred")
+    assert not _accepted("fred")
 
 
 @pytest.mark.parametrize(

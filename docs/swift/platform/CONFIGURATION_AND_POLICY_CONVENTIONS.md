@@ -119,9 +119,8 @@ to `false`.
 
 ## Contributed Identity Naming
 
-Everything a contributor adds to a deployed Fred — an agent, a Knowledge Base,
-an application — is named with **dotted segments, under a prefix that
-contributor owns**:
+What a contributor adds to a deployed Fred is named with **dotted segments,
+under a prefix that contributor owns**:
 
 ```
 fred.github.assistant          fred.github.sql_expert
@@ -173,6 +172,14 @@ declaration.
 
 ### What this rule governs, and what it does not
 
+**Where it holds today:** Knowledge Base definitions and agents, through
+`CONTRIBUTED_NAME_PATTERN` and `require_contributed_name`
+(`fred_core.common.naming`). Applications and capabilities each still carry
+their own, older pattern — see Application Registration below for why the
+application one cannot simply adopt this. Do not read this section as
+describing every identifier in Fred; it describes the rule, and names the two
+places that have not converged on it.
+
 It governs **the name a contributor chooses**. It does not govern the keys Fred
 builds internally — the shared administration catalog, for instance, prefixes
 its dictionary keys per kind so an agent and a tool cannot collide in one flat
@@ -201,9 +208,12 @@ and released by the team that owns it. Fred compiles no application code, so
 there is no manifest, no generator, and no generated artifact to keep in sync.
 
 Registration has two halves, one per process. `app_id` is the only key they
-share, it must match across them, and its shape follows the naming rule above —
-a dotted name under a prefix its contributor owns, such as
-`fred.samples.document-triage`:
+share and it must match across them. It does **not** follow the dotted rule
+above: it is one lowercase segment with hyphens, such as `document-triage`
+(`APPLICATION_ID_PATTERN` in `applications/catalog.py`). The reason is that an
+`app_id` is interpolated into browser paths (`/apps/<app_id>/`) and into nginx
+map directives the gateway generates, where a dot is not a free character.
+Converging the two is open work, not a decision already taken:
 
 - **Control plane** — `platform.application_sources[]`, expressed like
   `platform.runtime_catalog_sources[]`. Each entry carries `app_id`,
