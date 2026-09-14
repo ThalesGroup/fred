@@ -1,9 +1,11 @@
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { packIframeSdk } from "./pack-iframe-sdk.mjs";
 import { run } from "./process.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { sha512Integrity } from "./release-evidence.mjs";
 import { validateIframeSdkArchive } from "./validate-iframe-sdk-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -12,7 +14,13 @@ const frontendRoot = path.join(repositoryRoot, "apps/frontend");
 const integrationTest =
   "src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.sdk-integration.test.tsx";
 
-export async function runIframeSdkHostIntegration() {
+export async function runIframeSdkHostIntegration({
+  contract: selectedContract,
+  archivePath: suppliedArchive,
+  expectedIntegrity,
+  sdkEntry: suppliedSdkEntry,
+} = {}) {
+  const contract = selectedContract ?? (await loadReleaseContract());
   const vitest = path.join(frontendRoot, "node_modules/.bin/vitest");
   try {
     await access(vitest);
@@ -28,10 +36,32 @@ export async function runIframeSdkHostIntegration() {
     path.join(targetRoot, "iframe-sdk-host-integration-"),
   );
   try {
-    const { archivePath } = await packIframeSdk();
-    await validateIframeSdkArchive(archivePath);
-    await run("tar", ["-xzf", archivePath, "-C", temporary]);
-    const sdkEntry = path.join(temporary, "package/dist/index.js");
+    let archivePath;
+    let sdkEntry = suppliedSdkEntry;
+    if (sdkEntry) {
+      await access(sdkEntry);
+      const copiedDistribution = path.join(
+        temporary,
+        "registry-package",
+        "dist",
+      );
+      await cp(path.dirname(sdkEntry), copiedDistribution, {
+        recursive: true,
+      });
+      sdkEntry = path.join(copiedDistribution, path.basename(sdkEntry));
+    } else {
+      archivePath =
+        suppliedArchive ?? (await packIframeSdk({ contract })).archivePath;
+      await validateIframeSdkArchive(archivePath, { contract });
+      if (expectedIntegrity) {
+        if ((await sha512Integrity(archivePath)) !== expectedIntegrity)
+          throw new Error(
+            "iframe SDK archive integrity differs from candidate evidence",
+          );
+      }
+      await run("tar", ["-xzf", archivePath, "-C", temporary]);
+      sdkEntry = path.join(temporary, "package/dist/index.js");
+    }
     const result = await run(vitest, ["run", integrationTest], {
       cwd: frontendRoot,
       env: {
@@ -42,7 +72,9 @@ export async function runIframeSdkHostIntegration() {
     });
     return {
       archivePath,
-      sdkEntry: "temporary-package/dist/index.js",
+      sdkEntry: suppliedSdkEntry
+        ? "registry-installation-copy/dist/index.js"
+        : "temporary-package/dist/index.js",
       test: integrationTest,
       stdout: result.stdout.trim(),
       stderr: result.stderr.trim(),

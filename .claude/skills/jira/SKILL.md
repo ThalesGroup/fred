@@ -1,6 +1,6 @@
 ---
 name: jira
-description: Work with the Fred team's Jira Service Management help desk (project PRISM) through the `acli` CLI — triage a ticket, list your tickets, read descriptions and comments, download attached screenshots, post an internal analysis note.
+description: Work with the Fred team's Jira Service Management help desk (project PRISM) through the `acli` CLI — triage a ticket, list your tickets, read descriptions and comments, download attached screenshots, post an internal analysis note, move a ticket's status.
 user-invocable: true
 argument-hint: <ticket key or question, e.g. "first pass on PRISM-68" / "my open tickets">
 ---
@@ -24,8 +24,8 @@ Otherwise skip it.
    must never mistake it for a human teammate's conclusion.
 2. **Never post a public comment without the developer approving the exact text.** Public
    means the reporter gets an email. Show them the draft, wait for a yes, then post.
-3. Do not transition, close or assign a ticket unless the developer asks — except the PO
-   handoff in the feature workflow below.
+3. Do not transition, close or assign a ticket unless the developer asks — except the
+   status moves in "Ticket status" and the PO handoff in the feature workflow below.
 
 ## Three things `acli` cannot do — use the helper script
 
@@ -76,14 +76,42 @@ python3 .claude/skills/jira/scripts/jira.py comment PRISM-68 -F analysis.md --dr
 python3 .claude/skills/jira/scripts/jira.py comment PRISM-68 -F reply.md --public --yes
 ```
 
-The body is **Markdown**, converted to ADF: headings, bold, inline code, links, nested
-lists, quotes, rules and fenced code blocks all survive. Write the analysis to a file and
-pass `-F`; `-b` is for one-liners.
+The body is **Markdown**, converted to ADF: headings, bold, inline code, links (`[text](url)`
+and bare `https://…` URLs), nested lists, quotes, rules and fenced code blocks all survive.
+Jira never auto-links text posted over REST, so a URL is only clickable if the converter
+marks it. Write the analysis to a file and pass `-F`; `-b` is for one-liners.
 
 ## Workflow — first pass on a ticket
 
 Always start the same way: `jira.py show <KEY>`, then `jira.py attachments <KEY>` and
-`Read` the images if it lists any. Then branch on the type.
+`Read` the images if it lists any. Move the ticket to "Analysis in progress" (below). Then
+branch on the type.
+
+### Ticket status
+
+Keep the status in step with the work: the reporter watches it, and the team filters on it.
+
+| When                                                                     | Move to                |
+| ------------------------------------------------------------------------ | ---------------------- |
+| You start investigating                                                  | `Analysis in progress` |
+| A public reply asking the reporter a question is posted                  | `Waiting for customer` |
+| Cause found, GitHub issue created, and the public reply is posted        | `Resolved`             |
+| Fix deployed on the reporter's environment                               | `Closed`               |
+
+```bash
+acli jira workitem transition --key PRISM-68 --status "Analysis in progress" --yes
+```
+
+- Move only after the step is actually done. `Waiting for customer` and `Resolved` follow a
+  public reply, so they wait for the developer's approval of that reply (rule 2).
+- `Closed` usually comes days later, when a release reaches the reporter's environment. Do
+  not close a ticket because a fix merged. Close it only when the developer says the fix is
+  deployed there.
+- These statuses exist on `Bug`, `Improvement`, `Service Request` and `Platform Incident`.
+  `Task` and `Sub-task` use a different workflow (`Work in progress`, `Completed`, …), so
+  ask before moving one.
+- If a transition fails (a required field, or a status unreachable from the current one),
+  report the error to the developer rather than trying another route.
 
 ### Bug
 
@@ -98,6 +126,8 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
    ```
 3. Draft a public reply for the developer to approve (rule 2): thank the reporter, give a
    workaround if one exists, and include the GitHub issue link so they can follow the fix.
+   The reporter is usually an end user, so keep the reply non-technical.
+4. Once the reply is posted, move the ticket to `Resolved`.
 
 **Not reproduced / need more information:**
 
@@ -105,6 +135,7 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
    next person does not redo it.
 2. Draft a public reply asking for exactly the missing pieces (version, steps, file,
    screenshot). Approval first, as always.
+3. Once the reply is posted, move the ticket to `Waiting for customer`.
 
 ### Feature / improvement
 

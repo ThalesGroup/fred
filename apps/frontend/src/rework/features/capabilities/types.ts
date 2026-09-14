@@ -41,16 +41,6 @@ export interface CapabilitySidePanelProps {
 }
 
 /**
- * A headless per-session capability probe (#1905 auto-open): mounted by the
- * chat page's side-panel host for every ACTIVE capability, whether or not its
- * panel is open. It renders nothing; it observes the opened conversation
- * (URL `?session=`, the rework convention) and dispatches capability signals —
- * e.g. writable_document requests its editor panel when the conversation
- * already has documents.
- */
-export type CapabilitySessionProbe = ComponentType<{ capabilityId: string }>;
-
-/**
  * A capability side panel (RFC §9 item 3) — mounted in the chat page's reserved
  * right column when its owning capability is active in the session.
  */
@@ -63,10 +53,14 @@ export interface CapabilitySidePanelSpec {
   /** Glyph of the panel's launcher in the floating rail. */
   icon: IconType;
   /**
-   * Does this panel have anything to show for the OPEN conversation? A false
-   * answer hides the launcher - a button onto an empty panel is noise. Omitted
-   * means "always offer it". Called from the launcher's own component, so a
-   * capability going in or out of a session never shifts hook order.
+   * Does this panel have anything to show for the OPEN conversation? Two things
+   * read it, and both are the host's business, not the capability's: a false
+   * answer hides the launcher (a button onto an empty panel is noise), and it
+   * gates restoring a panel the user left open in this conversation. Answer
+   * false while the content is still on its way — the host waits rather than
+   * concluding there is none. Omitted means "always offer it". Called from its
+   * own component, so a capability going in or out of a session never shifts
+   * hook order.
    */
   useHasContent?: () => boolean;
   /**
@@ -226,14 +220,6 @@ export interface CapabilityUiPlugin {
    * declaration) but the host skips capabilities with no plugin entry.
    */
   sidePanels?: Record<string, CapabilitySidePanelSpec>;
-  /**
-   * Headless session probes (#1905 auto-open), mounted by the side-panel host
-   * for every ACTIVE capability whether or not its panel is open. The one
-   * plugin path for "observe the opened conversation and react" behaviours —
-   * e.g. writable_document auto-opens its editor when the conversation already
-   * has documents (its card renderer only covers live writes, not replay).
-   */
-  sessionProbes?: readonly CapabilitySessionProbe[];
   /**
    * Approval-card content keyed by GATED TOOL NAME (WIKI-04). Tool names are
    * unique across capabilities — the backend assembler refuses a collision at

@@ -262,7 +262,11 @@ for (const forbidden of [
   });
 }
 
-for (const protocol of ["workspace:*", "file:../dependency"]) {
+for (const protocol of [
+  "workspace:*",
+  "file:../dependency",
+  "\tGiT+FiLe:///tmp/dependency",
+]) {
   test(`rejects ${protocol} dependencies`, async (context) => {
     const archive = await mutateArchive(
       archivePath,

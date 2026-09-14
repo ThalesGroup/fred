@@ -41,7 +41,14 @@
     "test:consumer:iframe-sdk": "node scripts/isolated-iframe-sdk-consumer.mjs --evidence target/review-evidence/iframe-sdk-consumer.json",
     "test:host-integration": "node scripts/iframe-sdk-host-integration.mjs",
     "browser:install": "PLAYWRIGHT_BROWSERS_PATH=target/playwright playwright install --with-deps chromium",
-    "test:browser": "PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/browser-smoke.mjs --evidence target/review-evidence/browser-smoke.json"
+    "test:browser": "PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/browser-smoke.mjs --evidence target/review-evidence/browser-smoke.json",
+    "release:check": "node scripts/check-release-contract.mjs",
+    "release:test": "node --test --test-concurrency=1 tests/release-contract.test.mjs tests/dependency-boundaries.test.mjs tests/release-evidence.test.mjs tests/release-candidate.test.mjs tests/registry-verifier.test.mjs tests/fixture-transfer.test.mjs",
+    "fixture:transfer:create": "node scripts/fixture-transfer.mjs",
+    "fixture:transfer:validate": "node scripts/fixture-transfer-validation.mjs",
+    "release:candidate": "node scripts/release-candidate.mjs",
+    "release:verify-evidence": "node scripts/release-evidence.mjs",
+    "registry:verify": "node scripts/registry-verifier.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -59,6 +66,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sass": "^1.98.0",
+    "sigstore": "4.0.0",
     "typescript": "5.9.3",
     "vite": "^6.4.3",
     "yaml": "2.9.0"

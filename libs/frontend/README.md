@@ -113,3 +113,7 @@ iframe client contract and its deliberately buffered transport are documented in
 [iframe-sdk/README.md](iframe-sdk/README.md). Deferred components and overlays,
 theme/live-locale protocol extensions, registry publication, FRED package consumption,
 and external adopter integration remain outside these archive foundations.
+
+Coordinate-independent release-contract, evidence, and registry-verification tooling is
+documented in [RELEASE.md](RELEASE.md). Its fixture and proposed contracts do not confirm npm
+scope ownership or authorize publication.

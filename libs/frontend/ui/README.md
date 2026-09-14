@@ -38,3 +38,6 @@ Canonical ownership, package boundaries, and future work are described by the ex
 [frontend packaging RFC](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/FRED-FRONTEND-PACKAGING-RFC.md). Rounded,
 Sharp, custom SVG icons, deferred components, overlays, iframe SDK work, registry
 publication, and adopter migrations are outside this package milestone.
+
+The checked-in manifest remains a development coordinate. Release candidates must be compared
+with an external, maintainer-confirmed contract as described in [../RELEASE.md](../RELEASE.md).

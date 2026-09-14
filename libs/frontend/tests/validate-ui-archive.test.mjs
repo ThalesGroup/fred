@@ -108,6 +108,14 @@ for (const peerMutation of [
     },
     /deep-equal|local dependency/,
   ],
+  [
+    "local Git checkout",
+    (manifest) => {
+      manifest.peerDependencies.react =
+        "\tGiT+FiLe:///tmp/fred-frontend-checkout";
+    },
+    /deep-equal|local dependency/,
+  ],
 ]) {
   test(`rejects ${peerMutation[0]}`, async (context) => {
     const archive = await mutateArchive(archivePath, context, (root) =>
