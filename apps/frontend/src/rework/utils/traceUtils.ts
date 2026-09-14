@@ -701,12 +701,15 @@ type ReasoningSegment = {
 // A line opening its own block; any other line is a soft wrap of its paragraph.
 const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
 const LIST_MARKER = /^\s*([-*+]|\d+[.)])\s+/;
+const HEADING = /^\s{0,3}#{1,6}\s/;
 
 /**
  * A reasoning block cut into paragraphs, list items, headings and whole
  * sentences, each flattened to plain text. Whole sentences only — see
  * {@link isSentenceEnd} — so dropping a segment never opens a row mid-sentence.
  */
+const canWrapInto = (block: { text: string; code: boolean }) => !block.code && !HEADING.test(block.text);
+
 function reasoningSegments(markdown: string): ReasoningSegment[] {
   // Blocks keep the line they end on, so a cut can be mapped back onto the
   // original markdown (see `restatedMarkdown`). A code fence is one block.
@@ -722,7 +725,8 @@ function reasoningSegments(markdown: string): ReasoningSegment[] {
       return;
     }
     if (isFence) fence = [];
-    else if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0 || blocks[blocks.length - 1].code) {
+    // A heading or code block ends at its own line; the next one never wraps into it.
+    else if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0 || !canWrapInto(blocks[blocks.length - 1])) {
       blocks.push({ text: line, endLine: index, code: false });
     } else {
       const previous = blocks[blocks.length - 1];
@@ -795,6 +799,118 @@ function rawWords(text: string): string[] {
   );
 }
 
+/** Function words a rephrasing adds or drops freely ("sur" → "autour de"). Listed
+ *  rather than inferred from length: "EU", "dev" or "CSV" are short facts. */
+const FUNCTION_WORDS = new Set([
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "has",
+  "have",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "so",
+  "the",
+  "to",
+  "was",
+  "will",
+  "au",
+  "aux",
+  "ce",
+  "ces",
+  "de",
+  "des",
+  "du",
+  "en",
+  "est",
+  "et",
+  "il",
+  "je",
+  "la",
+  "le",
+  "les",
+  "ma",
+  "me",
+  "mes",
+  "mon",
+  "ne",
+  "ont",
+  "ou",
+  "par",
+  "qu",
+  "que",
+  "qui",
+  "sa",
+  "se",
+  "ses",
+  "son",
+  "sont",
+  "sur",
+  "un",
+  "une",
+  "about",
+  "after",
+  "also",
+  "around",
+  "because",
+  "before",
+  "from",
+  "into",
+  "that",
+  "their",
+  "then",
+  "there",
+  "these",
+  "this",
+  "those",
+  "very",
+  "which",
+  "while",
+  "with",
+  "ainsi",
+  "alors",
+  "aussi",
+  "autour",
+  "avec",
+  "cela",
+  "cette",
+  "comme",
+  "dans",
+  "depuis",
+  "donc",
+  "dont",
+  "elle",
+  "elles",
+  "entre",
+  "leur",
+  "leurs",
+  "mais",
+  "nous",
+  "pour",
+  "puis",
+  "selon",
+  "tres",
+  "vers",
+  "vous",
+]);
+
+// A crude stem: "résume" and "résumant" are the same word to a reader, "staging"
+// and "production" are not. Five letters keep short distinct words apart.
+function stemOf(word: string): string {
+  return word.slice(0, 5);
+}
+
 // One-letter words ("a", "l'") carry nothing a rephrasing would keep; digits do.
 function meaningfulWords(raw: string[]): string[] {
   return raw.filter((word) => word.length > 1 || /\d/.test(word));
@@ -810,10 +926,17 @@ function meaningfulWords(raw: string[]): string[] {
  * are dropped solely inside a lead of real repeats — see {@link restatedLead}.
  * `unfinished` is the sentence still streaming, cut mid-word: it is judged on the
  * words it has finished, or a restatement flashes into the row before it matches.
+ *
+ * A word the turn has never used — not even inflected, see {@link stemOf} — is
+ * new information, whatever the overlap: in a long sentence one swapped word
+ * ("production" → "staging") stays above the threshold. Prose carrying one is new;
+ * a list item only drops to "near", since retouched items routinely add words.
+ * Intros (":") are exempt — they introduce, they carry no fact.
  */
 function restatementOf(
   segment: ReasoningSegment,
   said: readonly ReasoningSegment[],
+  saidStems: ReadonlySet<string>,
   unfinished: boolean,
 ): "said" | "near" | "related" | "new" {
   if (segment.words.size === 0) return "said";
@@ -821,14 +944,21 @@ function restatementOf(
     const finished = meaningfulWords(rawWords(segment.text.replace(LIST_MARKER, ""))).slice(0, -1);
     return said.some((earlier) => finished.every((word) => earlier.words.has(word))) ? "said" : "new";
   }
+  const intro = segment.text.endsWith(":");
+  const novel = [...segment.words].some((word) => !FUNCTION_WORDS.has(word) && !saidStems.has(stemOf(word)));
+  if (novel && !segment.listItem && !intro) return "new";
   let coverage = 0;
   for (const earlier of said) {
     if (earlier.facts !== segment.facts) continue;
     let shared = 0;
     for (const word of segment.words) if (earlier.words.has(word)) shared++;
-    if (shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP) return "said";
     coverage = Math.max(coverage, shared / segment.words.size);
+    if (shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP && !novel) return "said";
   }
+  // A new word in a sentence or intro nearly identical to an earlier one is a swap
+  // ("staging deploy:" → "production deploy:"); in a loosely reworded intro it is
+  // just the rewording.
+  if (novel && coverage >= RESTATEMENT_OVERLAP) return intro ? "new" : "near";
   const near = segment.listItem ? coverage >= NEAR_OVERLAP : coverage === 1;
   if (near && segment.words.size > 1) return "near";
   return coverage >= INTRO_OVERLAP ? "related" : "new";
@@ -948,13 +1078,14 @@ function restatedLead(
   // after it. An intro (":") is carried along if said, or if it resembles an
   // earlier sentence and opens a list — a rephrased "the user asked me to:" — but
   // never ends the lead: that would open the row on the list it introduces.
+  const saidStems = new Set(said.flatMap((segment) => [...segment.words].map(stemOf)));
   let lead = 0;
   let saidLength = 0;
   let nearLength = 0;
   for (let i = 0; said.length > 0 && i < segments.length; i++) {
     const { text } = segments[i];
     const unfinished = streaming && i === segments.length - 1 && !/[.!?]$/.test(text);
-    const kind = restatementOf(segments[i], said, unfinished);
+    const kind = restatementOf(segments[i], said, saidStems, unfinished);
     if (text.endsWith(":")) {
       if (kind === "new" || (kind !== "said" && !segments[i + 1]?.listItem)) break;
       continue;
@@ -990,14 +1121,16 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
       earlier.push(entry.message);
 
       const nothingNew = segments.length > 0 && lead === segments.length;
-      const reasoningText =
+      const rest = segments.slice(lead);
+      const prose =
         lead === 0
           ? preview
-          : segments
-              .slice(lead)
+          : rest
               .filter((segment) => !segment.code)
               .map((segment) => segment.text)
               .join(" ");
+      // A block whose only new part is code previews the code's first line, not an empty row.
+      const reasoningText = prose || (rest.find((segment) => segment.code)?.text.split("\n")[0] ?? "");
       // A block still streaming may yet add something, so it is not called a restatement.
       return {
         entry,

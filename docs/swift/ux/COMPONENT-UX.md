@@ -446,6 +446,17 @@ agents) so the decision is informed at the point it is made.
   characters are real repeats — below that it is a recap in new words, kept. It never ends on
   an intro, and never opens the row mid-list.
 
+  Overlap alone hides a fact in a long sentence: past eight meaningful words, one swapped word
+  ("production" → "staging") stays ≥ 0.8. So a sentence carrying a word the turn has never used
+  is new, and a list item carrying one only drops to a near repeat. Function words (an explicit
+  French/English list, not a length rule, so "EU" or "dev" still count) are ignored, and words
+  match on their first five letters ("résume" / "résumant"). An intro is exempt from that rule
+  unless it is ≥ 0.8 alike an earlier one ("staging deploy:" → "production deploy:"): the
+  rephrased intros of the local sessions share 55–70% of their words and bring words of their
+  own. Replayed on the 75 local blocks, the trim is unchanged. Headings and code blocks are
+  their own blocks (a line never wraps into them), code is compared like a sentence, and a row
+  whose only new part is code previews its first line.
+
 - **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
   "reasoning preview length" open issue above. Reasoning models restate the task from scratch
   at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one

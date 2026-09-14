@@ -516,6 +516,15 @@ describe("traceRows — restated reasoning", () => {
     expect(reasoningTexts(first, second)[1]).toBe("Le document est créé.");
   });
 
+  // The real session: the rewording still shares two thirds of its words with the
+  // first intro, and brings words of its own ("fourni", "suivre").
+  it("drops a list whose intro was reworded with words of its own", () => {
+    const tasks = "1. Lister les documents\n2. Résumer un document au hasard";
+    const first = `L'utilisateur me donne des instructions détaillées sur mon processus de travail :\n${tasks}\n\nJe commence.`;
+    const second = `L'utilisateur a fourni des instructions détaillées sur le processus à suivre :\n${tasks}\n\nJ'ai déjà listé.`;
+    expect(reasoningTexts(first, second)[1]).toBe("J'ai déjà listé.");
+  });
+
   it("keeps an intro whose list brings something new", () => {
     const first = "Voici le plan :\n1. Lister les documents";
     const second = "Voici ce qui reste à faire :\n1. Lister les documents\n2. Écrire le rapport";
@@ -564,6 +573,54 @@ describe("traceRows — restated reasoning", () => {
     expect(reasoningTexts(first, second)[1]).toBe(
       "Bilan : Documents disponibles dans le chat listés hier soir Document au hasard dans le corpus résumé ce matin Suite.",
     );
+  });
+
+  // Past eight meaningful words, a single swapped word stays above the overlap
+  // threshold: only the word being new to the turn gives it away.
+  it.each([
+    [
+      "The configuration file config.yaml sets the database url for the production environment here.",
+      "The configuration file config.yaml sets the database url for the staging environment here.",
+    ],
+    [
+      "Je dois maintenant publier dans le wiki de l'équipe la page consacrée à l'Italie.",
+      "Je dois maintenant publier dans le wiki de l'équipe la page consacrée à l'Espagne.",
+    ],
+  ])("keeps a long sentence whose one swapped word is new to the turn", (first, second) => {
+    expect(reasoningTexts(first, second)[1]).toBe(second);
+  });
+
+  it.each([
+    [
+      "a short word",
+      "I will now send the quarterly report to the finance team in EU region.",
+      "I will now send the quarterly report to the finance team in US region.",
+    ],
+    [
+      "an intro close to an earlier one",
+      "I need to check the staging deploy:\n- read the config\n- run the tests",
+      "I need to check the production deploy:\n- read the config\n- run the tests",
+    ],
+  ])("keeps a block whose only change is %s", (_label, first, second) => {
+    const rows = traceRows([first, second].map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) })));
+    expect(rows[1].restated).toBe(false);
+    expect(rows[1].reasoningMarkdown).toBe(second);
+  });
+
+  // What a rephrasing changes without adding a fact must not count as a new word.
+  it.each([
+    [
+      "an inflection",
+      "L'utilisateur demande un document Word qui résume les bonnes pratiques de gestion de produit en entreprise.",
+      "L'utilisateur demande un document Word résumant les bonnes pratiques de gestion de produit en entreprise.",
+    ],
+    [
+      "a function word",
+      "L'utilisateur demande une page d'accueil pour un site gouvernemental sur la santé et la protection civile.",
+      "L'utilisateur a demandé une page d'accueil pour un site gouvernemental autour de la santé et de la protection civile.",
+    ],
+  ])("still drops a restatement that only changes %s", (_label, first, second) => {
+    expect(reasoningTexts(first, `${second} Voici la suite.`)[1]).toBe("Voici la suite.");
   });
 
   it("keeps a near-repeated sentence between repeats", () => {
@@ -695,9 +752,38 @@ describe("traceRows — restated reasoning", () => {
       ).toBe(false);
     });
 
+    // The chain of thought flattens and never shows code, so a row whose only new
+    // part is code would otherwise render empty.
+    it("previews the first line of code when code is all a block adds", () => {
+      const said = "I will read the config file.";
+      const rows = traceRows(
+        [said, `${said}\n\n\`\`\`yaml\nport: 8080\nhost: local\n\`\`\``].map((text) => ({
+          kind: "solo" as const,
+          message: thoughtMsg(text),
+        })),
+      );
+      expect(rows[1]).toMatchObject({ reasoningText: "port: 8080", restated: false });
+    });
+
     it("drops a code block the turn already showed", () => {
       const code = "```sh\nls -la\n```";
       expect(markdownOf(`Listing.\n\n${code}`, `Listing.\n\n${code}\n\nDone.`)[1]).toBe("Done.");
+    });
+
+    it("keeps a heading apart from the line below it", () => {
+      const said = "The user wants the sales report for Q3.";
+      // A heading the turn never showed stops the cut instead of vanishing with the line under it.
+      expect(markdownOf(said, `## Plan\n${said}\n\nI will now query the database.`)[1]).toBe(
+        `## Plan\n${said}\n\nI will now query the database.`,
+      );
+      // Glued to its heading, a repeated line fell under the overlap threshold and stayed.
+      const heading = "Plan for the quarterly sales analysis.";
+      expect(
+        markdownOf(
+          `${heading} ${said}`,
+          `## Plan for the quarterly sales analysis\n${said}\n\nI will now query the database.`,
+        )[1],
+      ).toBe("I will now query the database.");
     });
 
     it("is empty for a block with nothing new", () => {
