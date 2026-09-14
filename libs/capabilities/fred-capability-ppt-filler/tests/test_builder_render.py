@@ -39,7 +39,6 @@ from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pptx.oxml.ns import qn
 
 TEMPLATE = build_showcase_template()
 _analysed = analyze_template(TEMPLATE).inventory
@@ -270,8 +269,9 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
         )
     )
     body = cast(Any, deck.slides[0].placeholders[1])
-    autofit = body.text_frame._txBody.find(qn("a:bodyPr")).find(qn("a:normAutofit"))
-    assert autofit is not None and int(autofit.get("fontScale")) < 100000
+    # The body inherits 32 pt; the shrink is written as explicit run sizes.
+    sizes = {run.font.size.pt for p in body.text_frame.paragraphs for run in p.runs}
+    assert sizes and max(sizes) < 32
 
     very_long = ["word " * 200] * 40
     result, deck = _render(
@@ -302,11 +302,12 @@ def test_image_zone_filled_from_prepared_bytes_or_removed_when_empty():
     slide = deck.slides[0]
     assert all(p.placeholder_format.type.name != "PICTURE" for p in slide.placeholders)
 
-    with pytest.raises(RenderError, match="doc-missing"):
-        _render(
-            SlidePlan(pattern=photo.id, title="Site", image="doc-missing"),
-            images=prepared,
-        )
+    result, deck = _render(
+        SlidePlan(pattern=photo.id, title="Site", image="doc-missing"),
+        images=prepared,
+    )
+    assert any("'doc-missing' is not a usable image" in w for w in result.warnings)
+    assert _pictures(deck.slides[0]) == 1  # the template's own picture stays
 
 
 def test_intent_names_resolve_and_degrade_with_a_warning():
@@ -337,12 +338,54 @@ def test_intent_names_resolve_and_degrade_with_a_warning():
     assert result.warnings == []
 
 
-def test_unknown_or_excluded_patterns_are_refused():
-    with pytest.raises(RenderError, match="Unknown pattern"):
-        _render(SlidePlan(pattern="slide:999", title="x"))
+def test_unknown_or_excluded_patterns_fall_back_on_the_slide_content():
+    result, deck = _render(
+        SlidePlan(pattern="slide:999", title="x", bullets=["a", "b"])
+    )
+    assert len(deck.slides) == 1
+    assert "'slide:999' is not a pattern of this template" in result.warnings[0]
+    assert "(content)" in result.warnings[0] or "content" in result.warnings[0]
+
     chart = next(p for p in INVENTORY.patterns if p.exclusion_reason == "chart")
-    with pytest.raises(RenderError, match="excluded"):
-        _render(SlidePlan(pattern=chart.id, title="x"))
+    result, _ = _render(SlidePlan(pattern=chart.id, title="x", bullets=["a"]))
+    assert "is excluded from this template" in result.warnings[0]
+
+    # A slide number the model mistook for an id is honoured when it fits.
+    agenda = _pattern("Agenda")
+    result, _ = _render(
+        SlidePlan(
+            pattern=f"slide:{agenda.source_index}", items=[PlanItem(heading="One")]
+        )
+    )
+    assert f"used '{agenda.id}'" in result.warnings[0]
+
+
+def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
+    result, deck = _render(
+        SlidePlan(pattern="content", title="Kept"), SlidePlan.model_validate("junk")
+    )
+    assert len(deck.slides) == 1
+    assert "not a slide object" in result.warnings[0]
+    with pytest.raises(RenderError, match="no usable slide"):
+        _render(SlidePlan.model_validate("junk"))
+
+
+def test_figures_never_break_and_long_words_shrink_instead_of_splitting():
+    kpi = _pattern("Key figures")
+    _, deck = _render(
+        SlidePlan(
+            pattern=kpi.id,
+            title="KPIs",
+            items=[PlanItem(number="1 200", label="Collaborateurs")],
+        )
+    )
+    figures = [
+        cast(Any, p.shape).text_frame.text
+        for p in walk_shapes(deck.slides[0].shapes)
+        if cast(Any, p.shape).has_text_frame
+        and "200" in cast(Any, p.shape).text_frame.text
+    ]
+    assert figures == ["1\u00a0200"]
 
 
 def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():

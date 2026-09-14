@@ -23,13 +23,15 @@ intent, degrading along :data:`DEGRADATION` when the template lacks it.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
+from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
     INTENTS,
-    Intent,
     Pattern,
     TemplateInventory,
 )
@@ -49,6 +51,42 @@ DEGRADATION: Dict[str, Tuple[str, ...]] = {
     "contact": ("content",),
     "fixed": (),
 }
+
+
+# The plan comes from a model, and small models get JSON shapes wrong (a bullet
+# list as one string, a number as an int, a stray string in a list). Every
+# model below coerces what it can instead of rejecting the call: a validation
+# error would reach the user as an opaque tool failure.
+
+
+def _as_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return "\n".join(t for t in (_as_text(v) for v in value) if t)
+    if isinstance(value, dict):
+        return _as_text(value.get("text") or value.get("heading") or value.get("title"))
+    return str(value)
+
+
+def _as_text_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [line for line in value.splitlines() if line.strip()]
+    if isinstance(value, (list, tuple)):
+        out: List[str] = []
+        for entry in value:
+            text = _as_text(entry)
+            if text and text.strip():
+                out.append(text)
+        return out
+    text = _as_text(value)
+    return [text] if text else []
 
 
 class PlanItem(BaseModel):
@@ -72,6 +110,13 @@ class PlanItem(BaseModel):
         description="document_id of an image for the item, from list_images_in_folder.",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: _as_text(v) for k, v in value.items()}
+        return {"heading": _as_text(value)}
+
 
 class PlanColumn(BaseModel):
     heading: Optional[str] = Field(
@@ -82,10 +127,21 @@ class PlanColumn(BaseModel):
         description="Column bullets; prefix '- ' for a sub-bullet.",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                "heading": _as_text(value.get("heading") or value.get("title")),
+                "bullets": _as_text_list(value.get("bullets") or value.get("text")),
+            }
+        return {"bullets": _as_text_list(value)}
+
 
 class SlidePlan(BaseModel):
     pattern: str = Field(
-        description="A pattern id from the catalogue, or an intent name."
+        default="",
+        description="A pattern id from the catalogue, or an intent name.",
     )
     title: Optional[str] = None
     subtitle: Optional[str] = None
@@ -104,6 +160,39 @@ class SlidePlan(BaseModel):
         description="document_ids for a pattern with several image zones, in order.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
+    # Set when the model sent something that is not a slide object at all.
+    invalid_entry: SkipJsonSchema[Optional[str]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return {"invalid_entry": str(value)[:80]}
+        return value
+
+    @field_validator("title", "subtitle", "image", "notes", mode="before")
+    @classmethod
+    def _text(cls, value: Any) -> Optional[str]:
+        return _as_text(value)
+
+    @field_validator("pattern", mode="before")
+    @classmethod
+    def _pattern(cls, value: Any) -> str:
+        return _as_text(value) or ""
+
+    @field_validator("bullets", "images", mode="before")
+    @classmethod
+    def _texts(cls, value: Any) -> List[str]:
+        return _as_text_list(value)
+
+    @field_validator("columns", "items", mode="before")
+    @classmethod
+    def _entries(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple)):
+            return [v for v in value if v is not None]
+        return [value]
 
 
 class DeckPlan(BaseModel):
@@ -115,8 +204,8 @@ class DeckPlan(BaseModel):
 
 class Resolution(BaseModel):
     pattern: Pattern
-    # Set when the requested intent was replaced by another one.
-    substituted_from: Optional[str] = None
+    # Human-readable reason when the requested pattern was not used as is.
+    substitution: Optional[str] = None
 
 
 def included_patterns(inventory: TemplateInventory) -> List[Pattern]:
@@ -133,28 +222,122 @@ def best_for_intent(inventory: TemplateInventory, intent: str) -> Optional[Patte
     return (preferred or candidates)[0]
 
 
-def resolve(inventory: TemplateInventory, requested: str) -> Resolution:
-    """Map a plan's ``pattern`` value to a pattern, or raise ``ValueError``."""
-    pattern = inventory.pattern(requested)
-    if pattern is not None:
-        if not pattern.included:
-            raise ValueError(
-                f"Pattern '{requested}' is excluded from this template; pick one from the catalogue."
-            )
-        return Resolution(pattern=pattern)
-    if requested not in INTENTS:
-        valid = ", ".join(p.id for p in included_patterns(inventory))
-        raise ValueError(f"Unknown pattern '{requested}'. Valid pattern ids: {valid}.")
-    intent: Intent = requested  # type: ignore[assignment]
+def infer_intent(slide: SlidePlan) -> str:
+    """The intent a slide's content implies, when its pattern cannot be used."""
+    if len(slide.columns) >= 2:
+        return "two_columns"
+    if slide.items:
+        numbers = [i.number for i in slide.items if i.number]
+        if numbers and all(lexicon.is_year(n) for n in numbers):
+            return "steps"
+        if all(not (i.text or i.label) for i in slide.items):
+            return "agenda"
+        return "cards"
+    if slide.image or slide.images:
+        return "image_text"
+    if slide.bullets:
+        return "content" if slide.title else "statement"
+    if slide.subtitle:
+        return "title"
+    if slide.title:
+        return "section"
+    return "fixed"
+
+
+def _for_intent(
+    inventory: TemplateInventory, intent: str
+) -> Tuple[Optional[Pattern], Optional[str]]:
     direct = best_for_intent(inventory, intent)
     if direct is not None:
-        return Resolution(pattern=direct)
+        return direct, None
     for fallback in DEGRADATION.get(intent, ()):
         candidate = best_for_intent(inventory, fallback)
         if candidate is not None:
-            return Resolution(pattern=candidate, substituted_from=intent)
-    raise ValueError(
-        f"This template offers no pattern for '{intent}' nor any substitute; pick a pattern id from the catalogue."
+            return candidate, intent
+    return None, intent
+
+
+_NUMBERED_ID = re.compile(r"^(layout|slide)\s*[:#_ -]?\s*(\d+)$", re.IGNORECASE)
+
+
+def _fits(pattern: Pattern, slide: SlidePlan) -> bool:
+    """Whether a pattern has somewhere to put the slide's main content."""
+    roles = [z.role for z in pattern.zones]
+    body_like = sum(1 for r in roles if r in ("body", "caption", "subtitle"))
+    if len(slide.columns) >= 2 and body_like < 2:
+        return False
+    if slide.items and not pattern.groups:
+        return False
+    if slide.bullets and not body_like and not pattern.groups:
+        return False
+    return True
+
+
+def _loose_match(inventory: TemplateInventory, requested: str) -> Optional[Pattern]:
+    """A pattern the model meant but did not name exactly: `slide:12` read as
+    the 12th slide, `layout 3` as the 4th layout, or the pattern's label."""
+    match = _NUMBERED_ID.match(requested.strip())
+    if match:
+        kind, number = match.group(1).lower(), int(match.group(2))
+        for pattern in included_patterns(inventory):
+            if pattern.source == kind and pattern.source_index == number:
+                return pattern
+    wanted = lexicon.normalize(requested)
+    if wanted:
+        for pattern in included_patterns(inventory):
+            if lexicon.normalize(pattern.label) == wanted:
+                return pattern
+    return None
+
+
+def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
+    """Map a plan slide to a pattern, never failing while the template has one.
+
+    Exact id → intent name → a loosely named pattern → the intent the slide's
+    content implies; an excluded pattern stands in for its own intent. Every
+    step past the exact match is reported as a substitution.
+    """
+    requested = (slide.pattern or "").strip()
+    pattern = inventory.pattern(requested) if requested else None
+    if pattern is not None and pattern.included:
+        return Resolution(pattern=pattern)
+
+    if requested in INTENTS:
+        found, degraded_from = _for_intent(inventory, requested)
+        if found is not None:
+            reason = (
+                f"no '{degraded_from}' pattern in this template, used '{found.label}' ({found.intent})"
+                if degraded_from
+                else None
+            )
+            return Resolution(pattern=found, substitution=reason)
+
+    if pattern is None and requested:
+        loose = _loose_match(inventory, requested)
+        if loose is not None and _fits(loose, slide):
+            return Resolution(
+                pattern=loose,
+                substitution=f"'{requested}' is not a pattern id, used '{loose.id}' (\"{loose.label}\")",
+            )
+
+    intent = pattern.intent if pattern is not None else infer_intent(slide)
+    found, _ = _for_intent(inventory, intent)
+    if found is None:
+        found, _ = _for_intent(inventory, "content")
+    if found is None:
+        included = included_patterns(inventory)
+        if not included:
+            raise ValueError("This template offers no usable pattern.")
+        found = included[0]
+    if pattern is not None:
+        why = f"'{requested}' is excluded from this template"
+    elif requested:
+        why = f"'{requested}' is not a pattern of this template"
+    else:
+        why = "no pattern given"
+    return Resolution(
+        pattern=found,
+        substitution=f"{why}, used '{found.id}' (\"{found.label}\", {found.intent}) from the slide's content",
     )
 
 

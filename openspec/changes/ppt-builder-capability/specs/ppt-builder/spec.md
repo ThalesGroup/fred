@@ -115,10 +115,20 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** the plan asks for an intent the inventory does not offer
 - **THEN** the tool substitutes the closest available pattern following a documented degradation order (for example `two_columns` → `content`, `section` → `title`) and reports the substitution in its result
 
-#### Scenario: Unknown pattern id is rejected
+#### Scenario: Unknown or excluded pattern is substituted
 
-- **WHEN** the plan names a pattern id that is not in the inventory or is excluded
-- **THEN** the tool returns an error naming the valid patterns and nothing is generated
+- **WHEN** the plan names a pattern id that is not in the inventory, is excluded, or is a slide number or label the model mistook for an id
+- **THEN** the tool uses the pattern that name designates when it can hold the slide's content, otherwise the best pattern for the intent the slide's content implies, builds the deck, and reports each substitution in its result
+
+#### Scenario: Malformed plan from the model
+
+- **WHEN** the plan has the wrong JSON shapes (a bullet list given as one string, numbers as integers, a non-object entry in the slide list, unknown keys)
+- **THEN** the tool coerces what it can, skips entries that are not slides, builds the deck from the remaining slides and reports what it skipped; it never fails argument validation
+
+#### Scenario: Every error result is readable
+
+- **WHEN** the tool cannot build the deck (no usable slide, server busy, template unavailable)
+- **THEN** its error result carries a short actionable text, so the user sees that text rather than a generic failure message
 
 #### Scenario: Empty plan is rejected
 
@@ -142,7 +152,7 @@ The system SHALL let the plan fill an image zone with an image document chosen f
 #### Scenario: Invalid image reference
 
 - **WHEN** the plan names a document that cannot be fetched or is not an image
-- **THEN** the tool returns an error naming the zone and nothing is generated
+- **THEN** the deck is built without that picture and the tool result names the document that was left out
 
 ### Requirement: Built-in theme when no template is configured
 

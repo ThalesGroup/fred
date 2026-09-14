@@ -52,6 +52,9 @@ from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 MIN_FONT_SCALE = 0.7
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
 _LEVEL_WIDTH_FACTOR = 0.85
+# Average glyph width in em for a width estimate without font metrics; bold
+# display figures run wide, so this errs large.
+_GLYPH_EM = 0.62
 
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _SKIPPED_RELS = ("/slideLayout", "/notesSlide")
@@ -239,9 +242,25 @@ def _clear_text(shape) -> None:
     _write_lines(shape, [])
 
 
-def _set_font_scale(shape, scale: float) -> None:
-    """Shrink a text frame through ``normAutofit`` (``fontScale`` in 1/1000 %)."""
-    bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
+def _set_font_scale(shape, scale: float, base_pt: Optional[float] = None) -> None:
+    """Shrink a text frame. With a known base size every run gets an explicit
+    scaled size, which every renderer honours; otherwise fall back to
+    ``normAutofit`` (``fontScale`` in 1/1000 %)."""
+    txBody = shape.text_frame._txBody
+    if base_pt:
+        for tag in ("a:rPr", "a:endParaRPr"):
+            for rPr in txBody.iter(qn(tag)):
+                current = rPr.get("sz")
+                size = int(current) / 100 if current else base_pt
+                rPr.set("sz", str(max(600, int(size * scale * 100))))
+        for run in txBody.iter(qn("a:r")):
+            if run.find(qn("a:rPr")) is None:
+                rPr = run.makeelement(
+                    qn("a:rPr"), {"sz": str(max(600, int(base_pt * scale * 100)))}
+                )
+                run.insert(0, rPr)
+        return
+    bodyPr = txBody.find(qn("a:bodyPr"))
     if bodyPr is None:
         return
     for child in list(bodyPr):
@@ -277,11 +296,14 @@ def _fit(
             for line in lines
         )
 
-    if needed(1.0) <= max_lines:
+    # A word longer than a line breaks in the middle: shrink until it fits.
+    longest = max((len(w) for line in lines for w in line.text.split()), default=0)
+    word_scale = min(1.0, chars_per_line / longest) if longest else 1.0
+    if needed(1.0) <= max_lines and word_scale >= 1.0:
         return lines, None, False
-    scale = max_lines / needed(1.0)
-    if scale >= MIN_FONT_SCALE:
-        return lines, round(scale, 2), False
+    scale = min(max_lines / needed(1.0), word_scale)
+    if scale >= MIN_FONT_SCALE or needed(MIN_FONT_SCALE) <= max_lines:
+        return lines, round(max(scale, MIN_FONT_SCALE * 0.8), 2), False
 
     capacity = max_lines / MIN_FONT_SCALE
     cpl = chars_per_line / MIN_FONT_SCALE
@@ -464,14 +486,19 @@ class _Renderer:
 
     def render(self, plan: DeckPlan) -> RenderResult:
         original_ids = list(self.slides_by_id)
+        rendered = 0
         for position, slide_plan in enumerate(plan.slides, start=1):
-            resolution = resolve(self.inventory, slide_plan.pattern)
-            pattern = resolution.pattern
-            if resolution.substituted_from:
+            if slide_plan.invalid_entry is not None:
                 self.warnings.append(
-                    f"Slide {position}: no '{resolution.substituted_from}' pattern in this template, "
-                    f"used '{pattern.label}' ({pattern.intent}) instead."
+                    f"Entry {position} of 'slides' was not a slide object and was skipped "
+                    f"({slide_plan.invalid_entry!r})."
                 )
+                continue
+            resolution = resolve(self.inventory, slide_plan)
+            pattern = resolution.pattern
+            if resolution.substitution:
+                self.warnings.append(f"Slide {position}: {resolution.substitution}.")
+            rendered += 1
             slide = self._create(pattern)
             if pattern.intent != "fixed":
                 self._fill(slide, pattern, slide_plan, position)
@@ -483,11 +510,13 @@ class _Renderer:
             )
             if frame is not None:
                 frame.text = slide_plan.notes or ""
+        if rendered == 0:
+            raise RenderError("The plan holds no usable slide.")
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()
         self.prs.save(buffer)
         return RenderResult(
-            pptx=buffer.getvalue(), warnings=self.warnings, slide_count=len(plan.slides)
+            pptx=buffer.getvalue(), warnings=self.warnings, slide_count=rendered
         )
 
     def _create(self, pattern: Pattern):
@@ -544,23 +573,44 @@ class _Renderer:
                 if placed is not None:
                     self._remove_with_decoration(placed, index, pattern, kept_boxes)
             self._even_out_item_widths(group, index)
+        if pattern.groups:
+            # Widths and removals changed the slide: re-read absolute geometry.
+            index = _shape_index(slide)
 
+        containers = {
+            z.key: index.get(key)
+            for g in pattern.groups
+            for key, item in zip(g.item_keys, g.items)
+            for z in item
+        }
         for zone in self._fillable_text_zones(pattern):
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
-            if shape is None or not getattr(shape, "has_text_frame", False):
+            if (
+                placed is None
+                or shape is None
+                or not getattr(shape, "has_text_frame", False)
+            ):
                 continue
             lines = text.get(zone.key, [])
             if not lines:
                 _clear_text(shape)
                 continue
+            if zone.role == "number":
+                # "1 200", "62 %", "4,2 M€" never break across lines.
+                lines = [
+                    _Line(line.text.replace(" ", " "), line.level) for line in lines
+                ]
             if _grows_with_text(shape):
-                scale, truncated = None, False
+                scale = self._no_wrap_scale(
+                    zone, lines, placed, containers.get(zone.key)
+                )
+                truncated = False
             else:
                 lines, scale, truncated = _fit(zone, lines, self.width, self.height)
             _write_lines(shape, lines)
             if scale is not None:
-                _set_font_scale(shape, scale)
+                _set_font_scale(shape, scale, zone.font_pt)
             if truncated:
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
@@ -584,10 +634,13 @@ class _Renderer:
                 continue
             prepared = self.images.get(image_id)
             if prepared is None:
-                raise RenderError(
-                    f"Slide {position}: image '{image_id}' is not available; list the folder again and "
-                    "pass a document_id returned by list_images_in_folder."
+                # A bad image reference costs the picture, never the deck.
+                self.warnings.append(
+                    f"Slide {position}: image '{image_id}' is not a usable image document and was left out."
                 )
+                if cast(Any, placed.shape).is_placeholder:
+                    _remove(placed)
+                continue
             self._place_image(slide, placed, prepared)
 
     @staticmethod
@@ -657,6 +710,48 @@ class _Renderer:
                         target = widest / 1000 * self.width
                         shape = cast(Any, placed.shape)
                         shape.width = Emu(round(target * shape.width / placed.width))
+
+    def _no_wrap_scale(
+        self,
+        zone: Zone,
+        lines: List[_Line],
+        placed: PlacedShape,
+        container: Optional[PlacedShape],
+    ) -> Optional[float]:
+        """Keep a box that grows with its text (a KPI figure, its caption)
+        inside its card, identically in PowerPoint and in the PDF preview.
+
+        The room runs to the card's right edge (or the slide's). A box too
+        narrow for its text is widened to that room — renderers that ignore
+        "no wrap" otherwise break inside the figure. A figure stays on one line
+        and shrinks if even the room is too small; a caption may wrap between
+        words and only shrinks for a word longer than the room.
+        """
+        if not zone.font_pt or placed.width <= 0:
+            return None
+        right = (
+            container.left + container.width
+            if container is not None and container.width > 0
+            else int(self.width * 0.95)
+        )
+        room = int((right - placed.left) * 0.95)
+        if room <= 0:
+            return None
+        per_char = zone.font_pt * _GLYPH_EM / 72 * 914400
+        texts = [line.text for line in lines]
+        needed = max((len(t) for t in texts), default=0) * per_char
+        longest_word = max((len(w) for t in texts for w in t.split()), default=0)
+        if needed <= placed.width:
+            return None
+        shape = cast(Any, placed.shape)
+        shape.width = Emu(round(min(needed, room) * shape.width / placed.width))
+        if zone.role == "number":
+            return round(max(0.4, room / needed), 2) if needed > room else None
+        bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
+        if bodyPr is not None and needed > room:
+            bodyPr.set("wrap", "square")
+        word_needed = longest_word * per_char
+        return round(max(0.4, room / word_needed), 2) if word_needed > room else None
 
     @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:

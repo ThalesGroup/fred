@@ -271,17 +271,53 @@ async def test_build_without_template_uses_the_built_in_theme(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_build_rejects_empty_plan_and_unknown_pattern():
+async def test_empty_plan_is_an_error_the_user_can_read():
     config, assets = _configured()
     tools = _tools(_ctx(config, assets=assets))
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
         slides=[{"pattern": "content"}]
     )
     assert result.is_error and "no content" in text
+    # The text travels in the result so the runtime shows it, not a generic failure.
+    assert result.blocks and result.blocks[0].text == text
+
+
+@pytest.mark.asyncio
+async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
+    """The shape of a real failing call: invented `slide:<n>` ids, a column
+    pattern given as a slide number, stray strings in `slides`, bullets as one
+    string, numbers as integers, an unknown top-level key."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    workspace = FakeWorkspace()
+    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[{"pattern": "slide:999", "title": "x"}]
+        notes="stray top-level key",
+        slides=[
+            {"pattern": "title", "title": "Kick-off", "subtitle": "Team"},
+            {
+                "pattern": "slide:999",
+                "title": "Options",
+                "columns": [
+                    {"heading": "A", "bullets": "fast\ncheap"},
+                    {"heading": "B", "bullets": ["robust"]},
+                ],
+            },
+            {
+                "pattern": "cards",
+                "title": "KPIs",
+                "items": [{"number": 3, "label": "Sites"}, "Loose item"],
+            },
+            {"title": "Plan", "bullets": "one\ntwo"},
+            "notes**: ",
+            "A long stray note that is not a slide",
+        ],
     )
-    assert result.is_error and "Invalid plan" in text
+    assert not result.is_error, text
+    deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
+    assert len(deck.slides) == 4
+    assert "4 slides" in text
+    assert "not a slide object" in text and "slide:999" in text
 
 
 @pytest.mark.asyncio
@@ -300,14 +336,15 @@ async def test_build_places_images_from_documents_and_reports_bad_ones(monkeypat
     )
     assert not result.is_error
     assert docs.fetch_uids == ["img-1"]
+    # A bad image reference costs the picture, never the deck.
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
         slides=[{"pattern": photo.id, "title": "Site", "image": "txt-1"}]
     )
-    assert result.is_error and "not a usable image" in text
+    assert not result.is_error and "'txt-1' is not a usable image" in text
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
         slides=[{"pattern": photo.id, "title": "Site", "image": "missing"}]
     )
-    assert result.is_error and "Could not fetch" in text
+    assert not result.is_error and "'missing' is not a usable image" in text
 
 
 @pytest.mark.asyncio

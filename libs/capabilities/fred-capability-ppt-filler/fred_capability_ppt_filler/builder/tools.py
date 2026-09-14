@@ -18,9 +18,13 @@ folder listing.
 Same seams as the filler's tools: typed context through the closure, image
 bytes prefetched on the event loop, the CPU-bound render in one thread under
 the package's heavy-job slot, delivery through the workspace port with the
-shared PDF preview part. The ``pattern`` field of the plan is a closed enum
-built from the effective inventory, so the model cannot name a pattern that
-does not exist.
+shared PDF preview part.
+
+The tool never lets a malformed call fail validation: the schema the model
+sees lists the pattern ids as an enum, but the arguments are coerced and every
+slide resolves to a pattern (see ``plan.resolve``). What cannot be honoured is
+reported to the agent in the result, and every error result carries its text
+so the user sees it instead of an opaque failure.
 """
 
 from __future__ import annotations
@@ -29,13 +33,19 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
-from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    LinkKind,
+    LinkPart,
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 from langchain_core.tools import BaseTool, StructuredTool
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from fred_capability_ppt_filler.builder.models import (
     INTENTS,
@@ -44,8 +54,6 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
-    PlanColumn,
-    PlanItem,
     SlidePlan,
     has_content,
     included_patterns,
@@ -120,6 +128,15 @@ def _zone_summary(pattern: Pattern) -> str:
     return "; ".join(parts) or "no editable zone"
 
 
+def _error(message: str) -> tuple[str, ToolInvocationResult]:
+    """An error result whose text is Fred-owned, so the runtime shows it."""
+    return message, ToolInvocationResult(
+        tool_ref=_TOOL_REF,
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
+
+
 def catalogue(inventory: TemplateInventory) -> str:
     """One line per usable pattern, for the tool description."""
     lines = []
@@ -132,22 +149,32 @@ def catalogue(inventory: TemplateInventory) -> str:
 
 
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
-    """``DeckPlan`` with ``pattern`` closed over the usable ids and the intents."""
-    choices = tuple(p.id for p in included_patterns(inventory)) + INTENTS
+    """The deck plan, with the usable pattern ids and intents listed as an enum
+    in the JSON schema only: validation accepts any string and resolves it."""
+    choices = [p.id for p in included_patterns(inventory)] + list(INTENTS)
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
         pattern=(
-            Literal[choices],  # type: ignore[valid-type]
+            str,
             Field(
-                description="A pattern id from the catalogue, or an intent name (resolved to the best pattern)."
+                default="",
+                description=(
+                    "A pattern id copied exactly from the catalogue, or an intent name "
+                    "(the tool picks the best pattern for it)."
+                ),
+                json_schema_extra={"enum": cast(Any, choices)},
             ),
         ),
     )
-    return create_model(
+    model = create_model(
         "BuildPresentationArgs",
         __base__=BaseModel,
-        slides=(List[slide_model], Field(description="The slides, in order.")),  # type: ignore[valid-type]
+        __config__=ConfigDict(extra="ignore"),
+        slides=(
+            List[slide_model],
+            Field(default_factory=list, description="The slides, in order."),
+        ),  # type: ignore[valid-type]
         file_name=(
             Optional[str],
             Field(
@@ -156,26 +183,15 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
             ),
         ),
     )
+    return model
 
 
-def _to_plan(validated: BaseModel) -> DeckPlan:
-    dumped = validated.model_dump()
+def _to_plan(validated: Any) -> DeckPlan:
     return DeckPlan(
         slides=[
-            SlidePlan(
-                pattern=s["pattern"],
-                title=s.get("title"),
-                subtitle=s.get("subtitle"),
-                bullets=s.get("bullets") or [],
-                columns=[PlanColumn(**c) for c in s.get("columns") or []],
-                items=[PlanItem(**i) for i in s.get("items") or []],
-                image=s.get("image"),
-                images=s.get("images") or [],
-                notes=s.get("notes"),
-            )
-            for s in dumped["slides"]
+            SlidePlan.model_validate(slide.model_dump()) for slide in validated.slides
         ],
-        file_name=dumped.get("file_name"),
+        file_name=validated.file_name,
     )
 
 
@@ -187,12 +203,6 @@ def _image_ids(plan: DeckPlan) -> set[str]:
         ids.update(i for i in slide.images if i)
         ids.update(item.image for item in slide.items if item.image)
     return ids
-
-
-class _BadImage(ValueError):
-    def __init__(self, document_id: str, reason: str) -> None:
-        super().__init__(reason)
-        self.document_id = document_id
 
 
 def _is_fixed(inventory: TemplateInventory, requested: str) -> bool:
@@ -213,13 +223,16 @@ def _prepare_and_render(
     prefetched: Dict[str, object],
 ):
     """Picture validation/transcoding and the render, together in one worker
-    thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU."""
+    thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU.
+    An unusable picture is left out (the renderer reports it), never fatal."""
     images = {}
     for document_id, raw in prefetched.items():
+        if isinstance(raw, Exception):
+            continue
         try:
             images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
-        except NotAnImageError as exc:
-            raise _BadImage(document_id, str(exc)) from exc
+        except NotAnImageError:
+            continue
     return render_deck(template_bytes, inventory, plan, images)
 
 
@@ -280,18 +293,20 @@ def build_builder_tools(
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         try:
             plan = _to_plan(args_schema(**kwargs))
-        except Exception as exc:  # noqa: BLE001 - the model's malformed call
-            return f"Invalid plan: {exc}", ToolInvocationResult(
-                tool_ref=_TOOL_REF, is_error=True
+        except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
+            logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", exc)
+            return _error(
+                "The slide plan could not be read. Call build_presentation again with 'slides' as a "
+                "list of objects, each with a 'pattern' and its content (title, bullets, items…)."
             )
 
-        if not plan.slides or not any(
-            has_content(s) or _is_fixed(inventory, s.pattern) for s in plan.slides
+        usable = [s for s in plan.slides if s.invalid_entry is None]
+        if not usable or not any(
+            has_content(s) or _is_fixed(inventory, s.pattern) for s in usable
         ):
-            return (
-                "The plan has no content — nothing was generated. Write the slides first (title, bullets, "
-                "items) then call this tool again.",
-                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+            return _error(
+                "The plan has no content, so nothing was generated. Write the slides (title, bullets, "
+                "items…) and call build_presentation again."
             )
 
         workspace = services.workspace_fs
@@ -314,38 +329,28 @@ def build_builder_tools(
                 if image_ids
                 else _no_images(),
             )
-        except Exception as exc:  # noqa: BLE001 - surfaced to the agent
-            message = f"Could not load the presentation template [{type(exc).__name__}: {exc}]."
-            logger.exception("[PPTBUILD][TOOL] template load FAILED -> %s", message)
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
-        for document_id, fetched in prefetched.items():
-            if isinstance(fetched, Exception):
-                return (
-                    f"Could not fetch the image document '{document_id}' [{type(fetched).__name__}: {fetched}]. "
-                    "List the folder again with list_images_in_folder and pass a valid document_id.",
-                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
-                )
+        except Exception:  # noqa: BLE001 - surfaced to the agent
+            logger.exception("[PPTBUILD][TOOL] template load FAILED")
+            return _error(
+                "The presentation template could not be loaded right now. Tell the user and suggest trying "
+                "again in a moment."
+            )
 
         if not acquire_heavy_job_slot():
-            return _BUSY_MESSAGE, ToolInvocationResult(
-                tool_ref=_TOOL_REF, is_error=True
-            )
+            return _error(_BUSY_MESSAGE)
         try:
             result = await asyncio.to_thread(
                 _prepare_and_render, template_bytes, inventory, plan, prefetched
             )
-        except _BadImage as exc:
-            return (
-                f"The document '{exc.document_id}' is not a usable image [{exc}]. Pick an image document.",
-                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
-            )
         except RenderError as exc:
-            return str(exc), ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
-        except Exception as exc:  # noqa: BLE001 - wrapped uniformly for the agent
+            return _error(f"{exc} Check the plan and call build_presentation again.")
+        except Exception:  # noqa: BLE001 - wrapped uniformly for the agent
             elapsed = time.monotonic() - started
-            message = f"Could not build the presentation after {elapsed:.0f}s [{type(exc).__name__}: {exc}]."
-            logger.exception("[PPTBUILD][TOOL] render FAILED -> %s", message)
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+            logger.exception("[PPTBUILD][TOOL] render FAILED after %.0fs", elapsed)
+            return _error(
+                "The presentation could not be built because of an internal problem. Tell the user and "
+                "suggest trying again; if it persists, simplify the plan."
+            )
         finally:
             release_heavy_job_slot()
 
@@ -367,14 +372,19 @@ def build_builder_tools(
                 content_type=_PPTX_CONTENT_TYPE,
                 title=file_name,
             )
-        except Exception as exc:  # noqa: BLE001 - surfaced to the agent
-            message = f"Built the presentation but could not upload it [{type(exc).__name__}: {exc}]."
-            logger.exception("[PPTBUILD][TOOL] upload FAILED -> %s", message)
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+        except Exception:  # noqa: BLE001 - surfaced to the agent
+            logger.exception("[PPTBUILD][TOOL] upload FAILED")
+            return _error(
+                "The presentation was built but could not be saved to the conversation files. Tell the "
+                "user and suggest trying again in a moment."
+            )
 
         notes = ""
         if result.warnings:
-            notes = " Notes: " + " ".join(result.warnings)
+            notes = (
+                "\nAdjustments made (fix the plan and call again if they matter): "
+                + " ".join(result.warnings)
+            )
 
         pdf_bytes = await convert_office_bytes_to_pdf(result.pptx, suffix=".pptx")
         pdf_url: Optional[str] = None
@@ -427,7 +437,10 @@ def build_builder_tools(
 
     description = (
         "Build a PowerPoint presentation from a plan of slides, on the agent's template. Each slide names a "
-        "pattern (id below, or an intent name) and gives its content: title, subtitle, bullets (telegraphic, "
+        "pattern and gives its content. The simplest reliable pattern value is an intent name (title, section, "
+        "agenda, content, two_columns, comparison, image_text, cards, steps, statement, contact, fixed): the "
+        "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "
+        "exactly (ids like 'slide:259' are internal ids, not slide numbers). Content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}] for patterns with items, image/images (document_ids from "
         "list_images_in_folder), notes. Respect the character limits: a slide is not a document. Start with a "
