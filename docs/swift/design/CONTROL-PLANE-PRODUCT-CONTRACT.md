@@ -986,14 +986,14 @@ embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, â
 `import_export/api.py` derives the single-active-migration index name it matches
 in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
 
-Task rows are progress bookkeeping, so the split ships with **no backfill**. It
-also does **not drop** the old shared `task_run`/`task_event_log`: they are left
-orphaned for a later release. The two Temporal workers have no `migration:` block
-in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
-running old code â€” which writes the shared table through an unguarded activity
-that is the first step of every push-file ingestion. Dropping it mid-deploy would
-fail those workflows outright and lose the document, not just its task row.
-Expand now, contract in a later release.
+Task rows are progress bookkeeping, so the split shipped with **no backfill**. The
+old shared `task_run`/`task_event_log` stayed orphaned for one release and were
+dropped in a later one (control-plane revision `d3f8a2c6e174`, issue #2377). The
+two Temporal workers have no `migration:` block in `deploy/charts/fred/values.yaml`,
+so they get no scale-down hook and run the **previous** image through a rollout:
+a table they write can only be dropped once the release before already stopped
+writing it. Any future rename of a worker-written table needs the same two-release
+split.
 
 ### Ownership boundary
 
