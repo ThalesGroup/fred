@@ -82,6 +82,8 @@ def test_layout_zones_carry_roles_and_capacity():
     roles = {z.key: z.role for z in content.zones}
     assert roles == {"ph:0": "title", "ph:1": "body"}
     body = next(z for z in content.zones if z.role == "body")
+    # Inherited from the master body style (32 pt in the default template).
+    assert body.font_pt == 32
     assert body.max_chars and body.max_chars > 200
     assert body.max_lines and body.max_lines >= 5
 

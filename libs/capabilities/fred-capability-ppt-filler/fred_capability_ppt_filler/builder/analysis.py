@@ -34,6 +34,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
@@ -122,6 +123,47 @@ def _font_pt_of(shape) -> Optional[float]:
     return best
 
 
+def _lst_style_pt(element) -> Optional[float]:
+    """First-level default size declared in an element's ``a:lstStyle``/``a:lvl1pPr``."""
+    if element is None:
+        return None
+    node = element.find(f".//{qn('a:lvl1pPr')}/{qn('a:defRPr')}")
+    if node is None:
+        return None
+    size = node.get("sz")
+    return int(size) / 100 if size else None
+
+
+def _placeholder_pt(shape, layout, master) -> Optional[float]:
+    """Font size a placeholder inherits when its runs carry none: its own list
+    style, then the layout's and master's matching placeholder, then the
+    master's title/body text styles. Enough for a capacity estimate."""
+    own = _lst_style_pt(shape._element.find(f".//{qn('a:lstStyle')}"))
+    if own:
+        return own
+    fmt = shape.placeholder_format
+    for holder in (layout, master):
+        if holder is None:
+            continue
+        for candidate in holder.placeholders:
+            cfmt = candidate.placeholder_format
+            if cfmt.idx == fmt.idx or (cfmt.type == fmt.type and fmt.type is not None):
+                pt = _font_pt_of(candidate) if candidate.has_text_frame else None
+                pt = pt or _lst_style_pt(
+                    candidate._element.find(f".//{qn('a:lstStyle')}")
+                )
+                if pt:
+                    return pt
+                break
+    if master is None:
+        return None
+    styles = master._element.find(qn("p:txStyles"))
+    if styles is None:
+        return None
+    is_title = fmt.type is not None and fmt.type.name in ("TITLE", "CENTER_TITLE")
+    return _lst_style_pt(styles.find(qn("p:titleStyle" if is_title else "p:bodyStyle")))
+
+
 def _placeholder_key(shape) -> str:
     return f"ph:{shape.placeholder_format.idx}"
 
@@ -130,8 +172,12 @@ def _shape_key(path: Tuple[int, ...]) -> str:
     return "sp:" + "/".join(str(part) for part in path)
 
 
-def _records(shapes, width: int, height: int) -> List[_Rec]:
-    """Flatten ``shapes`` (groups included) into records with per-mille boxes."""
+def _records(shapes, width: int, height: int, layout=None, master=None) -> List[_Rec]:
+    """Flatten ``shapes`` (groups included) into records with per-mille boxes.
+
+    ``layout``/``master`` let a placeholder without explicit run sizes report
+    the size it inherits, which the capacity estimate needs.
+    """
     slide_area = float(width * height) or 1.0
     records: List[_Rec] = []
     for placed in walk_shapes(shapes):
@@ -164,6 +210,8 @@ def _records(shapes, width: int, height: int) -> List[_Rec]:
             kind = "text"
             text = _text_of(shape)
             font_pt = _font_pt_of(shape)
+            if font_pt is None and ph_idx is not None:
+                font_pt = _placeholder_pt(shape, layout, master)
             lines = text.count("\n") + 1 if text else 0
         else:
             kind = "other"
@@ -187,7 +235,7 @@ def _records(shapes, width: int, height: int) -> List[_Rec]:
     return records
 
 
-def _capacity(
+def estimate_capacity(
     box: Box, font_pt: Optional[float], role: str, width_emu: int, height_emu: int
 ) -> Tuple[int, int]:
     """Rough (max_chars, max_lines) from the box and the font size.
@@ -206,7 +254,9 @@ def _capacity(
 def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
     max_chars = max_lines = None
     if role != "image" and role != "keep":
-        max_chars, max_lines = _capacity(rec.box, rec.font_pt, role, width, height)
+        max_chars, max_lines = estimate_capacity(
+            rec.box, rec.font_pt, role, width, height
+        )
     return Zone(
         key=rec.key,
         role=role,
@@ -281,8 +331,14 @@ class _Analyzer:
 
         patterns: List[Pattern] = []
         layout_zone_sets: Dict[str, frozenset] = {}
-        for master in self.prs.slide_masters:
-            for index, layout in enumerate(master.slide_layouts):
+        # One running index over every master, matching the renderer's view.
+        layouts = [
+            layout
+            for master in self.prs.slide_masters
+            for layout in master.slide_layouts
+        ]
+        for index, layout in enumerate(layouts):
+            if True:
                 pattern = self._layout_pattern(layout, index)
                 patterns.append(pattern)
                 if pattern.included:
@@ -348,7 +404,9 @@ class _Analyzer:
     # -- layouts -----------------------------------------------------------------
 
     def _layout_pattern(self, layout, index: int) -> Pattern:
-        records = _records(layout.placeholders, self.width, self.height)
+        records = _records(
+            layout.placeholders, self.width, self.height, None, layout.slide_master
+        )
         zones: List[Zone] = []
         for rec in records:
             role = _placeholder_role(rec)
@@ -766,4 +824,5 @@ __all__ = [
     "COPYABLE_REL_SUFFIXES",
     "analyze_presentation",
     "analyze_template",
+    "estimate_capacity",
 ]
