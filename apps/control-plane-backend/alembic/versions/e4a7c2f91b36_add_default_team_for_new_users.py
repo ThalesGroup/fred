@@ -19,7 +19,7 @@ The partial unique index keeps at most one team flagged. Existing rows get
 false: nothing changes until an admin chooses a team.
 
 Revision ID: e4a7c2f91b36
-Revises: b7d4c1a9e802
+Revises: d3f8a2c6e174
 Create Date: 2026-09-14 12:00:00.000000
 
 """
@@ -32,7 +32,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "e4a7c2f91b36"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "b7d4c1a9e802"  # pragma: allowlist secret
+    "d3f8a2c6e174"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
