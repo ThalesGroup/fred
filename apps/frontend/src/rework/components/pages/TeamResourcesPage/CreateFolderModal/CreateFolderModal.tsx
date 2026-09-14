@@ -12,23 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
-import type { OptionModel } from "@models/Option.model.ts";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import {
-  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
-  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
-  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { TuningFieldRenderer } from "../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer";
-import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 
@@ -63,69 +54,13 @@ export default function CreateFolderModal({
   const { t } = useTranslation();
   const { showError } = useToast();
   const [createTag, { isLoading }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
-  const [createInstance, { isLoading: isCreatingInstance }] =
-    useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation();
   const [name, setName] = useState("");
-  const [definitionId, setDefinitionId] = useState("");
-  const [values, setValues] = useState<Record<string, unknown>>({});
-
-  // A synchronized folder lives at the top level and owns its whole subtree, so
-  // the choice is offered only there — and only for a team, since the pod is
-  // granted against the team's library.
-  const canSynchronize = !onSubmit && !!teamId && !parentPath;
-  const {
-    data: definitions,
-    isError: definitionsFailed,
-    isLoading: definitionsLoading,
-  } = useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery(
-    { teamId: teamId ?? "" },
-    { skip: !canSynchronize },
-  );
-  const { data: fields } = useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery(
-    { definitionId, teamId: teamId ?? "" },
-    { skip: !definitionId || !canSynchronize },
-  );
 
   // Reset the field each time the modal opens (it mounts fresh, so the input's
   // autoFocus handles focus).
   useEffect(() => {
-    if (open) {
-      setName("");
-      setDefinitionId("");
-      setValues({});
-    }
+    if (open) setName("");
   }, [open]);
-
-  // The empty option carries the state of the list itself, so "no Knowledge
-  // Base is enabled" never looks like "the list could not be loaded".
-  const definitionOptions = useMemo<OptionModel<string>[]>(() => {
-    const emptyLabel = definitionsLoading
-      ? "rework.resources.folderModal.definitionsLoading"
-      : definitionsFailed
-        ? "rework.resources.folderModal.definitionsFailed"
-        : (definitions?.length ?? 0) === 0
-          ? "rework.resources.folderModal.noDefinitions"
-          : "rework.resources.folderModal.notSynchronized";
-    return [
-      { key: "", value: "", label: t(emptyLabel) },
-      ...(definitions ?? []).map((definition) => ({
-        key: definition.definition_id,
-        value: definition.definition_id,
-        label: definition.name,
-      })),
-    ];
-  }, [definitions, definitionsFailed, definitionsLoading, t]);
-
-  // A definition's declared defaults are what the form starts from, so a user
-  // who changes nothing still submits what the author intended.
-  useEffect(() => {
-    if (!fields) return;
-    const defaults: Record<string, unknown> = {};
-    for (const field of [...fields.platform_fields, ...fields.configuration_fields]) {
-      if (field.default !== undefined && field.default !== null) defaults[field.key] = field.default;
-    }
-    setValues(defaults);
-  }, [fields]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,7 +76,7 @@ export default function CreateFolderModal({
   const trimmed = name.trim();
   const parentLeaf = parentPath?.split("/").filter(Boolean).pop();
 
-  // Mirror the backend's TagCreate guards so the user learns BEFORE
+  // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
   // clicking Create, not from a 422 toast: a folder name is a single level
   // (no slashes — a slashed name would smuggle several levels past the depth
   // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. The fs `mkdir`
@@ -149,10 +84,7 @@ export default function CreateFolderModal({
   // ReBAC-chain constraint — doesn't apply there; the slash rule does.
   const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
   const tooDeep = !onSubmit && folderPathDepth(parentPath) + 1 > MAX_FOLDER_DEPTH;
-  // A chosen Knowledge Base whose fields are still in flight has no cadence to
-  // submit yet: creating then would silently store the wrong schedule.
-  const awaitingFields = !!definitionId && !fields;
-  const blocked = !trimmed || nameHasSlash || tooDeep || awaitingFields;
+  const blocked = !trimmed || nameHasSlash || tooDeep;
   const inlineError = tooDeep
     ? t("rework.resources.folderModal.tooDeep", { max: MAX_FOLDER_DEPTH })
     : nameHasSlash
@@ -160,30 +92,9 @@ export default function CreateFolderModal({
       : undefined;
 
   const submit = async () => {
-    if (blocked || isLoading || isCreatingInstance) return;
+    if (blocked || isLoading) return;
     try {
-      if (definitionId && fields) {
-        // One call, not two: creating the library, the instance, the pod's
-        // grant over that library and its cadence is one transaction on the
-        // Control Plane's side, or none of them happens.
-        const configuration = Object.fromEntries(
-          fields.configuration_fields
-            .map((field) => [field.key, values[field.key]] as const)
-            .filter(([, value]) => value !== undefined && value !== ""),
-        );
-        // The two platform keys come back with the zones: they are declared on
-        // the SDK side, so holding a copy of them here is how the two drift.
-        await createInstance({
-          knowledgeBaseInstanceCreate: {
-            definition_id: definitionId,
-            team_id: teamId as string,
-            folder_name: trimmed,
-            cadence: values[fields.cadence_key] as never,
-            suspended: Boolean(values[fields.suspended_key]),
-            configuration,
-          },
-        }).unwrap();
-      } else if (onSubmit) {
+      if (onSubmit) {
         await onSubmit(trimmed);
       } else {
         await createTag({
@@ -255,51 +166,6 @@ export default function CreateFolderModal({
                 {inlineError}
               </p>
             )}
-
-            {/* Always shown where a synchronized folder is possible, even with
-                nothing to offer: hiding it made "no Knowledge Base is enabled"
-                and "the list could not be loaded" look identical — which cost a
-                test run to tell apart. */}
-            {canSynchronize && (
-              <>
-                <Select<string>
-                  label={t("rework.resources.folderModal.synchronizedBy")}
-                  options={definitionOptions}
-                  value={definitionId}
-                  onChange={setDefinitionId}
-                  size="medium"
-                  disabled={definitionsLoading || definitionsFailed || (definitions?.length ?? 0) === 0}
-                />
-
-                {/* Two zones, kept apart: what Fred declares and acts on, and
-                    what the author declared, which Fred only carries. */}
-                {fields &&
-                  [
-                    { legend: t("rework.resources.folderModal.zoneFred"), specs: fields.platform_fields },
-                    { legend: t("rework.resources.folderModal.zoneSource"), specs: fields.configuration_fields },
-                  ].map(({ legend, specs }) =>
-                    specs.length === 0 ? null : (
-                      <fieldset key={legend} className={styles.zone}>
-                        <legend className={styles.zoneLegend}>{legend}</legend>
-                        {specs.map((field) => (
-                          <TuningFieldRenderer
-                            key={field.key}
-                            // The renderer is typed on the agent form's looser
-                            // generated twin. Promoting it to a shared strict
-                            // component is a convergence of its own, still owed.
-                            field={field as unknown as ManagedAgentFieldSpec}
-                            value={values[field.key]}
-                            onChange={(key, value) => setValues((v) => ({ ...v, [key]: value }))}
-                            disabled={isCreatingInstance}
-                            teamId={teamId}
-                            allValues={values}
-                          />
-                        ))}
-                      </fieldset>
-                    ),
-                  )}
-              </>
-            )}
           </div>
 
           <div className={styles.actions}>
@@ -310,7 +176,7 @@ export default function CreateFolderModal({
               color="primary"
               variant="filled"
               size="medium"
-              disabled={blocked || isLoading || isCreatingInstance}
+              disabled={blocked || isLoading}
               onClick={() => void submit()}
             >
               {t("rework.resources.folderModal.create")}

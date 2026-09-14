@@ -31,10 +31,6 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container-high);
   width: min(440px, 90vw);
-  /* A synchronized folder's form is as tall as the fields its author declared,
-     which nothing here can bound. Cap the shell and scroll the body so the
-     actions stay reachable however much the form grows. */
-  max-height: min(90vh, 100%);
   color: var(--on-surface);
 }
 
@@ -43,8 +39,6 @@
   flex-direction: column;
   gap: var(--spacing-s);
   padding: var(--spacing-m);
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .header {
@@ -82,25 +76,8 @@
 
 .actions {
   display: flex;
-  flex-shrink: 0;
   justify-content: flex-end;
   gap: var(--spacing-xs);
   border-top: 1px solid var(--outline-retreat);
   padding: var(--spacing-s) var(--spacing-m);
-}
-
-/* The synchronized-folder zone. Two fieldsets so the settings Fred acts on stay
-   visibly apart from the ones it only carries to the source. The select itself
-   is the shared molecule, so nothing here restyles a control. */
-.zone {
-  margin: 0;
-  border: 1px solid var(--outline-retreat);
-  border-radius: var(--radius-s);
-  padding: 0 var(--spacing-s) var(--spacing-s);
-}
-
-.zoneLegend {
-  padding: 0 var(--spacing-2xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
 }

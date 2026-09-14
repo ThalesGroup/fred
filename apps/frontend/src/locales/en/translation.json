@@ -1802,8 +1802,8 @@
     },
     "resources": {
       "workspaceTitle": "Files",
-      "pageTitle": "Knowledge Bases",
-      "pageSubtitle": "What your agents can search",
+      "pageTitle": "Team resources",
+      "pageSubtitle": "Manage local resources, manually added to the team",
       "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
@@ -1817,11 +1817,6 @@
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
-      },
-      "knowledgeBases": {
-        "nativeName": "Corpus",
-        "manualDeposit": "Manual deposit",
-        "readOnly": "read only"
       },
       "hints": {
         "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
@@ -1922,20 +1917,13 @@
         "atRoot": "At the top level",
         "cancel": "Cancel",
         "create": "Create",
-        "definitionsFailed": "Could not load the list",
-        "definitionsLoading": "Loading…",
         "error": "Could not create the folder",
         "inFolder": "In",
         "nameLabel": "Name",
-        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
         "namePlaceholder": "e.g. Reports 2026",
-        "noDefinitions": "No Knowledge Base enabled for this team",
-        "notSynchronized": "Nothing — an ordinary folder",
-        "synchronizedBy": "Synchronized by",
+        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
         "title": "New folder",
-        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up.",
-        "zoneFred": "How often it runs",
-        "zoneSource": "Where its documents come from"
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
       },
       "renameModal": {
         "title": "Rename",
@@ -2039,8 +2027,8 @@
         "stopIngestionError": "Could not stop the ingestion",
         "stopIngestionRequested": "Ingestion stop requested"
       },
-      "pageTitlePersonal": "Your Knowledge Bases",
-      "pageSubtitlePersonal": "What your agents can search, in your personal space"
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
     },
     "save": "Save",
     "serviceNotice": {
@@ -2103,7 +2091,7 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Knowledge Base",
+          "resources": "Resources",
           "wiki": "Wiki"
         },
         "teamLabel": "Team",

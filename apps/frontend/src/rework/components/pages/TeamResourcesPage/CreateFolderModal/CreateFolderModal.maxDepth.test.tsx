@@ -41,16 +41,6 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useCreateTagKnowledgeFlowV1TagsPostMutation: () => [probe.createTag, { isLoading: false }],
 }));
-// The synchronized-folder choice is a Control Plane read; this file is about
-// the depth guard, so the list is simply empty here.
-vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: () => ({ data: [] }),
-  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: () => ({ data: undefined }),
-  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation: () => [
-    vi.fn(),
-    { isLoading: false },
-  ],
-}));
 
 import CreateFolderModal from "./CreateFolderModal";
 import { MAX_FOLDER_DEPTH } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";

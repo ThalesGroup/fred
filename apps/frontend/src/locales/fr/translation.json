@@ -1802,8 +1802,8 @@
     },
     "resources": {
       "workspaceTitle": "Fichiers",
-      "pageTitle": "Knowledge Bases",
-      "pageSubtitle": "Ce que vos agents peuvent interroger",
+      "pageTitle": "Ressources de l'équipe",
+      "pageSubtitle": "Gérer les ressources locales, manuellement ajoutées à l'équipe",
       "rootsAria": "Espaces de ressources",
       "storageQuota": "Stockage",
       "roots": {
@@ -1817,11 +1817,6 @@
         "privatePersonal": "privé · personnel",
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
-      },
-      "knowledgeBases": {
-        "nativeName": "Corpus",
-        "manualDeposit": "Dépôt manuel",
-        "readOnly": "lecture seule"
       },
       "hints": {
         "resources": "La base de connaissances de l'équipe, indexée pour la recherche IA. Créez d'abord une bibliothèque (dossier), puis ajoutez les documents à l'intérieur. Un fichier au niveau supérieur n'a pas de bibliothèque et ne sera pas indexé.",
@@ -1922,20 +1917,13 @@
         "atRoot": "À la racine",
         "cancel": "Annuler",
         "create": "Créer",
-        "definitionsFailed": "Impossible de charger la liste",
-        "definitionsLoading": "Chargement…",
         "error": "Impossible de créer le dossier",
         "inFolder": "Dans",
         "nameLabel": "Nom",
-        "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
         "namePlaceholder": "ex. Rapports 2026",
-        "noDefinitions": "Aucune Knowledge Base activée pour cette équipe",
-        "notSynchronized": "Rien — un dossier ordinaire",
-        "synchronizedBy": "Synchronisé par",
+        "nameNoSlash": "Un nom de dossier ne peut pas contenir « / » ni « \\ ».",
         "title": "Nouveau dossier",
-        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence.",
-        "zoneFred": "Fréquence de synchronisation",
-        "zoneSource": "Origine des documents"
+        "tooDeep": "Ce dossier est déjà à {{max}} niveaux de profondeur, ce qui est le maximum. Créez le nouveau dossier plus haut dans l'arborescence."
       },
       "renameModal": {
         "title": "Renommer",
@@ -2039,8 +2027,8 @@
         "stopIngestionError": "Impossible d'arrêter l'ingestion",
         "stopIngestionRequested": "Arrêt de l'ingestion demandé"
       },
-      "pageTitlePersonal": "Vos Knowledge Bases",
-      "pageSubtitlePersonal": "Ce que vos agents peuvent interroger, dans votre espace personnel"
+      "pageTitlePersonal": "Vos ressources personnelles",
+      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
     },
     "save": "Sauvegarder",
     "serviceNotice": {
@@ -2103,7 +2091,7 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Knowledge Base",
+          "resources": "Ressources",
           "wiki": "Wiki"
         },
         "teamLabel": "Equipe",

@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import { useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
@@ -69,29 +68,6 @@ export default function TeamResourcesPage() {
   // whenever you viewed the Resources page for your currently active team,
   // hiding "Espace partagé" for a legitimate team.
   const isPersonalTeam = isPersonalTeamId(teamId);
-
-  // Which of this team's folders a Knowledge Base fills, and under what name
-  // its contributor declared it. Read here and handed down: the workspace below
-  // speaks to Knowledge Flow, and a Control Plane query placed inside it would
-  // become every one of its consumers' problem.
-  //
-  // `refetch` for the same reason the team row below needs one: the
-  // folder-creation form creates the instance through the control plane, but
-  // the workspace's own change signal is a Knowledge Flow tag refetch, which
-  // cannot reach this cache entry. Without it a just-connected base shows up as
-  // an ordinary folder, actions and all, until the page is reloaded.
-  const {
-    data: synchronizedInstances,
-    refetch: refetchKnowledgeBases,
-    isUninitialized: knowledgeBasesUninitialized,
-  } = useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery(
-    { teamId },
-    { skip: !teamId || isPersonalTeam },
-  );
-  const synchronizedLibraries = useMemo(
-    () => new Map((synchronizedInstances ?? []).map((instance) => [instance.library_id, instance.definition_name])),
-    [synchronizedInstances],
-  );
   const userId = KeyCloakService.GetUserId() ?? "";
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
   // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
@@ -259,7 +235,6 @@ export default function TeamResourcesPage() {
         {activeTab === "resources" && (
           <DocumentWorkspace
             teamId={teamId}
-            synchronizedLibraries={synchronizedLibraries}
             isPersonalTeam={isPersonalTeam}
             // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
             // catch-up fire on mount for any task target already in the
@@ -274,7 +249,6 @@ export default function TeamResourcesPage() {
             onDocumentsChanged={() => {
               if (!corpusStats.isUninitialized) void corpusStats.refetch();
               if (!teamUninitialized) void refetchTeam();
-              if (!knowledgeBasesUninitialized) void refetchKnowledgeBases();
             }}
           />
         )}

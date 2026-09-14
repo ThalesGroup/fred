@@ -87,13 +87,6 @@ interface DataTableProps<T> {
    *  clickable actions (preview, menu), so a whole-row click target would
    *  fight with those instead of being an unambiguous convenience. */
   selectable?: boolean;
-  /** Withholds the checkbox from the rows this returns false for — a grouping
-   *  header, or a row no bulk action could do anything with. Such a row starts
-   *  at the checkbox's own left edge rather than after it, so it never reads as
-   *  indented under the rows it heads, and it is left out of "select all on
-   *  page" so that can still reach its all-selected state. Omit and every row
-   *  is selectable, as before. */
-  rowSelectable?: (element: T) => boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
@@ -155,7 +148,6 @@ export default function DataTable<T>({
   serverPagination,
   rowKey,
   selectable = false,
-  rowSelectable,
   selectedKeys,
   onSelectionChange,
   sortState: controlledSortState,
@@ -235,8 +227,7 @@ export default function DataTable<T>({
     }
   };
 
-  const pageKeys =
-    selectable && rowKey ? pageData.filter((row) => rowSelectable?.(row) ?? true).map((row) => rowKey(row)) : [];
+  const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
@@ -317,15 +308,14 @@ export default function DataTable<T>({
       <div className={styles["datatable-body"]}>
         {pageData.map((line, lineIndex) => {
           const key = rowKey ? rowKey(line) : lineIndex;
-          const lineSelectable = selectable && (rowSelectable?.(line) ?? true);
-          const isSelected = lineSelectable && (selectedKeys?.has(key) ?? false);
+          const isSelected = selectable && (selectedKeys?.has(key) ?? false);
           return (
             <div
               className={styles["datatable-row"]}
               key={key}
               data-selected={isSelected || undefined}
               onClick={
-                lineSelectable
+                selectable
                   ? (event) => {
                       // Clicking an interactive control inside the row (a
                       // preview button, a folder-name link, the checkbox
@@ -348,7 +338,7 @@ export default function DataTable<T>({
                   : undefined
               }
             >
-              {lineSelectable && (
+              {selectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
@@ -360,16 +350,8 @@ export default function DataTable<T>({
               {columns.map((column, columnIndex) => {
                 const cellContent = column.cellRenderer?.(line);
                 const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
-                // No checkbox on this row: its first cell takes that track,
-                // so the row starts where every other row's checkbox does.
-                const takesSelectTrack = selectable && !lineSelectable && columnIndex === 0;
                 return (
-                  <div
-                    className={`${styles["datatable-cell"]}${
-                      takesSelectTrack ? ` ${styles["datatable-cell-unselectable-first"]}` : ""
-                    }`}
-                    key={columnIndex}
-                  >
+                  <div className={styles["datatable-cell"]} key={columnIndex}>
                     {/* Primitive cell values get single-line ellipsis
                      * truncation, with the full value readable via the
                      * native title tooltip — free-length text (usernames,

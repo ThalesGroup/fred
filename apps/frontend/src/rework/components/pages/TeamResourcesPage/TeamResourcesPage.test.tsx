@@ -52,8 +52,6 @@ const probe = vi.hoisted(() => ({
   fsStatsSkip: {} as Record<string, boolean>,
   // Lifecycle flags of the KF health probe that gates the whole page.
   kfProbe: { isLoading: false, isFetching: false, isUninitialized: false, isError: false },
-  knowledgeBasesUninitialized: false,
-  knowledgeBasesRefetch: () => {},
 }));
 
 vi.mock("react-i18next", () => ({
@@ -83,15 +81,6 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-// Which folders a Knowledge Base fills is read here and handed to the
-// workspace; these tests are about the tab switcher, so nothing is synchronized.
-vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: () => ({
-    data: [],
-    isUninitialized: probe.knowledgeBasesUninitialized,
-    refetch: probe.knowledgeBasesRefetch,
-  }),
-}));
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
@@ -157,8 +146,6 @@ beforeEach(() => {
   probe.corpusStatsSkip = true;
   probe.fsStatsSkip = {};
   probe.kfProbe = { isLoading: false, isFetching: false, isUninitialized: false, isError: false };
-  probe.knowledgeBasesUninitialized = false;
-  probe.knowledgeBasesRefetch = vi.fn();
 });
 
 afterEach(() => {
@@ -282,28 +269,6 @@ describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
 
     expect(() => probe.onDocumentsChanged?.()).not.toThrow();
     expect(probe.teamRefetch).not.toHaveBeenCalled();
-  });
-
-  // The folder-creation form creates a Knowledge Base instance through the
-  // control plane, but the only change signal coming back out of the workspace
-  // is a Knowledge Flow tag refetch — which cannot invalidate this page's
-  // control-plane cache entry. Without this the just-connected base renders as
-  // an ordinary folder, badge-less and with every action offered over it,
-  // until a page reload.
-  it("refetches the knowledge bases so a just-connected one is badged straight away", () => {
-    render();
-
-    probe.onDocumentsChanged?.();
-    expect(probe.knowledgeBasesRefetch).toHaveBeenCalledOnce();
-  });
-
-  it("does not call the knowledge-bases refetch while that query has not started yet", () => {
-    // Skipped entirely in a personal space, where it never starts.
-    probe.knowledgeBasesUninitialized = true;
-    render();
-
-    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
-    expect(probe.knowledgeBasesRefetch).not.toHaveBeenCalled();
   });
 });
 
