@@ -23,15 +23,7 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       frontend-packages: ${{ steps.changes.outputs.frontend-packages }}
       agentic: ${{ steps.changes.outputs.agentic }}
-      knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
       deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
-      fred-core: ${{ steps.changes.outputs.fred-core }}
-      control-plane: ${{ steps.changes.outputs.control-plane }}
-      fred-sdk: ${{ steps.changes.outputs.fred-sdk }}
-      fred-runtime: ${{ steps.changes.outputs.fred-runtime }}
-      fred-agents: ${{ steps.changes.outputs.fred-agents }}
-      platform-ops: ${{ steps.changes.outputs.platform-ops }}
-      html-artifact: ${{ steps.changes.outputs.html-artifact }}
       python-modules: ${{ steps.matrices.outputs.python-modules }}
       openapi-drift: ${{ steps.matrices.outputs.openapi-drift }}
     steps:
@@ -119,7 +111,7 @@ jobs:
               - '.github/workflows/Check-pending-requests.yml'
               - '.github/actions/setup-python-env/**'
               - 'ruff.toml'
-              - 'scripts/makefiles/python-*.mk'
+              - 'scripts/makefiles/**'
             runtime-client:
               - 'apps/frontend/src/slices/runtime/**'
             knowledge-flow-client:
@@ -530,7 +522,7 @@ jobs:
   fred-agents-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'fred-agents')
 
     steps:
       - name: Checkout code
@@ -552,7 +544,7 @@ jobs:
   knowledge-flow-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'knowledge-flow-backend')
 
     steps:
       - name: Checkout code
@@ -579,7 +571,7 @@ jobs:
   control-plane-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'control-plane-backend')
 
     steps:
       - name: Checkout code
