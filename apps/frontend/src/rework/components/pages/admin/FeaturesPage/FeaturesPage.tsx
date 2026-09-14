@@ -521,9 +521,7 @@ export default function FeaturesPage() {
         ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths, but still a
-      // shrinkable fr so narrow viewports fall back to the wrapped label
-      // rather than forcing the table to overflow.
+      // Wide enough for the one-line button at desktop widths.
       size: "1.4fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an

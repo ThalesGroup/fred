@@ -1111,7 +1111,7 @@
         "loading": "Chargement des fonctionnalités…",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
-        "manageTeams": "Gérer les équipes",
+        "manageTeams": "Gérer par équipe",
         "kindFilter": {
           "tool": "Capacités",
           "agent": "Agents",
@@ -1149,7 +1149,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — agents suspendus",
-          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
