@@ -119,12 +119,13 @@ path by which a misreported inventory could cause data loss.*
 - **THEN** those retractions happened through Knowledge Flow's REST API, and Fred
   performs no deletion of its own as a result
 
-### Requirement: Creating a synchronized folder is what authorizes its pod to fill it
+### Requirement: Creating a Knowledge Base is what authorizes its pod to fill it
 
-A team SHALL create a Knowledge Base instance by creating a folder and naming
-the definition that synchronizes it, not through a separate Knowledge Base
-surface. Where no definition is enabled for that team, folder creation SHALL be
-unchanged.
+A team SHALL create a Knowledge Base instance from a surface of its own, naming
+the definition that synchronizes it. Folder creation SHALL be left unchanged:
+where a team's documents come from is a question about the base, not about a
+folder, and burying it in folder creation made the team's own deposits and a
+contributor's mirror look like the same act.
 
 That creation SHALL, as one transaction, create the library owned by the team,
 record the instance against it, grant the definition's publishing identity the
@@ -138,12 +139,13 @@ including another instance's within the same team. Authorization to reach Fred
 at all SHALL remain separate from, and insufficient for, writing into any
 library.
 
-Deleting the folder SHALL undo all of it and SHALL take its documents with it.
+Deleting the Knowledge Base SHALL undo all of it and SHALL take its documents
+with it.
 
-#### Scenario: Creating the folder is what makes the pod able to fill it
+#### Scenario: Creating the base is what makes the pod able to fill it
 
-- **WHEN** a team member creates a folder synchronized by a definition enabled
-  for that team, and a run is then dispatched
+- **WHEN** a team member creates a Knowledge Base from a definition enabled for
+  that team, and a run is then dispatched
 - **THEN** the library exists, the instance records it, and the pod writes into
   it with its own identity without any further grant being made by hand
 
@@ -158,13 +160,13 @@ Deleting the folder SHALL undo all of it and SHALL take its documents with it.
   including one in the same team
 - **THEN** the write is refused
 
-#### Scenario: Deleting the folder takes the documents and the grant
+#### Scenario: Deleting the base takes the documents and the grant
 
-- **WHEN** a team member deletes a synchronized folder
+- **WHEN** a team member deletes a Knowledge Base
 - **THEN** its documents are gone, its instance and cadence are gone, and no
   authorization over the deleted library remains
 
-### Requirement: A synchronized folder carries a tree, reached by one grant
+### Requirement: A Knowledge Base carries a tree, reached by one grant
 
 A Knowledge Base SHALL be able to reproduce the structure of its source, not
 only a flat set of documents. Writing anywhere beneath an instance's library
