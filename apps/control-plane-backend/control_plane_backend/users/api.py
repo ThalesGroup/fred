@@ -31,6 +31,7 @@ from control_plane_backend.teams.schemas import (
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
+from control_plane_backend.teams.service import join_default_team_for_new_user
 from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
     get_user_service_dependencies,
@@ -426,6 +427,7 @@ async def get_user_details(
 @router.post("/gcu")
 async def validate_gcu(
     deps: UserDependencies,
+    team_deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
@@ -437,9 +439,16 @@ async def validate_gcu(
       dependency starts enforcing it
     - standalone/no-security subjects (non-UUID uid) get a deterministic UUID
       so the same SQLite upsert path works for them too
+    - a first acceptance joins the default team for new users (contract §52)
 
     Example:
     - `POST /control-plane/v1/gcu`
     """
     user_uuid = _parse_user_uuid(user)
+    if deps.configuration.app.gcu_version is not None:
+        previous = await find_user_details_by_id(user_uuid, user_store)
+        # Membership first: a failed grant fails the call, so the retry still
+        # counts as a first acceptance.
+        if previous is None or previous.gcuVersionAccepted is None:
+            await join_default_team_for_new_user(user.uid, team_deps)
     await update_gcu_validation(user_uuid, user_store, deps)

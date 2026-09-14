@@ -229,6 +229,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     createTeamControlPlaneV1TeamsPost: {
       invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
     },
+    // Only the registry listing renders the flag, so the LIST tag is enough.
+    setDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPut: {
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
+    },
     updateTeamControlPlaneV1TeamsTeamIdPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -500,6 +504,7 @@ export const {
   useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
+  useSetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutMutation: useSetDefaultTeamForNewUsersMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,

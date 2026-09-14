@@ -335,6 +335,44 @@ async def rescue_team_admin(
     )
 
 
+async def set_default_team_for_new_users(
+    user: KeycloakUser,
+    team_id: TeamId | None,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Choose the team every new user joins on first GCU acceptance, or clear it with `None`.
+
+    Personal spaces have no registry row, so they are refused as unknown teams.
+    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    updated = await deps.get_team_metadata_store().set_default_for_new_users(team_id)
+    if team_id is not None and not updated:
+        raise TeamNotFoundError(team_id)
+    logger.info("Default team for new users set to %s", team_id)
+
+
+async def join_default_team_for_new_user(
+    user_id: str,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Grant `team_member` on the default team for new users, when one is set.
+
+    A user already holding any role on that team is left untouched.
+    """
+    metadata = await deps.get_team_metadata_store().get_default_for_new_users()
+    if metadata is None:
+        return
+    if await _get_user_roles_in_team(deps.rebac, metadata.id, user_id):
+        return
+    await _add_team_member_relation(
+        deps.rebac, metadata.id, user_id, UserTeamRelation.TEAM_MEMBER
+    )
+    logger.info("A new user joined the default team %s", metadata.id)
+
+
 async def _list_teams(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
@@ -1632,6 +1670,7 @@ def _build_team_dto(
         avatar_image_url=avatar_image_url,
         max_resources_storage_size=max_storage,
         current_resources_storage_size=metadata.current_resources_storage_size,
+        is_default_for_new_users=metadata.is_default_for_new_users,
     )
 
 

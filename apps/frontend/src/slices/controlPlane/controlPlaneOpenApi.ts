@@ -171,6 +171,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.rescueTeamAdminRequest,
       }),
     }),
+    setDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPut: build.mutation<
+      SetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutApiResponse,
+      SetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/default-team`,
+        method: "PUT",
+        body: queryArg.setDefaultTeamForNewUsersRequest,
+      }),
+    }),
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
@@ -1472,6 +1482,10 @@ export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
   rescueTeamAdminRequest: RescueTeamAdminRequest;
 };
+export type SetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutApiResponse = unknown;
+export type SetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutApiArg = {
+  setDefaultTeamForNewUsersRequest: SetDefaultTeamForNewUsersRequest;
+};
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
@@ -2460,6 +2474,7 @@ export type TeamWithPermissions = {
   avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
+  is_default_for_new_users?: boolean;
   permissions?: TeamPermission[];
   retention?: TeamRetentionView | null;
 };
@@ -2481,6 +2496,7 @@ export type Team = {
   avatar_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
+  is_default_for_new_users?: boolean;
 };
 export type CreateTeamRequest = {
   name: string;
@@ -2497,6 +2513,9 @@ export type UpdateTeamRequest = {
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
+};
+export type SetDefaultTeamForNewUsersRequest = {
+  team_id: string | null;
 };
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
@@ -3899,6 +3918,7 @@ export const {
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
+  useSetDefaultTeamForNewUsersControlPlaneV1AdminPlatformDefaultTeamPutMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

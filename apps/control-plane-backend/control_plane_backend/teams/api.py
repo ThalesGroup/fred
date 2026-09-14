@@ -17,6 +17,7 @@ from control_plane_backend.teams.schemas import (
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
     RetentionUpdateError,
+    SetDefaultTeamForNewUsersRequest,
     Team,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
@@ -63,6 +64,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import (
     search_candidate_team_members as search_candidate_team_members_from_service,
+)
+from control_plane_backend.teams.service import (
+    set_default_team_for_new_users as set_default_team_for_new_users_from_service,
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
@@ -278,6 +282,19 @@ async def rescue_team_admin(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rescue_team_admin_from_service(user, team_id, request.user_id, deps)
+
+
+@router.put(
+    "/admin/platform/default-team",
+    status_code=204,
+    summary="Set or clear the team every new user joins on first GCU acceptance (platform admin only)",
+)
+async def set_default_team_for_new_users(
+    request: SetDefaultTeamForNewUsersRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await set_default_team_for_new_users_from_service(user, request.team_id, deps)
 
 
 @router.post(

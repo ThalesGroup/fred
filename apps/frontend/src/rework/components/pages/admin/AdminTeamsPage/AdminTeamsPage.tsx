@@ -25,10 +25,13 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
+import { useUserCapabilities } from "@core/hooks/useUserCapabilities.ts";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import {
   useCreateTeamMutation,
   useListAllTeamsQuery,
   useSearchCandidateTeamAdminsQuery,
+  useSetDefaultTeamForNewUsersMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
@@ -59,6 +62,38 @@ export default function AdminTeamsPage() {
   );
   const { data: allTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
+
+  // Choosing where new users land is platform_admin-only, unlike the rest of this page.
+  const { canAdmin } = useUserCapabilities();
+  // Membership is granted on GCU acceptance: without GCU the setting never applies.
+  const { gcuVersion } = useFrontendProperties();
+  const [setDefaultTeam, { isLoading: isSettingDefaultTeam }] = useSetDefaultTeamForNewUsersMutation();
+  const [defaultTeamQuery, setDefaultTeamQuery] = useState("");
+  const defaultTeam = allTeams?.find((team) => team.is_default_for_new_users);
+
+  // Filtered client-side: the registry listing is already loaded for the table.
+  const defaultTeamOptions = useMemo(() => {
+    const query = defaultTeamQuery.trim().toLowerCase();
+    return (allTeams ?? [])
+      .filter((team) => !team.is_default_for_new_users && team.name.toLowerCase().includes(query))
+      .map((team) => ({ label: team.name, value: team, key: team.id }));
+  }, [allTeams, defaultTeamQuery]);
+
+  const handleSetDefaultTeam = (team: Team | null) =>
+    runMutationAction({
+      action: () => setDefaultTeam({ setDefaultTeamForNewUsersRequest: { team_id: team?.id ?? null } }).unwrap(),
+      onSuccess: () =>
+        showSuccess({
+          summary: t(
+            team ? "rework.adminTeams.defaultTeam.setSummary" : "rework.adminTeams.defaultTeam.clearedSummary",
+          ),
+        }),
+      onError: (error) =>
+        notifyApiError(error, {
+          summary: t("rework.adminTeams.defaultTeam.errors.summary"),
+          fallbackDetail: t("rework.adminTeams.defaultTeam.errors.fallbackDetail"),
+        }),
+    });
 
   const teamColumns = useMemo(
     (): DataTableColumn<Team>[] => [
@@ -133,6 +168,43 @@ export default function AdminTeamsPage() {
         )}
       </section>
       <Separator />
+      {canAdmin && (
+        <>
+          <section className={styles.defaultTeamSection}>
+            <h2 className={styles.sectionTitle}>{t("rework.adminTeams.defaultTeam.title")}</h2>
+            <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.description")}</p>
+            {!gcuVersion && (
+              <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.gcuDisabled")}</p>
+            )}
+            {defaultTeam ? (
+              <div className={`${styles.adminChip} ${styles.currentDefaultTeam}`}>
+                <span>{defaultTeam.name}</span>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "close" }}
+                  aria-label={t("rework.adminTeams.defaultTeam.clear")}
+                  disabled={isSettingDefaultTeam}
+                  onClick={() => handleSetDefaultTeam(null)}
+                />
+              </div>
+            ) : (
+              <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
+            )}
+            <Autocomplete<Team>
+              textInput={{
+                placeholder: t("rework.adminTeams.defaultTeam.searchPlaceholder"),
+                icon: { category: "outlined", type: "search" },
+                disabled: isSettingDefaultTeam,
+              }}
+              onFieldValueChange={setDefaultTeamQuery}
+              options={defaultTeamOptions}
+              onSelect={handleSetDefaultTeam}
+            />
+          </section>
+          <Separator />
+        </>
+      )}
       <section className={styles.createTeamSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.createTeam.title")}</h2>
         <TextInput

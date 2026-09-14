@@ -3892,3 +3892,44 @@ computed relations and the agent-capability packages; the page governs
 platform features — capabilities, agent templates and models — so it takes the
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
+
+## 52. Contract Notes - default team for new users (2026-09-14, issue #2649)
+
+**What it is.** A platform admin picks at most one registry team that every
+new user joins as `team_member` when they accept the GCU for the first time.
+
+**Endpoint.**
+
+| Method | Path                                            | Permission            |
+| ------ | ----------------------------------------------- | --------------------- |
+| PUT    | `/control-plane/v1/admin/platform/default-team` | `can_manage_platform` |
+
+Body `SetDefaultTeamForNewUsersRequest` `{team_id: string | null}`,
+`extra="forbid"`; `null` clears the default. 204 on success, 404 when the team
+has no registry row - personal spaces included, they never have one. There is
+no GET: `Team.is_default_for_new_users` on `GET /teams/all` already tells the
+admin page which team is current. Gated on `can_manage_platform` rather than a
+new narrow relation: it decides where every future account lands, and no
+delegated role owns that decision today.
+
+**Storage.** A boolean `teammetadata.is_default_for_new_users` behind a partial
+unique index (`uq_teammetadata_default_for_new_users`), so the database refuses
+a second default. Setting a team clears the previous flag in the same
+transaction, serialized by a Postgres advisory lock so concurrent writes resolve
+as last-writer-wins instead of hitting the index. A team deleted mid-write rolls
+the change back and answers 404. Deleting the team deletes the flag with its row.
+
+**Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
+still empty:
+
+- membership is written before the acceptance is persisted, so a ReBAC failure
+  fails the call and the retry is still a first acceptance;
+- a user already holding any role on the team is left untouched; a concurrent
+  second call is harmless, OpenFGA writes ignore duplicates;
+- re-accepting a newer GCU version does not re-add someone who left the team;
+- users who already accepted are not backfilled, but an account that never
+  accepted joins at its first acceptance, even if it predates the setting.
+
+**Limits.** A deployment without `app.gcu_version` never calls `POST /gcu`, so
+the setting is inert there and the admin page says so. The flag is not part of
+the platform export bundle.

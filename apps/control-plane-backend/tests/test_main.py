@@ -838,6 +838,7 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "visibility": "private",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
+            "is_default_for_new_users": False,
         }
     ]
 
@@ -1452,6 +1453,7 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "my_relations": ["team_editor"],
         "max_resources_storage_size": 5368709120,
         "current_resources_storage_size": 0,
+        "is_default_for_new_users": False,
     }
 
 

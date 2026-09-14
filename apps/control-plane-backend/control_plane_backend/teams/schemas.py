@@ -6,7 +6,7 @@ from typing import Literal
 
 from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from control_plane_backend.scheduler.policies.policy_models import (
     _validate_optional_duration,
@@ -155,6 +155,8 @@ class Team(BaseModel):
     avatar_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
+    # New users join this team on first GCU acceptance; one team at most.
+    is_default_for_new_users: bool = False
 
 
 class RetentionFieldView(BaseModel):
@@ -248,6 +250,14 @@ class RescueTeamAdminRequest(BaseModel):
     """
 
     user_id: str = Field(min_length=1)
+
+
+class SetDefaultTeamForNewUsersRequest(BaseModel):
+    """`PUT /admin/platform/default-team`: `team_id: null` clears the default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team_id: TeamId | None
 
 
 class AddTeamMemberRequest(BaseModel):

@@ -2294,6 +2294,20 @@
           "admins": "Admin(s)"
         }
       },
+      "defaultTeam": {
+        "title": "Default team for new users",
+        "description": "Every new user joins this team as a member when they accept the terms of use for the first time. Users who already accepted are not affected.",
+        "gcuDisabled": "Terms of use are not enabled on this deployment, so no user will join this team automatically.",
+        "none": "No default team.",
+        "searchPlaceholder": "Search a team by name",
+        "clear": "Remove the default team",
+        "setSummary": "Default team updated",
+        "clearedSummary": "Default team removed",
+        "errors": {
+          "summary": "Failed to update the default team",
+          "fallbackDetail": "Could not update the default team. Please try again."
+        }
+      },
       "createTeam": {
         "title": "Create team",
         "nameLabel": "Team name",

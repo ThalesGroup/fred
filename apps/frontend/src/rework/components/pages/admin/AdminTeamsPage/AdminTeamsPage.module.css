@@ -10,6 +10,7 @@
 }
 
 .existingTeamsSection,
+.defaultTeamSection,
 .createTeamSection {
   display: flex;
   flex-direction: column;
@@ -17,10 +18,15 @@
   width: 100%;
 }
 
-.emptyTeamsMessage {
+.emptyTeamsMessage,
+.sectionDescription {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.currentDefaultTeam {
+  align-self: flex-start;
 }
 
 .sectionTitle {

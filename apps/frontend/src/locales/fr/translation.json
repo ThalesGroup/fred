@@ -2294,6 +2294,20 @@
           "admins": "Administrateur(s)"
         }
       },
+      "defaultTeam": {
+        "title": "Équipe par défaut des nouveaux utilisateurs",
+        "description": "Chaque nouvel utilisateur rejoint cette équipe en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
+        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra cette équipe automatiquement.",
+        "none": "Aucune équipe par défaut.",
+        "searchPlaceholder": "Rechercher une équipe par nom",
+        "clear": "Retirer l'équipe par défaut",
+        "setSummary": "Équipe par défaut mise à jour",
+        "clearedSummary": "Équipe par défaut retirée",
+        "errors": {
+          "summary": "Échec de la mise à jour de l'équipe par défaut",
+          "fallbackDetail": "Impossible de mettre à jour l'équipe par défaut. Veuillez réessayer."
+        }
+      },
       "createTeam": {
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",

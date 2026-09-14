@@ -297,6 +297,11 @@ operations:
     review_status: approved
     required_permission: can_list_all_teams
   - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/default-team
+    review_status: approved
+    required_permission: can_manage_platform # teams.service.set_default_team_for_new_users. Picks the one team every user joins as team_member on first GCU acceptance (POST /gcu), or clears it with team_id null. platform_admin only - it decides where every future account lands. Personal spaces have no registry row and are refused as unknown teams (404).
+  - service: control-plane
     method: GET
     path: /control-plane/v1/teams/candidate-admins
     review_status: approved
