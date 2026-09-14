@@ -14,13 +14,13 @@
 
 from __future__ import annotations
 
+from builder_decks import build_showcase_template
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.models import PatternOverride
 from fred_capability_ppt_filler.builder.overrides import (
     apply_overrides,
     prune_overrides,
 )
-from builder_decks import build_showcase_template
 
 
 def _inventory():

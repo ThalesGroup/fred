@@ -20,18 +20,17 @@ from __future__ import annotations
 import os
 
 import pytest
-
+from builder_decks import (
+    FOOTER,
+    build_layouts_only_template,
+    build_showcase_template,
+)
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.lexicon import (
     is_sample_text,
     role_from_shape_name,
 )
 from fred_capability_ppt_filler.builder.models import TemplateInventory
-from builder_decks import (
-    FOOTER,
-    build_layouts_only_template,
-    build_showcase_template,
-)
 
 
 @pytest.fixture(scope="module")

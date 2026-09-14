@@ -144,6 +144,7 @@ export const materialIcons = [
   "picture_as_pdf",
   "description",
   "slideshow",
+  "co_present",
   "audio_file",
   "video_file",
   "create_new_folder",

@@ -24,14 +24,13 @@ note and a purely decorative divider.
 from __future__ import annotations
 
 import io
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
+from deck_builders import png_bytes
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.util import Emu, Inches, Pt
-
-from deck_builders import png_bytes
 
 # python-pptx default template layout indices.
 (
@@ -83,9 +82,13 @@ def _footer(slide) -> None:
     _textbox(slide.shapes, 0.5, 7.0, 6.0, 0.3, FOOTER, Pt(8))
 
 
+def _set_title(slide, title: str) -> None:
+    cast(Any, slide.shapes.title).text = title
+
+
 def _titled(presentation, title: str):
     slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
-    slide.shapes.title.text = title
+    _set_title(slide, title)
     return slide
 
 
@@ -111,20 +114,22 @@ def add_agenda_slide(presentation, count: int = 4):
 
 
 def add_kpi_slide(presentation, count: int = 4):
-    """Title + N groups of (value, label) with a small icon each."""
+    """Title + N groups of (value, label); the icon of each card sits over the
+    card but outside its group, as designers do."""
     slide = _titled(presentation, "Key figures")
     for index in range(count):
         group = slide.shapes.add_group_shape()
         x = 0.5 + index * 2.3
-        group.shapes.add_picture(
+        _textbox(group.shapes, x, 1.6, 1.6, 0.2, "", None)
+        _textbox(group.shapes, x, 2.6, 1.6, 1.0, f"{60 + index * 10}%", FONT_NUMBER)
+        _textbox(group.shapes, x, 3.7, 1.6, 0.35, f"KPI #{index + 1}", FONT_BODY)
+        slide.shapes.add_picture(
             io.BytesIO(png_bytes(12, 12)),
-            Inches(x),
-            Inches(1.8),
+            Inches(x + 0.2),
+            Inches(1.9),
             Inches(0.4),
             Inches(0.4),
         )
-        _textbox(group.shapes, x, 2.6, 1.6, 1.0, f"{60 + index * 10}%", FONT_NUMBER)
-        _textbox(group.shapes, x, 3.7, 1.6, 0.35, f"KPI #{index + 1}", FONT_BODY)
     _footer(slide)
     return slide
 
@@ -221,8 +226,8 @@ def add_table_slide(presentation):
 def add_divider_slide(presentation):
     """Title-only instance of a title+body layout, over a large graphic."""
     slide = presentation.slides.add_slide(presentation.slide_layouts[L_CONTENT])
-    slide.shapes.title.text = "Motif"
-    body = slide.placeholders[1]
+    _set_title(slide, "Motif")
+    body = cast(Any, slide.placeholders[1])
     body._element.getparent().remove(body._element)
     for top in (4.0, 5.2):
         slide.shapes.add_picture(
@@ -237,8 +242,10 @@ def add_divider_slide(presentation):
 
 def add_pure_instance_slide(presentation):
     slide = presentation.slides.add_slide(presentation.slide_layouts[L_CONTENT])
-    slide.shapes.title.text = "Cliquez ici pour modifier le titre"
-    slide.placeholders[1].text_frame.text = "Cliquez ici pour ajouter du texte"
+    _set_title(slide, "Cliquez ici pour modifier le titre")
+    cast(
+        Any, slide.placeholders[1]
+    ).text_frame.text = "Cliquez ici pour ajouter du texte"
     return slide
 
 

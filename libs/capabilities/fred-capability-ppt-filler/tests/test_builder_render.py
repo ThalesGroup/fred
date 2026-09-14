@@ -19,17 +19,14 @@ from __future__ import annotations
 
 import io
 import os
+from typing import Any, cast
 
 import pytest
 from builder_decks import FOOTER, build_showcase_template
 from deck_builders import png_bytes
-from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pptx.oxml.ns import qn
-
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
-from fred_capability_ppt_filler.builder.models import PatternOverride
+from fred_capability_ppt_filler.builder.models import PatternOverride, TemplateInventory
 from fred_capability_ppt_filler.builder.overrides import apply_overrides
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
@@ -40,21 +37,30 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.builder.render import RenderError, render_deck
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 
 TEMPLATE = build_showcase_template()
-INVENTORY = analyze_template(TEMPLATE).inventory
-assert INVENTORY is not None
+_analysed = analyze_template(TEMPLATE).inventory
+assert _analysed is not None
+INVENTORY: TemplateInventory = _analysed
 
 
 def _pattern(label: str):
     return next(p for p in INVENTORY.patterns if p.label == label)
 
 
+def _title(slide) -> str:
+    return cast(Any, slide.shapes.title).text
+
+
 def _texts(slide) -> list[str]:
     out = []
     for placed in walk_shapes(slide.shapes):
-        if getattr(placed.shape, "has_text_frame", False):
-            text = placed.shape.text_frame.text.strip()
+        shape = cast(Any, placed.shape)
+        if getattr(shape, "has_text_frame", False):
+            text = shape.text_frame.text.strip()
             if text and text != FOOTER:
                 out.append(text)
     return out
@@ -64,7 +70,7 @@ def _pictures(slide) -> int:
     return sum(
         1
         for p in walk_shapes(slide.shapes)
-        if p.shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+        if cast(Any, p.shape).shape_type == MSO_SHAPE_TYPE.PICTURE
     )
 
 
@@ -88,8 +94,8 @@ def test_layout_pattern_fills_title_and_levelled_bullets():
     )
     assert result.warnings == []
     (slide,) = deck.slides
-    assert slide.shapes.title.text == "Quarterly results"
-    body = slide.placeholders[1].text_frame
+    assert _title(slide) == "Quarterly results"
+    body = cast(Any, slide.placeholders[1]).text_frame
     assert [p.text for p in body.paragraphs] == [
         "Revenue up 12 %",
         "Europe +8 %",
@@ -129,9 +135,10 @@ def test_example_slides_are_duplicated_in_plan_order_and_originals_dropped():
     assert result.slide_count == 3
     assert len(deck.slides) == 3
     kpi, agenda, closing = deck.slides
-    assert kpi.shapes.title.text == "KPIs"
+    assert _title(kpi) == "KPIs"
     assert set(_texts(kpi)) == {"KPIs", "42%", "Margin", "7", "Sites"}
-    # Two of the four cards were not used: their groups are gone, icons of the used ones stay.
+    # Two of the four cards were not used: their groups are gone, and so are the
+    # loose icons drawn over them; the icons of the used cards stay.
     assert sum(1 for s in kpi.shapes if s.shape_type == MSO_SHAPE_TYPE.GROUP) == 2
     assert _pictures(kpi) == 2
     assert set(_texts(agenda)) == {
@@ -143,7 +150,7 @@ def test_example_slides_are_duplicated_in_plan_order_and_originals_dropped():
         "03",
         "Next steps",
     }
-    assert closing.shapes.title.text == "Closing"
+    assert _title(closing) == "Closing"
 
 
 def test_no_sample_text_survives_rendering():
@@ -202,7 +209,9 @@ def test_columns_fill_two_content_and_comparison_headings():
     comparison, two = deck.slides
     texts = _texts(comparison)
     assert {"Before", "After", "slow", "fast", "Before / after"} <= set(texts)
-    bodies = [s for s in two.placeholders if s.placeholder_format.idx in (1, 2)]
+    bodies = [
+        cast(Any, s) for s in two.placeholders if s.placeholder_format.idx in (1, 2)
+    ]
     assert sorted(len(b.text_frame.paragraphs) for b in bodies) == [2, 2]
 
 
@@ -215,7 +224,7 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
             pattern=_pattern("Title and Content").id, title="Long", bullets=long_bullets
         )
     )
-    body = deck.slides[0].placeholders[1]
+    body = cast(Any, deck.slides[0].placeholders[1])
     autofit = body.text_frame._txBody.find(qn("a:bodyPr")).find(qn("a:normAutofit"))
     assert autofit is not None and int(autofit.get("fontScale")) < 100000
 
@@ -228,7 +237,7 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
         )
     )
     assert any("truncated" in w for w in result.warnings)
-    body = deck.slides[0].placeholders[1]
+    body = cast(Any, deck.slides[0].placeholders[1])
     assert len(body.text_frame.paragraphs) < 40
 
 
@@ -273,7 +282,7 @@ def test_intent_names_resolve_and_degrade_with_a_warning():
         len(result.warnings) == 1 and "no 'two_columns' pattern" in result.warnings[0]
     )
     deck = Presentation(io.BytesIO(result.pptx))
-    assert deck.slides[0].shapes.title.text == "T"
+    assert _title(deck.slides[0]) == "T"
 
     result = render_deck(
         TEMPLATE,
@@ -295,8 +304,8 @@ def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():
     divider = _pattern("Motif")
     _, deck = _render(SlidePlan(pattern=divider.id, title="ignored", notes="Say hello"))
     slide = deck.slides[0]
-    assert slide.shapes.title.text == "Motif"
-    assert slide.notes_slide.notes_text_frame.text == "Say hello"
+    assert _title(slide) == "Motif"
+    assert cast(Any, slide.notes_slide.notes_text_frame).text == "Say hello"
 
 
 REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")
@@ -310,7 +319,7 @@ def test_reference_template_renders_a_full_deck():
     template = open(REFERENCE, "rb").read()  # type: ignore[arg-type]
     inventory = analyze_template(template).inventory
     assert inventory is not None
-    by_label = {}
+    by_label: dict[str, Any] = {}
     for pattern in inventory.patterns:
         by_label.setdefault(pattern.label, pattern)
     plan = DeckPlan(
@@ -375,6 +384,10 @@ def test_reference_template_renders_a_full_deck():
     result = render_deck(template, inventory, plan)
     deck = Presentation(io.BytesIO(result.pptx))
     assert len(deck.slides) == 9
+    contact = deck.slides[7]
+    assert {"Jane Doe", "Directrice", "+33 1 00 00 00 00", "jane@example.com"} <= set(
+        _texts(contact)
+    )
     for slide in deck.slides:
         for text in _texts(slide):
             assert not is_sample_text(text), text

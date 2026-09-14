@@ -30,7 +30,17 @@ import io
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -49,6 +59,9 @@ from fred_capability_ppt_filler.builder.models import (
     ZoneRole,
 )
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from pptx.shapes.base import BaseShape
 
 CODE_INVALID_UPLOAD = "invalid_upload"
 
@@ -100,7 +113,7 @@ class _Rec:
     font_pt: Optional[float]
     lines: int
     name: str
-    shape: object = field(repr=False)
+    shape: "BaseShape" = field(repr=False)
 
     @property
     def words(self) -> int:
@@ -181,7 +194,7 @@ def _records(shapes, width: int, height: int, layout=None, master=None) -> List[
     slide_area = float(width * height) or 1.0
     records: List[_Rec] = []
     for placed in walk_shapes(shapes):
-        shape = placed.shape
+        shape = cast(Any, placed.shape)
         box = Box(
             x=round(placed.left * 1000 / width),
             y=round(placed.top * 1000 / height),
@@ -280,7 +293,9 @@ def _promote_headings(zones: List[Zone]) -> None:
         if zone.box.h >= 100:
             continue
         for other in bodies:
-            if other is zone or other.box.y <= zone.box.y:
+            # Only a tall body below counts as a column: contact cards stack
+            # short lines and those are all bodies.
+            if other is zone or other.box.y <= zone.box.y or other.box.h < 150:
                 continue
             overlap = min(zone.box.x + zone.box.w, other.box.x + other.box.w) - max(
                 zone.box.x, other.box.x
@@ -459,7 +474,7 @@ class _Analyzer:
             if declared == "keep":
                 continue
             if declared and declared != "image":
-                role = declared  # type: ignore[assignment]
+                role = cast(ZoneRole, declared)
             if role == "title" and not title_text:
                 title_text = rec.text
             zone = _zone(rec, role, self.width, self.height)
@@ -520,9 +535,13 @@ class _Analyzer:
             pattern, records, layout_name, slide_number=number
         )
         if slide.has_notes_slide:
-            match = lexicon.INTENT_NOTE.search(slide.notes_slide.notes_text_frame.text)
+            notes = slide.notes_slide.notes_text_frame.text
+            match = lexicon.INTENT_NOTE.search(notes)
             if match and match.group(1) in Intent.__args__:  # type: ignore[attr-defined]
                 pattern.intent = match.group(1)  # type: ignore[assignment]
+            label = lexicon.LABEL_NOTE.search(notes)
+            if label:
+                pattern.label = label.group(1)[:60]
         return pattern
 
     def _slide_label(self, title_text: str, layout_name: str, number: int) -> str:
@@ -649,7 +668,7 @@ class _Analyzer:
             ):
                 continue
             if declared:
-                role: ZoneRole = declared  # type: ignore[assignment]
+                role = cast(ZoneRole, declared)
             elif marker:
                 role = "body"
             elif lexicon.is_numberish(rec.text):

@@ -485,7 +485,7 @@ class PlacedShape:
     chain without the shape's own id.
     """
 
-    shape: object
+    shape: "BaseShape"
     left: int
     top: int
     width: int

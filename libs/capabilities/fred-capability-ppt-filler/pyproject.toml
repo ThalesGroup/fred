@@ -30,6 +30,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # the fred-agents pod auto-discovers the capability at boot via this entry point.
 [project.entry-points."fred.capabilities"]
 ppt_filler = "fred_capability_ppt_filler.capability:PptFillerCapability"
+ppt_builder = "fred_capability_ppt_filler.builder.capability:PptBuilderCapability"
 
 [project.optional-dependencies]
 dev = [

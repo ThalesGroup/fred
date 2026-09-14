@@ -173,10 +173,11 @@ SHAPE_NAME_ROLES = {
     "decoration": "keep",
 }
 
-# Speaker-notes directive: `intent: cards` on its own line.
+# Speaker-notes directives, each on its own line: `intent: cards`, `label: KPI`.
 INTENT_NOTE = re.compile(
     r"^\s*intent\s*:\s*([a-z_]+)\s*$", re.IGNORECASE | re.MULTILINE
 )
+LABEL_NOTE = re.compile(r"^\s*label\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 # PowerPoint's own naming: any words followed by a space and a counter.
 _AUTO_NAME = re.compile(r"^.*\s\d+$")

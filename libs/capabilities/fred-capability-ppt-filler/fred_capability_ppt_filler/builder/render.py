@@ -30,7 +30,7 @@ import io
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 from pptx import Presentation
 from pptx.oxml.ns import qn
@@ -46,7 +46,7 @@ from fred_capability_ppt_filler.builder.models import (
 from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan, resolve
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
-from fred_capability_ppt_filler.traversal import walk_shapes
+from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
 # Smallest font scale the overflow control applies before truncating.
 MIN_FONT_SCALE = 0.7
@@ -139,19 +139,29 @@ def _remove_slides(presentation, slide_ids: Sequence[int]) -> None:
 # --- shape addressing -----------------------------------------------------------
 
 
-def _shape_index(slide) -> Dict[str, object]:
+def _shape_index(slide) -> Dict[str, PlacedShape]:
     """Zone key → shape for one slide (placeholder idx and shape-id path keys)."""
-    index: Dict[str, object] = {}
+    index: Dict[str, PlacedShape] = {}
     for placed in walk_shapes(slide.shapes):
-        shape = placed.shape
+        shape = cast(Any, placed.shape)
         index["sp:" + "/".join(str(p) for p in placed.path)] = placed
         if shape.is_placeholder:
             index.setdefault(f"ph:{shape.placeholder_format.idx}", placed)
     return index
 
 
-def _remove(placed) -> None:
-    element = placed.shape._element
+def _overlap_ratio(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+    """Intersection area over the smaller box's area (0 when apart)."""
+    width = min(a[2], b[2]) - max(a[0], b[0])
+    height = min(a[3], b[3]) - max(a[1], b[1])
+    if width <= 0 or height <= 0:
+        return 0.0
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return (width * height) / smaller if smaller else 0.0
+
+
+def _remove(placed: PlacedShape) -> None:
+    element = cast(Any, placed.shape)._element
     parent = element.getparent()
     if parent is not None:
         parent.remove(element)
@@ -242,6 +252,14 @@ def _set_font_scale(shape, scale: float) -> None:
     bodyPr.append(autofit)
 
 
+def _grows_with_text(shape) -> bool:
+    """A box that does not wrap, or auto-sizes to its text, has no capacity to enforce."""
+    bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
+    if bodyPr is None:
+        return False
+    return bodyPr.get("wrap") == "none" or bodyPr.find(qn("a:spAutoFit")) is not None
+
+
 def _fit(
     zone: Zone, lines: List[_Line], width: int, height: int
 ) -> Tuple[List[_Line], Optional[float], bool]:
@@ -324,6 +342,13 @@ class _ZoneMap:
     def body_like(self) -> List[Zone]:
         return self.bodies or self.captions or self.subtitles
 
+    def stacked(self) -> List[Zone]:
+        """Every non-title text line in reading order (contact cards)."""
+        return sorted(
+            (z for z in self.all_text if z.role not in ("title", "number")),
+            key=lambda z: (z.box.y, z.box.x),
+        )
+
 
 def _assign_text(pattern: Pattern, plan: SlidePlan) -> Dict[str, List[_Line]]:
     """Decide which lines go into which text zone (by zone key)."""
@@ -366,13 +391,14 @@ def _assign_text(pattern: Pattern, plan: SlidePlan) -> Dict[str, List[_Line]]:
             put(body, lines)
         return out
 
+    if pattern.intent == "contact" and bullets:
+        for zone, line in zip(zmap.stacked(), bullets):
+            put(zone, [line])
+        return out
     bodies = zmap.body_like()
     if not bullets or not bodies:
         return out
-    if pattern.intent == "contact" and len(bodies) > 1:
-        for zone, line in zip(bodies, bullets):
-            put(zone, [line])
-    elif len(bodies) > 1 and pattern.intent in ("two_columns", "comparison"):
+    if len(bodies) > 1 and pattern.intent in ("two_columns", "comparison"):
         half = math.ceil(len(bullets) / 2)
         put(bodies[0], bullets[:half])
         put(bodies[1], bullets[half:])
@@ -484,23 +510,40 @@ class _Renderer:
                     f"Slide {position}: '{pattern.label}' holds {group.count} items, "
                     f"{len(plan.items) - group.count} were dropped."
                 )
+            kept_boxes = []
+            for item_key in group.item_keys[:used]:
+                kept = index.get(item_key)
+                if kept is not None:
+                    kept_boxes.append(
+                        (
+                            kept.left,
+                            kept.top,
+                            kept.left + kept.width,
+                            kept.top + kept.height,
+                        )
+                    )
             for item_key in group.item_keys[used:]:
                 placed = index.get(item_key)
                 if placed is not None:
-                    _remove(placed)
+                    self._remove_with_decoration(placed, index, pattern, kept_boxes)
+            self._even_out_item_widths(group, index)
 
         for zone in self._fillable_text_zones(pattern):
             placed = index.get(zone.key)
-            if placed is None or not getattr(placed.shape, "has_text_frame", False):
+            shape = cast(Any, placed.shape) if placed is not None else None
+            if shape is None or not getattr(shape, "has_text_frame", False):
                 continue
             lines = text.get(zone.key, [])
             if not lines:
-                _clear_text(placed.shape)
+                _clear_text(shape)
                 continue
-            lines, scale, truncated = _fit(zone, lines, self.width, self.height)
-            _write_lines(placed.shape, lines)
+            if _grows_with_text(shape):
+                scale, truncated = None, False
+            else:
+                lines, scale, truncated = _fit(zone, lines, self.width, self.height)
+            _write_lines(shape, lines)
             if scale is not None:
-                _set_font_scale(placed.shape, scale)
+                _set_font_scale(shape, scale)
             if truncated:
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
@@ -519,7 +562,7 @@ class _Renderer:
                 continue
             image_id = image_ids.get(zone.key)
             if not image_id:
-                if placed.shape.is_placeholder:
+                if cast(Any, placed.shape).is_placeholder:
                     _remove(placed)
                 continue
             prepared = self.images.get(image_id)
@@ -531,6 +574,72 @@ class _Renderer:
             self._place_image(slide, placed, prepared)
 
     @staticmethod
+    def _remove_with_decoration(
+        placed: PlacedShape,
+        index: Dict[str, PlacedShape],
+        pattern: Pattern,
+        kept_boxes: List[Tuple[int, int, int, int]],
+    ) -> None:
+        """Drop an unused item and the loose decoration drawn with it (an icon
+        or a card frame the designer left outside the group). A shape survives
+        when it is a zone, carries text, or also serves a kept item — a
+        full-slide background touches every item and stays."""
+        zone_keys = {z.key for z in pattern.zones}
+        zone_keys.update(
+            z.key for g in pattern.groups for item in g.items for z in item
+        )
+        item_box = (
+            placed.left,
+            placed.top,
+            placed.left + placed.width,
+            placed.top + placed.height,
+        )
+        for key, other in list(index.items()):
+            if (
+                other is placed
+                or len(other.path) != 1
+                or key in zone_keys
+                or key.startswith("ph:")
+            ):
+                continue
+            other_shape = cast(Any, other.shape)
+            if (
+                getattr(other_shape, "has_text_frame", False)
+                and other_shape.text_frame.text.strip()
+            ):
+                continue
+            other_box = (
+                other.left,
+                other.top,
+                other.left + other.width,
+                other.top + other.height,
+            )
+            if _overlap_ratio(other_box, item_box) < 0.5:
+                continue
+            if any(_overlap_ratio(other_box, kept) >= 0.2 for kept in kept_boxes):
+                continue
+            _remove(other)
+        _remove(placed)
+
+    def _even_out_item_widths(
+        self, group: RepeatGroup, index: Dict[str, PlacedShape]
+    ) -> None:
+        """Widen a text box narrower than its siblings of the same role: designers
+        size sample boxes to their sample text, and the narrow one would wrap."""
+        for position in range(len(group.item_zones)):
+            zones = [item[position] for item in group.items if position < len(item)]
+            if not zones or zones[0].role == "image":
+                continue
+            widest = max(z.box.w for z in zones)
+            for zone in zones:
+                if zone.box.w < widest * 0.8:
+                    placed = index.get(zone.key)
+                    if placed is not None:
+                        cast(Any, placed.shape).width = Emu(
+                            round(widest / 1000 * self.width)
+                        )
+
+    @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:
         zones = [z for z in pattern.zones if z.role not in ("image", "keep")]
         for group in pattern.groups:
@@ -538,9 +647,9 @@ class _Renderer:
                 zones.extend(z for z in item if z.role not in ("image", "keep"))
         return zones
 
-    def _place_image(self, slide, placed, prepared: PreparedImage) -> None:
+    def _place_image(self, slide, placed: PlacedShape, prepared: PreparedImage) -> None:
         image_bytes, img_w, img_h = prepared
-        shape = placed.shape
+        shape = cast(Any, placed.shape)
         if shape.is_placeholder and hasattr(shape, "insert_picture"):
             shape.insert_picture(io.BytesIO(image_bytes))
             return
