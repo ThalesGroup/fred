@@ -30,7 +30,7 @@ const { archivePath } = await packDesignTokens();
 
 test("accepts the actual packed design-token archive", async () => {
   const result = await validateArchive(archivePath);
-  assert.equal(result.package, "@fred/design-tokens@0.0.0-development");
+  assert.equal(result.package, "@fred-oss/design-tokens@0.1.0-alpha.1");
   assert.equal(result.files.length, 9);
   assert.deepEqual(result.cssAssets["dist/tokens.css"], []);
 });

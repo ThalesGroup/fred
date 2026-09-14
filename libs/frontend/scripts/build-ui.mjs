@@ -282,9 +282,16 @@ export async function buildUi() {
     },
   });
   assertUiBuildSourceGraph(buildEvidence.modules);
-  await run("npm", ["exec", "--", "tsc", "-p", "ui/tsconfig.json"], {
-    cwd: path.dirname(packageRoot),
-  });
+  const producerRoot = path.dirname(packageRoot);
+  await run(
+    process.execPath,
+    [
+      path.join(producerRoot, "node_modules/typescript/bin/tsc"),
+      "-p",
+      "ui/tsconfig.json",
+    ],
+    { cwd: producerRoot },
+  );
   const publicDeclarationsPath = path.join(
     distributionRoot,
     "types/src/index.d.ts",

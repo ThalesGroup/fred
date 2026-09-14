@@ -1,10 +1,10 @@
 ## Why
 
-FRED can build and validate three development archives, but their manifests,
-validators, and consumers still assume `0.0.0-development` and do not produce the
-immutable evidence needed to release exactly the bytes that were reviewed. A bounded
-repository-readiness slice is needed before maintainers configure npm ownership or
-authorize any publication.
+FRED can build and validate three development archives, and the coordinate-independent
+release tooling is implemented. Maintainers have now selected the `@fred-oss` coordinates,
+public npm policy, bootstrap account, and guarded workflow identity. The repository needs
+release-ready manifests and a manual first-release workflow that keeps remaining ownership
+and policy decisions fail-closed and publishes only exact reviewed bytes after explicit approval.
 
 ## What Changes
 
@@ -48,13 +48,18 @@ authorize any publication.
   self-contained by provisioning their isolated-consumer caches before offline package tests,
   and add a compact release runbook plus a targeted RFC sequencing clarification separating
   readiness, publication, FRED adoption, and external adoption.
-- Keep `@fred/design-tokens`, `@fred/ui`, `@fred/iframe-sdk`, `0.1.0-alpha.1`, and the `next`
-  dist-tag as proposals until maintainers confirm scope ownership, coordinates, access,
-  publishing owners, registry settings, the distinct bootstrap and Trusted Publishing
-  identities, workflow identity, and bootstrap authorization.
+- Record the confirmed `fred-oss` organization, three `@fred-oss/*@0.1.0-alpha.1`
+  coordinates, public npm registry/access, `next` tag, `marc.fawaz` bootstrap account and
+  verified organization-owner authority, while keeping package API, SDK protocol, release,
+  enduring npm-publishing owners, and later direct/staged policy explicitly unresolved.
+- Add a `workflow_dispatch`-only, `swift`-restricted publication workflow that defaults to
+  preparation only, transfers immutable candidates across the release and application
+  toolchains, uses the protected `npm-publish` environment and its bootstrap token only in the
+  explicitly selected initial publishing step, and performs genuine registry verification
+  after publication.
 
-This change does not publish packages, add a publishing workflow, configure registry access,
-or migrate FRED or RAGS.
+This change prepares but does not trigger the publishing workflow. It does not create GitHub/npm
+settings, publish or stage packages, claim public-registry success, or migrate FRED or RAGS.
 
 ## Capabilities
 
@@ -76,7 +81,8 @@ None.
 - The producer lockfile retains only npm's expected links to declared workspace members;
   disposable consumers may refer only to integrity-verified candidate tarballs, while published
   manifests and registry consumers remain free of local/workspace dependency fallback.
-- Frontend-package Makefile targets, exact CI input selection, and a release-readiness command;
+- Frontend-package Makefile targets, exact CI input selection, a release-readiness command, and
+  `.github/workflows/Publish-frontend-packages.yml`;
   application-owned Node/npm tooling remains independently controlled while verified fixture
   archives cross the CI job boundary without dependency trees or consumer caches.
 - `libs/frontend/` release documentation and the existing

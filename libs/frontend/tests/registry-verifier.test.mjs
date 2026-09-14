@@ -45,7 +45,7 @@ function confirmContract(contract) {
   contract.expectedProvenance.workflow =
     "https://github.com/example/release-test/.github/workflows/release.yml@refs/heads/main";
   contract.maintainerApproval = {
-    scopeOwner: "test-maintainer-organization",
+    scopeOwner: "fred-oss",
     owners: {
       packageApi: "test-package-api-owner",
       sdkProtocol: "test-sdk-protocol-owner",
@@ -92,7 +92,7 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   await writeFile(archivePath, "npm metadata fixture archive");
   const integrity = await sha512Integrity(archivePath);
   const provenanceUrl =
-    "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development";
+    "https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@0.1.0-alpha.1";
   const metadata = {
     name: selected.name,
     version: selected.version,
@@ -135,7 +135,10 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
           },
         },
         resolvedDependencies: [
-          { digest: { gitCommit: identity.sourceCommit } },
+          {
+            uri: `git+${identity.repository}@refs/heads/swift`,
+            digest: { gitCommit: identity.sourceCommit },
+          },
         ],
       },
     },
@@ -189,21 +192,21 @@ test("rejects missing, malformed, and disallowed npm attestation URLs", async (c
     [
       "credentials",
       {
-        url: "https://user:secret@registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development",
+        url: "https://user:secret@registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@0.1.0-alpha.1",
       },
       /attestation URL credentials are disallowed/,
     ],
     [
       "fragment",
       {
-        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fui@0.0.0-development#other",
+        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@0.1.0-alpha.1#other",
       },
       /attestation URL fragment is disallowed/,
     ],
     [
       "coordinate",
       {
-        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred%2fother@0.0.0-development",
+        url: "https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fother@0.1.0-alpha.1",
       },
       /attestation URL coordinate differs/,
     ],
@@ -261,7 +264,12 @@ test("extracts identity from an in-toto SLSA statement", () => {
     predicate: {
       buildDefinition: {
         externalParameters: { workflow: { repository: expected().repository } },
-        resolvedDependencies: [{ digest: { gitCommit: "fixture-commit" } }],
+        resolvedDependencies: [
+          {
+            uri: `git+${expected().repository}@refs/heads/fixture`,
+            digest: { gitCommit: "fixture-commit" },
+          },
+        ],
       },
       runDetails: {
         builder: { id: "https://github.com/actions/runner/hosted" },
@@ -277,8 +285,52 @@ test("extracts identity from an in-toto SLSA statement", () => {
     payload: Buffer.from(JSON.stringify(statement)).toString("base64"),
   };
   assert.deepEqual(
-    provenanceIdentityFromStatement(statementFromDsseEnvelope(envelope)),
+    provenanceIdentityFromStatement(
+      statementFromDsseEnvelope(envelope),
+      expected().repository,
+    ),
     expected(),
+  );
+});
+
+test("selects the source commit only from the expected repository dependency", () => {
+  const identity = expected();
+  const statement = {
+    subject: [{ digest: { sha512: "ui" } }],
+    predicate: {
+      buildDefinition: {
+        externalParameters: {
+          workflow: {
+            repository: identity.repository,
+            path: ".github/workflows/publish.yml",
+            ref: "refs/heads/fixture",
+          },
+        },
+        resolvedDependencies: [
+          {
+            uri: "https://example.invalid/unrelated.git",
+            digest: { gitCommit: identity.sourceCommit },
+          },
+          {
+            uri: `git+${identity.repository}@refs/heads/fixture`,
+            digest: { gitCommit: "expected-repository-commit" },
+          },
+        ],
+      },
+    },
+  };
+  assert.equal(
+    provenanceIdentityFromStatement(statement, identity.repository)
+      .sourceCommit,
+    "expected-repository-commit",
+  );
+  statement.predicate.buildDefinition.resolvedDependencies.push({
+    uri: identity.repository,
+    digest: { gitCommit: "ambiguous-commit" },
+  });
+  assert.throws(
+    () => provenanceIdentityFromStatement(statement, identity.repository),
+    /exactly one source dependency/,
   );
 });
 
@@ -303,7 +355,10 @@ test("validly signed provenance still fails every wrong expected identity", asyn
             },
           },
           resolvedDependencies: [
-            { digest: { gitCommit: identity.sourceCommit } },
+            {
+              uri: expected().repository,
+              digest: { gitCommit: identity.sourceCommit },
+            },
           ],
         },
       },
@@ -329,6 +384,7 @@ test("validly signed provenance still fails every wrong expected identity", asyn
       },
       {
         expectedWorkflow: fixtureContract.expectedProvenance.workflow,
+        expectedRepository: fixtureContract.expectedProvenance.repository,
         certificateIssuer: fixtureContract.expectedProvenance.certificateIssuer,
         verifyBundle: async (bundle, options) => {
           assert.deepEqual(options, {
@@ -378,7 +434,10 @@ test("provenance verification requires an explicit signer certificate policy", a
   await assert.rejects(
     verifyProvenanceAttestation(
       { attestations: [] },
-      { expectedWorkflow: fixtureContract.expectedProvenance.workflow },
+      {
+        expectedWorkflow: fixtureContract.expectedProvenance.workflow,
+        expectedRepository: fixtureContract.expectedProvenance.repository,
+      },
     ),
     /expected provenance certificate issuer is unconfirmed/,
   );

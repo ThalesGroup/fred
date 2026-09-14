@@ -497,7 +497,7 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
       evidence: { packages },
     }),
   );
-  lockPackages["node_modules/@fred/ui"].resolved = "file:ui.tgz";
+  lockPackages["node_modules/@fred-oss/ui"].resolved = "file:ui.tgz";
   assert.throws(
     () =>
       assertRegistryConsumer({
@@ -508,8 +508,8 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
       }),
     /Invalid URL|registry|local fallback/,
   );
-  lockPackages["node_modules/@fred/ui"].resolved =
-    "https://registry.npmjs.org/@fred/ui/-/ui.tgz";
+  lockPackages["node_modules/@fred-oss/ui"].resolved =
+    "https://registry.npmjs.org/@fred-oss/ui/-/ui.tgz";
   lockPackages["node_modules/unapproved"] = {
     resolved: "\tGiT+FiLe:///tmp/source-checkout",
   };

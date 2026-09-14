@@ -1,20 +1,27 @@
 # Frontend package release readiness
 
-The producer contains coordinate-independent release tooling for the design-token, UI,
-and iframe SDK packages. It does not confirm ownership of the proposed `@fred` scope,
-authorize a publisher, create packages in a registry, or publish an archive.
+The producer prepares `@fred-oss/design-tokens`, `@fred-oss/ui`, and
+`@fred-oss/iframe-sdk` version `0.1.0-alpha.1` for public npm publication under the
+`next` tag. Repository commands and pull-request jobs do not publish. The manual
+publication workflow remains disabled by default and cannot run until the incomplete
+ownership and publishing-policy fields below are confirmed in a committed release
+contract.
 
 ## Release contracts
 
 Release expectations are external inputs, not values inferred from a built archive or a
 downloaded attestation:
 
-- `release/development-fixture-contract.json` describes the current private workspace and
-  its deliberately non-publishable development coordinates. It supports repository tests.
-- `release/proposed-release-contract.json` records discussion defaults only. Its `proposed`
-  state is not publication approval and cannot produce approved candidate evidence.
+- `release/development-fixture-contract.json` exercises the selected coordinates while
+  retaining fixture identities and evidence classifications. It supports repository tests
+  but can never authorize publication.
+- `release/proposed-release-contract.json` records the confirmed `fred-oss` organization,
+  three `@fred-oss` coordinates, public npm registry/access, `next` tag, bootstrap account,
+  verified organization-owner authority, and expected workflow identity. It remains
+  `proposed` because the enduring owners and later publishing policy are incomplete.
 - A maintainer-confirmed contract must record the exact package names and versions, registry,
-  dist-tag policy, producer Node/npm versions, source repository, bootstrap publisher, and
+  dist-tag policy, producer Node/npm versions, source repository, bootstrap publisher, named
+  API/protocol/release/publishing owners, and
   later Trusted Publishing workflow certificate identity and GitHub Actions OIDC issuer before
   release evidence can be approved. Fixture identities, development versions, and the
   development tag cannot be promoted by changing only the contract state.
@@ -61,8 +68,9 @@ Provision consumer dependencies and Chromium separately as described in
 the frontend application's own pinned test dependencies to run the host; the SDK under test is
 always loaded from a validated archive or an exact registry installation.
 
-Fixture evidence is visibly labelled `fixture-candidate-evidence`. It exercises the tools but
-is neither approved candidate evidence nor proof that a public package exists.
+Fixture evidence is visibly labelled `fixture-candidate-evidence`. It exercises the tools with
+the selected coordinates but is neither approved candidate evidence nor proof that a public
+package exists.
 
 ## Fixture transfer between CI toolchains
 
@@ -168,18 +176,76 @@ and exact coordinate, and re-roots only its pathname onto the approved registry 
 missing, malformed, or disallowed endpoint metadata fails closed. Controlled local tests of this
 behavior are not a successful public-registry run.
 
+## Prepared first-release workflow
+
+`.github/workflows/Publish-frontend-packages.yml` is manual-only. It rejects every ref except
+`swift`, defaults to `prepare-only`, and requires the explicit `publish-bootstrap` choice before
+the publication job exists. The workflow uses Node `24.21.0` and npm `11.19.0` to validate and
+pack one designated candidate set, transfers those exact bytes to the separately pinned
+application Node `22.13.0` / npm `10.9.2` job, and writes approved evidence only after offline
+consumers, browser smoke, and production-host compatibility pass. The final 30-day artifact keeps
+the three tarballs, transfer metadata, and evidence together.
+
+The publication job downloads that artifact, recomputes every SHA-512, checks the committed
+source and workflow identity, confirms the authenticated npm account is the contract's bootstrap
+identity, and preflights that none of the exact versions exists. It publishes design tokens, then
+UI, then the independent SDK with `--provenance --access public --tag next`, checking registry
+integrity after each package. A pre-existing or partially published coordinate stops the complete
+sequence before another mutation; do not rerun blindly or overwrite a version. The following job
+performs genuine registry/provenance and clean-consumer verification under the separately pinned
+application Node `22.13.0` / npm `10.9.2` toolchain so its browser and production-host evidence
+does not silently migrate application tooling. None of these claims is evidence that a workflow
+has actually run.
+
+The initial token is used only for creation. Later releases require a separately reviewed workflow
+change that removes the bootstrap secret and uses npm Trusted Publishing. The choice to allow
+direct Trusted Publishing or require staged publication remains unresolved; staged publishing
+cannot create a brand-new package.
+
+### Manual GitHub and npm setup
+
+1. In the GitHub repository, open **Settings → Environments**, create `npm-publish`, restrict its
+   deployment branches to `swift`, and select the required release reviewers. The identities of
+   those reviewers remain a maintainer decision.
+2. Add one environment secret named `NPM_BOOTSTRAP_TOKEN` containing the already-created temporary
+   granular token. Do not add it as a repository or organization secret. Do not expose it to a
+   pull-request, preparation, validation, installation, or registry-verification job.
+3. Complete `maintainerApproval.owners`, select `maintainerApproval.publishingPolicy`, change the
+   contract state to `maintainer-confirmed`, review the resulting contract, and merge it to
+   `swift`. Organization ownership does not select the package API or SDK protocol owners.
+4. In **Actions → Publish frontend packages → Run workflow**, select `swift` and
+   `prepare-only`. Review the candidate and application-validation jobs. This is a rehearsal; a
+   later run rebuilds and therefore creates a different candidate record.
+5. For the authorized creation run, select `swift` and `publish-bootstrap`. The environment gate
+   pauses the publish job after the exact candidate is prepared and validated. Approve only that
+   job and its commit-addressed artifact. Do not trigger the workflow from another ref.
+6. Confirm that the final registry-verification job succeeds for all three exact versions before
+   any adoption. If publication stops partway, preserve the logs/evidence, verify the published
+   subset, and make an explicit recovery decision; never rerun into an existing version or accept
+   different bytes.
+7. After all packages exist, configure a GitHub Actions Trusted Publisher on each npm package with
+   organization `ThalesGroup`, repository `fred`, workflow filename
+   `Publish-frontend-packages.yml`, and environment `npm-publish`. Choose direct vs staged allowed
+   actions only after the open policy decision is recorded.
+8. Replace the bootstrap-token step with the reviewed OIDC path, verify it with a new version,
+   restrict traditional token publishing as approved, then revoke the temporary granular token
+   from npm and remove `NPM_BOOTSTRAP_TOKEN` from the GitHub environment.
+
 ## Maintainer decisions and sequencing
 
-Before an approved candidate can be produced, maintainers must confirm:
+The following are confirmed: organization `fred-oss`, scope `@fred-oss`, the three
+`0.1.0-alpha.1` coordinates, public `https://registry.npmjs.org/`, `next`, bootstrap account
+`marc.fawaz`, verified organization-owner authority, and the expected GitHub workflow identity.
+Before an approved candidate can be produced, maintainers must still confirm:
 
-1. an organization-controlled npm scope and the final names/initial versions;
-2. package owners and bootstrap authority for creating each package;
-3. the registry, access, dist-tag, and staged-publishing policy;
-4. the exact bootstrap identity and later Trusted Publishing workflow identity.
+1. the named package/public-API, SDK protocol-compatibility, release, and enduring npm-publishing
+   owners;
+2. the later direct or staged Trusted Publishing policy and required reviewers.
 
 Initial package creation is distinct from later Trusted Publishing: staged publishing cannot
-create a package that does not exist. Bootstrap permissions must therefore be verified rather
-than assumed. Publication remains a manual, separately authorized operation.
+create a package that does not exist. The supplied organization-owner evidence establishes the
+bootstrap account's authority without recording its token. Publication remains a manual,
+separately authorized operation.
 
 Publish design tokens before UI; the iframe SDK is independent of that pair. Verify the exact
 published bytes and provenance before any FRED adoption. If later protocol ownership transfer

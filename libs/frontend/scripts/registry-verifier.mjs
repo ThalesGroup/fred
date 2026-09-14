@@ -70,15 +70,37 @@ export function assertProvenanceIdentity({
   return true;
 }
 
-export function provenanceIdentityFromStatement(statement) {
+function canonicalRepository(value) {
+  assert.equal(typeof value, "string", "provenance dependency URI is missing");
+  const normalized = value.startsWith("git+") ? value.slice(4) : value;
+  const repository = new URL(normalized);
+  repository.hash = "";
+  repository.search = "";
+  repository.pathname = repository.pathname
+    .replace(/@refs\/.*$/, "")
+    .replace(/\.git\/?$/, "")
+    .replace(/\/$/, "");
+  return repository.href.replace(/\/$/, "");
+}
+
+export function provenanceIdentityFromStatement(statement, expectedRepository) {
+  assert(expectedRepository, "expected provenance repository is unconfirmed");
   const subject = statement.subject?.[0];
   const subjectSha512 = subject?.digest?.sha512;
   const predicate = statement.predicate ?? {};
   const build = predicate.buildDefinition ?? {};
   const workflow = build.externalParameters?.workflow ?? {};
-  const dependency = (build.resolvedDependencies ?? []).find(
-    (entry) => entry.digest?.gitCommit,
+  const expected = canonicalRepository(expectedRepository);
+  const dependencies = (build.resolvedDependencies ?? []).filter(
+    (entry) =>
+      entry.digest?.gitCommit && canonicalRepository(entry.uri) === expected,
   );
+  assert.equal(
+    dependencies.length,
+    1,
+    "provenance must identify exactly one source dependency for the expected repository",
+  );
+  const [dependency] = dependencies;
   return {
     artifactDigest: subjectSha512
       ? `sha512-${
@@ -111,10 +133,12 @@ export async function verifyProvenanceAttestation(
   {
     verifyBundle = verifySigstoreBundle,
     expectedWorkflow,
+    expectedRepository,
     certificateIssuer,
   } = {},
 ) {
   assert(expectedWorkflow, "expected provenance workflow is unconfirmed");
+  assert(expectedRepository, "expected provenance repository is unconfirmed");
   assert(
     certificateIssuer,
     "expected provenance certificate issuer is unconfirmed",
@@ -132,7 +156,7 @@ export async function verifyProvenanceAttestation(
   const statement = statementFromDsseEnvelope(provenance.bundle.dsseEnvelope);
   return {
     cryptographicallyVerified: true,
-    identity: provenanceIdentityFromStatement(statement),
+    identity: provenanceIdentityFromStatement(statement, expectedRepository),
   };
 }
 
@@ -406,6 +430,7 @@ export async function verifyNpmPackageProvenance(
   );
   return verifyProvenanceAttestation(await response.json(), {
     expectedWorkflow: expectedProvenance.workflow,
+    expectedRepository: expectedProvenance.repository,
     certificateIssuer,
     verifyBundle,
   });

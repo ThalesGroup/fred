@@ -1,0 +1,219 @@
+name: Publish frontend packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      publication:
+        description: Prepare and validate only, or explicitly bootstrap-publish the exact candidate
+        required: true
+        default: prepare-only
+        type: choice
+        options:
+          - prepare-only
+          - publish-bootstrap
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_CONTRACT: release/proposed-release-contract.json
+
+jobs:
+  authorize-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the swift branch
+        run: test "${GITHUB_REF}" = "refs/heads/swift"
+
+  prepare-candidate:
+    runs-on: ubuntu-24.04
+    needs: authorize-source
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup release Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+
+      - name: Pin release npm
+        run: npm install --global npm@11.19.0
+
+      - name: Install producer dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Provision isolated consumer cache
+        run: make consumer-provision
+        working-directory: libs/frontend
+
+      - name: Validate contracts and controlled release tooling
+        run: make release-check release-test
+        working-directory: libs/frontend
+
+      - name: Preserve producer and archive regressions
+        run: make code-quality test pack-check
+        working-directory: libs/frontend
+
+      - name: Create immutable release-candidate transfer
+        run: make release-transfer-create
+        working-directory: libs/frontend
+
+      - name: Retain producer candidate transfer
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+          if-no-files-found: error
+          retention-days: 30
+
+  validate-application-compatibility:
+    runs-on: ubuntu-24.04
+    needs: prepare-candidate
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup application Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Pin application npm
+        run: npm install --global npm@10.9.2
+
+      - name: Install producer validation dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Install application dependencies
+        run: npm ci
+        working-directory: apps/frontend
+
+      - name: Provision isolated consumer cache
+        run: make consumer-provision
+        working-directory: libs/frontend
+
+      - name: Provision Chromium
+        run: make browser-install
+        working-directory: libs/frontend
+
+      - name: Download exact producer candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-packages-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+
+      - name: Validate candidate under application tooling
+        run: make release-transfer-validate
+        working-directory: libs/frontend
+
+      - name: Retain exact candidate archives and approved evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-bootstrap:
+    runs-on: ubuntu-24.04
+    needs: validate-application-compatibility
+    if: inputs.publication == 'publish-bootstrap'
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup release Node.js and npm registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+          registry-url: https://registry.npmjs.org/
+
+      - name: Pin release npm
+        run: npm install --global npm@11.19.0
+
+      - name: Download exact approved candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-packages-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+
+      - name: Reverify exact candidate bytes before publication
+        run: >-
+          npm run release:verify-evidence --
+          --contract release/proposed-release-contract.json
+          --evidence target/release-transfer/candidate-evidence.json
+          --design-tokens target/release-transfer/fred-oss-design-tokens-0.1.0-alpha.1.tgz
+          --ui target/release-transfer/fred-oss-ui-0.1.0-alpha.1.tgz
+          --iframe-sdk target/release-transfer/fred-oss-iframe-sdk-0.1.0-alpha.1.tgz
+        working-directory: libs/frontend
+
+      - name: Publish the initial package versions
+        run: >-
+          npm run release:publish-bootstrap --
+          --contract release/proposed-release-contract.json
+          --evidence target/release-transfer/candidate-evidence.json
+          --archive-root target/release-transfer
+        working-directory: libs/frontend
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+
+  verify-public-registry:
+    runs-on: ubuntu-24.04
+    needs: publish-bootstrap
+    if: inputs.publication == 'publish-bootstrap'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup application Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Pin application npm
+        run: npm install --global npm@10.9.2
+
+      - name: Install producer verification dependencies
+        run: npm ci
+        working-directory: libs/frontend
+
+      - name: Install production-host dependencies
+        run: npm ci
+        working-directory: apps/frontend
+
+      - name: Provision Chromium
+        run: make browser-install
+        working-directory: libs/frontend
+
+      - name: Download exact approved evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-packages-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+
+      - name: Verify exact public registry packages and provenance
+        run: >-
+          npm run registry:verify --
+          --contract release/proposed-release-contract.json
+          --evidence target/release-transfer/candidate-evidence.json
+          --design-tokens @fred-oss/design-tokens@0.1.0-alpha.1
+          --ui @fred-oss/ui@0.1.0-alpha.1
+          --iframe-sdk @fred-oss/iframe-sdk@0.1.0-alpha.1
+        working-directory: libs/frontend
