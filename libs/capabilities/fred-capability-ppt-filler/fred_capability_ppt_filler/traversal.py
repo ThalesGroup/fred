@@ -475,6 +475,52 @@ def _collect_image_anchors(
     # Any other shape (picture, media, chart, SmartArt, line, ...) contributes nothing.
 
 
+@dataclass(frozen=True)
+class PlacedShape:
+    """One shape reached by :func:`walk_shapes`, with its ABSOLUTE EMU box.
+
+    ``path`` is the chain of ``shape_id`` values from the slide's top level down
+    to this shape (groups included), so a shape nested in groups keeps a stable
+    address across duplications of the same slide. ``group_path`` is the same
+    chain without the shape's own id.
+    """
+
+    shape: object
+    left: int
+    top: int
+    width: int
+    height: int
+    path: Tuple[int, ...]
+
+    @property
+    def group_path(self) -> Tuple[int, ...]:
+        return self.path[:-1]
+
+
+def walk_shapes(
+    shapes, transform: "_Transform" = _IDENTITY, prefix: Tuple[int, ...] = ()
+):
+    """Yield every shape (groups included, then their children) as :class:`PlacedShape`.
+
+    The same group-transform composition the image-anchor seam uses, exposed for
+    callers that need every shape's absolute geometry rather than only ``{{key}}``
+    anchors (the template analysis of the builder capability).
+    """
+    for shape in shapes:
+        path = prefix + (shape.shape_id,)
+        abs_box = _apply_transform(
+            transform,
+            shape.left or 0,
+            shape.top or 0,
+            shape.width or 0,
+            shape.height or 0,
+        )
+        yield PlacedShape(shape, *abs_box, path)
+        if _is_group(shape):
+            child_transform = _compose(transform, _group_child_transform(shape))
+            yield from walk_shapes(shape.shapes, child_transform, path)  # type: ignore[attr-defined]
+
+
 def list_image_anchors_on_slide(slide: "Slide") -> List[ImageAnchor]:
     """Return an :class:`ImageAnchor` per ``{{key}}`` occurrence on ``slide``.
 
