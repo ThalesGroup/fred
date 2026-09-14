@@ -925,6 +925,33 @@ digit after the name.
 
 ---
 
+### `Switch` sizes and pill shape (2026-09-14)
+
+**Location:** `src/rework/components/shared/atoms/Switch/`
+
+**Status:** `Functional`
+
+The track and handle opt out of the global `corner-shape: superellipse(1.4)`
+with `corner-shape: round`. A switch is a true pill, not a squircle.
+
+`size` is `medium` (default, 32px track) or `small` (24px track). Only the
+track height changes per size. Everything else derives from it, so both sizes
+keep the same proportions:
+
+| Size | Track | Handle off | Handle on |
+| --- | --- | --- | --- |
+| `medium` | 52×32 | 22px | 24px |
+| `small` | 39×24 | 16.5px | 18px |
+
+The handle is smaller when off on purpose. At equal size, the handle looks
+smaller on the filled "on" track than on the pale "off" one. It stays centered
+in a square slot at each end of the track, and grows while it slides.
+
+The name `small` is scoped to this component. On the shared scale, 24px is
+`2xs`.
+
+---
+
 ### Package-foundation component corrections (2026-09-09)
 
 **Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
