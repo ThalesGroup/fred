@@ -1,3 +1,8 @@
+> **Shipped as beta (2026-09-14).** The authoring surface ships labelled beta so
+> the team can build against it; unchecked tasks below are follow-ups, not
+> guarantees this beta makes. Limits are listed in `libs/fred-sdk/README.md`.
+> The change stays active and is not archived.
+
 ## Why
 
 Fred can pull documents from a remote source today only as deployment YAML:

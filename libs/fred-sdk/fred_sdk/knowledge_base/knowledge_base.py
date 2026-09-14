@@ -57,7 +57,7 @@ class KnowledgeBase:
 
     Example:
         kb = KnowledgeBase(
-            id="http-markdown",
+            id="acme.kb.http-markdown",
             version="1.0.0",
             name="HTTP Markdown",
             description="Synchronize Markdown documents",
