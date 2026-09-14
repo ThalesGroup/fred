@@ -28,12 +28,11 @@ import logging
 
 from fred_core.sql import make_session_factory, use_session
 from fred_sdk.contracts.models import TuningValue
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.knowledge_base_models import (
     KnowledgeBaseInstanceRow,
-    KnowledgeBaseRunRow,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,6 @@ class KnowledgeBaseInstance:
         self.cadence = row.cadence
         self.suspended = row.suspended
         self.granted_subject = row.granted_subject
-        self.created_by = row.created_by
         self.created_at = row.created_at
         self.updated_at = row.updated_at
         self._configuration_json = row.configuration_json
@@ -59,16 +57,6 @@ class KnowledgeBaseInstance:
     @property
     def configuration(self) -> dict[str, TuningValue]:
         return json.loads(self._configuration_json)
-
-
-class KnowledgeBaseRun:
-    """One run Fred has seen begin, and where the engine holds it."""
-
-    def __init__(self, row: KnowledgeBaseRunRow) -> None:
-        self.run_id = row.run_id
-        self.instance_id = row.instance_id
-        self.execution_id = row.execution_id
-        self.started_at = row.started_at
 
 
 class KnowledgeBaseInstanceStore:
@@ -86,7 +74,7 @@ class KnowledgeBaseInstanceStore:
         cadence: str,
         suspended: bool,
         configuration: dict[str, TuningValue],
-        granted_subject: str | None,
+        granted_subject: str,
         created_by: str | None,
         session: AsyncSession | None = None,
     ) -> KnowledgeBaseInstance:
@@ -125,25 +113,6 @@ class KnowledgeBaseInstanceStore:
             )
             return [KnowledgeBaseInstance(row) for row in rows]
 
-    async def update(
-        self,
-        instance_id: str,
-        *,
-        cadence: str,
-        suspended: bool,
-        configuration: dict[str, TuningValue],
-        session: AsyncSession | None = None,
-    ) -> KnowledgeBaseInstance | None:
-        async with use_session(self._sessions, session) as active:
-            row = await active.get(KnowledgeBaseInstanceRow, instance_id)
-            if row is None:
-                return None
-            row.cadence = cadence
-            row.suspended = suspended
-            row.configuration_json = json.dumps(configuration)
-            await active.flush()
-            return KnowledgeBaseInstance(row)
-
     async def delete(
         self, instance_id: str, *, session: AsyncSession | None = None
     ) -> bool:
@@ -151,52 +120,5 @@ class KnowledgeBaseInstanceStore:
             row = await active.get(KnowledgeBaseInstanceRow, instance_id)
             if row is None:
                 return False
-            await active.execute(
-                delete(KnowledgeBaseRunRow).where(
-                    KnowledgeBaseRunRow.instance_id == instance_id
-                )
-            )
             await active.delete(row)
             return True
-
-    # ---------- runs ----------
-
-    async def record_run(
-        self,
-        *,
-        run_id: str,
-        instance_id: str,
-        execution_id: str,
-        session: AsyncSession | None = None,
-    ) -> KnowledgeBaseRun:
-        """Remember a run the first time anything asks about it.
-
-        A scheduled run is started by the engine, so Fred never sees it begin —
-        it learns of it when the pod asks for its configuration. Replaying that
-        call is an attempt of the same run, so this is an upsert, not an insert.
-        """
-        async with use_session(self._sessions, session) as active:
-            row = await active.get(KnowledgeBaseRunRow, run_id)
-            if row is None:
-                row = KnowledgeBaseRunRow(
-                    run_id=run_id,
-                    instance_id=instance_id,
-                    execution_id=execution_id,
-                )
-                active.add(row)
-            else:
-                row.execution_id = execution_id
-            await active.flush()
-            return KnowledgeBaseRun(row)
-
-    async def list_runs(
-        self, instance_id: str, *, limit: int = 50, session: AsyncSession | None = None
-    ) -> list[KnowledgeBaseRun]:
-        async with use_session(self._sessions, session) as active:
-            rows = await active.scalars(
-                select(KnowledgeBaseRunRow)
-                .where(KnowledgeBaseRunRow.instance_id == instance_id)
-                .order_by(KnowledgeBaseRunRow.started_at.desc())
-                .limit(limit)
-            )
-            return [KnowledgeBaseRun(row) for row in rows]

@@ -53,7 +53,6 @@ from control_plane_backend.knowledge_bases.cadence import (
 from control_plane_backend.knowledge_bases.instance_store import KnowledgeBaseInstance
 from control_plane_backend.knowledge_bases.library import LibraryClient
 from control_plane_backend.knowledge_bases.validation import (
-    InstanceConfigurationInvalid,
     validate_instance_configuration,
 )
 
@@ -76,17 +75,6 @@ class UnknownDefinition(Exception):
     """No definition was ever published under that name."""
 
     http_status = 404
-
-
-class KnowledgeBasePodIdentityMissing(Exception):
-    """The definition's publication recorded no account to grant.
-
-    A prefix claimed before the subject was recorded, and never republished.
-    Refusing is the only safe answer: creating the folder anyway would hand a
-    team a library nothing can fill.
-    """
-
-    http_status = 409
 
 
 class _Undo:
@@ -138,11 +126,6 @@ async def create_instance(
         rebac, team_id, definition_id=definition_id
     ):
         raise KnowledgeBaseNotEnabled(f"{definition_id!r} is not enabled for this team")
-    if not definition.subject:
-        raise KnowledgeBasePodIdentityMissing(
-            f"{definition_id!r} recorded no service account; redeploy its image "
-            "so its publication records one"
-        )
 
     values = validate_instance_configuration(
         definition.configuration_fields, configuration
@@ -209,76 +192,6 @@ async def create_instance(
         raise
 
 
-def _carry_secrets_forward(
-    declared: list[Any], *, submitted: dict[str, Any], stored: KnowledgeBaseInstance
-) -> dict[str, Any]:
-    """Keep a secret the submission left empty.
-
-    A display read never returns a secret, so a form round-trip comes back
-    without it. Taking that as "cleared" would destroy the value on any edit —
-    and refuse the edit outright when the field is required. An empty secret
-    field therefore means "unchanged", and clearing one is not offered here.
-    """
-    carried = dict(submitted)
-    held = stored.configuration
-    for field in declared:
-        if str(field.type) != "secret" or carried.get(field.key) is not None:
-            continue
-        if field.key in held:
-            carried[field.key] = held[field.key]
-    return carried
-
-
-async def update_instance(
-    *,
-    user: KeycloakUser,
-    instance_id: str,
-    cadence: RunCadence,
-    suspended: bool,
-    configuration: dict[str, Any],
-    deps: Any,
-) -> KnowledgeBaseInstance:
-    """Change what an instance runs on and with, leaving its library alone."""
-    instance = await _readable_instance(user=user, instance_id=instance_id, deps=deps)
-    definition = await deps.get_knowledge_base_definition_store().get(
-        instance.definition_id
-    )
-    if definition is None:
-        raise UnknownDefinition(
-            f"No definition published as {instance.definition_id!r}"
-        )
-    values = validate_instance_configuration(
-        definition.configuration_fields,
-        _carry_secrets_forward(
-            definition.configuration_fields, submitted=configuration, stored=instance
-        ),
-    )
-
-    client = await deps.get_temporal_client()
-    # Register rather than update: it creates or aligns, so an instance whose
-    # schedule has gone missing is repaired by the next edit instead of failing
-    # every one of them for ever.
-    await register_cadence(
-        client,
-        deps.configuration.scheduler.temporal,
-        instance_id=instance_id,
-        definition_id=instance.definition_id,
-        team_id=instance.team_id,
-        cadence=cadence,
-        suspended=suspended,
-        max_attempts=deps.configuration.knowledge_bases.run_max_attempts,
-    )
-    updated = await deps.get_knowledge_base_instance_store().update(
-        instance_id,
-        cadence=cadence.value,
-        suspended=suspended,
-        configuration=values,
-    )
-    if updated is None:  # pragma: no cover - read under the same request
-        raise KnowledgeBaseInstanceNotFound(instance_id)
-    return updated
-
-
 async def delete_instance(
     *,
     user: KeycloakUser,
@@ -312,12 +225,10 @@ async def delete_instance(
 
     # The account recorded when the grant was written, not whatever the
     # definition names today: a republication can move a definition onto a new
-    # service account, and deleting the relation that exists is the only way to
-    # leave none behind.
-    if instance.granted_subject:
-        await deps.team_dependencies.rebac.delete_relation(
-            knowledge_base_library_grant(instance.granted_subject, instance.library_id)
-        )
+    # service account, and only deleting the relation that exists leaves none.
+    await deps.team_dependencies.rebac.delete_relation(
+        knowledge_base_library_grant(instance.granted_subject, instance.library_id)
+    )
 
     await deps.get_knowledge_base_instance_store().delete(instance_id)
 
@@ -339,16 +250,15 @@ async def read_instance(
 def displayable_configuration(
     instance: KnowledgeBaseInstance, declared: list[Any]
 ) -> dict[str, TuningValue]:
-    """The instance's configuration with every secret-declared value removed.
+    """The instance's configuration with every value it may not show removed.
 
-    A read meant for display never carries one back: the form shows an empty
-    secret field, and leaving it empty keeps what is stored.
+    Withheld by union, not by the current declaration alone: a republication
+    that drops a secret field, or retypes it to a plain string, would otherwise
+    turn a value the team typed in confidence into a readable one.
     """
-    secrets = {field.key for field in declared if str(field.type) == "secret"}
+    showable = {field.key for field in declared if str(field.type) != "secret"}
     return {
-        key: value
-        for key, value in instance.configuration.items()
-        if key not in secrets
+        key: value for key, value in instance.configuration.items() if key in showable
     }
 
 
@@ -367,33 +277,18 @@ async def require_team_member(*, user: KeycloakUser, team_id: str, deps: Any) ->
 
     Instances are not authorization objects of their own: the definition is
     (that is what enablement grants), and everything an instance holds belongs
-    to the team that created it.
+    to the team that created it. Membership is asked for by the Knowledge Base
+    permission rather than CAN_READ, which a PUBLIC team grants to everyone.
     """
     from fred_core.security.rebac.rebac_engine import TeamPermission
 
     try:
         await deps.team_dependencies.rebac.check_user_team_permission_or_raise(
             user=user,
-            permission=TeamPermission.CAN_READ,
+            permission=TeamPermission.CAN_USE_TEAM_KNOWLEDGE_BASES,
             team_id=team_id,
         )
     except AuthorizationError:
         # Not found rather than forbidden: whether a team holds an instance is
         # itself the team's business.
         raise KnowledgeBaseInstanceNotFound(team_id) from None
-
-
-__all__ = [
-    "InstanceConfigurationInvalid",
-    "KnowledgeBaseInstanceNotFound",
-    "KnowledgeBaseNotEnabled",
-    "KnowledgeBasePodIdentityMissing",
-    "UnknownDefinition",
-    "create_instance",
-    "require_team_member",
-    "delete_instance",
-    "displayable_configuration",
-    "list_instances",
-    "read_instance",
-    "update_instance",
-]

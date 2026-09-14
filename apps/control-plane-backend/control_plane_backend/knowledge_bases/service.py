@@ -29,10 +29,18 @@ import logging
 from typing import Any
 
 from fred_core import KeycloakUser, prefix_covers
-from fred_core.security.rebac.knowledge_base_authz import can_team_use_knowledge_base
+from fred_core.security.rebac.knowledge_base_authz import (
+    can_team_use_knowledge_base,
+    usable_knowledge_base_ids,
+)
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 from fred_sdk.knowledge_base import KnowledgeBaseDeclaration
-from fred_sdk.knowledge_base.schedule import RunCadence, platform_fields
+from fred_sdk.knowledge_base.schedule import (
+    CADENCE_KEY,
+    SUSPENDED_KEY,
+    RunCadence,
+    platform_fields,
+)
 
 from control_plane_backend.knowledge_bases.instances import (
     KnowledgeBaseNotEnabled,
@@ -43,17 +51,13 @@ from control_plane_backend.knowledge_bases.instances import (
     list_instances,
     read_instance,
     require_team_member,
-    update_instance,
 )
-from control_plane_backend.knowledge_bases.runs import list_runs
 from control_plane_backend.knowledge_bases.schemas import (
     KnowledgeBaseDefinitionChoice,
     KnowledgeBaseInstanceCreate,
     KnowledgeBaseInstanceFields,
     KnowledgeBaseInstanceSummary,
-    KnowledgeBaseInstanceUpdate,
     KnowledgeBasePublicationResult,
-    KnowledgeBaseRunSummary,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
@@ -139,8 +143,11 @@ async def definitions_a_team_may_use(
     enabled for.
     """
     await require_team_member(user=user, team_id=team_id, deps=deps)
-    rebac = deps.team_dependencies.rebac
     published = await deps.get_knowledge_base_definition_store().list_all()
+    # One question for the whole list, never one per definition: asking per row
+    # is what makes a listing's latency grow with the catalog. `None` is the
+    # disabled-engine signal, and means every published definition is offered.
+    usable = await usable_knowledge_base_ids(deps.team_dependencies.rebac, team_id)
     return [
         KnowledgeBaseDefinitionChoice(
             definition_id=definition.id,
@@ -148,9 +155,7 @@ async def definitions_a_team_may_use(
             description=definition.description,
         )
         for definition in published
-        if await can_team_use_knowledge_base(
-            rebac, team_id, definition_id=definition.id
-        )
+        if usable is None or definition.id in usable
     ]
 
 
@@ -163,17 +168,19 @@ async def definition_fields(
     the definition's pod is running: a declaration says what an image expects,
     never that anything is up.
     """
-    definition = await deps.get_knowledge_base_definition_store().get(definition_id)
-    if definition is None:
-        raise UnknownDefinition(f"No definition published as {definition_id!r}")
+    # Authorized before the definition is read: answering "no such definition"
+    # to someone with no right to the team tells them which ids exist.
     await require_team_member(user=user, team_id=team_id, deps=deps)
     if not await can_team_use_knowledge_base(
         deps.team_dependencies.rebac, team_id, definition_id=definition_id
     ):
         raise KnowledgeBaseNotEnabled(f"{definition_id!r} is not enabled for this team")
+    definition = await deps.get_knowledge_base_definition_store().get(definition_id)
+    if definition is None:
+        raise UnknownDefinition(f"No definition published as {definition_id!r}")
     return KnowledgeBaseInstanceFields(
-        definition_id=definition.id,
-        definition_name=definition.name,
+        cadence_key=CADENCE_KEY,
+        suspended_key=SUSPENDED_KEY,
         platform_fields=platform_fields(),
         configuration_fields=definition.configuration_fields,
     )
@@ -225,24 +232,6 @@ async def list_instances_for_team(
     ]
 
 
-async def update_instance_for_team(
-    *,
-    user: KeycloakUser,
-    instance_id: str,
-    body: KnowledgeBaseInstanceUpdate,
-    deps: Any,
-) -> KnowledgeBaseInstanceSummary:
-    instance = await update_instance(
-        user=user,
-        instance_id=instance_id,
-        cadence=body.cadence,
-        suspended=body.suspended,
-        configuration=body.configuration,
-        deps=deps,
-    )
-    return await _summarize(instance, deps=deps)
-
-
 async def delete_instance_for_team(
     *, user: KeycloakUser, authorization: str, instance_id: str, deps: Any
 ) -> None:
@@ -252,17 +241,6 @@ async def delete_instance_for_team(
         instance_id=instance_id,
         deps=deps,
     )
-
-
-async def list_runs_for_team(
-    *, user: KeycloakUser, instance_id: str, deps: Any
-) -> list[KnowledgeBaseRunSummary]:
-    """Runs of one instance, for a member of its own team and nobody else."""
-    instance = await read_instance(user=user, instance_id=instance_id, deps=deps)
-    return [
-        KnowledgeBaseRunSummary(run_id=run_id, state=state, started_at=started_at)
-        for run_id, state, started_at in await list_runs(instance=instance, deps=deps)
-    ]
 
 
 async def _summarize(instance: Any, *, deps: Any) -> KnowledgeBaseInstanceSummary:

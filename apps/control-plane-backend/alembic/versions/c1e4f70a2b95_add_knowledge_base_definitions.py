@@ -37,6 +37,18 @@ def upgrade() -> None:
                 "later publication under it is checked against this value."
             ),
         ),
+        sa.Column(
+            "subject",
+            sa.String(length=255),
+            nullable=False,
+            comment=(
+                "Service account the claiming client authenticates as (`sub`). "
+                "A prefix is bound to the client, but only this identity can be "
+                "named as a relation's subject, so creating an instance reads it "
+                "here instead of asking Keycloak's admin API which account backs "
+                "a client."
+            ),
+        ),
         sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("prefix"),
     )

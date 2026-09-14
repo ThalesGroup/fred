@@ -40,10 +40,8 @@ from pydantic import ValidationError
 from control_plane_backend.app.route_errors import map_error as _map_error
 from control_plane_backend.knowledge_bases import service as knowledge_base_service
 from control_plane_backend.knowledge_bases.instances import (
-    InstanceConfigurationInvalid,
     KnowledgeBaseInstanceNotFound,
     KnowledgeBaseNotEnabled,
-    KnowledgeBasePodIdentityMissing,
     UnknownDefinition,
 )
 from control_plane_backend.knowledge_bases.library import LibraryRequestFailed
@@ -57,15 +55,16 @@ from control_plane_backend.knowledge_bases.schemas import (
     KnowledgeBaseInstanceCreate,
     KnowledgeBaseInstanceFields,
     KnowledgeBaseInstanceSummary,
-    KnowledgeBaseInstanceUpdate,
     KnowledgeBasePublicationRequest,
     KnowledgeBasePublicationResult,
-    KnowledgeBaseRunSummary,
 )
 from control_plane_backend.knowledge_bases.service import (
     KnowledgeBaseClientMismatch,
 )
 from control_plane_backend.knowledge_bases.store import KnowledgeBasePrefixConflict
+from control_plane_backend.knowledge_bases.validation import (
+    InstanceConfigurationInvalid,
+)
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
@@ -80,7 +79,6 @@ _INSTANCE_ERRORS = (
     InstanceConfigurationInvalid,
     KnowledgeBaseInstanceNotFound,
     KnowledgeBaseNotEnabled,
-    KnowledgeBasePodIdentityMissing,
     LibraryRequestFailed,
     UnknownDefinition,
 )
@@ -246,25 +244,6 @@ async def get_knowledge_base_instance(
         raise _map_error(exc) from exc
 
 
-@router.put(
-    "/knowledge-bases/instances/{instance_id}",
-    response_model=KnowledgeBaseInstanceSummary,
-    summary="Change when a synchronized folder runs, and with what.",
-)
-async def update_knowledge_base_instance(
-    instance_id: str,
-    body: KnowledgeBaseInstanceUpdate,
-    deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
-) -> KnowledgeBaseInstanceSummary:
-    try:
-        return await knowledge_base_service.update_instance_for_team(
-            user=user, instance_id=instance_id, body=body, deps=deps
-        )
-    except _INSTANCE_ERRORS as exc:
-        raise _map_error(exc) from exc
-
-
 @router.delete(
     "/knowledge-bases/instances/{instance_id}",
     status_code=204,
@@ -290,24 +269,6 @@ async def delete_knowledge_base_instance(
 
 
 @router.get(
-    "/knowledge-bases/instances/{instance_id}/runs",
-    response_model=list[KnowledgeBaseRunSummary],
-    summary="Runs of one synchronized folder, with the state the engine reports.",
-)
-async def list_knowledge_base_runs(
-    instance_id: str,
-    deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
-) -> list[KnowledgeBaseRunSummary]:
-    try:
-        return await knowledge_base_service.list_runs_for_team(
-            user=user, instance_id=instance_id, deps=deps
-        )
-    except _INSTANCE_ERRORS as exc:
-        raise _map_error(exc) from exc
-
-
-@router.get(
     "/knowledge-bases/definitions/{definition_id}/instances/{instance_id}"
     "/runs/{run_id}/context",
     response_model=KnowledgeBaseRunContext,
@@ -317,7 +278,6 @@ async def get_knowledge_base_run_context(
     definition_id: str,
     instance_id: str,
     run_id: str,
-    execution_id: Annotated[str, Query(min_length=1)],
     deps: ProductDependencies,
     # Not `get_current_user`: the caller is a confidential client with no user
     # row, so persisted GCU acceptance would refuse it for ever.
@@ -331,7 +291,6 @@ async def get_knowledge_base_run_context(
             definition_id=definition_id,
             instance_id=instance_id,
             run_id=run_id,
-            execution_id=execution_id,
             deps=deps,
         )
     except (InstanceConfigurationInvalid, RunAccessDenied, RunNotFound) as exc:

@@ -11,6 +11,7 @@ at its own boundary, and what is asserted is the order, the undo and the scope.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -21,19 +22,15 @@ from control_plane_backend.knowledge_bases import instances as instances_module
 from control_plane_backend.knowledge_bases.instances import (
     KnowledgeBaseInstanceNotFound,
     KnowledgeBaseNotEnabled,
-    KnowledgeBasePodIdentityMissing,
     create_instance,
     delete_instance,
     displayable_configuration,
     list_instances,
-    update_instance,
 )
 from control_plane_backend.knowledge_bases.runs import (
     RunAccessDenied,
     RunNotFound,
-    RunState,
     build_run_context,
-    resolve_run_state,
 )
 from control_plane_backend.knowledge_bases.validation import (
     InstanceConfigurationInvalid,
@@ -43,7 +40,7 @@ from fred_core.security.models import AuthorizationError
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base.schedule import RunCadence
-from temporalio.client import ScheduleAlreadyRunningError, WorkflowExecutionStatus
+from temporalio.client import ScheduleAlreadyRunningError
 from temporalio.service import RPCError, RPCStatusCode
 
 DEFINITION = "acme.kb.http-markdown"
@@ -67,10 +64,12 @@ class _FakeRebac:
         *,
         usable: Iterable[tuple[str, str]] = (),
         members: Iterable[str] = (),
+        public: Iterable[str] = (),
     ) -> None:
         self.relations: set[tuple[str, str, str]] = set()
         self._usable = set(usable)
         self._members = set(members)
+        self._public = set(public)
         self.add_failures = 0
 
     @staticmethod
@@ -97,9 +96,15 @@ class _FakeRebac:
         self.relations.discard(self._key(relation))
 
     async def check_user_team_permission_or_raise(self, *, user, permission, team_id):
-        del permission
+        asked = str(getattr(permission, "value", permission))
+        # `can_read` is the one permission a PUBLIC team hands to every signed-in
+        # user, through the `public: [user:*]` wildcard. Modelling membership as
+        # a plain set would hide that, and hide any guard that reached for the
+        # wrong permission with it.
+        if asked == "can_read" and team_id in self._public:
+            return
         if team_id not in self._members:
-            raise AuthorizationError(user.uid, "can_read", Resource.TEAM)
+            raise AuthorizationError(user.uid, asked, Resource.TEAM)
 
     def may_write_in(self, library_id: str) -> bool:
         """What `tag#update` resolves to for the pod: a direct editor statement."""
@@ -112,7 +117,7 @@ class _FakeRebac:
 
 class _FakeDefinition:
     def __init__(
-        self, definition_id: str, *, subject: str | None, fields: list[FieldSpec]
+        self, definition_id: str, *, subject: str, fields: list[FieldSpec]
     ) -> None:
         self.id = definition_id
         self.name = "HTTP Markdown"
@@ -135,7 +140,7 @@ class _FakeDefinitionStore:
 class _StoredInstance:
     id: str
     team_id: str
-    granted_subject: str | None
+    granted_subject: str
 
     def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
@@ -146,7 +151,6 @@ class _StoredInstance:
 class _FakeInstanceStore:
     def __init__(self, *, fail_create: bool = False) -> None:
         self.rows: dict[str, Any] = {}
-        self.runs: dict[str, Any] = {}
         self.fail_create = fail_create
 
     async def create(self, **kwargs: Any) -> Any:
@@ -173,31 +177,8 @@ class _FakeInstanceStore:
     async def list_for_team(self, team_id: str) -> list[Any]:
         return [row for row in self.rows.values() if row.team_id == team_id]
 
-    async def update(self, instance_id: str, *, cadence, suspended, configuration):
-        row = self.rows.get(instance_id)
-        if row is None:
-            return None
-        row.cadence, row.suspended, row.configuration = (
-            cadence,
-            suspended,
-            configuration,
-        )
-        return row
-
     async def delete(self, instance_id: str) -> bool:
         return self.rows.pop(instance_id, None) is not None
-
-    async def record_run(self, *, run_id, instance_id, execution_id):
-        self.runs[run_id] = SimpleNamespace(
-            run_id=run_id,
-            instance_id=instance_id,
-            execution_id=execution_id,
-            started_at=datetime.now(timezone.utc),
-        )
-        return self.runs[run_id]
-
-    async def list_runs(self, instance_id: str, limit: int = 50):
-        return [r for r in self.runs.values() if r.instance_id == instance_id][:limit]
 
 
 class _FakeLibraryClient:
@@ -239,7 +220,11 @@ class _FakeScheduleHandle:
         del self._client.schedules[self._id]
 
     async def update(self, updater) -> None:
-        update = await updater(SimpleNamespace(description=None))
+        # The real client accepts a plain or an async callback, so the fake has
+        # to as well, or it only ever exercises one of the two.
+        update = updater(SimpleNamespace(description=None))
+        if inspect.isawaitable(update):
+            update = await update
         self._client.schedules[self._id] = update.schedule
 
 
@@ -472,19 +457,6 @@ async def test_deleting_a_folder_leaves_no_grant_and_no_cadence():
     assert deps.instances.rows == {}
 
 
-@pytest.mark.asyncio
-async def test_a_definition_with_no_recorded_account_is_refused():
-    """Creating the folder anyway would hand a team a library nothing can fill."""
-    deps = _deps(
-        definitions=[_FakeDefinition(DEFINITION, subject=None, fields=_fields())]
-    )
-
-    with pytest.raises(KnowledgeBasePodIdentityMissing):
-        await _create(deps)
-
-    assert _FakeLibraryClient.created == {}
-
-
 # --------------------------------------------------------------------------
 # 3.1 — instances exist only where the definition is enabled
 # --------------------------------------------------------------------------
@@ -504,16 +476,8 @@ async def test_creating_an_instance_is_refused_while_the_definition_is_not_enabl
 async def test_two_instances_coexist_independently():
     deps = _deps()
 
-    first = await _create(deps, folder_name="First")
+    await _create(deps, folder_name="First", cadence=RunCadence.weekly, suspended=True)
     await _create(deps, folder_name="Second")
-    await update_instance(
-        user=_user(),
-        instance_id=first.id,
-        cadence=RunCadence.weekly,
-        suspended=True,
-        configuration={"base_url": "https://changed.test"},
-        deps=deps,
-    )
 
     listed = {
         row.library_name: row
@@ -542,7 +506,31 @@ async def test_an_instance_is_bound_to_its_creating_team():
 
 
 @pytest.mark.asyncio
-async def test_a_non_member_cannot_read_update_delete_or_list():
+async def test_a_public_team_does_not_hand_its_knowledge_bases_to_everyone():
+    """A PUBLIC team is discoverable, not readable.
+
+    `can_read` is satisfied by the `public: [user:*]` wildcard, so guarding a
+    Knowledge Base with it would show every signed-in user which sources a team
+    synchronizes and what those sources declare — including which of their
+    fields are secret.
+    """
+    deps = _deps(
+        rebac=_FakeRebac(usable={(TEAM, DEFINITION)}, members={TEAM}, public={TEAM})
+    )
+    instance = await _create(deps)
+    stranger = _user("mallory")
+    deps.team_dependencies.rebac._members = set()  # noqa: SLF001
+
+    with pytest.raises(KnowledgeBaseInstanceNotFound):
+        await instances_module.read_instance(
+            user=stranger, instance_id=instance.id, deps=deps
+        )
+    with pytest.raises(KnowledgeBaseInstanceNotFound):
+        await list_instances(user=stranger, team_id=TEAM, deps=deps)
+
+
+@pytest.mark.asyncio
+async def test_a_non_member_cannot_read_delete_or_list():
     deps = _deps()
     instance = await _create(deps)
     stranger = _user("mallory")
@@ -556,16 +544,6 @@ async def test_a_non_member_cannot_read_update_delete_or_list():
     await _as_stranger(
         instances_module.read_instance(
             user=stranger, instance_id=instance.id, deps=deps
-        )
-    )
-    await _as_stranger(
-        update_instance(
-            user=stranger,
-            instance_id=instance.id,
-            cadence=RunCadence.daily,
-            suspended=False,
-            configuration={"base_url": "https://x.test"},
-            deps=deps,
         )
     )
     await _as_stranger(
@@ -620,7 +598,6 @@ async def test_a_secret_is_stored_and_handed_to_the_pod_but_never_displayed():
         definition_id=DEFINITION,
         instance_id=instance.id,
         run_id="run-1",
-        execution_id="cp-kb-x",
         deps=deps,
     )
 
@@ -648,7 +625,6 @@ async def test_the_same_validator_refuses_a_stored_configuration_gone_stale():
             definition_id=DEFINITION,
             instance_id=instance.id,
             run_id="run-1",
-            execution_id="cp-kb-x",
             deps=deps,
         )
 
@@ -670,7 +646,6 @@ async def test_a_run_context_carries_the_library_the_pod_must_fill():
         definition_id=DEFINITION,
         instance_id=instance.id,
         run_id="run-1",
-        execution_id="cp-kb-1",
         deps=deps,
     )
 
@@ -690,7 +665,6 @@ async def test_another_definitions_client_is_refused():
             definition_id=DEFINITION,
             instance_id=instance.id,
             run_id="run-1",
-            execution_id="cp-kb-1",
             deps=deps,
         )
 
@@ -710,7 +684,6 @@ async def test_a_broad_service_role_alone_does_not_authorize():
             definition_id=DEFINITION,
             instance_id=instance.id,
             run_id="run-1",
-            execution_id="cp-kb-1",
             deps=deps,
         )
 
@@ -731,90 +704,12 @@ async def test_an_instance_of_another_definition_is_not_this_pods_to_read():
             definition_id=OTHER_DEFINITION,
             instance_id=instance.id,
             run_id="run-1",
-            execution_id="cp-kb-1",
             deps=deps,
         )
 
 
 # --------------------------------------------------------------------------
 # 4.5 — the run's state comes from the engine, never from the pod
-# --------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("status", "result", "expected"),
-    [
-        (WorkflowExecutionStatus.COMPLETED, "succeeded", RunState.succeeded),
-        (WorkflowExecutionStatus.COMPLETED, "failed", RunState.failed),
-        (WorkflowExecutionStatus.COMPLETED, "cancelled", RunState.cancelled),
-        (WorkflowExecutionStatus.FAILED, None, RunState.failed),
-        (WorkflowExecutionStatus.TIMED_OUT, None, RunState.failed),
-        (WorkflowExecutionStatus.TERMINATED, None, RunState.failed),
-        (WorkflowExecutionStatus.CANCELED, None, RunState.cancelled),
-        (WorkflowExecutionStatus.RUNNING, None, RunState.running),
-    ],
-)
-async def test_the_engine_decides_what_a_run_did(status, result, expected):
-    temporal = _FakeTemporal()
-    temporal.workflows["run-1"] = _FakeWorkflowHandle(status, result)
-
-    state = await resolve_run_state(
-        client=temporal, execution_id="cp-kb-1", run_id="run-1"
-    )
-
-    assert state == expected
-
-
-@pytest.mark.asyncio
-async def test_a_run_whose_pod_never_reported_still_reaches_a_terminal_state():
-    """A killed pod says nothing; the engine says TERMINATED, and that is enough."""
-    temporal = _FakeTemporal()
-    temporal.workflows["run-1"] = _FakeWorkflowHandle(
-        WorkflowExecutionStatus.TERMINATED
-    )
-
-    assert (
-        await resolve_run_state(client=temporal, execution_id="cp-kb-1", run_id="run-1")
-        == RunState.failed
-    )
-
-
-@pytest.mark.asyncio
-async def test_a_run_the_engine_no_longer_holds_is_not_left_running():
-    temporal = _FakeTemporal()
-
-    assert (
-        await resolve_run_state(
-            client=temporal, execution_id="cp-kb-1", run_id="forgotten"
-        )
-        == RunState.failed
-    )
-
-
-@pytest.mark.asyncio
-async def test_asking_for_a_runs_configuration_is_what_makes_fred_know_it():
-    """A scheduled run is started by the engine, so Fred never sees it begin."""
-    deps = _deps()
-    instance = await _create(deps)
-
-    await build_run_context(
-        user=_pod(),
-        definition_id=DEFINITION,
-        instance_id=instance.id,
-        run_id="run-7",
-        execution_id="cp-kb-7",
-        deps=deps,
-    )
-
-    recorded = deps.instances.runs["run-7"]
-    assert (recorded.instance_id, recorded.execution_id) == (instance.id, "cp-kb-7")
-    # And nothing about its state: that is the engine's to answer.
-    assert not hasattr(recorded, "state")
-
-
-# --------------------------------------------------------------------------
-# 3.6 — the cadence, and suspending it
 # --------------------------------------------------------------------------
 
 
@@ -828,25 +723,6 @@ async def test_a_suspended_instance_registers_a_paused_schedule():
 
 
 @pytest.mark.asyncio
-async def test_resuming_an_instance_unpauses_its_schedule():
-    deps = _deps()
-    instance = await _create(deps, suspended=True)
-
-    await update_instance(
-        user=_user(),
-        instance_id=instance.id,
-        cadence=RunCadence.hourly,
-        suspended=False,
-        configuration={"base_url": "https://x.test"},
-        deps=deps,
-    )
-
-    schedule = deps.temporal.schedules[f"cp-kb-{instance.id}"]
-    assert schedule.state.paused is False
-    assert schedule.spec.intervals[0].every.total_seconds() == 3600
-
-
-@pytest.mark.asyncio
 async def test_deleting_an_instance_removes_its_schedule():
     deps = _deps()
     instance = await _create(deps)
@@ -856,37 +732,6 @@ async def test_deleting_an_instance_removes_its_schedule():
     )
 
     assert deps.temporal.schedules == {}
-
-
-@pytest.mark.asyncio
-async def test_a_schedule_change_does_not_touch_a_run_already_in_flight():
-    """A run is a workflow execution of its own; a schedule only says what starts next."""
-    deps = _deps()
-    instance = await _create(deps)
-    deps.temporal.workflows["run-1"] = _FakeWorkflowHandle(
-        WorkflowExecutionStatus.RUNNING
-    )
-
-    await update_instance(
-        user=_user(),
-        instance_id=instance.id,
-        cadence=RunCadence.weekly,
-        suspended=True,
-        configuration={"base_url": "https://x.test"},
-        deps=deps,
-    )
-
-    assert (
-        await resolve_run_state(
-            client=deps.temporal, execution_id=f"cp-kb-{instance.id}", run_id="run-1"
-        )
-        == RunState.running
-    )
-
-
-# --------------------------------------------------------------------------
-# 4.7 — the attempt budget Fred set
-# --------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -923,57 +768,6 @@ def test_the_workflow_bounds_its_activity_with_that_budget():
 # --------------------------------------------------------------------------
 # What an edit and a deletion must not destroy
 # --------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_editing_an_instance_keeps_a_secret_the_form_could_not_show():
-    """A display read never returns a secret, so a round-trip comes back empty.
-
-    Taking that as "cleared" destroys the value on any edit — and refuses the
-    edit outright when the field is required.
-    """
-    deps = _deps()
-    instance = await _create(
-        deps, configuration={"base_url": "https://x.test", "token": "s3cret"}
-    )
-
-    await update_instance(
-        user=_user(),
-        instance_id=instance.id,
-        cadence=RunCadence.weekly,
-        suspended=False,
-        configuration={"base_url": "https://x.test"},
-        deps=deps,
-    )
-
-    context = await build_run_context(
-        user=_pod(),
-        definition_id=DEFINITION,
-        instance_id=instance.id,
-        run_id="run-1",
-        execution_id="cp-kb-1",
-        deps=deps,
-    )
-    assert context.configuration["token"] == "s3cret"
-
-
-@pytest.mark.asyncio
-async def test_a_secret_can_still_be_replaced():
-    deps = _deps()
-    instance = await _create(
-        deps, configuration={"base_url": "https://x.test", "token": "old"}
-    )
-
-    await update_instance(
-        user=_user(),
-        instance_id=instance.id,
-        cadence=RunCadence.daily,
-        suspended=False,
-        configuration={"base_url": "https://x.test", "token": "new"},
-        deps=deps,
-    )
-
-    assert deps.instances.rows[instance.id].configuration["token"] == "new"
 
 
 @pytest.mark.asyncio
@@ -1015,25 +809,6 @@ async def test_deletion_removes_the_grant_that_was_made_not_the_one_named_today(
     )
 
     assert deps.team_dependencies.rebac.relations == set()
-
-
-@pytest.mark.asyncio
-async def test_an_edit_repairs_a_schedule_that_went_missing():
-    """Otherwise every later edit of that instance fails for ever."""
-    deps = _deps()
-    instance = await _create(deps)
-    deps.temporal.schedules.clear()
-
-    await update_instance(
-        user=_user(),
-        instance_id=instance.id,
-        cadence=RunCadence.hourly,
-        suspended=False,
-        configuration={"base_url": "https://x.test"},
-        deps=deps,
-    )
-
-    assert f"cp-kb-{instance.id}" in deps.temporal.schedules
 
 
 @pytest.mark.asyncio

@@ -39,15 +39,13 @@ class KnowledgeBasePrefixRow(Base):
         comment="Confidential M2M client that claimed this prefix first. Every "
         "later publication under it is checked against this value.",
     )
-    subject: Mapped[str | None] = mapped_column(
+    subject: Mapped[str] = mapped_column(
         String(255),
-        nullable=True,
+        nullable=False,
         comment="Service account the claiming client authenticates as (`sub`). "
-        "The client is what a prefix is bound to; this is the only one of the "
-        "two the authorization engine can be told to grant, so creating an "
-        "instance reads it here instead of asking Keycloak's admin API which "
-        "account backs a client. Nullable for prefixes claimed before it was "
-        "recorded; the next publication fills it in.",
+        "A prefix is bound to the client, but only this identity can be named as "
+        "a relation's subject, so creating an instance reads it here instead of "
+        "asking Keycloak's admin API which account backs a client.",
     )
     claimed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -143,9 +141,9 @@ class KnowledgeBaseInstanceRow(Base):
         "Validated on write and again before a handler is invoked; never "
         "interpreted, and handed back to the pod exactly as supplied.",
     )
-    granted_subject: Mapped[str | None] = mapped_column(
+    granted_subject: Mapped[str] = mapped_column(
         String(255),
-        nullable=True,
+        nullable=False,
         comment="Service account this instance's library was granted to. Kept "
         "here rather than read back from the definition: a republication can "
         "move a definition onto a new account, and deleting the relation that "
@@ -157,33 +155,4 @@ class KnowledgeBaseInstanceRow(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
-    )
-
-
-class KnowledgeBaseRunRow(Base):
-    """ORM model for the ``knowledge_base_runs`` table.
-
-    What Fred remembers of a run so it can find it again: which instance it
-    belongs to and which workflow execution carries it. Deliberately NOT its
-    state — that is read from the workflow engine, which is the side Fred runs
-    and the only one a killed pod cannot leave wrong.
-    """
-
-    __tablename__ = "knowledge_base_runs"
-
-    run_id: Mapped[str] = mapped_column(String(255), primary_key=True)
-    instance_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("knowledge_base_instances.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    execution_id: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        comment="Workflow id this run belongs to. With run_id it addresses one "
-        "execution in the engine, which is where the run's state is read from.",
-    )
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
     )

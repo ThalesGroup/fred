@@ -1,16 +1,12 @@
-"""add knowledge_base_instances and knowledge_base_runs
+"""add knowledge_base_instances
 
 Revision ID: b6e2f9a04c31
-Revises: a3b8d5c17f42
+Revises: c1e4f70a2b95
 Create Date: 2026-09-13
 
 An instance is a folder that fills itself: the library it fills lives in
 knowledge-flow, and this row is what binds it to the definition that fills it,
 the team that owns it and the cadence Fred runs it on.
-
-A run row records only that a run exists and where the workflow engine holds
-it. Its state is deliberately absent — a stored state would be a copy that goes
-stale the moment a pod is killed, which is the case it would exist to cover.
 """
 
 from typing import Sequence, Union
@@ -19,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "b6e2f9a04c31"  # pragma: allowlist secret
-down_revision: Union[str, None] = "a3b8d5c17f42"  # pragma: allowlist secret
+down_revision: Union[str, None] = "c1e4f70a2b95"  # pragma: allowlist secret
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -64,7 +60,7 @@ def upgrade() -> None:
         sa.Column(
             "granted_subject",
             sa.String(length=255),
-            nullable=True,
+            nullable=False,
             comment=(
                 "Service account this instance's library was granted to. Kept "
                 "here rather than read back from the definition: a "
@@ -91,38 +87,8 @@ def upgrade() -> None:
         ["team_id"],
     )
 
-    op.create_table(
-        "knowledge_base_runs",
-        sa.Column("run_id", sa.String(length=255), nullable=False),
-        sa.Column("instance_id", sa.String(length=64), nullable=False),
-        sa.Column(
-            "execution_id",
-            sa.String(length=255),
-            nullable=False,
-            comment=(
-                "Workflow id this run belongs to. With run_id it addresses one "
-                "execution in the engine, which is where the run's state is "
-                "read from."
-            ),
-        ),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["instance_id"], ["knowledge_base_instances.id"], ondelete="CASCADE"
-        ),
-        sa.PrimaryKeyConstraint("run_id"),
-    )
-    op.create_index(
-        op.f("ix_knowledge_base_runs_instance_id"),
-        "knowledge_base_runs",
-        ["instance_id"],
-    )
-
 
 def downgrade() -> None:
-    op.drop_index(
-        op.f("ix_knowledge_base_runs_instance_id"), table_name="knowledge_base_runs"
-    )
-    op.drop_table("knowledge_base_runs")
     op.drop_index(
         op.f("ix_knowledge_base_instances_team_id"),
         table_name="knowledge_base_instances",
