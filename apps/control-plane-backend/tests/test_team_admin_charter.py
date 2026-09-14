@@ -388,8 +388,7 @@ async def test_store_keeps_the_first_acceptance_and_every_version(
     try:
         async with engine.begin() as connection:
             await connection.run_sync(
-                Base.metadata.create_all,
-                tables=[TeamAdminCharterAcceptanceRow.__table__],
+                Base.metadata.tables[TeamAdminCharterAcceptanceRow.__tablename__].create
             )
         store = TeamAdminCharterStore(engine)
 

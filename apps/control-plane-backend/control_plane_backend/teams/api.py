@@ -47,10 +47,10 @@ from control_plane_backend.teams.service import (
     get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
 )
 from control_plane_backend.teams.service import (
-    get_team_by_id as get_team_by_id_from_service,
+    get_team_admin_charter_status as get_team_admin_charter_status_from_service,
 )
 from control_plane_backend.teams.service import (
-    get_team_admin_charter_status as get_team_admin_charter_status_from_service,
+    get_team_by_id as get_team_by_id_from_service,
 )
 from control_plane_backend.teams.service import (
     grant_team_member_role as grant_team_member_role_from_service,
