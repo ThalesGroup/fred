@@ -87,7 +87,7 @@ def _restyle_theme(presentation) -> None:
         node = root.find(f".//{qn(tag)}/{qn('a:latin')}")
         if node is not None:
             node.set("typeface", _FONT)
-    theme_part._blob = etree.tostring(  # pyright: ignore[reportAttributeAccessIssue]
+    theme_part.blob = etree.tostring(
         root, xml_declaration=True, encoding="UTF-8", standalone=True
     )
 

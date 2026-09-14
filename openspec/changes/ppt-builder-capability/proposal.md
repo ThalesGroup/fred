@@ -5,7 +5,7 @@ Teams want an agent that produces a PowerPoint deck from a few instructions, on 
 ## What Changes
 
 - A second capability, `ppt_builder`, shipped in the existing `fred-capability-ppt-filler` package (same pod install, same preview and delivery machinery). `ppt_filler` is unchanged.
-- **Template analysis with zero annotation.** On upload, the capability inventories every usable *pattern* of the template: master layouts (classified from their typed placeholders) and example slides from the deck body (typed placeholders kept from their layout, free text boxes classified by geometry, typography and sample text, repeated sibling groups detected as lists). Decoration, shared footers and logos are never touched. Slides with nothing to fill are *fixed* slides the agent can include as-is; resource slides (icon banks, charts, tables) are excluded by default.
+- **Template analysis with zero annotation.** On upload, the capability inventories every usable _pattern_ of the template: master layouts (classified from their typed placeholders) and example slides from the deck body (typed placeholders kept from their layout, free text boxes classified by geometry, typography and sample text, repeated sibling groups detected as lists). Decoration, shared footers and logos are never touched. Slides with nothing to fill are _fixed_ slides the agent can include as-is; resource slides (icon banks, charts, tables) are excluded by default.
 - **Closed intent vocabulary.** Every pattern maps to one intent (`title`, `section`, `agenda`, `content`, `two_columns`, `comparison`, `image_text`, `cards`, `steps`, `statement`, `contact`, `fixed`), with graceful degradation when a plan asks for an intent the template lacks.
 - **Optional author review.** A config widget shows the inventory as a confirmation surface: thumbnails, detected intent, detected fields; the author can relabel a pattern, change its intent, exclude it, or change a zone's role. Nothing is mandatory — upload, read the summary, save is the nominal path. Only the analysis result and the author's overrides are persisted, never the template bytes.
 - **Optional annotation channels** honoured when present: shape names set in PowerPoint's Selection pane, speaker-notes descriptions. Neither is required.
@@ -17,9 +17,11 @@ Teams want an agent that produces a PowerPoint deck from a few instructions, on 
 ## Capabilities
 
 ### New Capabilities
+
 - `ppt-builder`: generating a PowerPoint deck from a chat plan on an analysed corporate template or the built-in theme — template analysis, author review, plan rendering and delivery.
 
 ### Modified Capabilities
+
 - none — `ppt_filler` keeps its contract; the preview chat part and side pane are reused, not changed.
 
 ## Impact

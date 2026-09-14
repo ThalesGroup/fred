@@ -183,6 +183,33 @@ def test_example_slide_of_an_existing_intent_is_preferred(showcase):
     assert not agenda.preferred
 
 
+def test_example_slide_placeholders_inherit_their_font_size(showcase):
+    agenda = _slide(showcase, "Agenda")
+    title = next(z for z in agenda.zones if z.role == "title")
+    # Inherited from the master title style (44 pt in the default template),
+    # so the capacity the catalogue quotes is the real one.
+    assert title.font_pt == 44
+    assert title.max_chars and title.max_chars < 40
+
+
+def test_notes_without_body_placeholder_do_not_abort_the_analysis(showcase):
+    silent = _slide(showcase, "Silent notes")
+    assert silent.intent == "content"
+
+
+def test_two_sibling_groups_are_columns_not_a_list(showcase):
+    two = _slide(showcase, "Two columns")
+    assert two.groups == []
+    assert two.intent == "comparison"
+    assert sorted(z.role for z in two.zones) == [
+        "body",
+        "body",
+        "heading",
+        "heading",
+        "title",
+    ]
+
+
 def test_summary_counts(showcase):
     summary = showcase.summary()
     assert summary.layouts == 11

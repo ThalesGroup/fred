@@ -257,6 +257,56 @@ def add_big_picture_slide(presentation):
     return slide
 
 
+def add_scaled_kpi_slide(presentation):
+    """KPI cards whose groups were resized after authoring (ext = chExt / 2),
+    the first label box narrower than its siblings."""
+    slide = _titled(presentation, "Scaled figures")
+    for index in range(3):
+        group = slide.shapes.add_group_shape()
+        x = 0.5 + index * 3.0
+        _textbox(group.shapes, x, 2.0, 1.6, 1.0, f"{10 + index}%", FONT_NUMBER)
+        _textbox(
+            group.shapes,
+            x,
+            3.2,
+            0.7 if index == 0 else 1.6,
+            0.35,
+            f"KPI #{index + 1}",
+            FONT_BODY,
+        )
+        # Shrink the group's placement without touching its child space.
+        group.width = int(group.width / 2)
+        group.height = int(group.height / 2)
+    return slide
+
+
+def add_notes_without_body_slide(presentation):
+    """A notes slide whose body placeholder was deleted (no text frame)."""
+    slide = _titled(presentation, "Silent notes")
+    _textbox(
+        slide.shapes, 0.5, 1.5, 8.0, 3.0, "Cliquez ici pour ajouter du texte", Pt(18)
+    )
+    notes = slide.notes_slide
+    for shape in list(notes.placeholders):
+        if (
+            shape.placeholder_format.type is not None
+            and shape.placeholder_format.type.name == "BODY"
+        ):
+            shape._element.getparent().remove(shape._element)
+    return slide
+
+
+def add_two_group_columns_slide(presentation):
+    """Two grouped columns (heading + body): two siblings, not a list."""
+    slide = _titled(presentation, "Two columns")
+    for index in range(2):
+        group = slide.shapes.add_group_shape()
+        x = 0.5 + index * 4.6
+        _textbox(group.shapes, x, 1.6, 4.0, 0.5, "Changez ce titre", FONT_HEADING)
+        _textbox(group.shapes, x, 2.3, 4.0, 3.5, "Changez ce texte", FONT_BODY)
+    return slide
+
+
 def build_showcase_template() -> bytes:
     presentation = Presentation()
     add_agenda_slide(presentation)
@@ -271,6 +321,9 @@ def build_showcase_template() -> bytes:
     add_divider_slide(presentation)
     add_pure_instance_slide(presentation)
     add_big_picture_slide(presentation)
+    add_scaled_kpi_slide(presentation)
+    add_notes_without_body_slide(presentation)
+    add_two_group_columns_slide(presentation)
     return _save(presentation)
 
 

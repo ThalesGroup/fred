@@ -293,7 +293,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
 class PptBuilderCapability(
     AgentCapability[PptBuilderConfig, PptBuilderConfig, EmptyModel]
 ):
-    """Generate a presentation from a chat plan (issue #2679; see the module docstring)."""
+    """Generate a presentation from a chat plan (see the module docstring)."""
 
     manifest = CapabilityManifest(
         id=PPT_BUILDER_CAPABILITY_ID,

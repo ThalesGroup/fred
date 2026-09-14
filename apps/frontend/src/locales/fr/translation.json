@@ -410,7 +410,8 @@
         "uploadSuccessToast": "Modèle PowerPoint analysé.",
         "summary": "{{patterns}} patrons de slide détectés, {{fixed}} slides fixes, {{excluded}} exclus.",
         "summaryTheme": "Thème intégré : {{patterns}} patrons de slide, {{fixed}} slide fixe.",
-        "review": "Vérifier les patrons"
+        "review": "Vérifier les patrons",
+        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées à l'enregistrement."
       },
       "review": {
         "title": "Patrons de slides",

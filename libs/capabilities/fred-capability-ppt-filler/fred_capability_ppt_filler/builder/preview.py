@@ -38,9 +38,14 @@ def build_patterns_deck(template_bytes: bytes, inventory: TemplateInventory) -> 
     layouts = _all_layouts(presentation)
     slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
     original_ids = list(slides_by_id)
+    blank = layouts[-1] if layouts else None
     for pattern in inventory.patterns:
+        # Page N must stay pattern N for the review: a pattern that cannot be
+        # rendered (uncopyable parts, vanished source) still gets a page.
         if pattern.source == "layout":
             if pattern.source_index >= len(layouts):
+                if blank is not None:
+                    presentation.slides.add_slide(blank)
                 continue
             slide = presentation.slides.add_slide(layouts[pattern.source_index])
             for shape in slide.placeholders:
@@ -58,8 +63,12 @@ def build_patterns_deck(template_bytes: bytes, inventory: TemplateInventory) -> 
                 shape.text_frame.text = zone.role.capitalize() if zone else ""
         else:
             source = slides_by_id.get(int(pattern.id.split(":", 1)[1]))
-            if source is not None:
+            if source is not None and pattern.exclusion_reason != "unsupported_parts":
                 _duplicate_slide(presentation, source)
+            elif source is not None:
+                presentation.slides.add_slide(source.slide_layout)
+            elif blank is not None:
+                presentation.slides.add_slide(blank)
     _remove_slides(presentation, original_ids)
     buffer = io.BytesIO()
     presentation.save(buffer)

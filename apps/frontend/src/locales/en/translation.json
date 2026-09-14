@@ -410,7 +410,8 @@
         "uploadSuccessToast": "PowerPoint template analysed.",
         "summary": "{{patterns}} slide patterns detected, {{fixed}} fixed slides, {{excluded}} excluded.",
         "summaryTheme": "Built-in theme: {{patterns}} slide patterns, {{fixed}} fixed slide.",
-        "review": "Review patterns"
+        "review": "Review patterns",
+        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on save."
       },
       "review": {
         "title": "Slide patterns",

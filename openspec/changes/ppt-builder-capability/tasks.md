@@ -44,6 +44,6 @@
 ## 7. Verification and docs
 
 - [ ] 7.1 End-to-end on the local stack: agent with the reference template, chat "prépare une présentation de 8 slides sur X", preview and download work; then the same agent without template
-- [ ] 7.2 `make code-quality` and `make test` green in `libs/fred-capability-ppt-filler`; `fred-performance-reviewer` on the tool path (per-turn call site)
-- [ ] 7.3 `/code-review` on the branch diff; apply fixes
+- [x] 7.2 `make code-quality` and `make test` green in `libs/fred-capability-ppt-filler`; `fred-performance-reviewer` on the tool path (per-turn call site)
+- [x] 7.3 `/code-review` on the branch diff; apply fixes
 - [x] 7.4 Docs: `COMPONENT-UX.md` (config widget section), `AUTHORING.md` worked-example row, package `README.md`; issue #2679 updated

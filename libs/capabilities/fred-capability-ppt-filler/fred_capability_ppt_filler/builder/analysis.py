@@ -340,7 +340,14 @@ class _Analyzer:
     def run(self) -> TemplateInventory:
         slides = list(self.prs.slides)
         slide_records = [
-            _records(slide.shapes, self.width, self.height) for slide in slides
+            _records(
+                slide.shapes,
+                self.width,
+                self.height,
+                slide.slide_layout,
+                slide.slide_layout.slide_master,
+            )
+            for slide in slides
         ]
         self.shared_texts = self._shared_texts(slide_records)
 
@@ -535,7 +542,8 @@ class _Analyzer:
             pattern, records, layout_name, slide_number=number
         )
         if slide.has_notes_slide:
-            notes = slide.notes_slide.notes_text_frame.text
+            frame = slide.notes_slide.notes_text_frame
+            notes = frame.text if frame is not None else ""
             match = lexicon.INTENT_NOTE.search(notes)
             if match and match.group(1) in Intent.__args__:  # type: ignore[attr-defined]
                 pattern.intent = match.group(1)  # type: ignore[assignment]
@@ -579,7 +587,7 @@ class _Analyzer:
         groups: List[RepeatGroup] = []
         grouped: set[int] = set()
         for signature, group_ids in signatures.items():
-            if len(group_ids) < 2:
+            if len(group_ids) < 3:
                 continue
             ordered = sorted(
                 group_ids,

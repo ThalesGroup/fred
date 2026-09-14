@@ -61,6 +61,8 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
   const { t } = useTranslation();
   const { objectUrl, isLoading, error } = usePatternsPreview(open ? previewSource : null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A PDF that fetched but does not parse is as unavailable as a failed fetch.
+  const [parseFailed, setParseFailed] = useState(false);
 
   useMemo(() => {
     pdfjs.GlobalWorkerOptions.workerPort = null;
@@ -87,7 +89,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
         <PatternDetail
           pattern={selected}
           page={pageOf.get(selected.id) ?? 1}
-          hasPdf={Boolean(objectUrl)}
+          hasPdf={Boolean(objectUrl) && !parseFailed}
           readOnly={readOnly}
           roleOptions={roleOptions}
           intentOptions={intentOptions}
@@ -98,7 +100,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
         <PatternGrid
           inventory={inventory}
           pageOf={pageOf}
-          hasPdf={Boolean(objectUrl)}
+          hasPdf={Boolean(objectUrl) && !parseFailed}
           readOnly={readOnly}
           intentOptions={intentOptions}
           onOverride={onOverride}
@@ -110,7 +112,9 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
           <Spinner size={16} /> {t("capability.ppt_builder.review.loadingThumbnails")}
         </p>
       )}
-      {error && <p className={styles.hint}>{t("capability.ppt_builder.review.thumbnailsUnavailable")}</p>}
+      {(error || parseFailed) && (
+        <p className={styles.hint}>{t("capability.ppt_builder.review.thumbnailsUnavailable")}</p>
+      )}
     </div>
   );
 
@@ -125,7 +129,7 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
       maxWidth={1040}
     >
       {objectUrl ? (
-        <Document file={objectUrl} loading={null} error={null}>
+        <Document file={objectUrl} loading={null} error={null} onLoadError={() => setParseFailed(true)}>
           {body}
         </Document>
       ) : (

@@ -190,6 +190,51 @@ def test_shared_image_parts_keep_the_file_small():
     assert all(_pictures(slide) == 4 for slide in deck.slides)
 
 
+def test_narrow_item_box_is_widened_in_group_units():
+    scaled = _pattern("Scaled figures")
+    _, deck = _render(
+        SlidePlan(
+            pattern=scaled.id,
+            title="Scaled",
+            items=[PlanItem(number="1%", label="Wide label now")] * 3,
+        )
+    )
+    labels = [
+        p
+        for p in walk_shapes(deck.slides[0].shapes)
+        if cast(Any, p.shape).has_text_frame
+        and cast(Any, p.shape).text_frame.text == "Wide label now"
+    ]
+    assert len(labels) == 3
+    widths = sorted(p.width for p in labels)
+    # Absolute widths within 5 % of each other: the narrow box caught up.
+    assert widths[-1] - widths[0] < widths[-1] * 0.05
+
+
+def test_notes_are_skipped_when_the_notes_slide_has_no_body():
+    silent = _pattern("Silent notes")
+    result, deck = _render(
+        SlidePlan(pattern=silent.id, title="Quiet", bullets=["a"], notes="ignored")
+    )
+    assert len(deck.slides) == 1
+    assert result.warnings == []
+
+
+def test_columns_without_enough_bodies_are_reported():
+    result, _ = _render(
+        SlidePlan(
+            pattern=_pattern("Title and Content").id,
+            title="Three columns",
+            columns=[
+                PlanColumn(bullets=["a"]),
+                PlanColumn(bullets=["b"]),
+                PlanColumn(bullets=["c"]),
+            ],
+        )
+    )
+    assert any("column(s) 2, 3" in w for w in result.warnings)
+
+
 def test_columns_fill_two_content_and_comparison_headings():
     result, deck = _render(
         SlidePlan(

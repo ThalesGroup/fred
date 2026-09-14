@@ -53,7 +53,7 @@ MIN_FONT_SCALE = 0.7
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
 _LEVEL_WIDTH_FACTOR = 0.85
 
-_R_ATTRS = (qn("r:embed"), qn("r:link"), qn("r:id"), qn("r:pict"))
+_R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _SKIPPED_RELS = ("/slideLayout", "/notesSlide")
 
 PreparedImage = Tuple[bytes, int, int]
@@ -119,9 +119,10 @@ def _duplicate_slide(presentation, source):
         clone = copy.deepcopy(element)
         if rid_map:
             for node in clone.iter():
-                for attr in _R_ATTRS:
-                    old = node.get(attr)
-                    if old is not None and old in rid_map:
+                # Every relationship-namespace attribute (r:embed, r:link,
+                # r:id, SmartArt's r:dm/r:lo/…), not a fixed list.
+                for attr, old in list(node.attrib.items()):
+                    if attr.startswith(_R_NS) and old in rid_map:
                         node.set(attr, rid_map[old])
         dest_tree.append(clone)
     return dest
@@ -350,10 +351,14 @@ class _ZoneMap:
         )
 
 
-def _assign_text(pattern: Pattern, plan: SlidePlan) -> Dict[str, List[_Line]]:
-    """Decide which lines go into which text zone (by zone key)."""
+def _assign_text(
+    pattern: Pattern, plan: SlidePlan, dropped: Optional[List[int]] = None
+) -> Dict[str, List[_Line]]:
+    """Decide which lines go into which text zone (by zone key). Column numbers
+    the pattern has no body for are appended to ``dropped``."""
     zmap = _ZoneMap(pattern)
     out: Dict[str, List[_Line]] = {}
+    dropped = dropped if dropped is not None else []
 
     def put(zone: Optional[Zone], lines: List[_Line]) -> None:
         if zone is not None and lines:
@@ -388,6 +393,8 @@ def _assign_text(pattern: Pattern, plan: SlidePlan) -> Dict[str, List[_Line]]:
                 put(heading, _lines_from_bullets([column.heading]))
             elif column.heading:
                 lines = [_Line(f"**{column.heading}**")] + lines
+            if body is None and lines:
+                dropped.append(index + 1)
             put(body, lines)
         return out
 
@@ -468,10 +475,14 @@ class _Renderer:
             slide = self._create(pattern)
             if pattern.intent != "fixed":
                 self._fill(slide, pattern, slide_plan, position)
-            if slide_plan.notes:
-                slide.notes_slide.notes_text_frame.text = slide_plan.notes
-            elif slide.has_notes_slide and pattern.source == "slide":
-                slide.notes_slide.notes_text_frame.text = ""
+            frame = (
+                slide.notes_slide.notes_text_frame
+                if slide_plan.notes
+                or (slide.has_notes_slide and pattern.source == "slide")
+                else None
+            )
+            if frame is not None:
+                frame.text = slide_plan.notes or ""
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()
         self.prs.save(buffer)
@@ -494,7 +505,13 @@ class _Renderer:
 
     def _fill(self, slide, pattern: Pattern, plan: SlidePlan, position: int) -> None:
         index = _shape_index(slide)
-        text = _assign_text(pattern, plan)
+        dropped_columns: List[int] = []
+        text = _assign_text(pattern, plan, dropped_columns)
+        if dropped_columns:
+            self.warnings.append(
+                f"Slide {position}: '{pattern.label}' has no zone for column(s) "
+                f"{', '.join(str(c) for c in dropped_columns)}; their content was dropped."
+            )
         image_ids: Dict[str, Optional[str]] = {}
         zmap = _ZoneMap(pattern)
         plan_images = list(plan.images) or ([plan.image] if plan.image else [])
@@ -634,10 +651,12 @@ class _Renderer:
             for zone in zones:
                 if zone.box.w < widest * 0.8:
                     placed = index.get(zone.key)
-                    if placed is not None:
-                        cast(Any, placed.shape).width = Emu(
-                            round(widest / 1000 * self.width)
-                        )
+                    if placed is not None and placed.width > 0:
+                        # `placed.width` is absolute, `.width` is in the group's
+                        # own units: scale the target through that ratio.
+                        target = widest / 1000 * self.width
+                        shape = cast(Any, placed.shape)
+                        shape.width = Emu(round(target * shape.width / placed.width))
 
     @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:

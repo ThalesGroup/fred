@@ -394,6 +394,31 @@ def test_theme_preview_is_converted_once_per_process(monkeypatch):
     assert calls == [".pptx"]
 
 
+def test_patterns_preview_keeps_one_page_per_pattern_even_for_uncopyable_slides():
+    from fred_capability_ppt_filler.builder.analysis import analyze_template
+    from fred_capability_ppt_filler.builder.preview import build_patterns_deck
+
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    chart = next(p for p in inventory.patterns if p.exclusion_reason == "chart")
+    chart.exclusion_reason = "unsupported_parts"
+    deck = Presentation(io.BytesIO(build_patterns_deck(TEMPLATE, inventory)))
+    assert len(deck.slides) == len(inventory.patterns)
+
+
+@pytest.mark.asyncio
+async def test_plan_made_of_fixed_slides_by_id_is_accepted(monkeypatch):
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    assert config.inventory is not None
+    fixed = next(
+        p for p in config.inventory.patterns if p.intent == "fixed" and p.included
+    )
+    tools = _tools(_ctx(config, assets=assets))
+    _, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"pattern": fixed.id}])
+    assert not result.is_error
+
+
 def test_theme_route_lists_every_intent():
     body = _client().get("/capabilities/ppt_builder/theme").json()
     intents = {p["intent"] for p in body["inventory"]["patterns"] if p["included"]}

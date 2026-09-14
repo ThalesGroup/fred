@@ -44,6 +44,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis }: Props) {
     analyzeFailed,
     errors,
     effective,
+    droppedOverrides,
     summary,
     usesTheme,
     previewSource,
@@ -123,6 +124,12 @@ export function PptBuilderTemplatePanel({ disabled, analysis }: Props) {
             </li>
           ))}
         </ul>
+      )}
+
+      {droppedOverrides.length > 0 && (
+        <p className={styles.summary}>
+          {t("capability.ppt_builder.form.droppedOverrides", { count: droppedOverrides.length })}
+        </p>
       )}
 
       {summary && effective && (

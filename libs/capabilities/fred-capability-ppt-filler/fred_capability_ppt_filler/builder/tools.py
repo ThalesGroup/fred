@@ -195,6 +195,13 @@ class _BadImage(ValueError):
         self.document_id = document_id
 
 
+def _is_fixed(inventory: TemplateInventory, requested: str) -> bool:
+    if requested == "fixed":
+        return True
+    pattern = inventory.pattern(requested)
+    return pattern is not None and pattern.intent == "fixed"
+
+
 async def _no_images() -> Dict[str, object]:
     return {}
 
@@ -279,7 +286,7 @@ def build_builder_tools(
             )
 
         if not plan.slides or not any(
-            has_content(s) or s.pattern == "fixed" for s in plan.slides
+            has_content(s) or _is_fixed(inventory, s.pattern) for s in plan.slides
         ):
             return (
                 "The plan has no content — nothing was generated. Write the slides first (title, bullets, "

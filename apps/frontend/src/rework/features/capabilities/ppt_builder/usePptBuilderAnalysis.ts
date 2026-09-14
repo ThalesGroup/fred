@@ -19,7 +19,7 @@
 // (written back through `onConfigChange`), and the Save-gating error. A
 // template is optional: only an unreadable staged file blocks Save.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useAnalyzePptBuilderTemplateMutation,
@@ -65,6 +65,8 @@ export interface PptBuilderAnalysis {
   inventory: TemplateInventory | null;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
+  /** Overrides a freshly analysed template no longer matches (dropped on save). */
+  droppedOverrides: string[];
   summary: InventorySummary | null;
   usesTheme: boolean;
   previewSource: PreviewSource;
@@ -73,6 +75,24 @@ export interface PptBuilderAnalysis {
   blockingError: string | null;
   handlePick: (file: File) => Promise<void>;
   handleClear: () => void;
+}
+
+/** Override targets (pattern id, or `pattern id/zone key`) absent from an inventory. */
+export function unmatchedOverrides(overrides: PatternOverride[], inventory: TemplateInventory): string[] {
+  const dropped: string[] = [];
+  for (const override of overrides) {
+    const pattern = inventory.patterns.find((p) => p.id === override.pattern_id);
+    if (!pattern) {
+      dropped.push(override.pattern_id);
+      continue;
+    }
+    const keys = new Set(pattern.zones.map((z) => z.key));
+    pattern.groups.forEach((g) => g.items.forEach((item) => item.forEach((z) => keys.add(z.key))));
+    for (const key of Object.keys(override.zone_roles ?? {})) {
+      if (!keys.has(key)) dropped.push(`${override.pattern_id}/${key}`);
+    }
+  }
+  return dropped;
 }
 
 export function usePptBuilderAnalysis({
@@ -87,6 +107,10 @@ export function usePptBuilderAnalysis({
   const [analyze, { isLoading: isAnalyzing }] = useAnalyzePptBuilderTemplateMutation();
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
   const [analyzeFailed, setAnalyzeFailed] = useState(false);
+  // A pick or clear invalidates any analysis still in flight: only the
+  // latest request may set state, so a slow first file never overwrites
+  // (or blocks Save for) a second one.
+  const requestSeq = useRef(0);
 
   const stagedFile = assetFiles[TEMPLATE_SLOT];
   const persisted = readInventory(configValues);
@@ -104,6 +128,10 @@ export function usePptBuilderAnalysis({
     [inventory, overrides],
   );
   const summary = effective ? summarize(effective) : null;
+  const droppedOverrides = useMemo(
+    () => (stagedFile && analysis?.inventory ? unmatchedOverrides(overrides, analysis.inventory) : []),
+    [stagedFile, analysis, overrides],
+  );
 
   const patternsPath = configValues[PATTERNS_PATH_KEY];
   const previewSource: PreviewSource = stagedFile
@@ -129,6 +157,7 @@ export function usePptBuilderAnalysis({
   }, [blockingError]);
 
   const handlePick = async (file: File) => {
+    const seq = ++requestSeq.current;
     onAssetFileChange(TEMPLATE_SLOT, file);
     setAnalysis(null);
     setAnalyzeFailed(false);
@@ -140,13 +169,14 @@ export function usePptBuilderAnalysis({
       const result = await analyze({
         bodyAnalyzePptBuilderTemplate: formData as unknown as BodyAnalyzePptBuilderTemplate,
       }).unwrap();
-      setAnalysis(result);
+      if (seq === requestSeq.current) setAnalysis(result);
     } catch {
-      setAnalyzeFailed(true);
+      if (seq === requestSeq.current) setAnalyzeFailed(true);
     }
   };
 
   const handleClear = () => {
+    requestSeq.current += 1;
     onAssetFileChange(TEMPLATE_SLOT, null);
     setAnalysis(null);
     setAnalyzeFailed(false);
@@ -164,6 +194,7 @@ export function usePptBuilderAnalysis({
     errors,
     inventory,
     effective,
+    droppedOverrides,
     summary,
     usesTheme,
     previewSource,
