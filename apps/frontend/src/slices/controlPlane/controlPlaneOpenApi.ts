@@ -735,16 +735,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}` }),
     }),
-    updateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPut: build.mutation<
-      UpdateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPutApiResponse,
-      UpdateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPutApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}`,
-        method: "PUT",
-        body: queryArg.knowledgeBaseInstanceUpdate,
-      }),
-    }),
     deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: build.mutation<
       DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse,
       DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg
@@ -754,12 +744,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    listKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGet: build.query<
-      ListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetApiResponse,
-      ListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}/runs` }),
-    }),
     getKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGet:
       build.query<
         GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse,
@@ -767,9 +751,6 @@ const injectedRtkApi = api.injectEndpoints({
       >({
         query: (queryArg) => ({
           url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
-          params: {
-            execution_id: queryArg.executionId,
-          },
         }),
       }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
@@ -1927,19 +1908,8 @@ export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanc
 export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiArg = {
   instanceId: string;
 };
-export type UpdateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPutApiResponse =
-  /** status 200 Successful Response */ KnowledgeBaseInstanceSummary;
-export type UpdateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPutApiArg = {
-  instanceId: string;
-  knowledgeBaseInstanceUpdate: KnowledgeBaseInstanceUpdate;
-};
 export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse = unknown;
 export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
-  instanceId: string;
-};
-export type ListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetApiResponse =
-  /** status 200 Successful Response */ KnowledgeBaseRunSummary[];
-export type ListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetApiArg = {
   instanceId: string;
 };
 export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse =
@@ -1949,7 +1919,6 @@ export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDef
     definitionId: string;
     instanceId: string;
     runId: string;
-    executionId: string;
   };
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
@@ -2584,6 +2553,7 @@ export type TeamPermission =
   | "can_read_conversations"
   | "can_use_team_agents"
   | "can_use_team_applications"
+  | "can_use_team_knowledge_bases"
   | "can_access_files"
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
@@ -3520,8 +3490,8 @@ export type KnowledgeBaseDefinitionChoice = {
   description?: string;
 };
 export type KnowledgeBaseInstanceFields = {
-  definition_id: string;
-  definition_name: string;
+  cadence_key: string;
+  suspended_key: string;
   platform_fields?: FieldSpec[];
   configuration_fields?: FieldSpec[];
 };
@@ -3550,19 +3520,6 @@ export type KnowledgeBaseInstanceCreate = {
   configuration?: {
     [key: string]: any;
   };
-};
-export type KnowledgeBaseInstanceUpdate = {
-  cadence: RunCadence;
-  suspended?: boolean;
-  configuration?: {
-    [key: string]: any;
-  };
-};
-export type RunState = "running" | "succeeded" | "failed" | "cancelled";
-export type KnowledgeBaseRunSummary = {
-  run_id: string;
-  state: RunState;
-  started_at: string;
 };
 export type KnowledgeBaseRunContext = {
   definition_id: string;
@@ -4218,10 +4175,7 @@ export const {
   useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation,
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
-  useUpdateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdPutMutation,
   useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
-  useListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetQuery,
-  useLazyListKnowledgeBaseRunsControlPlaneV1KnowledgeBasesInstancesInstanceIdRunsGetQuery,
   useGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
   useLazyGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,

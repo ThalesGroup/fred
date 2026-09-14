@@ -32,10 +32,6 @@ import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/c
 import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 
-/** Keys of the zone Fred declares itself; everything else is the author's. */
-const CADENCE_KEY = "fred.cadence";
-const SUSPENDED_KEY = "fred.suspended";
-
 interface CreateFolderModalProps {
   open: boolean;
   onClose: () => void;
@@ -145,7 +141,7 @@ export default function CreateFolderModal({
   const trimmed = name.trim();
   const parentLeaf = parentPath?.split("/").filter(Boolean).pop();
 
-  // Mirror the backend's TagCreate guards (#2355) so the user learns BEFORE
+  // Mirror the backend's TagCreate guards so the user learns BEFORE
   // clicking Create, not from a 422 toast: a folder name is a single level
   // (no slashes — a slashed name would smuggle several levels past the depth
   // cap), and corpus folders stop nesting at MAX_FOLDER_DEPTH. The fs `mkdir`
@@ -153,7 +149,10 @@ export default function CreateFolderModal({
   // ReBAC-chain constraint — doesn't apply there; the slash rule does.
   const nameHasSlash = trimmed.includes("/") || trimmed.includes("\\");
   const tooDeep = !onSubmit && folderPathDepth(parentPath) + 1 > MAX_FOLDER_DEPTH;
-  const blocked = !trimmed || nameHasSlash || tooDeep;
+  // A chosen Knowledge Base whose fields are still in flight has no cadence to
+  // submit yet: creating then would silently store the wrong schedule.
+  const awaitingFields = !!definitionId && !fields;
+  const blocked = !trimmed || nameHasSlash || tooDeep || awaitingFields;
   const inlineError = tooDeep
     ? t("rework.resources.folderModal.tooDeep", { max: MAX_FOLDER_DEPTH })
     : nameHasSlash
@@ -163,22 +162,24 @@ export default function CreateFolderModal({
   const submit = async () => {
     if (blocked || isLoading || isCreatingInstance) return;
     try {
-      if (definitionId) {
+      if (definitionId && fields) {
         // One call, not two: creating the library, the instance, the pod's
         // grant over that library and its cadence is one transaction on the
         // Control Plane's side, or none of them happens.
         const configuration = Object.fromEntries(
-          (fields?.configuration_fields ?? [])
+          fields.configuration_fields
             .map((field) => [field.key, values[field.key]] as const)
             .filter(([, value]) => value !== undefined && value !== ""),
         );
+        // The two platform keys come back with the zones: they are declared on
+        // the SDK side, so holding a copy of them here is how the two drift.
         await createInstance({
           knowledgeBaseInstanceCreate: {
             definition_id: definitionId,
             team_id: teamId as string,
             folder_name: trimmed,
-            cadence: values[CADENCE_KEY] as never,
-            suspended: Boolean(values[SUSPENDED_KEY]),
+            cadence: values[fields.cadence_key] as never,
+            suspended: Boolean(values[fields.suspended_key]),
             configuration,
           },
         }).unwrap();
