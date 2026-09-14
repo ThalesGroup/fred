@@ -79,11 +79,12 @@ Two endpoints in a new `team_admin_charter` router, under `get_current_user`, si
 
 `required` reads the acceptance first. Only when it is missing does it run one ListObjects on `can_administer_admins`, which is exactly `team_admin`, to learn whether the user administers any team. A disabled ReBAC engine yields `required = false`.
 
-### Frontend: a pop-up next to the router, not a guard
+### Frontend: a pop-up in the main layout, on team pages only
 
-`TeamAdminCharterPrompt` is mounted inside `BootstrapGuard`, next to `RouterProvider`.
-- It queries the status and, when `required`, opens the shared `Dialog` with Accept as `confirmLabel` and Later as `cancelLabel`.
-- Later sets component state only, with no storage, so the pop-up returns at the next load.
+`TeamAdminCharterPrompt` is mounted in `MainLayout`, which wraps the home page and every `team/:teamId/*` page.
+- It reads the route's team through `useSelectedTeam`, and only queries the status and opens the shared `Dialog` when the user holds `team_admin` on that team (from `my_relations`). The home page and the personal space never show it.
+- The status query refetches whenever it starts, so a promotion made by another admin is seen the next time the user opens that team.
+- Later sets component state only, with no storage. `MainLayout` stays mounted while navigating, so the pop-up stays closed until the next app load.
 - Accept calls the mutation, whose `invalidatesTags` covers the status and `ControlPlaneTeam`, so permissions are refetched and admin actions appear without a reload.
 
 It does not block the app: the gate already makes administrator rights inert, and a member must not lose chat because they were nominated.
@@ -102,7 +103,7 @@ No standalone `/team-admin-charter` route: the charter only concerns administrat
 
 ## Risks / Trade-offs
 
-- [Enabling the setting on a live deployment suspends every administrator at once] → Acceptance is self-service and prompted at the next load. `TERMS_OF_USE.md` tells operators to ship the theme archive's charter before setting the version.
+- [Enabling the setting on a live deployment suspends every administrator at once] → Acceptance is self-service and prompted on their team's pages. `TERMS_OF_USE.md` tells operators to ship the theme archive's charter before setting the version.
 - [A future administrator-only check written outside the two functions bypasses the gate] → The `schema.fga` parity test catches a new `team_admin`-only permission. `REBAC.md` states that these checks must go through `_validate_team_and_check_permission`.
 - [A team whose only administrators have not accepted cannot be administered, and rescue refuses because administrators exist] → Accepted: any of those administrators can unblock the team alone by accepting.
 - [The routing policy read still treats an unaccepted administrator as elevated] → Read-only, already visible to editors and analysts. Left as is and noted in `REBAC.md`.
@@ -113,6 +114,6 @@ No standalone `/team-admin-charter` route: the charter only concerns administrat
 
 1. Deploy with `app.team_admin_charter_version` unset. The migration creates an empty table and behaviour is unchanged.
 2. Publish a theme archive containing `team-admin-charter.md` and `team-admin-charter.fr.md`.
-3. Set `app.team_admin_charter_version`. Administrators are prompted at their next load.
+3. Set `app.team_admin_charter_version`. Administrators are prompted the next time they open one of their teams.
 
 Rollback: unset the version. The table and its rows stay, and re-enabling the same version keeps past acceptances valid.

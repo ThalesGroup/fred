@@ -100,24 +100,32 @@ While a version is configured, a user who has not accepted it SHALL be denied `c
 - **WHEN** a `team_admin` who accepted the current version grants `team_admin` to a member who has not
 - **THEN** the relation is written and the new administrator's administrator-only permissions stay inactive until they accept
 
-### Requirement: Team administrators are prompted to accept at app load
+### Requirement: Team administrators are prompted to accept on their team's pages
 
-When the app loads for a user whose charter status requires an acceptance, the frontend SHALL show a pop-up with the charter and two actions, Accept and Later. Accept MUST stay disabled until the end of the charter text has been reached. Later MUST close the pop-up without recording anything, and the pop-up MUST appear again at the next app load. After Accept, administrator actions MUST become available without reloading the app.
+When a user whose charter status requires an acceptance opens a page of a team on which they hold `team_admin`, the frontend SHALL show a pop-up with the charter and two actions, Accept and Later. The pop-up MUST NOT appear on the home page, on the personal space, or on the pages of a team the user does not administer. Accept MUST stay disabled until the end of the charter text has been reached. Later MUST close the pop-up without recording anything, and the pop-up MUST NOT appear again until the next app load. After Accept, administrator actions MUST become available without reloading the app.
 
-#### Scenario: Pending acceptance at load
-- **WHEN** the app loads for a `team_admin` whose status requires an acceptance
+#### Scenario: Pending acceptance on a team page
+- **WHEN** a `team_admin` whose status requires an acceptance opens a page of the team they administer
 - **THEN** the pop-up shows the charter with Accept disabled until the end of the text is reached
+
+#### Scenario: Home page
+- **WHEN** the same user is on the home page
+- **THEN** no pop-up is shown
+
+#### Scenario: Team the user does not administer
+- **WHEN** the same user opens a page of a team where they only hold `team_member`
+- **THEN** no pop-up is shown
 
 #### Scenario: Later
 - **WHEN** the user chooses Later
-- **THEN** the pop-up closes, no acceptance is recorded, and it is shown again the next time the app loads
+- **THEN** the pop-up closes, no acceptance is recorded, and it does not appear again on team pages until the app is loaded again
 
 #### Scenario: Accept
 - **WHEN** the user reaches the end of the charter and chooses Accept
 - **THEN** the acceptance is recorded, the pop-up closes and the team settings show administrator actions without a reload
 
 #### Scenario: Nothing pending
-- **WHEN** the app loads for a user whose status requires no acceptance
+- **WHEN** a `team_admin` whose status requires no acceptance opens a page of their team
 - **THEN** no pop-up is shown
 
 ### Requirement: Team settings give team administrators access to the charter

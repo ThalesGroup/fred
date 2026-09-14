@@ -3983,11 +3983,12 @@ plus `accepted_at`. `user_id` is the Keycloak uid used as the OpenFGA subject.
 Rows are never updated, so past versions stay on record. No in-process cache: a
 replica would keep refusing an admin who just accepted on another one.
 
-**Frontend.** At app load, a user whose status is `required` gets a pop-up with
-Accept, enabled once the end of the text is visible, and Later, which closes it
-until the next load. Team settings show a Responsibilities section to
-`team_admin`s, from `my_relations`, and a notice while acceptance is pending.
+**Frontend.** On the pages of a team where the user holds `team_admin`, never on
+the home page, a user whose status is `required` gets a pop-up with Accept,
+enabled once the end of the text is visible, and Later, which closes it until the
+next app load. Team settings show a Responsibilities section to `team_admin`s,
+from `my_relations`, and a notice while acceptance is pending.
 
 **Rollout.** Publish the theme archive with the charter first, then set the
-version: every admin is prompted at their next load. Unsetting the version turns
+version: every admin is prompted the next time they open one of their teams. Unsetting the version turns
 the gate off and keeps the rows.

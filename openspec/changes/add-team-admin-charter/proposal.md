@@ -9,7 +9,7 @@ Team administrators are part of the security chain: they decide who belongs to a
 - The control-plane records each user's acceptance of a charter version in the database, and exposes two endpoints: one tells the caller whether they must accept, the other records the acceptance and emits an audit event.
 - A `team_admin` who has not accepted the current version is denied the administrator-only team permissions (`can_update_info`, `can_administer_members`, `can_administer_editors`, `can_administer_analysts`, `can_administer_admins`), and those permissions are left out of the team permissions returned to the frontend. The `team_admin` relation itself is still granted, revoked and counted as today.
 - One acceptance per user covers every team they administer. Changing the configured version requires every administrator to accept again.
-- Frontend: a pop-up at app load for a team administrator whose acceptance is pending (Accept or Later), and a "Responsibilities" section in team settings to read the charter and accept it.
+- Frontend: a pop-up on the pages of a team the user administers, never on the home page, while their acceptance is pending (Accept or Later), and a "Responsibilities" section in team settings to read the charter and accept it.
 - Refactor: `GcuPage` and `GdprPage` share one markdown loading hook, which the charter reuses.
 
 Not breaking: with the setting unset, behaviour is unchanged. Turning it on for an existing deployment suspends every existing administrator's rights until they accept, which is the intent.

@@ -14,6 +14,7 @@
 
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
+import TeamAdminCharterPrompt from "@shared/organisms/TeamAdminCharterPrompt/TeamAdminCharterPrompt.tsx";
 import { useTaskSseManager } from "../../../../features/tasks/useTaskSseManager.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
 import styles from "./MainLayout.module.css";
@@ -29,6 +30,7 @@ export default function MainLayout() {
       <main className={styles.content}>
         <Outlet />
       </main>
+      <TeamAdminCharterPrompt />
     </div>
   );
 }

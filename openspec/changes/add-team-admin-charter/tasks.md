@@ -27,7 +27,7 @@
 ## 5. Frontend
 
 - [x] 5.1 Add `TeamAdminCharterContent` (charter through `useLegalMarkdown`, 1px end sentinel with `threshold: 0`, `onEndReached` callback); verify a component test where the callback fires once the sentinel intersects
-- [x] 5.2 Add `TeamAdminCharterPrompt` mounted in `App.tsx` inside `BootstrapGuard` next to `RouterProvider`, using the shared `Dialog` (Accept disabled until end reached, Later in component state only); verify tests: required opens the dialog, Later closes it without calling the mutation, Accept calls it, not required renders nothing
+- [x] 5.2 Add `TeamAdminCharterPrompt` mounted in `MainLayout`, shown only on the pages of a team the user administers, using the shared `Dialog` (Accept disabled until end reached, Later in component state only); verify tests: pending admin on their team opens the dialog, home page and non-administered team show nothing, Later closes it without calling the mutation, Accept calls it
 - [x] 5.3 Add the `responsibilities` section to `TeamSettingsPage` and its entry in the `TeamContentNavbar` settings menu, both gated on `my_relations` including `team_admin`, showing the acceptance time or an Accept action; add the pending notice at the top of team settings linking to it; verify tests: admin sees the section, plain member is redirected to Members, pending admin sees the notice
 - [x] 5.4 Add the en and fr i18n keys for the pop-up, the section and the notice; verify `tsc` and the frontend tests pass with no missing key warnings
 

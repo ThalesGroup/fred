@@ -155,8 +155,8 @@ without changing frontend code.
 The same versioned acceptance, scoped to team administrators. Set
 `app.team_admin_charter_version` in the control-plane configuration and every
 `team_admin` must accept that version before their admin-only team permissions
-apply. They are prompted when the app loads and can read the charter at any time
-from team settings, Responsibilities.
+apply. They are prompted when they open one of their teams, never on the home page, and
+can read the charter at any time from team settings, Responsibilities.
 
 The charter text is deployment-owned: ship `team-admin-charter.md` and
 `team-admin-charter.fr.md` at the root of the frontend theme archive (see

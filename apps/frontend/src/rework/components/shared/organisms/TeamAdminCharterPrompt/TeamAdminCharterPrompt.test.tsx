@@ -24,8 +24,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const PENDING: TeamAdminCharterStatus = { required: true, accepted_at: null };
+
 const h = vi.hoisted(() => ({
+  teamId: "team-1" as string | undefined,
+  relations: ["team_admin"] as string[],
   status: undefined as TeamAdminCharterStatus | undefined,
+  queryOptions: undefined as { skip: boolean } | undefined,
   accept: vi.fn(() => Promise.resolve()),
   endReached: undefined as (() => void) | undefined,
 }));
@@ -34,8 +39,20 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+vi.mock("../../../../../hooks/useSelectedTeam.ts", () => ({
+  useSelectedTeam: () => ({
+    teamId: h.teamId,
+    isPersonalTeam: false,
+    selectedTeam: h.teamId ? { id: h.teamId, permissions: [], my_relations: h.relations } : undefined,
+    canOpenTeamSettings: true,
+  }),
+}));
+
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
-  useTeamAdminCharterStatusQuery: () => ({ data: h.status }),
+  useTeamAdminCharterStatusQuery: (_arg: unknown, options: { skip: boolean }) => {
+    h.queryOptions = options;
+    return { data: options.skip ? undefined : h.status };
+  },
   useAcceptTeamAdminCharterMutation: () => [h.accept, { isLoading: false }],
 }));
 
@@ -75,14 +92,17 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  h.teamId = "team-1";
+  h.relations = ["team_admin"];
   h.status = undefined;
+  h.queryOptions = undefined;
   h.endReached = undefined;
   h.accept.mockClear();
 });
 
 describe("TeamAdminCharterPrompt", () => {
-  it("asks a pending admin to accept once the end of the charter is reached", () => {
-    h.status = { required: true, accepted_at: null };
+  it("asks a pending admin on their team's page to accept once the end is reached", () => {
+    h.status = PENDING;
     render();
     const accept = button("rework.teamAdminCharter.accept");
 
@@ -97,13 +117,31 @@ describe("TeamAdminCharterPrompt", () => {
   });
 
   it("closes on Later without recording anything", () => {
-    h.status = { required: true, accepted_at: null };
+    h.status = PENDING;
     render();
 
     act(() => button("rework.teamAdminCharter.later").click());
 
     expect(dialog()).toBeNull();
     expect(h.accept).not.toHaveBeenCalled();
+  });
+
+  it("never shows on the home page, where no team is selected", () => {
+    h.teamId = undefined;
+    h.status = PENDING;
+    render();
+
+    expect(dialog()).toBeNull();
+    expect(h.queryOptions?.skip).toBe(true);
+  });
+
+  it("never shows on a team the user does not administer", () => {
+    h.relations = ["team_member"];
+    h.status = PENDING;
+    render();
+
+    expect(dialog()).toBeNull();
+    expect(h.queryOptions?.skip).toBe(true);
   });
 
   it("stays closed when nothing is pending", () => {

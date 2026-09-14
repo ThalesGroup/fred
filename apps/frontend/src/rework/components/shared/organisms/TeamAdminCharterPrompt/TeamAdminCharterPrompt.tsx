@@ -16,22 +16,31 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx";
+import { useSelectedTeam } from "../../../../../hooks/useSelectedTeam.ts";
 import {
   useAcceptTeamAdminCharterMutation,
   useTeamAdminCharterStatusQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 
-/** Asks a team admin to accept the charter when the app loads. "Later" only closes it
- *  until the next load: the server keeps admin-only permissions off until acceptance. */
+/** Asks a team admin to accept the charter on the pages of a team they administer, never
+ *  on the home page. "Later" closes it until the next app load: the server keeps
+ *  admin-only permissions off until acceptance. */
 export default function TeamAdminCharterPrompt() {
   const { t } = useTranslation();
-  const { data: status } = useTeamAdminCharterStatusQuery();
+  const { selectedTeam } = useSelectedTeam();
+  const isTeamAdmin =
+    !!selectedTeam && "my_relations" in selectedTeam && (selectedTeam.my_relations ?? []).includes("team_admin");
+  // Refetched when it starts: a promotion made by another admin never reaches this session's cache.
+  const { data: status } = useTeamAdminCharterStatusQuery(undefined, {
+    skip: !isTeamAdmin,
+    refetchOnMountOrArgChange: true,
+  });
   const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
   const [dismissed, setDismissed] = useState(false);
   const [endReached, setEndReached] = useState(false);
   const handleEndReached = useCallback(() => setEndReached(true), []);
 
-  if (!status?.required || dismissed) return null;
+  if (!isTeamAdmin || !status?.required || dismissed) return null;
 
   return (
     <Dialog
