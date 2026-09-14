@@ -524,6 +524,78 @@ describe("traceRows — restated reasoning", () => {
     );
   });
 
+  it("drops a repeated list even when one item was retouched", () => {
+    const first =
+      "L'utilisateur me demande de :\n1. Chercher dans les documents RAG (vector search)\n2. Lister les documents";
+    const second =
+      "L'utilisateur me demande de :\n1. Chercher dans les documents RAG\n2. Lister les documents\n\nJ'ai reçu la liste.";
+    expect(reasoningTexts(first, second)[1]).toBe("J'ai reçu la liste.");
+  });
+
+  // One sentence reworded just below the threshold used to stop the trim, and
+  // every verbatim sentence after it stayed on the row.
+  it("does not let one reworded sentence shield the verbatim ones after it", () => {
+    const tail =
+      "Je dois localiser ces pages dans l'index du wiki. Je vais utiliser wiki_read_page pour les deux pages.";
+    const first = `L'utilisateur demande de traduire en espagnol et en italien deux pages du wiki. ${tail}`;
+    const second = `L'utilisateur demande de traduire deux pages du wiki en espagnol et en italien. ${tail} Les pages sont lues.`;
+    expect(reasoningTexts(first, second)[1]).toBe("Les pages sont lues.");
+  });
+
+  // Near repeats are dropped only INSIDE a lead of real repeats: a trailing one
+  // may be the only new fact of the block.
+  it("keeps a near-repeated sentence that would end the lead", () => {
+    const shared = "La page parente a été créée dans le wiki.";
+    const texts = reasoningTexts(
+      `${shared} Je dois maintenant publier la page Italie.`,
+      `${shared} Je dois maintenant publier la page Espagne.`,
+    );
+    expect(texts[1]).toBe("Je dois maintenant publier la page Espagne.");
+  });
+
+  // Every recap item resembles an earlier one, but a lead of near repeats with
+  // few real ones is progress told in new words, not a restatement.
+  it("keeps a recap told in new words", () => {
+    const first =
+      "Je dois :\n- Lister les documents disponibles dans le chat\n- Résumer un document au hasard dans le corpus";
+    const recap =
+      "Bilan :\n- Documents disponibles dans le chat listés hier soir\n- Document au hasard dans le corpus résumé ce matin";
+    const second = `- Lister les documents disponibles dans le chat\n\n${recap}\n\nSuite.`;
+    expect(reasoningTexts(first, second)[1]).toBe(
+      "Bilan : Documents disponibles dans le chat listés hier soir Document au hasard dans le corpus résumé ce matin Suite.",
+    );
+  });
+
+  it("keeps a near-repeated sentence between repeats", () => {
+    const before = "La page parente a été créée dans le wiki.";
+    const after = "Je vais utiliser wiki_propose_page pour cela.";
+    const texts = reasoningTexts(
+      `${before} Je dois maintenant publier la page Italie. ${after}`,
+      `${before} Je dois maintenant publier la page Espagne. ${after}`,
+    );
+    expect(texts[1]).toBe(`Je dois maintenant publier la page Espagne. ${after}`);
+  });
+
+  it.each([
+    ["before a repeated sentence", "Trois pages manquent encore :\nLa page parente a été créée dans le wiki."],
+    ["before a repeated list", "Deux étapes restent bloquées :\n1. Lister les documents\n2. Résumer un document"],
+  ])("keeps a new intro %s", (_label, second) => {
+    const first =
+      "Plan :\n1. Lister les documents\n2. Résumer un document\n\nLa page parente a été créée dans le wiki.";
+    expect(reasoningTexts(first, second)[1]).not.toBe("");
+    expect(reasoningTexts(first, second)[1]).toMatch(/^(Trois|Deux)/);
+  });
+
+  it("recognises a numbered item still streaming as a repeat", () => {
+    const earlier = thoughtMsg("Plan :\n1. Lister les documents disponibles du corpus.");
+    const streaming = thoughtMsg("Plan :\n2. Lister les documents disponibles du cor", { streaming_delta: true });
+    const rows = traceRows([
+      { kind: "solo", message: earlier },
+      { kind: "solo", message: streaming },
+    ]);
+    expect(rows[1]).toMatchObject({ reasoningText: "", restated: false });
+  });
+
   it("still drops a renumbered list item", () => {
     expect(
       reasoningTexts("1. Lister les documents disponibles", "2. Lister les documents disponibles\n\nEnsuite.")[1],

@@ -651,6 +651,16 @@ export type TraceRow = {
 /** Word overlap from which a sentence counts as already said. 0.75 confused
  *  sentences differing by a single noun ("…page Italie" / "…page Espagne"). */
 const RESTATEMENT_OVERLAP = 0.8;
+/** Share of a list item's words already said for it to count as a near repeat
+ *  (a retouched item). Prose needs all its words said — a reordered sentence —
+ *  since one unsaid word may be the new fact ("…page Espagne"). */
+const NEAR_OVERLAP = 0.6;
+/** Share of an intro's (":") words already said for it to be carried along with
+ *  the list it opens. */
+const INTRO_OVERLAP = 0.4;
+/** Share of a dropped lead, in characters, that must be real repeats. Keeps a
+ *  run of mere near repeats — a recap in new words — on the row. */
+const MIN_SAID_SHARE = 0.4;
 
 /** Negation words ("n" and "t" are what "n'existe" and "don't" split into).
  *  A negated sentence shares nearly all its words with the claim it reverses. */
@@ -734,26 +744,37 @@ function meaningfulWords(raw: string[]): string[] {
 }
 
 /**
- * Whether `segment` restates one of the sentences `said` earlier in the turn.
+ * How far `segment` restates the sentences `said` earlier in the turn.
  *
  * Reasoning models restate their context at every round, and rarely verbatim —
  * "L'utilisateur demande…" comes back as "L'utilisateur a demandé…" — so
- * sentences are compared by word overlap (Jaccard), not character by character.
+ * sentences are compared by word overlap, not character by character. "said" is
+ * a repeat (Jaccard, same facts); "near" and "related" only resemble one, and
+ * are dropped solely inside a lead of real repeats — see {@link restatedLead}.
  * `unfinished` is the sentence still streaming, cut mid-word: it is judged on the
  * words it has finished, or a restatement flashes into the row before it matches.
  */
-function isAlreadySaid(segment: ReasoningSegment, said: readonly ReasoningSegment[], unfinished: boolean): boolean {
-  if (segment.words.size === 0) return true;
+function restatementOf(
+  segment: ReasoningSegment,
+  said: readonly ReasoningSegment[],
+  unfinished: boolean,
+): "said" | "near" | "related" | "new" {
+  if (segment.words.size === 0) return "said";
   if (unfinished) {
-    const finished = meaningfulWords(rawWords(segment.text)).slice(0, -1);
-    return said.some((earlier) => finished.every((word) => earlier.words.has(word)));
+    const finished = meaningfulWords(rawWords(segment.text.replace(LIST_MARKER, ""))).slice(0, -1);
+    return said.some((earlier) => finished.every((word) => earlier.words.has(word))) ? "said" : "new";
   }
-  return said.some((earlier) => {
-    if (earlier.facts !== segment.facts) return false;
+  let coverage = 0;
+  for (const earlier of said) {
+    if (earlier.facts !== segment.facts) continue;
     let shared = 0;
     for (const word of segment.words) if (earlier.words.has(word)) shared++;
-    return shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP;
-  });
+    if (shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP) return "said";
+    coverage = Math.max(coverage, shared / segment.words.size);
+  }
+  const near = segment.listItem ? coverage >= NEAR_OVERLAP : coverage === 1;
+  if (near && segment.words.size > 1) return "near";
+  return coverage >= INTRO_OVERLAP ? "related" : "new";
 }
 
 /**
@@ -864,26 +885,30 @@ function restatedLead(
   if (cached && cached.earlier.length === earlier.length && cached.earlier.every((m, i) => m === earlier[i])) {
     return cached.lead;
   }
-  const isSaid = (i: number) =>
-    isAlreadySaid(segments[i], said, streaming && i === segments.length - 1 && !/[.!?]$/.test(segments[i].text));
-
+  // The longest lead of repeats and near repeats, mostly real repeats, so a
+  // retouched item or a reordered sentence no longer shields the verbatim ones
+  // after it. An intro (":") is carried along if said, or if it resembles an
+  // earlier sentence and opens a list — a rephrased "the user asked me to:" — but
+  // never ends the lead: that would open the row on the list it introduces.
   let lead = 0;
-  while (said.length > 0 && lead < segments.length) {
-    if (isSaid(lead)) {
-      lead++;
+  let saidLength = 0;
+  let nearLength = 0;
+  for (let i = 0; said.length > 0 && i < segments.length; i++) {
+    const { text } = segments[i];
+    const unfinished = streaming && i === segments.length - 1 && !/[.!?]$/.test(text);
+    const kind = restatementOf(segments[i], said, unfinished);
+    if (text.endsWith(":")) {
+      if (kind === "new" || (kind !== "said" && !segments[i + 1]?.listItem)) break;
       continue;
     }
-    // An intro rephrased past the threshold ("…me donne des instructions :" →
-    // "…a fourni des instructions :") goes with its list if every item was said,
-    // or it would shield the verbatim list below it from the trim.
-    let end = lead + 1;
-    while (end < segments.length && segments[end].listItem) end++;
-    if (!segments[lead].text.endsWith(":") || end === lead + 1) break;
-    let item = lead + 1;
-    while (item < end && isSaid(item)) item++;
-    if (item < end) break;
-    lead = end;
+    if (kind === "new" || kind === "related") break;
+    if (kind === "said") saidLength += text.length;
+    else nearLength += text.length;
+    if (saidLength >= MIN_SAID_SHARE * (saidLength + nearLength)) lead = i + 1;
   }
+  // Never open the row mid-list: a list with a new item keeps its earlier items and intro.
+  const inList = (i: number) => segments[i].listItem || segments[i].text.endsWith(":");
+  while (lead > 0 && lead < segments.length && segments[lead].listItem && inList(lead - 1)) lead--;
   // A streaming block arrives as a new object each delta, so it never hits the cache.
   if (!streaming) restatedLeadCache.set(message, { earlier: [...earlier], lead });
   return lead;

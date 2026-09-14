@@ -439,6 +439,13 @@ agents) so the decision is informed at the point it is made.
   soft-wrapped lines rejoin their paragraph first. A block with nothing new renders
   `rework.chatTrace.restatedReasoning` instead of its text, unless it is still streaming.
 
+  The lead is not cut at the first unmatched sentence: agents re-listing the user's
+  instructions retouch one item or reword the intro, which shielded the verbatim rest. The
+  lead may carry near repeats (a list item ≥ 60% said, prose with every word said) and an
+  intro (":") that resembles an earlier sentence and opens a list, as long as ≥ 40% of its
+  characters are real repeats — below that it is a recap in new words, kept. It never ends on
+  an intro, and never opens the row mid-list.
+
 - **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
   "reasoning preview length" open issue above. Reasoning models restate the task from scratch
   at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one
