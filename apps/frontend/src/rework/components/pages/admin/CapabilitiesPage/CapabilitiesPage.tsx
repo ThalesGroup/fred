@@ -381,8 +381,8 @@ export default function CapabilitiesPage() {
         <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
-            <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
-              {t(cap.name, { defaultValue: cap.name })}
+            <span className={styles.capName} title={capabilityLabel(t, cap)}>
+              {capabilityLabel(t, cap)}
             </span>
             <span className={styles.capVersion}>v{cap.version}</span>
           </div>

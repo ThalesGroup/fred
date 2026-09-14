@@ -17,7 +17,7 @@ two apart on gateways that reuse one wire name across several models.
 **Non-goals**
 
 - Changing `model_capability_id` itself, or the id's shape.
-- Any control-plane, OpenAPI or frontend change.
+- Any control-plane routing change (the admin label below is display only).
 - Adopting the field in the shipped `apps/fred-agents` catalog.
 
 ## Decisions
@@ -61,6 +61,14 @@ The id alone does not fix the LABEL, though: the composer prefers
 `model_display_name` and falls back to the wire `name`, which the siblings share.
 A profile declaring `model_id` must declare `model_display_name` too — an
 authoring rule, documented in `LLM_ROUTING_FRED.md`, not a code change.
+
+### D5 — The admin table labels a model by its display name
+
+Once split, the siblings are two rows in the admin Capabilities table, and that
+table labels a row by `name`, which for both is the shared wire name. The
+admin re-enables the new ids there, so it must show which is which.
+`CapabilityEnablementItem` carries `model_display_name` from the catalog entry,
+and the frontend's `capabilityLabel` prefers it for every admin label.
 
 ## Risks / Trade-offs
 

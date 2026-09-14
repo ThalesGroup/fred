@@ -26,8 +26,11 @@ to the provider, and gateways validate it.
   toggle on it instead of re-deriving from `model.name`. A platform binding has no
   profile and keeps `model_capability_id(provider, name)`.
 
-No control-plane, OpenAPI or frontend change: the composer's effective-chat-model
-read already selects the catalog entry that owns the winning profile. The shipped
+No routing change in control-plane: the composer's effective-chat-model read
+already selects the catalog entry that owns the winning profile. One display
+change: the admin Capabilities table labels a model row by its
+`model_display_name`, otherwise the split siblings would appear as two rows
+with the same wire name. The shipped
 `apps/fred-agents/config/models_catalog.yaml` does not adopt the field.
 
 ## Capabilities

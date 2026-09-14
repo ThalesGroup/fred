@@ -25,3 +25,6 @@
       `LLM_ROUTING_FRED.md` pod author guide, including the upgrade note.
 - [x] 2.6 Run `make code-quality` and `make test` in fred-runtime and
       control-plane-backend.
+- [x] 2.7 Label admin Capabilities model rows by `model_display_name`: carry it
+      on `CapabilityEnablementItem`, regenerate the client, prefer it in
+      `capabilityLabel`.

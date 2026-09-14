@@ -162,6 +162,15 @@ class CapabilityEnablementItem(BaseModel):
             "reasoning are two separate admin actions, in that order."
         ),
     )
+    model_display_name: str | None = Field(
+        default=None,
+        description=(
+            'For a `kind="model"` row: the ops-authored `model_display_name` '
+            "from models_catalog.yaml, carried verbatim. `name` is the wire "
+            "model value, which several models on one gateway can share, so "
+            "the admin label prefers this when set. Display only."
+        ),
+    )
 
 
 class CapabilityEnablementList(BaseModel):

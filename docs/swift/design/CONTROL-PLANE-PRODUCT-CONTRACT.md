@@ -2080,6 +2080,7 @@ per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §
 | ----- | -- | ------- |
 | `CapabilityEnablementItem.thinking_profile_ids` | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all** |
 | `CapabilityEnablementItem.reasoning_enabled` | `GET /admin/capabilities` | Current activation; `false` when no row is stored |
+| `CapabilityEnablementItem.model_display_name` | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
 | `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction |
 | `ExecutionPreparation.reasoning_enabled_model_ids` | prepare-execution | The activation snapshot the runtime enforces against |
 
