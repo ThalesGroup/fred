@@ -169,6 +169,17 @@ export default function AdminTeamsPage() {
             {!gcuVersion && (
               <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.gcuDisabled")}</p>
             )}
+            <Autocomplete<Team>
+              textInput={{
+                placeholder: t("rework.adminTeams.defaultTeam.searchPlaceholder"),
+                icon: { category: "outlined", type: "search" },
+                // Adding before the current list is known would drop the teams already set.
+                disabled: isSettingDefaultTeams || defaultTeams === undefined,
+              }}
+              onFieldValueChange={setDefaultTeamQuery}
+              options={defaultTeamOptions}
+              onSelect={handleAddDefaultTeam}
+            />
             {defaultTeams && defaultTeams.length > 0 ? (
               <ul className={styles.adminChipList}>
                 {defaultTeams.map((team) => (
@@ -188,17 +199,6 @@ export default function AdminTeamsPage() {
                 <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
               )
             )}
-            <Autocomplete<Team>
-              textInput={{
-                placeholder: t("rework.adminTeams.defaultTeam.searchPlaceholder"),
-                icon: { category: "outlined", type: "search" },
-                // Adding before the current list is known would drop the teams already set.
-                disabled: isSettingDefaultTeams || defaultTeams === undefined,
-              }}
-              onFieldValueChange={setDefaultTeamQuery}
-              options={defaultTeamOptions}
-              onSelect={handleAddDefaultTeam}
-            />
           </section>
           <Separator />
         </>

@@ -170,6 +170,8 @@ describe("AdminTeamsPage default teams for new users", () => {
     expect(options).toEqual(["Alpha", "Gamma"]);
     expect(section.textContent).toContain("Beta");
     expect(section.textContent).not.toContain("uid-");
+    const betaChip = section.querySelector('span[title="Beta"]')!;
+    expect(searchInput().compareDocumentPosition(betaChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("adds the team picked in the search to the ones already set", async () => {
