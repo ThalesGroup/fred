@@ -160,15 +160,7 @@ export default function AdminTeamsPage() {
   return (
     <div className={styles.adminTeamsPage}>
       <PageHeader title={t("rework.adminTeams.title")} />
-      <section className={styles.existingTeamsSection}>
-        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
-        {allTeams && allTeams.length > 0 ? (
-          <DataTable columns={teamColumns} data={allTeams} />
-        ) : (
-          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
-        )}
-      </section>
-      <Separator />
+      {/* Actions first: the registry list grows long and pushed them out of reach. */}
       {canAdmin && (
         <>
           <section className={styles.defaultTeamSection}>
@@ -254,6 +246,15 @@ export default function AdminTeamsPage() {
             {t("rework.adminTeams.createTeam.submit")}
           </Button>
         </div>
+      </section>
+      <Separator />
+      <section className={styles.existingTeamsSection}>
+        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
+        {allTeams && allTeams.length > 0 ? (
+          <DataTable columns={teamColumns} data={allTeams} />
+        ) : (
+          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
+        )}
       </section>
     </div>
   );

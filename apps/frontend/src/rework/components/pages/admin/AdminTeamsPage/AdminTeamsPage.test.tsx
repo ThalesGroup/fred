@@ -108,6 +108,18 @@ afterEach(() => {
   container.remove();
 });
 
+describe("AdminTeamsPage layout", () => {
+  it("puts the actions above the teams list, which can grow long", () => {
+    render();
+    const titles = Array.from(container.querySelectorAll("h2")).map((h2) => h2.textContent);
+    expect(titles).toEqual([
+      "rework.adminTeams.defaultTeam.title",
+      "rework.adminTeams.createTeam.title",
+      "rework.adminTeams.existingTeams.title",
+    ]);
+  });
+});
+
 describe("AdminTeamsPage default team for new users", () => {
   it("is hidden from a team_manager who is not platform_admin", () => {
     h.canAdmin = false;
