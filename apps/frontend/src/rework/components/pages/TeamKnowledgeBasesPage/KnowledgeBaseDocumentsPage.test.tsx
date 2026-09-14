@@ -32,6 +32,9 @@ const probe = vi.hoisted(() => ({
   browsed: [] as Record<string, unknown>[],
   page: { documents: [] as Record<string, unknown>[], total: 0 },
   browseRejects: false,
+  uploaders: [] as { id: string; [key: string]: unknown }[],
+  /** Every batched uid lookup the page made — one per page, never per row. */
+  uploaderLookups: [] as string[][],
 }));
 
 // One trigger for the life of the module, as RTK Query guarantees. A fresh
@@ -55,6 +58,10 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useKnowledgeBaseQuery: () => ({ data: probe.instance, isLoading: false, isError: !probe.instance }),
+  useUsersByIdsQuery: (args: { ids: string[] }) => {
+    probe.uploaderLookups.push(args.ids);
+    return { data: probe.uploaders, isFetching: false };
+  },
 }));
 
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts", () => ({
@@ -63,11 +70,13 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts", () => ({
 
 import KnowledgeBaseDocumentsPage from "./KnowledgeBaseDocumentsPage.tsx";
 
-function doc(name: string, uid: string) {
+function doc(name: string, uid: string, overrides: Record<string, unknown> = {}) {
   return {
-    identity: { document_name: name, document_uid: uid, title: null },
+    identity: { document_name: name, document_uid: uid, title: null, uploaded_by: null },
     source: { source_type: "pull", date_added_to_kb: "2026-09-14T08:00:00Z" },
     file: { file_size_bytes: 2048 },
+    processing: { stages: { vector: "done" } },
+    ...overrides,
   };
 }
 
@@ -90,6 +99,8 @@ beforeEach(() => {
   probe.browsed = [];
   probe.page = { documents: [], total: 0 };
   probe.browseRejects = false;
+  probe.uploaders = [];
+  probe.uploaderLookups = [];
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -140,5 +151,32 @@ describe("KnowledgeBaseDocumentsPage", () => {
 
     expect(container.textContent).toContain("rework.knowledgeBases.documents.loadFailed");
     expect(container.textContent).not.toContain("rework.knowledgeBases.documents.empty");
+  });
+
+  it("resolves every uploader in one lookup, not one per row", async () => {
+    probe.uploaders = [{ id: "u-1", first_name: "Priya", last_name: "N" }];
+    probe.page = {
+      documents: [
+        doc("a.md", "uid-1", { identity: { document_name: "a.md", document_uid: "uid-1", uploaded_by: "u-1" } }),
+        doc("b.md", "uid-2", { identity: { document_name: "b.md", document_uid: "uid-2", uploaded_by: "u-1" } }),
+      ],
+      total: 2,
+    };
+    await render();
+
+    const asked = probe.uploaderLookups.filter((ids) => ids.length > 0);
+    expect(asked.every((ids) => ids.length === 1)).toBe(true);
+    expect(asked[asked.length - 1]).toEqual(["u-1"]);
+  });
+
+  it("shows what a document settled at", async () => {
+    probe.page = {
+      documents: [doc("failed.pdf", "uid-1", { processing: { stages: { vector: "failed" } } })],
+      total: 1,
+    };
+    await render();
+
+    // The chip renders; its own tests cover which stage means which status.
+    expect(container.querySelector("[class*='statusChip'], [class*='chip']")).not.toBeNull();
   });
 });

@@ -16,12 +16,18 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
+import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
+import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
-import { useCallback, useEffect, useState } from "react";
+import { userDisplayName } from "@core/utils/userDisplayName.ts";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { useKnowledgeBaseQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import {
+  useKnowledgeBaseQuery,
+  useUsersByIdsQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import {
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   type DocumentMetadata,
@@ -56,6 +62,21 @@ export default function KnowledgeBaseDocumentsPage() {
   const [documentsError, setDocumentsError] = useState(false);
 
   const libraryId = instance?.library_id;
+
+  // One lookup for the page, not one per row — the same batching a team's
+  // resources use, so a library of 25 documents costs a single request.
+  const uploaderUids = useMemo(
+    () =>
+      Array.from(
+        new Set(documents.map((doc) => doc.identity.uploaded_by).filter((uid): uid is string => Boolean(uid))),
+      ),
+    [documents],
+  );
+  const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
+    { ids: uploaderUids },
+    { skip: uploaderUids.length === 0 },
+  );
+  const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
 
   const loadPage = useCallback(
     async (tagId: string, from: number) => {
@@ -99,6 +120,28 @@ export default function KnowledgeBaseDocumentsPage() {
       label: t("rework.resources.columns.created"),
       size: "9rem",
       cellRenderer: (doc) => <span className={styles.nowrapCell}>{formatDateTime(doc.source.date_added_to_kb)}</span>,
+    },
+    {
+      label: t("rework.resources.columns.author"),
+      size: "9rem",
+      cellRenderer: (doc) => {
+        const uid = doc.identity.uploaded_by;
+        // Absent-yet and absent-entirely both render "—": flashing a raw uid
+        // while the batched lookup resolves reads worse than a dash that
+        // corrects itself on the next render.
+        if (!uid || (!uploaderById.get(uid) && isFetchingUploaders)) {
+          return <span className={styles.nowrapCell}>—</span>;
+        }
+        return <span className={styles.nowrapCell}>{userDisplayName(uid, uploaderById.get(uid))}</span>;
+      },
+    },
+    {
+      // No live task feed here: a run's own progress is Temporal's to tell.
+      // What a document settled at is still worth showing — a base whose
+      // documents never became searchable looks identical to one that worked.
+      label: "",
+      size: "8rem",
+      cellRenderer: (doc) => <StatusChip status={deriveDocStatus(doc).status} errors={doc.processing?.errors} />,
     },
   ];
 

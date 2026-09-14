@@ -15,7 +15,7 @@
 import type { DocumentMetadata, TaskSummary } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { collectDescendantDocUids, type TagNode } from "../../../../../shared/utils/tagTree.ts";
-import { deriveDocStatus } from "./deriveDocStatus.ts";
+import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 
 /** A document a failure chip stands for. */
 export interface FailedDoc {

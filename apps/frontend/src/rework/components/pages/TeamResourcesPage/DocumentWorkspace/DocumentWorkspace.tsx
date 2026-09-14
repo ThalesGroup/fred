@@ -77,10 +77,10 @@ import { hasNativePreview } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
-import { StatusChip } from "../StatusChip/StatusChip.tsx";
+import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
-import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
+import { deriveDocStatus, isTabularOnlyDoc } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 import {
   buildFolderRollups,
