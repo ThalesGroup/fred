@@ -428,6 +428,17 @@ agents) so the decision is informed at the point it is made.
 
 #### Resolved
 
+- **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
+  only trimmed sentences identical character for character to the _previous_ block. Models
+  rarely restate verbatim ("L'utilisateur demande…" → "L'utilisateur a demandé…"), so on six
+  local multi-round conversations almost no row was trimmed. `traceRows()` now splits each
+  block into lines and whole sentences and drops the leading run already said in _any_ earlier
+  block of the turn, matched by word overlap (Jaccard ≥ 0.8, case- and accent-insensitive;
+  0.75 confused sentences differing by one noun). Numbers and negation must match exactly —
+  "3 pages left" / "no results" share nearly all their words with what they contradict — and
+  soft-wrapped lines rejoin their paragraph first. A block with nothing new renders
+  `rework.chatTrace.restatedReasoning` instead of its text, unless it is still streaming.
+
 - **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
   "reasoning preview length" open issue above. Reasoning models restate the task from scratch
   at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one

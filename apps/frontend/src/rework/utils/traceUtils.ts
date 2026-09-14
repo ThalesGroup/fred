@@ -638,45 +638,119 @@ export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
 /** One row of the trace. `index` is the 1-based tool step number — null for
  *  reasoning, notes and errors, which are sequenced but are not steps.
- *  `reasoningText` is the row's display text, null on a step row. */
+ *  `reasoningText` is the row's display text, null on a step row. `restated`
+ *  marks a reasoning row with nothing new: every sentence was said earlier. */
 export type TraceRow = {
   entry: TraceEntry;
   lane: "reasoning" | "step";
   index: number | null;
   reasoningText: string | null;
+  restated: boolean;
 };
 
+/** Word overlap from which a sentence counts as already said. 0.75 confused
+ *  sentences differing by a single noun ("…page Italie" / "…page Espagne"). */
+const RESTATEMENT_OVERLAP = 0.8;
+
+/** Negation words ("n" and "t" are what "n'existe" and "don't" split into).
+ *  A negated sentence shares nearly all its words with the claim it reverses. */
+const NEGATIONS = new Set([
+  "no",
+  "not",
+  "never",
+  "none",
+  "nothing",
+  "cannot",
+  "without",
+  "t",
+  "ne",
+  "n",
+  "pas",
+  "aucun",
+  "aucune",
+  "jamais",
+  "rien",
+  "sans",
+]);
+
+/** `facts` (negation, numbers) must match exactly: overlap alone would call
+ *  "3 pages left" and "2 pages left" the same sentence. */
+type ReasoningSegment = { text: string; words: ReadonlySet<string>; facts: string };
+
+// A line opening its own block; any other line is a soft wrap of its paragraph.
+const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
+
 /**
- * `text` with the leading run of whole sentences `previousText` already carried
- * removed — the repeated preamble, not a prefix of it.
- *
- * Reasoning models restate the task from scratch at every round: two blocks of
- * one turn commonly share hundreds of identical leading characters and differ
- * only at the end, so consecutive rows read as the same row twice.
- *
- * Only COMPLETE sentences are dropped, which is what keeps this safe. Two blocks
- * that merely open on the same few words ("The user asked ") share no whole
- * sentence, so nothing is removed and no line is ever cut mid-thought. Compared
- * against the previous block's FULL text, not its trimmed display text, so the
- * rows still tile the whole reasoning between them with nothing lost.
- *
- * Errs towards keeping text: a missed boundary repeats a preamble, a wrong one
- * opens a row mid-sentence — which is the failure this whole function exists to
- * avoid. See {@link isSentenceEnd}.
+ * A reasoning block cut into paragraphs, list items, headings and whole
+ * sentences, each flattened to plain text. Whole sentences only — see
+ * {@link isSentenceEnd} — so dropping a segment never opens a row mid-sentence.
  */
-export function stripRepeatedPreamble(text: string, previousText: string | null): string {
-  if (!previousText) return text;
+function reasoningSegments(markdown: string): ReasoningSegment[] {
+  const blocks: string[] = [];
+  for (const line of markdown.replace(/```[\s\S]*?```/g, "\n").split("\n")) {
+    if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0) blocks.push(line);
+    else blocks[blocks.length - 1] += ` ${line.trim()}`;
+  }
 
-  let shared = 0;
-  while (shared < text.length && shared < previousText.length && text[shared] === previousText[shared]) shared++;
+  const segments: ReasoningSegment[] = [];
+  const push = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const raw = rawWords(trimmed);
+    const numbers = raw.filter((word) => /\d/.test(word)).sort();
+    const facts = `${raw.some((word) => NEGATIONS.has(word)) ? "!" : ""}${numbers.join(",")}`;
+    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts });
+  };
+  for (const block of blocks) {
+    const text = plainPreviewText(block);
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (!isSentenceEnd(text, i)) continue;
+      push(text.slice(start, i + 1));
+      start = i + 1;
+    }
+    push(text.slice(start));
+  }
+  return segments;
+}
 
-  let cut = 0;
-  for (let i = 0; i < shared; i++) if (isSentenceEnd(text, i)) cut = i + 1;
-  // A block wholly contained in its predecessor keeps its text: an empty row
-  // would read as a rendering bug, and dropping it would lose the block itself.
-  if (cut === 0 || cut >= text.length) return text;
+// Case- and accent-insensitive, so "demande" and "a demandé" compare equal.
+function rawWords(text: string): string[] {
+  return (
+    text
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
+}
 
-  return text.slice(cut).trimStart();
+// One-letter words ("a", "l'") carry nothing a rephrasing would keep; digits do.
+function meaningfulWords(raw: string[]): string[] {
+  return raw.filter((word) => word.length > 1 || /\d/.test(word));
+}
+
+/**
+ * Whether `segment` restates one of the sentences `said` earlier in the turn.
+ *
+ * Reasoning models restate their context at every round, and rarely verbatim —
+ * "L'utilisateur demande…" comes back as "L'utilisateur a demandé…" — so
+ * sentences are compared by word overlap (Jaccard), not character by character.
+ * `unfinished` is the sentence still streaming, cut mid-word: it is judged on the
+ * words it has finished, or a restatement flashes into the row before it matches.
+ */
+function isAlreadySaid(segment: ReasoningSegment, said: readonly ReasoningSegment[], unfinished: boolean): boolean {
+  if (segment.words.size === 0) return true;
+  if (unfinished) {
+    const finished = meaningfulWords(rawWords(segment.text)).slice(0, -1);
+    return said.some((earlier) => finished.every((word) => earlier.words.has(word)));
+  }
+  return said.some((earlier) => {
+    if (earlier.facts !== segment.facts) return false;
+    let shared = 0;
+    for (const word of segment.words) if (earlier.words.has(word)) shared++;
+    return shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP;
+  });
 }
 
 /**
@@ -719,8 +793,8 @@ const SENTENCE_ABBREVIATIONS = new Set([
  * - a list marker is all digits, which rejects "1. Read the file";
  * - the rest are named in {@link SENTENCE_ABBREVIATIONS}.
  *
- * Deliberately asymmetric: a missed boundary only repeats a preamble, a wrong
- * one mutilates a line.
+ * Deliberately asymmetric: a missed boundary only keeps a restated sentence, a
+ * wrong one mutilates a line.
  */
 function isSentenceEnd(text: string, i: number): boolean {
   const ch = text[i];
@@ -753,47 +827,84 @@ function isReasoningEntry(entry: TraceEntry): boolean {
   return channel === "thought" || channel === "plan" || channel === "observation";
 }
 
-// Flattened preview text, keyed on the message object itself.
+// Flattened preview and segments, keyed on the message object itself.
 //
 // `toThreadMessages` rebuilds every exchange's `traceMessages` array on each SSE
 // frame, so this fold re-runs for every OPEN trace in the conversation on every
 // token — and a turn that streamed in this session stays open. The message
 // objects inside those arrays are the same ones, though: only the block still
 // streaming is rebuilt, and it is the only one that misses.
-const previewTextCache = new WeakMap<ChatMessage, string>();
+const reasoningTextCache = new WeakMap<ChatMessage, { preview: string; segments: ReasoningSegment[] }>();
 
-function previewTextForEntry(entry: TraceEntry): string {
-  if (entry.kind !== "solo") return "";
-  const cached = previewTextCache.get(entry.message);
-  if (cached !== undefined) return cached;
-  const text = plainPreviewText(detailTextForEntry(entry));
-  previewTextCache.set(entry.message, text);
-  return text;
+function reasoningTextFor(message: ChatMessage): { preview: string; segments: ReasoningSegment[] } {
+  const cached = reasoningTextCache.get(message);
+  if (cached) return cached;
+  const markdown = textOf(message);
+  const computed = { preview: plainPreviewText(markdown), segments: reasoningSegments(markdown) };
+  reasoningTextCache.set(message, computed);
+  return computed;
+}
+
+// How many leading segments of a block were already said, valid while the blocks
+// before it are the same objects. Matching is quadratic in the turn's sentences,
+// so on each streamed frame only the block still streaming pays for it.
+const restatedLeadCache = new WeakMap<ChatMessage, { earlier: ChatMessage[]; lead: number }>();
+
+function restatedLead(
+  message: ChatMessage,
+  segments: ReasoningSegment[],
+  earlier: ChatMessage[],
+  said: readonly ReasoningSegment[],
+  streaming: boolean,
+): number {
+  const cached = restatedLeadCache.get(message);
+  if (cached && cached.earlier.length === earlier.length && cached.earlier.every((m, i) => m === earlier[i])) {
+    return cached.lead;
+  }
+  let lead = 0;
+  while (said.length > 0 && lead < segments.length) {
+    const unfinished = streaming && lead === segments.length - 1 && !/[.!?]$/.test(segments[lead].text);
+    if (!isAlreadySaid(segments[lead], said, unfinished)) break;
+    lead++;
+  }
+  // A streaming block arrives as a new object each delta, so it never hits the cache.
+  if (!streaming) restatedLeadCache.set(message, { earlier: [...earlier], lead });
+  return lead;
 }
 
 /** The trace as one chronological list, each row tagged with how it renders. */
 export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
-  // Each reasoning row is trimmed against the previous one's FULL text — see
-  // stripRepeatedPreamble. Only this function sees the sequence, so it is the
-  // only place that can do it.
-  let previousReasoning: string | null = null;
+  // Every sentence of the turn so far: a row drops the restatement of ANY earlier
+  // block, not only the previous one. Only the leading run goes, never a sentence
+  // in the middle, and the full markdown stays in the detail drawer.
+  const said: ReasoningSegment[] = [];
+  const earlier: ChatMessage[] = [];
 
   return entries.map((entry) => {
-    if (isReasoningEntry(entry)) {
-      const text = previewTextForEntry(entry);
-      const row = {
-        entry,
-        lane: "reasoning" as const,
-        index: null,
-        reasoningText: stripRepeatedPreamble(text, previousReasoning),
-      };
-      previousReasoning = text;
-      return row;
+    if (isReasoningEntry(entry) && entry.kind === "solo") {
+      const { preview, segments } = reasoningTextFor(entry.message);
+      const streaming = statusForEntry(entry) === "streaming";
+      const lead = restatedLead(entry.message, segments, earlier, said, streaming);
+      said.push(...segments);
+      earlier.push(entry.message);
+
+      const nothingNew = segments.length > 0 && lead === segments.length;
+      const reasoningText =
+        lead === 0
+          ? preview
+          : segments
+              .slice(lead)
+              .map((segment) => segment.text)
+              .join(" ");
+      // A block still streaming may yet add something, so it is not called a restatement.
+      return { entry, lane: "reasoning" as const, index: null, reasoningText, restated: nothingNew && !streaming };
     }
-    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null };
+    if (isStepEntry(entry)) {
+      return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null, restated: false };
+    }
     // system_note / error — sequenced with the steps, but unnumbered.
-    return { entry, lane: "step" as const, index: null, reasoningText: null };
+    return { entry, lane: "step" as const, index: null, reasoningText: null, restated: false };
   });
 }
 

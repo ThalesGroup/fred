@@ -1554,6 +1554,7 @@
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
+      "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
