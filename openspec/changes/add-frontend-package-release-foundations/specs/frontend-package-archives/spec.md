@@ -27,9 +27,11 @@ The selected coordinates SHALL be `@fred-oss/design-tokens@0.1.0-alpha.1`,
 account `marc.fawaz` SHALL be recorded separately from the future Trusted Publishing
 workflow identity, together with the maintainer-supplied confirmation that it has the
 `fred-oss` organization-owner role. Package API, SDK protocol, release, and enduring npm
-publishing owners and the later direct-versus-staged policy MUST remain explicit unresolved
-decisions. The contract MUST remain non-approved until those required fields are complete;
-selected coordinates or npm-organization ownership MUST NOT imply product-contract ownership.
+publishing ownership SHALL each be explicitly assigned to `marc.fawaz`, and subsequent releases
+SHALL use the selected direct Trusted Publishing policy with GitHub environment approval. The
+distinct GitHub reviewer identity `marcfawaz` SHALL be documented operationally without extending
+the release-contract schema. Selected coordinates or npm-organization ownership alone MUST NOT
+imply product-contract ownership.
 Repository tooling MAY use explicit non-authoritative fixtures, but MUST NOT represent fixture
 results or a merely selected incomplete contract as approved release evidence.
 
@@ -71,7 +73,7 @@ results or a merely selected incomplete contract as approved release evidence.
   repository field, or other required value that differs from the selected contract
 - **THEN** validation fails even if the archive is internally self-consistent
 
-#### Scenario: Required release ownership remains incomplete
+#### Scenario: Required release ownership is incomplete
 
 - **WHEN** a command attempts to create approved release evidence while a required owner or
   later publication-policy field remains unresolved
@@ -84,6 +86,14 @@ results or a merely selected incomplete contract as approved release evidence.
 - **THEN** tooling accepts the selected scope and bootstrap authority only when all selected
   package names belong to `@fred-oss/`, without inferring package API, SDK protocol, release, or
   enduring publishing ownership
+
+#### Scenario: The complete maintainer contract is confirmed
+
+- **WHEN** the selected contract records `marc.fawaz` for all four ownership roles and `direct`
+  for the subsequent Trusted Publishing policy
+- **THEN** contract validation reports no unresolved maintainer decisions while candidate
+  execution and publication remain subject to their separate source, validation, manual-choice,
+  and protected-environment gates
 
 #### Scenario: A fixture contract is relabelled without maintainer decisions
 
@@ -510,10 +520,11 @@ actual publication, registry verification, FRED adoption, and external adoption.
 Initial creation MUST require confirmed scope ownership and an account or organization
 permission model capable of creating each package; it MUST NOT assume that a
 package-scoped credential can create a nonexistent package. Staged publishing MUST be
-documented as a maintainer policy choice and MUST NOT be used for brand-new package
-creation. The bootstrap actor or credential identity and the later Trusted Publishing
-workflow identity MUST be recorded separately. Neither identity may be inferred from the
-other, and an unconfirmed identity remains a maintainer gate.
+documented as an available policy with prerequisites and MUST NOT be used for brand-new package
+creation; the selected policy for subsequent FRED frontend package releases SHALL be direct
+Trusted Publishing with GitHub environment approval. The bootstrap actor or credential identity
+and the later Trusted Publishing workflow identity MUST be recorded separately. Neither identity
+may be inferred from the other, and an unconfirmed identity remains a maintainer gate.
 
 Dependencies SHALL be released before consumers: a compatible design-token version
 before its UI consumer, while the independent SDK may be sequenced separately. FRED

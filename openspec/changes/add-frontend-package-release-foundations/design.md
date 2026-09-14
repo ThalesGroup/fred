@@ -44,10 +44,19 @@ release production, not as an implicit migration of application-owned tooling:
 - [official Node 24 archive](https://nodejs.org/en/download/archive/v24)
 
 The maintainer supplied authenticated evidence that bootstrap account `marc.fawaz` has the
-owner role in npm organization `fred-oss`. The temporary granular token remains outside the
-repository and is neither an input to builds/tests nor inspected by this change. Package API,
-SDK protocol, release, and enduring npm-publishing owners and the later direct-versus-staged
-policy remain unresolved. No publication or registry configuration exists in this checkout.
+owner role in npm organization `fred-oss`, confirmed `marc.fawaz` for all four package API, SDK
+protocol, release, and enduring npm-publishing owner roles, and selected direct Trusted
+Publishing for subsequent releases. The GitHub release-reviewer identity is the distinct account
+`marcfawaz`. The temporary granular token remains outside the repository and is neither an input
+to builds/tests nor inspected by this change. No publication has occurred.
+
+A repository administrator reports that the `npm-publish` environment is configured. A supplied
+screenshot supports required reviewer `marcfawaz`, **Prevent self-review** disabled,
+administrator bypass disabled, branch `swift` only with zero tags, and the existence of an
+environment secret named `NPM_BOOTSTRAP_TOKEN`; the screenshot crops the environment name. This
+is not independent API verification, token-content validation, environment approval, workflow
+execution, or publication evidence. The maintainer will both initiate and approve releases;
+allowing that self-review preserves rather than removes the required environment approval gate.
 
 ## Goals / Non-Goals
 
@@ -61,8 +70,8 @@ policy remain unresolved. No publication or registry configuration exists in thi
   registry verification deliberately online, exact, and incapable of local fallback.
 - Retain the current application compatibility baseline without forcing FRED application
   tests onto the release-production toolchain.
-- Make repository work testable before registry ownership decisions while keeping
-  approval-dependent tasks visibly gated.
+- Keep repository work testable while keeping external execution and publication tasks visibly
+  gated.
 
 **Non-Goals:**
 
@@ -96,11 +105,11 @@ from the archive being judged.
 Maintainers selected `@fred-oss/design-tokens`, `@fred-oss/ui`, and
 `@fred-oss/iframe-sdk` at independent version `0.1.0-alpha.1`, public
 `https://registry.npmjs.org/` access, and `next`. They also confirmed bootstrap account
-`marc.fawaz` has organization-owner authority in `fred-oss`. These decisions authorize manifest
-and lockfile synchronization but do not name the package API, SDK protocol, release, or enduring
-npm-publishing owners and do not select later direct versus staged publication. The contract
-therefore remains `proposed`; approved evidence and publication require those remaining fields
-and an explicit `maintainer-confirmed` transition.
+`marc.fawaz` has organization-owner authority in `fred-oss`, named `marc.fawaz` as the package
+API, SDK protocol, release, and enduring npm-publishing owner, and selected direct Trusted
+Publishing for subsequent releases. The contract is therefore `maintainer-confirmed`. This
+authorizes approved-candidate preparation only when every existing clean-source, exact-toolchain,
+immutable-byte, dual-toolchain, and workflow gate passes; it does not authorize publication.
 
 Alternatives rejected:
 
@@ -130,10 +139,11 @@ checkout target, or other link is rejected. This preserves npm's legitimate work
 model without permitting it to leak into a packed manifest.
 
 The confirmed registry, public access, scope, and `next` policy are recorded in each member's
-`publishConfig`; no credential is stored. npm-organization ownership does not imply ownership of
-the package API or SDK protocol. Missing named owners and the later publishing-policy choice keep
-the contract non-approved. Verified organization ownership is also a namespace boundary: every
-selected member name must belong to the recorded `@fred-oss/` scope.
+`publishConfig`; no credential is stored. npm-organization ownership did not imply ownership of
+the package API or SDK protocol; those roles are now separately and explicitly assigned to
+`marc.fawaz`. The confirmed direct policy applies to subsequent Trusted Publishing and does not
+replace the guarded bootstrap path. Verified organization ownership is also a namespace boundary:
+every selected member name must belong to the recorded `@fred-oss/` scope.
 
 Alternative rejected: making the root publishable, because it is orchestration-only and
 would create an accidental fourth package.
@@ -263,9 +273,9 @@ provenance emission, npm package creation, or registry success.
 
 The bootstrap workflow uses token authentication only because these package coordinates do not
 yet exist. After creation, maintainers configure the exact workflow and `npm-publish` environment
-as Trusted Publishers, choose direct or staged allowed actions, update the workflow to remove the
-bootstrap secret, validate a new version, and revoke the temporary token. Staged publishing is
-not used for initial creation.
+for direct Trusted Publishing, update the workflow to remove the bootstrap secret, validate a new
+version, and revoke the temporary token. Selecting direct publishing does not implement this OIDC
+transition. Staged publishing is not used for initial creation.
 
 ### 5. Parameterize the existing consumers; do not create release-only product fixtures
 
@@ -386,10 +396,12 @@ The compact runbook records four maintainer gates before the guarded publish pat
    repository data. Package-scoped credentials for nonexistent packages are not assumed to work.
 3. Create each initial package through the separately approved bootstrap process. npm's
    staged publishing cannot create a brand-new package.
-4. Separately confirm and configure the exact trusted publisher repository and workflow identity
-   for each existing package, bind it to future candidate evidence, then choose direct or staged
-   publishing as maintainer policy. Staging is recommended for review but remains a policy choice
-   and requires its documented Node/npm/access/2FA prerequisites.
+4. Configure the exact trusted publisher repository and workflow identity for each existing
+   package, bind it to future candidate evidence, and apply the confirmed direct-publishing policy
+   with GitHub environment approval. This future OIDC workflow transition remains separate from
+   initial bootstrap creation and publication authorization. The unselected staged alternative
+   remains documented with its npm `11.15.0`+, Node `22.14.0`+, existing-package, publish-access,
+   and approving-maintainer 2FA prerequisites.
 
 The guarded workflow is prepared in this phase, but its token value is never read or stored and
 no GitHub environment or registry state is created. The runbook sequences design tokens before
@@ -430,9 +442,9 @@ operation only.
 
 ## Risks / Trade-offs
 
-- **[Release ownership and later policy remain incomplete]** → Record selected coordinates and
-  bootstrap authority while keeping the contract `proposed`; fail approved evidence and
-  publication until every named owner and the direct-versus-staged decision is reviewed.
+- **[A confirmed contract could be mistaken for publication authorization]** → Keep candidate
+  generation bound to committed clean source and exact dual-toolchain validation, and retain the
+  explicit manual publication choice plus protected-environment approval as separate gates.
 - **[A release-only toolchain can diverge from application CI]** → Retain both environments,
   pass hash-verified archives between them, and record both toolchains in evidence.
 - **[CI-retained artifacts can expire or be downloaded incorrectly]** → Retain tarballs and
@@ -465,14 +477,14 @@ operation only.
    validation, registry-verifier fixture tests, and CI selection using non-authoritative test
    contracts.
 2. Record the selected `fred-oss` scope, exact `@fred-oss/*@0.1.0-alpha.1` coordinates, public
-   npm/`next` policy, bootstrap actor and authority, and guarded workflow identity. Keep the
-   contract proposed until named owners and later direct-versus-staged policy are confirmed.
+   npm/`next` policy, bootstrap actor and authority, named owners, confirmed direct policy, and
+   guarded workflow identity; transition the complete contract to `maintainer-confirmed`.
 3. Synchronize the three member manifests, UI token peer, and producer lockfile to those selected
    coordinates while keeping the root private; run the full archive regression suite.
 4. Prepare the manual, `swift`-restricted workflow and approved transfer/publication controls.
    Controlled fixture tests prove them without producing approved evidence or contacting npm.
-5. After remaining contract decisions are confirmed on committed `swift`, run preparation to
-   produce one immutable candidate, validate it under both toolchains, and retain its evidence.
+5. After the confirmed contract reaches committed `swift`, run preparation to produce one
+   immutable candidate, validate it under both toolchains, and retain its evidence.
    A separately approved manual run may then bootstrap the nonexistent packages from those exact
    bytes and perform genuine public-registry verification.
 6. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
@@ -484,7 +496,7 @@ repository changes; no registry state exists to roll back.
 
 ## Open Questions
 
-- Who are the named package/public-API, SDK protocol compatibility, release, and enduring npm
-  publishing owners?
-- Will maintainers choose staged or direct publishing after bootstrap? Recommended default:
-  staged review for later releases, subject to the documented prerequisites.
+No release-contract ownership or publishing-policy decision remains open. Approved candidate
+production, protected-environment execution, initial publication, the later OIDC workflow
+transition, and genuine registry verification remain unexecuted operational gates rather than
+contract decisions.

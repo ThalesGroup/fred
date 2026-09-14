@@ -27,7 +27,7 @@
   final package names, independently selected initial versions, public registry/access policy,
   and intended dist-tag; verify the confirmed contract is reviewable and does not treat the
   formerly provisional coordinates or policy as pre-authorized.
-- [ ] 2.2 Obtain and record named package/public-API, SDK wire-compatibility, release, and npm
+- [x] 2.2 Obtain and record named package/public-API, SDK wire-compatibility, release, and npm
   publishing owners plus the distinct bootstrap actor/credential identity and exact future
   Trusted Publishing source repository and GitHub workflow identity; verify unconfirmed
   identities remain explicit gates and the guarded workflow cannot receive a credential or mutate
@@ -35,9 +35,9 @@
 - [x] 2.3 Verify the approved npm organization/account permission model can create each package
   if it does not exist and document the separate bootstrap path; verify the record does not
   assume a package-scoped credential or staged publishing can create a brand-new package.
-- [ ] 2.4 Record the maintainer choice between later direct and staged publishing, recommending
-  staged review after bootstrap; verify the decision cites the exact Node/npm, existing-package,
-  access, and 2FA prerequisites and remains separate from publication authorization.
+- [x] 2.4 Record the maintainer choice of direct Trusted Publishing after bootstrap; preserve the
+  documented staged alternative and its exact Node/npm, existing-package, access, and 2FA
+  prerequisites, and verify the selected policy remains separate from publication authorization.
 
 ## 3. Release-ready member metadata and lockfile
 
@@ -284,9 +284,9 @@
 
 - [x] 12.1 Record the selected npm organization, three exact prerelease coordinates, public
   registry/access, `next` tag, bootstrap account and supplied organization-owner confirmation in
-  the proposed contract; keep package API, SDK protocol, release, enduring publishing ownership,
-  and later direct-versus-staged policy unresolved and fail approved evidence while they are
-  incomplete.
+  the selected contract; record `marc.fawaz` for package API, SDK protocol, release, and enduring
+  npm-publishing ownership plus the direct subsequent-release policy, and fail approved evidence
+  whenever a proposed or fixture contract remains incomplete.
 - [x] 12.2 Synchronize member manifests, the UI token peer, generic consumer imports, package
   documentation, and the producer lockfile to the selected `@fred-oss/*@0.1.0-alpha.1`
   coordinates under exact Node `24.21.0` and npm `11.19.0`; preserve root privacy, React peers,
@@ -304,8 +304,8 @@
   Trusted Publishing setup, token revocation, immutable recovery, and the distinction between
   controlled tests, approved candidates, actual publication, and genuine registry evidence;
   retain broader RFC release/adoption work as open.
-- [ ] 12.6 On committed `swift` after named owners and later policy are confirmed, run the guarded
-  preparation path and retain one approved release-candidate artifact with GitHub repository,
+- [ ] 12.6 On committed `swift`, run the guarded preparation path and retain one approved
+  release-candidate artifact with GitHub repository,
   commit, workflow/run, dual-toolchain, archive, and complete downstream evidence.
 - [ ] 12.7 After separate publication authorization and protected-environment approval, bootstrap
   the three previously absent versions from those exact bytes, verify emitted provenance and
@@ -544,3 +544,30 @@
   genuine public-registry verification; tasks 2.2, 2.4, 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7
   remain gated on the remaining maintainer decisions, committed source, a real GitHub run,
   publication, and separately authorized registry verification.
+
+## Maintainer-confirmed release-contract evidence (2026-09-14)
+
+- Starting from clean reviewed commit `f4fab6951e0c14367cb70dd281b04c121d2c9338` on
+  `chore/confirm-frontend-release-contract`, maintainers confirmed `marc.fawaz` as package API,
+  SDK protocol compatibility, release, and enduring npm-publishing owner and selected direct
+  Trusted Publishing for subsequent releases. The selected contract is now
+  `maintainer-confirmed`, validates with no unresolved maintainer decisions, and retains every
+  existing coordinate, toolchain, manifest, bootstrap, and provenance value.
+- GitHub reviewer `marcfawaz` is distinct from npm/contract identity `marc.fawaz`. A repository
+  administrator reports, with screenshot support, that `npm-publish` requires reviewer
+  `marcfawaz`, allows self-review, disables administrator bypass, selects branch `swift` and zero
+  tags, and contains an environment secret named `NPM_BOOTSTRAP_TOKEN`; the screenshot crops the
+  environment name. This is not independent API verification, secret validation, environment
+  approval, workflow execution, or publication evidence.
+- Tasks 2.2 and 2.4 are complete because the named identities and direct policy are explicit and
+  the guarded default path still cannot publish. Tasks 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7 remain
+  unchecked pending committed `swift` source, real protected-environment workflow execution,
+  approved immutable candidate evidence, separately authorized publication, and genuine registry
+  verification. The confirmed policy neither performs the future OIDC workflow transition nor
+  authorizes publication.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, `npm run release:check` reports the
+  selected `maintainer-confirmed` contract alongside the unchanged fixture contract, `npm run
+  release:test` passes 82/82 controlled tests, and `npm run lint` plus `npm run format` pass. A
+  direct parser check reports all four exact owner values, `direct`, and zero unresolved decisions.
+  Strict validation of this change and all repository OpenSpec items passes, `git diff --check`
+  passes, and OpenSpec reports 67/73 tasks complete.

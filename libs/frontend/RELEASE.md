@@ -3,9 +3,9 @@
 The producer prepares `@fred-oss/design-tokens`, `@fred-oss/ui`, and
 `@fred-oss/iframe-sdk` version `0.1.0-alpha.1` for public npm publication under the
 `next` tag. Repository commands and pull-request jobs do not publish. The manual
-publication workflow remains disabled by default and cannot run until the incomplete
-ownership and publishing-policy fields below are confirmed in a committed release
-contract.
+publication workflow remains disabled by default. The release contract is now
+maintainer-confirmed, but publication still requires a committed `swift` source, an explicit
+manual publication choice, and approval through the protected environment.
 
 ## Release contracts
 
@@ -15,10 +15,11 @@ downloaded attestation:
 - `release/development-fixture-contract.json` exercises the selected coordinates while
   retaining fixture identities and evidence classifications. It supports repository tests
   but can never authorize publication.
-- `release/proposed-release-contract.json` records the confirmed `fred-oss` organization,
-  three `@fred-oss` coordinates, public npm registry/access, `next` tag, bootstrap account,
-  verified organization-owner authority, and expected workflow identity. It remains
-  `proposed` because the enduring owners and later publishing policy are incomplete.
+- `release/proposed-release-contract.json` retains its established filename and records the
+  confirmed `fred-oss` organization, three `@fred-oss` coordinates, public npm registry/access,
+  `next` tag, bootstrap account, verified organization-owner authority, all four named owners,
+  direct publishing policy, and expected workflow identity. Its state is
+  `maintainer-confirmed`.
 - A maintainer-confirmed contract must record the exact package names and versions, registry,
   dist-tag policy, producer Node/npm versions, source repository, bootstrap publisher, named
   API/protocol/release/publishing owners, and
@@ -138,8 +139,7 @@ Never rebuild an archive in the receiver or repair an artifact in place.
 
 ## Candidate and registry commands
 
-After maintainers supply a confirmed contract, use its exact producer toolchain and a clean
-source commit:
+Using the confirmed contract requires its exact producer toolchain and a clean source commit:
 
 ```sh
 npm run release:candidate -- --contract /absolute/path/to/confirmed-contract.json \
@@ -212,21 +212,44 @@ missing directory, absent executable, or resolution through Playwright's default
 the provisioning command.
 
 The initial token is used only for creation. Later releases require a separately reviewed workflow
-change that removes the bootstrap secret and uses npm Trusted Publishing. The choice to allow
-direct Trusted Publishing or require staged publication remains unresolved; staged publishing
-cannot create a brand-new package.
+change that removes the bootstrap secret and uses direct npm Trusted Publishing with GitHub
+environment approval. Selecting that policy does not implement the OIDC transition or authorize
+publication. Staged publishing cannot create a brand-new package.
+
+The unselected [staged-publishing alternative](https://docs.npmjs.com/staged-publishing/)
+requires npm `11.15.0` or later, Node `22.14.0` or later, an existing package, publish access,
+and 2FA on the approving maintainer's account. These prerequisites remain documented for future
+policy review; they do not change the confirmed direct policy.
+
+### Contract and environment confirmation (2026-09-14)
+
+Maintainers confirmed `marc.fawaz` as the package API, SDK protocol compatibility, release, and
+enduring npm-publishing owner, and selected direct Trusted Publishing for subsequent releases.
+The GitHub release-reviewer account is `marcfawaz`; it is a distinct identifier from the npm and
+contract owner identity `marc.fawaz` and is intentionally not added to the release-contract
+schema.
+
+A repository administrator reports that the `npm-publish` environment is configured, supported
+by a supplied screenshot showing required reviewer `marcfawaz`, **Prevent self-review** disabled,
+administrator bypass disabled, deployment branch `swift` only with zero tags, and an environment
+secret named `NPM_BOOTSTRAP_TOKEN`. Because **Prevent self-review** is disabled, the maintainer who
+initiates a release will also satisfy the required-reviewer gate; this is intentional, and the
+approval gate itself remains required. The screenshot crops the environment name, so the association with `npm-publish` is an
+administrator report rather than independently visible screenshot evidence. Repository tooling
+did not query GitHub settings, inspect or validate the secret, approve an environment deployment,
+run the workflow, or publish a package.
 
 ### Manual GitHub and npm setup
 
-1. In the GitHub repository, open **Settings → Environments**, create `npm-publish`, restrict its
-   deployment branches to `swift`, and select the required release reviewers. The identities of
-   those reviewers remain a maintainer decision.
-2. Add one environment secret named `NPM_BOOTSTRAP_TOKEN` containing the already-created temporary
-   granular token. Do not add it as a repository or organization secret. Do not expose it to a
-   pull-request, preparation, validation, installation, or registry-verification job.
-3. Complete `maintainerApproval.owners`, select `maintainerApproval.publishingPolicy`, change the
-   contract state to `maintainer-confirmed`, review the resulting contract, and merge it to
-   `swift`. Organization ownership does not select the package API or SDK protocol owners.
+1. In the GitHub repository, independently verify the administrator-reported `npm-publish`
+   environment configuration before release: deployment branch `swift` only, no tags, required
+   reviewer `marcfawaz`, self-review allowed, and administrator bypass disabled. Keep the required
+   approval gate even though the initiating maintainer may approve it.
+2. Independently verify that the environment, rather than the repository or organization, has one
+   secret named `NPM_BOOTSTRAP_TOKEN`. Do not inspect or expose its value to a pull-request,
+   preparation, validation, installation, or registry-verification job.
+3. Review the maintainer-confirmed contract and merge it to `swift`. The four ownership fields use
+   npm/contract identity `marc.fawaz`; the distinct GitHub reviewer identity is `marcfawaz`.
 4. In **Actions → Publish frontend packages → Run workflow**, select `swift` and
    `prepare-only`. Review the candidate and application-validation jobs. This is a rehearsal; a
    later run rebuilds and therefore creates a different candidate record.
@@ -237,10 +260,10 @@ cannot create a brand-new package.
    any adoption. If publication stops partway, preserve the logs/evidence, verify the published
    subset, and make an explicit recovery decision; never rerun into an existing version or accept
    different bytes.
-7. After all packages exist, configure a GitHub Actions Trusted Publisher on each npm package with
-   organization `ThalesGroup`, repository `fred`, workflow filename
-   `Publish-frontend-packages.yml`, and environment `npm-publish`. Choose direct vs staged allowed
-   actions only after the open policy decision is recorded.
+7. After all packages exist, configure direct GitHub Actions Trusted Publishing on each npm
+   package with organization `ThalesGroup`, repository `fred`, workflow filename
+   `Publish-frontend-packages.yml`, and environment `npm-publish`. Preserve GitHub environment
+   approval for the direct publication path.
 8. Replace the bootstrap-token step with the reviewed OIDC path, verify it with a new version,
    restrict traditional token publishing as approved, then revoke the temporary granular token
    from npm and remove `NPM_BOOTSTRAP_TOKEN` from the GitHub environment.
@@ -249,17 +272,17 @@ cannot create a brand-new package.
 
 The following are confirmed: organization `fred-oss`, scope `@fred-oss`, the three
 `0.1.0-alpha.1` coordinates, public `https://registry.npmjs.org/`, `next`, bootstrap account
-`marc.fawaz`, verified organization-owner authority, and the expected GitHub workflow identity.
-Before an approved candidate can be produced, maintainers must still confirm:
-
-1. the named package/public-API, SDK protocol-compatibility, release, and enduring npm-publishing
-   owners;
-2. the later direct or staged Trusted Publishing policy and required reviewers.
+`marc.fawaz`, verified organization-owner authority, package/public-API, SDK protocol-
+compatibility, release, and enduring npm-publishing owner `marc.fawaz`, direct Trusted Publishing
+for subsequent releases, and the expected GitHub workflow identity. The required GitHub reviewer
+is the distinct account `marcfawaz`. No release-contract owner or publishing-policy decision
+remains unresolved.
 
 Initial package creation is distinct from later Trusted Publishing: staged publishing cannot
 create a package that does not exist. The supplied organization-owner evidence establishes the
 bootstrap account's authority without recording its token. Publication remains a manual,
-separately authorized operation.
+separately authorized operation, and the selected direct policy neither implements the later OIDC
+workflow transition nor authorizes a publish run.
 
 Publish design tokens before UI; the iframe SDK is independent of that pair. Verify the exact
 published bytes and provenance before any FRED adoption. If later protocol ownership transfer
