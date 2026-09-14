@@ -416,6 +416,7 @@ export function AgentFormBody({
                   <label className={styles.advancedToggle}>
                     <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
                     <Switch
+                      size="small"
                       checked={capabilityView === "advanced"}
                       onChange={() => setCapabilityView(capabilityView === "advanced" ? "simple" : "advanced")}
                       disabled={isSubmitting}
