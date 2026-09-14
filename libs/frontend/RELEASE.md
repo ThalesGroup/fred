@@ -188,7 +188,8 @@ fallback fails closed.
 
 `.github/workflows/Publish-frontend-packages.yml` is manual-only. It rejects every ref except
 `swift`, defaults to `prepare-only`, and requires the explicit `publish-bootstrap` choice before
-the publication job exists. The workflow uses Node `24.21.0` and npm `11.19.0` to validate and
+the ordinary publication job exists. The separate `recover-bootstrap` choice is restricted to the
+reviewed partial-release incident described below. The workflow uses Node `24.21.0` and npm `11.19.0` to validate and
 pack one designated candidate set, transfers those exact bytes to the separately pinned
 application Node `22.13.0` / npm `10.9.2` job, and writes approved evidence only after offline
 consumers, browser smoke, and production-host compatibility pass. The final 30-day artifact keeps
@@ -210,6 +211,89 @@ and `npm run registry:verify`. The verifier confirms that Playwright's Chromium 
 inside that exact directory before registry resolution and never installs a browser itself. A
 missing directory, absent executable, or resolution through Playwright's default cache fails with
 the provisioning command.
+
+### Partial first-release incident and reviewed recovery
+
+Workflow run `34853407387`, attempt `1`, from commit
+`f49f2439d54b44f7739c5bd7fca3f789e0e528d6` published
+`@fred-oss/design-tokens@0.1.0-alpha.1`. The publish helper then made one immediate registry
+lookup, received a temporary exact-version 404, and stopped before publishing UI or iframe SDK.
+The correction retries only exact-version reads for bounded visibility lag, then requires exact
+name, version, and candidate SHA-512. It never retries `npm publish`; unauthorized reads,
+malformed or mismatched metadata, and exhausted retries remain stopping failures.
+
+Bootstrap, recovery, and registry verification now share a bounded HTTP adapter for the encoded
+exact-version endpoint (`/<package>/<version>`). It does not use `npm view`, because npm 11 first
+requests package-wide metadata even when given an exact coordinate. Only an HTTP 404 from the
+exact-version endpoint means absent or temporarily invisible; redirects, authentication or other
+HTTP failures, timeouts, malformed JSON, and identity/integrity drift fail immediately. The
+adapter follows no redirect and requires the response to remain on the selected registry request.
+
+The final original artifact is ID `10352121632`, named
+`frontend-packages-release-f49f2439d54b44f7739c5bd7fca3f789e0e528d6-34853407387-1`, with
+ZIP SHA-256 `25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82`.
+`release/bootstrap-recovery.json` records that immutable incident identity and declares design
+tokens published and UI/SDK missing. Read-only verification on 2026-09-14 found the exact design
+token version with candidate SHA-512
+`sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==`;
+npm signature audit, Sigstore certificate validation, and independent digest/repository/commit/
+workflow checks passed. The UI and SDK exact versions returned 404. Package-wide metadata for
+design tokens, which temporarily returned 404 during the incident, is no longer used for
+reconciliation.
+
+Recovery is an explicit `recover-bootstrap` selection, not a rerun of ordinary bootstrap. Its
+uncredentialed preparation job retrieves the exact original ZIP, verifies its GitHub artifact
+metadata and ZIP digest, and passes the ZIP unopened to the recovery helper. The helper requires
+the exact five regular entries (candidate evidence, transfer metadata, and three archives),
+rejects traversal, links, special files, missing files, and additions, extracts into a fresh
+temporary directory, cross-checks transfer metadata/evidence/archive bytes, and only then
+materializes the preserved recovery inputs. It cryptographically verifies the existing
+design-token package and requires UI and SDK to remain absent before recording recovery evidence
+tied to the current workflow execution.
+
+The protected job downloads that preserved ZIP and its derived copies, repeats ZIP hash, safe
+extraction, transfer/evidence/archive, registry, and provenance verification independently, and
+rejects any inconsistent transferred copy. Only its publication step can receive
+`NPM_BOOTSTRAP_TOKEN`; UI and SDK are published from the fresh verified ZIP extraction, never
+from the loose transferred copies. Design tokens are not published.
+
+The original evidence remains truthful and unchanged. Design-token provenance must identify the
+original `f49f2439…` source. Because npm provenance records the publishing workflow's actual
+`GITHUB_SHA`, UI and SDK must identify the recovery run's committed `swift` SHA. Recovery evidence
+binds both facts while retaining the same approved repository, workflow path/ref, certificate
+issuer, coordinates, and archive digests. Final registry verification consumes that evidence and
+performs signature, Sigstore, exact-identity, clean-consumer, browser, and host checks for all
+three packages.
+
+Manual recovery procedure (not executed by repository tests):
+
+1. Merge the reviewed correction to `swift` before the retained artifact expires. Confirm artifact
+   `10352121632` is still available and its reported and downloaded ZIP digests match the value
+   above. Confirm the helper accepts exactly the five expected regular entries and derives the
+   candidate evidence, transfer metadata, and archive paths from that ZIP. If it is unavailable,
+   different, malformed, or contains an unsafe or unexpected entry, stop and create a newly
+   versioned candidate.
+2. Recheck exact registry state: design tokens must match the recorded name/version/SHA-512 and
+   provenance; UI and SDK must be absent. Any other state stops this recovery.
+3. In **Actions → Publish frontend packages → Run workflow**, select `swift` and
+   `recover-bootstrap`. Do not select `publish-bootstrap`, which intentionally rejects the partial
+   state.
+4. Review the preparation job's recovery evidence. Confirm it names the original artifact/run and
+   original candidate commit, the current workflow run and real `GITHUB_SHA`, design tokens as the
+   verified published role, and UI/SDK as absent roles. Confirm the retained candidate copies are
+   byte-identical to the independently extracted pinned ZIP.
+5. Approve the `npm-publish` environment only if that evidence is exact. The protected step issues
+   no design-token publish command and publishes UI before SDK. It does not rebuild or relabel any
+   archive.
+6. Require the final public-registry job to verify design-token provenance against `f49f2439…`
+   and UI/SDK provenance against the recovery SHA, then pass clean registry consumers, browser
+   smoke, and production-host integration. Retain the recovery artifact and logs.
+7. If any read, publish, or reconciliation step fails, do not rerun blindly. Inspect exact-version
+   state. A package confirmed with the expected bytes is immutable; an indeterminate or drifted
+   state requires explicit review and normally a new version.
+
+The workflow and controlled tests only prepare this recovery. They do not constitute protected
+environment approval, publication of UI/SDK, or genuine all-package registry verification.
 
 The initial token is used only for creation. Later releases require a separately reviewed workflow
 change that removes the bootstrap secret and uses direct npm Trusted Publishing with GitHub

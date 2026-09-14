@@ -1,0 +1,606 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  assertExactPublishedMetadata,
+  reconcilePublishedCandidate,
+} from "./bootstrap-publish.mjs";
+import { run } from "./process.mjs";
+import {
+  assertMaintainerConfirmed,
+  loadReleaseContract,
+  packageRoles,
+} from "./release-contract.mjs";
+import { releaseContractDigest } from "./release-evidence.mjs";
+import { fetchExactPackageMetadata } from "./registry-metadata.mjs";
+import {
+  materializeVerifiedRecoveryArtifact,
+  verifyOriginalRecoveryArtifact,
+} from "./recovery-artifact.mjs";
+
+const recoveryPublishOrder = ["ui", "iframeSdk"];
+
+function digest(value) {
+  return `sha256-${createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("base64")}`;
+}
+
+function optionValue(name) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
+function githubEnvironment() {
+  return {
+    actions: process.env.GITHUB_ACTIONS,
+    repository: process.env.GITHUB_REPOSITORY,
+    ref: process.env.GITHUB_REF,
+    sha: process.env.GITHUB_SHA,
+    workflowRef: process.env.GITHUB_WORKFLOW_REF,
+    workflow: process.env.GITHUB_WORKFLOW,
+    runId: process.env.GITHUB_RUN_ID,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+  };
+}
+
+function expectedWorkflowRef(contract) {
+  const workflow = new URL(contract.expectedProvenance.workflow);
+  return `${workflow.pathname.slice(1)}${workflow.hash}`;
+}
+
+export function validateBootstrapRecoveryPlan(plan) {
+  assert.deepEqual(Object.keys(plan).sort(), [
+    "incident",
+    "kind",
+    "missingRoles",
+    "publishedRoles",
+    "recoveryExecution",
+    "schemaVersion",
+    "state",
+  ]);
+  assert.equal(plan.schemaVersion, 1, "unsupported recovery plan schema");
+  assert.equal(plan.kind, "frontend-bootstrap-partial-recovery");
+  assert.equal(plan.state, "reviewed", "recovery plan is not reviewed");
+  assert.match(plan.incident?.sourceCommit ?? "", /^[0-9a-f]{40}$/);
+  assert.deepEqual(Object.keys(plan.incident).sort(), [
+    "artifactId",
+    "artifactName",
+    "artifactZipSha256",
+    "sourceCommit",
+    "workflowRunAttempt",
+    "workflowRunId",
+  ]);
+  assert.match(plan.incident?.workflowRunId ?? "", /^\d+$/);
+  assert.match(plan.incident?.workflowRunAttempt ?? "", /^\d+$/);
+  assert(Number.isSafeInteger(plan.incident?.artifactId));
+  assert.equal(
+    plan.incident.artifactName,
+    `frontend-packages-release-${plan.incident.sourceCommit}-${plan.incident.workflowRunId}-${plan.incident.workflowRunAttempt}`,
+    "original release artifact name differs",
+  );
+  assert.match(plan.incident?.artifactZipSha256 ?? "", /^[0-9a-f]{64}$/);
+  assert.deepEqual(plan.publishedRoles, ["designTokens"]);
+  assert.deepEqual(plan.missingRoles, recoveryPublishOrder);
+  assert.deepEqual(
+    [...plan.publishedRoles, ...plan.missingRoles].sort(),
+    [...packageRoles].sort(),
+    "recovery roles do not partition the release packages",
+  );
+  assert.equal(plan.recoveryExecution?.repository, "ThalesGroup/fred");
+  assert.deepEqual(Object.keys(plan.recoveryExecution).sort(), [
+    "ref",
+    "repository",
+    "sourceCommitPolicy",
+    "workflow",
+  ]);
+  assert.equal(plan.recoveryExecution?.ref, "refs/heads/swift");
+  assert.equal(
+    plan.recoveryExecution?.sourceCommitPolicy,
+    "github-actions-sha",
+  );
+  assert.match(
+    plan.recoveryExecution?.workflow ?? "",
+    /^https:\/\/github\.com\/ThalesGroup\/fred\/\.github\/workflows\/Publish-frontend-packages\.yml@refs\/heads\/swift$/,
+  );
+  return plan;
+}
+
+export function assertOriginalArtifactMetadata(plan, metadata) {
+  validateBootstrapRecoveryPlan(plan);
+  assert.equal(metadata?.id, plan.incident.artifactId, "artifact ID differs");
+  assert.equal(
+    metadata?.name,
+    plan.incident.artifactName,
+    "artifact name differs",
+  );
+  assert.equal(metadata?.expired, false, "original artifact has expired");
+  assert.equal(
+    metadata?.digest,
+    `sha256:${plan.incident.artifactZipSha256}`,
+    "artifact ZIP digest differs",
+  );
+  assert.equal(
+    String(metadata?.workflow_run?.id),
+    plan.incident.workflowRunId,
+    "artifact workflow run differs",
+  );
+  assert.equal(
+    metadata?.workflow_run?.head_sha,
+    plan.incident.sourceCommit,
+    "artifact source commit differs",
+  );
+  assert.equal(
+    metadata?.workflow_run?.head_branch,
+    "swift",
+    "artifact source branch differs",
+  );
+  return true;
+}
+
+export function assertRecoveryWorkflowIdentity({ contract, plan, github }) {
+  validateBootstrapRecoveryPlan(plan);
+  assert.equal(github.actions, "true", "recovery requires GitHub Actions");
+  assert.equal(
+    github.repository,
+    plan.recoveryExecution.repository,
+    "recovery repository differs",
+  );
+  assert.equal(github.ref, plan.recoveryExecution.ref, "recovery ref differs");
+  assert.match(github.sha ?? "", /^[0-9a-f]{40}$/);
+  assert.equal(
+    github.workflowRef,
+    expectedWorkflowRef(contract),
+    "recovery workflow identity differs from the release contract",
+  );
+  assert.equal(
+    contract.expectedProvenance.workflow,
+    plan.recoveryExecution.workflow,
+    "recovery plan workflow differs from the release contract",
+  );
+  assert.match(github.runId ?? "", /^\d+$/, "recovery run ID is invalid");
+  assert.match(
+    github.runAttempt ?? "",
+    /^\d+$/,
+    "recovery run attempt is invalid",
+  );
+  return true;
+}
+
+function expectedProvenance(evidence, github) {
+  return Object.fromEntries(
+    packageRoles.map((role) => [
+      role,
+      {
+        ...evidence.packages[role].expectedProvenance,
+        sourceCommit:
+          role === "designTokens" ? evidence.sourceCommit : github.sha,
+      },
+    ]),
+  );
+}
+
+async function verifyPublishedPackage({
+  role,
+  contract,
+  evidence,
+  candidate,
+  expected,
+}) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-recovery-registry-"));
+  try {
+    const {
+      assertProvenanceIdentity,
+      resolveNpmRegistryPackage,
+      verifyNpmPackageProvenance,
+    } = await import("./registry-verifier.mjs");
+    const registryPackage = await resolveNpmRegistryPackage({
+      coordinate: candidate.coordinate,
+      registry: contract.registry,
+      root,
+      role,
+      contract,
+      evidence,
+      expectedPackage: contract.packages[role],
+      candidate,
+    });
+    const result = await verifyNpmPackageProvenance(registryPackage, {
+      registry: contract.registry,
+      expectedProvenance: expected,
+      certificateIssuer: contract.expectedProvenance.certificateIssuer,
+    });
+    assertProvenanceIdentity({
+      cryptographicallyVerified: result.cryptographicallyVerified,
+      actual: result.identity,
+      expected,
+    });
+    return registryPackage.metadata;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+function assertOriginalEvidence({ plan, evidence }) {
+  assert.equal(evidence.sourceCommit, plan.incident.sourceCommit);
+  assert.equal(evidence.transfer?.kind, "release-candidate-archive-transfer");
+  assert.equal(evidence.transfer?.sourceTreeClean, true);
+  assert.equal(evidence.transfer?.metadataFilename, "candidate-transfer.json");
+  assert.match(
+    evidence.transfer?.metadataDigest ?? "",
+    /^sha256-[A-Za-z0-9+/]+={0,2}$/,
+  );
+  assert.equal(evidence.transfer?.execution?.provider, "github-actions");
+  assert.equal(
+    evidence.transfer?.execution?.repository,
+    plan.recoveryExecution.repository,
+  );
+  assert.equal(
+    evidence.transfer?.artifactName,
+    `frontend-packages-candidate-${plan.incident.sourceCommit}-${plan.incident.workflowRunId}-${plan.incident.workflowRunAttempt}`,
+  );
+  assert.equal(
+    evidence.transfer?.execution?.runId,
+    plan.incident.workflowRunId,
+  );
+  assert.equal(
+    evidence.transfer?.execution?.runAttempt,
+    plan.incident.workflowRunAttempt,
+  );
+}
+
+export async function prepareBootstrapRecovery({
+  contract,
+  plan,
+  evidence: transferredEvidence,
+  archiveRoot: transferredRoot,
+  artifactZipPath,
+  artifactMetadata,
+  github,
+  materializeRoot,
+  inspectRegistry = fetchExactPackageMetadata,
+  verifyExistingPackage = verifyPublishedPackage,
+  createdAt = new Date().toISOString(),
+}) {
+  assertMaintainerConfirmed(contract);
+  validateBootstrapRecoveryPlan(plan);
+  assertOriginalArtifactMetadata(plan, artifactMetadata);
+  assertRecoveryWorkflowIdentity({ contract, plan, github });
+  const verified = await verifyOriginalRecoveryArtifact({
+    artifactZipPath,
+    contract,
+    plan,
+    transferredRoot,
+    transferredEvidence,
+  });
+  try {
+    const evidence = verified.evidence;
+    assertOriginalEvidence({ plan, evidence });
+    const provenance = expectedProvenance(evidence, github);
+
+    for (const role of plan.publishedRoles) {
+      const candidate = evidence.packages[role];
+      const metadata = await inspectRegistry({
+        coordinate: candidate.coordinate,
+        registry: contract.registry,
+        candidate,
+      });
+      assertExactPublishedMetadata(metadata, candidate);
+      await verifyExistingPackage({
+        role,
+        contract,
+        evidence,
+        candidate,
+        expected: provenance[role],
+      });
+    }
+    for (const role of plan.missingRoles) {
+      const candidate = evidence.packages[role];
+      const metadata = await inspectRegistry({
+        coordinate: candidate.coordinate,
+        registry: contract.registry,
+        candidate,
+      });
+      assert.equal(
+        metadata,
+        null,
+        `${candidate.coordinate} unexpectedly exists; stop recovery`,
+      );
+    }
+
+    const recoveryEvidence = {
+      schemaVersion: 1,
+      kind: "frontend-bootstrap-recovery-evidence",
+      createdAt,
+      planDigest: digest(plan),
+      contractDigest: releaseContractDigest(contract),
+      originalCandidate: { ...plan.incident },
+      recoveryExecution: {
+        repository: github.repository,
+        ref: github.ref,
+        sourceCommit: github.sha,
+        workflowRef: github.workflowRef,
+        workflow: github.workflow,
+        runId: github.runId,
+        runAttempt: github.runAttempt,
+      },
+      publishedRoles: [...plan.publishedRoles],
+      missingRoles: [...plan.missingRoles],
+      expectedProvenance: provenance,
+    };
+    if (materializeRoot)
+      await materializeVerifiedRecoveryArtifact({
+        verified,
+        artifactZipPath,
+        artifactMetadata,
+        outputRoot: materializeRoot,
+      });
+    return recoveryEvidence;
+  } finally {
+    await verified.dispose();
+  }
+}
+
+export function validateBootstrapRecoveryEvidence({
+  contract,
+  plan,
+  evidence,
+  recoveryEvidence,
+  github,
+}) {
+  validateBootstrapRecoveryPlan(plan);
+  assertRecoveryWorkflowIdentity({ contract, plan, github });
+  assertOriginalEvidence({ plan, evidence });
+  assert.equal(evidence.kind, "release-candidate-evidence");
+  assert.equal(evidence.contractDigest, releaseContractDigest(contract));
+  assert.deepEqual(Object.keys(recoveryEvidence).sort(), [
+    "contractDigest",
+    "createdAt",
+    "expectedProvenance",
+    "kind",
+    "missingRoles",
+    "originalCandidate",
+    "planDigest",
+    "publishedRoles",
+    "recoveryExecution",
+    "schemaVersion",
+  ]);
+  assert.equal(recoveryEvidence.schemaVersion, 1);
+  assert.equal(recoveryEvidence.kind, "frontend-bootstrap-recovery-evidence");
+  assert.match(
+    recoveryEvidence.createdAt ?? "",
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/,
+    "recovery evidence timestamp is invalid",
+  );
+  assert.equal(recoveryEvidence.planDigest, digest(plan));
+  assert.equal(
+    recoveryEvidence.contractDigest,
+    releaseContractDigest(contract),
+  );
+  assert.deepEqual(recoveryEvidence.originalCandidate, plan.incident);
+  assert.deepEqual(recoveryEvidence.publishedRoles, plan.publishedRoles);
+  assert.deepEqual(recoveryEvidence.missingRoles, plan.missingRoles);
+  assert.deepEqual(
+    recoveryEvidence.expectedProvenance,
+    expectedProvenance(evidence, github),
+    "recovery provenance expectations differ",
+  );
+  assert.deepEqual(recoveryEvidence.recoveryExecution, {
+    repository: github.repository,
+    ref: github.ref,
+    sourceCommit: github.sha,
+    workflowRef: github.workflowRef,
+    workflow: github.workflow,
+    runId: github.runId,
+    runAttempt: github.runAttempt,
+  });
+  return true;
+}
+
+async function npmIdentity({ registry }) {
+  return (await run("npm", ["whoami", "--registry", registry])).stdout.trim();
+}
+
+async function npmPublish({ archivePath, contract }) {
+  await run("npm", [
+    "publish",
+    archivePath,
+    "--provenance",
+    "--access",
+    "public",
+    "--tag",
+    contract.distTag,
+    "--registry",
+    contract.registry,
+  ]);
+}
+
+export async function publishBootstrapRecovery({
+  contract,
+  plan,
+  evidence: transferredEvidence,
+  recoveryEvidence,
+  archiveRoot: transferredRoot,
+  artifactZipPath,
+  artifactMetadata,
+  github,
+  identifyPublisher = npmIdentity,
+  inspectRegistry = fetchExactPackageMetadata,
+  verifyExistingPackage = verifyPublishedPackage,
+  publishArchive = npmPublish,
+  visibilityAttempts,
+  visibilityDelayMilliseconds,
+  waitForVisibility,
+}) {
+  assertMaintainerConfirmed(contract);
+  validateBootstrapRecoveryPlan(plan);
+  assertOriginalArtifactMetadata(plan, artifactMetadata);
+  assertRecoveryWorkflowIdentity({ contract, plan, github });
+  const verified = await verifyOriginalRecoveryArtifact({
+    artifactZipPath,
+    contract,
+    plan,
+    transferredRoot,
+    transferredEvidence,
+  });
+  try {
+    const evidence = verified.evidence;
+    const archivePaths = verified.archivePaths;
+    assertOriginalEvidence({ plan, evidence });
+    validateBootstrapRecoveryEvidence({
+      contract,
+      plan,
+      evidence,
+      recoveryEvidence,
+      github,
+    });
+    assert.equal(
+      await identifyPublisher({ registry: contract.registry }),
+      contract.maintainerApproval.bootstrapIdentity,
+      "authenticated npm identity differs from the approved bootstrap identity",
+    );
+
+    for (const role of plan.publishedRoles) {
+      const candidate = evidence.packages[role];
+      assertExactPublishedMetadata(
+        await inspectRegistry({
+          coordinate: candidate.coordinate,
+          registry: contract.registry,
+          candidate,
+        }),
+        candidate,
+      );
+      await verifyExistingPackage({
+        role,
+        contract,
+        evidence,
+        candidate,
+        expected: recoveryEvidence.expectedProvenance[role],
+      });
+    }
+    for (const role of recoveryPublishOrder) {
+      const candidate = evidence.packages[role];
+      assert.equal(
+        await inspectRegistry({
+          coordinate: candidate.coordinate,
+          registry: contract.registry,
+          candidate,
+        }),
+        null,
+        `${candidate.coordinate} unexpectedly exists; stop recovery without publishing`,
+      );
+    }
+
+    const published = [];
+    for (const role of recoveryPublishOrder) {
+      const candidate = evidence.packages[role];
+      try {
+        await publishArchive({
+          role,
+          archivePath: archivePaths[role],
+          contract,
+          candidate,
+        });
+      } catch (error) {
+        try {
+          await reconcilePublishedCandidate({
+            candidate,
+            registry: contract.registry,
+            inspectRegistry,
+            visibilityAttempts,
+            visibilityDelayMilliseconds,
+            waitForVisibility,
+          });
+        } catch (reconciliationError) {
+          throw new Error(
+            `recovery publish command failed for ${candidate.coordinate}; outcome is indeterminate because exact-version reconciliation failed (${reconciliationError.message}); previously confirmed recovery publications: ${published.join(", ") || "none"}; do not continue`,
+            { cause: reconciliationError },
+          );
+        }
+        published.push(candidate.coordinate);
+        throw new Error(
+          `recovery publish command failed for ${candidate.coordinate}, but exact-version reconciliation confirmed the expected bytes; confirmed recovery publications: ${published.join(", ")}; stop before continuing`,
+          { cause: error },
+        );
+      }
+      published.push(candidate.coordinate);
+      try {
+        await reconcilePublishedCandidate({
+          candidate,
+          registry: contract.registry,
+          inspectRegistry,
+          visibilityAttempts,
+          visibilityDelayMilliseconds,
+          waitForVisibility,
+        });
+      } catch (error) {
+        throw new Error(
+          `recovery publication completed for ${candidate.coordinate}, but exact-version verification failed (${error.message}); confirmed recovery publish commands: ${published.join(", ")}; stop before continuing`,
+          { cause: error },
+        );
+      }
+    }
+    return { kind: "frontend-bootstrap-recovery-publication", published };
+  } finally {
+    await verified.dispose();
+  }
+}
+
+async function loadJson(selectedPath) {
+  return JSON.parse(await readFile(path.resolve(selectedPath), "utf8"));
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const mode = optionValue("--mode");
+  const contractPath = optionValue("--contract");
+  const planPath = optionValue("--plan");
+  const evidencePath = optionValue("--evidence");
+  const archiveRoot = optionValue("--archive-root");
+  const artifactZipPath = optionValue("--artifact-zip");
+  const artifactMetadataPath = optionValue("--artifact-metadata");
+  assert(
+    ["prepare", "publish"].includes(mode),
+    "--mode prepare|publish is required",
+  );
+  assert(contractPath, "--contract is required");
+  assert(planPath, "--plan is required");
+  assert(artifactZipPath, "--artifact-zip is required");
+  assert(artifactMetadataPath, "--artifact-metadata is required");
+  const common = {
+    contract: await loadReleaseContract(contractPath),
+    plan: await loadJson(planPath),
+    evidence: evidencePath ? await loadJson(evidencePath) : undefined,
+    archiveRoot,
+    artifactZipPath,
+    artifactMetadata: await loadJson(artifactMetadataPath),
+    github: githubEnvironment(),
+  };
+  if (mode === "prepare") {
+    const materializeRoot = optionValue("--materialize-root");
+    const output = optionValue("--output");
+    assert(materializeRoot, "--materialize-root is required");
+    assert(output, "--output is required");
+    const result = await prepareBootstrapRecovery({
+      ...common,
+      materializeRoot,
+    });
+    await writeFile(
+      path.resolve(output),
+      `${JSON.stringify(result, null, 2)}\n`,
+    );
+    process.stdout.write(`prepared recovery evidence at ${output}\n`);
+  } else {
+    assert(evidencePath, "--evidence is required for publication");
+    assert(archiveRoot, "--archive-root is required for publication");
+    const recoveryEvidencePath = optionValue("--recovery-evidence");
+    assert(recoveryEvidencePath, "--recovery-evidence is required");
+    const result = await publishBootstrapRecovery({
+      ...common,
+      recoveryEvidence: await loadJson(recoveryEvidencePath),
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  }
+}

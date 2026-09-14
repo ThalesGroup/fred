@@ -440,6 +440,58 @@ transfer, FRED/RAGS adoption, theme/live-locale work, and stable release as open
 package behavior remains in the existing package READMEs; the new runbook covers release
 operation only.
 
+### 11. Reconcile delayed visibility and preserve truthful partial-release identity
+
+The first bootstrap run (`34853407387`, attempt `1`) published
+`@fred-oss/design-tokens@0.1.0-alpha.1` from commit
+`f49f2439d54b44f7739c5bd7fca3f789e0e528d6`. Its immediate exact-version lookup returned
+404, and the workflow stopped before UI or SDK. Retained artifact `10352121632` has ZIP SHA-256
+`25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82`; its three archive
+SHA-512 values match the approved evidence. A subsequent independent registry check verified the
+design-token archive, npm signature, Sigstore certificate, repository, workflow, source commit,
+and digest. UI and SDK remain absent.
+
+Post-publication reconciliation uses one shared HTTP adapter for the configured registry's safely
+encoded exact package/version endpoint. It deliberately does not use `npm view`: npm `11.19.0`
+requests package-wide metadata before selecting an exact version, so a package-wide 404 can hide
+available exact-version metadata. The adapter bounds each request, follows no redirect, retains
+the selected registry origin, and retries only an actual exact-endpoint HTTP 404 for six attempts
+at five-second intervals. It never retries `npm publish`. Authentication/authorization errors,
+other HTTP failures, redirects, timeouts, malformed responses, wrong name/version, or integrity
+mismatches stop immediately, as does exhausted visibility. Bootstrap preflight, publication
+reconciliation, recovery state checks, and registry-verifier metadata resolution share this
+adapter. The next package cannot begin until the previous exact version is visible with the
+expected identity and bytes.
+
+Recovery is a third, explicit manual input in the existing `swift`-restricted workflow, separate
+from ordinary bootstrap and its all-versions-absent preflight. A reviewed recovery plan pins the
+original source commit, run/attempt, final artifact ID/name, and artifact ZIP digest. An
+unprotected preparation job retrieves and hash-checks that exact retained artifact without
+pre-extracting it. The recovery helper requires exactly the candidate evidence, candidate transfer
+metadata, and three expected tarballs as regular ZIP entries; rejects traversal, links, special
+entries, omissions, and additions before extraction; extracts into a fresh isolated directory;
+and validates the transfer metadata, evidence, filenames, byte lengths, and SHA-512 values. Only
+verified ZIP contents are materialized for transfer. Preparation then cryptographically verifies
+the existing design-token version against the original candidate provenance, requires UI and SDK
+to be absent, and records recovery evidence tied to the current GitHub run.
+
+The distinct `npm-publish` environment job independently rechecks the pinned ZIP after artifact
+download, extracts it freshly, rejects any mismatch between the ZIP and separately transferred
+candidate copies, and repeats the registry/provenance preflight. Only then may its step receive the
+bootstrap token. UI followed by SDK are published exclusively from paths in that verified fresh
+extraction, not from loose transferred archives. The helper cleans the extraction on success or
+failure and never regenerates original candidate evidence.
+
+npm provenance truthfully records the commit executing each publish. The original candidate
+evidence is not rewritten: design tokens continue to require source commit `f49f2439…`, while the
+recovery evidence requires UI and SDK attestations to name the recovery run's actual
+`GITHUB_SHA`. Repository, workflow path/ref, certificate issuer, archive digests, coordinates, and
+original candidate/artifact identity remain unchanged. Final registry verification validates
+these per-package expectations before consumers run. If the original artifact expires, any
+published role differs, a missing role appears unexpectedly, or provenance cannot be verified,
+the recovery stops; maintainers must prepare a newly versioned release rather than weakening or
+relabeling evidence.
+
 ## Risks / Trade-offs
 
 - **[A confirmed contract could be mistaken for publication authorization]** → Keep candidate
@@ -468,7 +520,15 @@ operation only.
 - **[Independent versions add release coordination]** → Encode the selected UI/token pairing
   in one contract and publish dependencies before consumers.
 - **[A public package could be partially released]** → Stop the sequence before UI if its token
-  peer is unavailable; supersede published mistakes with new versions rather than overwrite.
+  peer is unavailable; supersede published mistakes with new versions rather than overwrite. If
+  an original candidate remains intact and a subset is already published with matching bytes and
+  provenance, the reviewed partial-recovery path may publish only the still-absent coordinates.
+- **[A package-wide registry lookup can hide an exact version]** → Query and validate the bounded
+  exact-version HTTP endpoint directly; treat only its real 404 as absence and reject redirects or
+  every other response failure.
+- **[Loose recovery files can diverge from a hash-pinned ZIP]** → Derive the candidate baseline
+  from a safe fresh extraction at preparation and publication, compare every transferred copy,
+  and publish only from the verified extraction.
 
 ## Migration Plan
 
@@ -487,7 +547,11 @@ operation only.
    immutable candidate, validate it under both toolchains, and retain its evidence.
    A separately approved manual run may then bootstrap the nonexistent packages from those exact
    bytes and perform genuine public-registry verification.
-6. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
+6. For the recorded partial first release only, merge the reconciliation correction, dispatch
+   `recover-bootstrap`, review the pinned original artifact and recovery evidence, and approve
+   the protected job only if existing design-token provenance and missing UI/SDK preflight pass.
+   The recovery publishes no design-token command and does not rebuild archives.
+7. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
    transfer changes SDK bytes, validate and publish that version before adoption. Plan RAGS
    separately.
 

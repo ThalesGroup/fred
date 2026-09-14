@@ -329,6 +329,58 @@
   release/package/application gates under their prescribed toolchains, run strict OpenSpec and
   diff validation, and obtain independent review without producing public-registry evidence.
 
+## 14. Bootstrap visibility correction and partial-release recovery
+
+- [x] 14.1 Reproduce the immediate exact-version 404 failure and implement bounded read-only
+  visibility retries that require exact name, version, and SHA-512 metadata before advancing;
+  verify publish commands are never retried and auth, malformed/mismatched metadata, or exhausted
+  visibility fail closed.
+- [x] 14.2 Add controlled positive and negative bootstrap regressions for delayed visibility,
+  exhausted retries, metadata drift, ambiguous publication, no duplicate publication, and no
+  progression after unresolved verification while retaining the all-versions-absent preflight.
+- [x] 14.3 Record the original artifact ID/name/ZIP SHA-256, source commit, run/attempt, published
+  role, and missing roles in a reviewed recovery plan; implement verification of the exact
+  retained artifact, unchanged candidate bytes, existing design-token integrity/provenance, and
+  absent UI/SDK coordinates.
+- [x] 14.4 Add a separate explicit `recover-bootstrap` workflow path with uncredentialed recovery
+  preparation, protected-environment publication of only UI then SDK, immutable artifact transfer,
+  per-package original-versus-recovery provenance expectations, and final registry/consumer
+  verification; preserve ordinary bootstrap rejection of partial state.
+- [x] 14.5 Update the runbook and OpenSpec artifacts with the incident, bounded reconciliation,
+  truthful provenance model, manual recovery steps, expiration/failure handling, and the
+  distinction between tested tooling and actual recovery publication.
+- [ ] 14.6 From committed `swift`, dispatch and approve the explicit recovery only after reviewing
+  its exact original-artifact and cryptographic design-token evidence; publish no design-token
+  command and retain the generated recovery evidence.
+- [ ] 14.7 Complete genuine public-registry signature, Sigstore, per-package identity, clean
+  consumer, browser, and production-host verification for all three coordinates after recovery.
+
+## 15. Exact metadata and pinned-ZIP recovery corrections
+
+- [x] 15.1 Reproduce npm `11.19.0` requesting package-wide metadata for `npm view` despite an
+  exact coordinate, then replace bootstrap preflight/reconciliation, recovery state checks, and
+  registry-verifier metadata resolution with one bounded exact-version HTTP adapter; verify only
+  actual exact-endpoint 404 responses are absent/retryable and every redirect, timeout, other HTTP
+  failure, malformed response, identity mismatch, or SHA-512 mismatch fails immediately.
+- [x] 15.2 Add controlled-server adapter and bootstrap regressions for package-wide 404 with
+  exact-version success, temporary exact-version 404 followed by success, six-attempt exhaustion,
+  invalid responses, exact requested URLs, and one publication callback per package with no
+  automatic retry.
+- [x] 15.3 Verify the pinned original artifact ZIP independently during both preparation and
+  protected publication; require its exact five regular candidate entries, safe fresh extraction,
+  transfer/evidence/archive consistency, and cleanup while rejecting missing, additional,
+  traversal, link, special, or inconsistent entries.
+- [x] 15.4 Derive preparation inputs from the verified ZIP, compare every protected-job candidate
+  copy with that ZIP, and publish UI then SDK exclusively from the protected job's fresh verified
+  extraction; reproduce and reject a changed loose UI archive with matching rewritten evidence
+  before any publication callback while preserving the unchanged-input path.
+- [x] 15.5 Update the workflow contract, release runbook, proposal, design, and normative scenarios
+  for exact HTTP metadata and the pinned-ZIP trust boundary without changing incident pins,
+  maintainer decisions, publication policy, or execution-dependent task state.
+- [x] 15.6 Run the exact release-toolchain focused and complete producer/release/archive/offline
+  consumer/browser gates, the application-toolchain host integration, strict active/all OpenSpec
+  validation, and `git diff --check`; obtain independent review and resolve every in-scope finding.
+
 ## Fixture archive-transfer evidence (2026-09-11)
 
 - Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
@@ -571,3 +623,76 @@
   direct parser check reports all four exact owner values, `direct`, and zero unresolved decisions.
   Strict validation of this change and all repository OpenSpec items passes, `git diff --check`
   passes, and OpenSpec reports 67/73 tasks complete.
+
+## Bootstrap partial-release recovery evidence (2026-09-14)
+
+- Run `34853407387`, attempt `1`, published the design-token archive successfully, then its one
+  immediate exact-version read returned 404. UI and SDK publish commands never ran. The corrected
+  helper retries only 404/not-visible reads and requires exact name, version, and SHA-512 before
+  advancing; controlled tests also reject authentication errors, malformed/mismatched metadata,
+  exhausted visibility, duplicate publication, and unresolved or ambiguous progression.
+- GitHub artifact `10352121632` remains unexpired. Its name, `swift` source commit
+  `f49f2439d54b44f7739c5bd7fca3f789e0e528d6`, run, attempt, and API/downloaded ZIP SHA-256
+  `25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82` match the reviewed
+  recovery plan. `npm run release:verify-evidence` passes against its original three tarballs and
+  candidate evidence without modifying their contents.
+- Read-only exact-version checks report design tokens 200 with the candidate SHA-512 and UI/SDK
+  404. A live verification of design tokens passes installed-tree npm signature audit, Sigstore
+  certificate verification, and independent artifact digest, `ThalesGroup/fred` repository,
+  `f49f2439…` commit, and `Publish-frontend-packages.yml@refs/heads/swift` workflow checks.
+- The reviewed recovery tooling preserves the original candidate evidence, records the actual
+  recovery workflow run and `GITHUB_SHA`, requires design-token provenance from the original
+  commit and UI/SDK provenance from that recovery SHA, and keeps repository/workflow/issuer and
+  archive digests fixed. Ordinary bootstrap still rejects partial state. The separate recovery
+  path prepares without a publishing credential and exposes `NPM_BOOTSTRAP_TOKEN` only to the
+  mutually exclusive protected step that can publish UI then SDK.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, the final focused suite passes 52/52,
+  `npm run release:check` passes, `npm run release:test` passes 94/94, lint and formatting pass,
+  the complete producer suite passes 299/299, and all three archive checks pass. Pre-provisioned
+  caches support all three offline consumers; pre-provisioned Chromium passes browser smoke with
+  zero installs/provisioning/external requests during execution. Application Node `22.13.0` and
+  npm `10.9.2` pass production-host SDK integration 4/4.
+- Strict change and repository-wide OpenSpec validation plus `git diff --check` pass. Independent
+  review found no correctness, security, workflow, evidence, test, or documentation finding.
+  Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain unchecked; no workflow was
+  dispatched, no protected environment was approved, UI/SDK were not published, and genuine
+  recovered all-package registry/consumer evidence does not yet exist.
+
+## Exact metadata and pinned-ZIP recovery evidence (2026-09-14)
+
+- Starting from clean reviewed commit `d84d7d90cc93bc3fbdccf527e63460d27e09e16d`, npm `11.19.0`
+  was reproduced requesting only package-wide metadata for an exact `npm view` coordinate; the
+  controlled registry returned package-wide 404 and exact-version 200, so the command failed
+  despite the exact version being available. Before the ZIP correction, two regressions proved
+  preparation and protected publication both accepted a changed loose UI archive accompanied by
+  rewritten loose evidence (8/10 tests passed and both expected rejections were missing).
+- One shared exact-version HTTP adapter now serves bootstrap preflight/reconciliation, recovery,
+  and registry verification. Its controlled loopback suite proves the exact URL path, an
+  unavailable package-wide endpoint with an available exact endpoint, temporary 404 recovery,
+  six-attempt exhaustion, per-request timeout, and immediate rejection of authentication,
+  authorization, server, redirect, malformed-JSON, identity, or integrity failures. Publication
+  callback assertions prove no package is republished automatically and no later package is
+  attempted after unresolved verification.
+- Preparation and protected publication independently verify artifact `10352121632` by the
+  reviewed ZIP SHA-256, require its exact five regular entries, extract into a fresh disposable
+  directory, validate the original transfer/evidence/archive records, and reject traversal,
+  links, special or unexpected entries. Preparation materializes only derived original bytes;
+  protected publication compares every transferred candidate copy and publishes UI then SDK only
+  from its fresh verified extraction. Both changed-loose-copy regressions now fail before any
+  publication callback.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, the focused adapter/bootstrap/recovery/
+  registry/workflow suite passes 70/70, release-contract checks pass, controlled release tests
+  pass 112/112, lint and formatting pass, the complete producer suite passes 317/317, and all
+  three archive checks pass. Separately provisioned caches support all three offline consumers;
+  separately provisioned Chromium passes browser smoke with zero installation, provisioning, or
+  external requests during execution. Application Node `22.13.0` and npm `10.9.2` pass packed-SDK
+  production-host integration 4/4.
+- Read-only registry checks report the design-token exact version with its expected candidate
+  SHA-512 while UI and SDK remain absent. The original artifact ZIP SHA-256 and five-entry set
+  match the recovery plan. Strict active and repository-wide OpenSpec validation and
+  `git diff --check` pass. Independent cold review found no correctness, security, workflow,
+  test, specification, or documentation finding. Availability still depends on npm and GitHub,
+  extraction requires `unzip`, and the retained artifact can expire.
+- Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain unchecked. No workflow was
+  dispatched, no protected environment was approved, no recovery publication occurred, and
+  genuine all-package public-registry/provenance/consumer evidence remains execution-dependent.
