@@ -13,17 +13,25 @@
 # limitations under the License.
 
 """
-Where a definition's runs are dispatched.
+Where a definition's runs are dispatched, and what is dispatched.
 
 Part of the contract, not a private detail: Control Plane and the pod's worker
 must derive the identical string, and a worker that is one day not this SDK has
 to be able to derive it too. Deliberately absent from the author-facing exports
 — an author never names a queue.
+
+The workflow name and its input are re-exported here for the same reason: the
+dispatching side needs all three, and needs them from somewhere it is meant to
+import.
 """
 
 from __future__ import annotations
 
 from fred_core import knowledge_base_catalog_id
+
+from fred_sdk.knowledge_base._workflow import SYNCHRONIZE_WORKFLOW, SynchronizeInput
+
+__all__ = ["SYNCHRONIZE_WORKFLOW", "SynchronizeInput", "task_queue_for"]
 
 
 def task_queue_for(name: str) -> str:

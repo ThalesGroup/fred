@@ -69,14 +69,11 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
     handler = knowledge_base.resolve_handler()
 
     @activity.defn(name=SYNCHRONIZE_ACTIVITY)
-    async def synchronize(
-        payload: SynchronizeInput, run_id: str, execution_id: str
-    ) -> str:
+    async def synchronize(payload: SynchronizeInput, run_id: str) -> str:
         context = await control_plane.fetch_run_context(
             payload.definition_id,
             payload.instance_id,
             run_id,
-            execution_id=execution_id,
         )
         result = await handler(context)
         # Nothing is reported back. Fred runs the workflow engine, so it already

@@ -80,22 +80,16 @@ class ControlPlaneClient:
         definition_id: str,
         instance_id: str,
         run_id: str,
-        *,
-        execution_id: str,
     ) -> KnowledgeBaseRunContext:
         """Fetch one run's configuration, scoped to that run's own instance.
 
         The instance is named because Fred resolves the run through it: a run
-        identifier alone says nothing about which folder is being filled, and
-        a scheduled run is started by the workflow engine, so Fred never saw it
-        begin. `execution_id` is what lets Fred ask the engine how this run
-        ended, which is where a run's state comes from — never from this pod.
+        identifier alone says nothing about which folder is being filled.
         """
         payload = await self._request(
             "GET",
             f"/knowledge-bases/definitions/{definition_id}"
             f"/instances/{instance_id}/runs/{run_id}/context",
-            params={"execution_id": execution_id},
         )
         return KnowledgeBaseRunContext.model_validate(payload)
 

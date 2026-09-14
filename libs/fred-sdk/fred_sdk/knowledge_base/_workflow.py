@@ -64,21 +64,17 @@ class SynchronizeInput:
 class SynchronizeWorkflow:
     @workflow.run
     async def run(self, payload: SynchronizeInput) -> str:
-        # Both come from the workflow's own identity, so every occurrence is
-        # distinguishable without anything being frozen into a schedule. They
-        # travel as arguments rather than being read from ambient context in the
-        # activity: the workflow is the side that knows them for certain.
-        info = workflow.info()
+        # The run id comes from the workflow's own identity, so every occurrence
+        # is distinguishable without anything being frozen into a schedule. It
+        # travels as an argument rather than being read from ambient context in
+        # the activity: the workflow is the side that knows it for certain.
         return await workflow.execute_activity(
             SYNCHRONIZE_ACTIVITY,
-            args=[payload, info.run_id, info.workflow_id],
+            args=[payload, workflow.info().run_id],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             # Without a policy Temporal retries an activity for ever, so a
             # handler that fails the same way every time never reaches the
             # terminal failure the contract promises. Bounding the attempts is
             # what makes exhaustion — and therefore a failed run — reachable.
-            # Retried at the activity, not at the workflow: a workflow retry
-            # would mint a new run id per attempt, and one run would be reported
-            # to Fred as several.
             retry_policy=RetryPolicy(maximum_attempts=payload.max_attempts),
         )
