@@ -750,10 +750,17 @@ def test_missing_pod_environment_names_everything_absent(
         assert name in str(raised.value)
 
 
-def test_a_local_stack_needs_neither_keycloak_nor_a_secret(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("absent", ["CLIENT_SECRET_ENV", "KEYCLOAK_REALM_URL_ENV"])
+def test_a_pod_without_credentials_refuses_to_start(
+    monkeypatch: pytest.MonkeyPatch, absent: str
 ) -> None:
-    """Mirrors `security.user.enabled: false`: no secret, no token, no Keycloak."""
+    """A Knowledge Base acts as a workload, and Fred admits it as nothing else.
+
+    So missing credentials are a startup error naming what is absent, not a pod
+    that runs and is refused at its first document. A deployment with
+    authentication off cannot host one at all — deliberately: it would be a
+    second admission story to keep true.
+    """
     from fred_sdk.knowledge_base import environment as env
 
     monkeypatch.setenv(
@@ -761,24 +768,12 @@ def test_a_local_stack_needs_neither_keycloak_nor_a_secret(
     )
     monkeypatch.setenv(env.PREFIX_ENV, "acme.kb")
     monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
-    for name in (env.CLIENT_SECRET_ENV, env.KEYCLOAK_REALM_URL_ENV):
-        monkeypatch.delenv(name, raising=False)
-
-    resolved = env.PodEnvironment.from_env(require_temporal=False)
-    assert resolved.authenticated is False
-
-
-def test_a_client_secret_makes_keycloak_required(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from fred_sdk.knowledge_base import environment as env
-
-    monkeypatch.setenv(env.CONTROL_PLANE_URL_ENV, "http://example.invalid")
-    monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
     monkeypatch.setenv(env.CLIENT_SECRET_ENV, "shh")
-    monkeypatch.delenv(env.KEYCLOAK_REALM_URL_ENV, raising=False)
+    monkeypatch.setenv(env.KEYCLOAK_REALM_URL_ENV, "http://keycloak.invalid/realms/app")
+    missing = getattr(env, absent)
+    monkeypatch.delenv(missing, raising=False)
 
-    with pytest.raises(env.MissingPodEnvironment, match=env.KEYCLOAK_REALM_URL_ENV):
+    with pytest.raises(env.MissingPodEnvironment, match=missing):
         env.PodEnvironment.from_env(require_temporal=False)
 
 

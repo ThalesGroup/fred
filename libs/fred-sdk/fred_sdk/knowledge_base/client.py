@@ -29,8 +29,6 @@ unfinished — and there is no second version of that fact to disagree with.
 
 from __future__ import annotations
 
-import logging
-
 import httpx
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 
@@ -39,8 +37,6 @@ from fred_sdk.knowledge_base.environment import CLIENT_SECRET_ENV, PodEnvironmen
 from fred_sdk.knowledge_base.models import (
     KnowledgeBaseRunContext,
 )
-
-logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(30.0)
 
@@ -52,20 +48,13 @@ class ControlPlaneClient:
         self._base_url = environment.control_plane_url
         self._prefix = environment.prefix
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens: M2MTokenProvider | None = None
-        if environment.authenticated:
-            self._tokens = M2MTokenProvider(
-                M2MAuthConfig(
-                    keycloak_realm_url=environment.keycloak_realm_url,
-                    client_id=environment.client_id,
-                    secret_env=CLIENT_SECRET_ENV,
-                )
+        self._tokens = M2MTokenProvider(
+            M2MAuthConfig(
+                keycloak_realm_url=environment.keycloak_realm_url,
+                client_id=environment.client_id,
+                secret_env=CLIENT_SECRET_ENV,
             )
-        else:
-            logger.warning(
-                "No client secret set: calling Fred unauthenticated. Only a "
-                "local stack with authentication disabled will accept this."
-            )
+        )
 
     async def publish(self, declaration: KnowledgeBaseDeclaration) -> None:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""
@@ -100,9 +89,7 @@ class ControlPlaneClient:
         json: object | None = None,
         params: dict[str, str] | None = None,
     ) -> dict:
-        headers = {}
-        if self._tokens is not None:
-            headers["Authorization"] = f"Bearer {await self._tokens.get_token()}"
+        headers = {"Authorization": f"Bearer {await self._tokens.get_token()}"}
         response = await self._client.request(
             method, f"{self._base_url}{path}", json=json, params=params, headers=headers
         )

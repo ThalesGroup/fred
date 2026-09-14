@@ -23,15 +23,12 @@ identity, so an author writes no auth code and holds no store credential.
 
 from __future__ import annotations
 
-import logging
 import mimetypes
 
 import httpx
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 
 from fred_sdk.knowledge_base.environment import CLIENT_SECRET_ENV, PodEnvironment
-
-logger = logging.getLogger(__name__)
 
 # Ingestion converts and indexes inline, so this is minutes, not the 30s a
 # Control Plane call gets.
@@ -73,20 +70,13 @@ class DocumentPublisher:
         self._library_id = library_id
         self._source_tag = source_tag
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens: M2MTokenProvider | None = None
-        if environment.authenticated:
-            self._tokens = M2MTokenProvider(
-                M2MAuthConfig(
-                    keycloak_realm_url=environment.keycloak_realm_url,
-                    client_id=environment.client_id,
-                    secret_env=CLIENT_SECRET_ENV,
-                )
+        self._tokens = M2MTokenProvider(
+            M2MAuthConfig(
+                keycloak_realm_url=environment.keycloak_realm_url,
+                client_id=environment.client_id,
+                secret_env=CLIENT_SECRET_ENV,
             )
-        else:
-            logger.warning(
-                "No client secret set: ingesting unauthenticated. Only a local "
-                "stack with authentication disabled will accept this."
-            )
+        )
 
     async def publish(
         self, *, relative_path: str, content: bytes, version: str | None = None
@@ -133,8 +123,6 @@ class DocumentPublisher:
         _raise_for(response, DocumentRetractError, relative_path)
 
     async def _headers(self) -> dict[str, str]:
-        if self._tokens is None:
-            return {}
         return {"Authorization": f"Bearer {await self._tokens.get_token()}"}
 
     async def aclose(self) -> None:

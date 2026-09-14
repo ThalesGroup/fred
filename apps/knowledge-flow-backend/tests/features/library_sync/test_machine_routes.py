@@ -30,11 +30,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, get_current_user, get_current_user_without_gcu
-from fred_core.security.structure import (
-    LOCAL_DEV_CLIENT_ID,
-    SERVICE_AGENT_ROLE,
-    is_service_agent,
-)
+from fred_core.security.structure import SERVICE_AGENT_ROLE
 
 import knowledge_flow_backend.features.library_sync.controller as controller_module
 from knowledge_flow_backend.features.library_sync.controller import (
@@ -114,19 +110,18 @@ def test_a_human_token_cannot_bypass_gcu_through_these_routes(
     assert sync.service.seen == []
 
 
-def test_the_local_dev_client_still_reaches_these_routes(
+def test_a_stack_with_authentication_off_cannot_synchronize(
     sync: SimpleNamespace,
 ) -> None:
-    """Authentication being off must not leave a local stack unable to synchronize.
+    """Synchronizing requires a deployment that authenticates. That is the design.
 
-    Deliberately runs the real dependency instead of supplying an identity: the
-    mock it returns carries `admin` and never `service_agent`, so a hand-built
-    caller would pass this while local ingestion stayed locked out.
+    Runs the real dependency rather than a supplied identity: with authentication
+    off, the mock it returns carries `admin` and no workload role, so it is
+    refused like any other non-workload caller. A Knowledge Base is not meant to
+    run against such a stack, and failing here is how that stays true.
     """
     assert not oidc.KEYCLOAK_ENABLED, "this test describes a stack with authentication off"
     with _client(sync) as client:
         response = client.get(SOURCE_VERSION_PATH)
-    assert response.status_code == 200
-    ((caller, _),) = sync.service.seen
-    assert caller.client_id == LOCAL_DEV_CLIENT_ID
-    assert not is_service_agent(caller)
+    assert response.status_code == 403
+    assert sync.service.seen == []

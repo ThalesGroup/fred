@@ -61,29 +61,22 @@ class PodEnvironment:
     temporal_host: str = ""
     temporal_namespace: str = DEFAULT_TEMPORAL_NAMESPACE
 
-    @property
-    def authenticated(self) -> bool:
-        """Whether this pod mints a token for its calls to Fred.
-
-        False only when no client secret is set, which mirrors a deployment
-        running with `security.user.enabled: false`. A Fred that does check
-        tokens rejects such a pod, so this cannot pass unnoticed anywhere it
-        matters.
-        """
-        return bool(self.keycloak_realm_url)
-
     @classmethod
     def from_env(cls, *, require_temporal: bool) -> "PodEnvironment":
         """Read the environment, naming everything missing in one error.
 
         `publish` needs Fred only; serving runs also needs Temporal — failing on
         the whole set either way would make the publish Job depend on a worker
-        it never starts. Keycloak is required only when a client secret is set,
-        so a local stack with authentication off needs neither.
+        it never starts. Credentials are required either way: a Knowledge Base
+        acts as a workload, and Fred admits it as nothing else.
         """
-        required = [CONTROL_PLANE_URL_ENV, PREFIX_ENV, CLIENT_ID_ENV]
-        if os.getenv(CLIENT_SECRET_ENV):
-            required.append(KEYCLOAK_REALM_URL_ENV)
+        required = [
+            CONTROL_PLANE_URL_ENV,
+            PREFIX_ENV,
+            CLIENT_ID_ENV,
+            CLIENT_SECRET_ENV,
+            KEYCLOAK_REALM_URL_ENV,
+        ]
         if require_temporal:
             required.append(TEMPORAL_HOST_ENV)
 

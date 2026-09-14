@@ -216,6 +216,32 @@ pod access to a library it is later given.
 - **THEN** the client and its subject are both recorded, replaying leaves them
   unchanged, and a publication presenting a different client is still refused
 
+### Requirement: A Knowledge Base runs only where the deployment authenticates
+
+A Knowledge Base SHALL act as a workload identity and SHALL NOT be usable from a
+deployment that does not authenticate. The synchronization routes SHALL admit a
+service identity and refuse every human token, and a pod SHALL fail at startup
+naming the credentials it lacks rather than starting and being refused at its
+first document.
+
+This closes the surface rather than widening it: admitting the mock identity a
+deployment fabricates when authentication is off would be a second admission
+story to keep true, in the one place where being wrong grants a stranger a
+team's documents. Local development of a Knowledge Base therefore requires a
+stack that authenticates.
+
+#### Scenario: A stack with authentication off cannot synchronize
+
+- **WHEN** a caller reaches a synchronization route on a deployment running with
+  authentication disabled, carrying the identity that deployment fabricates
+- **THEN** the request is refused, and no document is written or retracted
+
+#### Scenario: A pod without credentials does not start
+
+- **WHEN** a pod starts without its client secret, or without the realm to mint
+  a token against
+- **THEN** startup fails naming what is absent, before any call to Fred is made
+
 ## MODIFIED Requirements
 
 ### Requirement: Per-instance configuration is validated and passed through unchanged

@@ -26,7 +26,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fred_core import AuthorizationError, KeycloakUser, get_current_user_without_gcu
-from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
+from fred_core.security.structure import is_service_agent
 
 from knowledge_flow_backend.common.source_utils import UnknownSourceTagError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
@@ -42,14 +42,14 @@ logger = logging.getLogger(__name__)
 
 
 async def require_sync_client(user: KeycloakUser = Depends(get_current_user_without_gcu)) -> KeycloakUser:
-    """Admit a workload identity, and only one, to mirror a source.
+    """Admit a workload identity, and nothing else, to mirror a source.
 
     GCU admission is a person accepting terms; a service account has no such
     record and would be refused outright. Skipping that check is only safe
-    because a human token is refused here too, the way the Control Plane's own
-    Knowledge Base routes refuse one.
+    because a human token is refused here too. A deployment that authenticates
+    is therefore a precondition of synchronizing at all.
     """
-    if not is_service_agent(user) and user.client_id != LOCAL_DEV_CLIENT_ID:
+    if not is_service_agent(user):
         raise HTTPException(status_code=403, detail="Library synchronization requires a service identity")
     return user
 

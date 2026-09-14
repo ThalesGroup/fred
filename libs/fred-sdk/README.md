@@ -297,6 +297,11 @@ explicit retractions — Fred never infers a deletion from absence. Install
 `fred-sdk[knowledge-base]`. Working declarations live in the `fred-samples`
 repository under `knowledge-bases/`.
 
+A Knowledge Base acts as a workload, so it needs a deployment that authenticates
+and a confidential client of its own. A pod started without its client secret and
+realm fails immediately, naming what it lacks. A stack running with authentication
+off cannot host one — including for local development.
+
 **This surface is beta: pin your `fred-sdk` version, as it may change between beta
 releases.** Known limits today:
 
