@@ -3937,3 +3937,57 @@ still empty:
 the setting is inert there and the admin page says so. Two admins saving
 overlapping lists at the same instant can collide on the primary key (500 for
 one of them). The setting is not part of the platform export bundle.
+
+## 53. Contract Notes - team administrator charter (2026-09-14, issue #2658)
+
+**What it is.** A deployment can require every `team_admin` to accept a charter
+of responsibilities before their admin-only team permissions apply. The text is
+frontend markdown (`team-admin-charter.md`, `team-admin-charter.fr.md`),
+replaced from the theme archive like `gcu.md`; the stock file is a template.
+
+**Configuration.** `app.team_admin_charter_version: str | None`. `None`, the
+default, turns the charter off. Changing the value asks every admin to accept
+again.
+
+**Endpoints.**
+
+| Method | Path                                   | Permission    |
+| ------ | -------------------------------------- | ------------- |
+| GET    | `/control-plane/v1/team-admin-charter` | authenticated |
+| POST   | `/control-plane/v1/team-admin-charter` | authenticated |
+
+Both return the caller's `TeamAdminCharterStatus`
+`{required: bool, accepted_at: datetime | null}`. `required` is true when a
+version is set, the caller holds `team_admin` on at least one team (one
+ListObjects on `can_administer_admins`, skipped once accepted) and has not
+accepted that version. `POST` records the acceptance and is idempotent: a repeat
+keeps the first time. The first one emits the audit event
+`team_admin.charter.accepted` `{actor_uid, charter_version}`. With no version
+set, `POST` answers 409 `team_admin_charter_disabled`.
+
+**Gate.** While a version is set and the caller has not accepted it,
+`can_update_info`, `can_administer_members`, `can_administer_editors`,
+`can_administer_analysts` and `can_administer_admins` answer 403
+`team_admin_charter_not_accepted` and are left out of
+`TeamWithPermissions.permissions`. They are exactly the `team_admin`-only
+permissions of `schema.fga`, kept in sync by a test. Nothing else changes:
+
+- the `team_admin` relation is granted, revoked and counted as before (last-admin
+  guard, rescue), and `my_relations` still lists it;
+- permissions shared with another role (`can_run_evaluations`,
+  `can_manage_evaluation_corpus`) and the routing policy read are not gated;
+- one acceptance covers every team the user administers.
+
+**Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`,
+plus `accepted_at`. `user_id` is the Keycloak uid used as the OpenFGA subject.
+Rows are never updated, so past versions stay on record. No in-process cache: a
+replica would keep refusing an admin who just accepted on another one.
+
+**Frontend.** At app load, a user whose status is `required` gets a pop-up with
+Accept, enabled once the end of the text is visible, and Later, which closes it
+until the next load. Team settings show a Responsibilities section to
+`team_admin`s, from `my_relations`, and a notice while acceptance is pending.
+
+**Rollout.** Publish the theme archive with the charter first, then set the
+version: every admin is prompted at their next load. Unsetting the version turns
+the gate off and keeps the rows.
