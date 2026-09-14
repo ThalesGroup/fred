@@ -12,16 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type TimePresetKey =
-  | "last15m"
-  | "last1h"
-  | "last6h"
-  | "last24h"
-  | "last7d"
-  | "last30d"
-  | "today"
-  | "thisWeek"
-  | "thisMonth";
+export type TimePresetKey = "last24h" | "last7d" | "last30d" | "today" | "thisWeek" | "thisMonth";
 
 export interface TimeRange {
   since: string;
@@ -63,21 +54,6 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 export const TIME_PRESETS: TimePreset[] = [
-  {
-    key: "last15m",
-    labelKey: "rework.analytics.presets.last15m",
-    resolve: () => ({ since: isoMinus(15 * MIN), until: isoNow() }),
-  },
-  {
-    key: "last1h",
-    labelKey: "rework.analytics.presets.last1h",
-    resolve: () => ({ since: isoMinus(HOUR), until: isoNow() }),
-  },
-  {
-    key: "last6h",
-    labelKey: "rework.analytics.presets.last6h",
-    resolve: () => ({ since: isoMinus(6 * HOUR), until: isoNow() }),
-  },
   {
     key: "last24h",
     labelKey: "rework.analytics.presets.last24h",
