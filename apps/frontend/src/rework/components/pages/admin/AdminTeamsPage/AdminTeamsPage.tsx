@@ -18,7 +18,7 @@ import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
@@ -172,15 +172,12 @@ export default function AdminTeamsPage() {
             {defaultTeams && defaultTeams.length > 0 ? (
               <ul className={styles.adminChipList}>
                 {defaultTeams.map((team) => (
-                  <li key={team.team_id} className={styles.adminChip}>
-                    <span>{team.name}</span>
-                    <IconButton
-                      variant="icon"
-                      size="small"
-                      icon={{ category: "outlined", type: "close" }}
-                      aria-label={t("rework.adminTeams.defaultTeam.remove", { name: team.name })}
-                      disabled={isSettingDefaultTeams}
-                      onClick={() => handleRemoveDefaultTeam(team.team_id)}
+                  <li key={team.team_id}>
+                    <Chip
+                      label={team.name}
+                      // No remove while a save is in flight, so two removals never race.
+                      onRemove={isSettingDefaultTeams ? undefined : () => handleRemoveDefaultTeam(team.team_id)}
+                      removeAriaLabel={t("rework.adminTeams.defaultTeam.remove", { name: team.name })}
                     />
                   </li>
                 ))}
@@ -233,14 +230,8 @@ export default function AdminTeamsPage() {
           {selectedAdmins.length > 0 && (
             <ul className={styles.adminChipList}>
               {selectedAdmins.map((user) => (
-                <li key={user.id} className={styles.adminChip}>
-                  <span>{`${user.first_name} ${user.last_name}`}</span>
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "close" }}
-                    onClick={() => handleRemoveAdmin(user.id)}
-                  />
+                <li key={user.id}>
+                  <Chip label={`${user.first_name} ${user.last_name}`} onRemove={() => handleRemoveAdmin(user.id)} />
                 </li>
               ))}
             </ul>
