@@ -714,7 +714,7 @@ async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_
 
     ctx = ApplicationContext.get_instance()
     monkeypatch.setattr(ctx, "get_create_vector_store", lambda embedder: _VectorStore())
-    monkeypatch.setattr(ctx, "get_embedder", lambda: object())
+    monkeypatch.setattr(ctx, "get_embedder", object)
 
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
