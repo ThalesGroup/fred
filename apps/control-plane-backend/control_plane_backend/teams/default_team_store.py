@@ -15,52 +15,38 @@
 from __future__ import annotations
 
 from fred_core.sql import make_session_factory, use_session
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.platform_default_team_models import (
-    PLATFORM_DEFAULT_TEAM_SINGLETON_ID,
     PlatformDefaultTeamRow,
 )
 
 
 class PlatformDefaultTeamStore:
-    """CRUD over the `platform_default_team` singleton row.
+    """CRUD over `platform_default_teams`, one row per default team.
 
-    Never checks authorization or whether the team exists: that is
+    Never checks authorization or whether the teams exist: that is
     `teams/service.py`'s job, same split as `PlatformPromptStore`.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
 
-    async def get_team_id(self) -> str | None:
+    async def list_team_ids(self) -> list[str]:
         async with use_session(self._sessions) as s:
-            row = await s.get(
-                PlatformDefaultTeamRow, PLATFORM_DEFAULT_TEAM_SINGLETON_ID
-            )
-            return None if row is None else row.team_id
-
-    async def set(self, team_id: str | None, *, updated_by: str | None) -> None:
-        """Replace the default team; `None` deletes the row."""
-        async with use_session(self._sessions) as s:
-            row = await s.get(
-                PlatformDefaultTeamRow, PLATFORM_DEFAULT_TEAM_SINGLETON_ID
-            )
-            if team_id is None:
-                if row is not None:
-                    await s.delete(row)
-                return
-            if row is None:
-                s.add(
-                    PlatformDefaultTeamRow(
-                        id=PLATFORM_DEFAULT_TEAM_SINGLETON_ID,
-                        team_id=team_id,
-                        updated_by=updated_by,
-                    )
+            result = await s.execute(
+                select(PlatformDefaultTeamRow.team_id).order_by(
+                    PlatformDefaultTeamRow.team_id
                 )
-                return
-            row.team_id = team_id
-            row.updated_by = updated_by
-            # Explicit: `onupdate` does not fire when re-saving the same team.
-            row.updated_at = utcnow()
+            )
+            return list(result.scalars().all())
+
+    async def replace(self, team_ids: list[str], *, updated_by: str | None) -> None:
+        """Make `team_ids` the whole set of default teams; `[]` clears it."""
+        async with use_session(self._sessions) as s:
+            await s.execute(delete(PlatformDefaultTeamRow))
+            s.add_all(
+                PlatformDefaultTeamRow(team_id=team_id, updated_by=updated_by)
+                for team_id in team_ids
+            )

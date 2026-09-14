@@ -250,16 +250,16 @@ class RescueTeamAdminRequest(BaseModel):
     user_id: str = Field(min_length=1)
 
 
-class SetDefaultTeamForNewUsersRequest(BaseModel):
-    """`PUT /admin/platform/default-team`: `team_id: null` clears the default."""
+class SetDefaultTeamsForNewUsersRequest(BaseModel):
+    """`PUT /admin/platform/default-teams`: the whole list; `[]` clears it."""
 
     model_config = ConfigDict(extra="forbid")
 
-    team_id: TeamId | None
+    team_ids: list[TeamId]
 
 
 class DefaultTeamForNewUsers(BaseModel):
-    """The team every new user joins on first GCU acceptance."""
+    """One of the teams every new user joins on first GCU acceptance."""
 
     team_id: TeamId
     name: str

@@ -336,34 +336,40 @@ async def rescue_team_admin(
     )
 
 
-async def _resolve_default_team(deps: TeamServiceDependencies) -> TeamMetadata | None:
-    team_id = await deps.get_default_team_store().get_team_id()
-    if team_id is None:
-        return None
-    # A deleted team leaves its id behind: treat it as no default team.
-    return await deps.get_team_metadata_store().get_by_team_id(TeamId(team_id))
+async def _resolve_default_teams(
+    deps: TeamServiceDependencies,
+) -> list[TeamMetadata]:
+    team_ids = [
+        TeamId(team_id)
+        for team_id in await deps.get_default_team_store().list_team_ids()
+    ]
+    if not team_ids:
+        return []
+    # A deleted team leaves its id behind: it is simply not found here.
+    by_id = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+    return sorted(by_id.values(), key=lambda metadata: metadata.name.casefold())
 
 
-async def get_default_team_for_new_users(
+async def get_default_teams_for_new_users(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
-) -> DefaultTeamForNewUsers | None:
-    """Return the team every new user joins on first GCU acceptance, if any."""
+) -> list[DefaultTeamForNewUsers]:
+    """Return the teams every new user joins on first GCU acceptance."""
     await deps.rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     )
-    metadata = await _resolve_default_team(deps)
-    if metadata is None:
-        return None
-    return DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
+    return [
+        DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
+        for metadata in await _resolve_default_teams(deps)
+    ]
 
 
-async def set_default_team_for_new_users(
+async def set_default_teams_for_new_users(
     user: KeycloakUser,
-    team_id: TeamId | None,
+    team_ids: list[TeamId],
     deps: TeamServiceDependencies,
 ) -> None:
-    """Choose the team every new user joins on first GCU acceptance, or clear it with `None`.
+    """Replace the teams every new user joins on first GCU acceptance; `[]` clears them.
 
     Personal spaces have no registry row, so they are refused as unknown teams.
     Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
@@ -371,32 +377,40 @@ async def set_default_team_for_new_users(
     await deps.rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     )
-    if (
-        team_id is not None
-        and await deps.get_team_metadata_store().get_by_team_id(team_id) is None
-    ):
-        raise TeamNotFoundError(team_id)
-    await deps.get_default_team_store().set(team_id, updated_by=user.uid)
-    logger.info("Default team for new users set to %s", team_id)
+    unique_ids = list(dict.fromkeys(team_ids))
+    found = await deps.get_team_metadata_store().get_by_team_ids(unique_ids)
+    missing = next((team_id for team_id in unique_ids if team_id not in found), None)
+    if missing is not None:
+        raise TeamNotFoundError(missing)
+    await deps.get_default_team_store().replace(
+        [str(team_id) for team_id in unique_ids], updated_by=user.uid
+    )
+    logger.info("Default teams for new users set to %s", unique_ids)
 
 
-async def join_default_team_for_new_user(
+async def join_default_teams_for_new_user(
     user_id: str,
     deps: TeamServiceDependencies,
 ) -> None:
-    """Grant `team_member` on the default team for new users, when one is set.
+    """Grant `team_member` on every default team for new users.
 
-    A user already holding any role on that team is left untouched.
+    A user already holding any role on one of them is left untouched there.
     """
-    metadata = await _resolve_default_team(deps)
-    if metadata is None:
-        return
-    if await _get_user_roles_in_team(deps.rebac, metadata.id, user_id):
+    teams = await _resolve_default_teams(deps)
+    await asyncio.gather(
+        *(_join_unless_already_in_team(deps.rebac, team.id, user_id) for team in teams)
+    )
+
+
+async def _join_unless_already_in_team(
+    rebac: RebacEngine, team_id: TeamId, user_id: str
+) -> None:
+    if await _get_user_roles_in_team(rebac, team_id, user_id):
         return
     await _add_team_member_relation(
-        deps.rebac, metadata.id, user_id, UserTeamRelation.TEAM_MEMBER
+        rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
     )
-    logger.info("A new user joined the default team %s", metadata.id)
+    logger.info("A new user joined the default team %s", team_id)
 
 
 async def _list_teams(

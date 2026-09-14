@@ -298,14 +298,14 @@ operations:
     required_permission: can_list_all_teams
   - service: control-plane
     method: GET
-    path: /control-plane/v1/admin/platform/default-team
+    path: /control-plane/v1/admin/platform/default-teams
     review_status: approved
-    required_permission: can_manage_platform # teams.service.get_default_team_for_new_users. Reads the platform_default_team singleton and resolves the team name; null when unset or when the team was deleted. Same gate as the write it serves.
+    required_permission: can_manage_platform # teams.service.get_default_teams_for_new_users. Reads platform_default_teams and resolves the team names; deleted teams are skipped. Same gate as the write it serves.
   - service: control-plane
     method: PUT
-    path: /control-plane/v1/admin/platform/default-team
+    path: /control-plane/v1/admin/platform/default-teams
     review_status: approved
-    required_permission: can_manage_platform # teams.service.set_default_team_for_new_users. Picks the one team every user joins as team_member on first GCU acceptance (POST /gcu), or clears it with team_id null. platform_admin only - it decides where every future account lands. Personal spaces have no registry row and are refused as unknown teams (404).
+    required_permission: can_manage_platform # teams.service.set_default_teams_for_new_users. Replaces the list of teams every user joins as team_member on first GCU acceptance (POST /gcu); [] clears it. platform_admin only - it decides where every future account lands. Personal spaces have no registry row and are refused as unknown teams (404), and nothing is written.
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/candidate-admins

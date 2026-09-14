@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Default team for new users: one platform-wide team, joined on first GCU acceptance.
+"""Default teams for new users: platform-wide teams joined on first GCU acceptance.
 
 Contract: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
 """
@@ -31,9 +31,9 @@ from control_plane_backend.teams.schemas import (
     TeamNotFoundError,
 )
 from control_plane_backend.teams.service import (
-    get_default_team_for_new_users,
-    join_default_team_for_new_user,
-    set_default_team_for_new_users,
+    get_default_teams_for_new_users,
+    join_default_teams_for_new_user,
+    set_default_teams_for_new_users,
 )
 from control_plane_backend.users.api import validate_gcu
 from fred_core import (
@@ -48,18 +48,19 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 _ONBOARDING = TeamMetadata(id=TeamId("team-onboarding"), name="Onboarding")
+_SUPPORT = TeamMetadata(id=TeamId("team-support"), name="support")
+_BOTH = ["team-support", "team-onboarding"]
 
 
 async def _sqlite_store(tmp_path: Path) -> tuple[AsyncEngine, PlatformDefaultTeamStore]:
     engine = create_async_engine(
-        f"sqlite+aiosqlite:///{tmp_path / 'default-team.sqlite3'}"
+        f"sqlite+aiosqlite:///{tmp_path / 'default-teams.sqlite3'}"
     )
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.tables["platform_default_team"].create)
+        await conn.run_sync(Base.metadata.tables["platform_default_teams"].create)
     return engine, PlatformDefaultTeamStore(engine)
 
 
@@ -100,24 +101,28 @@ class _FakeRebac:
 
 
 class _FakeDefaultTeamStore:
-    def __init__(self, team_id: str | None = None) -> None:
-        self.team_id = team_id
-        self.set_calls: list[tuple[str | None, str | None]] = []
+    def __init__(self, team_ids: list[str] | None = None) -> None:
+        self.team_ids = list(team_ids or [])
+        self.replace_calls: list[tuple[list[str], str | None]] = []
 
-    async def get_team_id(self) -> str | None:
-        return self.team_id
+    async def list_team_ids(self) -> list[str]:
+        return list(self.team_ids)
 
-    async def set(self, team_id: str | None, *, updated_by: str | None) -> None:
-        self.set_calls.append((team_id, updated_by))
-        self.team_id = team_id
+    async def replace(self, team_ids: list[str], *, updated_by: str | None) -> None:
+        self.replace_calls.append((list(team_ids), updated_by))
+        self.team_ids = list(team_ids)
 
 
 class _FakeTeamMetadataStore:
     def __init__(self, teams: list[TeamMetadata]) -> None:
         self._teams = {str(team.id): team for team in teams}
 
-    async def get_by_team_id(self, team_id) -> TeamMetadata | None:
-        return self._teams.get(str(team_id))
+    async def get_by_team_ids(self, team_ids) -> dict[TeamId, TeamMetadata]:
+        return {
+            TeamId(str(team_id)): self._teams[str(team_id)]
+            for team_id in team_ids
+            if str(team_id) in self._teams
+        }
 
 
 class _FakeUserStore:
@@ -135,12 +140,8 @@ class _FakeUserStore:
         self.recorded.append(gcu_version)
 
 
-def _team_deps(
-    rebac: _FakeRebac,
-    default_store: _FakeDefaultTeamStore,
-    teams: list[TeamMetadata] | None = None,
-) -> Any:
-    metadata_store = _FakeTeamMetadataStore([_ONBOARDING] if teams is None else teams)
+def _team_deps(rebac: _FakeRebac, default_store: _FakeDefaultTeamStore) -> Any:
+    metadata_store = _FakeTeamMetadataStore([_ONBOARDING, _SUPPORT])
     return cast(
         Any,
         SimpleNamespace(
@@ -164,35 +165,27 @@ def _user(uid: str = "new-user-1") -> KeycloakUser:
     return KeycloakUser(uid=uid, username="newcomer", roles=[], email=None)
 
 
+def _grants(rebac: _FakeRebac) -> set[tuple[str, RelationType, str]]:
+    return {(r.subject.id, r.relation, r.resource.id) for r in rebac.added}
+
+
 # --------------------------- store ---------------------------
 
 
 @pytest.mark.asyncio
-async def test_store_replaces_and_clears_the_default_team(tmp_path: Path) -> None:
+async def test_store_replaces_and_clears_the_default_teams(tmp_path: Path) -> None:
     engine, store = await _sqlite_store(tmp_path)
     try:
-        assert await store.get_team_id() is None
+        assert await store.list_team_ids() == []
 
-        await store.set("alpha", updated_by="admin-1")
-        await store.set("beta", updated_by="admin-2")
-        assert await store.get_team_id() == "beta"
+        await store.replace(["beta", "alpha"], updated_by="admin-1")
+        assert await store.list_team_ids() == ["alpha", "beta"]
 
-        await store.set(None, updated_by="admin-2")
-        assert await store.get_team_id() is None
-        await store.set(None, updated_by="admin-2")
-        assert await store.get_team_id() is None
-    finally:
-        await engine.dispose()
+        await store.replace(["gamma"], updated_by="admin-2")
+        assert await store.list_team_ids() == ["gamma"]
 
-
-@pytest.mark.asyncio
-async def test_database_refuses_a_second_row(tmp_path: Path) -> None:
-    engine, _ = await _sqlite_store(tmp_path)
-    try:
-        table = Base.metadata.tables["platform_default_team"]
-        with pytest.raises(IntegrityError):
-            async with engine.begin() as conn:
-                await conn.execute(table.insert().values(id="other", team_id="alpha"))
+        await store.replace([], updated_by="admin-2")
+        assert await store.list_team_ids() == []
     finally:
         await engine.dispose()
 
@@ -201,95 +194,103 @@ async def test_database_refuses_a_second_row(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_team_is_read_with_its_name() -> None:
+async def test_default_teams_are_read_with_their_names_sorted_by_name() -> None:
     rebac = _FakeRebac()
 
-    result = await get_default_team_for_new_users(
-        _user(), _team_deps(rebac, _FakeDefaultTeamStore("team-onboarding"))
+    result = await get_default_teams_for_new_users(
+        _user(), _team_deps(rebac, _FakeDefaultTeamStore(_BOTH))
     )
 
-    assert result == DefaultTeamForNewUsers(
-        team_id=TeamId("team-onboarding"), name="Onboarding"
-    )
+    assert result == [
+        DefaultTeamForNewUsers(team_id=TeamId("team-onboarding"), name="Onboarding"),
+        DefaultTeamForNewUsers(team_id=TeamId("team-support"), name="support"),
+    ]
     assert rebac.permission_checks == [OrganizationPermission.CAN_MANAGE_PLATFORM]
 
 
 @pytest.mark.asyncio
-async def test_deleted_default_team_reads_as_unset() -> None:
-    deps = _team_deps(_FakeRebac(), _FakeDefaultTeamStore("team-gone"))
+async def test_deleted_default_team_is_skipped() -> None:
+    deps = _team_deps(
+        _FakeRebac(), _FakeDefaultTeamStore(["team-gone", "team-support"])
+    )
 
-    assert await get_default_team_for_new_users(_user(), deps) is None
+    result = await get_default_teams_for_new_users(_user(), deps)
+
+    assert [team.team_id for team in result] == ["team-support"]
 
 
 @pytest.mark.asyncio
-async def test_reading_the_default_team_requires_manage_platform() -> None:
+async def test_reading_the_default_teams_requires_manage_platform() -> None:
     with pytest.raises(AuthorizationError):
-        await get_default_team_for_new_users(
-            _user(),
-            _team_deps(
-                _FakeRebac(granted=False), _FakeDefaultTeamStore("team-onboarding")
-            ),
+        await get_default_teams_for_new_users(
+            _user(), _team_deps(_FakeRebac(granted=False), _FakeDefaultTeamStore(_BOTH))
         )
 
 
 @pytest.mark.asyncio
-async def test_setting_the_default_team_requires_manage_platform() -> None:
+async def test_setting_the_default_teams_requires_manage_platform() -> None:
     store = _FakeDefaultTeamStore()
 
     with pytest.raises(AuthorizationError):
-        await set_default_team_for_new_users(
+        await set_default_teams_for_new_users(
             _user(),
-            TeamId("team-onboarding"),
+            [TeamId("team-onboarding")],
             _team_deps(_FakeRebac(granted=False), store),
         )
 
-    assert store.set_calls == []
+    assert store.replace_calls == []
 
 
 @pytest.mark.asyncio
-async def test_setting_an_unregistered_team_is_not_found() -> None:
+async def test_one_unregistered_team_rejects_the_whole_list() -> None:
     """Personal spaces land here too: they never have a registry row."""
-    store = _FakeDefaultTeamStore()
+    store = _FakeDefaultTeamStore(["team-support"])
 
     with pytest.raises(TeamNotFoundError):
-        await set_default_team_for_new_users(
-            _user(), TeamId("personal-someone"), _team_deps(_FakeRebac(), store)
+        await set_default_teams_for_new_users(
+            _user(),
+            [TeamId("team-onboarding"), TeamId("personal-someone")],
+            _team_deps(_FakeRebac(), store),
         )
 
-    assert store.set_calls == []
+    assert store.replace_calls == []
+    assert store.team_ids == ["team-support"]
 
 
 @pytest.mark.asyncio
-async def test_setting_and_clearing_record_the_admin() -> None:
+async def test_setting_deduplicates_records_the_admin_and_clears() -> None:
     store = _FakeDefaultTeamStore()
     deps = _team_deps(_FakeRebac(), store)
+    ids = [TeamId("team-onboarding"), TeamId("team-support"), TeamId("team-onboarding")]
 
-    await set_default_team_for_new_users(
-        _user("admin-1"), TeamId("team-onboarding"), deps
-    )
-    await set_default_team_for_new_users(_user("admin-1"), None, deps)
+    await set_default_teams_for_new_users(_user("admin-1"), ids, deps)
+    await set_default_teams_for_new_users(_user("admin-1"), [], deps)
 
-    assert store.set_calls == [("team-onboarding", "admin-1"), (None, "admin-1")]
-
-
-# --------------------------- join_default_team_for_new_user ---------------------------
-
-
-@pytest.mark.asyncio
-async def test_new_user_joins_the_default_team_as_member() -> None:
-    rebac = _FakeRebac()
-
-    await join_default_team_for_new_user(
-        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore("team-onboarding"))
-    )
-
-    assert [(r.subject.id, r.relation, r.resource.id) for r in rebac.added] == [
-        ("new-user-1", RelationType.TEAM_MEMBER, "team-onboarding")
+    assert store.replace_calls == [
+        (["team-onboarding", "team-support"], "admin-1"),
+        ([], "admin-1"),
     ]
 
 
+# --------------------------- join_default_teams_for_new_user ---------------------------
+
+
 @pytest.mark.asyncio
-async def test_user_already_holding_a_role_is_left_untouched() -> None:
+async def test_new_user_joins_every_default_team_as_member() -> None:
+    rebac = _FakeRebac()
+
+    await join_default_teams_for_new_user(
+        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore(_BOTH))
+    )
+
+    assert _grants(rebac) == {
+        ("new-user-1", RelationType.TEAM_MEMBER, "team-onboarding"),
+        ("new-user-1", RelationType.TEAM_MEMBER, "team-support"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_team_where_the_user_already_holds_a_role_is_skipped() -> None:
     existing = Relation(
         subject=RebacReference(Resource.USER, "new-user-1"),
         relation=RelationType.TEAM_ADMIN,
@@ -297,22 +298,22 @@ async def test_user_already_holding_a_role_is_left_untouched() -> None:
     )
     rebac = _FakeRebac(relations=[existing])
 
-    await join_default_team_for_new_user(
-        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore("team-onboarding"))
+    await join_default_teams_for_new_user(
+        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore(_BOTH))
     )
 
-    assert rebac.added == []
+    assert _grants(rebac) == {("new-user-1", RelationType.TEAM_MEMBER, "team-support")}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("stored_team_id", [None, "team-gone"])
+@pytest.mark.parametrize("stored_team_ids", [[], ["team-gone"]])
 async def test_no_usable_default_team_grants_nothing(
-    stored_team_id: str | None,
+    stored_team_ids: list[str],
 ) -> None:
     rebac = _FakeRebac()
 
-    await join_default_team_for_new_user(
-        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore(stored_team_id))
+    await join_default_teams_for_new_user(
+        "new-user-1", _team_deps(rebac, _FakeDefaultTeamStore(stored_team_ids))
     )
 
     assert rebac.added == []
@@ -326,7 +327,7 @@ async def _accept_gcu(
 ) -> None:
     await validate_gcu(
         deps=_user_deps(gcu_version),
-        team_deps=_team_deps(rebac, _FakeDefaultTeamStore("team-onboarding")),
+        team_deps=_team_deps(rebac, _FakeDefaultTeamStore(_BOTH)),
         user=_user(),
         user_store=cast(Any, user_store),
     )
@@ -334,19 +335,19 @@ async def _accept_gcu(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("row_exists", [False, True])
-async def test_first_gcu_acceptance_joins_the_default_team(row_exists: bool) -> None:
+async def test_first_gcu_acceptance_joins_the_default_teams(row_exists: bool) -> None:
     """A users row can exist before any acceptance (storage accounting creates one)."""
     rebac = _FakeRebac()
     user_store = _FakeUserStore(row_exists=row_exists, accepted=None)
 
     await _accept_gcu(rebac, user_store)
 
-    assert len(rebac.added) == 1
+    assert len(rebac.added) == 2
     assert user_store.recorded == [GcuVersionsType.V1]
 
 
 @pytest.mark.asyncio
-async def test_accepting_a_newer_gcu_does_not_rejoin_the_default_team() -> None:
+async def test_accepting_a_newer_gcu_does_not_rejoin_the_default_teams() -> None:
     rebac = _FakeRebac()
     user_store = _FakeUserStore(row_exists=True, accepted=GcuVersionsType.V1)
 
@@ -357,7 +358,7 @@ async def test_accepting_a_newer_gcu_does_not_rejoin_the_default_team() -> None:
 
 
 @pytest.mark.asyncio
-async def test_deployment_without_gcu_never_joins_the_default_team() -> None:
+async def test_deployment_without_gcu_never_joins_the_default_teams() -> None:
     rebac = _FakeRebac()
     user_store = _FakeUserStore(row_exists=False, accepted=None)
 

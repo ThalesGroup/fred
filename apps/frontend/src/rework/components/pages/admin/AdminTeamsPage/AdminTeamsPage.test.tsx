@@ -20,15 +20,18 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type DefaultTeam = { team_id: string; name: string };
+
 const h = vi.hoisted(() => ({
   canAdmin: true,
   gcuVersion: "v1" as string | null,
   teams: [
     { id: "uid-alpha", name: "Alpha" },
     { id: "uid-beta", name: "Beta" },
+    { id: "uid-gamma", name: "Gamma" },
   ],
-  defaultTeam: { team_id: "uid-beta", name: "Beta" } as { team_id: string; name: string } | null | undefined,
-  setDefaultTeam: vi.fn(),
+  defaultTeams: undefined as { team_id: string; name: string }[] | undefined,
+  setDefaultTeams: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -62,12 +65,12 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListAllTeamsQuery: () => ({ data: h.teams }),
-  useDefaultTeamForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
-    data: options?.skip ? undefined : h.defaultTeam,
+  useDefaultTeamsForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
+    data: options?.skip ? undefined : h.defaultTeams,
   }),
   useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
   useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
-  useSetDefaultTeamForNewUsersMutation: () => [h.setDefaultTeam, { isLoading: false }],
+  useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
 }));
 
 import AdminTeamsPage from "./AdminTeamsPage";
@@ -87,17 +90,25 @@ function render() {
   });
 }
 
+function rerender() {
+  act(() => root.unmount());
+  root = createRoot(container);
+  render();
+}
+
 const defaultTeamSection = () =>
   Array.from(container.querySelectorAll("section")).find(
     (section) => section.querySelector("h2")?.textContent === "rework.adminTeams.defaultTeam.title",
   );
 
+const searchInput = () => defaultTeamSection()!.querySelector("input")!;
+
 beforeEach(() => {
   h.canAdmin = true;
   h.gcuVersion = "v1";
-  h.defaultTeam = { team_id: "uid-beta", name: "Beta" };
-  h.setDefaultTeam.mockReset();
-  h.setDefaultTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.defaultTeams = [{ team_id: "uid-beta", name: "Beta" }] satisfies DefaultTeam[];
+  h.setDefaultTeams.mockReset();
+  h.setDefaultTeams.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -120,7 +131,7 @@ describe("AdminTeamsPage layout", () => {
   });
 });
 
-describe("AdminTeamsPage default team for new users", () => {
+describe("AdminTeamsPage default teams for new users", () => {
   it("is hidden from a team_manager who is not platform_admin", () => {
     h.canAdmin = false;
     render();
@@ -132,55 +143,60 @@ describe("AdminTeamsPage default team for new users", () => {
     render();
     expect(gcuDisabled()).toBe(false);
 
-    act(() => root.unmount());
-    root = createRoot(container);
     h.gcuVersion = null;
-    render();
+    rerender();
     expect(gcuDisabled()).toBe(true);
   });
 
-  it("says there is no default team only once the server answered null", () => {
+  it("says there is no default team only once the server answered an empty list", () => {
     const saysNone = () => defaultTeamSection()!.textContent?.includes("rework.adminTeams.defaultTeam.none");
-    h.defaultTeam = undefined;
+    h.defaultTeams = undefined;
     render();
     expect(saysNone()).toBe(false);
+    expect(searchInput().disabled).toBe(true);
 
-    act(() => root.unmount());
-    root = createRoot(container);
-    h.defaultTeam = null;
-    render();
+    h.defaultTeams = [];
+    rerender();
     expect(saysNone()).toBe(true);
+    expect(searchInput().disabled).toBe(false);
   });
 
-  it("shows the current default and offers the other teams by name", () => {
+  it("shows the current defaults and offers the other teams by name", () => {
     render();
-    const section = defaultTeamSection()!;
-    act(() => section.querySelector("input")!.focus());
+    act(() => searchInput().focus());
 
+    const section = defaultTeamSection()!;
     const options = Array.from(section.querySelectorAll('[role="option"]')).map((option) => option.textContent);
-    expect(options).toEqual(["Alpha"]);
+    expect(options).toEqual(["Alpha", "Gamma"]);
     expect(section.textContent).toContain("Beta");
     expect(section.textContent).not.toContain("uid-");
   });
 
-  it("sets the team picked in the search", async () => {
+  it("adds the team picked in the search to the ones already set", async () => {
     render();
-    const input = defaultTeamSection()!.querySelector("input")!;
-    act(() => input.focus());
+    act(() => searchInput().focus());
     await act(async () => {
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      searchInput().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });
 
-    expect(h.setDefaultTeam).toHaveBeenCalledWith({ setDefaultTeamForNewUsersRequest: { team_id: "uid-alpha" } });
+    expect(h.setDefaultTeams).toHaveBeenCalledWith({
+      setDefaultTeamsForNewUsersRequest: { team_ids: ["uid-beta", "uid-alpha"] },
+    });
   });
 
-  it("clears the default team", async () => {
+  it("removes one default team and keeps the others", async () => {
+    h.defaultTeams = [
+      { team_id: "uid-beta", name: "Beta" },
+      { team_id: "uid-gamma", name: "Gamma" },
+    ];
     render();
-    const clear = defaultTeamSection()!.querySelector(
-      'button[aria-label="rework.adminTeams.defaultTeam.clear"]',
-    ) as HTMLButtonElement;
-    await act(async () => clear.click());
+    const betaChip = Array.from(defaultTeamSection()!.querySelectorAll("li")).find((li) =>
+      li.textContent?.includes("Beta"),
+    )!;
+    await act(async () => betaChip.querySelector("button")!.click());
 
-    expect(h.setDefaultTeam).toHaveBeenCalledWith({ setDefaultTeamForNewUsersRequest: { team_id: null } });
+    expect(h.setDefaultTeams).toHaveBeenCalledWith({
+      setDefaultTeamsForNewUsersRequest: { team_ids: ["uid-gamma"] },
+    });
   });
 });

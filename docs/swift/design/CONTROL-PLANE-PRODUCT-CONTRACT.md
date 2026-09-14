@@ -3893,46 +3893,49 @@ platform features — capabilities, agent templates and models — so it takes t
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
 
-## 52. Contract Notes - default team for new users (2026-09-14, issue #2649)
+## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
 
-**What it is.** A platform admin picks at most one registry team that every
+**What it is.** A platform admin picks any number of registry teams that every
 new user joins as `team_member` when they accept the GCU for the first time.
 
 **Endpoints.**
 
-| Method | Path                                            | Permission            |
-| ------ | ----------------------------------------------- | --------------------- |
-| GET    | `/control-plane/v1/admin/platform/default-team` | `can_manage_platform` |
-| PUT    | `/control-plane/v1/admin/platform/default-team` | `can_manage_platform` |
+| Method | Path                                             | Permission            |
+| ------ | ------------------------------------------------ | --------------------- |
+| GET    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+| PUT    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
 
-`GET` returns `DefaultTeamForNewUsers` `{team_id, name}`, or `null` when no
-team is set. `PUT` takes `SetDefaultTeamForNewUsersRequest`
-`{team_id: string | null}`, `extra="forbid"`; `null` clears the default. 204 on
-success, 404 when the team has no registry row - personal spaces included, they
-never have one. Gated on `can_manage_platform` rather than a new narrow
+`GET` returns `list[DefaultTeamForNewUsers]` `{team_id, name}`, sorted by name;
+`[]` when none is set. `PUT` takes `SetDefaultTeamsForNewUsersRequest`
+`{team_ids: string[]}`, `extra="forbid"`, and replaces the whole list: `[]`
+clears it, duplicates are ignored. 204 on success; 404 naming the first team
+without a registry row - personal spaces included, they never have one - and
+nothing is written. Gated on `can_manage_platform` rather than a new narrow
 relation: it decides where every future account lands, and no delegated role
 owns that decision today.
 
-**Storage.** A singleton `platform_default_team` table, same shape as
-`platform_prompt` (§48): at most one row, keyed `id="default"` and
-CHECK-enforced. No row means no default team, and clearing deletes the row.
-`team_id` has no foreign key, since `teammetadata` belongs to the fred-core
-metadata: a deleted team resolves as "no default team" on every read, so
-deleting a team needs no cleanup here. The setting stays out of `teammetadata`
-on purpose - a per-team flag would ship a field on every `Team` for one
-platform-wide value.
+**Storage.** A `platform_default_teams` table, one row per team keyed by
+`team_id`; a `PUT` deletes and re-inserts the list in one transaction. `team_id`
+has no foreign key, since `teammetadata` belongs to the fred-core metadata: a
+deleted team is skipped on every read, so deleting a team needs no cleanup
+here. The setting stays out of `teammetadata` on purpose - a per-team flag would
+ship a field on every `Team` for a platform-wide choice. The first version kept
+one default team in a `platform_default_team` singleton (migration
+`9c41e7b2d58a`); `4e7a2c91d0b3` replaces it and carries that team over.
 
 **Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
 still empty:
 
-- membership is written before the acceptance is persisted, so a ReBAC failure
-  fails the call and the retry is still a first acceptance;
-- a user already holding any role on the team is left untouched; a concurrent
-  second call is harmless, OpenFGA writes ignore duplicates;
-- re-accepting a newer GCU version does not re-add someone who left the team;
+- membership on every default team is written, concurrently, before the
+  acceptance is persisted, so a ReBAC failure on any of them fails the call and
+  the retry is still a first acceptance;
+- a user already holding any role on one of the teams is left untouched there;
+  a concurrent second call is harmless, OpenFGA writes ignore duplicates;
+- re-accepting a newer GCU version does not re-add someone who left a team;
 - users who already accepted are not backfilled, but an account that never
   accepted joins at its first acceptance, even if it predates the setting.
 
 **Limits.** A deployment without `app.gcu_version` never calls `POST /gcu`, so
-the setting is inert there and the admin page says so. The setting is not part
-of the platform export bundle.
+the setting is inert there and the admin page says so. Two admins saving
+overlapping lists at the same instant can collide on the primary key (500 for
+one of them). The setting is not part of the platform export bundle.

@@ -2295,17 +2295,16 @@
         }
       },
       "defaultTeam": {
-        "title": "Équipe par défaut des nouveaux utilisateurs",
-        "description": "Chaque nouvel utilisateur rejoint cette équipe en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
-        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra cette équipe automatiquement.",
+        "title": "Équipes par défaut des nouveaux utilisateurs",
+        "description": "Chaque nouvel utilisateur rejoint ces équipes en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
+        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra ces équipes automatiquement.",
         "none": "Aucune équipe par défaut.",
-        "searchPlaceholder": "Rechercher une équipe par nom",
-        "clear": "Retirer l'équipe par défaut",
-        "setSummary": "Équipe par défaut mise à jour",
-        "clearedSummary": "Équipe par défaut retirée",
+        "searchPlaceholder": "Ajouter une équipe par nom",
+        "remove": "Retirer {{name}}",
+        "savedSummary": "Équipes par défaut mises à jour",
         "errors": {
-          "summary": "Échec de la mise à jour de l'équipe par défaut",
-          "fallbackDetail": "Impossible de mettre à jour l'équipe par défaut. Veuillez réessayer."
+          "summary": "Échec de la mise à jour des équipes par défaut",
+          "fallbackDetail": "Impossible de mettre à jour les équipes par défaut. Veuillez réessayer."
         }
       },
       "createTeam": {

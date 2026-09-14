@@ -16,35 +16,23 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
 
-# The one and only row id, CHECK-enforced like `platform_prompt`.
-PLATFORM_DEFAULT_TEAM_SINGLETON_ID = "default"
-
 
 class PlatformDefaultTeamRow(Base):
-    """The team every new user joins on first GCU acceptance, platform-wide.
+    """One of the teams every new user joins on first GCU acceptance.
 
     No row means no default team. `team_id` carries no foreign key:
     `teammetadata` belongs to the fred-core metadata, so a deleted team is
-    treated as unset when read. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
+    skipped when read. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
     """
 
-    __tablename__ = "platform_default_team"
-    __table_args__ = (
-        CheckConstraint(
-            f"id = '{PLATFORM_DEFAULT_TEAM_SINGLETON_ID}'",
-            name="ck_platform_default_team_singleton",
-        ),
-    )
+    __tablename__ = "platform_default_teams"
 
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=PLATFORM_DEFAULT_TEAM_SINGLETON_ID
-    )
-    team_id: Mapped[str] = mapped_column(String, nullable=False)
+    team_id: Mapped[str] = mapped_column(String, primary_key=True)
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
