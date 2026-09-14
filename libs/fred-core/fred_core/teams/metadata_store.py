@@ -19,11 +19,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, cast
 
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select, text, update
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.common.team_id import TeamId
@@ -123,28 +121,6 @@ class TeamMetadata(BaseModel):
     team_delete_grace: str | None = None
     max_idle: str | None = None
     retention_updated_by: str | None = None
-    is_default_for_new_users: bool = False
-
-
-class _TeamRowMissing(Exception):
-    """Rolls back a default-team write whose target row does not exist."""
-
-
-def _to_metadata(row: TeamMetadataRow) -> TeamMetadata:
-    return TeamMetadata(
-        id=TeamId(row.id),
-        name=row.name,
-        description=row.description,
-        joining_mode=JoiningMode(row.joining_mode),
-        visibility=TeamVisibility(row.visibility),
-        banner_object_storage_key=row.banner_object_storage_key,
-        max_resources_storage_size=row.max_resources_storage_size,
-        current_resources_storage_size=row.current_resources_storage_size,
-        team_delete_grace=row.team_delete_grace,
-        max_idle=row.max_idle,
-        retention_updated_by=row.retention_updated_by,
-        is_default_for_new_users=row.is_default_for_new_users,
-    )
 
 
 class TeamMetadataStore:
@@ -194,7 +170,22 @@ class TeamMetadataStore:
                 .scalars()
                 .all()
             )
-        return {TeamId(row.id): _to_metadata(row) for row in rows}
+        return {
+            TeamId(row.id): TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
+            )
+            for row in rows
+        }
 
     async def get_by_team_id(
         self,
@@ -234,7 +225,22 @@ class TeamMetadataStore:
         source of truth, replacing the Keycloak root-group enumeration)."""
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
-        return [_to_metadata(row) for row in rows]
+        return [
+            TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
+            )
+            for row in rows
+        ]
 
     async def get_by_name(
         self,
@@ -249,59 +255,23 @@ class TeamMetadataStore:
                     select(TeamMetadataRow).where(TeamMetadataRow.name == name)
                 )
             ).scalar_one_or_none()
-        return None if row is None else _to_metadata(row)
-
-    async def get_default_for_new_users(
-        self, session: AsyncSession | None = None
-    ) -> TeamMetadata | None:
-        async with use_session(self._sessions, session) as s:
-            row = (
-                await s.execute(
-                    select(TeamMetadataRow).where(
-                        TeamMetadataRow.is_default_for_new_users.is_(True)
-                    )
-                )
-            ).scalar_one_or_none()
-        return None if row is None else _to_metadata(row)
-
-    async def set_default_for_new_users(self, team_id: TeamId | None) -> bool:
-        """Make `team_id` the only default team for new users, or clear it with `None`.
-
-        Returns False, changing nothing, when `team_id` has no row.
-        """
-        try:
-            async with self._sessions() as s, s.begin():
-                # Serialize writers: a second one would miss the first one's
-                # uncommitted flag and trip the partial unique index.
-                if self._engine.dialect.name == "postgresql":
-                    await s.execute(
-                        text("SELECT pg_advisory_xact_lock(:key)"),
-                        {
-                            "key": advisory_lock_key(
-                                "teammetadata.default_for_new_users"
-                            )
-                        },
-                    )
-                # Clear before setting, or the partial unique index rejects the second flag.
-                await s.execute(
-                    update(TeamMetadataRow)
-                    .where(TeamMetadataRow.is_default_for_new_users.is_(True))
-                    .values(is_default_for_new_users=False)
-                )
-                if team_id is not None:
-                    result = cast(
-                        CursorResult[Any],
-                        await s.execute(
-                            update(TeamMetadataRow)
-                            .where(TeamMetadataRow.id == str(team_id))
-                            .values(is_default_for_new_users=True)
-                        ),
-                    )
-                    if result.rowcount == 0:
-                        raise _TeamRowMissing
-        except _TeamRowMissing:
-            return False
-        return True
+        return (
+            None
+            if row is None
+            else TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                joining_mode=JoiningMode(row.joining_mode),
+                visibility=TeamVisibility(row.visibility),
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
+            )
+        )
 
     async def delete(
         self,

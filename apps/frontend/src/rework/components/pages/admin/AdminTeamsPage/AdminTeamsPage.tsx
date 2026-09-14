@@ -29,6 +29,7 @@ import { useUserCapabilities } from "@core/hooks/useUserCapabilities.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import {
   useCreateTeamMutation,
+  useDefaultTeamForNewUsersQuery,
   useListAllTeamsQuery,
   useSearchCandidateTeamAdminsQuery,
   useSetDefaultTeamForNewUsersMutation,
@@ -69,15 +70,15 @@ export default function AdminTeamsPage() {
   const { gcuVersion } = useFrontendProperties();
   const [setDefaultTeam, { isLoading: isSettingDefaultTeam }] = useSetDefaultTeamForNewUsersMutation();
   const [defaultTeamQuery, setDefaultTeamQuery] = useState("");
-  const defaultTeam = allTeams?.find((team) => team.is_default_for_new_users);
+  const { data: defaultTeam } = useDefaultTeamForNewUsersQuery(undefined, { skip: !canAdmin });
 
   // Filtered client-side: the registry listing is already loaded for the table.
   const defaultTeamOptions = useMemo(() => {
     const query = defaultTeamQuery.trim().toLowerCase();
     return (allTeams ?? [])
-      .filter((team) => !team.is_default_for_new_users && team.name.toLowerCase().includes(query))
+      .filter((team) => team.id !== defaultTeam?.team_id && team.name.toLowerCase().includes(query))
       .map((team) => ({ label: team.name, value: team, key: team.id }));
-  }, [allTeams, defaultTeamQuery]);
+  }, [allTeams, defaultTeam, defaultTeamQuery]);
 
   const handleSetDefaultTeam = (team: Team | null) =>
     runMutationAction({
@@ -189,7 +190,10 @@ export default function AdminTeamsPage() {
                 />
               </div>
             ) : (
-              <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
+              // `undefined` while loading or on error: only the server's `null` means none.
+              defaultTeam === null && (
+                <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
+              )
             )}
             <Autocomplete<Team>
               textInput={{

@@ -60,6 +60,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RetentionFieldView,
@@ -335,6 +336,28 @@ async def rescue_team_admin(
     )
 
 
+async def _resolve_default_team(deps: TeamServiceDependencies) -> TeamMetadata | None:
+    team_id = await deps.get_default_team_store().get_team_id()
+    if team_id is None:
+        return None
+    # A deleted team leaves its id behind: treat it as no default team.
+    return await deps.get_team_metadata_store().get_by_team_id(TeamId(team_id))
+
+
+async def get_default_team_for_new_users(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> DefaultTeamForNewUsers | None:
+    """Return the team every new user joins on first GCU acceptance, if any."""
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    metadata = await _resolve_default_team(deps)
+    if metadata is None:
+        return None
+    return DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
+
+
 async def set_default_team_for_new_users(
     user: KeycloakUser,
     team_id: TeamId | None,
@@ -348,9 +371,12 @@ async def set_default_team_for_new_users(
     await deps.rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     )
-    updated = await deps.get_team_metadata_store().set_default_for_new_users(team_id)
-    if team_id is not None and not updated:
+    if (
+        team_id is not None
+        and await deps.get_team_metadata_store().get_by_team_id(team_id) is None
+    ):
         raise TeamNotFoundError(team_id)
+    await deps.get_default_team_store().set(team_id, updated_by=user.uid)
     logger.info("Default team for new users set to %s", team_id)
 
 
@@ -362,7 +388,7 @@ async def join_default_team_for_new_user(
 
     A user already holding any role on that team is left untouched.
     """
-    metadata = await deps.get_team_metadata_store().get_default_for_new_users()
+    metadata = await _resolve_default_team(deps)
     if metadata is None:
         return
     if await _get_user_roles_in_team(deps.rebac, metadata.id, user_id):
@@ -1670,7 +1696,6 @@ def _build_team_dto(
         avatar_image_url=avatar_image_url,
         max_resources_storage_size=max_storage,
         current_resources_storage_size=metadata.current_resources_storage_size,
-        is_default_for_new_users=metadata.is_default_for_new_users,
     )
 
 

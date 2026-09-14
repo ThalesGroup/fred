@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, String, false, text
+from sqlalchemy import BigInteger, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -31,16 +31,6 @@ class TeamMetadataRow(Base):
     """ORM model for the ``teammetadata`` table."""
 
     __tablename__ = "teammetadata"
-    # At most one team is the default for new users, enforced by the database.
-    __table_args__ = (
-        Index(
-            "uq_teammetadata_default_for_new_users",
-            "is_default_for_new_users",
-            unique=True,
-            sqlite_where=text("is_default_for_new_users"),
-            postgresql_where=text("is_default_for_new_users"),
-        ),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): a team's identity lives here
@@ -84,10 +74,6 @@ class TeamMetadataRow(Base):
     team_delete_grace: Mapped[str | None] = mapped_column(String, nullable=True)
     max_idle: Mapped[str | None] = mapped_column(String, nullable=True)
     retention_updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
-    # The team a user joins on first GCU acceptance, chosen by a platform admin.
-    is_default_for_new_users: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false()
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""add default team for new users
+"""add platform_default_team table
 
-A platform admin picks one team that every user joins on first GCU acceptance.
-The partial unique index keeps at most one team flagged. Existing rows get
-false: nothing changes until an admin chooses a team.
+The team every user joins on first GCU acceptance, chosen by a platform admin.
+At most one row, keyed `id="default"` and CHECK-enforced like platform_prompt.
+No row is seeded: absence means no default team.
 
-Revision ID: e4a7c2f91b36
+Revision ID: 9c41e7b2d58a
 Revises: d3f8a2c6e174
 Create Date: 2026-09-14 12:00:00.000000
 
@@ -30,40 +30,32 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "e4a7c2f91b36"  # pragma: allowlist secret
+revision: str = "9c41e7b2d58a"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
     "d3f8a2c6e174"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-_INDEX_NAME = "uq_teammetadata_default_for_new_users"
-
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "teammetadata",
+    op.create_table(
+        "platform_default_team",
+        sa.Column("id", sa.String(), nullable=False, server_default="default"),
+        sa.Column("team_id", sa.String(), nullable=False),
+        sa.Column("updated_by", sa.String(), nullable=True),
         sa.Column(
-            "is_default_for_new_users",
-            sa.Boolean(),
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
-            server_default=sa.false(),
         ),
-    )
-    op.create_index(
-        _INDEX_NAME,
-        "teammetadata",
-        ["is_default_for_new_users"],
-        unique=True,
-        sqlite_where=sa.text("is_default_for_new_users"),
-        postgresql_where=sa.text("is_default_for_new_users"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint("id = 'default'", name="ck_platform_default_team_singleton"),
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(_INDEX_NAME, table_name="teammetadata")
-    # Batch mode: SQLite cannot drop a column in place.
-    with op.batch_alter_table("teammetadata") as batch_op:
-        batch_op.drop_column("is_default_for_new_users")
+    op.drop_table("platform_default_team")

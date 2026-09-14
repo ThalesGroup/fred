@@ -29,6 +29,7 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
 )
+from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 from control_plane_backend.users.dependencies import build_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
 from control_plane_backend.users.service import get_users_by_ids, search_users
@@ -70,6 +71,7 @@ class TeamServiceDependencies:
     rebac: RebacEngine
     scheduler_backend: SchedulerBackend
     get_team_metadata_store: Callable[[], TeamMetadataStore]
+    get_default_team_store: Callable[[], PlatformDefaultTeamStore]
     get_prompt_store: Callable[[], PromptStore]
     get_prompt_category_store: Callable[[], PromptCategoryStore]
     get_content_store: Callable[[], ContentStore]
@@ -186,6 +188,7 @@ def build_team_service_dependencies(
         rebac=container.get_rebac_engine(),
         scheduler_backend=container.get_scheduler_backend(),
         get_team_metadata_store=container.get_team_metadata_store,
+        get_default_team_store=container.get_platform_default_team_store,
         get_prompt_store=container.get_prompt_store,
         get_prompt_category_store=container.get_prompt_category_store,
         get_content_store=container.get_content_store,

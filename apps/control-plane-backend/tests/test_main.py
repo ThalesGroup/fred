@@ -838,7 +838,6 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "visibility": "private",
             "max_resources_storage_size": 5368709120,
             "current_resources_storage_size": 0,
-            "is_default_for_new_users": False,
         }
     ]
 
@@ -1453,7 +1452,6 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "my_relations": ["team_editor"],
         "max_resources_storage_size": 5368709120,
         "current_resources_storage_size": 0,
-        "is_default_for_new_users": False,
     }
 
 
@@ -5725,6 +5723,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_default_team_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
@@ -5802,6 +5801,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_default_team_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
@@ -6122,6 +6122,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
         get_team_metadata_store=lambda: cast(Any, object()),
+        get_default_team_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),

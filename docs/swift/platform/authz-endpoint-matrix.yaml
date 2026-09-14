@@ -297,6 +297,11 @@ operations:
     review_status: approved
     required_permission: can_list_all_teams
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/default-team
+    review_status: approved
+    required_permission: can_manage_platform # teams.service.get_default_team_for_new_users. Reads the platform_default_team singleton and resolves the team name; null when unset or when the team was deleted. Same gate as the write it serves.
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/default-team
     review_status: approved

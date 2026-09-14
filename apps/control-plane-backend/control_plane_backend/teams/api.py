@@ -13,6 +13,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
@@ -36,6 +37,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import create_team as create_team_from_service
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
+from control_plane_backend.teams.service import (
+    get_default_team_for_new_users as get_default_team_for_new_users_from_service,
+)
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
@@ -282,6 +286,18 @@ async def rescue_team_admin(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rescue_team_admin_from_service(user, team_id, request.user_id, deps)
+
+
+@router.get(
+    "/admin/platform/default-team",
+    response_model=DefaultTeamForNewUsers | None,
+    summary="Get the team every new user joins on first GCU acceptance (platform admin only)",
+)
+async def get_default_team_for_new_users(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> DefaultTeamForNewUsers | None:
+    return await get_default_team_for_new_users_from_service(user, deps)
 
 
 @router.put(

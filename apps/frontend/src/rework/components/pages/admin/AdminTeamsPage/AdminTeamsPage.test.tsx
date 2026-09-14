@@ -24,9 +24,10 @@ const h = vi.hoisted(() => ({
   canAdmin: true,
   gcuVersion: "v1" as string | null,
   teams: [
-    { id: "uid-alpha", name: "Alpha", is_default_for_new_users: false },
-    { id: "uid-beta", name: "Beta", is_default_for_new_users: true },
+    { id: "uid-alpha", name: "Alpha" },
+    { id: "uid-beta", name: "Beta" },
   ],
+  defaultTeam: { team_id: "uid-beta", name: "Beta" } as { team_id: string; name: string } | null | undefined,
   setDefaultTeam: vi.fn(),
 }));
 
@@ -61,6 +62,9 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListAllTeamsQuery: () => ({ data: h.teams }),
+  useDefaultTeamForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
+    data: options?.skip ? undefined : h.defaultTeam,
+  }),
   useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
   useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
   useSetDefaultTeamForNewUsersMutation: () => [h.setDefaultTeam, { isLoading: false }],
@@ -91,6 +95,7 @@ const defaultTeamSection = () =>
 beforeEach(() => {
   h.canAdmin = true;
   h.gcuVersion = "v1";
+  h.defaultTeam = { team_id: "uid-beta", name: "Beta" };
   h.setDefaultTeam.mockReset();
   h.setDefaultTeam.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
@@ -120,6 +125,19 @@ describe("AdminTeamsPage default team for new users", () => {
     h.gcuVersion = null;
     render();
     expect(gcuDisabled()).toBe(true);
+  });
+
+  it("says there is no default team only once the server answered null", () => {
+    const saysNone = () => defaultTeamSection()!.textContent?.includes("rework.adminTeams.defaultTeam.none");
+    h.defaultTeam = undefined;
+    render();
+    expect(saysNone()).toBe(false);
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    h.defaultTeam = null;
+    render();
+    expect(saysNone()).toBe(true);
   });
 
   it("shows the current default and offers the other teams by name", () => {

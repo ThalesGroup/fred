@@ -155,8 +155,6 @@ class Team(BaseModel):
     avatar_image_url: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
-    # New users join this team on first GCU acceptance; one team at most.
-    is_default_for_new_users: bool = False
 
 
 class RetentionFieldView(BaseModel):
@@ -258,6 +256,13 @@ class SetDefaultTeamForNewUsersRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     team_id: TeamId | None
+
+
+class DefaultTeamForNewUsers(BaseModel):
+    """The team every new user joins on first GCU acceptance."""
+
+    team_id: TeamId
+    name: str
 
 
 class AddTeamMemberRequest(BaseModel):
