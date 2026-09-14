@@ -594,6 +594,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
+          agent_model_override: queryArg.agentModelOverride,
         },
       }),
     }),
@@ -1750,6 +1751,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
+  agentModelOverride?: string | null;
 };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
