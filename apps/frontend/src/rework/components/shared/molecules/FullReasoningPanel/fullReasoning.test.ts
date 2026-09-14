@@ -103,6 +103,37 @@ describe("fullReasoning", () => {
   });
 });
 
+describe("fullReasoning — restatements hidden", () => {
+  const restated = "The user wants a summary. I will list the files.";
+  const conversation = () => [
+    question("e1", "Go"),
+    thought("e1", restated),
+    thought("e1", `${restated}\n\n- **Read** the first file`),
+    thought("e1", restated),
+  ];
+
+  it("trims each block of what the turn already said, markdown kept", () => {
+    const [turn] = fullReasoning(conversation(), true);
+    expect(turn.steps).toMatchObject([
+      { kind: "reasoning", text: restated, restated: false },
+      { kind: "reasoning", text: "- **Read** the first file", restated: false },
+      { kind: "reasoning", text: "", restated: true },
+    ]);
+  });
+
+  it("marks a restated block in the copied markdown", () => {
+    const markdown = fullReasoningMarkdown(fullReasoning(conversation(), true), "Restated");
+    expect(markdown).toBe(["## Go", restated, "- **Read** the first file", "_Restated_"].join("\n\n"));
+  });
+
+  it("leaves every block whole while the toggle is off", () => {
+    const [turn] = fullReasoning(conversation());
+    expect(
+      turn.steps.every((step) => step.kind === "reasoning" && !step.restated && step.text.startsWith(restated)),
+    ).toBe(true);
+  });
+});
+
 describe("fullReasoningMarkdown", () => {
   it("renders each turn as a heading followed by its blocks and tool markers", () => {
     const turns = fullReasoning([
@@ -114,7 +145,7 @@ describe("fullReasoningMarkdown", () => {
       thought("e2", "Third block."),
     ]);
 
-    expect(fullReasoningMarkdown(turns)).toBe(
+    expect(fullReasoningMarkdown(turns, "Restated")).toBe(
       [
         "## List the files",
         "First block.",

@@ -424,7 +424,8 @@
       "title": "Raisonnement complet",
       "copy": "Copier le raisonnement complet",
       "copied": "Copié",
-      "empty": "L'agent n'a pas encore raisonné dans cette conversation."
+      "empty": "L'agent n'a pas encore raisonné dans cette conversation.",
+      "hideRestatements": "Masquer les reformulations"
     },
     "debugRaw": {
       "title": "Débogage — messages bruts",

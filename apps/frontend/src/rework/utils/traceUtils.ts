@@ -645,6 +645,8 @@ export type TraceRow = {
   lane: "reasoning" | "step";
   index: number | null;
   reasoningText: string | null;
+  /** `reasoningText` with the block's markdown kept, for a view that renders it. */
+  reasoningMarkdown: string | null;
   restated: boolean;
 };
 
@@ -685,7 +687,16 @@ const NEGATIONS = new Set([
 
 /** `facts` (negation, numbers) must match exactly: overlap alone would call
  *  "3 pages left" and "2 pages left" the same sentence. */
-type ReasoningSegment = { text: string; words: ReadonlySet<string>; facts: string; listItem: boolean };
+type ReasoningSegment = {
+  text: string;
+  words: ReadonlySet<string>;
+  facts: string;
+  listItem: boolean;
+  /** A code block, compared like a sentence but never part of a flattened preview. */
+  code: boolean;
+  /** Last line, in the block's markdown, of the paragraph, item or code block this came from. */
+  blockEnd: number;
+};
 
 // A line opening its own block; any other line is a soft wrap of its paragraph.
 const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
@@ -697,34 +708,80 @@ const LIST_MARKER = /^\s*([-*+]|\d+[.)])\s+/;
  * {@link isSentenceEnd} — so dropping a segment never opens a row mid-sentence.
  */
 function reasoningSegments(markdown: string): ReasoningSegment[] {
-  const blocks: string[] = [];
-  for (const line of markdown.replace(/```[\s\S]*?```/g, "\n").split("\n")) {
-    if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0) blocks.push(line);
-    else blocks[blocks.length - 1] += ` ${line.trim()}`;
-  }
+  // Blocks keep the line they end on, so a cut can be mapped back onto the
+  // original markdown (see `restatedMarkdown`). A code fence is one block.
+  const blocks: { text: string; endLine: number; code: boolean }[] = [];
+  let fence: string[] | null = null;
+  markdown.split("\n").forEach((line, index) => {
+    const isFence = /^\s*```/.test(line);
+    if (fence) {
+      if (isFence) {
+        blocks.push({ text: fence.join("\n"), endLine: index, code: true });
+        fence = null;
+      } else fence.push(line);
+      return;
+    }
+    if (isFence) fence = [];
+    else if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0 || blocks[blocks.length - 1].code) {
+      blocks.push({ text: line, endLine: index, code: false });
+    } else {
+      const previous = blocks[blocks.length - 1];
+      blocks[blocks.length - 1] = { ...previous, text: `${previous.text} ${line.trim()}`, endLine: index };
+    }
+  });
+  // A fence still open is a code block still streaming.
+  if (fence)
+    blocks.push({ text: (fence as string[]).join("\n"), endLine: markdown.split("\n").length - 1, code: true });
 
   const segments: ReasoningSegment[] = [];
-  const push = (text: string, listItem: boolean) => {
+  const push = (text: string, listItem: boolean, blockEnd: number, code = false) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     // An item's own number is not a fact: a renumbered item is still a repeat.
     const raw = rawWords(trimmed.replace(LIST_MARKER, ""));
     const numbers = raw.filter((word) => /\d/.test(word)).sort();
     const facts = `${raw.some((word) => NEGATIONS.has(word)) ? "!" : ""}${numbers.join(",")}`;
-    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts, listItem });
+    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts, listItem, code, blockEnd });
   };
   for (const block of blocks) {
-    const listItem = LIST_MARKER.test(block);
-    const text = plainPreviewText(block);
+    if (block.code) {
+      push(block.text, false, block.endLine, true);
+      continue;
+    }
+    const listItem = LIST_MARKER.test(block.text);
+    const text = plainPreviewText(block.text);
     let start = 0;
     for (let i = 0; i < text.length; i++) {
       if (!isSentenceEnd(text, i)) continue;
-      push(text.slice(start, i + 1), listItem);
+      push(text.slice(start, i + 1), listItem, block.endLine);
       start = i + 1;
     }
-    push(text.slice(start), listItem);
+    push(text.slice(start), listItem, block.endLine);
   }
   return segments;
+}
+
+/**
+ * The markdown left once the first `lead` segments are dropped. Whole blocks
+ * after the cut keep their original markdown (lists, emphasis, code); only the
+ * rest of a paragraph cut mid-way comes back as flattened sentences.
+ */
+function restatedMarkdown(markdown: string, segments: ReasoningSegment[], lead: number): string {
+  if (lead === 0) return markdown;
+  if (lead >= segments.length) return "";
+  const cutBlock = segments[lead - 1].blockEnd;
+  const rest = segments.slice(lead);
+  const sameBlock = rest
+    .filter((segment) => segment.blockEnd === cutBlock && !segment.code)
+    .map((segment) => segment.text);
+  const after = markdown
+    .split("\n")
+    .slice(cutBlock + 1)
+    .join("\n");
+  return [sameBlock.join(" "), after]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 // Case- and accent-insensitive, so "demande" and "a demandé" compare equal.
@@ -845,7 +902,7 @@ function isStepEntry(entry: TraceEntry): boolean {
   return entry.kind === "combo" || entry.message.channel === "tool_result";
 }
 
-export function isReasoningEntry(entry: TraceEntry): boolean {
+function isReasoningEntry(entry: TraceEntry): boolean {
   if (entry.kind !== "solo") return false;
   const channel = entry.message.channel;
   return channel === "thought" || channel === "plan" || channel === "observation";
@@ -858,13 +915,14 @@ export function isReasoningEntry(entry: TraceEntry): boolean {
 // token — and a turn that streamed in this session stays open. The message
 // objects inside those arrays are the same ones, though: only the block still
 // streaming is rebuilt, and it is the only one that misses.
-const reasoningTextCache = new WeakMap<ChatMessage, { preview: string; segments: ReasoningSegment[] }>();
+type ReasoningText = { markdown: string; preview: string; segments: ReasoningSegment[] };
+const reasoningTextCache = new WeakMap<ChatMessage, ReasoningText>();
 
-function reasoningTextFor(message: ChatMessage): { preview: string; segments: ReasoningSegment[] } {
+function reasoningTextFor(message: ChatMessage): ReasoningText {
   const cached = reasoningTextCache.get(message);
   if (cached) return cached;
   const markdown = textOf(message);
-  const computed = { preview: plainPreviewText(markdown), segments: reasoningSegments(markdown) };
+  const computed = { markdown, preview: plainPreviewText(markdown), segments: reasoningSegments(markdown) };
   reasoningTextCache.set(message, computed);
   return computed;
 }
@@ -925,7 +983,7 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
 
   return entries.map((entry) => {
     if (isReasoningEntry(entry) && entry.kind === "solo") {
-      const { preview, segments } = reasoningTextFor(entry.message);
+      const { markdown, preview, segments } = reasoningTextFor(entry.message);
       const streaming = statusForEntry(entry) === "streaming";
       const lead = restatedLead(entry.message, segments, earlier, said, streaming);
       said.push(...segments);
@@ -937,16 +995,23 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
           ? preview
           : segments
               .slice(lead)
+              .filter((segment) => !segment.code)
               .map((segment) => segment.text)
               .join(" ");
       // A block still streaming may yet add something, so it is not called a restatement.
-      return { entry, lane: "reasoning" as const, index: null, reasoningText, restated: nothingNew && !streaming };
+      return {
+        entry,
+        lane: "reasoning" as const,
+        index: null,
+        reasoningText,
+        reasoningMarkdown: restatedMarkdown(markdown, segments, lead),
+        restated: nothingNew && !streaming,
+      };
     }
-    if (isStepEntry(entry)) {
-      return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null, restated: false };
-    }
+    const step = { entry, lane: "step" as const, reasoningText: null, reasoningMarkdown: null, restated: false };
+    if (isStepEntry(entry)) return { ...step, index: ++toolIndex };
     // system_note / error — sequenced with the steps, but unnumbered.
-    return { entry, lane: "step" as const, index: null, reasoningText: null, restated: false };
+    return { ...step, index: null };
   });
 }
 

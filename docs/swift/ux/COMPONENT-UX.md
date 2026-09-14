@@ -1131,6 +1131,13 @@ message dump, with the glyph a reasoning row carries (`settings`, **filled**:
 it, not only admins: each block is already readable one at a time in
 `TraceDetailDrawer`, so restricting the panel would protect nothing.
 
+**Hide restatements.** A switch pinned above the turns (off by default) trims
+each block the way the chain of thought does (`traceRows`, same detection), but
+keeps its markdown: `TraceRow.reasoningMarkdown` cuts the original text at the
+dropped paragraph or item, so the lists and code after the cut still render.
+Only the rest of a paragraph cut mid-way comes back flattened. A block with
+nothing new shows `rework.chatTrace.restatedReasoning`. Copy follows the switch.
+
 **Streaming.** `fullReasoning()` runs only while the panel is open, since
 `messages` changes on every token. Each block is a memoized component, so a
 token re-renders the block it lands in, not the markdown of the whole

@@ -42,9 +42,9 @@ vi.mock("./fullReasoning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./fullReasoning")>();
   return {
     ...actual,
-    fullReasoning: (messages: ChatMessage[]) => {
+    fullReasoning: (...args: Parameters<typeof actual.fullReasoning>) => {
       computed.calls++;
-      return actual.fullReasoning(messages);
+      return actual.fullReasoning(...args);
     },
   };
 });
@@ -80,6 +80,25 @@ describe("FullReasoningPanel", () => {
 
   it("says so when the conversation holds no reasoning yet", () => {
     expect(render(true, [MESSAGES[0]])).toContain("chatbot.fullReasoning.empty");
+  });
+
+  it("hides restatements when the toggle is turned on", () => {
+    const repeated: ChatMessage = { ...MESSAGES[1], rank: 2, metadata: { extras: { thought_id: "t2" } } };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => root.render(<FullReasoningPanel open onClose={() => undefined} messages={[...MESSAGES, repeated]} />));
+    const toggle = container.querySelector<HTMLInputElement>(
+      'input[aria-label="chatbot.fullReasoning.hideRestatements"]',
+    );
+    expect(container.textContent).not.toContain("rework.chatTrace.restatedReasoning");
+
+    act(() => toggle?.click());
+
+    expect(toggle?.checked).toBe(true);
+    expect(container.textContent).toContain("rework.chatTrace.restatedReasoning");
+    act(() => root.unmount());
+    container.remove();
   });
 
   // `messages` changes on every streamed token; a closed panel must not pay for it.

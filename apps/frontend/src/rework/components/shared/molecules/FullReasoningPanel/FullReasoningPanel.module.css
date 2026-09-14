@@ -1,9 +1,27 @@
+/* Pinned above the turns, which own the scrolling (the panel body is `fill`). */
+.toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-variant);
+  padding-bottom: var(--spacing-s);
+}
+
+.toolbarLabel {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
 /* Turns are separated by a rule and the widest gap: a turn is the unit the
    reader scans for, its question and blocks read as one group beneath it. */
 .turns {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-l);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .turn {
@@ -46,6 +64,11 @@
   background: var(--surface-main);
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface);
+}
+
+.restated {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .duration {

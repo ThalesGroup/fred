@@ -656,6 +656,55 @@ describe("traceRows — restated reasoning", () => {
     expect(reasoningTexts(head, text)[1]).toBe(text);
   });
 
+  describe("reasoningMarkdown", () => {
+    const markdownOf = (...blocks: string[]) =>
+      traceRows(blocks.map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) }))).map(
+        (row) => row.reasoningMarkdown,
+      );
+
+    it("is the block's markdown untouched when nothing was dropped", () => {
+      expect(markdownOf("**Plan** :\n- Lister les documents")).toEqual(["**Plan** :\n- Lister les documents"]);
+    });
+
+    // Cut between blocks, what follows keeps its markdown: the list stays a list.
+    it("keeps the markdown of the blocks after the cut", () => {
+      const first = "L'utilisateur veut un résumé.";
+      const second = `${first}\n\nJe dois :\n- **Lister** les documents\n- Résumer le premier`;
+      expect(markdownOf(first, second)[1]).toBe("Je dois :\n- **Lister** les documents\n- Résumer le premier");
+    });
+
+    it("flattens only the rest of a paragraph cut mid-way", () => {
+      const first = "L'utilisateur veut un résumé.";
+      const second = `${first} Je lis **le premier** fichier.\n\n- Ensuite, le second`;
+      expect(markdownOf(first, second)[1]).toBe("Je lis le premier fichier.\n\n- Ensuite, le second");
+    });
+
+    it("keeps a code block that follows the cut", () => {
+      const first = "L'utilisateur veut la requête.";
+      const second = `${first}\n\n\`\`\`sql\nSELECT 1;\n\`\`\`\n\nJe l'exécute.`;
+      expect(markdownOf(first, second)[1]).toBe("\`\`\`sql\nSELECT 1;\n\`\`\`\n\nJe l'exécute.");
+    });
+
+    // Code is compared like a sentence: new code stops the cut, repeated code goes.
+    it("never drops a new code block, even between repeated sentences", () => {
+      const first = "The user wants X. I will list files.";
+      const second = "The user wants X.\n\n```sh\nls -la\n```\n\nI will list files.";
+      expect(markdownOf(first, second)[1]).toBe("```sh\nls -la\n```\n\nI will list files.");
+      expect(
+        traceRows([first, second].map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) })))[1].restated,
+      ).toBe(false);
+    });
+
+    it("drops a code block the turn already showed", () => {
+      const code = "```sh\nls -la\n```";
+      expect(markdownOf(`Listing.\n\n${code}`, `Listing.\n\n${code}\n\nDone.`)[1]).toBe("Done.");
+    });
+
+    it("is empty for a block with nothing new", () => {
+      expect(markdownOf("Même chose.", "Même chose.")[1]).toBe("");
+    });
+  });
+
   it("marks a block with nothing new as restated", () => {
     const rows = traceRows([
       { kind: "solo", message: thoughtMsg("The user wants a summary. I will list the files.") },

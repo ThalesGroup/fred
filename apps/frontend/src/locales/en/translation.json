@@ -424,7 +424,8 @@
       "title": "Full reasoning",
       "copy": "Copy the full reasoning",
       "copied": "Copied",
-      "empty": "The agent has not reasoned in this conversation yet."
+      "empty": "The agent has not reasoned in this conversation yet.",
+      "hideRestatements": "Hide restatements"
     },
     "debugRaw": {
       "title": "Debug — raw messages",

@@ -16,6 +16,7 @@ import { memo, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import Switch from "@shared/atoms/Switch/Switch";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
@@ -39,14 +40,21 @@ const ReasoningBlock = memo(function ReasoningBlock({
   text,
   durationMs,
   streaming,
+  restatedLabel,
 }: {
   text: string;
   durationMs: number | null;
   streaming: boolean;
+  /** Set when the block said nothing new, shown in place of its text. */
+  restatedLabel: string | null;
 }) {
   return (
     <div className={styles.block}>
-      <MarkdownRenderer text={text} streaming={streaming} />
+      {restatedLabel ? (
+        <span className={styles.restated}>{restatedLabel}</span>
+      ) : (
+        <MarkdownRenderer text={text} streaming={streaming} />
+      )}
       {durationMs != null && !streaming && <span className={styles.duration}>{formatLatencyMs(durationMs)}</span>}
     </div>
   );
@@ -59,14 +67,21 @@ const ReasoningBlock = memo(function ReasoningBlock({
 export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPanelProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [hideRestatements, setHideRestatements] = useState(false);
   // Computed only while open: `messages` changes on every streamed token. Closed,
   // it keeps the last result, which the drawer still shows while it slides out.
   const lastTurns = useRef(NO_TURNS);
-  const turns = useMemo(() => (open ? fullReasoning(messages) : lastTurns.current), [open, messages]);
+  const turns = useMemo(
+    () => (open ? fullReasoning(messages, hideRestatements) : lastTurns.current),
+    [open, messages, hideRestatements],
+  );
   lastTurns.current = turns;
+  const restatedLabel = t("rework.chatTrace.restatedReasoning");
+  const hideLabel = t("chatbot.fullReasoning.hideRestatements");
 
   const handleCopy = () => {
-    writeRichClipboard("", fullReasoningMarkdown(turns)).then((ok) => {
+    // Copies what the panel shows, restatements hidden or not.
+    writeRichClipboard("", fullReasoningMarkdown(turns, restatedLabel)).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -82,6 +97,7 @@ export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPan
       title={t("chatbot.fullReasoning.title")}
       persistKey="full-reasoning-panel"
       width="560px"
+      fill
       headerActions={
         <Tooltip text={copyLabel}>
           <IconButton
@@ -95,6 +111,14 @@ export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPan
         </Tooltip>
       }
     >
+      <div className={styles.toolbar}>
+        <Switch
+          checked={hideRestatements}
+          onChange={(event) => setHideRestatements(event.target.checked)}
+          aria-label={hideLabel}
+        />
+        <span className={styles.toolbarLabel}>{hideLabel}</span>
+      </div>
       {turns.length === 0 ? (
         <p className={styles.empty}>{t("chatbot.fullReasoning.empty")}</p>
       ) : (
@@ -110,6 +134,7 @@ export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPan
                       text={step.text}
                       durationMs={step.durationMs}
                       streaming={step.streaming}
+                      restatedLabel={step.restated ? restatedLabel : null}
                     />
                   ) : (
                     <div key={step.key} className={styles.tools}>

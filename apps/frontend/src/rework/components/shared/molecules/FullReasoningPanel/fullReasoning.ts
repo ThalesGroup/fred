@@ -16,15 +16,23 @@ import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import {
   entryLabel,
   groupTraceEntries,
-  isReasoningEntry,
   statusForEntry,
   textOf,
   thoughtExtras,
   traceEntryKey,
+  traceRows,
 } from "../../../../utils/traceUtils";
 
 export type ReasoningStep =
-  | { kind: "reasoning"; key: string; text: string; durationMs: number | null; streaming: boolean }
+  | {
+      kind: "reasoning";
+      key: string;
+      text: string;
+      durationMs: number | null;
+      streaming: boolean;
+      /** Nothing new: every sentence was said earlier in the turn. */
+      restated: boolean;
+    }
   | { kind: "tools"; key: string; labels: string[] };
 
 export type ReasoningTurn = { exchangeId: string; question: string; steps: ReasoningStep[] };
@@ -33,8 +41,9 @@ export type ReasoningTurn = { exchangeId: string; question: string; steps: Reaso
  * The conversation's reasoning, turn by turn, in full: every reasoning block
  * untrimmed, with the tool calls that ran BETWEEN two blocks collapsed into one
  * marker — they are why the reasoning resumed. Turns without reasoning are left out.
+ * `hideRestatements` trims each block the way the chain of thought does, markdown kept.
  */
-export function fullReasoning(messages: ChatMessage[]): ReasoningTurn[] {
+export function fullReasoning(messages: ChatMessage[], hideRestatements = false): ReasoningTurn[] {
   const exchanges = new Map<string, ChatMessage[]>();
   for (const message of messages) {
     const group = exchanges.get(message.exchange_id);
@@ -49,20 +58,22 @@ export function fullReasoning(messages: ChatMessage[]): ReasoningTurn[] {
     const steps: ReasoningStep[] = [];
     let pendingTools: { key: string; labels: string[] } | null = null;
 
-    for (const entry of groupTraceEntries(group)) {
+    for (const row of traceRows(groupTraceEntries(group))) {
+      const { entry } = row;
       if (entry.kind === "combo") {
         pendingTools ??= { key: traceEntryKey(entry), labels: [] };
         pendingTools.labels.push(entryLabel(entry));
         continue;
       }
-      if (!isReasoningEntry(entry)) continue;
+      if (row.lane !== "reasoning") continue;
       const streaming = statusForEntry(entry) === "streaming";
-      const text = textOf(entry.message);
-      if (!text && !streaming) continue;
+      const restated = hideRestatements && row.restated;
+      const text = hideRestatements ? (row.reasoningMarkdown ?? "") : textOf(entry.message);
+      if (!text && !streaming && !restated) continue;
       if (pendingTools && steps.length > 0) steps.push({ kind: "tools", ...pendingTools });
       pendingTools = null;
       const durationMs = thoughtExtras(entry.message).duration_ms ?? null;
-      steps.push({ kind: "reasoning", key: traceEntryKey(entry), text, durationMs, streaming });
+      steps.push({ kind: "reasoning", key: traceEntryKey(entry), text, durationMs, streaming, restated });
     }
 
     if (steps.length > 0) turns.push({ exchangeId, question: question.trim(), steps });
@@ -71,12 +82,13 @@ export function fullReasoning(messages: ChatMessage[]): ReasoningTurn[] {
 }
 
 /** The same reasoning as one markdown document, for the clipboard. */
-export function fullReasoningMarkdown(turns: ReasoningTurn[]): string {
+export function fullReasoningMarkdown(turns: ReasoningTurn[], restatedLabel: string): string {
   return turns
     .map((turn) => {
-      const steps = turn.steps.map((step) =>
-        step.kind === "reasoning" ? step.text.trim() : `_→ ${step.labels.join(", ")}_`,
-      );
+      const steps = turn.steps.map((step) => {
+        if (step.kind === "tools") return `_→ ${step.labels.join(", ")}_`;
+        return step.restated ? `_${restatedLabel}_` : step.text.trim();
+      });
       const heading = turn.question ? [`## ${turn.question.replace(/\s+/g, " ")}`] : [];
       return [...heading, ...steps].join("\n\n");
     })
