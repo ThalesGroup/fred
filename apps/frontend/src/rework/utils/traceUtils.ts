@@ -675,10 +675,11 @@ const NEGATIONS = new Set([
 
 /** `facts` (negation, numbers) must match exactly: overlap alone would call
  *  "3 pages left" and "2 pages left" the same sentence. */
-type ReasoningSegment = { text: string; words: ReadonlySet<string>; facts: string };
+type ReasoningSegment = { text: string; words: ReadonlySet<string>; facts: string; listItem: boolean };
 
 // A line opening its own block; any other line is a soft wrap of its paragraph.
 const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
+const LIST_MARKER = /^\s*([-*+]|\d+[.)])\s+/;
 
 /**
  * A reasoning block cut into paragraphs, list items, headings and whole
@@ -693,23 +694,25 @@ function reasoningSegments(markdown: string): ReasoningSegment[] {
   }
 
   const segments: ReasoningSegment[] = [];
-  const push = (text: string) => {
+  const push = (text: string, listItem: boolean) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const raw = rawWords(trimmed);
+    // An item's own number is not a fact: a renumbered item is still a repeat.
+    const raw = rawWords(trimmed.replace(LIST_MARKER, ""));
     const numbers = raw.filter((word) => /\d/.test(word)).sort();
     const facts = `${raw.some((word) => NEGATIONS.has(word)) ? "!" : ""}${numbers.join(",")}`;
-    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts });
+    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts, listItem });
   };
   for (const block of blocks) {
+    const listItem = LIST_MARKER.test(block);
     const text = plainPreviewText(block);
     let start = 0;
     for (let i = 0; i < text.length; i++) {
       if (!isSentenceEnd(text, i)) continue;
-      push(text.slice(start, i + 1));
+      push(text.slice(start, i + 1), listItem);
       start = i + 1;
     }
-    push(text.slice(start));
+    push(text.slice(start), listItem);
   }
   return segments;
 }
@@ -861,11 +864,25 @@ function restatedLead(
   if (cached && cached.earlier.length === earlier.length && cached.earlier.every((m, i) => m === earlier[i])) {
     return cached.lead;
   }
+  const isSaid = (i: number) =>
+    isAlreadySaid(segments[i], said, streaming && i === segments.length - 1 && !/[.!?]$/.test(segments[i].text));
+
   let lead = 0;
   while (said.length > 0 && lead < segments.length) {
-    const unfinished = streaming && lead === segments.length - 1 && !/[.!?]$/.test(segments[lead].text);
-    if (!isAlreadySaid(segments[lead], said, unfinished)) break;
-    lead++;
+    if (isSaid(lead)) {
+      lead++;
+      continue;
+    }
+    // An intro rephrased past the threshold ("…me donne des instructions :" →
+    // "…a fourni des instructions :") goes with its list if every item was said,
+    // or it would shield the verbatim list below it from the trim.
+    let end = lead + 1;
+    while (end < segments.length && segments[end].listItem) end++;
+    if (!segments[lead].text.endsWith(":") || end === lead + 1) break;
+    let item = lead + 1;
+    while (item < end && isSaid(item)) item++;
+    if (item < end) break;
+    lead = end;
   }
   // A streaming block arrives as a new object each delta, so it never hits the cache.
   if (!streaming) restatedLeadCache.set(message, { earlier: [...earlier], lead });

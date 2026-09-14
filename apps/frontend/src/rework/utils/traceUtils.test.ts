@@ -507,6 +507,29 @@ describe("traceRows — restated reasoning", () => {
     expect(reasoningTexts(first, second)[1]).toBe("Now translating them.");
   });
 
+  // The shape of a real session: the agent re-lists the user's instructions at
+  // every round, verbatim, under an intro rephrased too far to match on its own.
+  it("drops a repeated list together with its rephrased intro", () => {
+    const tasks = "1. Lister les documents\n2. Résumer un document au hasard\n3. Générer un document Word";
+    const first = `L'utilisateur me donne des instructions détaillées sur mon processus de travail :\n${tasks}\n\nJe commence.`;
+    const second = `L'utilisateur m'a donné des instructions très précises sur la manière de procéder :\n${tasks}\n\nLe document est créé.`;
+    expect(reasoningTexts(first, second)[1]).toBe("Le document est créé.");
+  });
+
+  it("keeps an intro whose list brings something new", () => {
+    const first = "Voici le plan :\n1. Lister les documents";
+    const second = "Voici ce qui reste à faire :\n1. Lister les documents\n2. Écrire le rapport";
+    expect(reasoningTexts(first, second)[1]).toBe(
+      "Voici ce qui reste à faire : 1. Lister les documents 2. Écrire le rapport",
+    );
+  });
+
+  it("still drops a renumbered list item", () => {
+    expect(
+      reasoningTexts("1. Lister les documents disponibles", "2. Lister les documents disponibles\n\nEnsuite.")[1],
+    ).toBe("Ensuite.");
+  });
+
   it("only drops the leading run, never a sentence in the middle", () => {
     const texts = reasoningTexts("The user wants a summary.", "A new finding. The user wants a summary.");
     expect(texts[1]).toBe("A new finding. The user wants a summary.");
