@@ -78,6 +78,7 @@ from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
+from control_plane_backend.common.field_values import validate_field_values
 
 if TYPE_CHECKING:
     # Only ever imported lazily at runtime (see `has_org_relation`/
@@ -344,11 +345,6 @@ def _reject_personal_team_projected_grant(
         )
 
 
-def _type_of(field: FieldSpec) -> str:
-    # `FieldSpec.type` is a `FieldType` Literal (a plain str at runtime).
-    return str(field.type)
-
-
 def team_settings_has_required_fields(field_specs: Iterable[FieldSpec]) -> bool:
     """True when any team-settings field is required (fences default-on, §8.2)."""
 
@@ -361,53 +357,19 @@ def validate_team_settings(
     """Validate submitted enablement settings against the capability's
     `team_settings_fields` (RFC §8.2 typed enablement).
 
-    Rejects unknown keys, enforces `required`, and checks scalar type coherence.
-    Returns the cleaned settings dict (declared keys only). Raises
-    `CapabilitySettingsInvalid` (HTTP 422) on any violation.
+    Rejects unknown keys, enforces `required`, and checks type coherence with
+    `common.field_values`. Returns the cleaned settings dict (declared keys
+    only). Raises `CapabilitySettingsInvalid` (HTTP 422) on any violation.
     """
 
-    specs_by_key = {field.key: field for field in field_specs}
-    unknown = set(submitted) - set(specs_by_key)
-    if unknown:
-        raise CapabilitySettingsInvalid(
-            f"Unknown team-settings key(s): {sorted(unknown)!r}."
-        )
-
-    cleaned: dict[str, Any] = {}
-    for key, field in specs_by_key.items():
-        if key not in submitted or submitted[key] is None:
-            if getattr(field, "required", False):
-                raise CapabilitySettingsInvalid(
-                    f"Required team-settings field {key!r} is missing."
-                )
-            continue
-        value = submitted[key]
-        ftype = _type_of(field)
-        if ftype in {"string", "text", "text-multiline", "prompt", "secret", "url"}:
-            if not isinstance(value, str):
-                raise CapabilitySettingsInvalid(f"Field {key!r} must be a string.")
-        elif ftype == "select":
-            if not isinstance(value, str):
-                raise CapabilitySettingsInvalid(f"Field {key!r} must be a string.")
-            if field.enum is not None and value not in field.enum:
-                raise CapabilitySettingsInvalid(
-                    f"Field {key!r} must be one of {field.enum!r}."
-                )
-        elif ftype == "boolean":
-            if not isinstance(value, bool):
-                raise CapabilitySettingsInvalid(f"Field {key!r} must be a boolean.")
-        elif ftype == "integer":
-            if not (isinstance(value, int) and not isinstance(value, bool)):
-                raise CapabilitySettingsInvalid(f"Field {key!r} must be an integer.")
-        elif ftype == "number":
-            if not (isinstance(value, (int, float)) and not isinstance(value, bool)):
-                raise CapabilitySettingsInvalid(f"Field {key!r} must be a number.")
-        else:
-            raise CapabilitySettingsInvalid(
-                f"Field {key!r} has unsupported team-settings type {ftype!r}."
-            )
-        cleaned[key] = value
-    return cleaned
+    return validate_field_values(
+        field_specs,
+        submitted,
+        fail=lambda key, detail: CapabilitySettingsInvalid(f"Field {key!r} {detail}."),
+        fail_unknown=lambda keys: CapabilitySettingsInvalid(
+            f"Unknown team-settings key(s): {sorted(keys)!r}."
+        ),
+    )
 
 
 def _suspension_store(
