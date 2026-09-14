@@ -3,8 +3,9 @@
 FRED can build and validate three development archives, and the coordinate-independent
 release tooling is implemented. Maintainers have now selected the `@fred-oss` coordinates,
 public npm policy, bootstrap account, and guarded workflow identity. The repository needs
-release-ready manifests and a manual first-release workflow that keeps remaining ownership
-and policy decisions fail-closed and publishes only exact reviewed bytes after explicit approval.
+release-ready manifests and a manual first-release workflow. Maintainers have now confirmed the
+remaining ownership and direct-publication policy while preserving fail-closed execution gates
+that publish only exact reviewed bytes after explicit approval.
 
 ## What Changes
 
@@ -56,8 +57,9 @@ and policy decisions fail-closed and publishes only exact reviewed bytes after e
   readiness, publication, FRED adoption, and external adoption.
 - Record the confirmed `fred-oss` organization, three `@fred-oss/*@0.1.0-alpha.1`
   coordinates, public npm registry/access, `next` tag, `marc.fawaz` bootstrap account and
-  verified organization-owner authority, while keeping package API, SDK protocol, release,
-  enduring npm-publishing owners, and later direct/staged policy explicitly unresolved.
+  verified organization-owner authority; record `marc.fawaz` as package API, SDK protocol,
+  release, and enduring npm-publishing owner and select direct Trusted Publishing for subsequent
+  releases. GitHub reviewer `marcfawaz` remains a distinct operational identity.
 - Add a `workflow_dispatch`-only, `swift`-restricted publication workflow that defaults to
   preparation only, transfers immutable candidates across the release and application
   toolchains, uses the protected `npm-publish` environment and its bootstrap token only in the

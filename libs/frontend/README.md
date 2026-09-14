@@ -118,5 +118,5 @@ and external adopter integration remain outside these archive foundations.
 
 Release-contract, immutable evidence, bootstrap workflow, and registry-verification tooling is
 documented in [RELEASE.md](RELEASE.md). Fixture evidence never authorizes publication, and the
-first-release contract remains proposed until its named ownership and later policy fields are
-complete.
+first-release contract is maintainer-confirmed; publication still requires the separately
+authorized, protected-environment workflow path described in the runbook.

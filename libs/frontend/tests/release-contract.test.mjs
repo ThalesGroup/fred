@@ -65,27 +65,48 @@ test("loads the explicit development fixture contract", () => {
   assert.match(developmentContractPath, /development-fixture-contract\.json$/);
 });
 
-test("records confirmed first-release coordinates without claiming incomplete approval", async () => {
-  const proposed = await loadReleaseContract(
+test("records the complete maintainer-confirmed first-release contract", async () => {
+  const confirmed = await loadReleaseContract(
     path.join(workspaceRoot, "release/proposed-release-contract.json"),
   );
-  assert.equal(proposed.state, "proposed");
-  assert.equal(proposed.maintainerApproval.scopeOwner, "fred-oss");
-  assert.equal(proposed.maintainerApproval.bootstrapIdentity, "marc.fawaz");
-  assert.equal(proposed.maintainerApproval.bootstrapAuthorityVerified, true);
-  assert.equal(proposed.maintainerApproval.registryAccess, "public");
+  assert.equal(confirmed.state, "maintainer-confirmed");
+  assert.equal(confirmed.maintainerApproval.scopeOwner, "fred-oss");
+  assert.equal(confirmed.maintainerApproval.bootstrapIdentity, "marc.fawaz");
+  assert.equal(confirmed.maintainerApproval.bootstrapAuthorityVerified, true);
+  assert.equal(confirmed.maintainerApproval.registryAccess, "public");
+  assert.deepEqual(confirmed.maintainerApproval.owners, {
+    packageApi: "marc.fawaz",
+    sdkProtocol: "marc.fawaz",
+    release: "marc.fawaz",
+    npmPublishing: "marc.fawaz",
+  });
+  assert.equal(confirmed.maintainerApproval.publishingPolicy, "direct");
   assert.deepEqual(
-    packageRoles.map((role) => proposed.packages[role].name),
+    packageRoles.map((role) => confirmed.packages[role].name),
     ["@fred-oss/design-tokens", "@fred-oss/ui", "@fred-oss/iframe-sdk"],
   );
-  assert.deepEqual(unresolvedMaintainerDecisions(proposed), [
-    "maintainerApproval.owners.packageApi",
-    "maintainerApproval.owners.sdkProtocol",
-    "maintainerApproval.owners.release",
-    "maintainerApproval.owners.npmPublishing",
-    "maintainerApproval.publishingPolicy",
-  ]);
-  assert.throws(() => assertMaintainerConfirmed(proposed), /unresolved/);
+  assert.deepEqual(unresolvedMaintainerDecisions(confirmed), []);
+  assert.doesNotThrow(() => assertMaintainerConfirmed(confirmed));
+});
+
+test("incomplete ownership or policy cannot authorize publication", async () => {
+  const selected = await loadReleaseContract(
+    path.join(workspaceRoot, "release/proposed-release-contract.json"),
+  );
+  for (const mutate of [
+    (changed) => (changed.maintainerApproval.owners.packageApi = null),
+    (changed) => (changed.maintainerApproval.owners.sdkProtocol = null),
+    (changed) => (changed.maintainerApproval.owners.release = null),
+    (changed) => (changed.maintainerApproval.owners.npmPublishing = null),
+    (changed) => (changed.maintainerApproval.publishingPolicy = null),
+  ]) {
+    const changed = clone(selected);
+    changed.state = "proposed";
+    mutate(changed);
+    assert.doesNotThrow(() => validateReleaseContract(changed));
+    assert.throws(() => assertMaintainerConfirmed(changed));
+    assert.notDeepEqual(unresolvedMaintainerDecisions(changed), []);
+  }
 });
 
 test("accepts only explicit release contract states and exact versions", () => {
