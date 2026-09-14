@@ -56,7 +56,10 @@ from control_plane_backend.routing_policy.schemas import (
     UpdateTeamRoutingPolicyRequest,
 )
 from control_plane_backend.routing_policy.store import StoredPlatformModelBinding
-from control_plane_backend.teams.service import require_team_access
+from control_plane_backend.teams.service import (
+    drop_unaccepted_team_admin_permissions,
+    require_team_access,
+)
 
 # Read gate for routing policy (#2167 follow-up, explicit product decision):
 # only team_admin, team_editor, or team_analyst may read a team's routing
@@ -66,10 +69,13 @@ from control_plane_backend.teams.service import require_team_access
 # team_admin. Together their union is "holds an elevated team role", matching
 # the frontend's `hasElevatedTeamRole` gate on the same "Routing" tab
 # (`TeamSettingsPage.tsx`).
+# The analyst-only CAN_READ_CONVERSATIONS_FOR_EVALUATION lets the charter filter
+# tell an analyst from a team_admin who has not accepted the charter.
 _ELEVATED_TEAM_ROLE_PERMISSIONS = (
     TeamPermission.CAN_UPDATE_INFO,
     TeamPermission.CAN_UPDATE_RESOURCES,
     TeamPermission.CAN_RUN_EVALUATIONS,
+    TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION,
 )
 
 
@@ -98,12 +104,16 @@ async def _require_elevated_team_role(
 
     if is_personal_team_id(team_id):
         return
+    permissions = list(_ELEVATED_TEAM_ROLE_PERMISSIONS)
     allowed = await deps.team_dependencies.rebac.has_permissions(
         RebacReference(Resource.USER, user.uid),
-        list(_ELEVATED_TEAM_ROLE_PERMISSIONS),
+        permissions,
         RebacReference(Resource.TEAM, team_id),
     )
-    if not any(allowed):
+    granted = [p for p, ok in zip(permissions, allowed, strict=True) if ok]
+    if not await drop_unaccepted_team_admin_permissions(
+        user.uid, granted, deps.team_dependencies
+    ):
         raise AuthorizationError(
             user_id=user.uid,
             action="read_routing_policy",

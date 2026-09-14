@@ -64,9 +64,9 @@ The control-plane SHALL let any authenticated user read their charter status, re
 - **WHEN** a `team_admin` who accepted the current version reads their status
 - **THEN** the response reports that no acceptance is required and includes the acceptance time
 
-### Requirement: Administrator-only team permissions require acceptance of the current version
+### Requirement: A team administrator keeps only their other roles' rights until they accept the current version
 
-While a version is configured, a user who has not accepted it SHALL be denied `can_update_info`, `can_administer_members`, `can_administer_editors`, `can_administer_analysts` and `can_administer_admins` on every team, even when they hold `team_admin`. A denied request MUST fail with HTTP 403 and detail `team_admin_charter_not_accepted`, and those permissions MUST be absent from the team permissions returned to the user. Every other team permission MUST be unaffected, including permissions `team_admin` shares with another role. Granting, revoking and counting the `team_admin` relation MUST be unaffected.
+While a version is configured, a user who has not accepted it SHALL be denied everything `team_admin` alone grants, on every team. `can_update_info`, `can_administer_members`, `can_administer_editors`, `can_administer_analysts` and `can_administer_admins` MUST fail with HTTP 403 and detail `team_admin_charter_not_accepted`, and MUST be absent from the team permissions returned to the user. `can_run_evaluations` and `can_manage_evaluation_corpus` MUST also be absent unless the user holds `team_analyst` on that team. The routing policy read MUST be refused unless another role of the user allows it. Permissions granted by the user's other roles MUST be unaffected. Granting, revoking and counting the `team_admin` relation MUST be unaffected.
 
 #### Scenario: Administrator who has not accepted updates the team
 - **WHEN** a `team_admin` who has not accepted the current version updates the team's description
@@ -77,8 +77,12 @@ While a version is configured, a user who has not accepted it SHALL be denied `c
 - **THEN** the request fails with HTTP 403 and detail `team_admin_charter_not_accepted` and no relation is written
 
 #### Scenario: Permissions returned before acceptance
-- **WHEN** a `team_admin` who has not accepted the current version reads the team
-- **THEN** the returned permissions contain none of the five administrator-only permissions and still contain `can_read_members`
+- **WHEN** a user who holds only `team_admin` and has not accepted the current version reads the team
+- **THEN** the returned permissions contain none of the five administrator-only permissions and neither `can_run_evaluations` nor `can_manage_evaluation_corpus`, and still contain `can_read_members`
+
+#### Scenario: Routing policy read
+- **WHEN** a user who holds only `team_admin` and has not accepted the current version reads the team's routing policy
+- **THEN** the request fails with HTTP 403
 
 #### Scenario: Administrator accepts
 - **WHEN** a `team_admin` accepts the current version and then updates the team's description
@@ -88,9 +92,9 @@ While a version is configured, a user who has not accepted it SHALL be denied `c
 - **WHEN** a `team_admin` accepted `2026-09` and the configured version becomes `2027-01`
 - **THEN** administrator-only requests fail with HTTP 403 and detail `team_admin_charter_not_accepted` until they accept `2027-01`
 
-#### Scenario: Shared analyst permission
+#### Scenario: An analyst keeps evaluations
 - **WHEN** a user holding both `team_admin` and `team_analyst` has not accepted the current version
-- **THEN** the returned permissions still contain `can_run_evaluations`
+- **THEN** the returned permissions still contain `can_run_evaluations` and `can_manage_evaluation_corpus`
 
 #### Scenario: Other roles are unaffected
 - **WHEN** a `team_editor` who has never accepted the charter uploads a team resource

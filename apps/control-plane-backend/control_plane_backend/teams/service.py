@@ -1812,8 +1812,8 @@ async def _get_team_permissions_for_user(
     How to use it:
     - pass the already-authorized `team_id` and, when available, the
       consistency token from the caller's own access check
-    - admin-only permissions are left out until the caller accepted the
-      team administrator charter
+    - permissions team_admin alone grants are left out until the caller
+      accepted the team administrator charter
     """
     permissions_to_check = list(TeamPermission)
     allowed = await deps.rebac.has_permissions(
@@ -1827,11 +1827,7 @@ async def _get_team_permissions_for_user(
         for permission, has_permission in zip(permissions_to_check, allowed)
         if has_permission
     ]
-    if ADMIN_ONLY_TEAM_PERMISSIONS.intersection(
-        granted
-    ) and not await _has_accepted_team_admin_charter(user.uid, deps):
-        return [p for p in granted if p not in ADMIN_ONLY_TEAM_PERMISSIONS]
-    return granted
+    return await drop_unaccepted_team_admin_permissions(user.uid, granted, deps)
 
 
 async def _build_team_with_permissions(
@@ -1995,6 +1991,15 @@ ADMIN_ONLY_TEAM_PERMISSIONS: frozenset[TeamPermission] = frozenset(
     }
 )
 
+# Granted by team_admin and team_analyst alike; the analyst-only
+# can_read_conversations_for_evaluation tells the two apart.
+SHARED_WITH_ANALYST_TEAM_PERMISSIONS: frozenset[TeamPermission] = frozenset(
+    {
+        TeamPermission.CAN_RUN_EVALUATIONS,
+        TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
+    }
+)
+
 
 async def _has_accepted_team_admin_charter(
     user_id: str, deps: TeamServiceDependencies
@@ -2006,6 +2011,26 @@ async def _has_accepted_team_admin_charter(
         user_id, version
     )
     return accepted_at is not None
+
+
+async def drop_unaccepted_team_admin_permissions(
+    user_id: str,
+    granted: list[TeamPermission],
+    deps: TeamServiceDependencies,
+) -> list[TeamPermission]:
+    """Remove what team_admin alone grants while its holder has not accepted the charter.
+
+    `granted` must include the analyst-only permission whenever it includes a
+    shared one, or an analyst who is also an unaccepted admin loses evaluations.
+    """
+    if not ADMIN_ONLY_TEAM_PERMISSIONS.intersection(granted):
+        return granted
+    if await _has_accepted_team_admin_charter(user_id, deps):
+        return granted
+    gated = set(ADMIN_ONLY_TEAM_PERMISSIONS)
+    if TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION not in granted:
+        gated |= SHARED_WITH_ANALYST_TEAM_PERMISSIONS
+    return [permission for permission in granted if permission not in gated]
 
 
 async def _validate_team_and_check_permission(

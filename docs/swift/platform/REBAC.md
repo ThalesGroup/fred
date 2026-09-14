@@ -100,16 +100,16 @@ Can:
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
 
-When `app.team_admin_charter_version` is set, the admin-only permissions
-(`can_update_info`, `can_administer_*`) apply only once the admin has accepted
-that charter version: until then they answer 403
-`team_admin_charter_not_accepted` and are left out of the team projection. The
+When `app.team_admin_charter_version` is set, a `team_admin` who has not
+accepted that charter version keeps only what their other roles grant: the
+admin-only permissions (`can_update_info`, `can_administer_*`) answer 403
+`team_admin_charter_not_accepted`, and those plus the evaluation permissions
+shared with `team_analyst` are left out of the team projection. The
 `team_admin` relation is still granted, revoked and counted as usual. The rule
 lives in `_validate_team_and_check_permission` and
-`_get_team_permissions_for_user` (control-plane `teams/service.py`), so an
-admin-only check must go through them. The routing policy read, which uses
-`can_update_info` as an elevated-role proxy in its own BatchCheck, is not
-gated. Contract: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §53.
+`drop_unaccepted_team_admin_permissions` (control-plane `teams/service.py`),
+which any check a `team_admin` can satisfy must go through. Contract:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §53.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
 above):

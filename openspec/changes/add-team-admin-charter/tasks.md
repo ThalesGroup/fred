@@ -16,6 +16,7 @@
 - [x] 3.1 Define `ADMIN_ONLY_TEAM_PERMISSIONS` and `TeamAdminCharterNotAcceptedError` (403, detail `team_admin_charter_not_accepted`), and apply the gate after the ReBAC check in `_validate_team_and_check_permission`; verify tests: unaccepted admin gets 403 on `update_team` and `add_team_member` with no relation written, accepted admin succeeds, older accepted version gets 403, unset version succeeds, non-admin keeps the plain ReBAC 403 without a store read
 - [x] 3.2 Drop the five permissions from `_get_team_permissions_for_user` when the BatchCheck returned any of them and the acceptance is missing; verify tests: `get_team_by_id` projection for an unaccepted admin keeps `can_read_members` and lacks the five, admin plus analyst keeps `can_run_evaluations`, editor-only user triggers no store read
 - [x] 3.3 Add a test asserting `ADMIN_ONLY_TEAM_PERMISSIONS` equals the permissions defined as `team_admin` alone in `libs/fred-core/fred_core/security/rebac/schema.fga`; verify it fails when a `define can_x: team_admin` line is added locally
+- [x] 3.4 Apply the same filter to the evaluation permissions shared with `team_analyst` and to the routing policy read, so an unaccepted admin keeps only their other roles' rights; verify tests: a pure admin loses evaluations, an analyst admin keeps them, the routing read is refused for a pure unaccepted admin
 
 ## 4. API and contract
 

@@ -22,7 +22,6 @@ Observed state on `swift` that shapes the approach:
 **Non-Goals:**
 
 - Enforcing the charter's content (backup administrator, monthly review, member vetting). The product records the commitment; the charter's obligations stay human processes.
-- Gating `can_run_evaluations`, `can_manage_evaluation_corpus` or the routing policy read. They are shared with `team_analyst` or read-only.
 - Showing other members whether an administrator has accepted.
 - Fixing the GCU version enum. It is a separate defect.
 
@@ -33,7 +32,7 @@ Observed state on `swift` that shapes the approach:
 Keep a module-level `ADMIN_ONLY_TEAM_PERMISSIONS` next to `_validate_team_and_check_permission`, and apply the rule in the two functions above.
 
 - In `_validate_team_and_check_permission`: after the ReBAC check has passed, if a version is configured and the requested permissions include one of the five, read the acceptance and raise `TeamAdminCharterNotAcceptedError`, mapped to 403 `team_admin_charter_not_accepted`. Running it after the ReBAC check keeps the usual 403 for non-administrators and never reads the database for them.
-- In `_get_team_permissions_for_user`: if the BatchCheck returned any of the five and the acceptance is missing, drop them from the list.
+- In `drop_unaccepted_team_admin_permissions`, used by `_get_team_permissions_for_user` and by the routing policy read: if the checked permissions include any of the five and the acceptance is missing, drop them, and drop `can_run_evaluations` and `can_manage_evaluation_corpus` too unless the analyst-only `can_read_conversations_for_evaluation` is held. The analyst marker is part of the same BatchCheck, so no extra round trip.
 
 A test asserts that `ADMIN_ONLY_TEAM_PERMISSIONS` equals the set of `define can_*: team_admin` lines in `schema.fga`, so a new administrator-only permission cannot silently bypass the gate.
 
@@ -106,7 +105,6 @@ No standalone `/team-admin-charter` route: the charter only concerns administrat
 - [Enabling the setting on a live deployment suspends every administrator at once] → Acceptance is self-service and prompted on their team's pages. `TERMS_OF_USE.md` tells operators to ship the theme archive's charter before setting the version.
 - [A future administrator-only check written outside the two functions bypasses the gate] → The `schema.fga` parity test catches a new `team_admin`-only permission. `REBAC.md` states that these checks must go through `_validate_team_and_check_permission`.
 - [A team whose only administrators have not accepted cannot be administered, and rescue refuses because administrators exist] → Accepted: any of those administrators can unblock the team alone by accepting.
-- [The routing policy read still treats an unaccepted administrator as elevated] → Read-only, already visible to editors and analysts. Left as is and noted in `REBAC.md`.
 - [An administrator who chooses Later is shown actions disappearing in team settings] → The pending notice explains why and links to the Responsibilities section.
 - [Migration ordering with #2649, which also parents `d3f8a2c6e174`] → Whichever PR merges second re-parents its migration onto the new head, per CLAUDE.md. No merge revision.
 

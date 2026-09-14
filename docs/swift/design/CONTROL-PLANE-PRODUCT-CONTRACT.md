@@ -3965,17 +3965,22 @@ keeps the first time. The first one emits the audit event
 `team_admin.charter.accepted` `{actor_uid, charter_version}`. With no version
 set, `POST` answers 409 `team_admin_charter_disabled`.
 
-**Gate.** While a version is set and the caller has not accepted it,
-`can_update_info`, `can_administer_members`, `can_administer_editors`,
-`can_administer_analysts` and `can_administer_admins` answer 403
-`team_admin_charter_not_accepted` and are left out of
-`TeamWithPermissions.permissions`. They are exactly the `team_admin`-only
-permissions of `schema.fga`, kept in sync by a test. Nothing else changes:
+**Gate.** While a version is set and the caller has not accepted it, a
+`team_admin` keeps only what their other roles grant:
 
+- `can_update_info`, `can_administer_members`, `can_administer_editors`,
+  `can_administer_analysts` and `can_administer_admins` answer 403
+  `team_admin_charter_not_accepted` and are left out of
+  `TeamWithPermissions.permissions`. They are exactly the `team_admin`-only
+  permissions of `schema.fga`, kept in sync by a test;
+- `can_run_evaluations` and `can_manage_evaluation_corpus` are left out too,
+  unless the caller also holds `team_analyst`, told apart by the analyst-only
+  `can_read_conversations_for_evaluation`. No route checks them; they drive the
+  elevated team views of the UI;
+- the routing policy read, which accepts any elevated role, applies the same
+  filter;
 - the `team_admin` relation is granted, revoked and counted as before (last-admin
   guard, rescue), and `my_relations` still lists it;
-- permissions shared with another role (`can_run_evaluations`,
-  `can_manage_evaluation_corpus`) and the routing policy read are not gated;
 - one acceptance covers every team the user administers.
 
 **Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`,

@@ -38,6 +38,7 @@ from control_plane_backend.teams.schemas import (
 )
 from control_plane_backend.teams.service import (
     ADMIN_ONLY_TEAM_PERMISSIONS,
+    SHARED_WITH_ANALYST_TEAM_PERMISSIONS,
     _get_team_permissions_for_user,
     _validate_team_and_check_permission,
     accept_team_admin_charter,
@@ -124,6 +125,7 @@ _ADMIN = {
     TeamPermission.CAN_READ,
     TeamPermission.CAN_READ_MEMEBERS,
     TeamPermission.CAN_RUN_EVALUATIONS,
+    TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
     *ADMIN_ONLY_TEAM_PERMISSIONS,
 }
 _EDITOR = {
@@ -230,13 +232,23 @@ async def test_projection_drops_admin_only_permissions_until_accepted() -> None:
 
     before = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
     assert before.isdisjoint(ADMIN_ONLY_TEAM_PERMISSIONS)
-    # Shared with team_analyst, so never gated.
-    assert TeamPermission.CAN_RUN_EVALUATIONS in before
+    assert before.isdisjoint(SHARED_WITH_ANALYST_TEAM_PERMISSIONS)
     assert TeamPermission.CAN_READ_MEMEBERS in before
 
     await accept_team_admin_charter(_user("admin"), deps)
     after = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
-    assert ADMIN_ONLY_TEAM_PERMISSIONS <= after
+    assert ADMIN_ONLY_TEAM_PERMISSIONS | SHARED_WITH_ANALYST_TEAM_PERMISSIONS <= after
+
+
+@pytest.mark.asyncio
+async def test_an_unaccepted_admin_who_is_also_analyst_keeps_evaluations() -> None:
+    analyst_admin = _ADMIN | {TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION}
+    deps = _deps(_FakeRebac({"admin": analyst_admin}), _FakeCharterStore())
+
+    permissions = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
+
+    assert permissions.isdisjoint(ADMIN_ONLY_TEAM_PERMISSIONS)
+    assert SHARED_WITH_ANALYST_TEAM_PERMISSIONS <= permissions
 
 
 @pytest.mark.asyncio
