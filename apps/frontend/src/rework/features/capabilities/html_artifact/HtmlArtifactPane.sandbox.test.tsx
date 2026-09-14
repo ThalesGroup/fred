@@ -103,3 +103,16 @@ describe("HtmlArtifactPane preview sandbox", () => {
     }
   });
 });
+
+describe("HtmlArtifactPane preview buffers", () => {
+  // Chromium paints a frame blank when its doc lands while an empty srcdoc is still loading.
+  it("leaves an empty buffer without a srcdoc attribute", () => {
+    act(() => {
+      root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
+    });
+
+    const [back, loaded] = container.querySelectorAll("iframe");
+    expect(back.hasAttribute("srcdoc")).toBe(false);
+    expect(loaded.getAttribute("srcdoc")).toContain("<h1>hi</h1>");
+  });
+});
