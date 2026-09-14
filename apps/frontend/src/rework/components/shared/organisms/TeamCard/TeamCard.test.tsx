@@ -139,17 +139,4 @@ describe("TeamCard joining_mode rendering", () => {
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).not.toContain("rework.teamCard.join");
   });
-
-  it("a given action replaces the join button and the invite-only label", () => {
-    render(
-      <TeamCard
-        team={baseTeam({ joining_mode: "open" })}
-        withDescription={false}
-        action={<button type="button">Remove</button>}
-      />,
-    );
-
-    expect(Array.from(container.querySelectorAll("button")).map((button) => button.textContent)).toEqual(["Remove"]);
-    expect(container.textContent).not.toContain("rework.teamCard.inviteOnly");
-  });
 });

@@ -44,20 +44,6 @@
   font: var(--font-label-medium);
 }
 
-.defaultTeamCards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-m);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* Flex items, so cards in a row stretch to the tallest one, as on the marketplace. */
-.defaultTeamCards > li {
-  display: flex;
-}
-
 .adminChipList {
   display: flex;
   flex-wrap: wrap;
