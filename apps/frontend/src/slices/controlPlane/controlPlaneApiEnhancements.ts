@@ -17,6 +17,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
   ],
@@ -229,10 +230,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     createTeamControlPlaneV1TeamsPost: {
       invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
     },
+    // Platform-wide default teams for new users: replaced as a whole, one LIST tag.
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: {
+      providesTags: [{ type: "ControlPlanePlatformDefaultTeams" as const, id: "LIST" }],
+    },
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformDefaultTeams", id: "LIST" }],
+    },
     updateTeamControlPlaneV1TeamsTeamIdPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
+        // A rename changes the names the default-teams query echoes.
+        { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
       ],
     },
     // TEAM-09: self-service join — same tags as updateTeam so the marketplace
@@ -500,6 +510,9 @@ export const {
   useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery: useDefaultTeamsForNewUsersQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation:
+    useSetDefaultTeamsForNewUsersMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,

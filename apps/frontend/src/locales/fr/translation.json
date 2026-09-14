@@ -2260,15 +2260,16 @@
       },
       "grant": {
         "title": "Attribuer un rôle",
-        "userLabel": "Utilisateur",
-        "userPlaceholder": "Rechercher un utilisateur",
-        "clearSelection": "Effacer la sélection",
+        "userLabel": "Utilisateurs",
+        "userPlaceholder": "Rechercher et ajouter des utilisateurs",
+        "removeUser": "Retirer {{user}}",
         "roleLabel": "Rôle",
         "rootOnlyHint": "Seul l'admin principal peut nommer ou révoquer des admins plateforme.",
         "submit": "Attribuer",
-        "successSummary": "{{role}} attribué à {{user}}",
+        "successSummary_one": "{{role}} attribué à {{user}}",
+        "successSummary_other": "{{role}} attribué à {{count}} utilisateurs",
         "errors": {
-          "summary": "Impossible d'attribuer le rôle",
+          "summary": "Impossible d'attribuer le rôle à {{users}}",
           "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
           "forbiddenDetail": "Seul l'admin principal peut gérer les admins plateforme.",
           "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."
@@ -2292,6 +2293,19 @@
         "table": {
           "name": "Équipe",
           "admins": "Administrateur(s)"
+        }
+      },
+      "defaultTeam": {
+        "title": "Équipes par défaut des nouveaux utilisateurs",
+        "description": "Chaque nouvel utilisateur rejoint ces équipes en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
+        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra ces équipes automatiquement.",
+        "none": "Aucune équipe par défaut.",
+        "searchPlaceholder": "Ajouter une équipe par nom",
+        "remove": "Retirer {{name}}",
+        "savedSummary": "Équipes par défaut mises à jour",
+        "errors": {
+          "summary": "Échec de la mise à jour des équipes par défaut",
+          "fallbackDetail": "Impossible de mettre à jour les équipes par défaut. Veuillez réessayer."
         }
       },
       "createTeam": {
