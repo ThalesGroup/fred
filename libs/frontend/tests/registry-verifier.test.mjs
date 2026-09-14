@@ -162,6 +162,7 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
     evidence: { packages: { ui: candidate } },
     expectedPackage: selected,
     candidate,
+    fetchMetadata: async () => metadata,
     runCommand,
   });
   assert.equal(registryPackage.provenanceUrl, provenanceUrl);
@@ -311,16 +312,13 @@ test("registry archive identity and candidate integrity fail before dependency i
       evidence: { packages: { ui: candidate } },
       expectedPackage: selected,
       candidate,
+      fetchMetadata: async () => ({
+        name: selected.name,
+        version: selected.version,
+        dist: { integrity },
+      }),
       runCommand: async (_command, args) => {
         commands.push(args);
-        if (args[0] === "view")
-          return {
-            stdout: JSON.stringify({
-              name: selected.name,
-              version: selected.version,
-              dist: { integrity },
-            }),
-          };
         if (args[0] === "pack")
           return { stdout: JSON.stringify([{ filename }]) };
         return { stdout: "" };
@@ -355,20 +353,17 @@ test("registry lock fallback fails before npm ci", async (context) => {
       evidence: { packages: { ui: candidate } },
       expectedPackage: selected,
       candidate,
+      fetchMetadata: async () => ({
+        name: selected.name,
+        version: selected.version,
+        dist: {
+          integrity,
+          attestations: {
+            url: `${fixtureContract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
+          },
+        },
+      }),
       runCommand: async (_command, args) => {
-        if (args[0] === "view")
-          return {
-            stdout: JSON.stringify({
-              name: selected.name,
-              version: selected.version,
-              dist: {
-                integrity,
-                attestations: {
-                  url: `${fixtureContract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
-                },
-              },
-            }),
-          };
         if (args[0] === "pack")
           return { stdout: JSON.stringify([{ filename }]) };
         if (args.includes("--package-lock-only")) {
@@ -463,8 +458,8 @@ test("rejects missing, malformed, and disallowed npm attestation URLs", async (c
         evidence: { packages: { ui: candidate } },
         expectedPackage: selected,
         candidate,
+        fetchMetadata: async () => metadata,
         runCommand: async (_command, args) => {
-          if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
           if (args[0] === "pack")
             return { stdout: JSON.stringify([{ filename }]) };
           return { stdout: "" };

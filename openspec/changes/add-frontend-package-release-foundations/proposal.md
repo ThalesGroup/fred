@@ -66,11 +66,14 @@ that publish only exact reviewed bytes after explicit approval.
   explicitly selected initial or partial-recovery publishing step, and performs genuine registry verification
   after publication.
 - Correct exact-version post-publication reconciliation to tolerate bounded npm visibility lag
-  without ever retrying publication, and add an explicit protected recovery operation for the
+  through a shared, bounded exact-version HTTP adapter that does not depend on npm's package-wide
+  metadata lookup, without ever retrying publication, and add an explicit protected recovery operation for the
   partial first release from run `34853407387`. The recovery preserves the original candidate
-  artifact and evidence, verifies the already-published design-token bytes and provenance, and
-  publishes only the still-absent UI and SDK archives while binding their provenance to the
-  recovery workflow's actual `GITHUB_SHA`.
+  artifact and evidence, derives all candidate inputs from the hash-pinned ZIP at both trust
+  boundaries, rejects inconsistent transferred copies and unsafe ZIP entries, verifies the
+  already-published design-token bytes and provenance, and publishes only the still-absent UI and
+  SDK archives from the verified extraction while binding their provenance to the recovery
+  workflow's actual `GITHUB_SHA`.
 
 This change prepares but does not trigger the publishing workflow. It does not create GitHub/npm
 settings, publish or stage packages, claim public-registry success, or migrate FRED or RAGS.

@@ -202,11 +202,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p target/release-transfer
-          gh api repos/ThalesGroup/fred/actions/artifacts/10352121632 > target/release-transfer/original-artifact-metadata.json
-          gh api repos/ThalesGroup/fred/actions/artifacts/10352121632/zip > target/release-transfer/original-release-artifact.zip
-          echo "25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82  target/release-transfer/original-release-artifact.zip" | sha256sum --check
-          unzip -q target/release-transfer/original-release-artifact.zip -d target/release-transfer
+          mkdir -p target/recovery-source
+          gh api repos/ThalesGroup/fred/actions/artifacts/10352121632 > target/recovery-source/original-artifact-metadata.json
+          gh api repos/ThalesGroup/fred/actions/artifacts/10352121632/zip > target/recovery-source/original-release-artifact.zip
+          echo "25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82  target/recovery-source/original-release-artifact.zip" | sha256sum --check
         working-directory: libs/frontend
 
       - name: Verify the partial release and prepare recovery evidence
@@ -215,9 +214,9 @@ jobs:
           --mode prepare
           --contract release/proposed-release-contract.json
           --plan release/bootstrap-recovery.json
-          --evidence target/release-transfer/candidate-evidence.json
-          --archive-root target/release-transfer
-          --artifact-metadata target/release-transfer/original-artifact-metadata.json
+          --artifact-zip target/recovery-source/original-release-artifact.zip
+          --artifact-metadata target/recovery-source/original-artifact-metadata.json
+          --materialize-root target/release-transfer
           --output target/release-transfer/bootstrap-recovery-evidence.json
         working-directory: libs/frontend
 
@@ -279,6 +278,8 @@ jobs:
           --mode publish
           --contract release/proposed-release-contract.json
           --plan release/bootstrap-recovery.json
+          --artifact-zip target/release-transfer/original-release-artifact.zip
+          --artifact-metadata target/release-transfer/original-artifact-metadata.json
           --evidence target/release-transfer/candidate-evidence.json
           --recovery-evidence target/release-transfer/bootstrap-recovery-evidence.json
           --archive-root target/release-transfer

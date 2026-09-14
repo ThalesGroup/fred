@@ -204,6 +204,23 @@ test("partial-bootstrap recovery reuses the exact incident artifact without rebu
     retrieval.run,
     new RegExp(recoveryPlan.incident.artifactZipSha256),
   );
+  assert.match(
+    retrieval.run,
+    /target\/recovery-source\/original-release-artifact\.zip/,
+  );
+  assert.doesNotMatch(retrieval.run, /\bunzip\b/);
+  const prepareCommand = prepare.steps.find((step) =>
+    step.run?.includes("--mode prepare"),
+  ).run;
+  assert.match(
+    prepareCommand,
+    /--artifact-zip target\/recovery-source\/original-release-artifact\.zip/,
+  );
+  assert.match(
+    prepareCommand,
+    /--artifact-metadata target\/recovery-source\/original-artifact-metadata\.json/,
+  );
+  assert.match(prepareCommand, /--materialize-root target\/release-transfer/);
   const reverify = publish.steps.find(
     (step) => step.name === "Reverify the original candidate bytes",
   );
@@ -212,6 +229,22 @@ test("partial-bootstrap recovery reuses the exact incident artifact without rebu
     new RegExp(recoveryPlan.incident.artifactZipSha256),
   );
   assert.match(reverify.run, /release:verify-evidence/);
+  const publishCommand = publish.steps.find((step) =>
+    step.run?.includes("--mode publish"),
+  ).run;
+  assert.match(
+    publishCommand,
+    /--artifact-zip target\/release-transfer\/original-release-artifact\.zip/,
+  );
+  assert.match(
+    publishCommand,
+    /--artifact-metadata target\/release-transfer\/original-artifact-metadata\.json/,
+  );
+  assert.match(
+    publishCommand,
+    /--evidence target\/release-transfer\/candidate-evidence\.json/,
+  );
+  assert.match(publishCommand, /--archive-root target\/release-transfer/);
   assert(prepare.steps.some((step) => step.run?.includes("--mode prepare")));
   assert(publish.steps.some((step) => step.run?.includes("--mode publish")));
   assert.equal(

@@ -355,6 +355,32 @@
 - [ ] 14.7 Complete genuine public-registry signature, Sigstore, per-package identity, clean
   consumer, browser, and production-host verification for all three coordinates after recovery.
 
+## 15. Exact metadata and pinned-ZIP recovery corrections
+
+- [x] 15.1 Reproduce npm `11.19.0` requesting package-wide metadata for `npm view` despite an
+  exact coordinate, then replace bootstrap preflight/reconciliation, recovery state checks, and
+  registry-verifier metadata resolution with one bounded exact-version HTTP adapter; verify only
+  actual exact-endpoint 404 responses are absent/retryable and every redirect, timeout, other HTTP
+  failure, malformed response, identity mismatch, or SHA-512 mismatch fails immediately.
+- [x] 15.2 Add controlled-server adapter and bootstrap regressions for package-wide 404 with
+  exact-version success, temporary exact-version 404 followed by success, six-attempt exhaustion,
+  invalid responses, exact requested URLs, and one publication callback per package with no
+  automatic retry.
+- [x] 15.3 Verify the pinned original artifact ZIP independently during both preparation and
+  protected publication; require its exact five regular candidate entries, safe fresh extraction,
+  transfer/evidence/archive consistency, and cleanup while rejecting missing, additional,
+  traversal, link, special, or inconsistent entries.
+- [x] 15.4 Derive preparation inputs from the verified ZIP, compare every protected-job candidate
+  copy with that ZIP, and publish UI then SDK exclusively from the protected job's fresh verified
+  extraction; reproduce and reject a changed loose UI archive with matching rewritten evidence
+  before any publication callback while preserving the unchanged-input path.
+- [x] 15.5 Update the workflow contract, release runbook, proposal, design, and normative scenarios
+  for exact HTTP metadata and the pinned-ZIP trust boundary without changing incident pins,
+  maintainer decisions, publication policy, or execution-dependent task state.
+- [x] 15.6 Run the exact release-toolchain focused and complete producer/release/archive/offline
+  consumer/browser gates, the application-toolchain host integration, strict active/all OpenSpec
+  validation, and `git diff --check`; obtain independent review and resolve every in-scope finding.
+
 ## Fixture archive-transfer evidence (2026-09-11)
 
 - Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
@@ -631,3 +657,42 @@
   Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain unchecked; no workflow was
   dispatched, no protected environment was approved, UI/SDK were not published, and genuine
   recovered all-package registry/consumer evidence does not yet exist.
+
+## Exact metadata and pinned-ZIP recovery evidence (2026-09-14)
+
+- Starting from clean reviewed commit `d84d7d90cc93bc3fbdccf527e63460d27e09e16d`, npm `11.19.0`
+  was reproduced requesting only package-wide metadata for an exact `npm view` coordinate; the
+  controlled registry returned package-wide 404 and exact-version 200, so the command failed
+  despite the exact version being available. Before the ZIP correction, two regressions proved
+  preparation and protected publication both accepted a changed loose UI archive accompanied by
+  rewritten loose evidence (8/10 tests passed and both expected rejections were missing).
+- One shared exact-version HTTP adapter now serves bootstrap preflight/reconciliation, recovery,
+  and registry verification. Its controlled loopback suite proves the exact URL path, an
+  unavailable package-wide endpoint with an available exact endpoint, temporary 404 recovery,
+  six-attempt exhaustion, per-request timeout, and immediate rejection of authentication,
+  authorization, server, redirect, malformed-JSON, identity, or integrity failures. Publication
+  callback assertions prove no package is republished automatically and no later package is
+  attempted after unresolved verification.
+- Preparation and protected publication independently verify artifact `10352121632` by the
+  reviewed ZIP SHA-256, require its exact five regular entries, extract into a fresh disposable
+  directory, validate the original transfer/evidence/archive records, and reject traversal,
+  links, special or unexpected entries. Preparation materializes only derived original bytes;
+  protected publication compares every transferred candidate copy and publishes UI then SDK only
+  from its fresh verified extraction. Both changed-loose-copy regressions now fail before any
+  publication callback.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, the focused adapter/bootstrap/recovery/
+  registry/workflow suite passes 70/70, release-contract checks pass, controlled release tests
+  pass 112/112, lint and formatting pass, the complete producer suite passes 317/317, and all
+  three archive checks pass. Separately provisioned caches support all three offline consumers;
+  separately provisioned Chromium passes browser smoke with zero installation, provisioning, or
+  external requests during execution. Application Node `22.13.0` and npm `10.9.2` pass packed-SDK
+  production-host integration 4/4.
+- Read-only registry checks report the design-token exact version with its expected candidate
+  SHA-512 while UI and SDK remain absent. The original artifact ZIP SHA-256 and five-entry set
+  match the recovery plan. Strict active and repository-wide OpenSpec validation and
+  `git diff --check` pass. Independent cold review found no correctness, security, workflow,
+  test, specification, or documentation finding. Availability still depends on npm and GitHub,
+  extraction requires `unzip`, and the retained artifact can expire.
+- Tasks 4.7, 7.3, 9.1, 9.2, 12.6, 12.7, 14.6, and 14.7 remain unchecked. No workflow was
+  dispatched, no protected environment was approved, no recovery publication occurred, and
+  genuine all-package public-registry/provenance/consumer evidence remains execution-dependent.

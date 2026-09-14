@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,10 +15,12 @@ import {
   loadReleaseContract,
   packageRoles,
 } from "./release-contract.mjs";
+import { releaseContractDigest } from "./release-evidence.mjs";
+import { fetchExactPackageMetadata } from "./registry-metadata.mjs";
 import {
-  releaseContractDigest,
-  verifyCandidateEvidence,
-} from "./release-evidence.mjs";
+  materializeVerifiedRecoveryArtifact,
+  verifyOriginalRecoveryArtifact,
+} from "./recovery-artifact.mjs";
 
 const recoveryPublishOrder = ["ui", "iframeSdk"];
 
@@ -169,24 +171,6 @@ export function assertRecoveryWorkflowIdentity({ contract, plan, github }) {
   return true;
 }
 
-async function archivePathsFromEvidence(archiveRoot, evidence) {
-  const root = path.resolve(archiveRoot);
-  const archivePaths = {};
-  for (const role of packageRoles) {
-    const filename = evidence.packages?.[role]?.filename;
-    assert(filename && filename === path.basename(filename));
-    const archivePath = path.resolve(root, filename);
-    const relative = path.relative(root, archivePath);
-    assert(
-      relative && !relative.startsWith("..") && !path.isAbsolute(relative),
-    );
-    const stats = await lstat(archivePath);
-    assert(stats.isFile() && !stats.isSymbolicLink());
-    archivePaths[role] = archivePath;
-  }
-  return archivePaths;
-}
-
 function expectedProvenance(evidence, github) {
   return Object.fromEntries(
     packageRoles.map((role) => [
@@ -198,22 +182,6 @@ function expectedProvenance(evidence, github) {
       },
     ]),
   );
-}
-
-async function npmRegistryMetadata({ coordinate, registry }) {
-  try {
-    const { stdout } = await run("npm", [
-      "view",
-      coordinate,
-      "--json",
-      "--registry",
-      registry,
-    ]);
-    return JSON.parse(stdout);
-  } catch (error) {
-    if (/\bE404\b|(?:^|\s)404(?:\s|$)/i.test(error.message)) return null;
-    throw error;
-  }
 }
 
 async function verifyPublishedPackage({
@@ -287,11 +255,13 @@ function assertOriginalEvidence({ plan, evidence }) {
 export async function prepareBootstrapRecovery({
   contract,
   plan,
-  evidence,
-  archiveRoot,
+  evidence: transferredEvidence,
+  archiveRoot: transferredRoot,
+  artifactZipPath,
   artifactMetadata,
   github,
-  inspectRegistry = npmRegistryMetadata,
+  materializeRoot,
+  inspectRegistry = fetchExactPackageMetadata,
   verifyExistingPackage = verifyPublishedPackage,
   createdAt = new Date().toISOString(),
 }) {
@@ -299,59 +269,79 @@ export async function prepareBootstrapRecovery({
   validateBootstrapRecoveryPlan(plan);
   assertOriginalArtifactMetadata(plan, artifactMetadata);
   assertRecoveryWorkflowIdentity({ contract, plan, github });
-  assertOriginalEvidence({ plan, evidence });
-  const archivePaths = await archivePathsFromEvidence(archiveRoot, evidence);
-  await verifyCandidateEvidence(evidence, archivePaths, { contract });
-  const provenance = expectedProvenance(evidence, github);
+  const verified = await verifyOriginalRecoveryArtifact({
+    artifactZipPath,
+    contract,
+    plan,
+    transferredRoot,
+    transferredEvidence,
+  });
+  try {
+    const evidence = verified.evidence;
+    assertOriginalEvidence({ plan, evidence });
+    const provenance = expectedProvenance(evidence, github);
 
-  for (const role of plan.publishedRoles) {
-    const candidate = evidence.packages[role];
-    const metadata = await inspectRegistry({
-      coordinate: candidate.coordinate,
-      registry: contract.registry,
-    });
-    assertExactPublishedMetadata(metadata, candidate);
-    await verifyExistingPackage({
-      role,
-      contract,
-      evidence,
-      candidate,
-      expected: provenance[role],
-    });
-  }
-  for (const role of plan.missingRoles) {
-    const candidate = evidence.packages[role];
-    const metadata = await inspectRegistry({
-      coordinate: candidate.coordinate,
-      registry: contract.registry,
-    });
-    assert.equal(
-      metadata,
-      null,
-      `${candidate.coordinate} unexpectedly exists; stop recovery`,
-    );
-  }
+    for (const role of plan.publishedRoles) {
+      const candidate = evidence.packages[role];
+      const metadata = await inspectRegistry({
+        coordinate: candidate.coordinate,
+        registry: contract.registry,
+        candidate,
+      });
+      assertExactPublishedMetadata(metadata, candidate);
+      await verifyExistingPackage({
+        role,
+        contract,
+        evidence,
+        candidate,
+        expected: provenance[role],
+      });
+    }
+    for (const role of plan.missingRoles) {
+      const candidate = evidence.packages[role];
+      const metadata = await inspectRegistry({
+        coordinate: candidate.coordinate,
+        registry: contract.registry,
+        candidate,
+      });
+      assert.equal(
+        metadata,
+        null,
+        `${candidate.coordinate} unexpectedly exists; stop recovery`,
+      );
+    }
 
-  return {
-    schemaVersion: 1,
-    kind: "frontend-bootstrap-recovery-evidence",
-    createdAt,
-    planDigest: digest(plan),
-    contractDigest: releaseContractDigest(contract),
-    originalCandidate: { ...plan.incident },
-    recoveryExecution: {
-      repository: github.repository,
-      ref: github.ref,
-      sourceCommit: github.sha,
-      workflowRef: github.workflowRef,
-      workflow: github.workflow,
-      runId: github.runId,
-      runAttempt: github.runAttempt,
-    },
-    publishedRoles: [...plan.publishedRoles],
-    missingRoles: [...plan.missingRoles],
-    expectedProvenance: provenance,
-  };
+    const recoveryEvidence = {
+      schemaVersion: 1,
+      kind: "frontend-bootstrap-recovery-evidence",
+      createdAt,
+      planDigest: digest(plan),
+      contractDigest: releaseContractDigest(contract),
+      originalCandidate: { ...plan.incident },
+      recoveryExecution: {
+        repository: github.repository,
+        ref: github.ref,
+        sourceCommit: github.sha,
+        workflowRef: github.workflowRef,
+        workflow: github.workflow,
+        runId: github.runId,
+        runAttempt: github.runAttempt,
+      },
+      publishedRoles: [...plan.publishedRoles],
+      missingRoles: [...plan.missingRoles],
+      expectedProvenance: provenance,
+    };
+    if (materializeRoot)
+      await materializeVerifiedRecoveryArtifact({
+        verified,
+        artifactZipPath,
+        artifactMetadata,
+        outputRoot: materializeRoot,
+      });
+    return recoveryEvidence;
+  } finally {
+    await verified.dispose();
+  }
 }
 
 export function validateBootstrapRecoveryEvidence({
@@ -431,12 +421,14 @@ async function npmPublish({ archivePath, contract }) {
 export async function publishBootstrapRecovery({
   contract,
   plan,
-  evidence,
+  evidence: transferredEvidence,
   recoveryEvidence,
-  archiveRoot,
+  archiveRoot: transferredRoot,
+  artifactZipPath,
+  artifactMetadata,
   github,
   identifyPublisher = npmIdentity,
-  inspectRegistry = npmRegistryMetadata,
+  inspectRegistry = fetchExactPackageMetadata,
   verifyExistingPackage = verifyPublishedPackage,
   publishArchive = npmPublish,
   visibilityAttempts,
@@ -445,63 +437,96 @@ export async function publishBootstrapRecovery({
 }) {
   assertMaintainerConfirmed(contract);
   validateBootstrapRecoveryPlan(plan);
+  assertOriginalArtifactMetadata(plan, artifactMetadata);
   assertRecoveryWorkflowIdentity({ contract, plan, github });
-  assertOriginalEvidence({ plan, evidence });
-  validateBootstrapRecoveryEvidence({
+  const verified = await verifyOriginalRecoveryArtifact({
+    artifactZipPath,
     contract,
     plan,
-    evidence,
-    recoveryEvidence,
-    github,
+    transferredRoot,
+    transferredEvidence,
   });
-  const archivePaths = await archivePathsFromEvidence(archiveRoot, evidence);
-  await verifyCandidateEvidence(evidence, archivePaths, { contract });
-  assert.equal(
-    await identifyPublisher({ registry: contract.registry }),
-    contract.maintainerApproval.bootstrapIdentity,
-    "authenticated npm identity differs from the approved bootstrap identity",
-  );
-
-  for (const role of plan.publishedRoles) {
-    const candidate = evidence.packages[role];
-    assertExactPublishedMetadata(
-      await inspectRegistry({
-        coordinate: candidate.coordinate,
-        registry: contract.registry,
-      }),
-      candidate,
-    );
-    await verifyExistingPackage({
-      role,
+  try {
+    const evidence = verified.evidence;
+    const archivePaths = verified.archivePaths;
+    assertOriginalEvidence({ plan, evidence });
+    validateBootstrapRecoveryEvidence({
       contract,
+      plan,
       evidence,
-      candidate,
-      expected: recoveryEvidence.expectedProvenance[role],
+      recoveryEvidence,
+      github,
     });
-  }
-  for (const role of recoveryPublishOrder) {
-    const candidate = evidence.packages[role];
     assert.equal(
-      await inspectRegistry({
-        coordinate: candidate.coordinate,
-        registry: contract.registry,
-      }),
-      null,
-      `${candidate.coordinate} unexpectedly exists; stop recovery without publishing`,
+      await identifyPublisher({ registry: contract.registry }),
+      contract.maintainerApproval.bootstrapIdentity,
+      "authenticated npm identity differs from the approved bootstrap identity",
     );
-  }
 
-  const published = [];
-  for (const role of recoveryPublishOrder) {
-    const candidate = evidence.packages[role];
-    try {
-      await publishArchive({
-        role,
-        archivePath: archivePaths[role],
-        contract,
+    for (const role of plan.publishedRoles) {
+      const candidate = evidence.packages[role];
+      assertExactPublishedMetadata(
+        await inspectRegistry({
+          coordinate: candidate.coordinate,
+          registry: contract.registry,
+          candidate,
+        }),
         candidate,
+      );
+      await verifyExistingPackage({
+        role,
+        contract,
+        evidence,
+        candidate,
+        expected: recoveryEvidence.expectedProvenance[role],
       });
-    } catch (error) {
+    }
+    for (const role of recoveryPublishOrder) {
+      const candidate = evidence.packages[role];
+      assert.equal(
+        await inspectRegistry({
+          coordinate: candidate.coordinate,
+          registry: contract.registry,
+          candidate,
+        }),
+        null,
+        `${candidate.coordinate} unexpectedly exists; stop recovery without publishing`,
+      );
+    }
+
+    const published = [];
+    for (const role of recoveryPublishOrder) {
+      const candidate = evidence.packages[role];
+      try {
+        await publishArchive({
+          role,
+          archivePath: archivePaths[role],
+          contract,
+          candidate,
+        });
+      } catch (error) {
+        try {
+          await reconcilePublishedCandidate({
+            candidate,
+            registry: contract.registry,
+            inspectRegistry,
+            visibilityAttempts,
+            visibilityDelayMilliseconds,
+            waitForVisibility,
+          });
+        } catch (reconciliationError) {
+          throw new Error(
+            `recovery publish command failed for ${candidate.coordinate}; outcome is indeterminate because exact-version reconciliation failed (${reconciliationError.message}); previously confirmed recovery publications: ${published.join(", ") || "none"}; do not continue`,
+            { cause: reconciliationError },
+          );
+        }
+        published.push(candidate.coordinate);
+        throw new Error(
+          `recovery publish command failed for ${candidate.coordinate}, but exact-version reconciliation confirmed the expected bytes; confirmed recovery publications: ${published.join(", ")}; stop before continuing`,
+          { cause: error },
+        );
+      }
+      published.push(candidate.coordinate);
       try {
         await reconcilePublishedCandidate({
           candidate,
@@ -511,36 +536,17 @@ export async function publishBootstrapRecovery({
           visibilityDelayMilliseconds,
           waitForVisibility,
         });
-      } catch (reconciliationError) {
+      } catch (error) {
         throw new Error(
-          `recovery publish command failed for ${candidate.coordinate}; outcome is indeterminate because exact-version reconciliation failed (${reconciliationError.message}); previously confirmed recovery publications: ${published.join(", ") || "none"}; do not continue`,
-          { cause: reconciliationError },
+          `recovery publication completed for ${candidate.coordinate}, but exact-version verification failed (${error.message}); confirmed recovery publish commands: ${published.join(", ")}; stop before continuing`,
+          { cause: error },
         );
       }
-      published.push(candidate.coordinate);
-      throw new Error(
-        `recovery publish command failed for ${candidate.coordinate}, but exact-version reconciliation confirmed the expected bytes; confirmed recovery publications: ${published.join(", ")}; stop before continuing`,
-        { cause: error },
-      );
     }
-    published.push(candidate.coordinate);
-    try {
-      await reconcilePublishedCandidate({
-        candidate,
-        registry: contract.registry,
-        inspectRegistry,
-        visibilityAttempts,
-        visibilityDelayMilliseconds,
-        waitForVisibility,
-      });
-    } catch (error) {
-      throw new Error(
-        `recovery publication completed for ${candidate.coordinate}, but exact-version verification failed (${error.message}); confirmed recovery publish commands: ${published.join(", ")}; stop before continuing`,
-        { cause: error },
-      );
-    }
+    return { kind: "frontend-bootstrap-recovery-publication", published };
+  } finally {
+    await verified.dispose();
   }
-  return { kind: "frontend-bootstrap-recovery-publication", published };
 }
 
 async function loadJson(selectedPath) {
@@ -553,29 +559,33 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const planPath = optionValue("--plan");
   const evidencePath = optionValue("--evidence");
   const archiveRoot = optionValue("--archive-root");
+  const artifactZipPath = optionValue("--artifact-zip");
+  const artifactMetadataPath = optionValue("--artifact-metadata");
   assert(
     ["prepare", "publish"].includes(mode),
     "--mode prepare|publish is required",
   );
   assert(contractPath, "--contract is required");
   assert(planPath, "--plan is required");
-  assert(evidencePath, "--evidence is required");
-  assert(archiveRoot, "--archive-root is required");
+  assert(artifactZipPath, "--artifact-zip is required");
+  assert(artifactMetadataPath, "--artifact-metadata is required");
   const common = {
     contract: await loadReleaseContract(contractPath),
     plan: await loadJson(planPath),
-    evidence: await loadJson(evidencePath),
+    evidence: evidencePath ? await loadJson(evidencePath) : undefined,
     archiveRoot,
+    artifactZipPath,
+    artifactMetadata: await loadJson(artifactMetadataPath),
     github: githubEnvironment(),
   };
   if (mode === "prepare") {
-    const artifactMetadataPath = optionValue("--artifact-metadata");
+    const materializeRoot = optionValue("--materialize-root");
     const output = optionValue("--output");
-    assert(artifactMetadataPath, "--artifact-metadata is required");
+    assert(materializeRoot, "--materialize-root is required");
     assert(output, "--output is required");
     const result = await prepareBootstrapRecovery({
       ...common,
-      artifactMetadata: await loadJson(artifactMetadataPath),
+      materializeRoot,
     });
     await writeFile(
       path.resolve(output),
@@ -583,6 +593,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     );
     process.stdout.write(`prepared recovery evidence at ${output}\n`);
   } else {
+    assert(evidencePath, "--evidence is required for publication");
+    assert(archiveRoot, "--archive-root is required for publication");
     const recoveryEvidencePath = optionValue("--recovery-evidence");
     assert(recoveryEvidencePath, "--recovery-evidence is required");
     const result = await publishBootstrapRecovery({

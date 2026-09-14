@@ -33,6 +33,7 @@ import {
   sha512Integrity,
   verifyCandidateEvidence,
 } from "./release-evidence.mjs";
+import { fetchExactPackageMetadata } from "./registry-metadata.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const consumerFixtures = {
@@ -309,6 +310,7 @@ export async function resolveNpmRegistryPackage({
   expectedPackage,
   candidate,
   runCommand = run,
+  fetchMetadata = fetchExactPackageMetadata,
 }) {
   assert.equal(
     new URL(registry).href,
@@ -336,24 +338,8 @@ export async function resolveNpmRegistryPackage({
     /^sha512-[A-Za-z0-9+/]+={0,2}$/,
     `${role} candidate integrity is missing or malformed`,
   );
-  const { stdout: metadataJson } = await runCommand(
-    "npm",
-    ["view", coordinate, "--json", "--registry", registry],
-    { cwd: root },
-  );
-  const metadata = JSON.parse(metadataJson);
-  const coordinateSeparator = coordinate.lastIndexOf("@");
-  assert(coordinateSeparator > 0, `invalid registry coordinate ${coordinate}`);
-  assert.equal(
-    metadata.name,
-    coordinate.slice(0, coordinateSeparator),
-    `${coordinate} metadata name differs`,
-  );
-  assert.equal(
-    metadata.version,
-    coordinate.slice(coordinateSeparator + 1),
-    `${coordinate} metadata version differs`,
-  );
+  const metadata = await fetchMetadata({ coordinate, registry, candidate });
+  assert(metadata, `${coordinate} exact version is absent from the registry`);
   const { stdout: packJson } = await runCommand(
     "npm",
     [

@@ -451,20 +451,36 @@ SHA-512 values match the approved evidence. A subsequent independent registry ch
 design-token archive, npm signature, Sigstore certificate, repository, workflow, source commit,
 and digest. UI and SDK remain absent.
 
-Post-publication reconciliation reads only exact-version metadata and retries only a temporary
-404/not-visible result for a bounded number of attempts. It never retries `npm publish`. Any
-authentication error, malformed response, wrong name/version, or integrity mismatch stops
-immediately, as does exhausted visibility. The next package cannot begin until the previous exact
-version is visible with the expected identity and bytes.
+Post-publication reconciliation uses one shared HTTP adapter for the configured registry's safely
+encoded exact package/version endpoint. It deliberately does not use `npm view`: npm `11.19.0`
+requests package-wide metadata before selecting an exact version, so a package-wide 404 can hide
+available exact-version metadata. The adapter bounds each request, follows no redirect, retains
+the selected registry origin, and retries only an actual exact-endpoint HTTP 404 for six attempts
+at five-second intervals. It never retries `npm publish`. Authentication/authorization errors,
+other HTTP failures, redirects, timeouts, malformed responses, wrong name/version, or integrity
+mismatches stop immediately, as does exhausted visibility. Bootstrap preflight, publication
+reconciliation, recovery state checks, and registry-verifier metadata resolution share this
+adapter. The next package cannot begin until the previous exact version is visible with the
+expected identity and bytes.
 
 Recovery is a third, explicit manual input in the existing `swift`-restricted workflow, separate
 from ordinary bootstrap and its all-versions-absent preflight. A reviewed recovery plan pins the
 original source commit, run/attempt, final artifact ID/name, and artifact ZIP digest. An
-unprotected preparation job retrieves and hash-checks that exact retained artifact, preserves its
-contents, cryptographically verifies the existing design-token version against the original
-candidate provenance, requires UI and SDK to be absent, and records recovery evidence tied to the
-current GitHub run. Only then may a distinct `npm-publish` environment job receive the bootstrap
-token and publish UI followed by SDK from those original bytes.
+unprotected preparation job retrieves and hash-checks that exact retained artifact without
+pre-extracting it. The recovery helper requires exactly the candidate evidence, candidate transfer
+metadata, and three expected tarballs as regular ZIP entries; rejects traversal, links, special
+entries, omissions, and additions before extraction; extracts into a fresh isolated directory;
+and validates the transfer metadata, evidence, filenames, byte lengths, and SHA-512 values. Only
+verified ZIP contents are materialized for transfer. Preparation then cryptographically verifies
+the existing design-token version against the original candidate provenance, requires UI and SDK
+to be absent, and records recovery evidence tied to the current GitHub run.
+
+The distinct `npm-publish` environment job independently rechecks the pinned ZIP after artifact
+download, extracts it freshly, rejects any mismatch between the ZIP and separately transferred
+candidate copies, and repeats the registry/provenance preflight. Only then may its step receive the
+bootstrap token. UI followed by SDK are published exclusively from paths in that verified fresh
+extraction, not from loose transferred archives. The helper cleans the extraction on success or
+failure and never regenerates original candidate evidence.
 
 npm provenance truthfully records the commit executing each publish. The original candidate
 evidence is not rewritten: design tokens continue to require source commit `f49f2439…`, while the
@@ -507,6 +523,12 @@ relabeling evidence.
   peer is unavailable; supersede published mistakes with new versions rather than overwrite. If
   an original candidate remains intact and a subset is already published with matching bytes and
   provenance, the reviewed partial-recovery path may publish only the still-absent coordinates.
+- **[A package-wide registry lookup can hide an exact version]** → Query and validate the bounded
+  exact-version HTTP endpoint directly; treat only its real 404 as absence and reject redirects or
+  every other response failure.
+- **[Loose recovery files can diverge from a hash-pinned ZIP]** → Derive the candidate baseline
+  from a safe fresh extraction at preparation and publication, compare every transferred copy,
+  and publish only from the verified extraction.
 
 ## Migration Plan
 

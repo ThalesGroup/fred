@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  cp,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,11 +20,20 @@ import {
   validateBootstrapRecoveryPlan,
 } from "../scripts/bootstrap-recovery.mjs";
 import {
+  archiveTransferArtifactName,
+  fixtureArchiveFilename,
+} from "../scripts/fixture-transfer.mjs";
+import {
   loadReleaseContract,
   packageRoles,
   workspaceRoot,
 } from "../scripts/release-contract.mjs";
-import { createCandidateEvidence } from "../scripts/release-evidence.mjs";
+import {
+  createCandidateEvidence,
+  releaseContractDigest,
+  sha512Integrity,
+} from "../scripts/release-evidence.mjs";
+import { run } from "../scripts/process.mjs";
 
 const producerToolchain = { node: "24.21.0", npm: "11.19.0" };
 const applicationToolchain = {
@@ -79,7 +96,11 @@ async function fixture(context) {
   };
   const archives = [];
   for (const role of packageRoles) {
-    const archivePath = path.join(root, `${role}.tgz`);
+    const selected = contract.packages[role];
+    const archivePath = path.join(
+      root,
+      fixtureArchiveFilename(selected.name, selected.version),
+    );
     await writeFile(archivePath, `${role} original approved bytes`);
     archives.push({ role, path: archivePath });
   }
@@ -92,20 +113,90 @@ async function fixture(context) {
     gates,
     approved: true,
   });
-  evidence.transfer = {
-    kind: "release-candidate-archive-transfer",
-    artifactName: `frontend-packages-candidate-${plan.incident.sourceCommit}-${plan.incident.workflowRunId}-${plan.incident.workflowRunAttempt}`,
-    metadataFilename: "candidate-transfer.json",
-    metadataDigest: `sha256-${Buffer.alloc(32, 1).toString("base64")}`,
-    sourceTreeClean: true,
-    execution: {
-      provider: "github-actions",
-      repository: "ThalesGroup/fred",
-      workflow: "Publish frontend packages",
-      runId: plan.incident.workflowRunId,
-      runAttempt: plan.incident.workflowRunAttempt,
-    },
+  const execution = {
+    provider: "github-actions",
+    repository: "ThalesGroup/fred",
+    workflow: "Publish frontend packages",
+    runId: plan.incident.workflowRunId,
+    runAttempt: plan.incident.workflowRunAttempt,
   };
+  const artifactName = archiveTransferArtifactName({
+    contractState: contract.state,
+    sourceCommit: plan.incident.sourceCommit,
+    ...execution,
+  });
+  const transfer = {
+    schemaVersion: 1,
+    kind: "release-candidate-archive-transfer",
+    artifactName,
+    createdAt: "2026-09-14T14:09:00.000Z",
+    sourceCommit: plan.incident.sourceCommit,
+    sourceTreeClean: true,
+    contract: {
+      state: contract.state,
+      digest: releaseContractDigest(contract),
+    },
+    producerToolchain,
+    execution,
+    producerValidation: {
+      archives: true,
+      consumers: false,
+      browser: false,
+      host: false,
+    },
+    packages: Object.fromEntries(
+      packageRoles.map((role) => {
+        const selected = contract.packages[role];
+        const candidate = evidence.packages[role];
+        return [
+          role,
+          {
+            role,
+            name: selected.name,
+            version: selected.version,
+            coordinate: candidate.coordinate,
+            filename: candidate.filename,
+            bytes: candidate.bytes,
+            integrity: candidate.integrity,
+          },
+        ];
+      }),
+    ),
+  };
+  const transferPath = path.join(root, "candidate-transfer.json");
+  await writeFile(transferPath, `${JSON.stringify(transfer, null, 2)}\n`);
+  evidence.transfer = {
+    kind: transfer.kind,
+    artifactName,
+    metadataFilename: "candidate-transfer.json",
+    metadataDigest: `sha256-${createHash("sha256")
+      .update(await readFile(transferPath))
+      .digest("base64")}`,
+    sourceTreeClean: true,
+    execution,
+  };
+  await writeFile(
+    path.join(root, "candidate-evidence.json"),
+    `${JSON.stringify(evidence, null, 2)}\n`,
+  );
+  const artifactZipPath = path.join(
+    path.dirname(root),
+    "original-artifact.zip",
+  );
+  await run(
+    "zip",
+    [
+      "-q",
+      artifactZipPath,
+      "candidate-evidence.json",
+      "candidate-transfer.json",
+      ...packageRoles.map((role) => evidence.packages[role].filename),
+    ],
+    { cwd: root },
+  );
+  plan.incident.artifactZipSha256 = createHash("sha256")
+    .update(await readFile(artifactZipPath))
+    .digest("hex");
   const github = {
     actions: "true",
     repository: "ThalesGroup/fred",
@@ -128,7 +219,37 @@ async function fixture(context) {
       head_branch: "swift",
     },
   };
-  return { root, contract, plan, evidence, github, artifactMetadata };
+  artifactMetadata.digest = `sha256:${plan.incident.artifactZipSha256}`;
+  return {
+    root,
+    contract,
+    plan,
+    evidence,
+    github,
+    artifactMetadata,
+    artifactZipPath,
+  };
+}
+
+async function replaceLooseUiCandidate(input) {
+  const candidate = input.evidence.packages.ui;
+  const archivePath = path.join(input.root, candidate.filename);
+  await writeFile(archivePath, "replacement UI bytes");
+  candidate.bytes = (await readFile(archivePath)).byteLength;
+  candidate.integrity = await sha512Integrity(archivePath);
+  candidate.expectedProvenance.artifactDigest = candidate.integrity;
+  await writeFile(
+    path.join(input.root, "candidate-evidence.json"),
+    `${JSON.stringify(input.evidence, null, 2)}\n`,
+  );
+}
+
+async function updateArtifactZipPin(input, artifactZipPath) {
+  input.artifactZipPath = artifactZipPath;
+  input.plan.incident.artifactZipSha256 = createHash("sha256")
+    .update(await readFile(artifactZipPath))
+    .digest("hex");
+  input.artifactMetadata.digest = `sha256:${input.plan.incident.artifactZipSha256}`;
 }
 
 async function preparedFixture(context) {
@@ -205,6 +326,46 @@ test("recovery preparation verifies the existing package and requires the others
   );
 });
 
+test("recovery preparation materializes only files derived from the verified ZIP", async (context) => {
+  const input = await fixture(context);
+  const materializeRoot = path.join(input.root, "materialized");
+  await prepareBootstrapRecovery({
+    contract: input.contract,
+    plan: input.plan,
+    artifactZipPath: input.artifactZipPath,
+    artifactMetadata: input.artifactMetadata,
+    github: input.github,
+    materializeRoot,
+    inspectRegistry: async ({ coordinate }) =>
+      coordinate === input.evidence.packages.designTokens.coordinate
+        ? metadata(input.contract, input.evidence, "designTokens")
+        : null,
+    verifyExistingPackage: async () => true,
+  });
+  for (const filename of [
+    "candidate-evidence.json",
+    "candidate-transfer.json",
+    ...packageRoles.map((role) => input.evidence.packages[role].filename),
+  ])
+    assert.deepEqual(
+      await readFile(path.join(materializeRoot, filename)),
+      await readFile(path.join(input.root, filename)),
+    );
+  assert.deepEqual(
+    JSON.parse(
+      await readFile(
+        path.join(materializeRoot, "original-artifact-metadata.json"),
+        "utf8",
+      ),
+    ),
+    input.artifactMetadata,
+  );
+  assert.deepEqual(
+    await readFile(path.join(materializeRoot, "original-release-artifact.zip")),
+    await readFile(input.artifactZipPath),
+  );
+});
+
 test("recovery publishes only the missing packages in dependency-safe order", async (context) => {
   const input = await preparedFixture(context);
   const published = [];
@@ -216,8 +377,13 @@ test("recovery publishes only the missing packages in dependency-safe order", as
       input.registry.get(coordinate) ?? null,
     verifyExistingPackage: async ({ role }) =>
       assert.equal(role, "designTokens"),
-    publishArchive: async ({ role, candidate }) => {
+    publishArchive: async ({ role, candidate, archivePath }) => {
       published.push(role);
+      assert.notEqual(path.dirname(archivePath), input.root);
+      assert.equal(
+        await readFile(archivePath, "utf8"),
+        `${role} original approved bytes`,
+      );
       input.registry.set(
         candidate.coordinate,
         metadata(input.contract, input.evidence, role),
@@ -358,4 +524,119 @@ test("recovery refuses publication when existing-package provenance cannot be ve
     }),
     /design-token provenance differs/,
   );
+});
+
+test("recovery preparation rejects candidate copies that differ from the pinned ZIP", async (context) => {
+  const input = await fixture(context);
+  await replaceLooseUiCandidate(input);
+  await assert.rejects(
+    prepareBootstrapRecovery({
+      ...input,
+      archiveRoot: input.root,
+      inspectRegistry: async ({ coordinate }) =>
+        coordinate === input.evidence.packages.designTokens.coordinate
+          ? metadata(input.contract, input.evidence, "designTokens")
+          : null,
+      verifyExistingPackage: async () => true,
+    }),
+    /candidate copy differs from the pinned original artifact/,
+  );
+});
+
+test("protected recovery publishes nothing when transferred copies differ from the pinned ZIP", async (context) => {
+  const input = await preparedFixture(context);
+  await replaceLooseUiCandidate(input);
+  input.recoveryEvidence.expectedProvenance.ui.artifactDigest =
+    input.evidence.packages.ui.integrity;
+  const published = [];
+  await assert.rejects(
+    publishBootstrapRecovery({
+      ...input,
+      archiveRoot: input.root,
+      identifyPublisher: async () => "marc.fawaz",
+      inspectRegistry: async ({ coordinate }) =>
+        input.registry.get(coordinate) ?? null,
+      verifyExistingPackage: async () => true,
+      publishArchive: async ({ role, candidate }) => {
+        published.push(role);
+        input.registry.set(
+          candidate.coordinate,
+          metadata(input.contract, input.evidence, role),
+        );
+      },
+    }),
+    /candidate copy differs from the pinned original artifact/,
+  );
+  assert.deepEqual(published, []);
+});
+
+test("recovery rejects traversal and link entries before extraction", async (context) => {
+  await context.test("traversal", async (subcontext) => {
+    const input = await fixture(subcontext);
+    const outsidePath = path.join(path.dirname(input.root), "outside.txt");
+    await writeFile(outsidePath, "outside");
+    const artifactZipPath = path.join(
+      path.dirname(input.root),
+      "traversal-artifact.zip",
+    );
+    await run(
+      "zip",
+      [
+        "-q",
+        artifactZipPath,
+        "candidate-evidence.json",
+        "candidate-transfer.json",
+        ...packageRoles.map((role) => input.evidence.packages[role].filename),
+        "../outside.txt",
+      ],
+      { cwd: input.root },
+    );
+    await updateArtifactZipPin(input, artifactZipPath);
+    await assert.rejects(
+      prepareBootstrapRecovery({
+        ...input,
+        inspectRegistry: async () => assert.fail("must reject before registry"),
+        verifyExistingPackage: async () => assert.fail("must not verify"),
+      }),
+      /recovery ZIP candidate file set differs/,
+    );
+  });
+
+  await context.test("symbolic link", async (subcontext) => {
+    const input = await fixture(subcontext);
+    const linkedRoot = await mkdtemp(
+      path.join(path.dirname(input.root), "linked-candidate-"),
+    );
+    await cp(input.root, linkedRoot, { recursive: true });
+    const transferPath = path.join(linkedRoot, "candidate-transfer.json");
+    const transferTarget = path.join(linkedRoot, "transfer-target.json");
+    await cp(transferPath, transferTarget);
+    await rm(transferPath);
+    await symlink("transfer-target.json", transferPath);
+    const artifactZipPath = path.join(
+      path.dirname(input.root),
+      "linked-artifact.zip",
+    );
+    await run(
+      "zip",
+      [
+        "-q",
+        "-y",
+        artifactZipPath,
+        "candidate-evidence.json",
+        "candidate-transfer.json",
+        ...packageRoles.map((role) => input.evidence.packages[role].filename),
+      ],
+      { cwd: linkedRoot },
+    );
+    await updateArtifactZipPin(input, artifactZipPath);
+    await assert.rejects(
+      prepareBootstrapRecovery({
+        ...input,
+        inspectRegistry: async () => assert.fail("must reject before registry"),
+        verifyExistingPackage: async () => assert.fail("must not verify"),
+      }),
+      /must not be a link or special file/,
+    );
+  });
 });

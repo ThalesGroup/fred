@@ -10,6 +10,12 @@ import {
   packageRoles,
 } from "./release-contract.mjs";
 import { verifyCandidateEvidence } from "./release-evidence.mjs";
+import {
+  assertExactPublishedMetadata,
+  fetchExactPackageMetadata,
+} from "./registry-metadata.mjs";
+
+export { assertExactPublishedMetadata } from "./registry-metadata.mjs";
 
 const publishOrder = ["designTokens", "ui", "iframeSdk"];
 const candidateTransferMetadataFilename = "candidate-transfer.json";
@@ -124,18 +130,6 @@ async function npmIdentity({ registry }) {
   return (await run("npm", ["whoami", "--registry", registry])).stdout.trim();
 }
 
-async function registryMetadata({ coordinate, registry }) {
-  try {
-    return JSON.parse(
-      (await run("npm", ["view", coordinate, "--json", "--registry", registry]))
-        .stdout,
-    );
-  } catch (error) {
-    if (/\bE404\b|(?:^|\s)404(?:\s|$)/i.test(error.message)) return null;
-    throw error;
-  }
-}
-
 async function npmPublish({ archivePath, contract }) {
   await run("npm", [
     "publish",
@@ -148,39 +142,6 @@ async function npmPublish({ archivePath, contract }) {
     "--registry",
     contract.registry,
   ]);
-}
-
-function coordinateIdentity(coordinate) {
-  const separator = coordinate.lastIndexOf("@");
-  assert(separator > 0, `invalid registry coordinate ${coordinate}`);
-  return {
-    name: coordinate.slice(0, separator),
-    version: coordinate.slice(separator + 1),
-  };
-}
-
-export function assertExactPublishedMetadata(metadata, candidate) {
-  assert(
-    metadata && typeof metadata === "object" && !Array.isArray(metadata),
-    `${candidate.coordinate} registry metadata is malformed`,
-  );
-  const expected = coordinateIdentity(candidate.coordinate);
-  assert.equal(
-    metadata.name,
-    expected.name,
-    `${candidate.coordinate} metadata name differs`,
-  );
-  assert.equal(
-    metadata.version,
-    expected.version,
-    `${candidate.coordinate} metadata version differs`,
-  );
-  assert.equal(
-    metadata.dist?.integrity,
-    candidate.integrity,
-    `${candidate.coordinate} registry integrity differs`,
-  );
-  return metadata;
 }
 
 function wait(milliseconds) {
@@ -203,6 +164,7 @@ export async function reconcilePublishedCandidate({
     const metadata = await inspectRegistry({
       coordinate: candidate.coordinate,
       registry,
+      candidate,
     });
     if (metadata !== null)
       return assertExactPublishedMetadata(metadata, candidate);
@@ -220,7 +182,7 @@ export async function publishBootstrapRelease({
   archiveRoot,
   github,
   identifyPublisher = npmIdentity,
-  inspectRegistry = registryMetadata,
+  inspectRegistry = fetchExactPackageMetadata,
   publishArchive = npmPublish,
   visibilityAttempts = defaultVisibilityAttempts,
   visibilityDelayMilliseconds = defaultVisibilityDelayMilliseconds,
@@ -247,6 +209,7 @@ export async function publishBootstrapRelease({
     const metadata = await inspectRegistry({
       coordinate: candidate.coordinate,
       registry: contract.registry,
+      candidate,
     });
     if (metadata) {
       assertExactPublishedMetadata(metadata, candidate);

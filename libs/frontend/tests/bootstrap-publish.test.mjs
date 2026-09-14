@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +13,10 @@ import {
   workspaceRoot,
 } from "../scripts/release-contract.mjs";
 import { createCandidateEvidence } from "../scripts/release-evidence.mjs";
+import {
+  exactVersionMetadataUrl,
+  fetchExactPackageMetadata,
+} from "../scripts/registry-metadata.mjs";
 
 const sourceCommit = "b".repeat(40);
 const producerToolchain = { node: "24.21.0", npm: "11.19.0" };
@@ -145,18 +150,51 @@ test("post-publication visibility retries an exact 404 without republishing", as
   const registry = new Map();
   const inspections = new Map();
   const publishes = [];
+  const requests = [];
+  const candidatesByPath = new Map(
+    packageRoles.map((role) => {
+      const candidate = evidence.packages[role];
+      return [
+        exactVersionMetadataUrl({
+          coordinate: candidate.coordinate,
+          registry: "http://127.0.0.1/",
+        }).pathname,
+        { role, candidate },
+      ];
+    }),
+  );
+  const server = http.createServer((request, response) => {
+    requests.push(request.url);
+    const selected = candidatesByPath.get(request.url);
+    assert(selected, `unexpected registry request ${request.url}`);
+    const count = (inspections.get(request.url) ?? 0) + 1;
+    inspections.set(request.url, count);
+    if (!registry.has(selected.candidate.coordinate) || count === 2) {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "not visible" }));
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(registry.get(selected.candidate.coordinate)));
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  context.after(() => new Promise((resolve) => server.close(resolve)));
+  const controlledRegistry = `http://127.0.0.1:${server.address().port}/`;
   const result = await publishBootstrapRelease({
     contract,
     evidence,
     archiveRoot: root,
     github,
     identifyPublisher: async () => "marc.fawaz",
-    inspectRegistry: async ({ coordinate }) => {
-      const count = (inspections.get(coordinate) ?? 0) + 1;
-      inspections.set(coordinate, count);
-      if (!registry.has(coordinate) || count === 2) return null;
-      return registry.get(coordinate);
-    },
+    inspectRegistry: ({ coordinate, candidate }) =>
+      fetchExactPackageMetadata({
+        coordinate,
+        registry: controlledRegistry,
+        candidate,
+      }),
     publishArchive: async ({ role, candidate }) => {
       publishes.push(role);
       registry.set(candidate.coordinate, {
@@ -174,6 +212,8 @@ test("post-publication visibility retries an exact 404 without republishing", as
     evidence.packages.ui.coordinate,
     evidence.packages.iframeSdk.coordinate,
   ]);
+  assert.equal(requests.length, 9);
+  assert(requests.every((request) => candidatesByPath.has(request)));
 });
 
 test("exhausted visibility retries stop before the next package and never republish", async (context) => {
