@@ -187,6 +187,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setDefaultTeamsForNewUsersRequest,
       }),
     }),
+    getTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGet: build.query<
+      GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiResponse,
+      GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
+    }),
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter`, method: "POST" }),
+    }),
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
@@ -1495,6 +1507,12 @@ export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut
 export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
   setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
 };
+export type GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterStatus;
+export type GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiArg = void;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterStatus;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
@@ -2527,6 +2545,10 @@ export type DefaultTeamForNewUsers = {
 };
 export type SetDefaultTeamsForNewUsersRequest = {
   team_ids: string[];
+};
+export type TeamAdminCharterStatus = {
+  required: boolean;
+  accepted_at?: string | null;
 };
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
@@ -3932,6 +3954,9 @@ export const {
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
+  useGetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetQuery,
+  useLazyGetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetQuery,
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

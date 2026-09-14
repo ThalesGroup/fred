@@ -20,11 +20,12 @@ proof (negative: no tuple, no permission; positive: tuple, permission)."""
 
 from __future__ import annotations
 
-from typing import cast
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from control_plane_backend.teams.service import _get_team_permissions_for_user
-from fred_core import KeycloakUser, RebacEngine, TeamPermission
+from fred_core import KeycloakUser, TeamPermission
 from fred_core.common import TeamId
 
 
@@ -74,6 +75,13 @@ class _FakeRebac:
         ]
 
 
+def _deps(rebac: _FakeRebac) -> Any:
+    app = SimpleNamespace(team_admin_charter_version=None)
+    return cast(
+        Any, SimpleNamespace(rebac=rebac, configuration=SimpleNamespace(app=app))
+    )
+
+
 def _user() -> KeycloakUser:
     return KeycloakUser(
         uid="alice",
@@ -90,7 +98,7 @@ async def test_team_permissions_empty_without_persisted_tuple() -> None:
     user = _user()
 
     permissions = await _get_team_permissions_for_user(
-        cast(RebacEngine, rebac), user, TeamId("team-x")
+        user, TeamId("team-x"), _deps(rebac)
     )
 
     assert permissions == []
@@ -106,7 +114,7 @@ async def test_team_permissions_come_from_persisted_tuples() -> None:
     user = _user()
 
     permissions = await _get_team_permissions_for_user(
-        cast(RebacEngine, rebac), user, TeamId("team-x")
+        user, TeamId("team-x"), _deps(rebac)
     )
 
     assert set(permissions) == {

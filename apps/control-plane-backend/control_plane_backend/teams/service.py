@@ -32,6 +32,7 @@ from fred_core import (
     team_organization_relation,
 )
 from fred_core.common import TeamId, ThreadSafeLRUCache, is_personal_team_id
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
@@ -66,6 +67,9 @@ from control_plane_backend.teams.schemas import (
     RetentionFieldView,
     RetentionUpdateError,
     Team,
+    TeamAdminCharterDisabledError,
+    TeamAdminCharterNotAcceptedError,
+    TeamAdminCharterStatus,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
@@ -411,6 +415,50 @@ async def _join_unless_already_in_team(
         rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
     )
     logger.info("A new user joined the default team %s", team_id)
+
+
+async def get_team_admin_charter_status(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> TeamAdminCharterStatus:
+    """Tell the caller whether they must accept the team administrator charter.
+
+    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
+    """
+    version = deps.configuration.app.team_admin_charter_version
+    if version is None:
+        return TeamAdminCharterStatus(required=False)
+    accepted_at = await deps.get_team_admin_charter_store().get_accepted_at(
+        user.uid, version
+    )
+    if accepted_at is not None:
+        return TeamAdminCharterStatus(required=False, accepted_at=accepted_at)
+    # can_administer_admins is exactly team_admin in schema.fga.
+    administered = await deps.rebac.lookup_user_resources(
+        user, TeamPermission.CAN_ADMINISTER_ADMINS
+    )
+    required = not isinstance(administered, RebacDisabledResult) and bool(administered)
+    return TeamAdminCharterStatus(required=required)
+
+
+async def accept_team_admin_charter(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> TeamAdminCharterStatus:
+    """Record the caller's acceptance of the configured charter version; idempotent."""
+    version = deps.configuration.app.team_admin_charter_version
+    if version is None:
+        raise TeamAdminCharterDisabledError()
+    accepted_at, inserted = await deps.get_team_admin_charter_store().accept(
+        user.uid, version
+    )
+    if inserted:
+        emit_audit_log(
+            "team_admin.charter.accepted",
+            actor_uid=user.uid,
+            charter_version=version,
+        )
+    return TeamAdminCharterStatus(required=False, accepted_at=accepted_at)
 
 
 async def _list_teams(
@@ -1748,9 +1796,9 @@ def _dedupe_user_summaries_by_display_key(
 
 
 async def _get_team_permissions_for_user(
-    rebac: RebacEngine,
     user: KeycloakUser,
     team_id: TeamId,
+    deps: TeamServiceDependencies,
     consistency_token: str | None = None,
 ) -> list[TeamPermission]:
     """Project every `TeamPermission` the caller holds on one team.
@@ -1764,19 +1812,26 @@ async def _get_team_permissions_for_user(
     How to use it:
     - pass the already-authorized `team_id` and, when available, the
       consistency token from the caller's own access check
+    - admin-only permissions are left out until the caller accepted the
+      team administrator charter
     """
     permissions_to_check = list(TeamPermission)
-    allowed = await rebac.has_permissions(
+    allowed = await deps.rebac.has_permissions(
         RebacReference(Resource.USER, user.uid),
         permissions_to_check,
         RebacReference(Resource.TEAM, team_id),
         consistency_token=consistency_token,
     )
-    return [
+    granted = [
         permission
         for permission, has_permission in zip(permissions_to_check, allowed)
         if has_permission
     ]
+    if ADMIN_ONLY_TEAM_PERMISSIONS.intersection(
+        granted
+    ) and not await _has_accepted_team_admin_charter(user.uid, deps):
+        return [p for p in granted if p not in ADMIN_ONLY_TEAM_PERMISSIONS]
+    return granted
 
 
 async def _build_team_with_permissions(
@@ -1826,7 +1881,7 @@ async def _build_team_with_permissions(
             RebacReference(Resource.TEAM, team_id),
             consistency_token=consistency_token,
         ),
-        _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
+        _get_team_permissions_for_user(user, team_id, deps, consistency_token),
         _resolve_team_retention_view(team_id, deps),
     )
     roles_by_user = _fold_team_role_relations(direct_relations)
@@ -1927,6 +1982,32 @@ def _is_absolute_url(value: str) -> bool:
     return candidate.startswith("http://") or candidate.startswith("https://")
 
 
+# Exactly the `define can_*: team_admin` permissions of schema.fga, kept in sync
+# by a test. They apply only once the team admin accepted the configured charter
+# version. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
+ADMIN_ONLY_TEAM_PERMISSIONS: frozenset[TeamPermission] = frozenset(
+    {
+        TeamPermission.CAN_UPDATE_INFO,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
+        TeamPermission.CAN_ADMINISTER_EDITORS,
+        TeamPermission.CAN_ADMINISTER_ANALYSTS,
+        TeamPermission.CAN_ADMINISTER_ADMINS,
+    }
+)
+
+
+async def _has_accepted_team_admin_charter(
+    user_id: str, deps: TeamServiceDependencies
+) -> bool:
+    version = deps.configuration.app.team_admin_charter_version
+    if version is None:
+        return True
+    accepted_at = await deps.get_team_admin_charter_store().get_accepted_at(
+        user_id, version
+    )
+    return accepted_at is not None
+
+
 async def _validate_team_and_check_permission(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1978,6 +2059,10 @@ async def _validate_team_and_check_permission(
         team_id=team_id,
         permissions=permissions,
     )
+    if ADMIN_ONLY_TEAM_PERMISSIONS.intersection(
+        permissions
+    ) and not await _has_accepted_team_admin_charter(user.uid, deps):
+        raise TeamAdminCharterNotAcceptedError()
 
     return metadata, consistency_token
 

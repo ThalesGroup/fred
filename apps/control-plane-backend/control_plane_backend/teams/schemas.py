@@ -37,6 +37,21 @@ class TeamAdminConstraintError(Exception):
         super().__init__(detail)
 
 
+class TeamAdminCharterNotAcceptedError(PermissionError):
+    """Raised when a team_admin uses an admin-only permission before accepting
+    the configured team administrator charter."""
+
+    def __init__(self) -> None:
+        super().__init__("team_admin_charter_not_accepted")
+
+
+class TeamAdminCharterDisabledError(Exception):
+    """Raised when accepting the charter while no charter version is configured."""
+
+    def __init__(self) -> None:
+        super().__init__("team_admin_charter_disabled")
+
+
 class TeamMemberRoleNotHeldError(Exception):
     """AUTHZ-06 (RFC Part 7 §35): raised when revoking a role the member does
     not currently hold — nothing to revoke."""
@@ -263,6 +278,13 @@ class DefaultTeamForNewUsers(BaseModel):
 
     team_id: TeamId
     name: str
+
+
+class TeamAdminCharterStatus(BaseModel):
+    """Whether the caller must accept the team administrator charter, and when they did."""
+
+    required: bool
+    accepted_at: datetime | None = None
 
 
 class AddTeamMemberRequest(BaseModel):

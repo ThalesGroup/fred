@@ -28,6 +28,14 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    team_admin_charter_version: str | None = Field(
+        default=None,
+        description=(
+            "Version of the team administrator charter a team_admin must accept "
+            "before their admin-only team permissions apply. None disables the "
+            "charter. Changing it asks every team admin to accept again."
+        ),
+    )
     bootstrap_token_env_var: str | None = Field(
         default=None,
         description=(
