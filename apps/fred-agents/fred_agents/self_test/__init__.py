@@ -17,7 +17,8 @@
 Retrieves from the per-turn selected libraries through the real knowledge-search
 tool and echoes the retrieved chunks verbatim — no LLM — so the admin self-test
 page can assert that a marker phrase was retrieved end-to-end through the real
-execution pipeline. See docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md (Amendment A).
+execution pipeline. An optional hold before retrieval lets that page run a turn
+whose work outlives the credential the turn was handed.
 """
 
 from fred_agents.self_test.graph_agent import SELF_TEST_AGENT
