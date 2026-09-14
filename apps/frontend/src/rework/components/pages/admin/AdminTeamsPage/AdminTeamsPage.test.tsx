@@ -31,6 +31,7 @@ const h = vi.hoisted(() => ({
     { id: "uid-gamma", name: "Gamma" },
   ],
   defaultTeams: undefined as { team_id: string; name: string }[] | undefined,
+  teamsLoading: false,
   setDefaultTeams: vi.fn(),
 }));
 
@@ -64,13 +65,23 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useListAllTeamsQuery: () => ({ data: h.teams }),
+  useListAllTeamsQuery: () => ({ data: h.teamsLoading ? undefined : h.teams, isLoading: h.teamsLoading }),
   useDefaultTeamsForNewUsersQuery: (_arg: unknown, options?: { skip?: boolean }) => ({
     data: options?.skip ? undefined : h.defaultTeams,
   }),
   useSearchCandidateTeamAdminsQuery: () => ({ data: undefined }),
   useCreateTeamMutation: () => [vi.fn(), { isLoading: false }],
   useSetDefaultTeamsForNewUsersMutation: () => [h.setDefaultTeams, { isLoading: false }],
+}));
+
+// The card is covered by its own test; here it only needs to show the name and the action.
+vi.mock("@shared/organisms/TeamCard/TeamCard.tsx", () => ({
+  default: ({ team, action }: { team: { name: string }; action?: React.ReactNode }) => (
+    <div data-testid="team-card">
+      <span>{team.name}</span>
+      {action}
+    </div>
+  ),
 }));
 
 import AdminTeamsPage from "./AdminTeamsPage";
@@ -107,6 +118,7 @@ beforeEach(() => {
   h.canAdmin = true;
   h.gcuVersion = "v1";
   h.defaultTeams = [{ team_id: "uid-beta", name: "Beta" }] satisfies DefaultTeam[];
+  h.teamsLoading = false;
   h.setDefaultTeams.mockReset();
   h.setDefaultTeams.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
@@ -184,14 +196,35 @@ describe("AdminTeamsPage default teams for new users", () => {
     });
   });
 
+  it("shows the default teams as cards below the search field", () => {
+    h.defaultTeams = [
+      { team_id: "uid-beta", name: "Beta" },
+      { team_id: "uid-gamma", name: "Gamma" },
+    ];
+    render();
+
+    const cards = Array.from(defaultTeamSection()!.querySelectorAll('[data-testid="team-card"]'));
+    expect(cards.map((card) => card.querySelector("span")?.textContent)).toEqual(["Beta", "Gamma"]);
+    expect(searchInput().compareDocumentPosition(cards[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says the teams are loading instead of listing none while the registry loads", () => {
+    h.teamsLoading = true;
+    render();
+
+    expect(container.textContent).toContain("rework.adminTeams.loading");
+    expect(container.textContent).not.toContain("rework.adminTeams.existingTeams.empty");
+    expect(defaultTeamSection()!.querySelector('[data-testid="team-card"]')).toBeNull();
+  });
+
   it("removes one default team and keeps the others", async () => {
     h.defaultTeams = [
       { team_id: "uid-beta", name: "Beta" },
       { team_id: "uid-gamma", name: "Gamma" },
     ];
     render();
-    const betaChip = Array.from(defaultTeamSection()!.querySelectorAll("li")).find((li) =>
-      li.textContent?.includes("Beta"),
+    const betaChip = Array.from(defaultTeamSection()!.querySelectorAll('[data-testid="team-card"]')).find((card) =>
+      card.textContent?.includes("Beta"),
     )!;
     await act(async () => betaChip.querySelector("button")!.click());
 

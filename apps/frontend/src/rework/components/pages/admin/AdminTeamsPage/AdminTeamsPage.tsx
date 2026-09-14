@@ -22,6 +22,7 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
@@ -61,7 +62,7 @@ export default function AdminTeamsPage() {
     { query: trimmedAdminQuery },
     { skip: trimmedAdminQuery.length < 2 },
   );
-  const { data: allTeams } = useListAllTeamsQuery();
+  const { data: allTeams, isLoading: isLoadingTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
 
   // Choosing where new users land is platform_admin-only, unlike the rest of this page.
@@ -71,6 +72,12 @@ export default function AdminTeamsPage() {
   const [setDefaultTeams, { isLoading: isSettingDefaultTeams }] = useSetDefaultTeamsForNewUsersMutation();
   const [defaultTeamQuery, setDefaultTeamQuery] = useState("");
   const { data: defaultTeams } = useDefaultTeamsForNewUsersQuery(undefined, { skip: !canAdmin });
+
+  // Full rows from the registry listing: a card shows the avatar, members and admins.
+  const defaultTeamCards = useMemo(() => {
+    const teamsById = new Map((allTeams ?? []).map((team) => [team.id, team]));
+    return (defaultTeams ?? []).flatMap((defaultTeam) => teamsById.get(defaultTeam.team_id) ?? []);
+  }, [allTeams, defaultTeams]);
 
   // Filtered client-side: the registry listing is already loaded for the table.
   const defaultTeamOptions = useMemo(() => {
@@ -169,25 +176,6 @@ export default function AdminTeamsPage() {
             {!gcuVersion && (
               <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.gcuDisabled")}</p>
             )}
-            {defaultTeams && defaultTeams.length > 0 ? (
-              <ul className={styles.adminChipList}>
-                {defaultTeams.map((team) => (
-                  <li key={team.team_id}>
-                    <Chip
-                      label={team.name}
-                      // No remove while a save is in flight, so two removals never race.
-                      onRemove={isSettingDefaultTeams ? undefined : () => handleRemoveDefaultTeam(team.team_id)}
-                      removeAriaLabel={t("rework.adminTeams.defaultTeam.remove", { name: team.name })}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              // `undefined` while loading or on error: only the server's empty list means none.
-              defaultTeams?.length === 0 && (
-                <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
-              )
-            )}
             <Autocomplete<Team>
               textInput={{
                 placeholder: t("rework.adminTeams.defaultTeam.searchPlaceholder"),
@@ -199,6 +187,39 @@ export default function AdminTeamsPage() {
               options={defaultTeamOptions}
               onSelect={handleAddDefaultTeam}
             />
+            {/* `undefined` while loading or on error: only the server's empty list means none. */}
+            {defaultTeams?.length === 0 && (
+              <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
+            )}
+            {!!defaultTeams?.length && isLoadingTeams && (
+              <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.loading")}</p>
+            )}
+            {defaultTeamCards.length > 0 && (
+              <ul className={styles.defaultTeamCards}>
+                {defaultTeamCards.map((team) => (
+                  <li key={team.id}>
+                    <TeamCard
+                      team={team}
+                      withDescription={Boolean(team.description)}
+                      action={
+                        <Button
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                          icon={{ category: "outlined", type: "close" }}
+                          aria-label={t("rework.adminTeams.defaultTeam.remove", { name: team.name })}
+                          // No remove while a save is in flight, so two removals never race.
+                          disabled={isSettingDefaultTeams}
+                          onClick={() => handleRemoveDefaultTeam(team.id)}
+                        >
+                          {t("rework.adminTeams.defaultTeam.removeAction")}
+                        </Button>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
           <Separator />
         </>
@@ -246,11 +267,13 @@ export default function AdminTeamsPage() {
       <Separator />
       <section className={styles.existingTeamsSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
-        {allTeams && allTeams.length > 0 ? (
-          <DataTable columns={teamColumns} data={allTeams} />
-        ) : (
-          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
-        )}
+        {isLoadingTeams && <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.loading")}</p>}
+        {!isLoadingTeams &&
+          (allTeams && allTeams.length > 0 ? (
+            <DataTable columns={teamColumns} data={allTeams} />
+          ) : (
+            <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
+          ))}
       </section>
     </div>
   );

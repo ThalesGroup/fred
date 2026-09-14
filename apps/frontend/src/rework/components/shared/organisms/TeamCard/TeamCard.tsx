@@ -33,9 +33,11 @@ export interface TeamCardProps {
    * page refresh anything derived outside this card's own team-list cache
    * (e.g. the bootstrap-driven team navbar). */
   onJoined?: () => void;
+  /** Replaces the join affordance, e.g. an admin's remove button. */
+  action?: React.ReactNode;
 }
 
-export default function TeamCard({ team, withDescription, onJoined }: TeamCardProps) {
+export default function TeamCard({ team, withDescription, onJoined, action }: TeamCardProps) {
   const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
@@ -63,8 +65,8 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
 
   // Non-members see one join affordance: a direct self-service join for OPEN
   // teams, an "invite only" label for every other case.
-  const canJoinDirectly = !team.is_member && team.joining_mode === "open";
-  const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
+  const canJoinDirectly = !action && !team.is_member && team.joining_mode === "open";
+  const isInviteOnlyOutsider = !action && !team.is_member && team.joining_mode === "invite_only";
 
   return (
     <div className={styles.teamCardContainer}>
@@ -110,7 +112,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
           <div className={styles.teamCardAdmins}>
             <AvatarGroup
               avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))}
-              max={canJoinDirectly ? 2 : 4}
+              max={canJoinDirectly || action ? 2 : 4}
             />
           </div>
           {canJoinDirectly && (
@@ -127,6 +129,7 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
             </Button>
           )}
           {isInviteOnlyOutsider && <span className={styles.teamJoiningLabel}>{t("rework.teamCard.inviteOnly")}</span>}
+          {action}
         </div>
       </div>
     </div>

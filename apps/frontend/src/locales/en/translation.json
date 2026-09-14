@@ -2287,6 +2287,7 @@
     },
     "adminTeams": {
       "title": "Teams",
+      "loading": "Loading teams…",
       "existingTeams": {
         "title": "Existing teams",
         "empty": "No teams yet.",
@@ -2302,6 +2303,7 @@
         "none": "No default team.",
         "searchPlaceholder": "Add a team by name",
         "remove": "Remove {{name}}",
+        "removeAction": "Remove",
         "savedSummary": "Default teams updated",
         "errors": {
           "summary": "Failed to update the default teams",

@@ -2287,6 +2287,7 @@
     },
     "adminTeams": {
       "title": "Equipes",
+      "loading": "Chargement des équipes…",
       "existingTeams": {
         "title": "Équipes existantes",
         "empty": "Aucune équipe pour l'instant.",
@@ -2302,6 +2303,7 @@
         "none": "Aucune équipe par défaut.",
         "searchPlaceholder": "Ajouter une équipe par nom",
         "remove": "Retirer {{name}}",
+        "removeAction": "Retirer",
         "savedSummary": "Équipes par défaut mises à jour",
         "errors": {
           "summary": "Échec de la mise à jour des équipes par défaut",
