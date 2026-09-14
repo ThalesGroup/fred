@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
 import { verify as verifySignature } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { verify as verifySigstoreBundle } from "sigstore";
 
 import { assertRegistryConsumer } from "./dependency-boundaries.mjs";
-import { runBrowserSmoke } from "./browser-smoke.mjs";
+import {
+  assertProvisionedChromium,
+  runBrowserSmoke,
+} from "./browser-smoke.mjs";
 import { parameterizeConsumerSources } from "./consumer-contract.mjs";
 import { runIframeSdkHostIntegration } from "./iframe-sdk-host-integration.mjs";
 import { run } from "./process.mjs";
@@ -188,9 +199,15 @@ export async function verifyRegistryTooling({
     const expectedPackage = contract.packages[role];
     assertExactRegistryCoordinate(coordinates[role], expectedPackage);
     const candidate = evidence.packages[role];
+    assert(candidate, `candidate evidence missing ${role}`);
     const registryPackage = await resolvePackage({
       coordinate: coordinates[role],
       registry: contract.registry,
+      role,
+      contract,
+      evidence,
+      expectedPackage,
+      candidate,
     });
     assert.equal(
       registryPackage.integrity,
@@ -282,8 +299,39 @@ export async function resolveNpmRegistryPackage({
   coordinate,
   registry,
   root,
+  role,
+  contract,
+  evidence,
+  expectedPackage,
+  candidate,
   runCommand = run,
 }) {
+  assert.equal(
+    new URL(registry).href,
+    new URL(contract.registry).href,
+    `${role} registry differs from the approved contract`,
+  );
+  assert.deepEqual(
+    expectedPackage,
+    contract.packages[role],
+    `${role} expected package differs from the approved contract`,
+  );
+  assert.deepEqual(
+    candidate,
+    evidence.packages?.[role],
+    `${role} candidate differs from approved evidence`,
+  );
+  assertExactRegistryCoordinate(coordinate, expectedPackage);
+  assert.equal(
+    candidate?.coordinate,
+    coordinate,
+    `${role} candidate coordinate differs`,
+  );
+  assert.match(
+    candidate?.integrity ?? "",
+    /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+    `${role} candidate integrity is missing or malformed`,
+  );
   const { stdout: metadataJson } = await runCommand(
     "npm",
     ["view", coordinate, "--json", "--registry", registry],
@@ -323,6 +371,11 @@ export async function resolveNpmRegistryPackage({
     metadata.dist?.integrity,
     integrity,
     `${coordinate} metadata integrity differs`,
+  );
+  assert.equal(
+    integrity,
+    candidate.integrity,
+    `${role} downloaded registry integrity differs from candidate evidence`,
   );
   const advertisedAttestationUrl = metadata.dist?.attestations?.url;
   assert.equal(
@@ -387,6 +440,33 @@ export async function resolveNpmRegistryPackage({
       "install",
       "--package-lock-only",
       "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--registry",
+      registry,
+    ],
+    { cwd: root },
+  );
+  const manifest = JSON.parse(
+    await readFile(path.join(root, "package.json"), "utf8"),
+  );
+  const lockfile = JSON.parse(
+    await readFile(path.join(root, "package-lock.json"), "utf8"),
+  );
+  assertRegistryConsumer({
+    manifest,
+    lockfile,
+    contract,
+    evidence,
+    roles: [role],
+  });
+  await runCommand(
+    "npm",
+    [
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
       "--registry",
       registry,
     ],
@@ -402,6 +482,67 @@ export async function resolveNpmRegistryPackage({
   };
 }
 
+export async function assertInstalledRegistryPackage({
+  root,
+  expectedPackage,
+  runCommand = run,
+}) {
+  const { stdout } = await runCommand("npm", ["ls", "--all", "--json"], {
+    cwd: root,
+  });
+  const installedTree = JSON.parse(stdout);
+  const installed = installedTree.dependencies?.[expectedPackage.name];
+  assert(
+    installed,
+    `${expectedPackage.name} is absent from the installed tree`,
+  );
+  assert.equal(
+    installed.version,
+    expectedPackage.version,
+    `${expectedPackage.name} installed version differs`,
+  );
+
+  const packageRoot = path.join(
+    root,
+    "node_modules",
+    ...expectedPackage.name.split("/"),
+  );
+  const packageStat = await lstat(packageRoot);
+  assert.equal(
+    packageStat.isSymbolicLink(),
+    false,
+    `${expectedPackage.name} installed package must not be a link`,
+  );
+  assert.equal(
+    packageStat.isDirectory(),
+    true,
+    `${expectedPackage.name} installed package must be a directory`,
+  );
+  const [rootReal, packageReal] = await Promise.all([
+    realpath(root),
+    realpath(packageRoot),
+  ]);
+  const relative = path.relative(rootReal, packageReal);
+  assert(
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative),
+    `${expectedPackage.name} installed package escapes the disposable root`,
+  );
+  const installedManifest = JSON.parse(
+    await readFile(path.join(packageReal, "package.json"), "utf8"),
+  );
+  assert.equal(
+    installedManifest.name,
+    expectedPackage.name,
+    `${expectedPackage.name} installed manifest name differs`,
+  );
+  assert.equal(
+    installedManifest.version,
+    expectedPackage.version,
+    `${expectedPackage.name} installed manifest version differs`,
+  );
+  return installedTree;
+}
+
 export async function verifyNpmPackageProvenance(
   registryPackage,
   {
@@ -413,6 +554,14 @@ export async function verifyNpmPackageProvenance(
     verifyBundle = verifySigstoreBundle,
   },
 ) {
+  await assertInstalledRegistryPackage({
+    root: registryPackage.root,
+    expectedPackage: {
+      name: registryPackage.metadata.name,
+      version: registryPackage.metadata.version,
+    },
+    runCommand,
+  });
   await runCommand("npm", ["audit", "signatures", "--registry", registry], {
     cwd: registryPackage.root,
   });
@@ -457,16 +606,34 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   };
   const roots = [];
   try {
+    await assertProvisionedChromium();
     const result = await verifyRegistryTooling({
       contract,
       evidence,
       coordinates,
-      resolvePackage: async ({ coordinate, registry }) => {
+      resolvePackage: async ({
+        coordinate,
+        registry,
+        role,
+        contract: selected,
+        evidence: candidateEvidence,
+        expectedPackage,
+        candidate,
+      }) => {
         const root = await mkdtemp(
           path.join(os.tmpdir(), "fred-registry-package-"),
         );
         roots.push(root);
-        return resolveNpmRegistryPackage({ coordinate, registry, root });
+        return resolveNpmRegistryPackage({
+          coordinate,
+          registry,
+          root,
+          role,
+          contract: selected,
+          evidence: candidateEvidence,
+          expectedPackage,
+          candidate,
+        });
       },
       verifyPackageSignature: async (
         registryPackage,

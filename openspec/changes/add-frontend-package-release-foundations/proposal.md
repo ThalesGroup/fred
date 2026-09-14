@@ -42,6 +42,12 @@ and policy decisions fail-closed and publishes only exact reviewed bytes after e
 - Read npm provenance discovery from the registry's `dist.attestations.url` metadata shape,
   re-root its approved endpoint path onto the selected registry as npm does, and fail closed on
   missing, malformed, disallowed, or coordinate-mismatched attestation endpoints.
+- Materialize the disposable registry verifier's already validated lock graph with lifecycle
+  scripts disabled before npm signature audit, prove the selected package exists in that fresh
+  installed tree, and reject lock-only, linked, escaped, mismatched, or locally resolved trees.
+- Bind post-publication browser verification to the same explicit pre-provisioned Playwright
+  directory used by its workflow provisioning step; missing or differently resolved Chromium
+  fails actionably without downloading during verification.
 - Pin the producer release toolchain exactly and preserve the separately controlled tooling
   used by CI jobs that also run FRED application tests.
 - Extend CI selection and regression coverage for release inputs, keep release-readiness jobs

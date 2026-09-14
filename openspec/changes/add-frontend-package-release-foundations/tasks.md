@@ -312,6 +312,23 @@
   public registry integrity/consumers, then configure each existing package's Trusted Publisher
   and revoke the temporary token without overwriting or rebuilding any version.
 
+## 13. Release-verification hardening
+
+- [x] 13.1 Reproduce npm's lockfile-only installed-tree failure with the application Node/npm
+  toolchain, then require exact contract/evidence/registry/archive checks and registry-lock graph
+  validation before `npm ci --ignore-scripts`; prove the exact non-linked installed package tree
+  exists before mandatory npm signature and Sigstore verification.
+- [x] 13.2 Add positive and negative registry-verifier regressions using actual npm CLI
+  installed-tree behavior, including lock-only versus installed roots, pre-install candidate
+  integrity rejection, pre-install local-fallback rejection, and transitive FRED graph integrity.
+- [x] 13.3 Give the post-publication registry-verification job one explicit
+  `PLAYWRIGHT_BROWSERS_PATH` for provisioning and validation; add workflow and prerequisite
+  regressions proving the verifier rejects missing or differently resolved Chromium without
+  downloading a browser.
+- [x] 13.4 Update the release runbook and active OpenSpec artifacts, run the focused and complete
+  release/package/application gates under their prescribed toolchains, run strict OpenSpec and
+  diff validation, and obtain independent review without producing public-registry evidence.
+
 ## Fixture archive-transfer evidence (2026-09-11)
 
 - Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
@@ -492,3 +509,38 @@
   verification. Tasks 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7 remain unchecked pending committed
   source, the remaining maintainer decisions, a real workflow run, and separate publication
   authorization.
+
+## Release-verification hardening evidence (2026-09-14)
+
+- With application Node `22.13.0` and npm `10.9.2`, a disposable exact-registry dependency with
+  only `package-lock.json` reproduced `npm ls`'s missing dependency and `npm audit signatures`
+  failed with `found no dependencies to audit that were installed from a supported registry`.
+  After `npm ci --ignore-scripts`, `npm ls` resolved the exact registry URL and the same audit
+  reported one verified registry signature. The original workflow parse also showed no
+  `PLAYWRIGHT_BROWSERS_PATH` for the public-registry job.
+- The resolver now validates the contract-bound registry, coordinate, downloaded archive SHA-512,
+  and complete FRED lock graph before `npm ci --ignore-scripts --no-audit --no-fund`. Before the
+  mandatory npm signature audit and unchanged Sigstore/identity checks, it uses actual `npm ls`
+  behavior plus link, real-path, and installed-manifest checks to prove the package is installed
+  inside the disposable root. Negative tests reject candidate-integrity and local-lock fallback
+  before installation plus transitive FRED graph drift.
+- The public-registry job now shares `PLAYWRIGHT_BROWSERS_PATH=target/playwright` across its
+  separate provisioning and verification steps. The verifier rejects a missing directory,
+  missing executable, differently resolved path, or escaping symlink before registry lookup and
+  contains no browser installation path. The actual pre-provisioned Chromium executable resolves
+  inside that directory.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, the focused resolver/boundary/browser/
+  workflow suite passes 54/54, `npm run release:check`, `npm run release:test` (81/81), `npm run
+  lint`, `npm run format`, the complete producer suite (285/285), and all three archive checks
+  pass. Separately provisioned consumer caches then support all three offline isolated consumers;
+  separately provisioned Chromium supports browser smoke with zero dependency installations,
+  browser provisioning, or external requests during execution.
+- Under application Node `22.13.0` and npm `10.9.2`, production-host integration passes 4/4,
+  application quality and production build pass, and the frontend suite executes 2198/2198 tests
+  successfully with six existing skips. The existing dependency engine warnings for newer Node
+  22 patch releases remain unchanged.
+- Strict OpenSpec validation and `git diff --check` pass. Independent review found no correctness,
+  security, scope, test, or documentation finding. These controlled and local checks are not a
+  genuine public-registry verification; tasks 2.2, 2.4, 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7
+  remain gated on the remaining maintainer decisions, committed source, a real GitHub run,
+  publication, and separately authorized registry verification.

@@ -213,6 +213,26 @@ test("release workflow transfers one candidate to application tooling before pub
   );
 });
 
+test("public-registry verification reuses the explicitly provisioned Chromium path", () => {
+  const registryVerifier = publishWorkflow.jobs["verify-public-registry"];
+  assert.equal(
+    registryVerifier.env.PLAYWRIGHT_BROWSERS_PATH,
+    "target/playwright",
+  );
+  const provisionIndex = registryVerifier.steps.findIndex(
+    (step) =>
+      step.name === "Provision Chromium" && step.run === "make browser-install",
+  );
+  const verifyIndex = registryVerifier.steps.findIndex(
+    (step) =>
+      step.name === "Verify exact public registry packages and provenance" &&
+      step.run?.includes("npm run registry:verify"),
+  );
+  assert.notEqual(provisionIndex, -1);
+  assert.notEqual(verifyIndex, -1);
+  assert(provisionIndex < verifyIndex);
+});
+
 test("CI transfers one same-run fixture set from release to application tooling", () => {
   const producer = workflow.jobs["frontend-package-release-readiness"];
   const receiver = workflow.jobs["frontend-package-checks"];

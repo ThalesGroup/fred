@@ -176,6 +176,14 @@ and exact coordinate, and re-roots only its pathname onto the approved registry 
 missing, malformed, or disallowed endpoint metadata fails closed. Controlled local tests of this
 behavior are not a successful public-registry run.
 
+For each exact coordinate, the verifier checks registry metadata and downloaded archive SHA-512
+against the approved candidate before installation. It then creates and validates a registry-only
+lock graph, including every resolved FRED package in that graph, and runs `npm ci --ignore-scripts`
+in the fresh disposable root. `npm audit signatures` runs only after `npm ls` and the installed
+manifest/real-path checks prove that the exact package is a non-linked dependency inside that
+root. A package-lock alone is insufficient, and a missing install or local/workspace/checkout
+fallback fails closed.
+
 ## Prepared first-release workflow
 
 `.github/workflows/Publish-frontend-packages.yml` is manual-only. It rejects every ref except
@@ -196,6 +204,12 @@ performs genuine registry/provenance and clean-consumer verification under the s
 application Node `22.13.0` / npm `10.9.2` toolchain so its browser and production-host evidence
 does not silently migrate application tooling. None of these claims is evidence that a workflow
 has actually run.
+
+That final job sets `PLAYWRIGHT_BROWSERS_PATH=target/playwright` for both `make browser-install`
+and `npm run registry:verify`. The verifier confirms that Playwright's Chromium executable exists
+inside that exact directory before registry resolution and never installs a browser itself. A
+missing directory, absent executable, or resolution through Playwright's default cache fails with
+the provisioning command.
 
 The initial token is used only for creation. Later releases require a separately reviewed workflow
 change that removes the bootstrap secret and uses npm Trusted Publishing. The choice to allow

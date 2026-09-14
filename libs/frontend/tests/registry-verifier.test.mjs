@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ import {
   sha512Integrity,
 } from "../scripts/release-evidence.mjs";
 import {
+  assertInstalledRegistryPackage,
   assertProvenanceIdentity,
   buildRegistryConsumers,
   provenanceIdentityFromStatement,
@@ -21,6 +22,7 @@ import {
   verifyProvenanceAttestation,
   verifyRegistryTooling,
 } from "../scripts/registry-verifier.mjs";
+import { run } from "../scripts/process.mjs";
 
 const fixtureContract = await loadReleaseContract();
 
@@ -107,16 +109,59 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
     },
   };
   const commands = [];
-  const runCommand = async (command, args) => {
+  const runCommand = async (command, args, options) => {
     commands.push([command, ...args]);
     if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
     if (args[0] === "pack") return { stdout: JSON.stringify([{ filename }]) };
+    if (args.includes("--package-lock-only")) {
+      await writeFile(
+        path.join(root, "package-lock.json"),
+        `${JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            "": { dependencies: { [selected.name]: selected.version } },
+            [`node_modules/${selected.name}`]: {
+              version: selected.version,
+              resolved: `${fixtureContract.registry}${selected.name}/-/ui.tgz`,
+              integrity,
+            },
+          },
+        })}\n`,
+      );
+    }
+    if (args[0] === "ci") {
+      const installedRoot = path.join(
+        options.cwd,
+        "node_modules",
+        ...selected.name.split("/"),
+      );
+      await mkdir(installedRoot, { recursive: true });
+      await writeFile(
+        path.join(installedRoot, "package.json"),
+        `${JSON.stringify({ name: selected.name, version: selected.version })}\n`,
+      );
+    }
+    if (args[0] === "ls") {
+      return {
+        stdout: JSON.stringify({
+          dependencies: {
+            [selected.name]: { version: selected.version },
+          },
+        }),
+      };
+    }
     return { stdout: "" };
   };
+  const candidate = { coordinate, integrity };
   const registryPackage = await resolveNpmRegistryPackage({
     coordinate,
     registry: fixtureContract.registry,
     root,
+    role: "ui",
+    contract: fixtureContract,
+    evidence: { packages: { ui: candidate } },
+    expectedPackage: selected,
+    candidate,
     runCommand,
   });
   assert.equal(registryPackage.provenanceUrl, provenanceUrl);
@@ -171,6 +216,184 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   assert.equal(fetched.href, provenanceUrl);
   assert.deepEqual(result.identity, identity);
   assert(commands.some(([, command]) => command === "audit"));
+  const lockOnlyIndex = commands.findIndex((entry) =>
+    entry.includes("--package-lock-only"),
+  );
+  const installIndex = commands.findIndex((entry) => entry.includes("ci"));
+  const auditIndex = commands.findIndex((entry) => entry.includes("audit"));
+  assert.notEqual(lockOnlyIndex, -1);
+  assert.notEqual(installIndex, -1);
+  assert.notEqual(auditIndex, -1);
+  assert(lockOnlyIndex < installIndex && installIndex < auditIndex);
+});
+
+test("npm CLI distinguishes a lockfile-only graph from an installed dependency tree", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-installed-tree-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const packageRoot = path.join(root, "package");
+  const consumerRoot = path.join(root, "consumer");
+  const npmEnvironment = {
+    ...process.env,
+    npm_config_cache: path.join(root, "npm-cache"),
+  };
+  const npmRun = (command, args, options) =>
+    run(command, args, { ...options, env: npmEnvironment });
+  await Promise.all([mkdir(packageRoot), mkdir(consumerRoot)]);
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    `${JSON.stringify({ name: "fred-installed-tree-fixture", version: "1.0.0" })}\n`,
+  );
+  const { stdout } = await npmRun(
+    "npm",
+    ["pack", packageRoot, "--json", "--pack-destination", consumerRoot],
+    { cwd: root },
+  );
+  const [{ filename }] = JSON.parse(stdout);
+  await writeFile(
+    path.join(consumerRoot, "package.json"),
+    `${JSON.stringify({
+      private: true,
+      dependencies: {
+        "fred-installed-tree-fixture": `file:./${filename}`,
+      },
+    })}\n`,
+  );
+  await npmRun(
+    "npm",
+    ["install", "--package-lock-only", "--ignore-scripts", "--offline"],
+    { cwd: consumerRoot },
+  );
+  const expectedPackage = {
+    name: "fred-installed-tree-fixture",
+    version: "1.0.0",
+  };
+  await assert.rejects(
+    assertInstalledRegistryPackage({
+      root: consumerRoot,
+      expectedPackage,
+      runCommand: npmRun,
+    }),
+    /missing: fred-installed-tree-fixture@/,
+  );
+  await npmRun("npm", ["ci", "--ignore-scripts", "--offline"], {
+    cwd: consumerRoot,
+  });
+  const installed = await assertInstalledRegistryPackage({
+    root: consumerRoot,
+    expectedPackage,
+    runCommand: npmRun,
+  });
+  assert.equal(
+    installed.dependencies["fred-installed-tree-fixture"].version,
+    "1.0.0",
+  );
+});
+
+test("registry archive identity and candidate integrity fail before dependency installation", async (context) => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-registry-integrity-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const selected = fixtureContract.packages.ui;
+  const coordinate = `${selected.name}@${selected.version}`;
+  const filename = "ui.tgz";
+  await writeFile(path.join(root, filename), "registry bytes");
+  const integrity = await sha512Integrity(path.join(root, filename));
+  const candidate = { coordinate, integrity: "sha512-dW5leHBlY3RlZA==" };
+  const commands = [];
+  await assert.rejects(
+    resolveNpmRegistryPackage({
+      coordinate,
+      registry: fixtureContract.registry,
+      root,
+      role: "ui",
+      contract: fixtureContract,
+      evidence: { packages: { ui: candidate } },
+      expectedPackage: selected,
+      candidate,
+      runCommand: async (_command, args) => {
+        commands.push(args);
+        if (args[0] === "view")
+          return {
+            stdout: JSON.stringify({
+              name: selected.name,
+              version: selected.version,
+              dist: { integrity },
+            }),
+          };
+        if (args[0] === "pack")
+          return { stdout: JSON.stringify([{ filename }]) };
+        return { stdout: "" };
+      },
+    }),
+    /downloaded registry integrity differs from candidate evidence/,
+  );
+  assert.equal(
+    commands.some((args) => args[0] === "install" || args[0] === "ci"),
+    false,
+  );
+});
+
+test("registry lock fallback fails before npm ci", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-registry-lock-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const selected = fixtureContract.packages.ui;
+  const coordinate = `${selected.name}@${selected.version}`;
+  const filename = "ui.tgz";
+  const archivePath = path.join(root, filename);
+  await writeFile(archivePath, "registry bytes");
+  const integrity = await sha512Integrity(archivePath);
+  const candidate = { coordinate, integrity };
+  let installed = false;
+  await assert.rejects(
+    resolveNpmRegistryPackage({
+      coordinate,
+      registry: fixtureContract.registry,
+      root,
+      role: "ui",
+      contract: fixtureContract,
+      evidence: { packages: { ui: candidate } },
+      expectedPackage: selected,
+      candidate,
+      runCommand: async (_command, args) => {
+        if (args[0] === "view")
+          return {
+            stdout: JSON.stringify({
+              name: selected.name,
+              version: selected.version,
+              dist: {
+                integrity,
+                attestations: {
+                  url: `${fixtureContract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
+                },
+              },
+            }),
+          };
+        if (args[0] === "pack")
+          return { stdout: JSON.stringify([{ filename }]) };
+        if (args.includes("--package-lock-only")) {
+          await writeFile(
+            path.join(root, "package-lock.json"),
+            `${JSON.stringify({
+              lockfileVersion: 3,
+              packages: {
+                "": { dependencies: { [selected.name]: selected.version } },
+                [`node_modules/${selected.name}`]: {
+                  version: selected.version,
+                  resolved: "file:./ui.tgz",
+                  integrity,
+                },
+              },
+            })}\n`,
+          );
+        }
+        if (args[0] === "ci") installed = true;
+        return { stdout: "" };
+      },
+    }),
+    /registry|local fallback/,
+  );
+  assert.equal(installed, false);
 });
 
 test("rejects missing, malformed, and disallowed npm attestation URLs", async (context) => {
@@ -226,11 +449,20 @@ test("rejects missing, malformed, and disallowed npm attestation URLs", async (c
         attestations,
       },
     };
+    const candidate = {
+      coordinate,
+      integrity: metadata.dist.integrity,
+    };
     await assert.rejects(
       resolveNpmRegistryPackage({
         coordinate,
         registry: fixtureContract.registry,
         root,
+        role: "ui",
+        contract: fixtureContract,
+        evidence: { packages: { ui: candidate } },
+        expectedPackage: selected,
+        candidate,
         runCommand: async (_command, args) => {
           if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
           if (args[0] === "pack")

@@ -352,6 +352,17 @@ package. Against a real public registry, it MUST resolve those exact versions, v
 registry-reported and downloaded-byte integrity, cryptographically verify provenance for
 each package, and exercise fresh clean consumers installed from the registry.
 
+Before installing each resolved package, the verifier MUST compare its exact identity, version,
+registry, and downloaded SHA-512 with the approved contract and candidate evidence. It MUST
+generate and validate the disposable registry lock graph against those same expectations,
+including every FRED package resolution present in the graph. Only an accepted graph may be
+installed with lifecycle scripts disabled. Before running `npm audit signatures`, the verifier
+MUST prove through npm's actual installed-tree behavior and the installed package's filesystem
+identity that the exact package is a non-linked installed dependency contained in the fresh
+disposable root. A package-lock without the corresponding installation MUST NOT satisfy this
+gate. Installation or audit MUST NOT use a local tarball, workspace, checkout, application
+`node_modules`, or other fallback.
+
 Cryptographic signature validity alone MUST NOT establish a matching release. Cryptographic
 verification MUST require the signing certificate identity to equal the explicitly authorized
 GitHub workflow URI and its issuer to equal the explicitly expected GitHub Actions OIDC issuer.
@@ -380,6 +391,12 @@ credential-bearing, non-HTTP(S), fragment-bearing, endpoint-mismatched, or
 coordinate-mismatched URL. The sibling provenance predicate metadata MUST NOT be treated as
 the endpoint location.
 
+Browser verification MUST use an explicit pre-provisioned Playwright browser directory shared
+by the provisioning and verification steps. Before registry verification begins, the command
+MUST confirm that Playwright resolves Chromium from that directory and that the executable
+exists. Missing, default-cache, or differently resolved Chromium MUST fail actionably; registry
+verification MUST NOT install or download a browser.
+
 #### Scenario: Published candidates match recorded evidence
 
 - **WHEN** the command is given the three exact published coordinates and their recorded
@@ -393,6 +410,40 @@ the endpoint location.
   coordinate
 - **THEN** the verifier fetches that endpoint only through the approved registry and performs
   the required cryptographic and expected-release identity checks
+
+#### Scenario: An approved registry graph is installed before signature audit
+
+- **WHEN** exact registry metadata and archive bytes match candidate evidence and the generated
+  lock graph contains only approved registry resolutions
+- **THEN** the verifier validates that graph, installs it with lifecycle scripts disabled,
+  proves the exact package exists in npm's installed tree, and only then runs npm signature audit
+
+#### Scenario: A lockfile exists without an installed dependency tree
+
+- **WHEN** registry resolution produced a package-lock but the exact dependency has not been
+  installed in the disposable root
+- **THEN** verification fails before npm signature audit rather than treating the lockfile as an
+  installed tree
+
+#### Scenario: The disposable registry graph has an unapproved resolution
+
+- **WHEN** the generated graph contains a FRED package with a mismatched version or integrity,
+  an unexpected registry, a link, or a local/workspace/checkout fallback
+- **THEN** verification fails before dependency installation and provenance acceptance
+
+#### Scenario: The provisioned browser is reused during registry verification
+
+- **WHEN** the post-publication job provisions Chromium in its explicit Playwright directory and
+  invokes registry verification with the same directory
+- **THEN** the verifier confirms the selected executable is present inside that directory and
+  browser smoke performs no browser installation or download
+
+#### Scenario: Registry Chromium prerequisites are absent or inconsistent
+
+- **WHEN** the explicit Playwright directory is missing, Chromium is absent, or Playwright
+  resolves its executable from another directory
+- **THEN** registry verification fails with an actionable provisioning error before registry
+  resolution rather than bootstrapping a browser
 
 #### Scenario: The attestation endpoint metadata is invalid
 

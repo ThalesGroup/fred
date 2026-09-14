@@ -316,6 +316,17 @@ metadata and downloaded SHA-512 before installation. Registry-installed consumer
 only exact registry versions and reject every tarball, directory, workspace, source-checkout,
 or reused-dependency-tree fallback.
 
+For each package, the resolver checks the contract-bound identity, exact version, approved
+registry, downloaded archive bytes, and candidate SHA-512 before dependency installation. It
+then generates a registry lockfile in the fresh disposable root, validates every resolved FRED
+entry in that graph against the approved contract and candidate evidence, and only then runs
+`npm ci --ignore-scripts`. Before `npm audit signatures`, the verifier uses npm's actual installed
+tree plus the installed package manifest and real path to prove that the exact package is a
+non-linked directory inside that disposable root. A lockfile-only directory is not audit input;
+missing installation, local fallback, an escaping path, or any graph mismatch fails before
+signature acceptance. Vulnerability-audit side effects are disabled during materialization so
+the separately mandatory signature audit remains an explicit gate.
+
 Provenance verification is two separate gates. First, the verifier cryptographically checks
 the signature and attestation chain using the pinned supported tooling, requiring the signer
 certificate SAN to equal the authorized GitHub workflow identity and its issuer to equal the
@@ -352,6 +363,13 @@ identity-mismatched provenance, integrity success/failure, and fallback rejectio
 controlled fixtures or a local test registry. Their evidence
 is labelled `registry-verifier-tooling`; only a real run against exact published public
 coordinates can produce `public-registry-verification` evidence.
+
+The post-publication workflow provisions Chromium in `target/playwright` and sets
+`PLAYWRIGHT_BROWSERS_PATH=target/playwright` for the complete public-registry verification job.
+Before any registry lookup, the verifier requires that setting, confirms Playwright's selected
+Chromium executable is contained in that directory, and confirms the executable exists. It
+never installs or downloads a browser during verification; a missing or default-cache browser
+fails with the provisioning command.
 
 Alternative rejected: accepting `next` or another tag at verification time, because tags
 are mutable and cannot identify the reviewed release.
