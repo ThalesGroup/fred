@@ -30,10 +30,10 @@ unfinished — and there is no second version of that fact to disagree with.
 from __future__ import annotations
 
 import httpx
-from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider
 
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
-from fred_sdk.knowledge_base.environment import CLIENT_SECRET_ENV, PodEnvironment
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.models import (
     KnowledgeBaseRunContext,
 )
@@ -44,17 +44,11 @@ _TIMEOUT = httpx.Timeout(30.0)
 class ControlPlaneClient:
     """Authenticated Control Plane calls a Knowledge Base pod makes."""
 
-    def __init__(self, environment: PodEnvironment) -> None:
-        self._base_url = environment.control_plane_url
-        self._prefix = environment.prefix
+    def __init__(self, configuration: PodConfiguration) -> None:
+        self._base_url = configuration.control_plane_url
+        self._prefix = configuration.prefix
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens = M2MTokenProvider(
-            M2MAuthConfig(
-                keycloak_realm_url=environment.keycloak_realm_url,
-                client_id=environment.client_id,
-                secret_env=CLIENT_SECRET_ENV,
-            )
-        )
+        self._tokens = M2MTokenProvider(configuration.m2m)
 
     async def publish(self, declaration: KnowledgeBaseDeclaration) -> None:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""

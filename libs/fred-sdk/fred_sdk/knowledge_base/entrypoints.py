@@ -30,7 +30,7 @@ from collections.abc import Sequence
 
 from fred_sdk.knowledge_base.client import ControlPlaneClient
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
-from fred_sdk.knowledge_base.environment import PodEnvironment
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,10 @@ def publish_knowledge_base(knowledge_base: KnowledgeBase) -> None:
     stores stays what is deployed.
     """
     declaration = KnowledgeBaseDeclaration.of(knowledge_base)
-    environment = PodEnvironment.from_env(require_temporal=False)
+    configuration = PodConfiguration.load()
 
     async def _publish() -> None:
-        client = ControlPlaneClient(environment)
+        client = ControlPlaneClient(configuration)
         try:
             await client.publish(declaration)
         finally:
@@ -65,9 +65,9 @@ def run_knowledge_base(knowledge_base: KnowledgeBase) -> None:
 
     Takes the declaration and nothing else: where runs arrive, which client it
     authenticates as and what it connects to all come from the pod's
-    environment.
+    configuration.
     """
-    environment = PodEnvironment.from_env(require_temporal=True)
+    configuration = PodConfiguration.load()
     # Imported here so `publish` needs no workflow engine at all: serving runs
     # is the only thing that does, and it ships as the `knowledge-base` extra.
     try:
@@ -78,7 +78,7 @@ def run_knowledge_base(knowledge_base: KnowledgeBase) -> None:
             "install fred-sdk[knowledge-base]"
         ) from exc
 
-    asyncio.run(worker.serve(knowledge_base, environment))
+    asyncio.run(worker.serve(knowledge_base, configuration))
 
 
 def knowledge_base_main(

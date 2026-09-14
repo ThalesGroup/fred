@@ -712,69 +712,134 @@ def test_task_queue_refuses_an_empty_name() -> None:
 # 2c.5 the pod environment contract
 
 
-def test_publish_needs_no_workflow_engine_in_its_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from fred_sdk.knowledge_base import environment as env
-
-    for name in (env.CONTROL_PLANE_URL_ENV, env.KEYCLOAK_REALM_URL_ENV):
-        monkeypatch.setenv(name, "http://example.invalid/x/")
-    monkeypatch.setenv(env.PREFIX_ENV, "acme.kb")
-    monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
-    monkeypatch.setenv(env.CLIENT_SECRET_ENV, "shh")
-    monkeypatch.delenv(env.TEMPORAL_HOST_ENV, raising=False)
-
-    resolved = env.PodEnvironment.from_env(require_temporal=False)
-    assert resolved.control_plane_url == "http://example.invalid/x"
-
-    with pytest.raises(env.MissingPodEnvironment, match=env.TEMPORAL_HOST_ENV):
-        env.PodEnvironment.from_env(require_temporal=True)
+def _valid_configuration() -> dict:
+    """The smallest configuration a pod can start from, in Fred's own keys."""
+    return {
+        "knowledge_base": {
+            "prefix": "acme.kb",
+            "control_plane_url": "http://example.invalid/control-plane/v1/",
+        },
+        "security": {
+            "m2m": {
+                "realm_url": "http://keycloak.invalid/realms/app",
+                "client_id": "kb-local-folder",
+                "secret_env_var": "ACME_KB_CLIENT_SECRET",
+            }
+        },
+    }
 
 
-def test_missing_pod_environment_names_everything_absent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from fred_sdk.knowledge_base import environment as env
+def test_a_pod_is_configured_the_way_every_fred_component_is() -> None:
+    """Same keys, same models — `security.m2m` and `scheduler.temporal`.
 
-    for name in (
-        env.CONTROL_PLANE_URL_ENV,
-        env.KEYCLOAK_REALM_URL_ENV,
-        env.CLIENT_ID_ENV,
-        env.CLIENT_SECRET_ENV,
-    ):
-        monkeypatch.delenv(name, raising=False)
+    The point of this test is not that the values arrive, but that they arrive
+    under the paths an operator already knows from every other Fred backend,
+    parsed by the models fred-core owns rather than by a second set.
+    """
+    from fred_core.common import TemporalSchedulerConfig
+    from fred_core.security.structure import M2MSecurity
 
-    with pytest.raises(env.MissingPodEnvironment) as raised:
-        env.PodEnvironment.from_env(require_temporal=False)
-    for name in (env.CONTROL_PLANE_URL_ENV, env.CLIENT_ID_ENV):
-        assert name in str(raised.value)
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    configuration = PodConfiguration.model_validate(_valid_configuration())
+
+    assert isinstance(configuration.security.m2m, M2MSecurity)
+    assert isinstance(configuration.scheduler.temporal, TemporalSchedulerConfig)
+    # Read from a browser's address bar with its trailing slash, used without.
+    assert configuration.control_plane_url == "http://example.invalid/control-plane/v1"
 
 
-@pytest.mark.parametrize("absent", ["CLIENT_SECRET_ENV", "KEYCLOAK_REALM_URL_ENV"])
-def test_a_pod_without_credentials_refuses_to_start(
-    monkeypatch: pytest.MonkeyPatch, absent: str
-) -> None:
+def test_publish_needs_no_workflow_engine_in_its_configuration() -> None:
+    """A publish Job must not depend on a worker it never starts.
+
+    So a configuration that says nothing about Temporal is valid, and only a
+    pod that actually serves runs ever reaches it.
+    """
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    configuration = PodConfiguration.model_validate(_valid_configuration())
+
+    assert "scheduler" not in _valid_configuration()
+    assert configuration.temporal_host
+    assert configuration.temporal_namespace
+
+
+def test_a_configuration_without_credentials_is_refused_at_startup() -> None:
     """A Knowledge Base acts as a workload, and Fred admits it as nothing else.
 
     So missing credentials are a startup error naming what is absent, not a pod
-    that runs and is refused at its first document. A deployment with
-    authentication off cannot host one at all — deliberately: it would be a
-    second admission story to keep true.
+    that runs and is refused at its first document.
     """
-    from fred_sdk.knowledge_base import environment as env
+    from pydantic import ValidationError
 
-    monkeypatch.setenv(
-        env.CONTROL_PLANE_URL_ENV, "http://localhost:8222/control-plane/v1"
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    without_security = _valid_configuration()
+    del without_security["security"]
+
+    with pytest.raises(ValidationError, match="security"):
+        PodConfiguration.model_validate(without_security)
+
+
+@pytest.mark.parametrize("absent", ["realm_url", "client_id"])
+def test_a_configuration_missing_one_credential_names_it(absent: str) -> None:
+    from pydantic import ValidationError
+
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    payload = _valid_configuration()
+    del payload["security"]["m2m"][absent]
+
+    with pytest.raises(ValidationError, match=absent):
+        PodConfiguration.model_validate(payload)
+
+
+def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
+    """Which variable holds it is configuration; the value never is.
+
+    The hard-coded variable name this replaces made two pods in one namespace
+    unable to read two different secrets.
+    """
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    configuration = PodConfiguration.model_validate(_valid_configuration())
+
+    assert configuration.m2m.secret_env == "ACME_KB_CLIENT_SECRET"
+    assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
+
+
+def test_a_missing_configuration_file_is_its_own_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Absent is catchable; present-and-wrong stops the process.
+
+    A developer tool running with no Fred at all is a legitimate state, so the
+    absence of a file is an exception a caller may handle.
+    """
+    from fred_sdk.knowledge_base.configuration import (
+        MissingPodConfiguration,
+        PodConfiguration,
     )
-    monkeypatch.setenv(env.PREFIX_ENV, "acme.kb")
-    monkeypatch.setenv(env.CLIENT_ID_ENV, "kb-local-folder")
-    monkeypatch.setenv(env.CLIENT_SECRET_ENV, "shh")
-    monkeypatch.setenv(env.KEYCLOAK_REALM_URL_ENV, "http://keycloak.invalid/realms/app")
-    missing = getattr(env, absent)
-    monkeypatch.delenv(missing, raising=False)
 
-    with pytest.raises(env.MissingPodEnvironment, match=missing):
-        env.PodEnvironment.from_env(require_temporal=False)
+    monkeypatch.setenv("CONFIG_FILE", "/nowhere/configuration.yaml")
+
+    with pytest.raises(MissingPodConfiguration, match="CONFIG_FILE"):
+        PodConfiguration.load()
+
+
+def test_the_queue_is_derived_and_a_configured_one_is_not_read() -> None:
+    """Both sides derive it, so neither can be configured out of agreement."""
+    from fred_sdk.knowledge_base.routing import task_queue_for
+
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    payload = _valid_configuration()
+    payload["scheduler"] = {"temporal": {"task_queue": "somebody-elses-queue"}}
+    configuration = PodConfiguration.model_validate(payload)
+
+    assert task_queue_for("acme.kb.local-folder") != (
+        configuration.scheduler.temporal.task_queue
+    )
 
 
 # --------------------------------------------------------------------------

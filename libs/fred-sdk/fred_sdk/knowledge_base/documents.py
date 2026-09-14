@@ -26,9 +26,9 @@ from __future__ import annotations
 import mimetypes
 
 import httpx
-from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider
 
-from fred_sdk.knowledge_base.environment import CLIENT_SECRET_ENV, PodEnvironment
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 
 # Ingestion converts and indexes inline, so this is minutes, not the 30s a
 # Control Plane call gets.
@@ -56,27 +56,21 @@ class DocumentPublisher:
 
     def __init__(
         self,
-        environment: PodEnvironment,
+        configuration: PodConfiguration,
         *,
         library_id: str,
         source_tag: str,
     ) -> None:
-        if not environment.knowledge_flow_url:
+        if not configuration.knowledge_flow_url:
             raise ValueError(
                 "This pod has no Knowledge Flow URL: set FRED_KNOWLEDGE_FLOW_URL, "
                 "or keep your own store and do not use DocumentPublisher."
             )
-        self._base_url = environment.knowledge_flow_url
+        self._base_url = configuration.knowledge_flow_url
         self._library_id = library_id
         self._source_tag = source_tag
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens = M2MTokenProvider(
-            M2MAuthConfig(
-                keycloak_realm_url=environment.keycloak_realm_url,
-                client_id=environment.client_id,
-                secret_env=CLIENT_SECRET_ENV,
-            )
-        )
+        self._tokens = M2MTokenProvider(configuration.m2m)
 
     async def publish(
         self, *, relative_path: str, content: bytes, version: str | None = None

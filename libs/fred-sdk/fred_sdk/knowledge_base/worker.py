@@ -41,7 +41,7 @@ from fred_sdk.knowledge_base._workflow import (
     SynchronizeWorkflow,
 )
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.environment import PodEnvironment
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 from fred_sdk.knowledge_base.routing import task_queue_for
 
@@ -84,13 +84,13 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
     return synchronize
 
 
-async def serve(knowledge_base: KnowledgeBase, environment: PodEnvironment) -> None:
+async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) -> None:
     """Poll this definition's queue until the process is stopped."""
     task_queue = task_queue_for(knowledge_base.id)
     client = await Client.connect(
-        environment.temporal_host, namespace=environment.temporal_namespace
+        configuration.temporal_host, namespace=configuration.temporal_namespace
     )
-    control_plane = ControlPlaneClient(environment)
+    control_plane = ControlPlaneClient(configuration)
     logger.info("Knowledge Base %s serving runs on %s", knowledge_base.id, task_queue)
     try:
         async with Worker(

@@ -58,7 +58,7 @@ from fred_sdk.knowledge_base.entrypoints import (
     publish_knowledge_base,
     run_knowledge_base,
 )
-from fred_sdk.knowledge_base.environment import MissingPodEnvironment
+from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
     KnowledgeBase,
@@ -92,7 +92,7 @@ __all__ = [
     "KnowledgeBaseRunContext",
     "KnowledgeBaseRunOutcome",
     "KnowledgeBaseSyncResult",
-    "MissingPodEnvironment",
+    "MissingPodConfiguration",
     "SynchronizeHandler",
     "knowledge_base_main",
     "publish_knowledge_base",
