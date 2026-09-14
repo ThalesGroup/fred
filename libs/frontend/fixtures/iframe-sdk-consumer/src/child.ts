@@ -2,7 +2,7 @@ import {
   createFredApplicationClient,
   type FredApplicationClient,
   type FredApplicationContext,
-} from "@fred/iframe-sdk";
+} from "@fred-oss/iframe-sdk";
 
 interface ChildHarness {
   client: FredApplicationClient;

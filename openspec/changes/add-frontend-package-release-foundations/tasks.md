@@ -23,16 +23,16 @@
 
 ## 2. Maintainer coordinate and bootstrap gate
 
-- [ ] 2.1 Obtain and record maintainer confirmation of the organization-controlled npm scope,
+- [x] 2.1 Obtain and record maintainer confirmation of the organization-controlled npm scope,
   final package names, independently selected initial versions, public registry/access policy,
   and intended dist-tag; verify the confirmed contract is reviewable and does not treat the
-  provisional `@fred/*`, `0.1.0-alpha.1`, or `next` values as pre-authorized.
+  formerly provisional coordinates or policy as pre-authorized.
 - [ ] 2.2 Obtain and record named package/public-API, SDK wire-compatibility, release, and npm
   publishing owners plus the distinct bootstrap actor/credential identity and exact future
   Trusted Publishing source repository and GitHub workflow identity; verify unconfirmed
-  identities remain explicit gates and no credential, registry mutation, or publishing workflow
-  is added by this task.
-- [ ] 2.3 Verify the approved npm organization/account permission model can create each package
+  identities remain explicit gates and the guarded workflow cannot receive a credential or mutate
+  the registry during its default preparation path.
+- [x] 2.3 Verify the approved npm organization/account permission model can create each package
   if it does not exist and document the separate bootstrap path; verify the record does not
   assume a package-scoped credential or staged publishing can create a brand-new package.
 - [ ] 2.4 Record the maintainer choice between later direct and staged publishing, recommending
@@ -44,14 +44,14 @@
 - [x] 3.1 Keep `libs/frontend/package.json` private and excluded from member release selection;
   verify positive and negative tests enumerate exactly the three selected members and reject a
   publishable root or accidental fourth package.
-- [ ] 3.2 Synchronize the design-token, UI, and iframe SDK manifests with the confirmed independent
+- [x] 3.2 Synchronize the design-token, UI, and iframe SDK manifests with the confirmed independent
   coordinates and required description, license, repository directory, homepage/bugs, engines,
   files, exports, types, and side-effects metadata; verify contract comparison catches mutations
   to every required field while preserving existing public exports and packaged assets.
-- [ ] 3.3 Synchronize UI's selected design-token peer and preserve the tested React and React DOM
+- [x] 3.3 Synchronize UI's selected design-token peer and preserve the tested React and React DOM
   peer contract; verify manifest tests reject an unselected token version, bundled React runtime,
   local protocol, or undeclared runtime dependency.
-- [ ] 3.4 Regenerate `libs/frontend/package-lock.json` only with the repository-pinned release
+- [x] 3.4 Regenerate `libs/frontend/package-lock.json` only with the repository-pinned release
   toolchain and verify all member names, exact versions, and peer edges match the confirmed
   contract; permit npm-generated `link: true` records only for the three explicitly declared
   workspace members resolving to their contained member directories.
@@ -77,7 +77,7 @@
   current suites pass unchanged with selected candidate coordinates.
 - [x] 4.4 Implement a clean-checkout release-candidate command that checks exact Node/npm versions,
   builds and packs each member once, and reuses those same tarballs for validation; verify dirty
-  source state, wrong toolchain, unconfirmed coordinates, incomplete archives, or a failed gate
+  source state, wrong toolchain, incomplete maintainer decisions, incomplete archives, or a failed gate
   stops before approved evidence is written.
 - [x] 4.5 Generate one schema-versioned candidate evidence record containing the clean source
   commit, UTC time, selected contract, exact producer and application-test Node/npm toolchains,
@@ -280,6 +280,55 @@
   with actual tarballs and obtain independent review. Keep tasks 4.7, 7.3, 9.1, and 9.2 plus all
   other maintainer-gated work unchecked because fixture evidence cannot satisfy them.
 
+## 12. First `@fred-oss` release preparation
+
+- [x] 12.1 Record the selected npm organization, three exact prerelease coordinates, public
+  registry/access, `next` tag, bootstrap account and supplied organization-owner confirmation in
+  the proposed contract; keep package API, SDK protocol, release, enduring publishing ownership,
+  and later direct-versus-staged policy unresolved and fail approved evidence while they are
+  incomplete.
+- [x] 12.2 Synchronize member manifests, the UI token peer, generic consumer imports, package
+  documentation, and the producer lockfile to the selected `@fred-oss/*@0.1.0-alpha.1`
+  coordinates under exact Node `24.21.0` and npm `11.19.0`; preserve root privacy, React peers,
+  canonical sources, public exports, assets, licenses, and fixture-only evidence classification.
+- [x] 12.3 Extend the immutable transfer boundary for approved candidates and add controlled
+  bootstrap-publication tests that require a complete contract, exact same-run bytes/evidence,
+  repository/commit/ref/workflow/bootstrap identity, all-version absence preflight, provenance,
+  expected-repository source-dependency selection, dependency-safe order, per-package integrity
+  checks, and explicit reconciliation of ambiguous or partial publication failures.
+- [x] 12.4 Add a manual-only, `swift`-restricted workflow that defaults to preparation, separates
+  release and application toolchains, uses `npm-publish` and `NPM_BOOTSTRAP_TOKEN` only for the
+  explicitly selected publishing step, reverifies without rebuilding, and runs genuine
+  secret-free registry verification only after publication; verify its contract and CI selection.
+- [x] 12.5 Document exact GitHub environment/secret setup, first-package bootstrap, subsequent
+  Trusted Publishing setup, token revocation, immutable recovery, and the distinction between
+  controlled tests, approved candidates, actual publication, and genuine registry evidence;
+  retain broader RFC release/adoption work as open.
+- [ ] 12.6 On committed `swift` after named owners and later policy are confirmed, run the guarded
+  preparation path and retain one approved release-candidate artifact with GitHub repository,
+  commit, workflow/run, dual-toolchain, archive, and complete downstream evidence.
+- [ ] 12.7 After separate publication authorization and protected-environment approval, bootstrap
+  the three previously absent versions from those exact bytes, verify emitted provenance and
+  public registry integrity/consumers, then configure each existing package's Trusted Publisher
+  and revoke the temporary token without overwriting or rebuilding any version.
+
+## 13. Release-verification hardening
+
+- [x] 13.1 Reproduce npm's lockfile-only installed-tree failure with the application Node/npm
+  toolchain, then require exact contract/evidence/registry/archive checks and registry-lock graph
+  validation before `npm ci --ignore-scripts`; prove the exact non-linked installed package tree
+  exists before mandatory npm signature and Sigstore verification.
+- [x] 13.2 Add positive and negative registry-verifier regressions using actual npm CLI
+  installed-tree behavior, including lock-only versus installed roots, pre-install candidate
+  integrity rejection, pre-install local-fallback rejection, and transitive FRED graph integrity.
+- [x] 13.3 Give the post-publication registry-verification job one explicit
+  `PLAYWRIGHT_BROWSERS_PATH` for provisioning and validation; add workflow and prerequisite
+  regressions proving the verifier rejects missing or differently resolved Chromium without
+  downloading a browser.
+- [x] 13.4 Update the release runbook and active OpenSpec artifacts, run the focused and complete
+  release/package/application gates under their prescribed toolchains, run strict OpenSpec and
+  diff validation, and obtain independent review without producing public-registry evidence.
+
 ## Fixture archive-transfer evidence (2026-09-11)
 
 - Work started from merge commit `a1b29c45403af496f1a6421e29ae131b802c90d1` on
@@ -411,3 +460,87 @@
   provisioning, or external requests during smoke execution.
 - The original maintainer-gated tasks 2.1-2.4, 3.2-3.4, 4.7, 7.3, 9.1, and 9.2 remain unchecked;
   this CI prerequisite correction does not produce approved candidate or public-registry evidence.
+
+## First `@fred-oss` release-preparation evidence (2026-09-14)
+
+- Work started clean at `1cffc1e002242211430d853c0b4a3b068139dbbd` on
+  `feat/frontend-package-first-release`. Maintainers selected npm organization `fred-oss`, all
+  three `@fred-oss/*@0.1.0-alpha.1` coordinates, public npm access, `next`, bootstrap account
+  `marc.fawaz`, and supplied authenticated organization-owner confirmation. No token value was
+  requested, read, printed, or stored. Named product/release/enduring-publisher owners and later
+  direct-versus-staged policy remain incomplete, so the contract remains `proposed`.
+- The producer lockfile was regenerated with exact Node `24.21.0` and npm `11.19.0` using
+  `npm install --package-lock-only --ignore-scripts --no-audit --no-fund`. Under that toolchain,
+  `npm run release:check`, `npm run release:test` (77/77), `make code-quality`, `npm test`
+  (279/279 producer tests), and `make pack-check` for all three archive validators pass.
+- The final exact-toolchain run reproduced npm `11.19.0` rejecting the older
+  `npm exec -- tsc` build invocation. UI and SDK generation now invoke the lockfile-installed
+  TypeScript compiler through the active Node executable, with no install or network fallback;
+  the exact Node `24.21.0` / npm `11.19.0` 279-test suite then passed.
+- The selected-coordinate archive regression bytes are
+  `fred-oss-design-tokens-0.1.0-alpha.1.tgz`
+  (`sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==`),
+  `fred-oss-ui-0.1.0-alpha.1.tgz`
+  (`sha512-+BmE1ASoIDN8HYDugYCd8gzykHcspH7LxQuM5m4HjQWMoVErR99L1OU+bcp2ICN1AkvUoOwfNbtpU9eFp5ln8A==`),
+  and `fred-oss-iframe-sdk-0.1.0-alpha.1.tgz`
+  (`sha512-FG0y07SN6I+iNzKxJGMC1RYeJeGHCitbRBob7jr7iGMW5AcMt1pfoIJm//UK/cMq0E1QC2sE+hWpF2VsPwsz6w==`).
+  They are disposable archive-regression output from a dirty planning checkout, not approved
+  candidate evidence and not eligible for publication.
+- Network-capable `make consumer-provision` and `make browser-install` ran separately. Exact
+  release-toolchain `make isolated-consumer` passed for token, UI, and SDK archives in fresh
+  consumers with npm offline mode. `make browser-smoke` passed with pre-provisioned Chromium,
+  zero dependency installations, zero browser provisioning, zero external requests, local 200
+  responses, both themes, optional Geist, Material Symbols, reset behavior, and cross-origin SDK
+  checks. The sandboxed browser attempt failed only because loopback binding was denied and the
+  same local-only command passed with authorized host execution.
+- Under application Node `22.13.0` and npm `10.9.2`, `make host-integration` passes 4/4 packed-SDK
+  production-host tests. `make code-quality build test` in `apps/frontend` passes its type,
+  format, lint, production build, proxy smoke, and 2198/2198 executed tests (six additional tests
+  skipped by the existing suite). npm reports existing dependency engine warnings for packages
+  requiring newer Node 22 patch releases; the application command still passes and application
+  tooling remains separately controlled.
+- The guarded workflow and controlled helper tests prove default no-publish behavior, secret
+  isolation, exact identity/byte verification, all-version absence preflight, design-token-before-
+  UI ordering, per-package integrity, expected-repository commit selection, and registry
+  reconciliation after ambiguous publish failures. Verified `fred-oss` ownership is bound to all
+  selected package namespaces, and RFC edits now select release-readiness CI. Independent final
+  review found no remaining correctness, security, or scope finding. These checks do not prove a
+  GitHub environment approval, provenance emission, npm package creation, or public-registry
+  verification. Tasks 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7 remain unchecked pending committed
+  source, the remaining maintainer decisions, a real workflow run, and separate publication
+  authorization.
+
+## Release-verification hardening evidence (2026-09-14)
+
+- With application Node `22.13.0` and npm `10.9.2`, a disposable exact-registry dependency with
+  only `package-lock.json` reproduced `npm ls`'s missing dependency and `npm audit signatures`
+  failed with `found no dependencies to audit that were installed from a supported registry`.
+  After `npm ci --ignore-scripts`, `npm ls` resolved the exact registry URL and the same audit
+  reported one verified registry signature. The original workflow parse also showed no
+  `PLAYWRIGHT_BROWSERS_PATH` for the public-registry job.
+- The resolver now validates the contract-bound registry, coordinate, downloaded archive SHA-512,
+  and complete FRED lock graph before `npm ci --ignore-scripts --no-audit --no-fund`. Before the
+  mandatory npm signature audit and unchanged Sigstore/identity checks, it uses actual `npm ls`
+  behavior plus link, real-path, and installed-manifest checks to prove the package is installed
+  inside the disposable root. Negative tests reject candidate-integrity and local-lock fallback
+  before installation plus transitive FRED graph drift.
+- The public-registry job now shares `PLAYWRIGHT_BROWSERS_PATH=target/playwright` across its
+  separate provisioning and verification steps. The verifier rejects a missing directory,
+  missing executable, differently resolved path, or escaping symlink before registry lookup and
+  contains no browser installation path. The actual pre-provisioned Chromium executable resolves
+  inside that directory.
+- Under exact producer Node `24.21.0` and npm `11.19.0`, the focused resolver/boundary/browser/
+  workflow suite passes 54/54, `npm run release:check`, `npm run release:test` (81/81), `npm run
+  lint`, `npm run format`, the complete producer suite (285/285), and all three archive checks
+  pass. Separately provisioned consumer caches then support all three offline isolated consumers;
+  separately provisioned Chromium supports browser smoke with zero dependency installations,
+  browser provisioning, or external requests during execution.
+- Under application Node `22.13.0` and npm `10.9.2`, production-host integration passes 4/4,
+  application quality and production build pass, and the frontend suite executes 2198/2198 tests
+  successfully with six existing skips. The existing dependency engine warnings for newer Node
+  22 patch releases remain unchanged.
+- Strict OpenSpec validation and `git diff --check` pass. Independent review found no correctness,
+  security, scope, test, or documentation finding. These controlled and local checks are not a
+  genuine public-registry verification; tasks 2.2, 2.4, 4.7, 7.3, 9.1, 9.2, 12.6, and 12.7
+  remain gated on the remaining maintainer decisions, committed source, a real GitHub run,
+  publication, and separately authorized registry verification.

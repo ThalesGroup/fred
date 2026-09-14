@@ -105,8 +105,14 @@ export const LICENSE_FILES = [
 ];
 export const PACKAGE_WORKSPACE_PATTERN = "libs/frontend/**";
 export const WORKFLOW_PATH = ".github/workflows/Check-pending-requests.yml";
+export const PUBLISH_WORKFLOW_PATH =
+  ".github/workflows/Publish-frontend-packages.yml";
 
-export const VALIDATION_ORCHESTRATION_PATHS = ["Makefile", WORKFLOW_PATH];
+export const VALIDATION_ORCHESTRATION_PATHS = [
+  "Makefile",
+  WORKFLOW_PATH,
+  PUBLISH_WORKFLOW_PATH,
+];
 
 export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/release/release-contract.schema.json",
@@ -120,6 +126,7 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/scripts/fixture-transfer.mjs",
   "libs/frontend/scripts/fixture-transfer-validation.mjs",
   "libs/frontend/scripts/registry-verifier.mjs",
+  "libs/frontend/scripts/bootstrap-publish.mjs",
   "libs/frontend/scripts/check-release-contract.mjs",
   "libs/frontend/scripts/consumer-contract.mjs",
   "libs/frontend/tests/release-contract.test.mjs",
@@ -128,7 +135,9 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/tests/release-evidence.test.mjs",
   "libs/frontend/tests/dependency-boundaries.test.mjs",
   "libs/frontend/tests/registry-verifier.test.mjs",
+  "libs/frontend/tests/bootstrap-publish.test.mjs",
   "libs/frontend/RELEASE.md",
+  "docs/swift/FRED-FRONTEND-PACKAGING-RFC.md",
 ];
 
 export const CI_EXACT_INPUTS = [
@@ -141,6 +150,9 @@ export const CI_EXACT_INPUTS = [
   ...IFRAME_HOST_COMPATIBILITY_PATHS,
   ROOT_LICENSE_PATH,
   ...VALIDATION_ORCHESTRATION_PATHS,
+  ...RELEASE_TOOLING_INPUTS.filter(
+    (sourcePath) => !sourcePath.startsWith("libs/frontend/"),
+  ),
 ];
 
 export const CI_INPUT_PATTERNS = [

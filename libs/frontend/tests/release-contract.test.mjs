@@ -4,14 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { assertSelectedContractState } from "../scripts/check-release-contract.mjs";
 import {
   assertExactRegistryCoordinate,
   assertExpectedManifest,
+  assertMaintainerConfirmed,
   assertProducerLockfile,
   assertPublishedDependencyReferences,
   assertReleaseToolchain,
   developmentContractPath,
   loadReleaseContract,
+  packageRoles,
+  unresolvedMaintainerDecisions,
   validateReleaseContract,
   workspaceRoot,
 } from "../scripts/release-contract.mjs";
@@ -35,7 +39,7 @@ function confirm(changed) {
   changed.expectedProvenance.workflow =
     "https://github.com/example/fred/.github/workflows/release.yml@refs/heads/main";
   changed.maintainerApproval = {
-    scopeOwner: "test-maintainer-organization",
+    scopeOwner: "fred-oss",
     owners: {
       packageApi: "test-package-api-owner",
       sdkProtocol: "test-sdk-protocol-owner",
@@ -59,6 +63,29 @@ test("loads the explicit development fixture contract", () => {
   assert.equal(contract.releaseToolchain.node, "24.21.0");
   assert.equal(contract.releaseToolchain.npm, "11.19.0");
   assert.match(developmentContractPath, /development-fixture-contract\.json$/);
+});
+
+test("records confirmed first-release coordinates without claiming incomplete approval", async () => {
+  const proposed = await loadReleaseContract(
+    path.join(workspaceRoot, "release/proposed-release-contract.json"),
+  );
+  assert.equal(proposed.state, "proposed");
+  assert.equal(proposed.maintainerApproval.scopeOwner, "fred-oss");
+  assert.equal(proposed.maintainerApproval.bootstrapIdentity, "marc.fawaz");
+  assert.equal(proposed.maintainerApproval.bootstrapAuthorityVerified, true);
+  assert.equal(proposed.maintainerApproval.registryAccess, "public");
+  assert.deepEqual(
+    packageRoles.map((role) => proposed.packages[role].name),
+    ["@fred-oss/design-tokens", "@fred-oss/ui", "@fred-oss/iframe-sdk"],
+  );
+  assert.deepEqual(unresolvedMaintainerDecisions(proposed), [
+    "maintainerApproval.owners.packageApi",
+    "maintainerApproval.owners.sdkProtocol",
+    "maintainerApproval.owners.release",
+    "maintainerApproval.owners.npmPublishing",
+    "maintainerApproval.publishingPolicy",
+  ]);
+  assert.throws(() => assertMaintainerConfirmed(proposed), /unresolved/);
 });
 
 test("accepts only explicit release contract states and exact versions", () => {
@@ -88,6 +115,19 @@ test("accepts only explicit release contract states and exact versions", () => {
   }
 });
 
+test("the selected contract check accepts a later maintainer-confirmed state", () => {
+  const proposed = clone(contract);
+  proposed.state = "proposed";
+  assert.doesNotThrow(() => assertSelectedContractState(proposed));
+  const confirmed = clone(contract);
+  confirm(confirmed);
+  assert.doesNotThrow(() => assertSelectedContractState(confirmed));
+  assert.throws(
+    () => assertSelectedContractState(contract),
+    /proposed or maintainer-confirmed/,
+  );
+});
+
 test("confirmed contracts require explicit provenance identities", () => {
   const changed = clone(contract);
   confirm(changed);
@@ -113,6 +153,16 @@ test("confirmed contracts require explicit provenance identities", () => {
   assert.throws(
     () => validateReleaseContract(contradictory),
     /selected design-token peer/,
+  );
+});
+
+test("verified bootstrap authority is bound to the selected npm scope", () => {
+  const changed = clone(contract);
+  confirm(changed);
+  changed.maintainerApproval.scopeOwner = "another-organization";
+  assert.throws(
+    () => validateReleaseContract(changed),
+    /package must belong to the verified npm scope @another-organization\//,
   );
 });
 
@@ -226,7 +276,7 @@ test("rejects unexpected, mismatched, and escaping producer links", async () => 
     /unexpected producer link/,
   );
   changed = clone(lockfile);
-  changed.packages["node_modules/@fred/ui"].resolved = "design-tokens";
+  changed.packages["node_modules/@fred-oss/ui"].resolved = "design-tokens";
   await assert.rejects(
     assertProducerLockfile({
       contract,
@@ -237,7 +287,7 @@ test("rejects unexpected, mismatched, and escaping producer links", async () => 
     /target differs/,
   );
   changed = clone(lockfile);
-  changed.packages["node_modules/@fred/ui"].resolved = "../ui";
+  changed.packages["node_modules/@fred-oss/ui"].resolved = "../ui";
   await assert.rejects(
     assertProducerLockfile({
       contract,
@@ -277,13 +327,13 @@ test("rejects a declared producer member whose real target escapes", async (cont
 test("enforces exact registry coordinates and release toolchain", () => {
   assert.doesNotThrow(() =>
     assertExactRegistryCoordinate(
-      "@fred/ui@0.0.0-development",
+      "@fred-oss/ui@0.1.0-alpha.1",
       contract.packages.ui,
     ),
   );
   for (const coordinate of [
-    "@fred/ui@next",
-    "@fred/ui@^0.1.0",
+    "@fred-oss/ui@next",
+    "@fred-oss/ui@^0.1.0",
     "file:ui.tgz",
   ]) {
     assert.throws(() =>

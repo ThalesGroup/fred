@@ -1,12 +1,12 @@
-# `@fred/iframe-sdk`
+# `@fred-oss/iframe-sdk`
 
 Framework-independent browser client for applications hosted by FRED in an iframe. The package
 uses the existing protocol `"1"`; it does not receive FRED credentials or authorization state.
-This development archive is not a registry publication or an instruction for FRED or an external
-application to adopt a local workspace dependency.
+This checked-in first-release coordinate is not evidence of registry publication or an instruction
+for FRED or an external application to adopt a local workspace dependency.
 
 ```ts
-import { createFredApplicationClient } from "@fred/iframe-sdk";
+import { createFredApplicationClient } from "@fred-oss/iframe-sdk";
 
 const fred = createFredApplicationClient({
   hostOrigin: "https://fred.example",
@@ -28,7 +28,7 @@ fred.dispose();
 ```
 
 Low-level protocol types, constants, parsers, request limits, protected-header checks, and relative
-path validation are available from `@fred/iframe-sdk/protocol`. Undocumented deep imports are not
+path validation are available from `@fred-oss/iframe-sdk/protocol`. Undocumented deep imports are not
 public API.
 
 ## Lifecycle and security boundary

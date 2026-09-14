@@ -497,7 +497,7 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
       evidence: { packages },
     }),
   );
-  lockPackages["node_modules/@fred/ui"].resolved = "file:ui.tgz";
+  lockPackages["node_modules/@fred-oss/ui"].resolved = "file:ui.tgz";
   assert.throws(
     () =>
       assertRegistryConsumer({
@@ -508,8 +508,8 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
       }),
     /Invalid URL|registry|local fallback/,
   );
-  lockPackages["node_modules/@fred/ui"].resolved =
-    "https://registry.npmjs.org/@fred/ui/-/ui.tgz";
+  lockPackages["node_modules/@fred-oss/ui"].resolved =
+    "https://registry.npmjs.org/@fred-oss/ui/-/ui.tgz";
   lockPackages["node_modules/unapproved"] = {
     resolved: "\tGiT+FiLe:///tmp/source-checkout",
   };
@@ -522,5 +522,55 @@ test("registry consumers require exact versions, integrity, and registry URLs", 
         evidence: { packages },
       }),
     /local fallback/,
+  );
+});
+
+test("registry resolution validates transitive FRED packages against approved evidence", () => {
+  const confirmed = structuredClone(contract);
+  confirmed.state = "maintainer-confirmed";
+  const ui = confirmed.packages.ui;
+  const tokens = confirmed.packages.designTokens;
+  const evidence = {
+    packages: {
+      ui: { integrity: "sha512-dWk=" },
+      designTokens: { integrity: "sha512-dG9rZW5z" },
+    },
+  };
+  const manifest = { dependencies: { [ui.name]: ui.version } };
+  const lockfile = {
+    packages: {
+      "": { dependencies: manifest.dependencies },
+      [`node_modules/${ui.name}`]: {
+        version: ui.version,
+        resolved: `https://registry.npmjs.org/${ui.name}/-/ui.tgz`,
+        integrity: evidence.packages.ui.integrity,
+      },
+      [`node_modules/${tokens.name}`]: {
+        version: tokens.version,
+        resolved: `https://registry.npmjs.org/${tokens.name}/-/tokens.tgz`,
+        integrity: evidence.packages.designTokens.integrity,
+      },
+    },
+  };
+  assert.doesNotThrow(() =>
+    assertRegistryConsumer({
+      manifest,
+      lockfile,
+      contract: confirmed,
+      evidence,
+      roles: ["ui"],
+    }),
+  );
+  lockfile.packages[`node_modules/${tokens.name}`].integrity = "sha512-other";
+  assert.throws(
+    () =>
+      assertRegistryConsumer({
+        manifest,
+        lockfile,
+        contract: confirmed,
+        evidence,
+        roles: ["ui"],
+      }),
+    /registry graph integrity differs/,
   );
 });

@@ -107,9 +107,16 @@ export async function buildIframeSdk() {
     false,
   );
   assertIframeSdkBuildSourceGraph(evidence);
-  await run("npm", ["exec", "--", "tsc", "-p", "iframe-sdk/tsconfig.json"], {
-    cwd: path.dirname(packageRoot),
-  });
+  const producerRoot = path.dirname(packageRoot);
+  await run(
+    process.execPath,
+    [
+      path.join(producerRoot, "node_modules/typescript/bin/tsc"),
+      "-p",
+      "iframe-sdk/tsconfig.json",
+    ],
+    { cwd: producerRoot },
+  );
   await copyFile(
     path.join(repositoryRoot, ROOT_LICENSE_PATH),
     path.join(packageRoot, "LICENSE"),

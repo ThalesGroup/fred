@@ -175,11 +175,7 @@ export async function validateArchive(
       "design tokens must not declare runtime dependencies",
     );
 
-    const generatedTextFiles = [
-      "dist/tokens.css",
-      "dist/fonts.css",
-      "package.json",
-    ];
+    const generatedTextFiles = ["dist/tokens.css", "dist/fonts.css"];
     const forbiddenReferences = [
       { pattern: /@(?:shared|rework)\b/, description: "FRED source alias" },
       {

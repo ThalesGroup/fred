@@ -21,12 +21,17 @@ its declared member directory within the producer workspace. The lockfile MUST r
 undeclared linked package, a member-name mismatch, an escaping target, or any other link
 that is not npm's representation of an explicitly declared producer member.
 
-The `@fred` scope, the three current package names, version `0.1.0-alpha.1`, and the
-`next` dist-tag SHALL remain proposed values until maintainers record confirmation of
-scope ownership, final coordinates, registry policy, publishing owners, workflow
-identity, and bootstrap authorization. Repository tooling MAY be implemented and tested
-with explicit non-authoritative fixture coordinates before that confirmation, but it
-MUST NOT represent such a test as an approved release candidate.
+The selected coordinates SHALL be `@fred-oss/design-tokens@0.1.0-alpha.1`,
+`@fred-oss/ui@0.1.0-alpha.1`, and `@fred-oss/iframe-sdk@0.1.0-alpha.1` on
+`https://registry.npmjs.org/` with public access and initial `next` dist-tag. Bootstrap
+account `marc.fawaz` SHALL be recorded separately from the future Trusted Publishing
+workflow identity, together with the maintainer-supplied confirmation that it has the
+`fred-oss` organization-owner role. Package API, SDK protocol, release, and enduring npm
+publishing owners and the later direct-versus-staged policy MUST remain explicit unresolved
+decisions. The contract MUST remain non-approved until those required fields are complete;
+selected coordinates or npm-organization ownership MUST NOT imply product-contract ownership.
+Repository tooling MAY use explicit non-authoritative fixtures, but MUST NOT represent fixture
+results or a merely selected incomplete contract as approved release evidence.
 
 #### Scenario: A confirmed coordinate set is selected
 
@@ -66,11 +71,19 @@ MUST NOT represent such a test as an approved release candidate.
   repository field, or other required value that differs from the selected contract
 - **THEN** validation fails even if the archive is internally self-consistent
 
-#### Scenario: Coordinates have not been confirmed
+#### Scenario: Required release ownership remains incomplete
 
-- **WHEN** a command attempts to create approved release evidence while the selected
-  scope, package names, versions, or bootstrap authorization remain provisional
+- **WHEN** a command attempts to create approved release evidence while a required owner or
+  later publication-policy field remains unresolved
 - **THEN** it fails actionably and does not label the archives release candidates
+
+#### Scenario: npm organization ownership is recorded
+
+- **WHEN** the selected contract records the confirmed `fred-oss` organization and bootstrap
+  account owner role
+- **THEN** tooling accepts the selected scope and bootstrap authority only when all selected
+  package names belong to `@fred-oss/`, without inferring package API, SDK protocol, release, or
+  enduring publishing ownership
 
 #### Scenario: A fixture contract is relabelled without maintainer decisions
 
@@ -339,6 +352,17 @@ package. Against a real public registry, it MUST resolve those exact versions, v
 registry-reported and downloaded-byte integrity, cryptographically verify provenance for
 each package, and exercise fresh clean consumers installed from the registry.
 
+Before installing each resolved package, the verifier MUST compare its exact identity, version,
+registry, and downloaded SHA-512 with the approved contract and candidate evidence. It MUST
+generate and validate the disposable registry lock graph against those same expectations,
+including every FRED package resolution present in the graph. Only an accepted graph may be
+installed with lifecycle scripts disabled. Before running `npm audit signatures`, the verifier
+MUST prove through npm's actual installed-tree behavior and the installed package's filesystem
+identity that the exact package is a non-linked installed dependency contained in the fresh
+disposable root. A package-lock without the corresponding installation MUST NOT satisfy this
+gate. Installation or audit MUST NOT use a local tarball, workspace, checkout, application
+`node_modules`, or other fallback.
+
 Cryptographic signature validity alone MUST NOT establish a matching release. Cryptographic
 verification MUST require the signing certificate identity to equal the explicitly authorized
 GitHub workflow URI and its issuer to equal the explicitly expected GitHub Actions OIDC issuer.
@@ -349,6 +373,9 @@ to the approved release contract and candidate evidence. It MUST NOT accept valu
 because they appear in a validly signed downloaded attestation. The expected bootstrap
 identity and the later authorized Trusted Publishing workflow identity MUST remain
 distinct and explicit; an unconfirmed identity MUST fail closed as a maintainer decision.
+The source commit MUST be selected from exactly one resolved dependency whose normalized URI
+identifies the explicitly expected source repository. An unrelated dependency's commit MUST NOT
+satisfy that comparison, and a missing or ambiguous matching dependency MUST fail closed.
 
 The command MUST reject tags, ranges, unexpected registries, missing provenance,
 integrity mismatches, local tarballs, workspace packages, source-checkout resolution,
@@ -364,6 +391,12 @@ credential-bearing, non-HTTP(S), fragment-bearing, endpoint-mismatched, or
 coordinate-mismatched URL. The sibling provenance predicate metadata MUST NOT be treated as
 the endpoint location.
 
+Browser verification MUST use an explicit pre-provisioned Playwright browser directory shared
+by the provisioning and verification steps. Before registry verification begins, the command
+MUST confirm that Playwright resolves Chromium from that directory and that the executable
+exists. Missing, default-cache, or differently resolved Chromium MUST fail actionably; registry
+verification MUST NOT install or download a browser.
+
 #### Scenario: Published candidates match recorded evidence
 
 - **WHEN** the command is given the three exact published coordinates and their recorded
@@ -377,6 +410,40 @@ the endpoint location.
   coordinate
 - **THEN** the verifier fetches that endpoint only through the approved registry and performs
   the required cryptographic and expected-release identity checks
+
+#### Scenario: An approved registry graph is installed before signature audit
+
+- **WHEN** exact registry metadata and archive bytes match candidate evidence and the generated
+  lock graph contains only approved registry resolutions
+- **THEN** the verifier validates that graph, installs it with lifecycle scripts disabled,
+  proves the exact package exists in npm's installed tree, and only then runs npm signature audit
+
+#### Scenario: A lockfile exists without an installed dependency tree
+
+- **WHEN** registry resolution produced a package-lock but the exact dependency has not been
+  installed in the disposable root
+- **THEN** verification fails before npm signature audit rather than treating the lockfile as an
+  installed tree
+
+#### Scenario: The disposable registry graph has an unapproved resolution
+
+- **WHEN** the generated graph contains a FRED package with a mismatched version or integrity,
+  an unexpected registry, a link, or a local/workspace/checkout fallback
+- **THEN** verification fails before dependency installation and provenance acceptance
+
+#### Scenario: The provisioned browser is reused during registry verification
+
+- **WHEN** the post-publication job provisions Chromium in its explicit Playwright directory and
+  invokes registry verification with the same directory
+- **THEN** the verifier confirms the selected executable is present inside that directory and
+  browser smoke performs no browser installation or download
+
+#### Scenario: Registry Chromium prerequisites are absent or inconsistent
+
+- **WHEN** the explicit Playwright directory is missing, Chromium is absent, or Playwright
+  resolves its executable from another directory
+- **THEN** registry verification fails with an actionable provisioning error before registry
+  resolution rather than bootstrapping a browser
 
 #### Scenario: The attestation endpoint metadata is invalid
 
@@ -461,12 +528,84 @@ validated version or publish a newly versioned correction; it MUST NOT overwrite
 published version. Adoption rollback SHALL restore a prior lockfile/dependency set or
 redeploy a prior application image.
 
+The repository SHALL provide a dedicated `workflow_dispatch`-only first-release workflow that
+rejects refs other than `swift`, defaults to candidate preparation without publication, and
+requires an explicit manual publication choice. Candidate production and application-toolchain
+validation MUST be separate jobs that transfer one commit/run-specific immutable archive set.
+The application job MUST verify the transfer before and after its offline consumer, browser, and
+production-host gates and add approved evidence only for a complete `maintainer-confirmed`
+contract. The workflow MUST NOT rebuild archives during or after this transfer.
+
+Initial publication MUST use a protected GitHub environment named `npm-publish`. The environment
+secret `NPM_BOOTSTRAP_TOKEN` MUST be referenced only by the explicit initial publishing step and
+MUST NOT be available to checkout, installation, build, test, transfer, or registry-verification
+steps. The publishing job MUST grant `id-token: write`, reverify the exact archive bytes and
+evidence, require the expected repository, commit, ref, workflow identity, and authenticated
+bootstrap account, and preflight that all three exact versions are absent before the first
+registry mutation. It MUST publish design tokens before UI, use public access and `next`, request
+GitHub Actions provenance, and verify registry integrity after each successful package publish.
+The SDK MAY follow independently within the same sequence.
+
+A preflight existing version or a failure after partial publication MUST stop without rebuilding,
+overwriting, or silently accepting different bytes. Logs and evidence SHALL identify which exact
+packages succeeded so maintainers can choose a newly versioned recovery. If a publish command
+fails after the registry may have accepted it, the workflow MUST query that exact coordinate and
+compare integrity before reporting the outcome. Matching bytes MAY be reported as confirmed;
+otherwise the outcome MUST remain explicitly indeterminate and MUST NOT be described as no
+registry mutation. A genuine registry
+verification job MUST run only after the explicitly selected publication path and MUST use exact
+registry coordinates, recorded integrity, and provenance without receiving the bootstrap secret.
+Its clean-consumer, browser, and production-host checks MUST execute under the separately selected
+application toolchain rather than the release-production Node/npm installation.
+Local workflow and publication-helper tests MUST remain controlled tooling evidence and MUST NOT
+claim GitHub environment approval, emitted provenance, package creation, or public-registry
+success.
+
 #### Scenario: Maintainers bootstrap a new public package
 
 - **WHEN** one of the selected package names does not yet exist in the approved npm scope
 - **THEN** maintainers verify organization ownership and package-creation authority and
   record the authorized bootstrap identity before using the approved bootstrap process
   and separately configuring the later Trusted Publishing workflow identity
+
+#### Scenario: Preparation is dispatched without publication
+
+- **WHEN** a maintainer manually dispatches the first-release workflow on `swift` with its default
+  input
+- **THEN** it prepares and validates the immutable candidate under both toolchains without
+  receiving a registry credential or executing a publish command
+
+#### Scenario: Bootstrap publication is explicitly selected
+
+- **WHEN** a maintainer selects bootstrap publication and the protected environment approves a
+  complete candidate from the same committed workflow run
+- **THEN** only the publishing step receives `NPM_BOOTSTRAP_TOKEN`, reverifies the evidence and
+  bytes, requests provenance, and publishes in dependency-safe order
+
+#### Scenario: A first-release coordinate already exists
+
+- **WHEN** preflight finds any selected exact version already present on the public registry
+- **THEN** publication stops before its first mutation and reports a partial or conflicting
+  release rather than overwriting or accepting unknown bytes
+
+#### Scenario: Publication fails after one package succeeds
+
+- **WHEN** a package publish or integrity check fails after an earlier package was created
+- **THEN** the workflow stops, retains the immutable evidence and result logs, and requires an
+  explicit newly versioned recovery decision without rebuilding under the prior evidence
+
+#### Scenario: A publish command fails after an ambiguous registry mutation
+
+- **WHEN** a publish command fails after the registry may have accepted the candidate bytes
+- **THEN** the workflow reconciles the exact coordinate and integrity, reports matching bytes as
+  confirmed or the result as indeterminate, and stops without rebuilding or continuing
+
+#### Scenario: A local publication test passes
+
+- **WHEN** controlled tests exercise the bootstrap helper and workflow contract without an actual
+  GitHub environment and public npm packages
+- **THEN** they report tooling validation only and do not claim publication, provenance, or
+  registry-verification success
 
 #### Scenario: Maintainers choose staged publishing
 
@@ -497,8 +636,9 @@ Material Symbols asset; an applicable license or notice input; an SDK compatibil
 isolated-consumer fixture; or relevant validation orchestration changes. Release
 readiness validation SHALL also be selected when a release coordinate contract,
 candidate metadata, exact producer-toolchain pin, release-evidence schema, registry
-verifier, fixture-transfer helper or metadata, release runbook, or release-specific orchestration
-changes. It MAY skip that
+verifier, fixture-transfer helper or metadata, bootstrap-publication helper, release runbook,
+dedicated first-release workflow, governing frontend packaging RFC, or release-specific
+orchestration changes. It MAY skip that
 job for application changes that affect neither package generation nor package/host
 compatibility or release validation. Existing frontend selection MUST continue to run
 the FRED host, request, path, and proxy regressions when their application inputs change.
@@ -582,6 +722,13 @@ NOT depend on another job's filesystem or introduce network fallback into valida
   release documentation, or the workflow that validates them
 - **THEN** CI selects the frontend-package release-readiness and applicable existing
   archive regression jobs
+
+#### Scenario: First-release workflow input changes
+
+- **WHEN** a pull request changes the guarded publication workflow, bootstrap helper, release
+  transfer/evidence logic, selected manifest metadata, or its workflow-contract tests
+- **THEN** CI selects release readiness and the existing archive, consumer, and compatibility
+  regressions without exposing a publication credential to those jobs
 
 #### Scenario: Validation orchestration changes
 

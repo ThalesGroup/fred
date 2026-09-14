@@ -28,6 +28,8 @@ import {
 import { releaseContractDigest, sha512Integrity } from "./release-evidence.mjs";
 
 export const fixtureTransferMetadataFilename = "fixture-transfer.json";
+export const releaseCandidateTransferMetadataFilename =
+  "candidate-transfer.json";
 const exactVersionPattern = /^\d+\.\d+\.\d+$/;
 const integrityPattern = /^sha512-[A-Za-z0-9+/]+={0,2}$/;
 const commitPattern = /^[0-9a-f]{40}$/;
@@ -63,13 +65,49 @@ export function fixtureArchiveFilename(name, version) {
 }
 
 export function fixtureArtifactName({ sourceCommit, runId, runAttempt }) {
+  return archiveTransferArtifactName({
+    contractState: "fixture",
+    sourceCommit,
+    runId,
+    runAttempt,
+  });
+}
+
+export function archiveTransferArtifactName({
+  contractState,
+  sourceCommit,
+  runId,
+  runAttempt,
+}) {
   assert(
     commitPattern.test(sourceCommit),
-    "fixture source commit must be a full Git commit",
+    "archive source commit must be a full Git commit",
   );
-  assert(identityPattern.test(runId), "fixture run id is invalid");
-  assert(/^[1-9]\d*$/.test(runAttempt), "fixture run attempt is invalid");
-  return `frontend-packages-fixture-${sourceCommit}-${runId}-${runAttempt}`;
+  assert(identityPattern.test(runId), "archive run id is invalid");
+  assert(/^[1-9]\d*$/.test(runAttempt), "archive run attempt is invalid");
+  const label =
+    contractState === "fixture"
+      ? "fixture"
+      : contractState === "maintainer-confirmed"
+        ? "candidate"
+        : assert.fail("archive transfer requires an approved contract state");
+  return `frontend-packages-${label}-${sourceCommit}-${runId}-${runAttempt}`;
+}
+
+function transferProfile(contract) {
+  if (contract.state === "fixture")
+    return {
+      kind: "fixture-archive-transfer",
+      metadataFilename: fixtureTransferMetadataFilename,
+    };
+  if (contract.state === "maintainer-confirmed")
+    return {
+      kind: "release-candidate-archive-transfer",
+      metadataFilename: releaseCandidateTransferMetadataFilename,
+    };
+  assert.fail(
+    "archive transfer requires a fixture or maintainer-confirmed contract",
+  );
 }
 
 export function fixtureExecution({
@@ -145,11 +183,7 @@ export function validateFixtureTransferMetadata(
   { contract, sourceCommit, sourceTreeClean, execution },
 ) {
   validateReleaseContract(contract);
-  assert.equal(
-    contract.state,
-    "fixture",
-    "fixture transfer requires a fixture contract",
-  );
+  const profile = transferProfile(contract);
   assertFixtureExecution(execution);
   exactKeys(
     metadata,
@@ -173,11 +207,7 @@ export function validateFixtureTransferMetadata(
     1,
     "unsupported fixture transfer schema",
   );
-  assert.equal(
-    metadata.kind,
-    "fixture-archive-transfer",
-    "fixture transfer kind differs",
-  );
+  assert.equal(metadata.kind, profile.kind, "archive transfer kind differs");
   assertNonemptyString(metadata.createdAt, "fixture transfer creation time");
   assert.equal(
     new Date(metadata.createdAt).toISOString(),
@@ -212,8 +242,8 @@ export function validateFixtureTransferMetadata(
   );
   assert.equal(
     metadata.contract.state,
-    "fixture",
-    "fixture transfer contract state differs",
+    contract.state,
+    "archive transfer contract state differs",
   );
   assert.equal(
     metadata.contract.digest,
@@ -234,8 +264,12 @@ export function validateFixtureTransferMetadata(
   );
   assert.equal(
     metadata.artifactName,
-    fixtureArtifactName({ sourceCommit, ...execution }),
-    "fixture transfer artifact name differs",
+    archiveTransferArtifactName({
+      contractState: contract.state,
+      sourceCommit,
+      ...execution,
+    }),
+    "archive transfer artifact name differs",
   );
   exactKeys(
     metadata.producerValidation,
@@ -390,14 +424,15 @@ export async function verifyFixtureTransfer({
     !rootStats.isSymbolicLink() && rootStats.isDirectory(),
     "fixture transfer root must be a regular non-symlink directory",
   );
-  const metadataPath = path.join(root, fixtureTransferMetadataFilename);
+  const profile = transferProfile(contract);
+  const metadataPath = path.join(root, profile.metadataFilename);
   await assertRegularFile(metadataPath, "fixture transfer metadata");
   const metadata = validateFixtureTransferMetadata(
     JSON.parse(await readFile(metadataPath, "utf8")),
     { contract, sourceCommit, sourceTreeClean, execution },
   );
   const expectedFiles = [
-    fixtureTransferMetadataFilename,
+    profile.metadataFilename,
     ...packageRoles.map((role) => metadata.packages[role].filename),
   ].sort();
   const entries = await readdir(root, { withFileTypes: true });
@@ -437,7 +472,7 @@ export async function verifyFixtureTransfer({
   };
 }
 
-export async function createFixtureTransfer({
+export async function createArchiveTransfer({
   outputRoot,
   contract,
   sourceCommit,
@@ -452,11 +487,7 @@ export async function createFixtureTransfer({
   },
 }) {
   validateReleaseContract(contract);
-  assert.equal(
-    contract.state,
-    "fixture",
-    "fixture transfer requires a fixture contract",
-  );
+  const profile = transferProfile(contract);
   assertReleaseToolchain(contract, producerToolchain);
   assertFixtureExecution(execution);
   assert(
@@ -506,8 +537,12 @@ export async function createFixtureTransfer({
   }
   const metadata = {
     schemaVersion: 1,
-    kind: "fixture-archive-transfer",
-    artifactName: fixtureArtifactName({ sourceCommit, ...execution }),
+    kind: profile.kind,
+    artifactName: archiveTransferArtifactName({
+      contractState: contract.state,
+      sourceCommit,
+      ...execution,
+    }),
     createdAt,
     sourceCommit,
     sourceTreeClean,
@@ -532,7 +567,7 @@ export async function createFixtureTransfer({
     execution,
   });
   await writeFile(
-    path.join(root, fixtureTransferMetadataFilename),
+    path.join(root, profile.metadataFilename),
     `${JSON.stringify(metadata, null, 2)}\n`,
   );
   await verifyFixtureTransfer({
@@ -543,6 +578,24 @@ export async function createFixtureTransfer({
     execution,
   });
   return { outputRoot: root, metadata };
+}
+
+export async function createFixtureTransfer(options) {
+  assert.equal(
+    options.contract.state,
+    "fixture",
+    "fixture transfer requires a fixture contract",
+  );
+  return createArchiveTransfer(options);
+}
+
+export async function createReleaseCandidateTransfer(options) {
+  assert.equal(
+    options.contract.state,
+    "maintainer-confirmed",
+    "release candidate transfer requires a maintainer-confirmed contract",
+  );
+  return createArchiveTransfer(options);
 }
 
 function optionValue(name) {
@@ -577,7 +630,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       run("git", ["rev-parse", "HEAD"], { cwd: workspaceRoot }),
       run("npm", ["--version"], { cwd: workspaceRoot }),
     ]);
-  const result = await createFixtureTransfer({
+  const approved = process.argv.includes("--approved");
+  const createTransfer = approved
+    ? createReleaseCandidateTransfer
+    : createFixtureTransfer;
+  const result = await createTransfer({
     outputRoot,
     contract,
     sourceCommit: commit.trim(),

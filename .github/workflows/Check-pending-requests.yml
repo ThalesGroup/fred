@@ -90,6 +90,8 @@ jobs:
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
+              - '.github/workflows/Publish-frontend-packages.yml'
+              - 'docs/swift/FRED-FRONTEND-PACKAGING-RFC.md'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:

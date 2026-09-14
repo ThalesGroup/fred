@@ -41,7 +41,7 @@ const { archivePath } = await packIframeSdk();
 
 test("accepts the actual packed iframe SDK with runtime and declaration closure", async () => {
   const evidence = await validateIframeSdkArchive(archivePath);
-  assert.equal(evidence.package, "@fred/iframe-sdk@0.0.0-development");
+  assert.equal(evidence.package, "@fred-oss/iframe-sdk@0.1.0-alpha.1");
   assert.deepEqual(evidence.runtimeModules, [
     "dist/index.js",
     "dist/protocol.js",

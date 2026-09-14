@@ -17,7 +17,9 @@ import test from "node:test";
 import {
   assertDedicatedFixtureOutput,
   assertSafeFixtureTransferOutput,
+  createReleaseCandidateTransfer,
   createFixtureTransfer,
+  releaseCandidateTransferMetadataFilename,
   fixtureArchiveFilename,
   fixtureExecution,
   fixtureTransferMetadataFilename,
@@ -107,6 +109,31 @@ async function createTransfer(context) {
   return { paths, contract, calls };
 }
 
+function confirmedContract(contract) {
+  const confirmed = structuredClone(contract);
+  confirmed.state = "maintainer-confirmed";
+  confirmed.maintainerApproval = {
+    scopeOwner: "fred-oss",
+    owners: {
+      packageApi: "fixture-package-api-owner",
+      sdkProtocol: "fixture-sdk-protocol-owner",
+      release: "fixture-release-owner",
+      npmPublishing: "fixture-npm-publishing-owner",
+    },
+    bootstrapIdentity: "fixture-bootstrap-account",
+    bootstrapAuthorityVerified: true,
+    registryAccess: "public",
+    publishingPolicy: "direct",
+  };
+  confirmed.expectedProvenance = {
+    repository: "https://github.com/ThalesGroup/fred",
+    workflow:
+      "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    certificateIssuer: "https://token.actions.githubusercontent.com",
+  };
+  return confirmed;
+}
+
 async function mutateMetadata(root, mutate) {
   const metadataPath = path.join(root, fixtureTransferMetadataFilename);
   const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
@@ -147,6 +174,67 @@ test("a valid fixture transfer is consumed from separate exact bytes without reb
   assert.deepEqual(result.evidence.applicationToolchain, applicationToolchain);
   assert.equal((await stat(paths.evidence)).isFile(), true);
   assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+});
+
+test("a maintainer-confirmed transfer becomes approved evidence only after receiver gates", async (context) => {
+  const paths = await roots(context);
+  const contract = confirmedContract(await loadReleaseContract());
+  const calls = [];
+  await createReleaseCandidateTransfer({
+    outputRoot: paths.producer,
+    contract,
+    sourceCommit,
+    sourceTreeClean: true,
+    producerToolchain: contract.releaseToolchain,
+    execution,
+    createdAt: "2026-09-14T00:00:00.000Z",
+    packers: await packerFixtures(paths.root, contract, calls),
+  });
+  await cp(paths.producer, paths.receiver, { recursive: true });
+  const result = await validateTransferredFixture({
+    transferRoot: paths.receiver,
+    evidencePath: paths.evidence,
+    stageRoot: paths.stage,
+    contract,
+    sourceCommit,
+    sourceTreeClean: true,
+    execution,
+    applicationToolchain,
+    runGates: async () => successfulGates,
+  });
+  assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+  assert.equal(result.evidence.kind, "release-candidate-evidence");
+  assert.equal(
+    result.evidence.transfer.kind,
+    "release-candidate-archive-transfer",
+  );
+  assert.equal(
+    (
+      await stat(
+        path.join(paths.receiver, releaseCandidateTransferMetadataFilename),
+      )
+    ).isFile(),
+    true,
+  );
+});
+
+test("a proposed contract cannot create an archive transfer", async (context) => {
+  const paths = await roots(context);
+  const contract = await loadReleaseContract(
+    path.join(workspaceRoot, "release/proposed-release-contract.json"),
+  );
+  await assert.rejects(
+    createReleaseCandidateTransfer({
+      outputRoot: paths.producer,
+      contract,
+      sourceCommit,
+      sourceTreeClean: true,
+      producerToolchain: contract.releaseToolchain,
+      execution,
+      packers: await packerFixtures(paths.root, contract),
+    }),
+    /maintainer-confirmed/,
+  );
 });
 
 test("invalid transfer sets fail before downstream installation or execution", async (context) => {

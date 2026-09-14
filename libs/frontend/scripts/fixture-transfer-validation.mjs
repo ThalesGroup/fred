@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { runBrowserSmoke } from "./browser-smoke.mjs";
 import {
-  fixtureArtifactName,
+  archiveTransferArtifactName,
   fixtureExecution,
   verifyFixtureTransfer,
 } from "./fixture-transfer.mjs";
@@ -132,8 +132,14 @@ export async function validateTransferredFixture({
     producerToolchain: verified.metadata.producerToolchain,
     applicationToolchain,
     gates,
+    approved: contract.state === "maintainer-confirmed",
   });
-  assert.equal(evidence.kind, "fixture-candidate-evidence");
+  assert.equal(
+    evidence.kind,
+    contract.state === "maintainer-confirmed"
+      ? "release-candidate-evidence"
+      : "fixture-candidate-evidence",
+  );
   for (const role of packageRoles) {
     const transferRecord = verified.metadata.packages[role];
     assert.deepEqual(
@@ -154,7 +160,11 @@ export async function validateTransferredFixture({
   }
   evidence.transfer = {
     kind: verified.metadata.kind,
-    artifactName: fixtureArtifactName({ sourceCommit, ...execution }),
+    artifactName: archiveTransferArtifactName({
+      contractState: contract.state,
+      sourceCommit,
+      ...execution,
+    }),
     metadataFilename: path.basename(verified.metadataPath),
     metadataDigest: verified.metadataDigest,
     sourceTreeClean,
@@ -197,6 +207,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assert(evidencePath, "--evidence is required");
   assert(stageRoot, "--stage-root is required");
   const contract = await loadReleaseContract(optionValue("--contract"));
+  const approved = process.argv.includes("--approved");
+  assert.equal(
+    approved,
+    contract.state === "maintainer-confirmed",
+    approved
+      ? "approved transfer validation requires a maintainer-confirmed contract"
+      : "maintainer-confirmed transfer validation requires --approved",
+  );
   const [{ stdout: status }, { stdout: commit }, { stdout: npmVersion }] =
     await Promise.all([
       run("git", ["status", "--porcelain"], { cwd: workspaceRoot }),

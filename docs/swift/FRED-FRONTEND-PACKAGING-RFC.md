@@ -1,6 +1,6 @@
 # RFC: Versioned frontend packages for external application integration with FRED
 
-**Status:** Partially implemented — design-token, initial UI, protocol-`"1"` iframe SDK archive foundations, and coordinate-independent release-readiness tooling are implemented; registry decisions, publication, FRED registry adoption, theme/live-locale extensions, catalog expansion, and external adoption remain open
+**Status:** Partially implemented — design-token, initial UI, protocol-`"1"` iframe SDK archive foundations, selected `@fred-oss` prerelease coordinates, and guarded first-release preparation are implemented; publication, enduring ownership/publishing policy, FRED registry adoption, theme/live-locale extensions, catalog expansion, and external adoption remain open
 **Date:** 2026-09-07  
 **Area:** FRED frontend, design system, application integration, package delivery  
 **Scope:** Common frontend integration contract for independently deployed external applications  
@@ -8,7 +8,7 @@
 **Repository location:** `docs/swift/FRED-FRONTEND-PACKAGING-RFC.md`
 **Source baseline:** `ThalesGroup/fred`, branch `swift`, commit [`3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55`](https://github.com/ThalesGroup/fred/commit/3bee57eb90a3b9883fd4224cee6ea3a7d3f73c55). The supplied `fred-swift(4).zip` archive identifies this commit, which matched the GitHub branch when checked on 2026-09-07.
 
-Package names, new exports, and release numbers below are **proposals**, not packages verified to exist on npm. `@fred` is a working scope name; maintainers must confirm an organization-controlled scope before publication.
+The `@fred-oss` scope and three `0.1.0-alpha.1` coordinates below are maintainer-selected release inputs. They are not packages verified to exist on npm, publication evidence, or approval of still-unnamed package API, SDK protocol, release, and enduring publishing owners.
 
 ## 1. Decision proposed
 
@@ -18,9 +18,9 @@ Start with three bounded packages:
 
 | Proposed package      | Responsibility                                                                               | Consumer requirements                            |
 | --------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `@fred/design-tokens` | Existing visual tokens, theme selectors, and optional typography assets                      | CSS; no React dependency                         |
-| `@fred/ui`            | A small, reviewed set of existing presentation components and all their runtime assets       | Supported React and React DOM versions           |
-| `@fred/iframe-sdk`    | Framework-independent client and shared wire definitions for FRED's existing iframe protocol | Browser; no React, Redux, or Keycloak dependency |
+| `@fred-oss/design-tokens` | Existing visual tokens, theme selectors, and optional typography assets                      | CSS; no React dependency                         |
+| `@fred-oss/ui`            | A small, reviewed set of existing presentation components and all their runtime assets       | Supported React and React DOM versions           |
+| `@fred-oss/iframe-sdk`    | Framework-independent client and shared wire definitions for FRED's existing iframe protocol | Browser; no React, Redux, or Keycloak dependency |
 
 FRED must consume the extracted implementations itself. External applications consume published versions without copying FRED files or requiring a sibling FRED checkout.
 
@@ -77,7 +77,7 @@ That earlier RFC explicitly excluded a shared component library from its scope. 
 - Shared package implementations and protocol definitions must not hard-code consumer identities, endpoints, business models, or application-specific branches. Consumer values flow through generic configuration and message fields.
 - Each consumer owns its business API adapter, UI screens, configuration, and package upgrade decisions.
 - A second application must be able to use a different application ID, UI origin, and service upstream through the existing generic registration mechanism. New platform capabilities still require normal contract review.
-- Application independence does not imply universal framework support: `@fred/ui` targets supported React versions, while tokens and the iframe SDK remain framework-independent. Consumers select the packages they need.
+- Application independence does not imply universal framework support: `@fred-oss/ui` targets supported React versions, while tokens and the iframe SDK remain framework-independent. Consumers select the packages they need.
 
 ### Outside this RFC
 
@@ -124,9 +124,9 @@ Preserve existing variable names and values for the first extraction, including 
 Proposed explicit imports:
 
 ```ts
-import "@fred/design-tokens/tokens.css";
-import "@fred/design-tokens/fonts.css";
-import "@fred/ui/styles.css";
+import "@fred-oss/design-tokens/tokens.css";
+import "@fred-oss/design-tokens/fonts.css";
+import "@fred-oss/ui/styles.css";
 ```
 
 - `tokens.css` contains visual variables and theme definitions; it has no shell layout rules or remote font fetches.
@@ -162,7 +162,7 @@ Start with React and React DOM peer ranges `^19.2.4`, matching the inspected FRE
 
 Each application supplies its own React runtime. The FRED parent and an external application iframe can have separate React installations because they are separate documents; the duplicate-runtime risk concerns incompatible React copies within one application. ([React documentation](https://react.dev/warnings/invalid-hook-call-warning))
 
-Use a peer dependency on `@fred/design-tokens` to express a tested compatible range. Consumers install the token package explicitly, preventing an unnoticed second token version. The SDK has no dependency on either UI package.
+Use a peer dependency on `@fred-oss/design-tokens` to express a tested compatible range. Consumers install the token package explicitly, preventing an unnoticed second token version. The SDK has no dependency on either UI package.
 
 ## 7. Iframe SDK contract
 
@@ -183,7 +183,7 @@ The initial SDK must implement the existing message names and serialized shapes:
 These shapes come from the existing implementation, not a new API family. The bounded archive foundation now exposes this public child API:
 
 ```ts
-import { createFredApplicationClient } from "@fred/iframe-sdk";
+import { createFredApplicationClient } from "@fred-oss/iframe-sdk";
 
 const client = createFredApplicationClient({
   hostOrigin: "https://fred.example.com", // deployment-owned public configuration
@@ -302,7 +302,7 @@ The catalog's application version identifies the deployed application. It is nei
 
 Build ESM JavaScript and `.d.ts` declarations for UI and SDK packages. Build compiled CSS and all referenced assets before packing; consumers must not need FRED's Sass setup or source aliases. Vite's library build is a suitable starting point; generate declarations as a separate TypeScript build step and explicitly externalize peers. ([Vite library-mode documentation](https://vite.dev/guide/build.html#library-mode))
 
-Each published manifest must have a bounded `files` list, explicit `exports`, package/repository metadata, README, license and required third-party notices. Export `@fred/iframe-sdk/protocol` separately from its child client. Block deep imports into internal directories. Mark CSS as side-effectful so consumer bundlers retain explicit CSS imports; do not indiscriminately mark the whole UI package `sideEffects: false`. ([npm package.json documentation](https://docs.npmjs.com/cli/v12/configuring-npm/package-json/))
+Each published manifest must have a bounded `files` list, explicit `exports`, package/repository metadata, README, license and required third-party notices. Export `@fred-oss/iframe-sdk/protocol` separately from its child client. Block deep imports into internal directories. Mark CSS as side-effectful so consumer bundlers retain explicit CSS imports; do not indiscriminately mark the whole UI package `sideEffects: false`. ([npm package.json documentation](https://docs.npmjs.com/cli/v12/configuring-npm/package-json/))
 
 No consumer installation step may fetch or copy missing FRED assets. The decisive validation installs the **packed artifacts**, not workspace symlinks, into a consumer with no FRED source available.
 
@@ -312,7 +312,7 @@ Use public npm publication for the open-source packages, under a maintainer-cont
 
 Use a dedicated frontend-package CI workflow, separate from Python package publishing and Docker image releases. Pin a tested Node/npm toolchain for that workflow; the existing frontend image uses Node `22.13.0`, which must not be assumed to include the npm CLI needed for OIDC publishing.
 
-Prefer npm Trusted Publishing from the approved GitHub Actions workflow with provenance, subject to the registry's current toolchain and repository requirements. Confirm scope ownership, initial package creation, maintainers, and publisher configuration before the first release. ([npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/))
+The prepared manual `Publish-frontend-packages.yml` workflow uses the verified `marc.fawaz` organization-owner bootstrap path only for initial package creation, with its temporary token confined to the protected `npm-publish` environment and publication step. It remains disabled by default and blocked while named ownership and later publishing policy are unresolved. After the packages exist, replace that bootstrap step with npm Trusted Publishing from the same reviewed workflow identity; configure direct or staged permission only after maintainers select that policy. ([npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/))
 
 Release steps: build → quality/tests → `npm pack` → isolated consumer checks → publish prereleases → validate registry installation → release approval → stable publication. Publish dependencies before their consumers. Commit standard semver dependencies, not unresolved `workspace:` or local `file:` references, in released manifests.
 
@@ -346,13 +346,13 @@ Each row is a proposed implementation slice, not a claim of completed work or a 
 | 2. Package tokens and initial UI        | Create the producer workspace; extract the selected implementation and complete assets; create an isolated consumer fixture                                                               | Packed artifacts render light/dark correctly with no source checkout                                                                      |
 | 3. Package protocol and child SDK       | Extract shared wire definitions; implement the child client against protocol `"1"`; keep authenticated host adapters internal                                                             | Existing host plus packed SDK passes messaging and API tests                                                                              |
 | 4. Establish release readiness          | Parameterize release coordinates; validate exact candidate archives and integrity; record evidence; prepare strict registry/provenance verification without assuming registry ownership  | Repository tooling is ready for maintainer-confirmed coordinates; no publication or adoption is implied                                   |
-| 5. Publish and verify prereleases        | Confirm scope, owners, bootstrap authority and workflow identity; publish the exact validated bytes in dependency order; verify registry integrity and provenance                          | Genuine registry-installed consumers pass with no local fallback                                                                          |
+| 5. Prepare and publish prereleases       | Record the selected `@fred-oss` coordinates and bootstrap authority; prepare a guarded manual workflow; after remaining owners/policy are confirmed, publish exact validated bytes and verify registry integrity/provenance | Workflow preparation is reviewable now; completion still requires a committed source, protected environment approval, actual publication, and genuine registry-installed consumer evidence |
 | 6. Migrate FRED                          | Commit exact verified dependencies; replace FRED implementations with package imports; retain temporary re-exports only where necessary                                                   | FRED uses published packages; current host/UI behavior remains supported                                                                   |
 | 7. Add synchronized context              | Implement optional theme and live locale updates; update the existing contract and compatibility fixtures                                                                                 | Old/new client and host combinations behave as specified                                                                                  |
 | 8. Validate external adoption           | Audit the pilot application's dependencies/OpenAPI; migrate one real screen; build its own UI image; exercise both hosting modes and a neutral fixture under another application identity | The pilot builds independently; the fixture integrates through the same contract without consumer-specific host or package changes        |
 | 9. Stabilize and remove migration code  | Satisfy the platform acceptance criteria; publish stable packages; remove redundant shared implementations/re-exports and record support policy                                           | One owner per implementation; stable artifacts and documented upgrade path; further consumer migration follows each application's roadmap |
 
-Each adopter inventories its dependencies and confirms React compatibility before installing `@fred/ui`. A representative pilot screen should include a read, a form or mutation, loading/error/empty states, route navigation, and a team switch.
+Each adopter inventories its dependencies and confirms React compatibility before installing `@fred-oss/ui`. A representative pilot screen should include a read, a form or mutation, loading/error/empty states, route navigation, and a team switch.
 
 Each application retains its own business API types and generated client where applicable. Adapt that client's supported transport to the SDK or write a small application-owned API adapter using generated types. Endpoints and business models remain in the consumer repository.
 

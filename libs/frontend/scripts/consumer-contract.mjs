@@ -2,9 +2,9 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const developmentNames = {
-  designTokens: "@fred/design-tokens",
-  ui: "@fred/ui",
-  iframeSdk: "@fred/iframe-sdk",
+  designTokens: "@fred-oss/design-tokens",
+  ui: "@fred-oss/ui",
+  iframeSdk: "@fred-oss/iframe-sdk",
 };
 
 export async function parameterizeConsumerSources(root, contract, roles) {
