@@ -74,6 +74,10 @@ that publish only exact reviewed bytes after explicit approval.
   already-published design-token bytes and provenance, and publishes only the still-absent UI and
   SDK archives from the verified extraction while binding their provenance to the recovery
   workflow's actual `GITHUB_SHA`.
+- Remove the recovery CLI's evaluation cycle by placing reusable recovery plan/evidence
+  validation in an execution-independent module shared by recovery and public-registry entry
+  points; add bounded fresh-process tests for preparation, controlled publication, provenance,
+  invalid inputs, failure propagation, and recovery-aware registry verification.
 
 This change prepares but does not trigger the publishing workflow. It does not create GitHub/npm
 settings, publish or stage packages, claim public-registry success, or migrate FRED or RAGS.

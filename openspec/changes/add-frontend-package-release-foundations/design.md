@@ -492,6 +492,24 @@ published role differs, a missing role appears unexpectedly, or provenance canno
 the recovery stops; maintainers must prepare a newly versioned release rather than weakening or
 relabeling evidence.
 
+The first recovery attempt after the ZIP correction (run `34873471933`) downloaded and
+hash-checked the pinned ZIP, then exited `13` with an unsettled top-level await before producing
+recovery evidence. The recovery entry module was awaiting preparation, preparation dynamically
+imported the registry verifier for real existing-package provenance checks, and that verifier
+statically imported recovery-evidence validation back from the still-evaluating entry module.
+Function-level tests imported an already-evaluated recovery module and replaced the existing-
+package verifier, so they could not expose the evaluation deadlock.
+
+Reusable plan, artifact-identity, workflow-identity, original-evidence, provenance-expectation,
+and recovery-evidence validation now lives in an execution-independent module. Both CLI modules
+import that module directly; the recovery entry retains its prior validation exports for callers
+but is no longer a dependency of the registry verifier. The recovery CLI may therefore complete
+its dynamic verifier import without waiting on itself. Fresh-process tests launch the actual
+recovery and registry-verifier entry points with bounded timeouts, a controlled local TLS registry,
+an external npm command shim, and cryptographically signed controlled provenance. They exercise
+real existing-package verification and module evaluation while remaining incapable of reaching a
+writable registry or producing genuine public-registry evidence.
+
 ## Risks / Trade-offs
 
 - **[A confirmed contract could be mistaken for publication authorization]** → Keep candidate
@@ -529,6 +547,9 @@ relabeling evidence.
 - **[Loose recovery files can diverge from a hash-pinned ZIP]** → Derive the candidate baseline
   from a safe fresh extraction at preparation and publication, compare every transferred copy,
   and publish only from the verified extraction.
+- **[Module tests can miss an entry-point evaluation cycle]** → Keep reusable recovery validation
+  independent of CLI execution and run bounded preparation, publication, and recovery-aware
+  registry-verifier subprocesses in fresh Node processes.
 
 ## Migration Plan
 
@@ -550,7 +571,9 @@ relabeling evidence.
 6. For the recorded partial first release only, merge the reconciliation correction, dispatch
    `recover-bootstrap`, review the pinned original artifact and recovery evidence, and approve
    the protected job only if existing design-token provenance and missing UI/SDK preflight pass.
-   The recovery publishes no design-token command and does not rebuild archives.
+   The recovery publishes no design-token command and does not rebuild archives. Before another
+   dispatch, require the real preparation CLI and recovery-aware registry-verifier entry point to
+   pass the fresh-process module-evaluation regressions.
 7. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
    transfer changes SDK bytes, validate and publish that version before adoption. Plan RAGS
    separately.
