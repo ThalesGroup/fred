@@ -2,8 +2,11 @@
 
 FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
 FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
+RELEASE_CONTRACT ?= release/proposed-release-contract.json
+RELEASE_TRANSFER_ROOT ?= target/release-transfer
+RELEASE_VALIDATION_ROOT ?= target/release-validation
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-candidate release-verify-evidence registry-verify clean
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -75,6 +78,12 @@ fixture-transfer-create: ## Produce the three-archive fixture transfer for this 
 
 fixture-transfer-validate: ## Verify and exercise the received fixture archives
 	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- --transfer $(FIXTURE_TRANSFER_ROOT) --evidence $(FIXTURE_VALIDATION_ROOT)/final-evidence.json --stage-root $(FIXTURE_VALIDATION_ROOT)/staged
+
+release-transfer-create: ## Produce a maintainer-confirmed candidate transfer
+	npm run release:transfer:create -- --contract $(RELEASE_CONTRACT) --output $(RELEASE_TRANSFER_ROOT)
+
+release-transfer-validate: ## Validate candidate bytes under application tooling
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:transfer:validate -- --contract $(RELEASE_CONTRACT) --transfer $(RELEASE_TRANSFER_ROOT) --evidence $(RELEASE_TRANSFER_ROOT)/candidate-evidence.json --stage-root $(RELEASE_VALIDATION_ROOT)/staged
 
 release-candidate: ## Build evidence under an explicitly selected contract
 	npm run release:candidate --

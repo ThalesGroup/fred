@@ -164,6 +164,13 @@ export async function verifyCandidateEvidence(
     assert.equal(evidence.contractState, contract.state);
     assert.equal(evidence.registry, contract.registry);
     assert.deepEqual(evidence.producerToolchain, contract.releaseToolchain);
+    assert.equal(
+      evidence.kind,
+      contract.state === "maintainer-confirmed"
+        ? "release-candidate-evidence"
+        : "fixture-candidate-evidence",
+      "candidate evidence classification differs from release contract state",
+    );
   }
   for (const role of packageRoles) {
     const recorded = evidence.packages?.[role];

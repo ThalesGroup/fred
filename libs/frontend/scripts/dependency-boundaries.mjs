@@ -297,6 +297,12 @@ export function assertRegistryConsumer({
   roles = Object.keys(contract.packages),
 }) {
   const registry = new URL(contract.registry);
+  const approvedByName = new Map(
+    Object.entries(contract.packages).map(([role, selected]) => [
+      selected.name,
+      { role, selected },
+    ]),
+  );
   for (const role of roles) {
     const expected = contract.packages[role];
     assert(expected, `unknown registry consumer package role ${role}`);
@@ -346,6 +352,31 @@ export function assertRegistryConsumer({
       typeof entry?.resolved !== "string" ||
         !isLocalDependencyReference(entry.resolved),
       `registry consumer contains local fallback ${entry.resolved}`,
+    );
+    const packageName = packageNameFromLockPath(lockPath);
+    const approved = approvedByName.get(packageName);
+    if (!approved) continue;
+    const record = evidence.packages?.[approved.role];
+    assert(record, `registry evidence missing ${approved.role}`);
+    assert.equal(
+      entry.version,
+      approved.selected.version,
+      `${packageName} registry graph version differs`,
+    );
+    assert.equal(
+      entry.integrity,
+      record.integrity,
+      `${packageName} registry graph integrity differs`,
+    );
+    assert.equal(
+      typeof entry.resolved,
+      "string",
+      `${packageName} registry graph URL is missing`,
+    );
+    assert.equal(
+      new URL(entry.resolved).origin,
+      registry.origin,
+      `${packageName} registry graph uses unexpected registry`,
     );
   }
 }

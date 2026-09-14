@@ -4,40 +4,59 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  assertExpectedManifest,
   assertProducerLockfile,
   loadReleaseContract,
   validateReleaseContract,
   workspaceRoot,
 } from "./release-contract.mjs";
 
+export function assertSelectedContractState(contract) {
+  assert(
+    ["proposed", "maintainer-confirmed"].includes(contract.state),
+    "selected release contract must be proposed or maintainer-confirmed",
+  );
+  return contract;
+}
+
 export async function checkReleaseContracts() {
   const fixture = await loadReleaseContract();
-  const proposed = validateReleaseContract(
-    JSON.parse(
-      await readFile(
-        path.join(workspaceRoot, "release/proposed-release-contract.json"),
-        "utf8",
+  const selected = assertSelectedContractState(
+    validateReleaseContract(
+      JSON.parse(
+        await readFile(
+          path.join(workspaceRoot, "release/proposed-release-contract.json"),
+          "utf8",
+        ),
       ),
     ),
   );
   assert.equal(fixture.state, "fixture");
-  assert.equal(proposed.state, "proposed");
   const rootManifest = JSON.parse(
     await readFile(path.join(workspaceRoot, "package.json"), "utf8"),
   );
   const lockfile = JSON.parse(
     await readFile(path.join(workspaceRoot, "package-lock.json"), "utf8"),
   );
+  for (const expected of Object.values(selected.packages)) {
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, expected.workspace, "package.json"),
+        "utf8",
+      ),
+    );
+    assertExpectedManifest(manifest, expected);
+  }
   await assertProducerLockfile({
-    contract: fixture,
+    contract: selected,
     rootManifest,
     lockfile,
     root: workspaceRoot,
   });
   return {
     kind: "release-contract-tooling",
-    contracts: [fixture.state, proposed.state],
-    producerMembers: Object.keys(fixture.packages),
+    contracts: [fixture.state, selected.state],
+    producerMembers: Object.keys(selected.packages),
   };
 }
 

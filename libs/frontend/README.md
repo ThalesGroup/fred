@@ -1,8 +1,8 @@
 # FRED frontend package producer
 
 This private npm workspace builds distributable frontend packages from canonical
-FRED sources. It produces the implemented `@fred/design-tokens`, bounded `@fred/ui`, and
-framework-independent `@fred/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
+FRED sources. It produces the implemented `@fred-oss/design-tokens`, bounded `@fred-oss/ui`, and
+framework-independent `@fred-oss/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
 [frontend packaging RFC](../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 
 ## Workspace and publication boundary
@@ -10,7 +10,9 @@ framework-independent `@fred/iframe-sdk` archive foundations; the broader packag
 `private: true` applies to this workspace root and prevents treating its
 orchestration manifest as a package. It does not make workspace members private
 or configure their eventual registry, access policy, version, credentials, or
-publication workflow. This change does not publish anything.
+publication workflow. The prepared manual workflow publishes only after an explicit bootstrap
+choice and a protected GitHub environment approval; no development or pull-request command
+publishes anything.
 
 The members generate disposable output from canonical files under
 `apps/frontend/src/styles/` and `apps/frontend/src/assets/fonts/`. Do not copy
@@ -114,6 +116,7 @@ iframe client contract and its deliberately buffered transport are documented in
 theme/live-locale protocol extensions, registry publication, FRED package consumption,
 and external adopter integration remain outside these archive foundations.
 
-Coordinate-independent release-contract, evidence, and registry-verification tooling is
-documented in [RELEASE.md](RELEASE.md). Its fixture and proposed contracts do not confirm npm
-scope ownership or authorize publication.
+Release-contract, immutable evidence, bootstrap workflow, and registry-verification tooling is
+documented in [RELEASE.md](RELEASE.md). Fixture evidence never authorizes publication, and the
+first-release contract remains proposed until its named ownership and later policy fields are
+complete.

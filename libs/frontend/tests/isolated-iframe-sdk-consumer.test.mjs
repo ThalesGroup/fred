@@ -16,7 +16,7 @@ test("the iframe SDK consumer is neutral and lockfile-pinned", async () => {
 test("the actual iframe SDK archive installs and builds outside FRED", async () => {
   const evidence = await stageIsolatedIframeSdkConsumer();
   assert.deepEqual(evidence.dependencyGraph, {
-    "@fred/iframe-sdk": "0.0.0-development",
+    "@fred-oss/iframe-sdk": "0.1.0-alpha.1",
     typescript: "5.9.3",
     vite: "6.4.3",
   });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { chromium } from "@playwright/test";
@@ -158,6 +158,41 @@ export async function assertBrowserPrerequisites({
       );
     }),
   ]);
+}
+
+export async function assertProvisionedChromium({
+  browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH,
+  browserPath = chromium.executablePath(),
+  baseDirectory = workspaceRoot,
+} = {}) {
+  assert(
+    browsersPath,
+    "PLAYWRIGHT_BROWSERS_PATH is required for pre-provisioned browser validation",
+  );
+  const provisionedRoot = path.resolve(baseDirectory, browsersPath);
+  const executable = path.resolve(browserPath);
+  const provisionedRootReal = await realpath(provisionedRoot).catch(() => {
+    throw new Error(
+      `PLAYWRIGHT_BROWSERS_PATH is missing (${provisionedRoot}); run npm run browser:install during provisioning`,
+    );
+  });
+  const executableReal = await realpath(executable).catch(() => {
+    throw new Error(
+      `Playwright Chromium is missing from PLAYWRIGHT_BROWSERS_PATH (${provisionedRoot}); run npm run browser:install during provisioning`,
+    );
+  });
+  const relative = path.relative(provisionedRootReal, executableReal);
+  assert(
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative),
+    `Playwright Chromium does not resolve from PLAYWRIGHT_BROWSERS_PATH (${provisionedRootReal})`,
+  );
+  const executableStat = await stat(executableReal);
+  assert.equal(
+    executableStat.isFile(),
+    true,
+    `Playwright Chromium is not a file in PLAYWRIGHT_BROWSERS_PATH (${provisionedRootReal})`,
+  );
+  return { browserPath: executableReal, browsersPath: provisionedRootReal };
 }
 
 function assertLocalRequests(observation, allowedOrigins) {

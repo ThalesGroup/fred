@@ -86,7 +86,7 @@ test("UI output is deterministic, scoped, closed, and externalized", async () =>
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   );
   assert.deepEqual(manifest.peerDependencies, {
-    "@fred/design-tokens": "0.0.0-development",
+    "@fred-oss/design-tokens": "^0.1.0-alpha.1",
     react: "^19.2.4",
     "react-dom": "^19.2.4",
   });

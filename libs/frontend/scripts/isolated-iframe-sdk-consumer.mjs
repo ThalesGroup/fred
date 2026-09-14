@@ -85,8 +85,8 @@ export async function assertIframeSdkConsumerFixture(root = fixtureRoot) {
       "src/readonly-declarations.ts",
     ].map((file) => readFile(path.join(root, file), "utf8")),
   );
-  assert(source[0].includes('"@fred/iframe-sdk/protocol"'));
-  assert(source[1].includes('"@fred/iframe-sdk"'));
+  assert(source[0].includes('"@fred-oss/iframe-sdk/protocol"'));
+  assert(source[1].includes('"@fred-oss/iframe-sdk"'));
   assert(source[3].includes("readonly-context-typecheck-only"));
   assert(source[3].includes("readonly-route-typecheck-only"));
   assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 2);
@@ -217,7 +217,9 @@ export async function stageIsolatedIframeSdkConsumer({
       !Object.keys(graph.dependencies ?? {}).some(
         (name) =>
           name === "react" ||
-          (name.startsWith("@fred/") &&
+          (Object.values(contract.packages).some(
+            ({ name: packageName }) => name === packageName,
+          ) &&
             name !== contract.packages.iframeSdk.name),
       ),
     );

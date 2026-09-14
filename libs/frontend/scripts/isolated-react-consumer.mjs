@@ -81,8 +81,8 @@ export async function assertReactConsumerFixture(root = fixtureRoot) {
   );
   const source = await readFile(path.join(root, "src/main.tsx"), "utf8");
   for (const requiredImport of [
-    '"@fred/design-tokens/tokens.css"',
-    '"@fred/ui/styles.css"',
+    '"@fred-oss/design-tokens/tokens.css"',
+    '"@fred-oss/ui/styles.css"',
   ]) {
     assert(
       source.includes(requiredImport),

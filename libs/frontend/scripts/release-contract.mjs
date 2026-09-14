@@ -207,57 +207,113 @@ export function validateReleaseContract(contract) {
     workspaces.add(entry.workspace);
     names.add(entry.name);
   }
+  if (contract.maintainerApproval.bootstrapAuthorityVerified) {
+    const expectedScope = `@${contract.maintainerApproval.scopeOwner}/`;
+    for (const role of packageRoles)
+      assert(
+        contract.packages[role].name.startsWith(expectedScope),
+        `${role} package must belong to the verified npm scope ${expectedScope}`,
+      );
+  }
   if (contract.state === "maintainer-confirmed")
     for (const role of packageRoles)
       assert(
         !/development/i.test(contract.packages[role].version),
         `${role} fixture version cannot confirm a release contract`,
       );
-  if (contract.state !== "proposed") {
-    const requiredManifestFields = {
-      designTokens: [
-        "description",
-        "license",
-        "type",
-        "exports",
-        "files",
-        "sideEffects",
-      ],
-      ui: [
-        "description",
-        "license",
-        "type",
-        "exports",
-        "types",
-        "files",
-        "sideEffects",
-        "peerDependencies",
-      ],
-      iframeSdk: [
-        "description",
-        "license",
-        "type",
-        "exports",
-        "types",
-        "files",
-        "sideEffects",
-      ],
-    };
-    for (const role of packageRoles) {
-      const manifest = contract.packages[role].expectedManifest;
-      for (const field of requiredManifestFields[role])
-        assert(
-          field in manifest,
-          `${role} expectedManifest.${field} is required`,
-        );
-      assertPublishedDependencyReferences(manifest);
-    }
-    const token = contract.packages.designTokens;
-    assert(
-      contract.packages.ui.expectedManifest.peerDependencies?.[token.name],
-      "UI expected manifest must declare the selected design-token peer",
+  const requiredManifestFields = {
+    designTokens: [
+      "description",
+      "license",
+      "type",
+      "repository",
+      "homepage",
+      "bugs",
+      "engines",
+      "exports",
+      "files",
+      "sideEffects",
+      "publishConfig",
+    ],
+    ui: [
+      "description",
+      "license",
+      "type",
+      "repository",
+      "homepage",
+      "bugs",
+      "engines",
+      "exports",
+      "types",
+      "files",
+      "sideEffects",
+      "peerDependencies",
+      "publishConfig",
+    ],
+    iframeSdk: [
+      "description",
+      "license",
+      "type",
+      "repository",
+      "homepage",
+      "bugs",
+      "engines",
+      "exports",
+      "types",
+      "files",
+      "sideEffects",
+      "publishConfig",
+    ],
+  };
+  for (const role of packageRoles) {
+    const manifest = contract.packages[role].expectedManifest;
+    for (const field of requiredManifestFields[role])
+      assert(
+        field in manifest,
+        `${role} expectedManifest.${field} is required`,
+      );
+    assertPublishedDependencyReferences(manifest);
+    assert.deepEqual(
+      manifest.publishConfig,
+      {
+        access: "public",
+        registry: contract.registry,
+        tag: contract.distTag,
+        provenance: true,
+      },
+      `${role} publishConfig differs from release policy`,
     );
   }
+  const token = contract.packages.designTokens;
+  assert(
+    contract.packages.ui.expectedManifest.peerDependencies?.[token.name],
+    "UI expected manifest must declare the selected design-token peer",
+  );
+  return contract;
+}
+
+export function unresolvedMaintainerDecisions(contract) {
+  validateReleaseContract(contract);
+  const unresolved = [];
+  for (const [role, owner] of Object.entries(
+    contract.maintainerApproval.owners,
+  ))
+    if (!owner) unresolved.push(`maintainerApproval.owners.${role}`);
+  if (!contract.maintainerApproval.publishingPolicy)
+    unresolved.push("maintainerApproval.publishingPolicy");
+  return unresolved;
+}
+
+export function assertMaintainerConfirmed(contract) {
+  validateReleaseContract(contract);
+  const unresolved = unresolvedMaintainerDecisions(contract);
+  assert.equal(
+    contract.state,
+    "maintainer-confirmed",
+    `release contract is not maintainer-confirmed${
+      unresolved.length ? `; unresolved: ${unresolved.join(", ")}` : ""
+    }`,
+  );
   return contract;
 }
 

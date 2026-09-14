@@ -1,9 +1,21 @@
 {
-  "name": "@fred/ui",
-  "version": "0.0.0-development",
+  "name": "@fred-oss/ui",
+  "version": "0.1.0-alpha.1",
   "description": "Application-agnostic React component foundations for FRED consumers",
   "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ThalesGroup/fred.git",
+    "directory": "libs/frontend/ui"
+  },
+  "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/ui#readme",
+  "bugs": {
+    "url": "https://github.com/ThalesGroup/fred/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/types/src/index.d.ts",
@@ -24,8 +36,14 @@
     "./dist/styles.css"
   ],
   "peerDependencies": {
-    "@fred/design-tokens": "0.0.0-development",
+    "@fred-oss/design-tokens": "^0.1.0-alpha.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "next",
+    "provenance": true
   }
 }
