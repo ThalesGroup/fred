@@ -2689,6 +2689,10 @@
           "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
           "none": "Aucun tool activé sur cette instance."
         },
+        "modelOverride": {
+          "label": "Surcharge de modèle (optionnel)",
+          "placeholder": "Utiliser le modèle par défaut de l'équipe"
+        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
@@ -2772,7 +2776,8 @@
           "metrics": "Métriques",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
-          "profileAuto": "Automatique"
+          "profileAuto": "Automatique",
+          "modelOverride": "Surcharge de modèle"
         }
       },
       "detail": {
@@ -2816,6 +2821,7 @@
           "author": "Auteur",
           "profile": "Profil de vérifications structurelles",
           "judge": "Juge",
+          "modelOverride": "Surcharge de modèle",
           "team": "Identifiant d'évaluation",
           "created": "Créée le",
           "started": "Démarrée le",
@@ -2838,6 +2844,7 @@
         "downloading": "Préparation…",
         "downloadError": "Échec du téléchargement",
         "latency": "Latence",
+        "actualModel": "Modèle réel",
         "input": "Entrée",
         "expected": "Sortie attendue",
         "actual": "Sortie réelle",

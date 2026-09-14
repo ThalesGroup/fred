@@ -219,6 +219,44 @@ async def _validate_write(
         raise ProfileNotUsableError(team_id=team_id, profile_ids=sorted(not_usable))
 
 
+async def check_profile_usable_for_team(
+    deps: ProductServiceDependencies,
+    *,
+    team_id: TeamId,
+    profile_id: str,
+    source_runtime_ids: set[str],
+) -> None:
+    """Single-profile version of `_validate_write`'s checks: chat-capable,
+    deployment-global across `source_runtime_ids`, and `can_use`-enabled for
+    `team_id`. Kept separate from `_validate_write` (which validates a whole
+    `UpdateTeamRoutingPolicyRequest` and batches its catalog fetch across all
+    referenced profiles) rather than refactored into it, so this one-shot,
+    single-profile caller (`prepare_execution`'s `agent_model_override`)
+    doesn't risk the batched write-path's behavior.
+
+    Raises `UnknownProfileError` or `ProfileNotUsableError` — the same
+    exceptions `_validate_write` raises — rather than a bool, so a bad
+    `agent_model_override` is as diagnosable as a bad routing-policy write.
+    """
+
+    # Lazy import: breaks the product.service <-> routing_policy import cycle,
+    # same reason `_validate_write` imports it lazily below.
+    from control_plane_backend.product.service import _pod_catalog_fetch_scope
+
+    with _pod_catalog_fetch_scope():
+        profile_to_capability = await _profile_to_capability_id_map(deps)
+        universal = await universally_available_chat_model_profile_ids(
+            deps, source_runtime_ids=source_runtime_ids
+        )
+    if profile_id not in profile_to_capability or profile_id not in universal:
+        raise UnknownProfileError(profile_ids=[profile_id])
+    capability_id = profile_to_capability[profile_id]
+    if not await can_team_use_capability(
+        deps.team_dependencies.rebac, team_id, capability_id=capability_id
+    ):
+        raise ProfileNotUsableError(team_id=team_id, profile_ids=[profile_id])
+
+
 async def get_team_routing_policy(
     user: KeycloakUser,
     team_id: TeamId,
