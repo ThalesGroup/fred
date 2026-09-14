@@ -25,7 +25,7 @@ import styles from "./TeamSettingsResponsibilities.module.scss";
 /** The team administrator charter, readable at any time and acceptable while pending. */
 export default function TeamSettingsResponsibilities() {
   const { t, i18n } = useTranslation();
-  const { data: status } = useTeamAdminCharterStatusQuery();
+  const { data: status } = useTeamAdminCharterStatusQuery(undefined, { refetchOnMountOrArgChange: true });
   const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
   const [endReached, setEndReached] = useState(false);
   const handleEndReached = useCallback(() => setEndReached(true), []);

@@ -45,7 +45,11 @@ export default function TeamSettingsPage() {
   // charter holds no admin-only permission but must still reach it.
   const isTeamAdmin =
     !!selectedTeam && "my_relations" in selectedTeam && (selectedTeam.my_relations ?? []).includes("team_admin");
-  const { data: charterStatus } = useTeamAdminCharterStatusQuery(undefined, { skip: !isTeamAdmin });
+  // Refetched on every visit: a promotion made by another admin never reaches this session's cache.
+  const { data: charterStatus } = useTeamAdminCharterStatusQuery(undefined, {
+    skip: !isTeamAdmin,
+    refetchOnMountOrArgChange: true,
+  });
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —

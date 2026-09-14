@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   section: "members" as string,
   relations: [] as string[],
   charterRequired: false,
+  charterQueryOptions: undefined as { skip: boolean; refetchOnMountOrArgChange?: boolean } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -55,9 +56,10 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
-  useTeamAdminCharterStatusQuery: (_arg: unknown, options: { skip: boolean }) => ({
-    data: options.skip ? undefined : { required: h.charterRequired, accepted_at: null },
-  }),
+  useTeamAdminCharterStatusQuery: (_arg: unknown, options: { skip: boolean; refetchOnMountOrArgChange?: boolean }) => {
+    h.charterQueryOptions = options;
+    return { data: options.skip ? undefined : { required: h.charterRequired, accepted_at: null } };
+  },
 }));
 
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx", () => ({
@@ -126,6 +128,12 @@ describe("TeamSettingsPage responsibilities", () => {
     expect(container.textContent).toContain("rework.teamAdminCharter.pendingNotice");
     expect(container.textContent).toContain("rework.teamAdminCharter.reviewCharter");
     expect(container.textContent).toContain("members-section");
+  });
+
+  it("reads the charter status again on every visit", () => {
+    render("members", ["team_admin"]);
+
+    expect(h.charterQueryOptions).toEqual({ skip: false, refetchOnMountOrArgChange: true });
   });
 
   it("shows no notice once nothing is pending", () => {

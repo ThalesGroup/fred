@@ -34,5 +34,5 @@
 ## 6. Docs and handoff
 
 - [x] 6.1 Add a dated contract section to `CONTROL-PLANE-PRODUCT-CONTRACT.md` (endpoints, 403 detail, gated permissions), a paragraph in the team admin section of `REBAC.md` (gate, the two functions, the routing read exception), and a charter section in `TERMS_OF_USE.md` (setting, theme files, rollout order); verify relative links resolve
-- [ ] 6.2 Run `make code-quality` and `make test` in `apps/control-plane-backend` and `apps/frontend`, the `fred-performance-reviewer` skill on the gate, and `/code-review` on the diff; verify all green and findings addressed
+- [x] 6.2 Run `make code-quality` and `make test` in `apps/control-plane-backend` and `apps/frontend`, the `fred-performance-reviewer` skill on the gate, and `/code-review` on the diff; verify all green and findings addressed
 - [ ] 6.3 Open a draft PR against `swift` linking #2658; after merge, `openspec archive add-team-admin-charter` and close #2658
