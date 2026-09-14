@@ -12,13 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
+import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import Button from "@shared/atoms/Button/Button.tsx";
+import { useTeamAdminCharterStatusQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import styles from "./TeamSettingsPage.module.scss";
@@ -35,6 +40,12 @@ export default function TeamSettingsPage() {
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
+  const { t } = useTranslation();
+  // From the relations, not the permissions: an admin who has not accepted the
+  // charter holds no admin-only permission but must still reach it.
+  const isTeamAdmin =
+    !!selectedTeam && "my_relations" in selectedTeam && (selectedTeam.my_relations ?? []).includes("team_admin");
+  const { data: charterStatus } = useTeamAdminCharterStatusQuery(undefined, { skip: !isTeamAdmin });
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —
@@ -53,6 +64,7 @@ export default function TeamSettingsPage() {
   // sections the sidebar hides for them via a direct/refreshed URL.
   const sectionAllowed =
     section === "members" ||
+    (section === "responsibilities" && isTeamAdmin) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
     (section === "evaluations" && canUpdateAgents) ||
     ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
@@ -78,10 +90,26 @@ export default function TeamSettingsPage() {
         // TEAM-05, #2118: team_editor writes, team_admin reads (hard
         // cross-write rule) — canUpdateResources is team_editor-only.
         return <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateResources} />;
+      case "responsibilities":
+        return <TeamSettingsResponsibilities />;
       default:
         return <Navigate to={`/team/${teamId}/settings/members`} replace />;
     }
   };
 
-  return <div className={styles.teamSettingsPage}>{renderSection()}</div>;
+  return (
+    <div className={styles.teamSettingsPage}>
+      {charterStatus?.required && section !== "responsibilities" && (
+        <div className={styles.charterNotice}>
+          <ServiceNotice title={t("rework.teamAdminCharter.pendingNotice")} />
+          <Link to={`/team/${teamId}/settings/responsibilities`}>
+            <Button color="primary" variant="text" size="medium">
+              {t("rework.teamAdminCharter.reviewCharter")}
+            </Button>
+          </Link>
+        </div>
+      )}
+      {renderSection()}
+    </div>
+  );
 }

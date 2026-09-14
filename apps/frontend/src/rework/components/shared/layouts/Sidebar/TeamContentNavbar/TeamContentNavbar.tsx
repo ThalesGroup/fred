@@ -221,6 +221,16 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/parameters` },
     });
   }
+  // From the relations, not the permissions: accepting the charter is what turns
+  // an admin's admin-only permissions on, so it must be reachable before that.
+  if ((selectedTeam?.my_relations ?? []).includes("team_admin")) {
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.responsibilities"),
+      icon: { category: "outlined", type: "admin_panel_settings", filled: false },
+      linkProps: { to: `${settingsBase}/responsibilities` },
+    });
+  }
   if (canSeeActivity) {
     // Same "build" icon as the platform admin Tasks entry — one shared surface,
     // identical ergonomy at both levels (OPS-04 §3.4).

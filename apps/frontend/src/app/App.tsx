@@ -24,6 +24,7 @@ import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
+import TeamAdminCharterPrompt from "@shared/organisms/TeamAdminCharterPrompt/TeamAdminCharterPrompt.tsx";
 import styles from "./App.module.css";
 
 const LoadingScreen = ({
@@ -112,6 +113,7 @@ function FredUiContent() {
                 <ConfirmationDialogProvider>
                   <ToastProvider>
                     <RouterProvider router={router} />
+                    <TeamAdminCharterPrompt />
                   </ToastProvider>
                 </ConfirmationDialogProvider>
               </BootstrapGuard>

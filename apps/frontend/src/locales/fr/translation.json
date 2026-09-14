@@ -2344,6 +2344,15 @@
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
     },
+    "teamAdminCharter": {
+      "accept": "Accepter",
+      "acceptedOn": "Vous avez accepté cette charte le {{date}}.",
+      "later": "Plus tard",
+      "lockInformation": "Lisez la charte jusqu'au bout avant de pouvoir l'accepter",
+      "pendingNotice": "Vos droits d'administration sont inactifs tant que vous n'avez pas accepté la charte de l'administrateur d'équipe.",
+      "reviewCharter": "Lire la charte",
+      "title": "Charte de l'administrateur d'équipe"
+    },
     "teamSettings": {
       "members": {
         "addMembersDialog": {
@@ -2392,6 +2401,7 @@
         "activity": "Activité",
         "evaluations": "Évaluations",
         "usage": "Consommation",
+        "responsibilities": "Responsabilités",
         "routing": "Routage des modèles",
         "retention": "Rétention"
       },

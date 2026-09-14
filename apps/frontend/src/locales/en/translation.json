@@ -2344,6 +2344,15 @@
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
     },
+    "teamAdminCharter": {
+      "accept": "Accept",
+      "acceptedOn": "You accepted this charter on {{date}}.",
+      "later": "Later",
+      "lockInformation": "Read the charter to the end before you can accept it",
+      "pendingNotice": "Your administrator rights are inactive until you accept the team administrator charter.",
+      "reviewCharter": "Review the charter",
+      "title": "Team administrator charter"
+    },
     "teamSettings": {
       "members": {
         "addMembersDialog": {
@@ -2392,6 +2401,7 @@
         "activity": "Activity",
         "evaluations": "Evaluations",
         "usage": "Usage",
+        "responsibilities": "Responsibilities",
         "routing": "Model routing",
         "retention": "Retention"
       },
