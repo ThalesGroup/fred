@@ -48,7 +48,9 @@ owner role in npm organization `fred-oss`, confirmed `marc.fawaz` for all four p
 protocol, release, and enduring npm-publishing owner roles, and selected direct Trusted
 Publishing for subsequent releases. The GitHub release-reviewer identity is the distinct account
 `marcfawaz`. The temporary granular token remains outside the repository and is neither an input
-to builds/tests nor inspected by this change. No publication has occurred.
+to builds/tests nor inspected by this change. Separately authorized bootstrap and recovery runs
+have now published all three selected coordinates; genuine all-package registry verification
+remains incomplete.
 
 A repository administrator reports that the `npm-publish` environment is configured. A supplied
 screenshot supports required reviewer `marcfawaz`, **Prevent self-review** disabled,
@@ -76,7 +78,7 @@ allowing that self-review preserves rather than removes the required environment
 **Non-Goals:**
 
 - Creating npm organizations/packages, changing registry access, authenticating locally,
-  triggering the prepared workflow, or publishing any version.
+  triggering another workflow, or publishing another version.
 - Migrating FRED to registry dependencies, transferring canonical SDK protocol ownership,
   removing temporary re-exports, or changing protocol `"1"`.
 - Changing public package exports, expanding UI components, changing canonical assets,
@@ -510,6 +512,37 @@ an external npm command shim, and cryptographically signed controlled provenance
 real existing-package verification and module evaluation while remaining incapable of reaching a
 writable registry or producing genuine public-registry evidence.
 
+### 12. Continue verification from retained publication evidence
+
+The completed recovery artifact is a second immutable trust boundary. A reviewed continuation
+contract pins artifact `10363547296`, its source commit/run/attempt/name and ZIP SHA-256, the
+nested original artifact identity, the historical recovery execution, and the per-package source
+commits. A `verify-existing` workflow choice retrieves that artifact by ID with read-only Actions
+permission, validates GitHub metadata and the outer ZIP, validates the nested original ZIP, and
+compares every copied archive and evidence file with both containers. It never rebuilds a
+candidate or rewrites original candidate/recovery evidence.
+
+Historical publication and current verification are independent identities. Recovery evidence is
+validated against the pinned historical execution: design tokens require `f49f2439…`, while UI
+and SDK require `a1fedc66…`. Separate preparation evidence records the current workflow's actual
+commit, run, and attempt, and final evidence retains both identities. GitHub environment values
+are read, never replaced to impersonate the publication run.
+
+npm's exact-version endpoint remains authoritative for coordinate and SHA-512 admission. Because
+`npm pack` also consults package-wide metadata, the verifier performs a bounded read-only
+package-wide readiness check before invoking npm. Only an actual package-wide HTTP 404 is retried;
+authentication, authorization, redirects, malformed data, or identity/integrity drift fail
+immediately. The subsequent npm install remains exact and registry-only, and signature audit,
+Sigstore verification, expected provenance matching, clean consumers, browser smoke, and host
+compatibility are unchanged.
+
+The new choice explicitly excludes candidate generation, candidate compatibility transfer, and
+both publication jobs. It uses neither the `npm-publish` environment, bootstrap secret, nor
+`id-token: write`. Preparation may install pinned tooling and verification separately provisions
+application dependencies and Chromium. Final evidence is created and uploaded only after the
+complete verifier returns successfully, making the same retained artifact independently
+rerunnable until it expires.
+
 ## Risks / Trade-offs
 
 - **[A confirmed contract could be mistaken for publication authorization]** → Keep candidate
@@ -541,9 +574,10 @@ writable registry or producing genuine public-registry evidence.
   peer is unavailable; supersede published mistakes with new versions rather than overwrite. If
   an original candidate remains intact and a subset is already published with matching bytes and
   provenance, the reviewed partial-recovery path may publish only the still-absent coordinates.
-- **[A package-wide registry lookup can hide an exact version]** → Query and validate the bounded
-  exact-version HTTP endpoint directly; treat only its real 404 as absence and reject redirects or
-  every other response failure.
+- **[A package-wide registry lookup can lag behind an exact version]** → Admit identity only from
+  the bounded exact-version endpoint, then retry only package-wide 404 reads before npm transport;
+  reject authentication, malformed data, identity/integrity drift, and every other response
+  failure immediately.
 - **[Loose recovery files can diverge from a hash-pinned ZIP]** → Derive the candidate baseline
   from a safe fresh extraction at preparation and publication, compare every transferred copy,
   and publish only from the verified extraction.
@@ -574,16 +608,18 @@ writable registry or producing genuine public-registry evidence.
    The recovery publishes no design-token command and does not rebuild archives. Before another
    dispatch, require the real preparation CLI and recovery-aware registry-verifier entry point to
    pass the fresh-process module-evaluation regressions.
-7. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
+7. After all three coordinates exist, merge the verification continuation, dispatch only
+   `verify-existing`, and retain genuine all-package registry evidence. Do not rerun either
+   bootstrap path or rebuild the original candidate.
+8. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
    transfer changes SDK bytes, validate and publish that version before adoption. Plan RAGS
    separately.
 
-Rollback during this change is deletion of disposable candidate output or reversion of the
-repository changes; no registry state exists to roll back.
+Rollback of the continuation is deletion of disposable verification output or reversion of its
+repository changes. Published versions remain immutable and are not changed by this path.
 
 ## Open Questions
 
-No release-contract ownership or publishing-policy decision remains open. Approved candidate
-production, protected-environment execution, initial publication, the later OIDC workflow
-transition, and genuine registry verification remain unexecuted operational gates rather than
-contract decisions.
+No release-contract ownership or publishing-policy decision remains open. Initial publication is
+complete. The later OIDC workflow transition and genuine all-package registry verification remain
+unexecuted operational gates rather than contract decisions.

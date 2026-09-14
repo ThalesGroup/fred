@@ -52,6 +52,7 @@
     "release:verify-evidence": "node scripts/release-evidence.mjs",
     "release:publish-bootstrap": "node scripts/bootstrap-publish.mjs",
     "release:bootstrap-recovery": "node scripts/bootstrap-recovery.mjs",
+    "registry:prepare-existing": "node scripts/registry-verification-continuation.mjs",
     "registry:verify": "node scripts/registry-verifier.mjs"
   },
   "devDependencies": {
