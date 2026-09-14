@@ -1,0 +1,71 @@
+/* Turns are separated by a rule and the widest gap: a turn is the unit the
+   reader scans for, its question and blocks read as one group beneath it. */
+.turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.turn + .turn {
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-l);
+}
+
+.question {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  overflow-wrap: anywhere;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  color: var(--on-surface);
+}
+
+.duration {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A quiet aside between two blocks: what ran, not a step to read. */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.toolLabels {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

@@ -1106,6 +1106,35 @@ single push-drawer slot.
 
 ---
 
+### `FullReasoningPanel` (2026-09-14, #2672)
+
+**Location:** `src/rework/components/shared/molecules/FullReasoningPanel/`
+
+**Status:** `Functional`
+
+Expert view of the agent's whole reasoning across the conversation, in one
+block. The chain of thought stays the condensed view: each `ReasoningRow` is
+clamped to three lines and trimmed of what earlier rows said. This panel is the
+opposite, every reasoning block (`thought`, `plan`, `observation`) untrimmed and
+markdown-rendered, grouped by turn under the user's question, with the block's
+duration. The tools run _between_ two blocks collapse into one quiet marker
+(`build` glyph, humanized labels): they are why the reasoning resumed. Tools
+before the first block or after the last are left out. The header's copy action
+exports the same content as markdown (`## question`, blocks, `_→ tools_`).
+
+**Launcher.** At the rail's foot (expert tooling), above the admin-only raw
+message dump, with the glyph a reasoning row carries (`settings`, **filled**:
+`ChatLauncher.iconFilled`) and the rail's usual tooltip. **Every user** gets
+it, not only admins: each block is already readable one at a time in
+`TraceDetailDrawer`, so restricting the panel would protect nothing.
+
+**Streaming.** `fullReasoning()` runs only while the panel is open, since
+`messages` changes on every token. Each block is a memoized component, so a
+token re-renders the block it lands in, not the markdown of the whole
+conversation.
+
+---
+
 ### Prompt library → insert into composer (`PromptSelectionChatPanel`, 2026-09-04)
 
 **Location:** `src/rework/components/shared/molecules/PromptSelectionChatPanel/`,

@@ -845,7 +845,7 @@ function isStepEntry(entry: TraceEntry): boolean {
   return entry.kind === "combo" || entry.message.channel === "tool_result";
 }
 
-function isReasoningEntry(entry: TraceEntry): boolean {
+export function isReasoningEntry(entry: TraceEntry): boolean {
   if (entry.kind !== "solo") return false;
   const channel = entry.message.channel;
   return channel === "thought" || channel === "plan" || channel === "observation";

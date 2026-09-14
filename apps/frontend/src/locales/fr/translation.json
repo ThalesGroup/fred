@@ -420,6 +420,12 @@
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
     },
+    "fullReasoning": {
+      "title": "Raisonnement complet",
+      "copy": "Copier le raisonnement complet",
+      "copied": "Copié",
+      "empty": "L'agent n'a pas encore raisonné dans cette conversation."
+    },
     "debugRaw": {
       "title": "Débogage — messages bruts",
       "scopeAria": "Portée des messages",

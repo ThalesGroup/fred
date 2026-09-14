@@ -420,6 +420,12 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "fullReasoning": {
+      "title": "Full reasoning",
+      "copy": "Copy the full reasoning",
+      "copied": "Copied",
+      "empty": "The agent has not reasoned in this conversation yet."
+    },
     "debugRaw": {
       "title": "Debug — raw messages",
       "scopeAria": "Message scope",
