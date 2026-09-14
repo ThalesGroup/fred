@@ -171,6 +171,12 @@ class TeamPermission(str, Enum):
     # agent-specific permission above.
     CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
 
+    # The team's Knowledge Bases and the folders they fill. Separate from
+    # CAN_READ for the same reason as the two above: a PUBLIC team carries
+    # `public`, and a source's declared fields say what it expects and which
+    # values are secret.
+    CAN_USE_TEAM_KNOWLEDGE_BASES = "can_use_team_knowledge_bases"
+
     # Box-entry gate for the team's filesystem (`/teams/{id}/...`). Separate from
     # CAN_READ on purpose: a PUBLIC team carries `public`, so CAN_READ would let
     # any connected user list and read that team's files.

@@ -153,6 +153,14 @@ type team
     # from agent access.
     define can_use_team_applications: team_member
 
+    # Can see the team's Knowledge Bases: which ones it may synchronize a
+    # folder from, the fields they declare, and the synchronized folders it
+    # holds.
+    # -> must be member; reusing `can_read` would let any connected user read
+    # a PUBLIC team's sources — and a source's declared fields name what it
+    # expects, down to which of them are secret
+    define can_use_team_knowledge_bases: team_member
+
     # Can enter the team's filesystem box (/teams/{id}/... in the virtual FS)
     # -> must be member; reusing `can_read` would turn "listed in the
     # marketplace" into "may read this team's files" for every PUBLIC team

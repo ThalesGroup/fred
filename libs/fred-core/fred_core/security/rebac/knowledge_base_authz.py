@@ -47,6 +47,7 @@ __all__ = [
     "knowledge_base_definition_ref",
     "knowledge_base_library_grant",
     "knowledge_base_name_from_catalog_id",
+    "usable_knowledge_base_ids",
 ]
 
 
@@ -101,16 +102,36 @@ async def can_team_use_knowledge_base(
     """
 
     team_ref, context = team_subject_and_context(team_id)
-    allowed = await rebac.has_permission(
+    return await rebac.has_permission(
         team_ref,
         KnowledgeBaseDefinitionPermission.CAN_USE,
         knowledge_base_definition_ref(definition_id),
         contextual_relations=context,
         consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
-    if isinstance(allowed, RebacDisabledResult):
-        return True
-    return bool(allowed)
+
+
+async def usable_knowledge_base_ids(
+    rebac: RebacEngine, team_id: str
+) -> set[str] | None:
+    """Return the definitions one team may use, in a single question.
+
+    Asking `can_team_use_knowledge_base` once per published definition is the
+    shape that made listing capabilities slow; a listing must not pay one round
+    trip per row. ``None`` retains the established disabled-ReBAC signal.
+    """
+
+    team_ref, context = team_subject_and_context(team_id)
+    refs = await rebac.lookup_resources(
+        team_ref,
+        KnowledgeBaseDefinitionPermission.CAN_USE,
+        Resource.KNOWLEDGE_BASE_DEFINITION,
+        contextual_relations=context,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+    )
+    if isinstance(refs, RebacDisabledResult):
+        return None
+    return {ref.id for ref in refs}
 
 
 def knowledge_base_library_grant(subject: str, library_id: str) -> Relation:

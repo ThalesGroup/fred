@@ -734,37 +734,32 @@ operations:
     method: GET
     path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/fields
     review_status: approved
-    required_permission: team.can_read + knowledge_base_definition.can_use # The declared fields an instance form renders. Served only to a member of a team the definition is enabled for: a declaration names what a source expects, which is a hint about somebody's infrastructure. Read from the stored declaration, so it renders whether or not the definition's pod is running.
+    required_permission: team.can_use_team_knowledge_bases + knowledge_base_definition.can_use # The declared fields an instance form renders. DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a declaration to non-members — and a declaration names what a source expects, down to which of its fields are secret. Read from the stored declaration, so it renders whether or not the definition's pod is running.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases # Which Knowledge Bases a team may synchronize a folder from, to a member of that team. DELIBERATELY not can_read, for the reason above.
   - service: control-plane
     method: GET
     path: /control-plane/v1/knowledge-bases/instances
     review_status: approved
-    required_permission: team.can_read # Synchronized folders of one team, to a member of that team. An instance is not an authorization object of its own — the definition is, and everything an instance holds belongs to the team that created it.
+    required_permission: team.can_use_team_knowledge_bases # Synchronized folders of one team, to a member of that team. DELIBERATELY not can_read: on a team flagged public it would show every signed-in user which sources that team draws from. An instance is not an authorization object of its own — the definition is, and everything an instance holds belongs to the team that created it.
   - service: control-plane
     method: POST
     path: /control-plane/v1/knowledge-bases/instances
     review_status: approved
-    required_permission: team.can_read + knowledge_base_definition.can_use + tag.create # Creating a folder that fills itself. Team membership and enablement are checked here; the right to add a folder to this team is checked by knowledge-flow's own folder endpoint, which this route calls with the caller's own token rather than a service identity. The pod's `editor` grant over the new library is written as part of the same transaction and is never broader than that one library.
+    required_permission: team.can_use_team_knowledge_bases + knowledge_base_definition.can_use + tag.create # Creating a folder that fills itself. Team membership and enablement are checked here; the right to add a folder to this team is checked by knowledge-flow's own folder endpoint, which this route calls with the caller's own token rather than a service identity. The pod's `editor` grant over the new library is written as part of the same transaction and is never broader than that one library.
   - service: control-plane
     method: GET
     path: /control-plane/v1/knowledge-bases/instances/{instance_id}
     review_status: approved
-    required_permission: team.can_read # Scoped to the instance's own team. A non-member is answered not-found rather than forbidden: whether a team holds an instance is itself the team's business.
-  - service: control-plane
-    method: PUT
-    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
-    review_status: approved
-    required_permission: team.can_read # Changes the cadence and the author-declared configuration, never the library or the definition. Submitted values pass the same strict validation applied again before a handler is invoked.
+    required_permission: team.can_use_team_knowledge_bases # Scoped to the instance's own team. A non-member is answered not-found rather than forbidden: whether a team holds an instance is itself the team's business.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/knowledge-bases/instances/{instance_id}
     review_status: approved
-    required_permission: team.can_read + tag.delete # Undoes the creation in reverse: cadence, grant, library, row. The library deletion goes through knowledge-flow with the caller's own token, so the right to delete the folder is checked there, and its existing cascade takes the documents with it.
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/knowledge-bases/instances/{instance_id}/runs
-    review_status: approved
-    required_permission: team.can_read # Runs of one instance, to a member of its team. Each run's state is read from the workflow engine rather than stored, so a pod killed mid-run cannot leave one looking unfinished.
+    required_permission: team.can_use_team_knowledge_bases + tag.delete # Undoes the creation in reverse: cadence, grant, library, row. The library deletion goes through knowledge-flow with the caller's own token, so the right to delete the folder is checked there — that is where the destructive authority is verified — and its existing cascade takes the documents with it.
   - service: control-plane
     method: GET
     path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/instances/{instance_id}/runs/{run_id}/context
