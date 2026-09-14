@@ -2260,15 +2260,16 @@
       },
       "grant": {
         "title": "Attribuer un rôle",
-        "userLabel": "Utilisateur",
-        "userPlaceholder": "Rechercher un utilisateur",
-        "clearSelection": "Effacer la sélection",
+        "userLabel": "Utilisateurs",
+        "userPlaceholder": "Rechercher et ajouter des utilisateurs",
+        "removeUser": "Retirer {{user}}",
         "roleLabel": "Rôle",
         "rootOnlyHint": "Seul l'admin principal peut nommer ou révoquer des admins plateforme.",
         "submit": "Attribuer",
-        "successSummary": "{{role}} attribué à {{user}}",
+        "successSummary_one": "{{role}} attribué à {{user}}",
+        "successSummary_other": "{{role}} attribué à {{count}} utilisateurs",
         "errors": {
-          "summary": "Impossible d'attribuer le rôle",
+          "summary": "Impossible d'attribuer le rôle à {{users}}",
           "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
           "forbiddenDetail": "Seul l'admin principal peut gérer les admins plateforme.",
           "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."

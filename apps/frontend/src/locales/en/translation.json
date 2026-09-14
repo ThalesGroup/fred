@@ -2260,15 +2260,16 @@
       },
       "grant": {
         "title": "Grant a role",
-        "userLabel": "User",
-        "userPlaceholder": "Search for a user",
-        "clearSelection": "Clear selected user",
+        "userLabel": "Users",
+        "userPlaceholder": "Search and add users",
+        "removeUser": "Remove {{user}}",
         "roleLabel": "Role",
         "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
         "submit": "Grant role",
-        "successSummary": "{{role}} granted to {{user}}",
+        "successSummary_one": "{{role}} granted to {{user}}",
+        "successSummary_other": "{{role}} granted to {{count}} users",
         "errors": {
-          "summary": "Could not grant the role",
+          "summary": "Could not grant the role to {{users}}",
           "fallbackDetail": "An unexpected error occurred while granting the role.",
           "forbiddenDetail": "Only the primary admin can manage platform admins.",
           "conflictDetail": "Root bootstrap has never run on this platform."
