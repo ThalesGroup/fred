@@ -17,19 +17,16 @@
   padding-top: var(--spacing-l);
 }
 
-/* The user's message, styled apart from the agent's reasoning below it. */
+/* The user's message in full, line breaks kept, styled apart from the agent's
+   reasoning below it. */
 .question {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
   margin: 0;
   border-radius: var(--radius-m);
   background: var(--secondary-container);
   padding: var(--spacing-s) var(--spacing-m);
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
   color: var(--on-secondary-container);
   font: var(--font-body-medium);
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
