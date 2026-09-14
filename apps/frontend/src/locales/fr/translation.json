@@ -3233,6 +3233,18 @@
         "message": "{{name}} et tous ses documents seront supprimés. C'est irréversible.",
         "confirm": "Supprimer",
         "cancel": "Annuler"
+      },
+      "documents": {
+        "back": "Bases de connaissance",
+        "name": "Document",
+        "size": "Taille",
+        "added": "Ajouté le",
+        "empty": "Cette base de connaissance ne contient encore aucun document",
+        "loadFailed": "Impossible de charger les documents",
+        "unavailable": {
+          "title": "Base de connaissance introuvable",
+          "description": "Elle a peut-être été supprimée, ou appartient à une autre équipe."
+        }
       }
     }
   },

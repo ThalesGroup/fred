@@ -3233,6 +3233,18 @@
         "message": "{{name}} and every document it holds will be deleted. This cannot be undone.",
         "confirm": "Delete",
         "cancel": "Cancel"
+      },
+      "documents": {
+        "back": "Knowledge bases",
+        "name": "Document",
+        "size": "Size",
+        "added": "Added",
+        "empty": "This knowledge base holds no document yet",
+        "loadFailed": "Could not load the documents",
+        "unavailable": {
+          "title": "Knowledge base not found",
+          "description": "It may have been deleted, or belong to another team."
+        }
       }
     }
   },

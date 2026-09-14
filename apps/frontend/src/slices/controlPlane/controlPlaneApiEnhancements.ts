@@ -506,6 +506,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 export const {
   // A team's Knowledge Bases: what fills a library, and how often.
   useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,
   useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation: useCreateKnowledgeBaseMutation,
   useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation:
     useDeleteKnowledgeBaseMutation,
