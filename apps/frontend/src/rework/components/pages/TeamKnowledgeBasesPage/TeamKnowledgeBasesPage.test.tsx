@@ -53,6 +53,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => 
   }),
   useDeleteKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
   useKnowledgeBaseFieldsQuery: () => ({ data: probe.fields }),
+  // Reached through the creation modal this page mounts, closed here.
+  useKnowledgeBaseDefinitionsQuery: () => ({ data: [], isLoading: false, isError: false }),
+  useCreateKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({

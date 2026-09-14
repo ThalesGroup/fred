@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import KnowledgeBaseCard from "@shared/organisms/KnowledgeBaseCard/KnowledgeBaseCard.tsx";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -24,6 +26,7 @@ import {
   useKnowledgeBasesQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { KnowledgeBaseInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import KnowledgeBaseFormModal from "./KnowledgeBaseFormModal/KnowledgeBaseFormModal.tsx";
 import styles from "./TeamKnowledgeBasesPage.module.css";
 
 /** Where a team's documents come from, one card per base.
@@ -40,6 +43,7 @@ export default function TeamKnowledgeBasesPage() {
 
   const { data: instances, isLoading, isError } = useKnowledgeBasesQuery({ teamId: teamId ?? "" }, { skip: !teamId });
   const [deleteKnowledgeBase] = useDeleteKnowledgeBaseMutation();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const handleDelete = (instance: KnowledgeBaseInstanceSummary) => {
     showConfirmationDialog({
@@ -64,6 +68,15 @@ export default function TeamKnowledgeBasesPage() {
     <div className={styles.page}>
       <div className={styles.title}>
         <span className={styles.titleText}>{t("rework.knowledgeBases.title")}</span>
+        <Button
+          color={"primary"}
+          variant={"filled"}
+          size={"medium"}
+          icon={{ category: "outlined", type: "add" }}
+          onClick={() => setIsCreateOpen(true)}
+        >
+          {t("rework.knowledgeBases.create")}
+        </Button>
       </div>
 
       {isLoading ? (
@@ -93,6 +106,8 @@ export default function TeamKnowledgeBasesPage() {
           ))}
         </div>
       )}
+
+      <KnowledgeBaseFormModal open={isCreateOpen} teamId={teamId ?? ""} onClose={() => setIsCreateOpen(false)} />
     </div>
   );
 }

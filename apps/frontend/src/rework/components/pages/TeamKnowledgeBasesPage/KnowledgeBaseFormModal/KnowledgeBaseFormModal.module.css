@@ -1,0 +1,94 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Mirrors the ConfirmationDialog shell so every centred modal looks identical. */
+.overlay {
+  display: flex;
+  position: fixed;
+  justify-content: center;
+  align-items: center;
+  z-index: 1300;
+  inset: 0;
+  background-color: var(--scrim);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-l);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-high);
+  width: min(440px, 90vw);
+  color: var(--on-surface);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  border-top: 1px solid var(--outline-retreat);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+/* The shell is as tall as the fields an author declared, which nothing here can
+   bound. Cap it and scroll the body so the actions stay reachable. */
+.dialog {
+  max-height: min(90vh, 100%);
+}
+
+.body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+/* Two fieldsets so the settings Fred acts on stay visibly apart from the ones
+   it only carries to the source. The select is the shared molecule, so nothing
+   here restyles a control. */
+.zone {
+  margin: 0;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  padding: 0 var(--spacing-s) var(--spacing-s);
+}
+
+.zoneLegend {
+  padding: 0 var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}

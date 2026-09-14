@@ -3242,6 +3242,22 @@
           "title": "Base de connaissance introuvable",
           "description": "Elle a peut-être été supprimée, ou appartient à une autre équipe."
         }
+      },
+      "create": "Ajouter une base",
+      "form": {
+        "title": "Nouvelle base de connaissance",
+        "name": "Nom",
+        "namePlaceholder": "ex. Manuel de l'équipe",
+        "synchronizedBy": "Synchronisée par",
+        "pickOne": "Choisissez une source",
+        "noDefinitions": "Aucune base de connaissance activée pour cette équipe",
+        "definitionsLoading": "Chargement…",
+        "definitionsFailed": "Impossible de charger la liste",
+        "zoneFred": "Fréquence d'exécution",
+        "zoneSource": "Provenance des documents",
+        "submit": "Créer",
+        "created": "{{name}} créée",
+        "createFailed": "Impossible de créer {{name}}"
       }
     }
   },

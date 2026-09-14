@@ -3242,6 +3242,22 @@
           "title": "Knowledge base not found",
           "description": "It may have been deleted, or belong to another team."
         }
+      },
+      "create": "Add knowledge base",
+      "form": {
+        "title": "New knowledge base",
+        "name": "Name",
+        "namePlaceholder": "e.g. Team handbook",
+        "synchronizedBy": "Synchronized by",
+        "pickOne": "Choose a source",
+        "noDefinitions": "No knowledge base is enabled for this team",
+        "definitionsLoading": "Loading…",
+        "definitionsFailed": "Could not load the list",
+        "zoneFred": "How often it runs",
+        "zoneSource": "Where its documents come from",
+        "submit": "Create",
+        "created": "{{name}} created",
+        "createFailed": "Could not create {{name}}"
       }
     }
   },
