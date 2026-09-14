@@ -17,15 +17,19 @@
   padding-top: var(--spacing-l);
 }
 
+/* The user's message, styled apart from the agent's reasoning below it. */
 .question {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   margin: 0;
+  border-radius: var(--radius-m);
+  background: var(--secondary-container);
+  padding: var(--spacing-s) var(--spacing-m);
   -webkit-line-clamp: 3;
   line-clamp: 3;
   overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-title-small);
+  color: var(--on-secondary-container);
+  font: var(--font-body-medium);
   overflow-wrap: anywhere;
 }
 
@@ -35,10 +39,15 @@
   gap: var(--spacing-s);
 }
 
+/* One container per block, so where a block ends and the next begins reads at
+   a glance. */
 .block {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3xs);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface);
 }
 
@@ -48,12 +57,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A quiet aside between two blocks: what ran, not a step to read. */
+/* Between two blocks: what ran, in primary so it reads apart from the reasoning. */
 .tools {
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  color: var(--on-surface-retreat);
+  color: var(--primary);
   font: var(--font-label-small);
 }
 

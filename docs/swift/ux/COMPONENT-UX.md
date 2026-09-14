@@ -1117,9 +1117,12 @@ block. The chain of thought stays the condensed view: each `ReasoningRow` is
 clamped to three lines and trimmed of what earlier rows said. This panel is the
 opposite, every reasoning block (`thought`, `plan`, `observation`) untrimmed and
 markdown-rendered, grouped by turn under the user's question, with the block's
-duration. The tools run _between_ two blocks collapse into one quiet marker
-(`build` glyph, humanized labels): they are why the reasoning resumed. Tools
-before the first block or after the last are left out. The header's copy action
+duration. The tools run _between_ two blocks collapse into one marker (`build`
+glyph, humanized labels): they are why the reasoning resumed. Tools before the
+first block or after the last are left out. Each part has its own look so they
+tell apart at a glance: a block sits in a `surface-main` container (`--radius-s`),
+the tool marker is `primary` text, and the user's message is a
+`secondary-container` / `on-secondary-container` container (`--radius-m`). The header's copy action
 exports the same content as markdown (`## question`, blocks, `_→ tools_`).
 
 **Launcher.** At the rail's foot (expert tooling), above the admin-only raw
