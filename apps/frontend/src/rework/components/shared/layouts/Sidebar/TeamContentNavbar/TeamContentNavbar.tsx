@@ -49,7 +49,7 @@ import { useWikiAvailabilityQuery } from "../../../../../../slices/controlPlane/
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { agentIconName, agentsNicknamePlural, defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
@@ -134,15 +134,18 @@ export default function TeamContentNavbar() {
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
-  // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
-  // square initials (same fallback as the Home team list). The personal space
-  // reuses that list's round user avatar (UserAvatar) — the "this is you"
-  // signal — sized down to fit this compact header.
+  // Team avatar (28×28, 4px): the team's own image, else the deployment default,
+  // else colour-tinted square initials — the same chain as the Home team list
+  // and the team cards, so one team looks the same on every surface. The
+  // personal space keeps that list's round user avatar (UserAvatar) — the "this
+  // is you" signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
     <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
   ) : selectedTeam?.avatar_image_url ? (
     <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+  ) : defaultTeamAvatarFile ? (
+    <img className={styles.teamPanelAvatar} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true" />
   ) : (
     <TeamInitials
       className={styles.teamPanelAvatar}
