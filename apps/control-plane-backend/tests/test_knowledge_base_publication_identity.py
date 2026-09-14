@@ -88,6 +88,82 @@ async def test_replaying_a_publication_leaves_both_identities_unchanged(tmp_path
     assert stored.version == "2.0.0"
 
 
+def _named(name: str) -> KnowledgeBaseDeclaration:
+    return KnowledgeBaseDeclaration.model_validate(
+        {
+            "id": name,
+            "version": "1.0.0",
+            "name": "Squatted",
+            "description": "Published under somebody else's prefix",
+            "configuration_fields": [],
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_client_may_claim_a_prefix_inside_another_clients(tmp_path):
+    """Owning `acme.kb` has to mean owning everything under it.
+
+    Checking the exact key alone would protect only names already published: a
+    second client could claim `acme.kb.payroll` and publish inside it.
+    """
+    store = await _store(tmp_path)
+    await store.upsert(
+        prefix=PREFIX, declaration=_declaration(), client_id=CLIENT, subject=SUBJECT
+    )
+
+    with pytest.raises(KnowledgeBasePrefixConflict):
+        await store.upsert(
+            prefix=f"{PREFIX}.payroll",
+            declaration=_named(f"{PREFIX}.payroll.hr"),
+            client_id="kb-intruder",
+            subject="service-account-intruder",
+        )
+
+    assert await store.get(f"{PREFIX}.payroll.hr") is None
+
+
+@pytest.mark.asyncio
+async def test_no_client_may_claim_a_prefix_above_another_clients(tmp_path):
+    """The other direction of the same violation.
+
+    A prefix that sits above an existing claim swallows it, so `acme` over
+    `acme.kb` is refused exactly as `acme.kb.payroll` under it is.
+    """
+    store = await _store(tmp_path)
+    await store.upsert(
+        prefix=PREFIX, declaration=_declaration(), client_id=CLIENT, subject=SUBJECT
+    )
+
+    with pytest.raises(KnowledgeBasePrefixConflict):
+        await store.upsert(
+            prefix="acme",
+            declaration=_named("acme.finance"),
+            client_id="kb-other",
+            subject="service-account-other",
+        )
+
+    assert await store.get("acme.finance") is None
+
+
+@pytest.mark.asyncio
+async def test_a_neighbouring_prefix_is_not_an_overlap(tmp_path):
+    """A segment boundary is required, so `acme.kbx` is nobody's business."""
+    store = await _store(tmp_path)
+    await store.upsert(
+        prefix=PREFIX, declaration=_declaration(), client_id=CLIENT, subject=SUBJECT
+    )
+
+    published = await store.upsert(
+        prefix="acme.kbx",
+        declaration=_named("acme.kbx.triage"),
+        client_id="kb-neighbour",
+        subject="service-account-neighbour",
+    )
+
+    assert published.client_id == "kb-neighbour"
+
+
 @pytest.mark.asyncio
 async def test_another_client_is_still_refused_the_prefix(tmp_path):
     store = await _store(tmp_path)
@@ -124,24 +200,19 @@ async def test_listing_carries_both_identities(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_prefix_claimed_before_subjects_were_recorded_is_healed(tmp_path):
-    """A row predating the column gets its subject on the next publication.
+async def test_a_rotated_service_account_is_recorded_by_the_next_publication(tmp_path):
+    """The prefix is the client's, so recreating its account keeps it.
 
-    Nothing backfills it, because only a publication carries the account.
+    Only a publication carries the account, and the one it carries is what a
+    grant made from then on will name.
     """
     store = await _store(tmp_path)
     await store.upsert(
-        prefix=PREFIX, declaration=_declaration(), client_id=CLIENT, subject=SUBJECT
+        prefix=PREFIX,
+        declaration=_declaration(),
+        client_id=CLIENT,
+        subject="service-account-kb-acme-before-rotation",
     )
-    async with store._sessions() as session:  # noqa: SLF001 - simulating an old row
-        async with session.begin():
-            from control_plane_backend.models.knowledge_base_models import (
-                KnowledgeBasePrefixRow,
-            )
-
-            claim = await session.get(KnowledgeBasePrefixRow, PREFIX)
-            assert claim is not None
-            claim.subject = None
 
     await store.upsert(
         prefix=PREFIX, declaration=_declaration(), client_id=CLIENT, subject=SUBJECT

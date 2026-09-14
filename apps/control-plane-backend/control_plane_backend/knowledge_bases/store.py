@@ -28,7 +28,7 @@ import logging
 from fred_core.sql import make_session_factory, use_session
 from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base import KnowledgeBaseDeclaration
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -52,7 +52,7 @@ class PublishedDefinition:
     def __init__(
         self,
         row: KnowledgeBaseDefinitionRow,
-        claim: KnowledgeBasePrefixRow | None = None,
+        claim: KnowledgeBasePrefixRow,
     ) -> None:
         self.id = row.id
         self.prefix = row.prefix
@@ -63,8 +63,8 @@ class PublishedDefinition:
         # from the prefix its name sits under. `client_id` is what a later
         # publication is checked against; `subject` is what a grant over a
         # library names, since a relation's subject is an account, not a client.
-        self.client_id = None if claim is None else claim.client_id
-        self.subject = None if claim is None else claim.subject
+        self.client_id: str = claim.client_id
+        self.subject: str = claim.subject
         self._configuration_fields_json = row.configuration_fields_json
 
     @property
@@ -145,13 +145,16 @@ class KnowledgeBaseDefinitionStore:
                     f"Prefix {prefix!r} is owned by another client"
                 )
             # Written only when it actually differs, so replaying a publication
-            # leaves the row untouched — and a prefix claimed before the subject
-            # was recorded is healed by the next one.
+            # leaves the row untouched, while a client whose service account was
+            # rotated records the new one here.
             if owner.subject != subject:
                 owner.subject = subject
                 await active.flush()
             return owner
 
+        await KnowledgeBaseDefinitionStore._refuse_overlapping_claim(
+            active, prefix, client_id
+        )
         owner = KnowledgeBasePrefixRow(
             prefix=prefix, client_id=client_id, subject=subject
         )
@@ -164,6 +167,37 @@ class KnowledgeBaseDefinitionStore:
             ) from exc
         return owner
 
+    @staticmethod
+    async def _refuse_overlapping_claim(
+        active: AsyncSession, prefix: str, client_id: str
+    ) -> None:
+        """Refuse a prefix that sits inside, or above, another client's.
+
+        The exact-key claim above protects only the prefix itself. Without this,
+        a second client declares `fred.samples.payroll` and publishes inside
+        somebody else's `fred.samples` — or claims `fred` over the top of it.
+        Both directions are the same violation of "nobody writes under another's
+        prefix", so both are checked.
+        """
+        segments = prefix.split(".")
+        ancestors = [".".join(segments[:depth]) for depth in range(1, len(segments))]
+        overlaps = [KnowledgeBasePrefixRow.prefix.startswith(f"{prefix}.")]
+        if ancestors:
+            overlaps.append(KnowledgeBasePrefixRow.prefix.in_(ancestors))
+
+        clash = (
+            await active.scalars(
+                select(KnowledgeBasePrefixRow).where(
+                    KnowledgeBasePrefixRow.client_id != client_id,
+                    or_(*overlaps),
+                )
+            )
+        ).first()
+        if clash is not None:
+            raise KnowledgeBasePrefixConflict(
+                f"Prefix {prefix!r} overlaps {clash.prefix!r}, owned by another client"
+            )
+
     async def get(
         self,
         name: str,
@@ -171,10 +205,22 @@ class KnowledgeBaseDefinitionStore:
         session: AsyncSession | None = None,
     ) -> PublishedDefinition | None:
         async with use_session(self._sessions, session) as active:
-            row = await active.get(KnowledgeBaseDefinitionRow, name)
-            if row is None:
+            # Joined rather than looked up twice: a definition always sits under
+            # a claimed prefix, and the foreign key is what makes that true.
+            found = (
+                await active.execute(
+                    select(KnowledgeBaseDefinitionRow, KnowledgeBasePrefixRow)
+                    .join(
+                        KnowledgeBasePrefixRow,
+                        KnowledgeBaseDefinitionRow.prefix
+                        == KnowledgeBasePrefixRow.prefix,
+                    )
+                    .where(KnowledgeBaseDefinitionRow.id == name)
+                )
+            ).first()
+            if found is None:
                 return None
-            claim = await active.get(KnowledgeBasePrefixRow, row.prefix)
+            row, claim = found
             return PublishedDefinition(row, claim)
 
     async def list_all(
