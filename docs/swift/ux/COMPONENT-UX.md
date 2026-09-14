@@ -200,12 +200,29 @@ it unchanged, so the icon never claims a copy that did not happen.
 Both list markers — a bullet's dash and an ordered item's number — are drawn in `primary`; the
 other syntax marks (`#`, `>`, `*`, backticks) stay in the muted marker colour. lezer gives both
 list markers the same `ListMark` node, so one non-contextual `styleTags` override on that node
-carries them out of the marker rule together. Note that a *contextual* selector cannot do this: a
+carries them out of the marker rule together. Note that a _contextual_ selector cannot do this: a
 `"OrderedList/.../ListMark"` form does not override the parser's own rule for a node, only the
 whole-node form does — worth knowing before trying to colour the two list markers differently,
 which would need a `ViewPlugin` reading the syntax tree.
 
-`PlatformPromptPage` still edits its prompt in a plain `TextArea` — not yet migrated.
+**Reserved system-prompt tags (2026-09-09, #2595).** The runtime wraps the system
+prompt's four blocks in `<platform_instructions>`, `<platform_prompt>`, `<tools>` and
+`<agent_instructions>`, and control-plane refuses (422) a platform prompt or any
+string-valued agent tuning field that contains one of them. The editor itself stays neutral; the
+two call sites that are validated compute the message with `findReservedPromptTag`
+(`rework/utils/promptValidation.ts`, a mirror of the fred-sdk finder) and pass it through
+the existing `error` prop, so the refusal is visible while typing and Save is disabled
+until the tag is gone (`AgentFormBody` → `TuningFieldRenderer`, `PlatformPromptPage`).
+The prompt library is not validated and shows nothing: its text is either inserted into
+the user's message or copied into an agent field, where the check applies. Any other
+XML/HTML tag is accepted, which is what the tag colouring above is for.
+
+`PlatformPromptPage` (2026-09-09) edits in this editor too. The 0 / 20 000 counter the
+`TextArea` atom used to draw is re-implemented beside the editor, with the hint on the
+left; a draft over the cap is refused like a reserved tag. Its two panes now read left to
+right in the order the model receives the blocks — the read-only platform instructions,
+which carry the precedence rule, then the editable global prompt — and a backend 422 is
+shown under the editor rather than only as a toast.
 
 ---
 
@@ -421,7 +438,7 @@ agents) so the decision is informed at the point it is made.
 
   Two changes, both needed. `traceRows()` trims each reasoning row of the leading run of
   **complete sentences** the previous row already carried (`stripRepeatedPreamble`), compared
-  against that row's *full* text, so the rows tile the whole reasoning with nothing lost
+  against that row's _full_ text, so the rows tile the whole reasoning with nothing lost
   between them. Whole sentences only: blocks that merely open on the same few words share no
   sentence and are left alone — a character-level trim rendered `demandé un document nommé…`
   on this very session. And the clamp went from 2 lines to 3: with the repeat removed, the
@@ -468,7 +485,7 @@ agents) so the decision is informed at the point it is made.
   entries at all, so its per-phase pill branch was dead code and was removed — the badge
   survives only in `TraceDetailDrawer`.
 
-  A grouping background behind *consecutive* tool rows may come back; it was deliberately
+  A grouping background behind _consecutive_ tool rows may come back; it was deliberately
   left out here rather than guessed at.
 
 - **Reasoning rendered as a tool step (2026-07-30, #2172 — lane split superseded 2026-09-04)** — the trace was one flat list of
@@ -482,7 +499,7 @@ agents) so the decision is informed at the point it is made.
   as a process unfolding.
 
 - **Misleading summary line (2026-07-30, #2172)** — the header read "Thought for 856ms" (the
-  sum of *tool* latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
+  sum of _tool_ latencies) directly above a reasoning row reading 16.4s. `traceSummary()`
   replaces `thoughtSummaryLabel()` and returns structured data — reasoning wall-clock, tool
   count, tool latency, running flag — which the component formats through i18n as e.g.
   "Reasoning 16.4s · 4 tools". The wall-clock was the max of the blocks, not their sum,
@@ -640,8 +657,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
   dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
   `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
-  + SSE consumption) — a reasonable fast-follow, not required for the current fix since
-  `content` already carries enough to render useful citations.
+  - SSE consumption) — a reasonable fast-follow, not required for the current fix since
+    `content` already carries enough to render useful citations.
 
 - **Unrecognized-tool fallback still raw JSON** — two content shapes (SQL
   `{sql_query, rows, error}`, RAG `{query, hits}`) plus two named first-party tools
@@ -822,16 +839,18 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Open UX issues
 
-- **No syntax highlighting** — plain monospace only. Consider adding `react-syntax-highlighter`
-  (already in `package.json`) for a richer developer experience, especially for code-heavy agents.
-
-- **Fenced code without language** — renders as inline code (no language class, so the block
-  path is not triggered). Low-frequency edge case, but may surprise users who write unlabelled
-  fenced blocks. Discuss whether to detect by trailing `\n` heuristic.
+_(none)_
 
 #### Resolved
 
-_(none yet)_
+- **No syntax highlighting** — `CodeBlock` renders through `react-syntax-highlighter` (Prism,
+  `oneDark`/`oneLight` following the theme).
+
+- **Fenced code without language (2026-09-10)** — used to render as inline code because
+  `MarkdownRenderer` picked block vs inline from the presence of a `language-*` class.
+  Block routing now lives on the `pre` component (every fenced or indented block has one;
+  react-markdown v9 passes no `inline` prop), so an unlabelled fence renders as a
+  `plaintext` block and only backtick spans reach the inline path.
 
 ---
 
@@ -881,7 +900,7 @@ _(none yet)_
 
 **Status:** `Functional`
 
-`badgeCount` puts an M3 *large badge* on the button's top-right corner. Nothing
+`badgeCount` puts an M3 _large badge_ on the button's top-right corner. Nothing
 renders below 1 — a "0" pill is noise, not information — and counts above 999
 show as `999+`, M3's three-digit cap.
 
@@ -895,7 +914,7 @@ not the `error` / `on-error` M3 specifies. M3 colors badges as notification
 signals; this one is a neutral count (attachments in a conversation), and a red
 pill would read as something to fix.
 
-The badge renders in a wrapper *beside* the `<button>`, not inside it: `.btn` is
+The badge renders in a wrapper _beside_ the `<button>`, not inside it: `.btn` is
 `overflow: hidden` to clip its state layer to the circle, so a nested badge
 would be cut off. The wrapper only appears when a badge does, so every other
 call site keeps rendering a bare `<button>`.
@@ -903,6 +922,36 @@ call site keeps rendering a bare `<button>`.
 It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
 otherwise a screen reader announces the button with no number, or reads a bare
 digit after the name.
+
+---
+
+### Package-foundation component corrections (2026-09-09)
+
+**Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
+
+**Status:** `Functional`
+
+- `Button` and `IconButton` expose their implemented `2xs`, `small`, and `medium`
+  sizes without narrowing the shared size scale used by fields. `IconButton` retains
+  caller classes alongside generated classes and now has a visible two-pixel
+  `:focus-visible` outline. Its neutral tonal colors use defined on-surface and
+  on-surface-retreat state layers for hover and press.
+- Material and custom icons are decorative by default. A standalone informative icon
+  receives only an explicit caller-owned accessible name; glyph identifiers no longer
+  become user-facing labels. The unsupported legacy `infos` name was corrected to
+  `info` at its sole caller.
+- `TextInput` preserves caller IDs, refs, handlers, input type, autocomplete, and other
+  native props. Labels target the effective ID; help/error descriptions are merged with
+  caller descriptions; enabled errors set `aria-invalid`; and controlled/uncontrolled
+  counters follow the current value, including an uncontrolled input's actual value
+  after an uncancelled native form reset. A canceled reset leaves both value and count
+  unchanged. Compact presentation keeps any visually omitted help/error text associated
+  through `aria-describedby`.
+- `Spinner` keeps `Loading` as its default status name, accepts caller-supplied status
+  text, and remains label-free when decorative.
+
+These corrections support the initial `@fred/ui` archive only. They do not claim the
+deferred component catalog, overlays, iframe SDK, release, or adoption work as shipped.
 
 ---
 
@@ -1007,7 +1056,7 @@ first-ever value only).
 
 **Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
 (150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
-capability viewer keeps. Note this is deliberately *faster* than M3 recommends
+capability viewer keeps. Note this is deliberately _faster_ than M3 recommends
 for a panel (300–400ms) — a designer call: they are a quick detour from the
 conversation, not a context switch. The prop moved the drawer's hardcoded
 `250ms ease-out` onto the `--duration-*` / `--easing-*` tokens on the way.
@@ -1074,7 +1123,7 @@ old always-on prompt query is part of that — the chat no longer fetches prompt
 on session load.
 
 In a personal chat the space picker is hidden: the team side would have nothing
-to show, and the chat's own team id *is* the personal space.
+to show, and the chat's own team id _is_ the personal space.
 
 **Categories are team-owned** (migration `8ca7cafc292f`), so they are fetched
 per space and the active category resets when the space changes. The counts come
@@ -1234,7 +1283,7 @@ inline popover into a full-height right-side push panel (#2259).
 - **Reset** reverts the per-turn selection to the agent's configured scope. For an agent that
   binds specific libraries at creation (`bind_libraries` → `bound_library_ids`), the library tree
   stays read-only and reset clears only any per-turn document narrowing back to that bound
-  baseline; for an unbound agent, reset clears to empty (no per-agent *editable* default exists in
+  baseline; for an unbound agent, reset clears to empty (no per-agent _editable_ default exists in
   the data today — this is frontend-only). Reset is disabled when the selection already equals the
   agent scope.
 - **Tune badge**: `ComposerActionsMenu` gained a `badge` prop (a small `--error` dot over the
@@ -1249,6 +1298,19 @@ inline popover into a full-height right-side push panel (#2259).
 
 **Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`
 **Status:** `Functional`
+
+Opening a conversation puts the cursor in the composer (2026-09-11). That used
+to fall out of the field being RE-ENABLED after a history load, so it happened
+only when a load actually ran — a conversation served from the session cache
+silently got none, and which conversations those are is arbitrary. The page asks
+for it outright on every conversation change; a field still disabled by a
+loading history takes it on re-enable.
+
+Loading a conversation shows a centred `Spinner` in the lane (2026-09-11),
+replacing the italic pulsing line of text. What drives it is not "a fetch is in
+flight" but "this conversation has not answered yet" — `isLoadingHistory` is
+false BEFORE a load starts and stays false on a cache hit, so reading it left a
+gap in which the page believed the conversation was empty.
 
 #### Open UX issues
 
@@ -1280,7 +1342,7 @@ _(none)_
   instant and cancels any animation in flight.
 
   That stop needs no DOM anchor and no spacer: the view is at the bottom when the answer starts, so
-  the content grown since the last trace-only height *is* the answer's height on screen. The
+  the content grown since the last trace-only height _is_ the answer's height on screen. The
   trace-only height is sampled continuously during the work phase rather than read when the answer
   phase opens — the latter already includes the first batch, and an answer arriving in one chunk
   would leave a budget of zero.
@@ -1295,7 +1357,7 @@ _(none)_
   Distance alone is a race: the follow write and the browser's scroll event are a frame apart, so
   content landing in between makes a perfectly-followed view measure as far from the bottom, which
   would give up following for the rest of the turn with nothing left to re-arm it. Direction alone
-  misses content being *removed*: answering a HITL prompt takes it out of the thread, the page
+  misses content being _removed_: answering a HITL prompt takes it out of the thread, the page
   shortens, and the browser clamps `scrollTop` downward with no reader involved — which read as a
   scroll-up and killed the resume's autoscroll. So: at the bottom is following whatever moved the
   view there; away from it, only an upward move is the reader.
@@ -1304,7 +1366,7 @@ _(none)_
   gate is open, and treating that as idle stranded the reader above a prompt they had to act on,
   with the resume then having nowhere to scroll back from.
 
-  One more signal is needed because `hasAnswerText` only accumulates: a tool round *after* the model
+  One more signal is needed because `hasAnswerText` only accumulates: a tool round _after_ the model
   has written text would otherwise leave the turn stuck in the answer phase, with its new trace rows
   eating the freeze budget. A rise in the turn's trace-row count drops the anchor and resumes
   following — which also covers a HITL resume, since that adds no user message and so leaves the key
@@ -1312,13 +1374,13 @@ _(none)_
 
   `ChatMessagesArea` lost its `useLayoutEffect`/`turnKey` bottom-jump in the same change; it is
   presentation only now. Two owners on one scroll container cannot be reasoned about, and the hook
-  is the one that also has to decide when *not* to move.
+  is the one that also has to decide when _not_ to move.
 
 - **Trace no longer collapses under the reader (2026-09-04, #2566)** — `ThoughtTrace` collapsed
   itself on `done`, contracting the layout by tens of pixels at the exact moment the reader started
   on the answer, every turn. `resolveTraceExpanded` takes a fourth input: a block that watched its
   own turn stream stays open. Captured at mount rather than latched over time — `done` briefly goes
-  false on the *previous* turn during the pre-flight between `waitResponse` flipping and the new user
+  false on the _previous_ turn during the pre-flight between `waitResponse` flipping and the new user
   message landing, and a running latch would pin that history block open for good. History blocks
   still mount collapsed, so opening a long conversation is unchanged.
 
@@ -1401,7 +1463,7 @@ _(none)_
   translated on both sides (they were hardcoded English here). The 2s revert timer is also
   now cancelled before re-arming and on unmount: clicking copy twice inside the window used
   to have the first click's timer cut the second confirmation short after ~0.1s. The
-  clipboard *payload* stays asymmetric on purpose: assistant replies go through
+  clipboard _payload_ stays asymmetric on purpose: assistant replies go through
   `clipboardUtils`, user messages are plain text and use `writeText`. See `UserTurn` below.
 
 ---
@@ -1477,21 +1539,93 @@ _(none yet)_
 Shared, chrome-less document content renderer used by both `DocumentViewerPage`
 (`/documents/:uid`, chat-citation flow) and `DocumentWorkspace`'s corpus preview
 drawer (`InlineDrawer`). Picks a render strategy from the file's real extension
-(`isPdfFile` on `identity.document_name`, never the display title): `.pdf` renders
-natively via `PdfStreamingDocumentViewer` (`react-pdf`); every other format renders
-the existing markdown extraction (`GET /knowledge-flow/v1/markdown/{uid}`). Owns no
-header/close affordance — both hosts already provide one. Landed 2026-07-19 (FRONT-13)
-to close the "PDF viewer parity" regression from kea tracked on GitHub issue #1956.
+(`hasNativePreview` on `identity.document_name`, never the display title): a format
+with a native renderer goes to `PdfStreamingDocumentViewer` (`react-pdf`); every
+other one renders the existing markdown extraction
+(`GET /knowledge-flow/v1/markdown/{uid}`). Owns no header/close affordance — both
+hosts already provide one. Landed 2026-07-19 (FRONT-13) to close the "PDF viewer
+parity" regression from kea tracked on GitHub issue #1956.
 
-**Markdown toggle (2026-07-27).** A `mode` prop (`"original" | "markdown"`, default
-`"original"`) lets a host force the markdown extraction for a format that has a native
-renderer. The corpus preview drawer exposes it as an icon button in the `InlineDrawer`
-header (`headerActions`, left of the close button), gated on `hasNativePreview(fileName)`
-so it only appears for PDFs: `.docx`/`.xlsx`/`.csv` already display their markdown
-extraction, so a toggle there would be inert. Mode resets to `"original"` on every newly
-opened document. When the extraction is missing (endpoint 404s, or empty body), the body
-renders a `preview.markdownUnavailable` notice instead of the former literal
-"Error loading document." string, which read as document content.
+**File/Raw toggle (2026-07-27).** A `view` prop (`"file" | "raw"`) lets a host force
+the markdown extraction for a format that has a native renderer; omitting it keeps
+the single-strategy behaviour (`DocumentViewerPage`). The corpus preview drawer
+renders `DocumentViewerModeToggle` in the `InlineDrawer` header (`headerActions`,
+left of the close button) rather than inside the body, gated on
+`hasNativePreview(fileName)` so it never appears for a format that has nothing to
+toggle to (`.xlsx`/`.csv` already display their markdown extraction). The view resets
+to `"file"` on every newly opened document. When the extraction is missing (endpoint
+404s, or empty body), the body renders a `preview.markdownUnavailable` notice instead
+of the former literal "Error loading document." string, which read as document content.
+
+**Word/ODT native preview (2026-09-03).** `hasNativePreview` now also covers `.docx`,
+`.doc` and `.odt`, so the toggle's "Fichier" side shows the document itself rather
+than only its markdown extraction. Browsers cannot render a Word file, so
+`documentPdfSourceUrl` sends those formats to `GET /knowledge-flow/v1/raw_content/pdf/{uid}`
+(headless LibreOffice, converted once and cached under the document's own `output/`
+prefix) while a `.pdf` keeps streaming untouched from `/raw_content/stream/{uid}`. The
+viewer component itself is unchanged apart from a `sourceUrl` prop — it stays a PDF
+renderer and knows nothing about formats — so virtualization, byte-range fetching and
+the large-document guards below apply to Word documents for free. The frontend's
+accepted-suffix list is deliberately the same one `PDF_RENDERABLE_SUFFIXES`
+(`content_service.py`) accepts: a format offered here but refused there would show a
+toggle that 415s.
+
+**PowerPoint on the same path (2026-09-04).** `.pptx` and `.ppt` joined
+`PDF_RENDERABLE_SUFFIXES` and `OFFICE_DOCUMENT_SUFFIXES`; the render endpoint, cache
+and viewer are format-agnostic and needed no change. `.odp` is in neither list: the
+LibreOffice helper can convert it, but no ingestion processor accepts it, so it never
+reaches the library. The shared helper also stopped asking for Writer's PDF export
+filter on every format and now picks Impress' or Calc's from the source suffix —
+LibreOffice builds differ on how they treat that mismatch, and a refused export would
+surface here as a 503 behind a toggle the UI had offered.
+
+**Renders expire after 30 days (2026-09-07).** The cached `render.pdf` used to live as
+long as its document. It is now deleted by a nightly Temporal Schedule
+(`pipeline-pdf-render-expiry`, 03:00 UTC) once its write date is older than
+`app.pdf_render_ttl_days` (knowledge-flow configuration, default 30, `0` removes the
+Schedule at worker start). The TTL is read by the activity on every run, not stored in
+the Schedule, so changing it only takes a worker restart. The next viewer of an expired
+document pays one fresh conversion (a few seconds), nothing else changes: the render
+stays under the document's `output/` prefix, so deleting the document still removes it,
+and it is never charged to the storage quota. One pass per night, `SKIP` overlap and a
+one-hour catch-up window: after a long worker outage the first pass cleans everything
+older than the TTL at once instead of replaying each missed night. Local `memory`
+scheduler setups have no Schedule and therefore no expiry; k3d and fredlab run Temporal
+and do. Listing is server-side on GCS (`match_glob`), a full document-bucket walk on
+SeaweedFS/MinIO.
+
+`DocumentViewerPage` carries the same toggle in its top bar, not just the corpus
+drawer. A citation opens the document at the passage it quotes, and that passage
+lives in the markdown extraction — so the reader needs a route back to it, including
+when the render endpoint is down. Without it a 503 would leave a dead error pane
+where the cited text used to be.
+
+Two properties of the render endpoint are load-bearing for the viewer and easy to
+break. **Byte ranges are only ever cut from a cached render.** LibreOffice stamps
+`/CreationDate` and `/ID` per run, so two renders of one document differ in length
+and in every offset; if the cache write failed, each chunk request would re-convert
+and pdf.js would stitch windows from different files into one corrupt document. The
+service therefore reports whether the bytes it returned are persisted
+(`PdfRender.cached`) and the controller degrades to a full 200 body when they are
+not — which pdf.js handles the same way it handles a proxy that strips ranges.
+**Cold renders of one document are serialized per worker**, so a document opened by
+several viewers at once is converted once rather than once per viewer.
+
+Conversions also run on a dedicated two-worker pool
+(`PDF_RENDER_MAX_CONCURRENCY`), never on the default executor `asyncio.to_thread`
+would pick. That executor is shared with RAG search, summarization, metadata
+deletes and ingestion, and a `soffice` run holds its worker for up to the full 60 s
+timeout — left there, a handful of Word previews would stall the retrieval path of
+every agent turn on the pod. The same worker count caps how many `soffice` processes
+(hundreds of MB of RSS each) can exist at once. The path emits
+`content.pdf_render_latency_ms` with `file_type`/`status`, both already in
+`PROMETHEUS_ALLOWED_LABELS`, so it is Grafana-visible without an allow-list change.
+
+Known cost, not yet addressed: a ranged request reads the whole cached PDF and
+slices it, because the content store has no ranged read for derived artifacts (only
+for a document's primary file). Serving an N-MB render in 1 MB chunks therefore
+costs ~N store reads. The viewer's 20 MB opt-in guard bounds the practical exposure;
+the fix is a ranged `get_output_artifact`, mirroring `get_content_range`.
 
 **Virtualized PDF rendering (2026-08-07, #2273).** `PdfStreamingDocumentViewer`
 previously mounted one live `<canvas>` per page of the document the moment it
@@ -1757,11 +1891,11 @@ Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:
 
-| `joining_mode` | Footer content |
-| --- | --- |
-| `open` | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
-| `invite_only` | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable |
-| already a member | Nothing renders in the footer's join slot |
+| `joining_mode`   | Footer content                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `open`           | "Join" button (`small`, `outlined`, `person_add` icon) — calls `useJoinTeamMutation` directly (instant self-service, no confirmation step); on success calls the `onJoined` prop so the page can refresh anything outside this card's own cache (bootstrap's team navbar) |
+| `invite_only`    | No button; muted label (`body-small`, `on-surface-muted`) — the team is discoverable but not self-joinable                                                                                                                                                                |
+| already a member | Nothing renders in the footer's join slot                                                                                                                                                                                                                                 |
 
 The former lock icon next to the team name (driven by the retired
 `is_private` bool) was removed rather than remapped to `joining_mode` — the
@@ -1821,7 +1955,7 @@ decides on its own what is discoverable, and drops from the "discover"
 `visibility` is `private` (#2398). The server already withholds the ReBAC
 `public` relation from a private team, but that filter is skipped entirely
 when authorization is disabled — so the page never relies on it. A team the
-caller *is* a member of stays listed under "your teams" whatever its
+caller _is_ a member of stays listed under "your teams" whatever its
 visibility: members need it to navigate.
 
 ---
@@ -1871,7 +2005,7 @@ support line switches to the `privateSupport` copy ("a private team is not
 listed on the marketplace: its members are added manually by a team
 admin"). One inert, locked control states the fact; the original 2026-07-26
 treatment kept the whole group mounted with every item `disabled`, and a
-greyed-out *two-state* toggle still reads as a live choice — while "Invite
+greyed-out _two-state_ toggle still reads as a live choice — while "Invite
 only" named a mechanism that does not exist. Plain muted text was tried
 first and read as too weak for the row (it also wrapped onto two lines),
 hence a real button shape. `.team-settings-toggle-action` carries the
@@ -1987,7 +2121,7 @@ it's now redundant with the default.
 
 `DataTable` gained an optional `pageSize` prop. Omitted (the default), it
 renders exactly as before — every consumer that doesn't pass it
-(`AdminTeamsPage`, `MigrationPage`, `CapabilitiesPage`) is unaffected. When
+(`AdminTeamsPage`, `MigrationPage`, `FeaturesPage`) is unaffected. When
 set, the table slices `data` to one page and renders a persistent pagination
 footer, height `3.75rem` — same height as a table row — with two flex
 containers:
@@ -2061,7 +2195,7 @@ names, `MigrationPage` team names):
 - Primitive `cellRenderer` values (string/number) are wrapped by DataTable
   in a `.cell-text` span: single-line `text-overflow: ellipsis`, full value
   readable via the span's native `title` on hover — same idiom as
-  `CorpusAuditPage`/`CapabilitiesPage` name cells. Element values pass
+  `CorpusAuditPage`/`FeaturesPage` name cells. Element values pass
   through untouched (the caller owns their layout).
 
 `TeamSettingsMembersTable`'s three text columns (Identifiant, First name,
@@ -2187,6 +2321,7 @@ generic `Dialog` primitive exists yet):
   the dialog's own padding, and clipping would also cut off the
   `Autocomplete` menu popover in the search row above the list (same class
   of bug just fixed on the old inline field, see above).
+
 - **Actions:** `Annuler` (`outlined`/`on-surface`) / `Ajouter`
   (`filled`/`primary`, disabled while the list is empty or a submit is in
   flight). Clicking `Ajouter` always closes the dialog once the batch
@@ -2250,13 +2385,13 @@ cannot drift apart in the same row.
 
 **`TeamRoleChips`: a static `Member` badge and a description tooltip on
 every badge** (2026-08-17, #2383). Two complaints from team admins, one
-fix. (1) A member holding no elevated role rendered as three *inactive*
+fix. (1) A member holding no elevated role rendered as three _inactive_
 pills — visually indistinguishable from a row that hadn't loaded. A
 non-interactive `Member` badge now closes the row, after the three toggles,
 always visible. It shares the toggles' pill geometry (a `%pill` placeholder
 both `@extend`, so height/padding cannot desync mid-row) but carries its own
 fill: tonal `secondary-container` / `on-secondary-container`, with a
-transparent 1px border to keep the geometry identical. Deliberately *not*
+transparent 1px border to keep the geometry identical. Deliberately _not_
 the toggles' `--primary` fill — in this row `--primary` reads as "someone
 granted this and someone can revoke it", whereas `team_member` is neither
 granted nor revocable, just always true. The same tonal pairing already
@@ -2271,7 +2406,7 @@ that cannot happen. (2) The role names carried no meaning on the page: all
 four badges now open a rich `Tooltip` (title + one-line description), copy
 condensed from the help centre's `features/roles.md` tables so the two
 surfaces agree. The Analyst panel alone carries a `--warning` footer row —
-it grants evaluation-campaign execution *and* the limited conversation
+it grants evaluation-campaign execution _and_ the limited conversation
 slices those datasets are built from, which a flat pill row hinted at
 nowhere.
 
@@ -2284,7 +2419,7 @@ reader who cannot act on the role and most needs to know what it is.
 
 **Members table: role chips are a live, single-click toggle in both
 directions.** `TeamRoleChips` renders identically here and in the
-add-members dialog, but only the table's instance is *live* — a click
+add-members dialog, but only the table's instance is _live_ — a click
 there immediately grants/revokes via the API, while the dialog's is a
 staged selection with no effect until "Ajouter". A confirmation step was
 added on the revoke path (2026-07-26) while investigating a report of "a
@@ -2389,7 +2524,7 @@ Helps a user recognize their role in each team they belong to.
   token — roles are priority-sorted, admin first), the same Shield glyph as
   the `TeamSelectionItem` badge (`color: secondary`, 12px) prefixes the
   label, without that badge's circular background/outline — inline, `gap:
-  var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
+var(--spacing-3xs)`. Personal-space admin has no equivalent yet (the role
   label itself isn't shown there) — left for a follow-up task.
 - Backend: new `TeamWithPermissions.my_relations` field — see
   `CONTROL-PLANE-PRODUCT-CONTRACT.md` §26 for why `permissions` alone
@@ -2559,22 +2694,22 @@ Extended 2026-07-31 with the `breadcrumb`/`tabs` slots and retrofitted onto ever
 admin-scope and team-admin-scope page in the same pass, so platform-admin and team-admin pages
 now share one consistent header pattern instead of diverging per page:
 
-| Page | Slots used |
-| --- | --- |
-| `TeamUsagePage` | title, actions (`TimeRangeSelector` + refresh) |
-| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle |
-| `Evaluations` (team Evaluations tab) | title, subtitle, actions |
-| `AnalyticsPage` | title, actions (`TimeRangeSelector` + refresh) |
-| `CorpusAuditPage` | title, subtitle, actions (refresh + Fix) |
-| `SelfTestPage` | title only |
-| `CapabilitiesPage` | title, subtitle, tabs (kind-filter `ButtonGroup`) |
-| `MigrationPage` (Platform data) | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
-| `AdminTeamsPage` | title only (new — page previously had no page-level header) |
-| `TeamSettingsMembers` | title, actions (search + `LeaveTeamButton` + Add members) |
-| `TeamSettingsParameters` | title only (new) |
-| `TeamSettingsRouting` | title only (new) |
+| Page                                                   | Slots used                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
+| `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
+| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
+| `SelfTestPage`                                         | title only                                                                               |
+| `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
+| `MigrationPage` (Platform data)                        | title only (Kea cutover breadcrumb link removed with the Kea migration cleanup, 2026-09) |
+| `AdminTeamsPage`                                       | title only (new — page previously had no page-level header)                              |
+| `TeamSettingsMembers`                                  | title, actions (search + `LeaveTeamButton` + Add members)                                |
+| `TeamSettingsParameters`                               | title only (new)                                                                         |
+| `TeamSettingsRouting`                                  | title only (new)                                                                         |
 
-Known deliberate non-adoption: `CapabilitiesPage`'s Tools/Agents/Models control is `ButtonGroup
+Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
 visually similar but semantically different ARIA roles; kept as `radio` since it is in fact a
 filter, not a tab strip.
@@ -2666,6 +2801,23 @@ Non-interactive lock icon + label. Uses `material-symbols-outlined` `lock` icon 
 #### Open UX issues
 
 - **Label truncation** — no max-width set. Validate with long label text (`"Administrateur seulement"`) inside narrow `SourceCard` widths.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `BetaBadge`
+
+**Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
 
 #### Resolved
 
@@ -2828,7 +2980,7 @@ _(none yet)_
 Generic `<T extends string>` pill-chip trigger + `MenuPopover`/`MenuPopoverItem` options popover anchored above the chip (`position: absolute; bottom: calc(100% + spacing-xs)`, same "opens above" grammar as `ComposerActionsMenu`). Chip: 32px height, fully rounded (`--radius-full`), `--surface-container-low` background, `--font-label-medium` in `--on-surface-retreat`, 18×18px icon; hover lightens via `--state-on-surface-hover`; open state (`data-open`) shows `--primary` text/icon over a `--state-primary-selected` background layer (a `primary`-tinted 16%-opacity overlay — the same token vocabulary as every other state layer in the app, not a one-off value). Self-contained `open` state (unlike `EnumSelectRow`'s externally-coordinated `open`/`onToggle`): each chip closes itself on outside mousedown or Escape, so multiple chips can sit side by side without a shared "one open at a time" coordinator — clicking a sibling chip already lands outside the first one's container. Full ARIA: `role="listbox"`/`role="option"` on the popover, `aria-haspopup`/`aria-expanded`/`aria-label` (`"{title}: {current value}"`) on the trigger. `ArrowUp`/`ArrowDown`/`Home`/`End` roving-tabindex navigation across options, mirroring `EnumSelectRow`'s pattern.
 
 The trigger is wrapped in the shared `Tooltip` atom (`text={title}`) — the chip itself only shows
-the current *value* ("Hybride"), the setting's *name* ("Recherche") shows on hover/focus via the
+the current _value_ ("Hybride"), the setting's _name_ ("Recherche") shows on hover/focus via the
 tooltip. `Tooltip` has no built-in show delay (toggles on `onMouseEnter`/focus immediately), so
 this is an instant tooltip with no extra wiring needed. The wrapper stays mounted unconditionally
 (not gated on `open`) — swapping it in/out based on `open` would remount the trigger `<button>`
@@ -2940,7 +3092,7 @@ cut short by the first click's timer, and the pending revert is dropped on unmou
 is `writeText` of the raw message: user messages are plain text, so none of the assistant side's
 email-safe HTML serialisation applies.
 
-A failed clipboard write is deliberately silent — the icon not flipping *is* the feedback, and
+A failed clipboard write is deliberately silent — the icon not flipping _is_ the feedback, and
 the API only fails in degraded contexts a toast would not fix (a denied permission rejects; a
 non-secure origin has no `navigator.clipboard` at all, so the property access throws
 synchronously and never reaches a `.catch`). Both turns get this from
@@ -2975,7 +3127,7 @@ change — deliberately left as its own call (see Hover zone below).
   deleted.
 
   `useCopyToClipboard` is deleted too, replaced by `useCopyConfirmation`. The distinction is
-  the point: the old hook bundled the clipboard *write* with the confirmation flag, which
+  the point: the old hook bundled the clipboard _write_ with the confirmation flag, which
   forced it to hardcode `writeText` — unusable by the assistant side, which writes email-safe
   HTML. Unshareable by construction, so it was reimplemented per turn and the copies drifted.
   The new hook holds only the flag and its timer, so both turns really do share it, and the
@@ -3016,6 +3168,13 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 
 - **Hierarchy debt** (2026-05-24) — moved from `shared/organisms/` to `pages/ManagedChatPage/ConversationThread/`. Organism→organism imports eliminated. `ThreadMessage` extracted to `@rework/types/thread`.
 - **Empty state** (2026-05-24) — `ChatMessagesArea` renders `t("chatbot.startConversationHint")` when `!isLoading && isEmpty`. EN + FR translations present.
+- **Welcome stage flashed on the way into a conversation (2026-09-11)** — entering an existing
+  conversation showed the "start a new conversation" stage for the moment between the click and
+  the messages landing. Emptiness alone does not mean empty: the page now waits for the history to
+  answer (`isHistorySettled`) before claiming a conversation has nothing, and shows the loading
+  state until then. A chat with no session id is settled on the spot — it has no history to
+  resolve, and making it wait would put a spinner in front of the one screen that is empty by
+  nature.
 
 ---
 
@@ -3199,14 +3358,69 @@ a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
-Mounted by `CapabilitySidePanelHost` when the capability is active.
+Restored behind the conversation (2026-09-11): the chat page holds a panel-open
+request until the thread has something on screen (messages rendered, or history
+settled with none), then applies it. Mounting the editor is one long synchronous
+task, and landing it on a still-loading thread delays the messages — which is
+what the user opened the conversation for. The request is held, not dropped, so
+it applies the moment the thread is there. Leaving the conversation drops it,
+and so does opening another push drawer while it waits — the hold opens a window
+in which the user can act, and it must yield to them rather than land on top of
+what they chose a second later. A request made mid-conversation (an agent
+writing a document) is long past that point and stays immediate. Code-splitting alone did not achieve this: it only
+delayed the editor on the FIRST page load, and click-navigation — which does not
+remount the page — found the chunk already in memory.
 
-Auto-open (2026-07-22): opening a conversation that already holds a document
-opens the editor pane immediately (`WritableDocumentAutoOpenProbe`, a headless
-`sessionProbes` plugin entry evaluated once per conversation-open against the
-authoritative list API). Live writes mid-conversation keep their existing pop
-via the card renderer; a list refresh never re-opens a pane the user closed.
-writable_document only — the PPT preview declares no probe.
+The drawer animates before the pane mounts (2026-09-11): `CapabilitySidePanelHost`
+opens the drawer empty and mounts the panel once the slide has landed
+(`--duration-medium-1`), mirroring the lag it already had on the way down. A
+pane's first render can be a long synchronous task — this editor parses the
+whole document at mount — and anything synchronous during the slide stops it
+dead, so a large document made the drawer snap open instead of animating.
+Swapping between two panels while the drawer is already open is immediate:
+nothing is sliding. A loading placeholder fills the drawer for the whole wait —
+the slide, and the chunk fetch when there is one. The `Suspense` fallback alone
+would not do: a code-split pane suspends only on the first open of a page load,
+so every later open showed an empty drawer. The drawer's chrome (title band,
+inset) is dressed from the panel it is opening onto, not from the one mounted,
+or it flips mid-slide.
+
+Mounted by `CapabilitySidePanelHost` when the capability is active, through a
+`Suspense` boundary: the pane is code-split (2026-09-11) because MDXEditor pulls
+the whole lexical graph, and a static import put ~600 kB of it in the chunk every
+eagerly-routed page loads — the chat included, whether or not a document exists.
+`TeamWikiPage` splits `WikiEditor` for the same reason (it only renders in edit
+mode); both paths have to stay lazy or lexical returns to the shared chunk.
+
+Resume-if-left-open (2026-07-22, default inverted and generalised 2026-09-11):
+re-opening a conversation restores the editor pane only where the user had it
+open, and only once `useHasContent` confirms there is still something to show.
+**Closed is the default** — holding a document is not reason enough to push the
+editor in front of someone reading the thread; the launcher rail offers it.
+Live writes mid-conversation keep their existing pop via the card renderer.
+
+Nothing here is specific to this capability any more: `CapabilitySidePanelHost`
+restores **every** declared panel the same way, so the HTML artifact viewer and
+the PPT preview resume too. The `sessionProbes` plugin contract this used to
+need is gone — it had exactly one implementation, and its two jobs were already
+expressible: "has this conversation got content" is `useHasContent` (which the
+launcher rail already asks), and "was it left open" is the record below. The
+probe's once-per-conversation guard went with it: closing clears the record, so
+the record is the guard.
+
+What "left open" means is recorded per conversation and per browser
+(`capabilityPanelMemory.ts`, bounded localStorage, the same class of UI
+preference as the persisted drawer width). The chat page derives it from the
+push-drawer state rather than recording at each of the dozen call sites that
+change it, so every route to the same outcome agrees: the launcher, the pane's
+✕, a capability's own `requestSidePanelOpen`, a switch to another capability
+panel, and opening the attachments drawer over the editor all land correctly,
+and only one panel is ever remembered because only one drawer is ever open. The
+page's own close on a conversation switch is excluded — it lands while the state
+still describes the conversation being left, and must touch neither side's
+record. With no record — a new machine, cleared storage, blocked storage — the
+answer is the default, closed. Capability-agnostic by construction: every
+declared panel is restored from the same record.
 
 Double close removed (2026-07-22): the pane (and `PptPreviewPane`) shipped its
 own header close button — a Kea-port leftover from `ResizablePaneShell`, which
@@ -3347,6 +3561,22 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+### `DocumentWorkspace` — refresh control (2026-09-11)
+
+The knowledge-flow query slice used to refetch on every mount and keep nothing
+between them, so each arrival on the Resources page reloaded the folder tree,
+the ingestion history and the folder sizes from scratch. It now serves the
+retained answer and only revalidates once it has aged past a short window,
+which makes walking to the chat and back instant — at the cost of a change made
+from another screen staying invisible for that window.
+
+The toolbar therefore carries an explicit refresh action, left of new-folder
+and upload. One press refetches the tree, the open folder's current page (its
+offset preserved), the usage stats and the team's storage quota. It sits
+**outside** the `canUpdateResources` gate the two actions beside it use:
+refreshing is not a mutation, and a read-only member needs it as much as
+anyone. The button shows its spinner while the round trip is in flight.
+
 ### `DocumentWorkspace` — library deletion
 
 Corpus library folders now carry a delete action (same `canUpdateResources`
@@ -3449,18 +3679,18 @@ A folder row now summarizes everything under it — its own documents and every
 sub-folder's, at any depth — in the status column that used to be blank on
 folder rows. Three states, in strict precedence:
 
-| State | Chip | Lifetime |
-| --- | --- | --- |
-| something still ingesting | `StatusChip status="processing"` | until the last child settles |
-| some documents failed | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent |
-| something under it finished this session | `status="ready" justCompleted` ("Done") | session-only |
+| State                                    | Chip                                                                                | Lifetime                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
+| something still ingesting                | `StatusChip status="processing"`                                                    | until the last child settles |
+| some documents failed                    | `status="warning"`, labelled with the count ("2 errors"), naming the files on hover | persistent                   |
+| something under it finished this session | `status="ready" justCompleted` ("Done")                                             | session-only                 |
 
 `raw` is never rolled up: a folder of stored-but-unprocessed documents is a
 steady state, not news. Precedence is processing > failures > done — while
 anything runs the folder is not settled, and once it is, an unresolved failure
 outranks a "your upload landed" marker.
 
-"Done" means *something* under the folder finished this session and nothing
+"Done" means _something_ under the folder finished this session and nothing
 under it is still running or failed — not that every document it holds has been
 processed. The stricter reading would never fire on a folder of long-stored
 documents, and the mark exists to answer "did what I just started land?". It is
@@ -3802,10 +4032,10 @@ lands on the exact section.
 
 ### `PlatformModelBindingsPanel`
 
-**Location:** `src/rework/components/pages/admin/CapabilitiesPage/PlatformModelBindingsPanel/`
+**Location:** `src/rework/components/pages/admin/FeaturesPage/PlatformModelBindingsPanel/`
 **Status:** `Functional`
 
-`InlineDrawer` opened from `CapabilitiesPage`'s Models tab, sibling to
+`InlineDrawer` opened from `FeaturesPage`'s Models tab, sibling to
 `CapabilityTeamMatrixDrawer`. Renders exactly one row — chat — never a
 4-capability list; V1 has no `language`/`embedding`/`image` binding to show.
 Row states: bound (`{{provider}} / {{name}}`), unset ("Using pod default"),
@@ -3914,19 +4144,19 @@ The composer's right-edge chip. Two concerns, now independent:
   diagnosability rule: a control that can do nothing must be absent).
 
 Previously the model identity rode on the `reasoning_toggle` control's own
-`params`, i.e. the single model whose *reasoning* an admin had enabled
+`params`, i.e. the single model whose _reasoning_ an admin had enabled
 platform-wide. That is unrelated to routing, so the chip contradicted any
 platform binding or team override in force. The name is kept (`ReasoningChip`)
 because the reasoning menu is still what makes it interactive.
 
 Three render states:
 
-| Condition | Renders |
-| --------- | ------- |
-| Reasoning control present **and** `reasoning_enabled` | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click. |
+| Condition                                                   | Renders                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reasoning control present **and** `reasoning_enabled`       | Interactive `<button>`: model name, then reasoning state one step fainter (`--on-surface-muted`), then chevron. Menu on click.                                                                                                    |
 | Reasoning control present but `reasoning_enabled === false` | Static label only. The toggle would be inert — the pod strips reasoning for this model — so it is hidden rather than shown as a no-op. `undefined` (not resolved yet, or an older backend) keeps the control the platform served. |
-| No reasoning control at all, model resolved | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable. |
-| Neither | Nothing (`null`). An empty chip would be worse than none. |
+| No reasoning control at all, model resolved                 | Non-interactive `<span class="static">`, same 38px metrics so the composer row keeps its rhythm. Deliberately **not** a disabled button — no action is being withheld, so nothing should look clickable.                          |
+| Neither                                                     | Nothing (`null`). An empty chip would be worse than none.                                                                                                                                                                         |
 
 **Unavailable model.** When `enabled_for_team` is `false` the turn will fail
 with `ModelNotUsableError` before the LLM call. The model name takes
@@ -4010,6 +4240,13 @@ agent-health controls.
 
 - Application-owned information architecture remains outside the generic host
   contract; the host specifies containment and failure behavior only.
+- The framework-independent `@fred/iframe-sdk` child client is generated from the
+  canonical protocol source in
+  `src/rework/features/applications/applicationProtocol.ts`. It replaces hand-written
+  consumer messaging, not the host's source/origin checks, authorization, routing,
+  authenticated request broker, refresh policy, or frame/team teardown.
+- Route notifications are events rather than route-value state: returning to a
+  previously observed sub-path must notify the current child subscribers again.
 
 ---
 
@@ -4110,3 +4347,272 @@ conversation that produced them (the slice only drops them when the next convers
 upserts one of its own). A conversation whose documents all come from the API never
 upserts, so the previous conversation's document showed up as an extra tab - someone
 else's document, in an editor that autosaves.
+
+---
+
+## Team wiki (2026-09-06, WIKI-02, issue #2572)
+
+### `TeamWikiPage`
+
+**Location:** `src/rework/components/pages/TeamWikiPage/`
+**Status:** `Functional` — all four delivery slices shipped (RFC §14): human
+CRUD, revision history and restore, agent read, and agent proposals gated
+behind a human's HITL approval.
+
+`/team/:teamId/wiki` and `/team/:teamId/wiki/:slug`. Three columns: the page
+tree, the article, and the version history when it is open. The layout is
+`HelpCenterPage`'s, which already solves this shape; reading uses
+`MarkdownRenderer` and editing uses `MDXEditor`, the same component
+`writable_document` uses. Nothing new was built where something existed.
+
+**The slug is in the URL**, so a wiki page is deep-linkable and the browser's
+back button walks the pages. A rename does not change the slug, so links
+survive it — nothing here maps an old slug to a page, so re-minting one would
+be a hard 404 for every link already shared.
+
+**Titles are unique among siblings** (2026-09-07): creating, renaming or
+moving a page onto a sibling's title is refused with a translated message. That
+is what makes a page's path — its titles from the root — a unique address, which
+is how an agent names one; the slug never reaches the model at all.
+
+**The slug is opaque** (2026-09-07): eight random hex characters, minted at
+creation and never derived from the title. Because a rename cannot change it, a
+title-derived slug outlives the title it was named for — a page renamed to "Les
+Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every reader,
+and it misled a model too: handed `Les Shinigamis — sous-page-11` in its index,
+it read the pair as one name and called back with a slug that did not exist. An
+identifier that never claimed to mean anything cannot go stale. Pages created
+before this keep the slugs they have; changing them would break their links.
+
+**Every editor-only control is absent, not disabled**, for a member — except
+the version history, which is deliberately open to everyone: the endpoint is
+member-readable, and who wrote a page and when is exactly what a reader needs
+to judge one an agent may have touched. Restore stays editor-only, inside the
+panel. Hiding is courtesy; the server decides either way.
+
+**The rules page is not a node of the tree.** It sits below a separator with its
+own icon, because it is not content the team browses — it is the instruction
+sheet every agent reads — and putting it in the tree would invite moving or
+deleting it like an ordinary page. Its article carries a one-line notice saying
+what it does and that no agent can write to it.
+
+**The review mark** shows as a dot in the rail and a chip on the article, with a
+filter above the tree that lists every page waiting for a human read. The filter
+control stays rendered while the filter is ON even when the count reaches zero —
+clearing the last mark would otherwise remove the only way to turn the filter
+off and strand the reader on an empty rail.
+
+### The rules page's starting draft (2026-09-07, WIKI-05)
+
+Opening the rules page for the first time seeds the editor with a short
+outline: three empty headings for the team's own material, and two rules that
+are true for any team and that the capability's prompt block does not already
+say. Nothing is written until the editor saves, so a team that never opens the
+page keeps no rules — agents are told about rules the team actually wrote,
+never about a default nobody chose.
+
+**Emptiness is not the test** — `revision_id` is. A page saved empty was
+emptied on purpose, and handing the outline back would undo that decision every
+time it is reopened.
+
+**Placeholders would have been worse than nothing.** This page's text is
+injected verbatim into every agent's system prompt, under a heading saying to
+follow it and never act against it. A conventional template of the
+`_(describe your team here)_ ` kind would reach the model as a standing
+instruction on every question, for every team that never cleaned it up. That
+is why the guidance on how to fill the page sits in the editor UI
+(`rules.templateHint`) instead of in the page's own content.
+
+### Version history (2026-09-07, WIKI-05)
+
+Each tile says in words what happened — `Édition manuelle`, `Édition par agent
+(<name>)`, `Validation de l'édition de l'agent` — because a column of
+timestamps and names does not tell a reader which changes were an agent's, and
+that is the one thing they open the history to find out. The agent's display
+name is resolved from the team's instances, and only fetched once a page
+actually has an agent revision.
+
+**A validation is its own entry**, not a line inside the edit it approves. The
+approval happens later than the write and often by someone else, so folding the
+two together would lose both facts. Event entries carry no preview and no
+restore: no content of their own belongs to them.
+
+**The whole tile opens the version**, and restore is a small icon button in the
+corner the current-version tag would otherwise occupy — the two never appear on
+the same tile. A row of text buttons under every entry cost more height than
+the history it was listing.
+
+### Paged history (2026-09-08, WIKI-05)
+
+`GET .../revisions` is bounded server-side (`CONTROL-PLANE-PRODUCT-CONTRACT.md`
+§49), so `WikiRevisions` owns the walk backward through it rather than
+receiving a finished list. Pagination logic is pulled into pure functions in
+`historyPages.ts` (`mergeHistoryPage`), matching this feature's existing
+convention (`historyEntries.ts`, `wikiTree.ts`) of testing the logic without
+rendering the component.
+
+**A base page (`cursor` omitted) always replaces the accumulated state
+outright**, never merges with an older tail. This is both the first load and
+every later re-arrival of that same query — a restore, an edit, another
+viewer's write invalidating the `HISTORY-*` tag while the reader is still
+parked on it. Replacing is what keeps a stale second/third page from surviving
+next to a freshly-invalidated first one.
+
+**"Load older" is disabled while a request for it is in flight**, the
+codebase's usual guard against a second click firing a concurrent duplicate.
+Three terminal states share one area below the list: a `Réessayer` (`common.
+retry`) button on error, `Charger les versions antérieures` while
+`next_cursor` is non-null, and `Début de l'historique.` once it is null —
+never more than one at a time.
+
+**Follow-up (2026-09-08, WIKI-05): three gaps in "every later re-arrival"
+above.** The paragraph's claim only held while the reader stayed on the base
+page — walking to an older one unsubscribes it, so nothing was left to
+re-arrive on. (1) Closing and reopening the panel left `fetchCursor` and the
+accumulated `pages` exactly where they were; `WikiRevisions` now resets both
+on the close→open transition (a ref tracking the previous `open`). Resetting
+state alone is not enough when the panel was already on the base page:
+`fetchCursor` staying `undefined` is a no-op that triggers no request, so
+reopening explicitly calls the query's own `refetch()` once it is confirmed
+bound to `cursor: undefined` — the one case a plain state reset cannot reach.
+The merge effect also gained `fulfilledTimeStamp` as a dependency, since RTK
+Query's structural sharing can keep the same object reference when a refetch
+returns byte-identical content, and reopening must still show it. (2) A local
+mutation this page's OWNER knows about but
+`WikiRevisions` does not (the review mark, an edit or rules save) is handled
+by `TeamWikiPage` remounting the panel on a `key` of
+`` `${pageId}-${historyGeneration}` `` — a full remount resets the walk the
+same way a fresh page does, so "the page changed" and "a save changed this
+page's history" are one mechanism, not two. Restore's own explicit reset
+(inside `WikiRevisions`) still fires directly, since restore is this
+component's own mutation. (3) The merge effect read RTK Query's `data`, which
+keeps the PREVIOUS args' value while a new one is in flight; pairing it with
+the `fetchCursor` that had just changed could merge a response into the walk
+under the wrong cursor. It now reads `currentData`, which is only ever set
+from the args the hook was just called with. None of the three add polling, a
+second cache, or a reconciliation layer — an explicit reset stays the
+accepted trade-off over merging two walks.
+
+### Conflict handling in the editor
+
+A stale save returns 409 carrying the current text and revision. The editor
+shows a banner and keeps the user's own draft on screen and editable: nothing is
+discarded for them, and "Load their version" is a choice, not a consequence.
+
+Two things that had to be right for it to work at all:
+
+- **The editor remounts on a new `key`** when the server's version is loaded.
+  `MDXEditor` reads `markdown` only at mount (`WritableDocumentPane` documents
+  the same constraint), so changing the prop alone would leave the user's text
+  on screen while claiming to have loaded someone else's.
+- **The conflict's `current_revision_id` becomes the next save's base.** Without
+  it every retry after a conflict conflicts again, and the banner promises an
+  outcome the code cannot reach.
+
+Navigating to another page closes the editor. Left open, its draft would still
+be in state while the save now targets the new page id — one click from
+overwriting page B with page A's text.
+
+### Cache tags
+
+The page read is addressed by slug but tagged by `page_id` off the **result**:
+every mutation knows the page id and none of them knows the slug, so tagging by
+slug leaves a write unable to invalidate the page it just changed — the article
+keeps rendering pre-save text and, with it, a stale `revision_id`, which makes
+the _next_ save conflict every time.
+
+---
+
+## Conversation outline rail (2026-09-09, CHAT-OUTLINE-01, issue #2602)
+
+### `ConversationOutlineRail`
+
+**Location:** `src/rework/components/shared/molecules/ConversationOutlineRail/`
+**Status:** `Functional` — V1. Design and the deferred parts: RFC
+`CONVERSATION-OUTLINE-RAIL-RFC.md`.
+
+A rail of graphical marks along the left edge of `ManagedChatPage`'s
+conversation, one per turn. No text: the marks sit in the gutter left by the
+720px message lane, so they take no width from the reading column. Hovering one
+magnifies it and its two neighbours each side and opens a preview tile to its
+right — the question's first sentence over the answer's first two. Clicking one
+jumps to that turn.
+
+**The rail sits against the page's left edge**, at the top bar's inset, not
+against the reading column: it is chrome for the page, and anchoring it to the
+lane made it drift inward with the column instead of staying where the eye
+learns to find it. On a column barely wider than the lane it therefore overlaps
+the first characters of each line — a known cost, and the case to answer when
+narrow viewports are taken on.
+
+**Every mark is the same size.** Encoding the answer's length in a mark's
+height was built and then dropped: it turned the rail into a second thing to
+read rather than a place to aim. The rail says where the turns are, and nothing
+about them.
+
+**The rail has no gaps.** Each mark's button is a full-width row with no gap
+between rows and no padding around the list, and the visible bar is a
+pseudo-element inside it. Anywhere the pointer lands on the rail it is on
+exactly one mark — otherwise travelling down the rail crosses slivers where the
+tile closes and the magnification collapses.
+
+**The rail is inert while a turn is live** (`isStreaming || pendingHitl`):
+visible but dimmed, clicks dead, no tooltip mounted. That is not a nicety, it is
+what makes the whole feature safe. `useChatAutoScroll` re-decides the
+conversation's scroll position every animation frame while a turn runs, so a
+jump written from outside would be overwritten a frame later — a frame-timing
+bug, therefore intermittent. The hook writes _only_ while live, so a rail that
+can only be clicked when it is quiescent never overlaps it: the single-owner
+invariant holds by construction rather than by timing. `useChatAutoScroll`'s
+ownership comment states the refined rule.
+
+**The active mark** (`--primary`) follows two rules, and the second is not a
+special case — it is the common one. _At the bottom of the conversation, the
+last turn is active_: a short final turn never climbs to any reading line,
+because there is not enough content below it to push it there, so without this
+the rail points at the previous turn while the reader sits on the newest one.
+Otherwise, _the last turn whose question has passed a line 35% down the
+viewport_ — not the topmost anchor still on screen, since the anchors sit on the
+user message and partway through a long answer none is visible at all.
+
+This is driven by a scroll listener, not an `IntersectionObserver`. An observer
+only fires when something crosses a boundary, and the first rule turns on the
+scroll position: no anchor crosses anything over the last stretch to the bottom,
+so an observer stays silent through precisely the case that has to be right. The
+cost is paid off instead by binary search — anchors are in document order, so
+their positions are monotonic and the line is found in about eight measurements
+for a two-hundred-turn conversation — and by not measuring at all while a turn
+is live, which is when the autoscroll is writing every frame.
+
+**Streaming costs the rail nothing.** The message list is replaced on every
+token, so: the fold's result is handed back by identity when it describes the
+same rail (keeping the component's `memo` alive), the preview callback is
+ref-backed so its identity never changes, and extracts are derived on hover for
+the hovered turn only, from a bounded 500-character slice.
+
+**Sized to its marks, not full height.** The rail is a sibling of the scroll
+container, so a wheel gesture over it has no scrollable ancestor to chain to and
+the conversation would not move — the dead left gutter of #654. Hugging the
+marks keeps that surface to the few pixels the reader is deliberately pointing
+at. Once the marks outgrow the available height the rail scrolls itself, and
+follows the active mark.
+
+**`aria-hidden`, and the marks are out of the tab order.** Keyboard access is a
+V1 omission, and the RFC says what taking it on would involve: with no labels or
+tab order a screen reader would announce a row of silent marks, and a focusable
+control inside an aria-hidden subtree is a trap. The conversation itself stays fully readable in the thread.
+
+### `Tooltip` — `gapPx`, `placement="right"`, and closing on window blur
+
+Three additions, all made for the rail and all useful beyond it:
+
+- an optional `gapPx` (default 4, `--spacing-2xs`, unchanged for every existing
+  caller) — the rail's preview tile reads as its own card rather than a hint
+  stuck to its trigger, and takes 12;
+- `placement="right"`, the mirror of `"left"`: beside the trigger, vertically
+  centred, flipping to the other side when there is no room;
+- **the panel now closes when the window loses focus or the page is hidden.**
+  Leaving the window produces no `mouseleave`, so a tooltip hovered at the
+  moment of an alt-tab was still open on return and — its own leave event
+  having been lost for good — stayed open alongside the next one hovered. On a
+  rail of many triggers that meant two panels on screen at once.

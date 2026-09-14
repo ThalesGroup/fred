@@ -74,7 +74,7 @@ class FrontendFeatureFlags(BaseModel):
         default=False,
         description=(
             "Enable Fred's integrated Apps surface deployment-wide. When false, "
-            "application discovery, application capability administration, and "
+            "application discovery, application catalog administration, and "
             "the frontend Apps experience stay disabled."
         ),
     )

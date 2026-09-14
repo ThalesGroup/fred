@@ -41,6 +41,9 @@ from knowledge_flow_backend.features.scheduler.activities import (
     output_process_trusted,
     prepare_revectorize_file,
 )
+from knowledge_flow_backend.features.scheduler.pdf_render_expiry_activities import expire_pdf_renders
+from knowledge_flow_backend.features.scheduler.pdf_render_expiry_schedule import sync_pdf_render_expiry_schedule
+from knowledge_flow_backend.features.scheduler.pdf_render_expiry_workflow import ExpirePdfRendersWorkflow
 from knowledge_flow_backend.features.scheduler.pull_files_activities import (
     create_pull_file_metadata,
     pull_input_process,
@@ -81,6 +84,7 @@ async def run_worker(
     *,
     max_concurrent_workflow_tasks: int = 1,
     max_concurrent_activities: int = 1,
+    pdf_render_ttl_days: int = 30,
 ):
     """
     Connect to Temporal and start the ingestion worker.
@@ -100,6 +104,8 @@ async def run_worker(
             by this worker process.
         max_concurrent_activities (int): Max concurrent activity tasks handled by
             this worker process.
+        pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
+            nightly expiry Schedule (0 removes it).
     """
     workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
     activity_concurrency = max(1, int(max_concurrent_activities))
@@ -109,6 +115,12 @@ async def run_worker(
         namespace=config.namespace,
     )
     logger.info(f"[SCHEDULER] Connected to Temporal. Registering worker on queue: '{config.task_queue}'")
+
+    # Housekeeping must never keep ingestion from starting: log and carry on.
+    try:
+        await sync_pdf_render_expiry_schedule(client, config, pdf_render_ttl_days)
+    except Exception:  # noqa: BLE001
+        logger.exception("[SCHEDULER] Could not sync the PDF render expiry schedule; ingestion worker starts anyway")
 
     # Use thread pool executor for sync activities
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency)
@@ -130,6 +142,7 @@ async def run_worker(
             RevectorizeCorpusWorkflow,
             RevectorizeDocument,
             RepairVectorMetadataWorkflow,
+            ExpirePdfRendersWorkflow,
         ],
         activities=[
             create_pull_file_metadata,
@@ -151,6 +164,7 @@ async def run_worker(
             list_strict_content_document_uids,
             bulk_repair_vector_metadata,
             emit_repair_vector_metadata_task_event,
+            expire_pdf_renders,
         ],
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,

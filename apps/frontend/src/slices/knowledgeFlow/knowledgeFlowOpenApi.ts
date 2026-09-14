@@ -213,6 +213,17 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}/artifact/${queryArg.artifactPath}`,
       }),
     }),
+    streamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGet: build.query<
+      StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiResponse,
+      StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/raw_content/pdf/${queryArg.documentUid}`,
+        headers: {
+          Range: queryArg.range,
+        },
+      }),
+    }),
     streamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGet: build.query<
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse,
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg
@@ -1132,6 +1143,11 @@ export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArt
 export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg = {
   documentUid: string;
   artifactPath: string;
+};
+export type StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiResponse = unknown;
+export type StreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetApiArg = {
+  documentUid: string;
+  range?: string | null;
 };
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse = unknown;
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = {
@@ -2644,6 +2660,8 @@ export const {
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
   useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
+  useStreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetQuery,
+  useLazyStreamDocumentAsPdfKnowledgeFlowV1RawContentPdfDocumentUidGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,

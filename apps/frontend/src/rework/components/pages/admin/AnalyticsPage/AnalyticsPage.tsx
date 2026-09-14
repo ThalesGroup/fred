@@ -621,7 +621,7 @@ export default function AnalyticsPage() {
               isLoading={storageByTeamIsLoading}
               isError={storageByTeamIsError}
             />
-            <Link to="/admin/capabilities?kind=model" className={styles.governanceLink}>
+            <Link to="/admin/features?kind=model" className={styles.governanceLink}>
               {t("rework.analytics.administration.modelsGovernanceLink")}
             </Link>
           </div>

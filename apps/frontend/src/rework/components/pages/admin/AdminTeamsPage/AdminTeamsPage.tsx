@@ -28,16 +28,17 @@ import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import {
   useCreateTeamMutation,
   useListAllTeamsQuery,
-  useListUsersQuery,
+  useSearchCandidateTeamAdminsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
 
-// AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
-// bootstrap action — there is no other way to give a freshly created team its
-// first team_admin. The existing-teams list below is read-only (registry
-// governance view, item 9's `can_list_all_teams`) — this page still has no
-// edit/delete affordance for a team, only creation and registry visibility.
+// AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action — there is
+// no other way to give a freshly created team its first team_admin. Every call
+// this page fires is reachable by a `team_manager` who is not a platform_admin
+// (`can_create_team` / `can_list_all_teams`); the existing-teams list is a
+// read-only registry view, and delete/rescue stay platform_admin-only and have
+// no affordance here.
 export default function AdminTeamsPage() {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
@@ -48,7 +49,14 @@ export default function AdminTeamsPage() {
   const [selectedAdmins, setSelectedAdmins] = useState<UserSummary[]>([]);
   const [adminQuery, setAdminQuery] = useState("");
 
-  const { data: allUsers } = useListUsersQuery();
+  // Server-side search, not the org-wide `GET /users` listing: that one is
+  // gated on `can_administer_users` (platform_admin only), so a team_manager
+  // reached this page and found the admin picker permanently empty.
+  const trimmedAdminQuery = adminQuery.trim();
+  const { data: candidateAdmins } = useSearchCandidateTeamAdminsQuery(
+    { query: trimmedAdminQuery },
+    { skip: trimmedAdminQuery.length < 2 },
+  );
   const { data: allTeams } = useListAllTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
 
@@ -72,13 +80,10 @@ export default function AdminTeamsPage() {
   );
 
   const suggestions = useMemo(() => {
-    if (!allUsers) return [];
+    if (!candidateAdmins) return [];
     const selectedIds = new Set(selectedAdmins.map((u) => u.id));
-    const query = adminQuery.toLowerCase().trim();
-    return allUsers
-      .filter((u) => !selectedIds.has(u.id))
-      .filter((u) => !query || `${u.first_name} ${u.last_name} ${u.username}`.toLowerCase().includes(query));
-  }, [allUsers, selectedAdmins, adminQuery]);
+    return candidateAdmins.filter((u) => !selectedIds.has(u.id));
+  }, [candidateAdmins, selectedAdmins]);
 
   const handleSelectAdmin = (user: UserSummary) => {
     setSelectedAdmins((prev) => [...prev, user]);

@@ -30,7 +30,8 @@ Covers the acceptance criteria that hold WITHOUT a live OpenFGA (the tri-state
 #   team ids into functions typed against the real protocols on purpose.
 from __future__ import annotations
 
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
@@ -51,7 +52,12 @@ from control_plane_backend.capabilities.enablement import (
 from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.service import PodModelCatalog
-from fred_core import CapabilityPermission, RebacDisabledResult
+from fred_core import (
+    CapabilityPermission,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacDisabledResult,
+)
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -3067,3 +3073,157 @@ async def test_default_off_without_agent_store_writes_no_tuples() -> None:
         )
 
     assert rebac.write_log == []
+
+
+# ---------------------------------------------------------------------------
+# Delegated feature governance (AUTHZ-05): which relation each gate demands.
+#
+# Whether a `feature_manager` SATISFIES those relations is a property of the
+# compiled OpenFGA model, asserted offline in fred-core
+# (`test_capability_scoping_1980.py`, `test_rebac_schema_authz05.py`):
+# `capability#can_manage` == `can_manage_capabilities from organization`, and
+# `can_manage_capabilities` == `platform_admin or feature_manager`. What this
+# section locks down is the other half — that these endpoints ask for the
+# narrow relations and never for the `can_manage_platform` catch-all.
+# ---------------------------------------------------------------------------
+
+
+class _GateReached(Exception):
+    """Raised by the probe fake so a call stops at its gate, before any work."""
+
+
+class _GateProbeRebac(_FakeRebac):
+    """Records the permission each entry point demands, then aborts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.demanded: tuple[object, str] | None = None
+
+    async def check_user_permission_or_raise(
+        self, user, permission, resource_id, **kwargs
+    ) -> None:
+        self.demanded = (permission, resource_id)
+        raise _GateReached
+
+
+def _probe_user() -> KeycloakUser:
+    """A delegated holder: no Keycloak admin role, only the stored relation."""
+
+    return KeycloakUser(uid="fm", username="fm", roles=[], email=None)
+
+
+def _probe_deps(rebac: _GateProbeRebac) -> Any:
+    return SimpleNamespace(team_dependencies=SimpleNamespace(rebac=rebac))
+
+
+_CAPABILITY_ID = "pod__example"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "call",
+    [
+        pytest.param(
+            lambda svc, user, deps: svc.enable_team_capability(
+                user=user,
+                capability_id=_CAPABILITY_ID,
+                team_id="team-a",
+                settings={},
+                deps=deps,
+            ),
+            id="enable_team_capability",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.disable_team_capability(
+                user=user, capability_id=_CAPABILITY_ID, team_id="team-a", deps=deps
+            ),
+            id="disable_team_capability",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.reset_team_capability(
+                user=user, capability_id=_CAPABILITY_ID, team_id="team-a", deps=deps
+            ),
+            id="reset_team_capability",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.set_default_on(
+                user=user, capability_id=_CAPABILITY_ID, default_on=True, deps=deps
+            ),
+            id="set_default_on",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.set_personal_scope(
+                user=user, capability_id=_CAPABILITY_ID, scope="on", deps=deps
+            ),
+            id="set_personal_scope",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.set_model_reasoning(
+                user=user,
+                capability_id=_CAPABILITY_ID,
+                reasoning_enabled=True,
+                deps=deps,
+            ),
+            id="set_model_reasoning",
+        ),
+        pytest.param(
+            lambda svc, user, deps: svc.preview_capability_revoke(
+                user=user, capability_id=_CAPABILITY_ID, team_id=None, deps=deps
+            ),
+            id="preview_capability_revoke",
+        ),
+    ],
+)
+async def test_capability_mutations_demand_the_per_object_can_manage(call) -> None:
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _GateProbeRebac()
+    with pytest.raises(_GateReached):
+        await call(capability_service, _probe_user(), _probe_deps(rebac))
+
+    assert rebac.demanded == (CapabilityPermission.CAN_MANAGE, _CAPABILITY_ID)
+
+
+@pytest.mark.asyncio
+async def test_capability_list_demands_the_narrow_org_relation() -> None:
+    """The aggregate list has no capability object to check, so it probes the
+    org relation `capability#can_manage` resolves through — not the catch-all."""
+
+    from control_plane_backend.capabilities import service as capability_service
+
+    rebac = _GateProbeRebac()
+    with pytest.raises(_GateReached):
+        await capability_service.list_capability_enablement(
+            user=_probe_user(), deps=_probe_deps(rebac)
+        )
+
+    assert rebac.demanded == (
+        OrganizationPermission.CAN_MANAGE_CAPABILITIES,
+        ORGANIZATION_ID,
+    )
+
+
+@pytest.mark.asyncio
+async def test_catch_all_surfaces_still_demand_can_manage_platform() -> None:
+    """Narrowness regression: delegating feature governance must not hand over
+    a `can_manage_platform` surface. The platform-scoped task listing stands in
+    for that whole family (import/export, reset, stats, corpus audit)."""
+
+    from fred_core.tasks.authz import list_tasks_scoped
+
+    rebac = _GateProbeRebac()
+    with pytest.raises(_GateReached):
+        await list_tasks_scoped(
+            cast(Any, None),
+            cast(Any, rebac),
+            _probe_user(),
+            scope="platform",
+            team_id=None,
+            kind=None,
+            state=None,
+        )
+
+    assert rebac.demanded == (
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        ORGANIZATION_ID,
+    )

@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
+import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRail/ConversationOutlineRail";
+import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
@@ -29,6 +31,7 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
+import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
 import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabilities/ReasoningChip";
 import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRail";
@@ -36,6 +39,8 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
+import { useConversationJump } from "../../../core/hooks/useConversationJump";
+import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { useManagedChat } from "./useManagedChat";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
@@ -84,6 +89,14 @@ function ManagedChatWelcome() {
   );
 }
 
+type ActivePushDrawer =
+  | { kind: "attachments" }
+  | { kind: "capability"; key: string }
+  | { kind: "document-scope" }
+  | { kind: "prompt-library" }
+  | { kind: "debug" }
+  | null;
+
 export default function ManagedChatPage() {
   const { t, i18n } = useTranslation();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
@@ -98,28 +111,10 @@ export default function ManagedChatPage() {
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
   // a time so their widths never cumulate.
-  const [activePushDrawer, setActivePushDrawer] = useState<
-    | { kind: "attachments" }
-    | { kind: "capability"; key: string }
-    | { kind: "document-scope" }
-    | { kind: "prompt-library" }
-    | { kind: "debug" }
-    | null
-  >(null);
+  const [activePushDrawer, setActivePushDrawer] = useState<ActivePushDrawer>(null);
   const attachmentsDrawerOpen = activePushDrawer?.kind === "attachments";
 
-  // Capability part renderers may request their own panel to open (#1903,
-  // e.g. the ppt_filler preview card after a fill): watch the request counter
-  // and open the named panel — this page stays the single open-state authority.
-  const sidePanelOpenRequest = useSelector(selectSidePanelOpenRequest);
-  const lastSidePanelRequestId = useRef(sidePanelOpenRequest.requestId);
-  useEffect(() => {
-    if (sidePanelOpenRequest.requestId === lastSidePanelRequestId.current) return;
-    lastSidePanelRequestId.current = sidePanelOpenRequest.requestId;
-    if (sidePanelOpenRequest.key) {
-      setActivePushDrawer({ kind: "capability", key: sidePanelOpenRequest.key });
-    }
-  }, [sidePanelOpenRequest]);
+  const activeCapabilityKey = activePushDrawer?.kind === "capability" ? activePushDrawer.key : null;
   const [dragActive, setDragActive] = useState(false);
   // Trace detail panel state is lifted here so the drawer is a sibling of the main
   // column. We store the selected entry's *key* (not a snapshot) and re-resolve it
@@ -154,6 +149,75 @@ export default function ManagedChatPage() {
     lastDrawerSessionId.current = chat.sessionId;
     if (wasBound) setActivePushDrawer(null);
   }, [chat.sessionId]);
+
+  // Has this conversation answered yet? `isLoadingHistory` cannot say: it is
+  // false BEFORE a load starts and stays false on a cache hit, so an empty
+  // thread never means an empty conversation on its own. Drives the loading
+  // state, the welcome stage and the hold below. Rationale: COMPONENT-UX.md.
+  const conversationUnresolved = chat.threadMessages.length === 0 && !chat.isHistorySettled;
+
+  // Capability part renderers ask for their own panel (the ppt_filler preview
+  // card after a fill); this page stays the single open-state authority and
+  // applies the request — held until the thread is on screen, because mounting
+  // a panel is one long synchronous task. Rationale: COMPONENT-UX.md.
+  const sidePanelOpenRequest = useSelector(selectSidePanelOpenRequest);
+  const lastSidePanelRequestId = useRef(sidePanelOpenRequest.requestId);
+  const heldPanelRequest = useRef<{
+    key: string | null;
+    sessionId: string | null;
+    drawer: ActivePushDrawer;
+  } | null>(null);
+  useEffect(() => {
+    if (sidePanelOpenRequest.requestId !== lastSidePanelRequestId.current) {
+      lastSidePanelRequestId.current = sidePanelOpenRequest.requestId;
+      heldPanelRequest.current = {
+        key: sidePanelOpenRequest.key,
+        sessionId: chat.sessionId,
+        drawer: activePushDrawer,
+      };
+    }
+    const held = heldPanelRequest.current;
+    if (!held) return;
+    // A request speaks for the conversation it was made in AND for the drawer
+    // it was made against. Leaving drops it rather than carrying it into the
+    // next conversation; opening something else while it waits drops it too,
+    // or the hold would reach over the user and shut what they just opened.
+    if (held.sessionId !== chat.sessionId || held.drawer !== activePushDrawer) {
+      heldPanelRequest.current = null;
+      return;
+    }
+    if (conversationUnresolved) return;
+    heldPanelRequest.current = null;
+    if (held.key) setActivePushDrawer({ kind: "capability", key: held.key });
+  }, [sidePanelOpenRequest, conversationUnresolved, chat.sessionId, activePushDrawer]);
+
+  const handleCapabilityPanelChange = (key: string | null) =>
+    setActivePushDrawer(key ? { kind: "capability", key } : null);
+
+  // Which capability panel this conversation is left with, derived from the
+  // drawer state rather than recorded at each of the dozen places that change
+  // it — the attachments drawer retires the editor as surely as its own ✕ does.
+  // Rationale: COMPONENT-UX.md.
+  const panelMemorySessionRef = useRef(chat.sessionId);
+  const recordedPanelKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previousSessionId = panelMemorySessionRef.current;
+    if (previousSessionId !== chat.sessionId) {
+      panelMemorySessionRef.current = chat.sessionId;
+      recordedPanelKeyRef.current = null;
+      // A switch still carries the outgoing conversation's drawer state, and
+      // the page's own close lands a render later: neither speaks for either
+      // side. A FIRST bind keeps its drawer (`wasBound` above) — fall through.
+      if (previousSessionId) return;
+    }
+    if (recordedPanelKeyRef.current === activeCapabilityKey) return;
+    if (chat.sessionId) {
+      if (recordedPanelKeyRef.current) rememberPanelClosed(chat.sessionId, recordedPanelKeyRef.current);
+      if (activeCapabilityKey) rememberPanelOpen(chat.sessionId, activeCapabilityKey);
+    }
+    recordedPanelKeyRef.current = activeCapabilityKey;
+  }, [chat.sessionId, activeCapabilityKey]);
+
   // The model this agent's next turn will actually route to (#2387) — the
   // composer's label. Its own read rather than part of prepare-execution:
   // prepare runs on every send and is contractually free of pod-catalog
@@ -165,7 +229,7 @@ export default function ManagedChatPage() {
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const isInitialState =
-    chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
+    chat.threadMessages.length === 0 && !chat.waitResponse && !conversationUnresolved && chat.pendingHitl == null;
 
   const attachmentsCount = chat.persistedAttachments.length;
 
@@ -190,6 +254,35 @@ export default function ManagedChatPage() {
     traceCount: lastTurn?.traceMessages.length ?? 0,
     isAwaitingHuman: chat.pendingHitl != null,
   });
+  // ── Outline rail ────────────────────────────────────────────────────────
+  // Frozen while a turn runs: the rail then takes no input, so it can never
+  // write the conversation's scroll position while useChatAutoScroll owns it.
+  const outlineFrozen = chat.waitResponse || chat.pendingHitl != null;
+  // Derived from the messages themselves, then handed back by identity when it
+  // describes the same rail. The message list is replaced on every streamed
+  // token, so a plain memo would re-render every mark tens of times a second;
+  // a coarser key (session + turn count) avoids that but goes stale instead,
+  // since `sessionId` changes a render before the messages do — switching
+  // between two cached conversations of equal length would leave the previous
+  // one's marks on screen. The fold itself is a linear scan over small objects.
+  const outlineTurnIdsRef = useRef<string[]>([]);
+  const outlineTurnIds = useMemo(() => {
+    const next = toTurnIds(chat.threadMessages);
+    if (sameTurnIds(outlineTurnIdsRef.current, next)) return outlineTurnIdsRef.current;
+    outlineTurnIdsRef.current = next;
+    return next;
+  }, [chat.threadMessages]);
+  const activeTurnId = useOutlineScrollSpy(scrollContainerRef, outlineTurnIds, outlineFrozen);
+  const jumpToTurn = useConversationJump(scrollContainerRef, outlineFrozen);
+  // Reads the message list only when a mark is actually hovered — see
+  // ConversationOutlineRail's PreviewTile. Through a ref, so this callback keeps
+  // one identity for the life of the page: keyed on `threadMessages` it would
+  // change on every streamed token and defeat the rail's own `memo`, which is
+  // the whole thing that keeps streaming off the rail's back.
+  const threadMessagesRef = useRef(chat.threadMessages);
+  threadMessagesRef.current = chat.threadMessages;
+  const outlinePreview = useCallback((turnId: string) => toOutlinePreview(threadMessagesRef.current, turnId), []);
+
   // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
   // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
   // supersedes the retired `EffectiveChatOptions.attach_files`.
@@ -234,9 +327,20 @@ export default function ManagedChatPage() {
   // full record, not the summary, so we fetch it on demand; personal-scope prompts
   // are stored under the user's personal team, team-scope under the chat team.
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
-  // Bumped alongside chat.setInput below to ask RichInputField to refocus with
-  // the caret at the end of the just-inserted prompt (batched into one render).
+  // Asks RichInputField to focus with the caret at the end of the draft: bumped
+  // alongside chat.setInput below (an inserted prompt, batched into one render)
+  // and on entering a conversation.
   const [focusEndRequestId, setFocusEndRequestId] = useState(0);
+
+  // Opening a conversation puts the cursor in the composer. Focus used to fall
+  // out of the composer being RE-ENABLED after a load, so a conversation served
+  // from cache silently got none. Rationale: COMPONENT-UX.md.
+  const focusedForSessionRef = useRef(chat.sessionId);
+  useEffect(() => {
+    if (focusedForSessionRef.current === chat.sessionId) return;
+    focusedForSessionRef.current = chat.sessionId;
+    setFocusEndRequestId((n) => n + 1);
+  }, [chat.sessionId]);
   // Resolves true once the text is in the composer. The prompt panel closes on
   // true only, so a failed fetch leaves the user where they were instead of
   // dismissing the list under them.
@@ -522,29 +626,43 @@ export default function ManagedChatPage() {
                   </div>
                 )}
 
-                <div
-                  className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
-                  ref={scrollContainerRef}
-                >
-                  {isInitialState ? (
-                    <div className={styles.initialStage}>
-                      <ManagedChatWelcome />
-                      <div className={styles.initialComposer}>
-                        {composer}
-                        <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                {/* Positioning context for the outline rail, scoped to the
+                    conversation alone — anchoring it on mainColumn would centre
+                    the rail across the composer too. */}
+                <div className={styles.conversationStage}>
+                  <div
+                    className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`}
+                    ref={scrollContainerRef}
+                  >
+                    {isInitialState ? (
+                      <div className={styles.initialStage}>
+                        <ManagedChatWelcome />
+                        <div className={styles.initialComposer}>
+                          {composer}
+                          <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <ConversationThread
-                      messages={chat.threadMessages}
-                      pendingHitl={chat.pendingHitl}
-                      isLoading={chat.isLoadingHistory}
-                      isStreaming={chat.waitResponse}
-                      scrollContainerRef={scrollContainerRef}
-                      onHitlAnswer={chat.handleHitlAnswer}
-                      maxChatInputChars={chat.maxChatInputChars}
-                      hitlFreeText={chat.hitlFreeText}
-                      onHitlFreeTextChange={chat.setHitlFreeText}
+                    ) : (
+                      <ConversationThread
+                        messages={chat.threadMessages}
+                        pendingHitl={chat.pendingHitl}
+                        isLoading={conversationUnresolved}
+                        isStreaming={chat.waitResponse}
+                        scrollContainerRef={scrollContainerRef}
+                        onHitlAnswer={chat.handleHitlAnswer}
+                        maxChatInputChars={chat.maxChatInputChars}
+                        hitlFreeText={chat.hitlFreeText}
+                        onHitlFreeTextChange={chat.setHitlFreeText}
+                      />
+                    )}
+                  </div>
+                  {!isInitialState && (
+                    <ConversationOutlineRail
+                      turnIds={outlineTurnIds}
+                      activeId={activeTurnId}
+                      frozen={outlineFrozen}
+                      onJump={jumpToTurn}
+                      getPreview={outlinePreview}
                     />
                   )}
                 </div>
@@ -563,8 +681,8 @@ export default function ManagedChatPage() {
             its push drawer reflows the header and the conversation together. */}
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
-            activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
-            onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+            activeKey={activeCapabilityKey}
+            onActiveKeyChange={handleCapabilityPanelChange}
           />
 
           {isAdmin && (
@@ -624,8 +742,8 @@ export default function ManagedChatPage() {
             reserves its own in-flow column at the far right. */}
         <ChatLauncherRail
           capabilityIds={chat.capabilityIds}
-          activeKey={activePushDrawer?.kind === "capability" ? activePushDrawer.key : null}
-          onActiveKeyChange={(key) => setActivePushDrawer(key ? { kind: "capability", key } : null)}
+          activeKey={activeCapabilityKey}
+          onActiveKeyChange={handleCapabilityPanelChange}
           launchers={railLaunchers}
           footerLaunchers={debugLaunchers}
         />

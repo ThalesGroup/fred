@@ -74,6 +74,17 @@ function remarkDetailsDirective() {
   };
 }
 
+function fencedLanguage(codeNode: HastNode): string | undefined {
+  const className = codeNode.properties?.className;
+  const classes = Array.isArray(className) ? className.join(" ") : String(className ?? "");
+  return /language-([\w-]+)/.exec(classes)?.[1];
+}
+
+function hastText(node: HastNode): string {
+  if (node.type === "text") return node.value ?? "";
+  return (node.children ?? []).map(hastText).join("");
+}
+
 function walkMdast(node: MdastNode, visitor: (n: MdastNode) => void) {
   visitor(node);
   if (Array.isArray(node.children)) {
@@ -180,22 +191,24 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   // components (MermaidBlock, CodeBlock) and cause their effects to re-fire.
   const components = useMemo(
     () => ({
-      // Pass-through pre: CodeBlock provides its own wrapper
-      pre({ children }: { children: React.ReactNode }) {
-        return <>{children}</>;
-      },
-      // code: mindmap/mermaid fences → custom blocks; other fenced blocks → CodeBlock; inline → CodeBlock inline
-      code({ className, children }: { className?: string; children?: React.ReactNode }) {
-        const lang = /language-([\w-]+)/.exec(className || "")?.[1];
+      // pre: every fenced/indented block lands here, with or without a language.
+      // react-markdown v9 dropped the `inline` prop, so the parent element is
+      // the only reliable block-vs-inline signal — a `language-*` class is not.
+      pre({ node, children }: { node?: HastNode; children?: React.ReactNode }) {
+        const codeNode = node?.children?.find((c) => c.type === "element" && c.tagName === "code");
+        if (!codeNode) return <pre>{children}</pre>;
+        const lang = fencedLanguage(codeNode);
+        const code = hastText(codeNode).replace(/\n$/, "");
         if (lang === "mindmap" || lang === "mindmap-json") {
-          return <MindMapBlock code={String(children).replace(/\n$/, "")} language={lang} />;
+          return <MindMapBlock code={code} language={lang} />;
         }
         if (lang === "mermaid") {
-          return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
+          return <MermaidBlock code={code} />;
         }
-        if (className) {
-          return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;
-        }
+        return <CodeBlock code={code} language={lang} />;
+      },
+      // code: only inline code reaches here — block code is consumed by `pre` above
+      code({ children }: { children?: React.ReactNode }) {
         return <CodeBlock code={String(children)} inline />;
       },
       // hr: suppress horizontal rules — visual noise in a chat context

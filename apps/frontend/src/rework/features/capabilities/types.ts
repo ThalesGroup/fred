@@ -22,6 +22,7 @@
 import type { ComponentType } from "react";
 import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
+import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
 import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface UiPartRendererProps {
@@ -40,16 +41,6 @@ export interface CapabilitySidePanelProps {
 }
 
 /**
- * A headless per-session capability probe (#1905 auto-open): mounted by the
- * chat page's side-panel host for every ACTIVE capability, whether or not its
- * panel is open. It renders nothing; it observes the opened conversation
- * (URL `?session=`, the rework convention) and dispatches capability signals —
- * e.g. writable_document requests its editor panel when the conversation
- * already has documents.
- */
-export type CapabilitySessionProbe = ComponentType<{ capabilityId: string }>;
-
-/**
  * A capability side panel (RFC §9 item 3) — mounted in the chat page's reserved
  * right column when its owning capability is active in the session.
  */
@@ -62,10 +53,14 @@ export interface CapabilitySidePanelSpec {
   /** Glyph of the panel's launcher in the floating rail. */
   icon: IconType;
   /**
-   * Does this panel have anything to show for the OPEN conversation? A false
-   * answer hides the launcher - a button onto an empty panel is noise. Omitted
-   * means "always offer it". Called from the launcher's own component, so a
-   * capability going in or out of a session never shifts hook order.
+   * Does this panel have anything to show for the OPEN conversation? Two things
+   * read it, and both are the host's business, not the capability's: a false
+   * answer hides the launcher (a button onto an empty panel is noise), and it
+   * gates restoring a panel the user left open in this conversation. Answer
+   * false while the content is still on its way — the host waits rather than
+   * concluding there is none. Omitted means "always offer it". Called from its
+   * own component, so a capability going in or out of a session never shifts
+   * hook order.
    */
   useHasContent?: () => boolean;
   /**
@@ -178,6 +173,22 @@ export interface CapabilityConfigWidgetProps {
  */
 export type CapabilityConfigWidget = ComponentType<CapabilityConfigWidgetProps>;
 
+export interface CapabilityHitlRendererProps {
+  /** The gated call, as the approval prompt carries it. */
+  call: PendingToolCall;
+}
+
+/**
+ * Extra content shown inside the approval card for ONE gated tool.
+ *
+ * The gate itself carries almost nothing — a tool name and an argument preview
+ * truncated to 1 200 characters — so a capability whose approval needs real
+ * context (what a proposed wiki edit would actually change) contributes a
+ * renderer that fetches it. It renders above the accept/reject buttons and
+ * never replaces them: the decision stays the platform's.
+ */
+export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -210,11 +221,10 @@ export interface CapabilityUiPlugin {
    */
   sidePanels?: Record<string, CapabilitySidePanelSpec>;
   /**
-   * Headless session probes (#1905 auto-open), mounted by the side-panel host
-   * for every ACTIVE capability whether or not its panel is open. The one
-   * plugin path for "observe the opened conversation and react" behaviours —
-   * e.g. writable_document auto-opens its editor when the conversation already
-   * has documents (its card renderer only covers live writes, not replay).
+   * Approval-card content keyed by GATED TOOL NAME (WIKI-04). Tool names are
+   * unique across capabilities — the backend assembler refuses a collision at
+   * turn assembly — so one flat map resolves them, the same shape as the
+   * side-panel and config-widget registries.
    */
-  sessionProbes?: readonly CapabilitySessionProbe[];
+  hitlRenderers?: Record<string, CapabilityHitlRenderer>;
 }

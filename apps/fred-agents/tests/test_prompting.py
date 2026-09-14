@@ -18,7 +18,7 @@ def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
 
     Why this test exists:
     - the Mermaid output contract moved from authoring-time baking to runtime
-      injection (fred-runtime `build_global_base_prompt_suffix`)
+      injection (fred-runtime `compose_system_prompt`)
     - the stored, operator-editable `system_prompt_template` must stay free of the
       contract so it does not clutter the agent editor and cannot be deleted by an
       operator; baking it back in is the regression this test guards against

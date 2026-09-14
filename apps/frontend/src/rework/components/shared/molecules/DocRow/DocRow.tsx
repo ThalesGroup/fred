@@ -227,7 +227,7 @@ export function DocRow({
                     iconButton={{
                       color: "on-surface",
                       variant: "icon",
-                      size: "xs",
+                      size: "small",
                       icon: { category: "outlined", type: "more_horiz" },
                       "aria-label": t("rework.resources.action.more"),
                       title: t("rework.resources.action.more"),

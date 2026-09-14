@@ -29,8 +29,8 @@ from typing import Any, Mapping
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId, is_personal_team_id
 from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -54,8 +54,10 @@ from control_plane_backend.capabilities.enablement import (
     capability_relation_subjects,
     disable_capability_for_team,
     enable_capability_for_team,
+    enablement_ref,
     ensure_capability_anchor,
-    get_capability_relations_cached,
+    get_enablement_relations_cached,
+    has_enablement_org_relation,
     has_org_relation,
     is_template_capability_instance,
     reset_capability_for_team,
@@ -80,7 +82,7 @@ from control_plane_backend.capabilities.schemas import (
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
-from control_plane_backend.organization_authz import require_manage_any
+from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
@@ -102,36 +104,43 @@ async def _require_can_manage(
     *,
     deps: ProductServiceDependencies,
 ) -> None:
-    """Gate a mutation on `capability#can_manage` (org admin, RFC §8.1/§8.5).
+    """Gate a feature-governance mutation on the org's `can_manage_capabilities`.
 
-    The capability is anchored first (idempotent) so `can_manage` resolves even
-    for a brand-new capability an admin has never touched.
+    Capabilities are checked through ``capability#can_manage``, which the
+    schema resolves through that relation. Applications
+    first pass the equivalent organization gate, then resolve an exact
+    configured ``app__`` catalog entry. Their typed anchor is left to the
+    mutation itself, after any team-scope guard has run, so a rejected request
+    cannot write an application tuple.
     """
 
-    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+    if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         # Validate reserved application ids without first anchoring an
         # arbitrary path parameter. The org-level gate runs before loading
         # application metadata, preserving the admin boundary. The deployment
         # kill switch is then checked before reading registered applications or
         # creating any structural tuple, so disabled applications are both
         # undiscoverable and immutable through the generic capability API.
-        await require_manage_any(rebac, user)
+        await require_manage_capabilities(rebac, user)
         if not is_feature_enabled(deps.configuration, "enableApplications"):
             raise CapabilityNotFound(
-                f"Application capability {capability_id!r} is not installed."
+                f"Application catalog entry {capability_id!r} is not installed."
             )
-        # Parked (`enabled: false`) entries stay manageable: parking withdraws
-        # an app from the catalog while its grants keep living, so gating here
-        # would strand them. Granting stays refused by the strict catalog read.
-        known_ids = {
-            item.capability_id
-            for item in deps.configuration.platform.application_sources
-        }
-        if capability_id not in known_ids:
+        # Catalog-hidden (`enabled: false`) entries stay manageable: their
+        # grants keep living, so gating here would strand them. Granting is
+        # still refused by the strict catalog read.
+        application = next(
+            (
+                item
+                for item in deps.configuration.platform.application_sources
+                if item.catalog_id == capability_id
+            ),
+            None,
+        )
+        if application is None:
             raise CapabilityNotFound(
-                f"Application capability {capability_id!r} is not installed."
+                f"Application catalog entry {capability_id!r} is not installed."
             )
-        await ensure_capability_anchor(rebac, capability_id)
         return
 
     await ensure_capability_anchor(rebac, capability_id)
@@ -165,7 +174,7 @@ def _catalog_entry_for_revoke(
     needed to carry out the revoke; requiring one anyway means an admin
     cannot revoke a live model grant for exactly as long as the model pod's
     `/agents/models-catalog` endpoint is having trouble (2026-08-01, GitHub
-    #2191) — fail-OPEN on an authorization-management surface. A parked
+    #2191) — fail-OPEN on an authorization-management surface. A catalog-hidden
     application (`enabled: false`) leaves the catalog the same way while its
     gateway routes and its grants keep living, so `kind="app"` ids get the
     same fallback for the same reason. `kind="tool"`/`"agent"` ids are NOT
@@ -188,7 +197,7 @@ def _catalog_entry_for_revoke(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
-    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+    if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         return CapabilityCatalogEntry(
             id=capability_id,
             version="0",
@@ -281,7 +290,7 @@ async def _build_enablement_item(
     cache key) also avoids a per-row thundering herd on a cold cache.
     """
 
-    relations = await get_capability_relations_cached(rebac, entry.id)
+    relations = await get_enablement_relations_cached(rebac, enablement_ref(entry))
     default_on = ORGANIZATION_ID in capability_relation_subjects(
         relations, RelationType.DEFAULT_ON, Resource.ORGANIZATION
     )
@@ -359,11 +368,10 @@ async def list_capability_enablement(
     """List every advertised capability with its scope + enablement state (§8.5)."""
 
     rebac = _rebac(deps)
-    # Aggregate-list read gate: `can_manage` is org-admin, so probe it on the
-    # organization singleton via the same admin relation. Kept before every
-    # other step below — authorization must resolve before any of this
-    # request's work runs.
-    await require_manage_any(rebac, user)
+    # Aggregate-list read gate: no single capability object to check, so probe
+    # the org relation `capability#can_manage` itself resolves through. Kept
+    # before every other step — authorization resolves before any work runs.
+    await require_manage_capabilities(rebac, user)
 
     # Lazy import breaks the product.service ↔ capabilities import cycle, same
     # reason `catalog.py`/`impact.py` defer their own product.service imports.
@@ -541,7 +549,9 @@ async def reset_team_capability(
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
     team_id = _canonical_team_id_for_entry(user, entry, team_id)
-    default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
+    default_on = await has_enablement_org_relation(
+        rebac, enablement_ref(entry), RelationType.DEFAULT_ON
+    )
     suspended = await reset_capability_for_team(
         rebac=rebac,
         agent_instance_store=(

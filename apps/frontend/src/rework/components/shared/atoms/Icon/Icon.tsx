@@ -12,16 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IconCategory, IconType, isCustomIcon } from "@shared/utils/Type.ts";
+import { IconCategory, IconType, isCustomIcon, MaterialIconType } from "../../utils/Type.ts";
 import styles from "./Icon.module.scss";
 
 export interface IconProps {
   category: IconCategory;
   type: IconType;
   filled?: boolean;
+  /** Caller-owned accessible name. Omit for decorative icons. */
+  accessibleName?: string;
 }
 
-export default function Icon({ category, type, filled }: IconProps) {
+export interface MaterialIconProps {
+  type: MaterialIconType;
+  filled?: boolean;
+  /** Caller-owned accessible name. Omit for decorative icons. */
+  accessibleName?: string;
+}
+
+export function MaterialIcon({ type, filled, accessibleName }: MaterialIconProps) {
+  const classes = `material-symbols-outlined ${styles.icon} ${filled ? styles.filled : ""}`;
+  return (
+    <span
+      className={classes}
+      role={accessibleName ? "img" : undefined}
+      aria-label={accessibleName}
+      aria-hidden={accessibleName ? undefined : "true"}
+    >
+      {type}
+    </span>
+  );
+}
+
+export default function Icon({ category, type, filled, accessibleName }: IconProps) {
   if (isCustomIcon(type)) {
     const iconPath = `/images/icons/${type}.svg`;
 
@@ -32,11 +55,26 @@ export default function Icon({ category, type, filled }: IconProps) {
           maskImage: `url(${iconPath})`,
           WebkitMaskImage: `url(${iconPath})`,
         }}
-        aria-label={`${type} icon`}
+        role={accessibleName ? "img" : undefined}
+        aria-label={accessibleName}
+        aria-hidden={accessibleName ? undefined : "true"}
       />
     );
   }
 
+  if (category === "outlined") {
+    return <MaterialIcon type={type} filled={filled} accessibleName={accessibleName} />;
+  }
+
   const classes = `material-symbols-${category} ${styles.icon} ${filled ? styles.filled : ""}`;
-  return <span className={classes}>{type}</span>;
+  return (
+    <span
+      className={classes}
+      role={accessibleName ? "img" : undefined}
+      aria-label={accessibleName}
+      aria-hidden={accessibleName ? undefined : "true"}
+    >
+      {type}
+    </span>
+  );
 }

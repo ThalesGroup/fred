@@ -14,7 +14,7 @@
 
 import styles from "./Spinner.module.css";
 
-interface SpinnerProps {
+export interface SpinnerProps {
   /** Diameter in px. */
   size?: number;
   /** Stroke color — defaults to the current text color so it drops into any
@@ -26,12 +26,19 @@ interface SpinnerProps {
    *  don't announce "Loading" a second time per instance, which gets noisy
    *  fast with several concurrent spinners (e.g. an activity list). */
   decorative?: boolean;
+  /** Status text announced to assistive technology. */
+  statusText?: string;
 }
 
 /** Indeterminate circular progress ring — the M3 loading affordance for "work
  *  is happening, no known duration". Extracted from TaskIndicator's inline
  *  SpinningRing so page-level loading states can reuse the same visual. */
-export function Spinner({ size = 20, color = "currentColor", decorative = false }: SpinnerProps) {
+export function Spinner({
+  size = 20,
+  color = "currentColor",
+  decorative = false,
+  statusText = "Loading",
+}: SpinnerProps) {
   const strokeWidth = 2;
   const r = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * r;
@@ -45,7 +52,7 @@ export function Spinner({ size = 20, color = "currentColor", decorative = false 
       className={styles.ring}
       style={{ flexShrink: 0 }}
       role={decorative ? undefined : "status"}
-      aria-label={decorative ? undefined : "Loading"}
+      aria-label={decorative ? undefined : statusText}
       aria-hidden={decorative ? "true" : undefined}
     >
       <circle cx={cx} cy={cx} r={r} fill="none" stroke={color} strokeWidth={strokeWidth} opacity={0.18} />

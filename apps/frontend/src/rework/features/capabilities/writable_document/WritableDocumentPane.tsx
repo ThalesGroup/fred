@@ -24,29 +24,16 @@
 // URL (`?session=`, the rework convention — there is no redux session selector).
 
 import {
-  BlockTypeSelect,
-  BoldItalicUnderlineToggles,
   ChangeCodeMirrorLanguage,
   codeBlockPlugin,
   codeMirrorPlugin,
   ConditionalContents,
-  CreateLink,
-  headingsPlugin,
   imagePlugin,
   InsertCodeBlock,
-  InsertTable,
-  linkDialogPlugin,
-  linkPlugin,
-  listsPlugin,
-  ListsToggle,
   markdownShortcutPlugin,
   MDXEditor,
-  quotePlugin,
   Separator,
-  tablePlugin,
-  thematicBreakPlugin,
   toolbarPlugin,
-  UndoRedo,
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 import { useMemo } from "react";
@@ -54,6 +41,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import type { CapabilitySidePanelProps } from "../types";
 import { useWritableDocuments } from "./useWritableDocuments";
 import WritableDocumentDownloadButton from "./WritableDocumentDownloadButton";
@@ -136,13 +124,7 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
             className={isDarkTheme() ? "dark-theme dark-editor" : undefined}
             contentEditableClassName="fred-writable-document"
             plugins={[
-              headingsPlugin(),
-              listsPlugin(),
-              quotePlugin(),
-              linkPlugin(),
-              linkDialogPlugin(),
-              thematicBreakPlugin(),
-              tablePlugin(),
+              ...proseMdxPlugins(),
               imagePlugin(),
               codeBlockPlugin({ defaultCodeBlockLanguage: "" }),
               codeMirrorPlugin({
@@ -175,17 +157,8 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
                       {
                         fallback: () => (
                           <>
-                            <UndoRedo />
+                            <ProseToolbarButtons />
                             <Separator />
-                            <BoldItalicUnderlineToggles />
-                            <Separator />
-                            <BlockTypeSelect />
-                            <Separator />
-                            <ListsToggle />
-                            <Separator />
-                            <CreateLink />
-                            <Separator />
-                            <InsertTable />
                             <InsertCodeBlock />
                           </>
                         ),

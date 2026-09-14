@@ -116,14 +116,14 @@ def no_pdf(monkeypatch):
     async def _none(_content, *args, **kwargs):
         return None
 
-    monkeypatch.setattr(fill_mod, "convert_pptx_bytes_to_pdf", _none)
+    monkeypatch.setattr(fill_mod, "convert_office_bytes_to_pdf", _none)
 
 
 def _enable_preview(monkeypatch, *, pdf_bytes: bytes = b"%PDF-1.5 fake"):
     async def _pdf(_content, *args, **kwargs):
         return pdf_bytes
 
-    monkeypatch.setattr(fill_mod, "convert_pptx_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(fill_mod, "convert_office_bytes_to_pdf", _pdf)
 
 
 @pytest.fixture

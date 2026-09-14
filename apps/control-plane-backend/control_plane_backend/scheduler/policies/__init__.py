@@ -15,6 +15,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     PolicyEvaluationResult,
     PolicyResolutionRequest,
     PurgeMode,
+    WikiProposalPolicy,
     default_conversation_policy_catalog,
     parse_iso8601_duration,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "PolicyEvaluationResult",
     "PolicyResolutionRequest",
     "PurgeMode",
+    "WikiProposalPolicy",
     "default_conversation_policy_catalog",
     "evaluate_conversation_policy",
     "evaluate_policy_for_request",

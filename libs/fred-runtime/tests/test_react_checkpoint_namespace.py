@@ -109,6 +109,7 @@ async def test_react_executor_does_not_configure_a_checkpoint_namespace() -> Non
         compiled_agent=compiled,  # type: ignore[arg-type]
         binding=_FakeBinding(),  # type: ignore[arg-type]
         services=_FakeServices(),  # type: ignore[arg-type]
+        runtime_class_name="ReActRuntime",
     )
 
     input_model = ReActInput(

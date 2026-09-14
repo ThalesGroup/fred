@@ -58,7 +58,7 @@ The boundary is a `postMessage` handshake with a frame served from a configured
 prefix — never a shared build, a compiled module, or same-origin DOM access.
 Fred code on this side of it must keep it that way: reaching into the frame,
 or handing it anything beyond the plain cloneable context in
-`features/applications/applicationHost.ts`, is a defect even while the frame
+`features/applications/applicationProtocol.ts`, is a defect even while the frame
 happens to be same-origin. An application never receives a bearer token; the
 authenticated request stays on the host side of the channel.
 

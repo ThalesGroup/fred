@@ -40,6 +40,7 @@ from typing import Any, cast
 
 from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
+from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.tools import BaseTool, StructuredTool
 
@@ -116,7 +117,8 @@ def _tool_summary(description: str) -> str:
     """
 
     first_paragraph = description.strip().partition("\n\n")[0]
-    return " ".join(first_paragraph.split())
+    # A remote MCP server's text is data: it must not open or close a block.
+    return escape_reserved_prompt_tags(" ".join(first_paragraph.split()))
 
 
 def build_runtime_tool_prompt_suffix(
@@ -146,8 +148,9 @@ def build_runtime_tool_prompt_suffix(
       `RUNTIME-EXECUTION-CONTRACT.md` §8.63). Untagged tools, or tools whose
       tag matches no given group, render under a flat `Other tools:` bucket
       ahead of the named groups — or, when no group renders at all (the
-      default for every caller that doesn't pass `mcp_prompt_groups`, e.g.
-      Deep agents), as today's plain flat list with no extra heading.
+      default for every caller that doesn't pass `mcp_prompt_groups`, e.g. an
+      agent with no capability selected), as today's plain flat list with no
+      extra heading.
     - `capability_tools` covers tools a native Fred capability contributes via
       `tools(ctx)` (e.g. `document_access`'s `list_document_tree`,
       `document_verbatim`'s `read_document`) — these reach the model's actual
@@ -165,7 +168,7 @@ def build_runtime_tool_prompt_suffix(
     - call after binding tools and append the returned text to the system prompt
 
     Example:
-    - `system_prompt += build_runtime_tool_prompt_suffix(bound_tools, mcp_prompt_groups=block.mcp_prompt_groups, capability_tools=block.tools)`
+    - `tool_suffix = build_runtime_tool_prompt_suffix(bound_tools, mcp_prompt_groups=block.mcp_prompt_groups, capability_tools=block.tools)`, passed to `compose_system_prompt`
     """
 
     bound_names = {bound_tool.runtime_name for bound_tool in bound_tools}
@@ -173,7 +176,7 @@ def build_runtime_tool_prompt_suffix(
 
     if not bound_tools and not extra_tools:
         return (
-            "\n\nTool availability:\n"
+            "Tool availability:\n"
             "- No external tool is available in this session.\n"
             "- Do not claim any search, database lookup, or API call unless it actually happened.\n"
             "- Answer directly without repeating capability disclaimers.\n"
@@ -195,7 +198,7 @@ def build_runtime_tool_prompt_suffix(
         ungrouped_names.append(tool.name)
         ungrouped_summaries[tool.name] = _tool_summary(tool.description)
 
-    lines = ["\n\n# Available tools (exact names)"]
+    lines = ["# Available tools (exact names)"]
 
     if ungrouped_names:
         if grouped_tools:

@@ -50,7 +50,7 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
 // pull in recharts/ResizeObserver machinery this Node-environment test suite
 // has no DOM for — stub them to trivial title-echoing placeholders so this
 // suite stays focused on AnalyticsPage's own section/gating logic, the same
-// isolation CapabilitiesPage.test.tsx applies to its drawer.
+// isolation FeaturesPage.test.tsx applies to its drawer.
 vi.mock("@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart", () => ({
   // Echoes `emptyMessage` too: it is a plain string the page picks per chart,
   // so a mistyped key would otherwise type-check and lint its way to an admin's
@@ -129,7 +129,7 @@ describe("AnalyticsPage admin-only section (§2.4/§2.5)", () => {
     h.capabilities = { ...h.capabilities, canAdmin: true };
     const html = render();
     expect(html).toContain("rework.analytics.sections.administration");
-    expect(html).toContain("/admin/capabilities?kind=model");
+    expect(html).toContain("/admin/features?kind=model");
   });
 
   it("renders the overview and token-usage sections regardless of role", () => {

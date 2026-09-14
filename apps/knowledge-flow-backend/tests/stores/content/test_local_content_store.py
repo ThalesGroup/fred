@@ -26,6 +26,8 @@ This test module covers:
 All tests are isolated using pytest's tmp_path and monkeypatch fixtures.
 """
 
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -73,7 +75,7 @@ def test_save_and_get_markdown(tmp_store, tmp_path):
     md_file.write_text("# Hello")
 
     tmp_store.save_content(doc_id, doc_dir)
-    markdown = tmp_store.get_preview_bytes(f"{doc_id}/output/output.md")
+    markdown = tmp_store.get_output_artifact(f"{doc_id}/output/output.md")
     assert markdown.decode("utf-8") == "# Hello"
 
 
@@ -135,7 +137,7 @@ def test_get_content_empty_input(tmp_store, tmp_path):
 def test_get_markdown_not_found(tmp_store):
     """Raise FileNotFoundError if the markdown file is missing."""
     with pytest.raises(FileNotFoundError):
-        tmp_store.get_preview_bytes("unknown_doc")
+        tmp_store.get_output_artifact("unknown_doc")
 
 
 def test_save_content_copies_file_and_logs(tmp_store, tmp_path, caplog):
@@ -173,7 +175,7 @@ def test_get_markdown_raises_and_logs(monkeypatch, tmp_store, tmp_path, caplog):
     monkeypatch.setattr(Path, "read_bytes", faulty_read_bytes)
     with caplog.at_level("ERROR"):
         with pytest.raises(OSError, match="Read error"):
-            tmp_store.get_preview_bytes(f"{doc_id}/output/output.md")
+            tmp_store.get_output_artifact(f"{doc_id}/output/output.md")
     assert "Error reading document file for" in caplog.text
 
 
@@ -202,3 +204,61 @@ def test_put_file_stores_existing_local_file(tmp_store, tmp_path):
     assert stored_path.read_bytes() == b"parquet-bytes"
     assert stored.size == len(b"parquet-bytes")
     assert stored.file_name == "data.parquet"
+
+
+# ----------------------------
+# Derived artifacts (output/<name>) listing and deletion
+# ----------------------------
+
+
+def _write_artifact(root: Path, document_uid: str, relative: str, payload: bytes = b"x") -> Path:
+    path = root / document_uid / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    return path
+
+
+def test_list_output_artifacts_returns_one_entry_per_document(tmp_store):
+    root = tmp_store.document_root
+    _write_artifact(root, "doc-a", "output/render.pdf", b"a")
+    old = _write_artifact(root, "doc-b", "output/render.pdf", b"bb")
+    _write_artifact(root, "doc-b", "output/output.md")
+    _write_artifact(root, "doc-c", "output/nested/render.pdf")
+    _write_artifact(root, "doc-d", "input/render.pdf")
+    forty_days_ago = 1_700_000_000
+    os.utime(old, (forty_days_ago, forty_days_ago))
+
+    found = tmp_store.list_output_artifacts("render.pdf")
+
+    assert [(o.key, o.document_uid, o.size) for o in found] == [
+        ("doc-a/output/render.pdf", "doc-a", 1),
+        ("doc-b/output/render.pdf", "doc-b", 2),
+    ]
+    assert found[1].modified == datetime.fromtimestamp(forty_days_ago, tz=timezone.utc)
+    assert found[0].modified.tzinfo is not None
+
+
+def test_list_output_artifacts_on_empty_root(tmp_store):
+    assert tmp_store.list_output_artifacts("render.pdf") == []
+
+
+def test_delete_output_artifact_is_idempotent_and_leaves_siblings(tmp_store):
+    root = tmp_store.document_root
+    render = _write_artifact(root, "doc-a", "output/render.pdf")
+    markdown = _write_artifact(root, "doc-a", "output/output.md")
+
+    tmp_store.delete_output_artifact("doc-a/output/render.pdf")
+    tmp_store.delete_output_artifact("doc-a/output/render.pdf")
+
+    assert not render.exists()
+    assert markdown.exists()
+
+
+def test_delete_output_artifact_refuses_paths_outside_the_document_root(tmp_store, tmp_path):
+    outside = tmp_path / "outside.pdf"
+    outside.write_bytes(b"keep me")
+
+    with pytest.raises(ValueError):
+        tmp_store.delete_output_artifact("../outside.pdf")
+
+    assert outside.exists()

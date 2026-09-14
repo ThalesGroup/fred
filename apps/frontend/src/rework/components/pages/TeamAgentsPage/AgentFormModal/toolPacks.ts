@@ -110,6 +110,7 @@ export const CAP_HTML_ARTIFACT = "html_artifact";
 // Advanced view keeps each toggle separate.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
+export const CAP_TEAM_WIKI = "team_wiki";
 
 /** `document_access` config field keys the resource packs compute. */
 export const DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY = "search_attachments_only";
@@ -117,6 +118,7 @@ export const DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL = "show_attach_files_control";
 
 const PACK_TEAM_RESOURCES = "team_resources";
 const PACK_CONVERSATION_ATTACHMENTS = "conversation_attachments";
+const PACK_TEAM_WIKI = "team_wiki";
 
 export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
   {
@@ -144,6 +146,17 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         // selects them — this list documents the pack, it does not drive it.
         enablesCapabilityIds: [CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_SIMILARITY],
         documentAccessIntent: "corpus",
+      },
+      {
+        // Same icon as the wiki's own entry in the team navigation panel, so the
+        // pack and the thing it grants access to read as one feature.
+        id: PACK_TEAM_WIKI,
+        kind: "capabilities",
+        icon: "book_2",
+        titleKey: "rework.teams.formAgent.capabilities.packs.teamWiki.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.teamWiki.description",
+        includes: [{ capabilityId: CAP_TEAM_WIKI, labelKey: "capability.team_wiki.name" }],
+        enablesCapabilityIds: [CAP_TEAM_WIKI],
       },
       {
         id: PACK_CONVERSATION_ATTACHMENTS,

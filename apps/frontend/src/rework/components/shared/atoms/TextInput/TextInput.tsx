@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import styles from "./TextInput.module.scss";
-import { ComponentPropsWithRef, useId } from "react";
-import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { ComponentSize } from "@shared/utils/Type.ts";
+import { ComponentPropsWithRef, useCallback, useEffect, useId, useRef, useState } from "react";
+import Icon, { IconProps } from "../Icon/Icon.tsx";
+import { ComponentSize } from "../../utils/Type.ts";
 
 export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   label?: string;
@@ -44,16 +44,81 @@ export default function TextInput({
   size,
   maxLength,
   value,
+  defaultValue,
   required,
+  disabled,
+  id: callerId,
+  ref,
+  onChange,
+  type = "text",
+  autoComplete = "off",
+  form: formId,
+  "aria-describedby": callerDescription,
+  "aria-invalid": callerInvalid,
   ...props
 }: TextInputProps) {
-  const id = useId();
+  const generatedId = useId();
+  const id = callerId ?? generatedId;
+  const hintId = `${id}-description`;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
+  const isControlled = value !== undefined;
+  const characterCounter = isControlled ? String(value).length : uncontrolledValue.length;
+  const message = error || explanation;
+  const hasError = !disabled && Boolean(error);
+  const describedBy = [callerDescription, message ? hintId : undefined].filter(Boolean).join(" ") || undefined;
 
-  const characterCounter = String(value).length;
+  const handleChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    if (!isControlled) setUncontrolledValue(event.currentTarget.value);
+    onChange?.(event);
+  };
+
+  const setInputRef = useCallback(
+    (input: HTMLInputElement | null) => {
+      inputRef.current = input;
+      if (typeof ref === "function") {
+        const cleanup = ref(input);
+        if (input === null) return;
+        return () => {
+          inputRef.current = null;
+          if (typeof cleanup === "function") cleanup();
+          else ref(null);
+        };
+      }
+      if (ref) ref.current = input;
+      if (input === null) return;
+      return () => {
+        inputRef.current = null;
+        if (ref) ref.current = null;
+      };
+    },
+    [ref],
+  );
+
+  useEffect(() => {
+    const input = inputRef.current;
+    const form = input?.form;
+    if (isControlled || !input || !form) return;
+
+    let pendingReset: ReturnType<typeof setTimeout> | undefined;
+    const handleReset = (event: Event) => {
+      if (pendingReset !== undefined) clearTimeout(pendingReset);
+      pendingReset = setTimeout(() => {
+        if (!event.defaultPrevented && inputRef.current === input) {
+          setUncontrolledValue(input.value);
+        }
+      }, 0);
+    };
+    form.addEventListener("reset", handleReset);
+    return () => {
+      form.removeEventListener("reset", handleReset);
+      if (pendingReset !== undefined) clearTimeout(pendingReset);
+    };
+  }, [formId, isControlled]);
 
   return (
     <div
-      className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
+      className={`${styles.input} ${disabled ? styles.disabled : ""} ${hasError ? styles.error : ""}`}
       data-compact={compact}
       data-size={size}
     >
@@ -70,18 +135,27 @@ export default function TextInput({
         )}
         <input
           id={id}
-          type={"text"}
+          ref={setInputRef}
+          type={type}
           value={value}
+          defaultValue={defaultValue}
           maxLength={maxLength}
           required={required}
-          autoComplete="off"
+          disabled={disabled}
+          autoComplete={autoComplete}
+          form={formId}
+          onChange={handleChange}
+          aria-describedby={describedBy}
+          aria-invalid={hasError ? true : callerInvalid}
           {...props}
         />
         {suffix && <span className={styles.suffix}>{suffix}</span>}
       </div>
       <span className={styles.information}>
-        <span className={styles.hint}>{error || explanation || null}</span>
-        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+        <span className={styles.hint} id={message ? hintId : undefined}>
+          {message || null}
+        </span>
+        <span className={styles.maxLength}>{maxLength !== undefined && `${characterCounter} / ${maxLength}`}</span>
       </span>
     </div>
   );

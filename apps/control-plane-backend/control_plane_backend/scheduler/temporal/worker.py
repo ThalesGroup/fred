@@ -68,6 +68,8 @@ async def run_worker(
         activities=[
             activities.list_conversation_candidates,
             activities.delete_conversation,
+            activities.list_wiki_proposal_candidates,
+            activities.reject_wiki_proposal,
         ],
     )
 

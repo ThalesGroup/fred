@@ -8,6 +8,11 @@
   --tile-hover-bg: color-mix(in srgb, var(--on-surface) 8%, var(--surface-container-high));
   display: flex;
   position: relative;
+  /* The list is a height-constrained flex column, so a row left shrinkable is
+   * squashed to its min-height as soon as the list overflows — swallowing its
+   * own padding, which then looks inert. The list scrolls; rows keep their
+   * height. */
+  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;

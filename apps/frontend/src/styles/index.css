@@ -15,6 +15,8 @@
 
 @import "typography.css";
 
+@import "./mdxeditor-theme.css";
+
 @font-face {
   font-style: normal;
   font-weight: 100 900;

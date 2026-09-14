@@ -26,11 +26,12 @@ from fred_core.security.oidc import apply_security_profile as _apply_security_pr
 from fred_core.security.oidc import (
     initialize_user_security as _initialize_user_security,
 )
-from fred_core.security.rebac.capability_authz import (
-    application_capability_id as _application_capability_id,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX as _APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
-from fred_core.security.rebac.capability_authz import (
-    team_capability_subject_and_context as _team_capability_subject_and_context,
+from fred_core.security.rebac.application_authz import app_ref as _app_ref
+from fred_core.security.rebac.rebac_engine import (
+    AppPermission as _AppPermission,
 )
 from fred_core.security.rebac.rebac_engine import (
     CapabilityPermission as _CapabilityPermission,
@@ -38,6 +39,9 @@ from fred_core.security.rebac.rebac_engine import (
 from fred_core.security.rebac.rebac_engine import RebacEngine as _RebacEngine
 from fred_core.security.rebac.rebac_engine import RebacReference as _RebacReference
 from fred_core.security.rebac.rebac_engine import TeamPermission as _TeamPermission
+from fred_core.security.rebac.rebac_engine import (
+    team_subject_and_context as _team_subject_and_context,
+)
 from fred_core.security.rebac.rebac_factory import rebac_factory as _rebac_factory
 from fred_core.security.structure import KeycloakUser as _KeycloakUser
 from fred_core.security.structure import OpenFgaRebacConfig as _OpenFgaRebacConfig
@@ -63,7 +67,7 @@ class RebacSdk(_Protocol):
         team_id: str,
         capability_id: str,
     ) -> None:
-        """Raise unless a collaborative ``team_id`` may use ``capability_id``."""
+        """Raise unless a team may use a non-application ``capability_id``."""
         ...
 
     async def check_application_access(
@@ -146,6 +150,16 @@ class _RebacSdk:
                 subject_type=_Resource.TEAM,
                 subject_id=team_id,
             )
+        if capability_id.startswith(_APPLICATION_CATALOG_NAMESPACE_PREFIX):
+            raise _AuthorizationError(
+                team_id,
+                _CapabilityPermission.CAN_USE.value,
+                _Resource.CAPABILITY,
+                f"{capability_id!r} is an application catalog id; use "
+                "check_application_access with the raw application id",
+                subject_type=_Resource.TEAM,
+                subject_id=team_id,
+            )
         await self._check_team_capability(team_id, capability_id)
 
     async def _check_team_capability(
@@ -155,13 +169,32 @@ class _RebacSdk:
         *,
         user: _KeycloakUser | None = None,
     ) -> None:
-        team_ref, context = _team_capability_subject_and_context(team_id)
+        team_ref, context = _team_subject_and_context(team_id)
         await self.__engine.check_permission_or_raise(
             team_ref,
             _CapabilityPermission.CAN_USE,
             _RebacReference(type=_Resource.CAPABILITY, id=capability_id),
             contextual_relations=context,
             actor_uid=user.uid if user else None,
+        )
+
+    async def _check_team_application(
+        self,
+        team_id: str,
+        app_id: str,
+        *,
+        user: _KeycloakUser,
+    ) -> None:
+        team_ref, context = _team_subject_and_context(team_id)
+        # Fresh read: a revoked grant must deny here even when a recent allow
+        # for the same pair is still cached upstream.
+        await self.__engine.check_permission_or_raise(
+            team_ref,
+            _AppPermission.CAN_USE,
+            _app_ref(app_id),
+            contextual_relations=context,
+            consistency_token=_RebacEngine.HIGHER_CONSISTENCY,
+            actor_uid=user.uid,
         )
 
     async def check_application_access(
@@ -183,11 +216,7 @@ class _RebacSdk:
         await self.check_user_team_permission(
             user, _TeamPermission.CAN_USE_TEAM_APPLICATIONS, team_id
         )
-        await self._check_team_capability(
-            team_id,
-            _application_capability_id(app_id),
-            user=user,
-        )
+        await self._check_team_application(team_id, app_id, user=user)
 
     async def close(self) -> None:
         await self.__engine.close()

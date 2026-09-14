@@ -304,16 +304,22 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         compiled_agent: _CompiledReActAgent,
         binding: BoundRuntimeContext,
         services: RuntimeServices,
+        runtime_class_name: str,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
         self._services = services
+        # Names the actual runtime class (both ReActRuntime and DeepAgentRuntime
+        # construct this same executor) so per-turn logs never say "ReActRuntime"
+        # for a Deep turn.
+        self._runtime_class_name = runtime_class_name
 
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> ReActOutput:
         logger.info(
-            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** handling exchange agent_id=%s session_id=%s",
+            "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange agent_id=%s session_id=%s",
+            self._runtime_class_name,
             self._binding.portable_context.agent_id or "unknown",
             self._binding.portable_context.session_id,
         )
@@ -359,7 +365,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> AsyncIterator[RuntimeEvent]:
         logger.debug(
-            "[AGENT VERSION] *** V2 BasicReAct/stream *** exchange agent_id=%s session_id=%s",
+            "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange agent_id=%s session_id=%s",
+            self._runtime_class_name,
             self._binding.portable_context.agent_id or "unknown",
             self._binding.portable_context.session_id,
         )
@@ -880,8 +887,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
         logger.info(
-            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** activated"
+            "[AGENT VERSION] *** V2 BasicReAct/%s *** activated"
             " agent_id=%s profile=%s session_id=%s tools=%s",
+            type(self).__name__,
             self.definition.agent_id,
             getattr(self.definition, "react_profile_id", "N/A"),
             binding.portable_context.session_id,
@@ -896,7 +904,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
 
         policy = self.definition.policy()
         logger.debug(
-            "[V2][EXECUTOR] build start agent=%s declared_tool_refs=%r toolset_key=%r",
+            "[V2][EXECUTOR] build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
+            type(self).__name__,
             self.definition.agent_id,
             [r.tool_ref for r in self.definition.declared_tool_refs],
             self._toolset_key(),
@@ -980,6 +989,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             compiled_agent=compiled_agent,
             binding=binding,
             services=self.services,
+            runtime_class_name=type(self).__name__,
         )
 
     async def on_dispose(self) -> None:

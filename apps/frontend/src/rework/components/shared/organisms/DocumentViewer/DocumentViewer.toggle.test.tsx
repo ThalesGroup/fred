@@ -36,7 +36,9 @@ vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
   MarkdownRenderer: () => <p data-testid="markdown-view" />,
 }));
 vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
-  PdfStreamingDocumentViewer: () => <div data-testid="pdf-view" />,
+  PdfStreamingDocumentViewer: ({ sourceUrl }: { sourceUrl?: string }) => (
+    <div data-testid="pdf-view" data-source-url={sourceUrl} />
+  ),
 }));
 // A real RTK Query lazy-query trigger is a stable function across renders —
 // a fresh closure here on every render (as a plain `() => [...]` factory
@@ -107,11 +109,39 @@ describe("DocumentViewer Fichier/Raw content", () => {
     expect(container.querySelector('[data-testid="markdown-view"]')).not.toBeNull();
   });
 
-  it("ignores `view` for a non-PDF file — there is nothing to switch to", async () => {
-    render(<DocumentViewer documentUid="doc-1" fileName="report.docx" view="raw" />);
+  it("ignores `view` for a format with no native renderer — there is nothing to switch to", async () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="ventes.csv" view="raw" />);
     await flush();
     expect(container.querySelector('[role="tablist"]')).toBeNull();
     expect(container.querySelector('[data-testid="markdown-view"]')).not.toBeNull();
+  });
+
+  it('renders a Word document natively for view="file", through the render endpoint', () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="rapport.docx" view="file" />);
+    const pdfView = container.querySelector('[data-testid="pdf-view"]');
+    expect(pdfView).not.toBeNull();
+    // Not the raw stream: a .docx has to go through the backend PDF render.
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/pdf/doc-1");
+    expect(container.querySelector('[data-testid="markdown-view"]')).toBeNull();
+  });
+
+  it('renders a PowerPoint deck natively for view="file", through the same render endpoint', () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="deck.pptx" view="file" />);
+    const pdfView = container.querySelector('[data-testid="pdf-view"]');
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/pdf/doc-1");
+  });
+
+  it('still offers the markdown extraction of a Word document for view="raw"', async () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="rapport.docx" view="raw" />);
+    await flush();
+    expect(container.querySelector('[data-testid="pdf-view"]')).toBeNull();
+    expect(container.querySelector('[data-testid="markdown-view"]')).not.toBeNull();
+  });
+
+  it("streams a PDF from storage rather than through the render endpoint", () => {
+    render(<DocumentViewer documentUid="doc-1" fileName="report.pdf" view="file" />);
+    const pdfView = container.querySelector('[data-testid="pdf-view"]');
+    expect(pdfView?.getAttribute("data-source-url")).toBe("/knowledge-flow/v1/raw_content/stream/doc-1");
   });
 });
 

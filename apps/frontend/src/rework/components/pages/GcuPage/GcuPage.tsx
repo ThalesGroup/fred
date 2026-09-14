@@ -70,10 +70,9 @@ export default function GcuPage() {
           setHasReachedBottom(false);
         }
       },
-      {
-        root: null,
-        threshold: 1.0,
-      },
+      // Any overlap counts: Firefox's fractional positions keep a full-visibility
+      // threshold from ever tripping on a 1px sentinel.
+      { threshold: 0 },
     );
 
     if (bottomRef.current) {
@@ -93,7 +92,7 @@ export default function GcuPage() {
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
       <div className={styles.gcuContent}>
         <MarkdownRenderer text={gcuMarkdown} />
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className={styles.gcuEnd} />
       </div>
       <div className={styles.gcuActions}>
         {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (

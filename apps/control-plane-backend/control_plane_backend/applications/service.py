@@ -18,13 +18,13 @@ from __future__ import annotations
 
 from fred_core import KeycloakUser, TeamPermission
 from fred_core.common import TeamId, is_personal_team_id
+from fred_core.security.rebac.application_authz import usable_application_ids
 
 from control_plane_backend.applications.catalog import (
     ApplicationCatalogSource,
     ConfiguredApplicationCatalogSource,
 )
 from control_plane_backend.applications.schemas import ApplicationList
-from control_plane_backend.capabilities.authz import usable_capability_ids
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.schemas import TeamNotFoundError
 from control_plane_backend.teams.system import resolve_system_team_id
@@ -53,8 +53,8 @@ async def list_team_applications(
         str(canonical_team_id),
     )
 
-    # Personal spaces are an explicit V1 ceiling even if capability default-on
-    # would make their team subject pass ``capability#can_use``.
+    # Personal spaces are an explicit V1 ceiling even if application default-on
+    # would make their team subject pass ``app#can_use``.
     if is_personal_team_id(str(canonical_team_id)):
         return ApplicationList(schema_version="1", items=[])
 
@@ -67,10 +67,10 @@ async def list_team_applications(
         raise TeamNotFoundError(canonical_team_id)
 
     catalog = source.load()
-    usable_ids = await usable_capability_ids(rebac, canonical_team_id)
+    usable_ids = await usable_application_ids(rebac, canonical_team_id)
     items = [
         item.summary()
         for item in catalog.items
-        if usable_ids is None or item.capability_id in usable_ids
+        if usable_ids is None or item.app_id in usable_ids
     ]
     return ApplicationList(schema_version="1", items=items)

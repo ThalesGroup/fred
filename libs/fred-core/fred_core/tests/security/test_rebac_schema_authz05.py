@@ -111,20 +111,6 @@ def test_team_role_administration_has_no_platform_escalation() -> None:
         )
 
 
-def test_can_create_team_is_platform_admin_only() -> None:
-    """`can_create_team` (the bootstrap gate, RFC §28) is `platform_admin`-only
-    (AUTHZ-05 review item 5): the legacy `admin` bridge had no other caller in
-    the repo than `create_team`, so it is cut rather than perpetuated. This
-    must not be confused with a team relation: `platform_admin` still does not
-    appear anywhere in the `team` type's relation definitions (checked above),
-    so this capability can only ever gate the one-shot create-team action,
-    never ongoing team access."""
-    organization = _type_definition("organization")
-    can_create_team = organization["relations"]["can_create_team"]
-
-    assert can_create_team == {"computedUserset": {"relation": "platform_admin"}}
-
-
 def test_can_use_team_agents_is_team_member_only() -> None:
     """AUTHZ-05 review item 1b: seeing/using a team's agents (templates and
     managed instances) must be gated on `team_member`, never on `can_read`
@@ -205,20 +191,16 @@ def test_no_legacy_organization_role_relations_survive() -> None:
         )
 
 
-def test_team_registry_governance_capabilities_are_platform_admin_only() -> None:
-    """AUTHZ-05 review item 9 (RFC Part 6 §32): `can_list_all_teams`,
-    `can_delete_team`, `can_rescue_team_admin` govern the team *registry*
-    (existence), never a team's data - `platform_admin`-only, like
-    `can_create_team` above. None of the three may ever be redefined to also
-    accept a team relation: that would let `platform_admin` reach team data
-    through the registry surface, the exact escalation this RFC closes."""
+def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> None:
+    """AUTHZ-05 review item 9 (RFC Part 6 §32): the registry capabilities
+    govern the *existence* of teams, never a team's data. Deleting a team and
+    rescuing its admin are deliberately excluded from `team_manager` and must
+    stay `platform_admin`-only; none of them may ever be redefined to also
+    accept a team relation, which would let a platform role reach team data
+    through the registry surface - the exact escalation this RFC closes."""
     organization = _type_definition("organization")
 
-    for capability in (
-        "can_list_all_teams",
-        "can_delete_team",
-        "can_rescue_team_admin",
-    ):
+    for capability in ("can_delete_team", "can_rescue_team_admin"):
         assert organization["relations"][capability] == {
             "computedUserset": {"relation": "platform_admin"}
         }, f"{capability} must be platform_admin-only."

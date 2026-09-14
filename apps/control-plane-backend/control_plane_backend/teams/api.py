@@ -59,6 +59,9 @@ from control_plane_backend.teams.service import (
     revoke_team_member_role as revoke_team_member_role_from_service,
 )
 from control_plane_backend.teams.service import (
+    search_candidate_team_admins as search_candidate_team_admins_from_service,
+)
+from control_plane_backend.teams.service import (
     search_candidate_team_members as search_candidate_team_members_from_service,
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
@@ -184,6 +187,23 @@ async def list_all_teams(
     """Registered before `/teams/{team_id}` so the literal `all` path segment
     is not swallowed by the team-id path parameter."""
     return await list_all_teams_from_service(user, deps)
+
+
+@router.get(
+    "/teams/candidate-admins",
+    response_model=list[UserSummary],
+    response_model_exclude_none=True,
+    summary="Search users eligible to be a new team's first team_admin",
+)
+async def search_candidate_team_admins(
+    query: Annotated[str, Query(min_length=2)],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[UserSummary]:
+    """Feeds `POST /teams`' `initial_team_admin_ids` and is gated on the same
+    `can_create_team`. Registered before `/teams/{team_id}` so the literal
+    path segment is not swallowed by the team-id path parameter."""
+    return await search_candidate_team_admins_from_service(user, query, deps)
 
 
 @router.get(

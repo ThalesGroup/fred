@@ -45,9 +45,12 @@ from control_plane_backend.teams.service import (
     delete_team,
     list_all_teams_for_registry,
     rescue_team_admin,
+    search_candidate_team_admins,
     update_team,
 )
+from control_plane_backend.users.schemas import UserSummary
 from fred_core import (
+    AuthorizationError,
     KeycloakUser,
     OrganizationPermission,
     RebacReference,
@@ -71,6 +74,7 @@ class _FakeRebac:
         *,
         team_admin_ids: set[str] | None = None,
         add_relations_raises: Exception | None = None,
+        granted: set[OrganizationPermission] | None = None,
     ) -> None:
         self.permission_checks: list[OrganizationPermission] = []
         self.team_permission_checks: list[tuple[str, tuple[TeamPermission, ...]]] = []
@@ -78,11 +82,17 @@ class _FakeRebac:
         self.added_relations: list[Relation] = []
         self.deleted_references: list[RebacReference] = []
         self._add_relations_raises = add_relations_raises
+        self._granted = granted
 
     async def check_user_permission_or_raise(
         self, user, permission, resource_id, **kwargs
     ) -> None:
         self.permission_checks.append(permission)
+        # `granted=None` keeps the permissive default every pre-existing test
+        # relies on; a set turns this into a real allow-list so a delegated
+        # role's exact reach can be asserted.
+        if self._granted is not None and permission not in self._granted:
+            raise AuthorizationError(user.uid, permission.value, Resource.ORGANIZATION)
 
     async def check_user_team_permissions_or_raise(
         self, *, user, team_id, permissions
@@ -216,6 +226,7 @@ def _deps(
     *,
     prompt_store: Any = None,
     prompt_category_store: Any = None,
+    search_users: Any = None,
 ):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
@@ -235,7 +246,7 @@ def _deps(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _no_users_by_ids),
-        search_users=cast(Any, _no_search_users),
+        search_users=cast(Any, search_users or _no_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
 
@@ -748,3 +759,228 @@ async def test_get_teams_all_route_is_not_swallowed_by_team_id_path_param(
     assert resp.status_code == 200
     assert resp.json() == []
     assert sentinel_call_count == 1
+
+
+# --------------------------- team_manager delegation ------------------------
+#
+# A `team_manager` who is NOT a `platform_admin` holds exactly two org
+# capabilities. These lock in both halves of that: the two surfaces the role
+# owns work, and nothing else in the admin tier does.
+
+_TEAM_MANAGER_GRANTS = {
+    OrganizationPermission.CAN_CREATE_TEAM,
+    OrganizationPermission.CAN_LIST_ALL_TEAMS,
+}
+
+
+def _team_manager() -> KeycloakUser:
+    return KeycloakUser(uid="team-manager-1", username="mallory", roles=[], email=None)
+
+
+def _team_manager_rebac(**kwargs: Any) -> _FakeRebac:
+    return _FakeRebac(granted=_TEAM_MANAGER_GRANTS, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_team_manager_creates_a_team_with_no_further_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`POST /teams` must be reachable on `can_create_team` alone: no second
+    org check, no `can_manage_platform` fallback, no Keycloak-role assumption.
+    The creator receives no relation on the new team unless they name
+    themselves in `initial_team_admin_ids` (RFC §24.2/§24.7) — here they do
+    not, so the only user tuple written names the requested admin."""
+    rebac = _team_manager_rebac()
+    store = _FakeMetadataStore()
+    _stub_team_projection(monkeypatch)
+
+    team = await create_team(
+        _team_manager(),
+        CreateTeamRequest(name="Northbridge", initial_team_admin_ids=["alice"]),
+        _deps(
+            rebac,
+            store,
+            prompt_store=_FakePromptStoreForSeed(),
+            prompt_category_store=_FakePromptCategoryStoreForSeed(),
+        ),
+    )
+
+    assert team.name == "Northbridge"
+    assert rebac.permission_checks == [OrganizationPermission.CAN_CREATE_TEAM]
+    admin_subjects = {
+        relation.subject.id
+        for relation in rebac.added_relations
+        if relation.relation == RelationType.TEAM_ADMIN
+    }
+    assert admin_subjects == {"alice"}
+
+
+@pytest.mark.asyncio
+async def test_team_manager_lists_the_whole_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The registry view must reach `list_all_teams_unfiltered` (every team)
+    rather than the per-caller `CAN_READ`-filtered `list_teams` — a
+    team_manager belongs to none of the teams they govern, so the filtered
+    list would render `/admin/teams` empty for the role that owns it."""
+    rebac = _team_manager_rebac()
+    store = _FakeMetadataStore({})
+
+    async def _fake_list_all_teams_unfiltered(user, deps):
+        return [
+            Team(id=TeamId("fredlab"), name="Fredlab"),
+            Team(id=TeamId("northbridge"), name="Northbridge"),
+        ]
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.list_all_teams_unfiltered",
+        _fake_list_all_teams_unfiltered,
+    )
+
+    result = await list_all_teams_for_registry(_team_manager(), _deps(rebac, store))
+
+    assert {str(team.id) for team in result} == {"fredlab", "northbridge"}
+    assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
+
+
+@pytest.mark.asyncio
+async def test_team_manager_cannot_delete_a_team() -> None:
+    """`can_delete_team` stays platform_admin-only by design."""
+    rebac = _team_manager_rebac()
+    store = _team_store(t1="Northbridge")
+
+    with pytest.raises(AuthorizationError):
+        await delete_team(_team_manager(), TeamId("t1"), _deps(rebac, store))
+
+    assert store.deleted_ids == []
+
+
+@pytest.mark.asyncio
+async def test_team_manager_cannot_rescue_a_team_admin() -> None:
+    """`can_rescue_team_admin` stays platform_admin-only: it writes a
+    `team_admin` tuple, which is the one door from the registry surface into a
+    team's data."""
+    rebac = _team_manager_rebac(team_admin_ids=set())
+    store = _team_store(t1="Northbridge")
+
+    with pytest.raises(AuthorizationError):
+        await rescue_team_admin(
+            _team_manager(), TeamId("t1"), "mallory", _deps(rebac, store)
+        )
+
+    assert rebac.added_relations == []
+
+
+@pytest.mark.asyncio
+async def test_team_manager_cannot_reach_a_can_manage_platform_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The delegation must be narrow: holding the two team-registry
+    capabilities gives no access to the `can_manage_platform` catch-all that
+    still gates import/export, tasks and platform reset. Driven through the
+    real route so the assertion is about the permission that surface actually
+    picks, not one this test named. This is the regression test for the whole
+    point of splitting the admin tier."""
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+    from control_plane_backend.import_export.api import _get_rebac_engine
+    from control_plane_backend.main import create_app
+
+    rebac = _team_manager_rebac()
+    app = create_app()
+    app.dependency_overrides[_get_rebac_engine] = lambda: cast(Any, rebac)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/import-export/stats")
+
+    assert resp.status_code == 403
+    assert rebac.permission_checks == [OrganizationPermission.CAN_MANAGE_PLATFORM]
+
+
+# --------------------------- candidate-admin search -------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_admins_is_gated_on_can_create_team() -> None:
+    """`create_team` requires at least one admin id, and the org-wide
+    directory (`GET /users`) is `can_administer_users`-gated — platform_admin
+    only. Without this search a team_manager could open `/admin/teams` and
+    hold `can_create_team` yet never fill the form."""
+    rebac = _team_manager_rebac()
+    store = _FakeMetadataStore()
+
+    async def _search(query: str) -> list[UserSummary]:
+        return [UserSummary(id="alice", username=query)]
+
+    matches = await search_candidate_team_admins(
+        _team_manager(), "coh", _deps(rebac, store, search_users=_search)
+    )
+
+    assert [user.id for user in matches] == ["alice"]
+    assert rebac.permission_checks == [OrganizationPermission.CAN_CREATE_TEAM]
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_admins_refuses_without_can_create_team() -> None:
+    rebac = _FakeRebac(granted=set())
+    store = _FakeMetadataStore()
+
+    with pytest.raises(AuthorizationError):
+        await search_candidate_team_admins(_user(), "coh", _deps(rebac, store))
+
+
+@pytest.mark.asyncio
+async def test_search_candidate_team_admins_never_degrades_into_a_directory_dump() -> (
+    None
+):
+    """The route's `min_length=2` validates the raw string, so a whitespace-only
+    query would otherwise reach Keycloak un-narrowed."""
+    rebac = _team_manager_rebac()
+    store = _FakeMetadataStore()
+    calls: list[str] = []
+
+    async def _search(query: str) -> list[UserSummary]:
+        calls.append(query)
+        return []
+
+    assert (
+        await search_candidate_team_admins(
+            _team_manager(), "  ", _deps(rebac, store, search_users=_search)
+        )
+        == []
+    )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_candidate_admins_route_is_not_swallowed_by_team_id_path_param(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`GET /teams/candidate-admins` must be registered before
+    `GET /teams/{team_id}`, or the literal segment is captured as a team id."""
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+    calls: list[str] = []
+
+    async def _fake_search(user, query, deps):
+        calls.append(query)
+        return []
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.api.search_candidate_team_admins_from_service",
+        _fake_search,
+    )
+
+    from control_plane_backend.main import create_app
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/candidate-admins?query=coh")
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    assert calls == ["coh"]

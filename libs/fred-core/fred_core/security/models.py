@@ -56,6 +56,9 @@ class Resource(str, Enum):
     # Agent-capability team scoping (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.1):
     # a platform-wide object that teams are enabled-for, not owned-by.
     CAPABILITY = "capability"
+    # Product applications use the same team-enablement relations but remain
+    # a distinct authorization resource from agent capabilities.
+    APP = "app"
 
     # Authorization subject
     USER = "user"

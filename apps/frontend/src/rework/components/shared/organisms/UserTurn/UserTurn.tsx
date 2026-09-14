@@ -23,12 +23,15 @@ import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
   text: string;
+  /** Anchor for the outline rail: its marks scroll to this node, and the
+   *  scroll-spy reads its position to say which turn is being read. */
+  turnId?: string;
   /** Called when user clicks the edit action. If omitted, edit action is hidden. */
   onEdit?: (text: string) => void;
 }
 
 // Memoized alongside AssistantTurn — see #2221.
-export const UserTurn = memo(function UserTurn({ text, onEdit }: UserTurnProps) {
+export const UserTurn = memo(function UserTurn({ text, turnId, onEdit }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
 
@@ -57,7 +60,7 @@ export const UserTurn = memo(function UserTurn({ text, onEdit }: UserTurnProps) 
   );
 
   return (
-    <div className={styles.turn}>
+    <div className={styles.turn} data-turn-id={turnId}>
       {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
       <ActionBar actions={actions} className={styles.actions} />
       <UserMessage text={text} />

@@ -196,6 +196,18 @@
   user-select: none;
 }
 
+/* ── Conversation stage — positioning context for the outline rail ───────
+   Wraps the scroll container alone, not the composer below it: the rail
+   centres itself on this box, and anchoring it on .mainColumn would push that
+   centre down by half the composer's height. */
+.conversationStage {
+  display: flex;
+  position: relative;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* ── Single scroll container — flexes to fill the space between the in-flow
    top bar and composer. A soft mask fades content near both edges so it
    dissolves into the bars instead of cutting off with a hard line, which is

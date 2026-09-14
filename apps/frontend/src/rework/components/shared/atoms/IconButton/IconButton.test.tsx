@@ -22,6 +22,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import IconButton from "./IconButton.tsx";
+import styles from "./IconButton.module.scss";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -59,8 +60,7 @@ function spinner(): SVGElement | null {
 }
 
 function badge(): HTMLElement | null {
-  // The badge is the only aria-hidden span the button renders.
-  return container.querySelector('span[aria-hidden="true"]');
+  return container.querySelector(`.${styles.badge}`);
 }
 
 describe("IconButton badge", () => {
@@ -110,6 +110,24 @@ describe("IconButton badge", () => {
 });
 
 describe("IconButton loading state", () => {
+  it("retains caller and generated visual classes", () => {
+    render(
+      <IconButton
+        variant="icon"
+        size="small"
+        icon={{ category: "outlined", type: "attach_file" }}
+        className="consumer-class"
+        aria-label="Attachments"
+      />,
+    );
+
+    expect(button().classList.contains("consumer-class")).toBe(true);
+    expect(button().classList.contains(styles.btn)).toBe(true);
+    expect(button().classList.contains(styles["btn-small"])).toBe(true);
+    expect(button().classList.contains(styles["btn-icon"])).toBe(true);
+    expect(button().classList.contains(styles["btn-on-surface-retreat"])).toBe(true);
+  });
+
   it("shows the icon, not a spinner, and stays enabled when loading is omitted/false", () => {
     render(
       <IconButton
@@ -132,6 +150,7 @@ describe("IconButton loading state", () => {
         size="small"
         icon={{ category: "outlined", type: "download" }}
         aria-label="Download"
+        aria-busy={false}
         loading
       />,
     );

@@ -82,10 +82,13 @@ class CountingRebacEngine(NoopRebacEngine):
             tuple[RebacReference, RebacReference | None]
         ] = []
         self.list_direct_relations_tokens: list[str | None] = []
+        self.has_direct_relation_tokens: list[str | None] = []
         self.has_permission_calls: list[tuple[str, RebacPermission, str]] = []
         self.has_permissions_calls: list[tuple[RebacPermission, ...]] = []
         self.has_permissions_tokens: list[str | None] = []
         self.add_relations_calls: list[list[Relation]] = []
+        self.deleted_relations: list[Relation] = []
+        self.deleted_reference_calls: list[RebacReference] = []
         self.lookup_resources_calls = 0
         self.lookup_subjects_calls = 0
 
@@ -100,19 +103,58 @@ class CountingRebacEngine(NoopRebacEngine):
         propagation (e.g. `create_team` seeing its own `initial_team_admin_ids`
         immediately), not just that a token value was threaded through
         unused."""
-        self.direct_relations.append(relation)
-        self.membership_relations.append(relation)
+        # The real engine writes with `on_duplicate_writes=IGNORE`, so re-writing
+        # a stored tuple is a no-op. Appending a duplicate here would let a test
+        # that counts stored tuples read an idempotent re-run as new work.
+        if relation not in self.direct_relations:
+            self.direct_relations.append(relation)
+        if relation not in self.membership_relations:
+            self.membership_relations.append(relation)
         if relation.resource.type == Resource.TEAM:
             if relation.relation == RelationType.ORGANIZATION:
                 self.org_linked_team_ids.add(relation.resource.id)
             elif relation.relation == RelationType.PUBLIC:
                 self.public_team_ids.add(relation.resource.id)
 
+    def _forget_write(self, relation: Relation) -> None:
+        """Drop one tuple from the seeded read-state.
+
+        A delete that leaves the read-state intact lets a cleanup assertion pass
+        against an engine that removed nothing.
+        """
+        self.direct_relations = [
+            stored for stored in self.direct_relations if stored != relation
+        ]
+        self.membership_relations = [
+            stored for stored in self.membership_relations if stored != relation
+        ]
+        if relation.resource.type == Resource.TEAM:
+            if relation.relation == RelationType.ORGANIZATION:
+                self.org_linked_team_ids.discard(relation.resource.id)
+            elif relation.relation == RelationType.PUBLIC:
+                self.public_team_ids.discard(relation.resource.id)
+
     async def _persist_relation(self, relation: Relation) -> str | None:
         self._record_write(relation)
         return "consistency-token"  # nosec B106 — fake test token, not a credential
 
     async def delete_relation(self, relation: Relation) -> str | None:
+        self.deleted_relations.append(relation)
+        self._forget_write(relation)
+        return "consistency-token"  # nosec B106 — fake test token, not a credential
+
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
+        matched = [
+            stored
+            for stored in self.direct_relations
+            if reference in (stored.subject, stored.resource)
+        ]
+        self.deleted_reference_calls.append(reference)
+        for relation in matched:
+            self.deleted_relations.append(relation)
+            self._forget_write(relation)
         return "consistency-token"  # nosec B106 — fake test token, not a credential
 
     async def add_relations(
@@ -164,6 +206,28 @@ class CountingRebacEngine(NoopRebacEngine):
             and rel.relation == relation
             and rel.subject == subject
         ]
+
+    async def has_direct_relation(
+        self,
+        subject: RebacReference,
+        relation: RelationType,
+        resource: RebacReference,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        """Answer from the seeded read-state, not a constant.
+
+        Inheriting the no-op engine's unconditional ``False`` would let a
+        caller that verifies its own write read as failed, and — worse — let a
+        deletion verification pass without anything being deleted.
+        """
+        self.has_direct_relation_tokens.append(consistency_token)
+        return any(
+            stored.subject == subject
+            and stored.relation == relation
+            and stored.resource == resource
+            for stored in self.direct_relations
+        )
 
     async def list_direct_relations(
         self,

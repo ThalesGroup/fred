@@ -41,6 +41,7 @@ import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Protocol, TypedDict, cast
+from urllib.parse import quote
 
 import httpx
 from fred_core.common import OwnerFilter
@@ -87,9 +88,14 @@ from fred_sdk.contracts.runtime import (
     DocumentTreeResult,
     FolderDocumentEntry,
     SpanPort,
+    TeamWikiPort,
+    TeamWikiPortError,
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WikiPageContent,
+    WikiPageRef,
+    WikiProposalRef,
     WorkspaceFileNotFound,
     WorkspaceFsPort,
 )
@@ -1801,6 +1807,27 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
 DEFAULT_MARKDOWN_PAGE_CHARS = 8000
 
 
+def _slice_window(
+    text: str, *, offset: int, max_chars: int
+) -> tuple[str, int, int | None, int]:
+    """Pure `[start:start+max_chars]` slice of `text`, shared by every port
+    that paginates a whole-text fetch (`DocumentMarkdownPort`, `TeamWikiPort`).
+    Clamped defensively: a negative offset starts at 0, a non-positive
+    `max_chars` falls back to `DEFAULT_MARKDOWN_PAGE_CHARS`, and an offset past
+    the end yields an empty final slice with `next_offset=None` (never an
+    exception). Returns `(slice, actual_start, next_offset, total_chars)`.
+    """
+
+    if offset < 0:
+        offset = 0
+    if max_chars <= 0:
+        max_chars = DEFAULT_MARKDOWN_PAGE_CHARS
+    total = len(text)
+    start = min(offset, total)
+    end = min(start + max_chars, total)
+    return text[start:end], start, (end if end < total else None), total
+
+
 def paginate_markdown(
     *, document_uid: str, full: str, offset: int, max_chars: int
 ) -> DocumentMarkdownResult:
@@ -1808,24 +1835,17 @@ def paginate_markdown(
 
     Pure function (no I/O) so the pagination contract — clamped bounds and the
     `next_offset` end-of-document signal — is unit-testable without a live
-    Knowledge Flow. `offset`/`max_chars` are clamped defensively: a negative
-    offset starts at 0, a non-positive `max_chars` falls back to the default,
-    and an offset past the end yields an empty final page with `next_offset`
-    None (never an exception).
+    Knowledge Flow.
     """
 
-    if offset < 0:
-        offset = 0
-    if max_chars <= 0:
-        max_chars = DEFAULT_MARKDOWN_PAGE_CHARS
-    total = len(full)
-    start = min(offset, total)
-    end = min(start + max_chars, total)
+    text, start, next_offset, total = _slice_window(
+        full, offset=offset, max_chars=max_chars
+    )
     return DocumentMarkdownResult(
         document_uid=document_uid,
-        text=full[start:end],
+        text=text,
         offset=start,
-        next_offset=end if end < total else None,
+        next_offset=next_offset,
         total_chars=total,
     )
 
@@ -2830,3 +2850,294 @@ class KPIWriterMetricsAdapter(MetricsProvider):
             actor=KPIActor(type="system"),
         ) as recorded_dims:
             yield recorded_dims
+
+
+class TeamWikiAdapter(TeamWikiPort):
+    """
+    Runtime adapter behind `RuntimeServices.team_wiki` (WIKI-03).
+
+    Same private-binding doctrine as `DocumentSearchAdapter`: the turn's team
+    and access token are captured here and never cross into
+    `CapabilityContext`. The capability names a slug; it cannot name a team.
+
+    The control-plane is the authority, not this adapter. It re-checks team
+    membership on every call, and refuses the whole wiki when an admin has not
+    enabled the `team_wiki` capability for the team — so an agent whose
+    selection survived a revoke gets a clean refusal rather than a stale read.
+
+    `read_page` memoises one page's content per slug on this per-turn instance
+    (cleared on `rebind`, same doctrine as `DocumentMarkdownAdapter`), guarded
+    by `_page_cache_lock` — a ReAct round can dispatch several tool calls from
+    one model turn concurrently, and an unlocked check-then-fetch could still
+    race two first reads of the same slug into two different snapshots. A long
+    page read across several continuation calls costs one control-plane round
+    trip, not one per segment, and every segment slices the SAME snapshot, so
+    they can never disagree on revision. A real edit landing while that
+    snapshot is held is caught later, at `propose_edit`'s existing
+    `base_revision_id` conflict check. Two calls evict a slug's cache entry so
+    the next offset-0 read renews it rather than replaying the pinned
+    snapshot: this adapter's own successful `publish_proposal` (a same-turn
+    re-read must see what was just written), and a 409 from `propose_edit`
+    (the snapshot the rejected proposal was anchored to is now known stale —
+    without eviction, "read again from the start" would still be handed the
+    same superseded content).
+    """
+
+    def __init__(
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        control_plane_url: str | None,
+        http_client: Any | None,
+    ) -> None:
+        self._control_plane_url = control_plane_url
+        self._http_client = http_client
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._page_cache: dict[str, dict[str, Any]] = {}
+        self._page_cache_lock = asyncio.Lock()
+
+    def _base(self) -> str:
+        if not self._control_plane_url:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this pod has no control-plane URL "
+                "configured."
+            )
+        team_id = getattr(self._binding.runtime_context, "team_id", None)
+        if not team_id:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this conversation has no team."
+            )
+        return f"{self._control_plane_url.rstrip('/')}/teams/{team_id}/wiki"
+
+    async def _request(self, method: str, path: str, json: Any = None) -> Any:
+        url = f"{self._base()}{path}"
+        client = self._http_client
+        if client is None:
+            raise TeamWikiPortError(
+                "The team wiki is unavailable: this pod has no control-plane client."
+            )
+        token = await _workspace_access_token(self._binding.runtime_context)
+        try:
+            response = await client.request(
+                method, url, headers={"Authorization": f"Bearer {token}"}, json=json
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            raise _wrap_team_wiki_error(exc) from exc
+        return response.json() if response.content else None
+
+    async def _get(self, path: str) -> Any:
+        return await self._request("GET", path)
+
+    async def list_pages(self) -> tuple[WikiPageRef, ...]:
+        payload = await self._get("/pages")
+        pages = payload.get("pages") or []
+        # The API is flat and carries parent ids; the port speaks slugs, so the
+        # capability never has to hold an id-to-slug map of its own.
+        slug_by_id = {
+            page.get("page_id"): page.get("slug")
+            for page in pages
+            if page.get("page_id")
+        }
+        refs = [
+            WikiPageRef(
+                page_id=page.get("page_id") or "",
+                slug=page.get("slug") or "",
+                title=page.get("title") or "",
+                parent_slug=slug_by_id.get(page.get("parent_page_id")),
+                updated_at=page.get("updated_at"),
+            )
+            for page in pages
+            if page.get("kind") != "rules"
+        ]
+        return tuple(_ordered_wiki_refs(refs))
+
+    async def read_page(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        # Control-plane's own GET has no window parameters — it always returns
+        # the page whole. Fetched once per slug per turn and memoised under a
+        # lock (class docstring): unlocked, two concurrent first reads of the
+        # same slug could each fetch and cache a different snapshot.
+        async with self._page_cache_lock:
+            cached = self._page_cache.get(slug)
+            if cached is None:
+                payload = await self._get(f"/pages/{quote(slug, safe='')}")
+                page = payload.get("page") or {}
+                cached = {
+                    "slug": page.get("slug") or slug,
+                    "title": page.get("title") or slug,
+                    "content": payload.get("content_md") or "",
+                    "updated_at": page.get("updated_at"),
+                    "revision_id": payload.get("revision_id"),
+                }
+                self._page_cache[slug] = cached
+        text, start, next_offset, total_chars = _slice_window(
+            cached["content"], offset=offset, max_chars=max_chars
+        )
+        return WikiPageContent(
+            slug=cached["slug"],
+            title=cached["title"],
+            content_md=text,
+            updated_at=cached["updated_at"],
+            truncated=next_offset is not None,
+            revision_id=cached["revision_id"],
+            offset=start,
+            next_offset=next_offset,
+            total_chars=total_chars,
+        )
+
+    async def read_rules(self) -> str:
+        try:
+            payload = await self._get("/rules")
+        except TeamWikiPortError as exc:
+            # A team that has not written rules is the normal state. Anything
+            # else — a refusal, a transport failure — must still be raised: an
+            # agent silently running without the rules is the failure the
+            # rules page exists to prevent.
+            if exc.status_code == 404:
+                return ""
+            raise
+        return payload.get("content_md") or ""
+
+    # ---- the write half (WIKI-04) -----------------------------------------
+    #
+    # Two steps, because the platform's approval gate pauses a tool BEFORE it
+    # runs and carries only a truncated argument preview. A proposal is stored
+    # first, changing nothing; publishing it is the call a human approves.
+
+    def _proposal_ref(self, payload: Any, *, verb: str) -> WikiProposalRef:
+        title = payload.get("title") or ""
+        return WikiProposalRef(
+            proposal_id=payload.get("proposal_id") or "",
+            title=title,
+            slug=payload.get("slug"),
+            summary=f"{verb} \u201c{title}\u201d",
+        )
+
+    async def propose_page(
+        self, *, title: str, content_md: str, parent_slug: str | None = None
+    ) -> WikiProposalRef:
+        payload = await self._request(
+            "POST",
+            "/proposals/page",
+            {
+                "title": title,
+                "content_md": content_md,
+                "parent_slug": parent_slug,
+                # The audit trail back to the conversation that produced it.
+                # Read from the binding, never from the model.
+                "agent_instance_id": getattr(
+                    self._binding.runtime_context, "agent_instance_id", None
+                ),
+                "session_id": getattr(
+                    self._binding.runtime_context, "session_id", None
+                ),
+            },
+        )
+        return self._proposal_ref(payload, verb="create")
+
+    async def propose_edit(
+        self, *, slug: str, content_md: str, base_revision_id: str
+    ) -> WikiProposalRef:
+        try:
+            payload = await self._request(
+                "POST",
+                "/proposals/edit",
+                {
+                    "slug": slug,
+                    "content_md": content_md,
+                    "base_revision_id": base_revision_id,
+                    "agent_instance_id": getattr(
+                        self._binding.runtime_context, "agent_instance_id", None
+                    ),
+                    "session_id": getattr(
+                        self._binding.runtime_context, "session_id", None
+                    ),
+                },
+            )
+        except TeamWikiPortError as exc:
+            if exc.status_code == 409:
+                # base_revision_id is already stale server-side: the cached
+                # snapshot it came from must not be replayed to a caller who
+                # re-reads this slug from the start to recover.
+                async with self._page_cache_lock:
+                    self._page_cache.pop(slug, None)
+            raise
+        return self._proposal_ref(payload, verb="rewrite")
+
+    async def publish_proposal(self, proposal_id: str) -> str:
+        payload = await self._request(
+            "POST", f"/proposals/{quote(proposal_id, safe='')}/publish"
+        )
+        page = (payload or {}).get("page") or {}
+        slug = page.get("slug") or ""
+        # The write just landed: a same-turn re-read of this slug must see it,
+        # not the pre-publish snapshot `read_page` may have cached.
+        async with self._page_cache_lock:
+            self._page_cache.pop(slug, None)
+        return slug
+
+
+def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:
+    """Parents before their children, siblings in the order given.
+
+    The control-plane returns a flat list; an index that lists a child above
+    the page it belongs to reads as a different wiki than the one the team
+    sees in the rail.
+    """
+
+    by_parent: dict[str | None, list[WikiPageRef]] = {}
+    known = {ref.slug for ref in refs}
+    for ref in refs:
+        parent = ref.parent_slug if ref.parent_slug in known else None
+        by_parent.setdefault(parent, []).append(ref)
+
+    ordered: list[WikiPageRef] = []
+    seen: set[str] = set()
+
+    def walk(parent: str | None) -> None:
+        for ref in by_parent.get(parent, []):
+            if ref.slug in seen:
+                continue
+            seen.add(ref.slug)
+            ordered.append(ref)
+            walk(ref.slug)
+
+    walk(None)
+    # A page caught in a parent cycle would never be walked into; append it
+    # rather than drop it, for the same reason the frontend tree promotes it.
+    ordered.extend(ref for ref in refs if ref.slug not in seen)
+    return ordered
+
+
+def _wrap_team_wiki_error(exc: Exception) -> TeamWikiPortError:
+    """
+    Map an httpx failure onto the SDK-typed `TeamWikiPortError`.
+
+    Same redaction as `_wrap_document_port_error`: the message reaches the LLM
+    and is persisted in chat history, so the internal host and route are
+    stripped and the status carries the diagnosis.
+    """
+
+    if isinstance(exc, TeamWikiPortError):
+        return exc
+    timed_out = isinstance(exc, httpx.TimeoutException)
+    status_code = None
+    detail = ""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        # The server's own `detail` is what makes the failure actionable — "the
+        # rules page cannot be changed by an agent", "this page changed while
+        # the proposal was waiting". `str(exc)` carries only the status and the
+        # URL, so the reason never reached the model without this.
+        try:
+            body = exc.response.json()
+            detail = str(body.get("detail") or "").strip()
+        except Exception:
+            detail = ""
+    detail = detail or _redact_urls(str(exc).strip()) or type(exc).__name__
+    return TeamWikiPortError(detail, timed_out=timed_out, status_code=status_code)

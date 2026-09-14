@@ -344,4 +344,154 @@ describe("Tooltip", () => {
     expect(top).toBeGreaterThanOrEqual(4);
     expect(top + 380).toBeLessThanOrEqual(400 - 4);
   });
+
+  it("places a right-placed panel beside the trigger, vertically centred", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="right" gapPx={12}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    // A trigger against the left edge — the outline rail's case.
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 12, right: 44, width: 32, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 12 (trigger left) + 32 (trigger width) + 12 (gap).
+    expect(parseFloat(panel.style.left)).toBe(56);
+    // 200 (trigger centre) - 50 (half the panel).
+    expect(parseFloat(panel.style.top)).toBe(150);
+  });
+
+  it("flips a right-placed panel to the left when there is no room", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="right" gapPx={12}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 900, right: 932, width: 32, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 900 - 12 - 200: to the left, since 944 + 200 overflows a 1000px viewport.
+    expect(parseFloat(panel.style.left)).toBe(688);
+  });
+
+  // Leaving the window produces no mouseleave, so a tooltip hovered at the
+  // moment of an alt-tab stayed open on return — and, its own leave event
+  // having been lost, stayed open next to the next one hovered.
+  it("closes when the window loses focus", () => {
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
+
+  it("closes when the page is hidden", () => {
+    const trigger = renderTooltip();
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    hidden.mockRestore();
+  });
+
+  // `gapPx` exists for a panel that reads as its own card rather than a hint
+  // stuck to its trigger — the conversation outline rail's preview tile.
+  it("honours a custom gap on both axes of a left-placed panel", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="left" gapPx={12}>
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 400, right: 420, width: 20, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 400 (trigger left) - 12 (gap) - 200 (panel width).
+    expect(parseFloat(panel.style.left)).toBe(188);
+    // Still vertically centred on the trigger: 200 (centre) - 50 (half height).
+    expect(parseFloat(panel.style.top)).toBe(150);
+  });
+
+  it("keeps its default gap when none is given", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    act(() => {
+      root.render(
+        <Tooltip content={<div>Detail</div>} placement="left">
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 190, bottom: 210, left: 400, right: 420, width: 20, height: 20 }) as DOMRect;
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ width: 200, height: 100 }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // 400 - 4 - 200: the 4px default every other tooltip in the app relies on.
+    expect(parseFloat(panel.style.left)).toBe(196);
+  });
 });

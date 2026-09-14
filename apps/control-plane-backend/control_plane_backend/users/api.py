@@ -248,7 +248,7 @@ async def get_users_by_ids(
     "/users/platform-roles",
     response_model=PlatformRolesResponse,
     response_model_exclude_none=True,
-    summary="List platform_admin / platform_observer holders.",
+    summary="List platform-role holders.",
 )
 async def list_platform_roles(
     deps: UserDependencies,
@@ -279,8 +279,8 @@ async def grant_platform_role(
     ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): `platform_observer` may be
-    granted by any `platform_admin`; `platform_admin` only by the bootstrap
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3: every role may be granted
+    by any `platform_admin`; `platform_admin` itself only by the bootstrap
     root (403 otherwise, 409 if bootstrap never ran). 404 when Keycloak does
     not know the target uid (skipped when M2M is disabled)."""
     await grant_platform_role_from_service(
@@ -302,8 +302,8 @@ async def revoke_platform_role(
     ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): `platform_observer` may be
-    revoked by any `platform_admin`; `platform_admin` only by the bootstrap
+    """PLATFORM-ADMIN-DELEGATION-RFC.md §3: every role may be revoked
+    by any `platform_admin`; `platform_admin` itself only by the bootstrap
     root, and never targeting the root itself — for any caller, root
     included."""
     await revoke_platform_role_from_service(

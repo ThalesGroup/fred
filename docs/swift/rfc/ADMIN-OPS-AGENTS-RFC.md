@@ -44,7 +44,7 @@ Each tool family ships as a **native capability package** (`tools()` lane of
 - **No new network surface.** The tools are not HTTP endpoints; there is nothing to
   forget to gate. The capability framework *is* the authorization: every capability
   defaults to `team_scope: ADMIN_GATED`, so a platform admin must explicitly enable it
-  per team via the existing `/admin/capabilities` surface and CapabilitiesPage UI.
+  per team via the existing `/admin/capabilities` surface and FeaturesPage UI.
 - **The admin team roster is the security boundary.** Agents are enrolled into a
   dedicated admins/ops team; `capability#can_use` is checked team-subject at
   enroll/save (403 on ungranted selection), and revoking a grant synchronously

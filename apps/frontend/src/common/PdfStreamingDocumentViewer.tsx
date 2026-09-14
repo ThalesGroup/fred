@@ -23,6 +23,9 @@ import styles from "./PdfStreamingDocumentViewer.module.css";
 
 type Props = {
   documentUid: string;
+  /** Where to fetch the PDF bytes. Defaults to the document's own raw stream; the
+   * document viewer overrides it for formats served through the render endpoint. */
+  sourceUrl?: string;
 };
 
 // Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
@@ -142,7 +145,7 @@ export function reduceMountedPages(
 // Header-less by design: the two hosting contexts (DocumentViewerPage's own
 // top bar, InlineDrawer's own title+close) already provide chrome, so this
 // component owns only the PDF surface itself.
-export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => {
+export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourceUrl }) => {
   const { t } = useTranslation();
   const token = useAuthToken();
   const [isLoading, setIsLoading] = useState(true);
@@ -244,8 +247,8 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
 
   const pdfUrl = useMemo(() => {
     if (!documentUid) return null;
-    return `/knowledge-flow/v1/raw_content/stream/${documentUid}`;
-  }, [documentUid]);
+    return sourceUrl ?? `/knowledge-flow/v1/raw_content/stream/${documentUid}`;
+  }, [documentUid, sourceUrl]);
 
   const authHeader = useMemo(() => (token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : null), [token]);
 
@@ -335,7 +338,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid }) => 
     setPageAspectRatio(FALLBACK_PAGE_ASPECT_RATIO);
     setLargeDocumentConfirmed(false);
     setReloadKey((k) => k + 1); // remount Document to reset PDF.js
-  }, [documentUid]);
+  }, [documentUid, sourceUrl]);
 
   const isLargeDocument = numPages !== null && numPages > LARGE_DOCUMENT_PAGE_COUNT;
   const showPages = numPages !== null && (!isLargeDocument || largeDocumentConfirmed);

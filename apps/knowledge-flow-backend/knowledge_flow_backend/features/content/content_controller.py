@@ -19,11 +19,12 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
+from knowledge_flow_backend.features.content.content_service import PdfRenderFailedError, PdfRenderUnsupportedError
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,40 @@ def parse_range_header(range_str: Optional[str]) -> Optional[tuple[int | None, i
     start_s, end_s = m.groups()
     start = int(start_s) if start_s else None
     end = int(end_s) if end_s else None
+    return start, end
+
+
+def resolve_range_window(range_str: Optional[str], total_size: int) -> Optional[tuple[int, int]]:
+    """
+    Resolve a Range header into the inclusive (start, end) byte window to serve.
+
+    Returns None when the client asked for the whole body (no or unparseable Range).
+    Raises a 416 carrying the `Content-Range: bytes */<size>` the RFC requires, so
+    a client can learn the real size from a rejected range.
+    """
+    rng = parse_range_header(range_str)
+    if rng is None:
+        return None
+
+    unsatisfiable = HTTPException(
+        status_code=416,
+        detail="Range Not Satisfiable",
+        headers={"Content-Range": f"bytes */{total_size}"},
+    )
+    start, end = rng
+
+    if start is None and end is not None:
+        # Suffix form: bytes=-N. N may exceed total_size → serve the whole file.
+        if end <= 0:
+            raise unsatisfiable
+        return max(total_size - end, 0), total_size - 1
+
+    # Normal form: bytes=START-END or bytes=START-
+    if start is None or start < 0 or start >= total_size:
+        raise unsatisfiable
+    end = total_size - 1 if end is None else min(end, total_size - 1)
+    if end < start:
+        raise unsatisfiable
     return start, end
 
 
@@ -161,6 +196,7 @@ class ContentController:
     ----------
     - `GET /markdown/{document_uid}`: returns the full markdown preview of a document
     - `GET /raw_content/{document_uid}`: streams the original uploaded file for download
+    - `GET /raw_content/pdf/{document_uid}`: streams the document rendered as PDF (Word/PowerPoint preview)
 
     Dependencies:
     -------------
@@ -307,6 +343,72 @@ class ContentController:
                 raise HTTPException(status_code=404, detail=str(e))
 
         @router.get(
+            "/raw_content/pdf/{document_uid}",
+            tags=["Content"],
+            summary="Stream the document rendered as PDF (Word/PowerPoint native preview)",
+            description="""
+        Serves the document as a PDF so the UI can show the file itself, not only its
+        markdown extraction. A Word (`.docx`, `.doc`, `.odt`) or PowerPoint (`.pptx`,
+        `.ppt`) document is rendered once by headless LibreOffice and cached, so only the
+        first viewer pays the conversion. A `.pdf` is not handled here: it streams
+        untouched from `/raw_content/stream/{document_uid}`.
+
+        Range requests are supported, which is what lets the PDF viewer fetch the
+        document by byte range instead of buffering it whole.
+        """,
+            response_class=StreamingResponse,
+            responses={
+                200: {"description": "Full PDF body (no Range header)"},
+                206: {"description": "Partial PDF body (Range Request)"},
+                415: {"description": "The document's format has no PDF rendering path"},
+                416: {"description": "Range Not Satisfiable"},
+                503: {"description": "PDF rendering is unavailable (LibreOffice missing, failed or timed out)"},
+            },
+        )
+        async def stream_document_as_pdf(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+            range_header: Optional[str] = Header(None, alias="Range"),
+        ):
+            try:
+                render = await self.service.get_pdf_render(user, document_uid)
+            except PdfRenderUnsupportedError as e:
+                raise HTTPException(status_code=415, detail=str(e))
+            except PdfRenderFailedError as e:
+                raise HTTPException(status_code=503, detail=str(e))
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+
+            total_size = len(render.content)
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": build_content_disposition_header("inline", render.file_name),
+            }
+
+            # The render is already resident in memory (just converted, or read back
+            # from the cache), so ranges are served by slicing rather than by the
+            # store-backed streaming the raw endpoint needs.
+            #
+            # A 206 is only ever cut from bytes the cache holds. When caching failed,
+            # every follow-up request would re-run LibreOffice and get a DIFFERENT
+            # file (/CreationDate and /ID are stamped per render), so the client would
+            # stitch windows from several documents into one corrupt PDF. Serving the
+            # whole body instead is always self-consistent — pdf.js falls back to
+            # buffering it, exactly as it does behind a proxy that strips ranges.
+            window = resolve_range_window(range_header, total_size) if render.cached else None
+            if window is None:
+                return Response(content=render.content, media_type="application/pdf", headers=headers, status_code=200)
+
+            start, end = window
+            headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
+            return Response(
+                content=render.content[start : end + 1],
+                media_type="application/pdf",
+                headers=headers,
+                status_code=206,
+            )
+
+        @router.get(
             "/raw_content/stream/{document_uid}",
             tags=["Content"],
             summary="Stream original document content (optimized for PDF Viewer and Range Requests)",
@@ -334,10 +436,10 @@ class ContentController:
                     "Content-Disposition": build_content_disposition_header("inline", file_name),
                 }
 
-                rng = parse_range_header(range_header)
+                window = resolve_range_window(range_header, total_size)
 
                 # No Range → full file with Content-Length
-                if rng is None:
+                if window is None:
                     raw_stream = await self.service.get_full_stream(user, document_uid)
 
                     # FIX: Wrap the non-iterable raw_stream object in an iterable generator
@@ -355,30 +457,7 @@ class ContentController:
                         background=BackgroundTask(getattr(raw_stream, "close", lambda: None)),
                     )
 
-                # ---- Normalize Range window (inclusive end) ----
-                start, end = rng
-
-                if start is None and end is not None:
-                    # Suffix: bytes=-N  (N may exceed total_size → serve whole file)
-                    if end <= 0:
-                        # invalid suffix
-                        headers["Content-Range"] = f"bytes */{total_size}"
-                        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-                    start = max(total_size - end, 0)
-                    end = total_size - 1
-                else:
-                    # Normal: bytes=START-END or bytes=START-
-                    if start is None or start < 0 or start >= total_size:
-                        headers["Content-Range"] = f"bytes */{total_size}"
-                        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-                    if end is None:
-                        end = total_size - 1
-                    else:
-                        end = min(end, total_size - 1)
-                    if end < start:
-                        headers["Content-Range"] = f"bytes */{total_size}"
-                        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-
+                start, end = window
                 length = end - start + 1
 
                 # Ask store for a stream that *clamps* to exactly `length` bytes

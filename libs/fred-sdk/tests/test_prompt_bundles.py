@@ -14,7 +14,7 @@ def test_global_base_prompt_markdown_bundles_mermaid_contract() -> None:
 
     Why this test exists:
     - `GLOBAL_BASE_PROMPT_MARKDOWN` is the single source of truth that the runtime
-      injects at execution time (see fred-runtime `build_global_base_prompt_suffix`)
+      injects at execution time (see fred-runtime `compose_system_prompt`)
     - the contract is no longer baked into agent templates, so this constant is the
       only place that still guarantees the renderer rules ship with the platform
 

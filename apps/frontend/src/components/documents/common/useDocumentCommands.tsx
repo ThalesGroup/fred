@@ -86,10 +86,13 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     async (doc: DocumentMetadata, tag: TagWithItemsId) => {
       try {
         const newItemIds = (tag.item_ids || []).filter((id) => id !== doc.identity.document_uid);
+        // The PUT replaces the whole tag: omitting `path` clears it server-side
+        // and the folder jumps back to the root.
         await updateTag({
           tagId: tag.id,
           tagUpdate: {
             name: tag.name,
+            path: tag.path,
             description: tag.description,
             type: tag.type,
             item_ids: newItemIds,
@@ -133,6 +136,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
           tagId: tag.id,
           tagUpdate: {
             name: tag.name,
+            path: tag.path,
             description: tag.description,
             type: tag.type,
             item_ids: newItemIds,

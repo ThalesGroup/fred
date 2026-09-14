@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildDocumentViewerPath,
   decodeMaybeBase64Utf8,
+  documentPdfSourceUrl,
   extractH1,
   hasNativePreview,
+  isOfficeDocumentFile,
   isPdfFile,
 } from "./documentViewerUtils";
 
@@ -45,15 +47,37 @@ describe("isPdfFile", () => {
   });
 });
 
+describe("isOfficeDocumentFile", () => {
+  it("accepts the Word and PowerPoint formats the backend renders as PDF", () => {
+    expect(isOfficeDocumentFile("rapport.docx")).toBe(true);
+    expect(isOfficeDocumentFile("note.DOC")).toBe(true);
+    expect(isOfficeDocumentFile("compte-rendu.odt")).toBe(true);
+    expect(isOfficeDocumentFile("deck.pptx")).toBe(true);
+    expect(isOfficeDocumentFile("vieux-deck.PPT")).toBe(true);
+  });
+
+  it("rejects formats the render endpoint would 415 on", () => {
+    // Kept in step with PDF_RENDERABLE_SUFFIXES in content_service.py: listing a
+    // format here that the backend refuses would offer a toggle that cannot load.
+    expect(isOfficeDocumentFile("agence.xlsx")).toBe(false);
+    // .odp is a presentation too, but no ingestion processor accepts it.
+    expect(isOfficeDocumentFile("slides.odp")).toBe(false);
+    expect(isOfficeDocumentFile("facture.pdf")).toBe(false);
+    expect(isOfficeDocumentFile(undefined)).toBe(false);
+  });
+});
+
 describe("hasNativePreview", () => {
-  it("is true for a PDF — the only format with a renderer distinct from its markdown extraction", () => {
+  it("is true for the formats with a renderer distinct from their markdown extraction", () => {
     expect(hasNativePreview("facture.pdf")).toBe(true);
+    expect(hasNativePreview("rapport.docx")).toBe(true);
+    expect(hasNativePreview("compte-rendu.odt")).toBe(true);
+    expect(hasNativePreview("deck.pptx")).toBe(true);
   });
 
   it("is false for formats already displayed as markdown, so no inert toggle is offered", () => {
-    // A docx/xlsx/csv preview IS the markdown extraction — there is no second
+    // An xlsx/csv preview IS the markdown extraction — there is no second
     // rendering to switch to.
-    expect(hasNativePreview("rapport.docx")).toBe(false);
     expect(hasNativePreview("agence.xlsx")).toBe(false);
     expect(hasNativePreview("ticket-jira.csv")).toBe(false);
   });
@@ -61,6 +85,20 @@ describe("hasNativePreview", () => {
   it("is false when the file name is unknown", () => {
     expect(hasNativePreview(undefined)).toBe(false);
     expect(hasNativePreview(null)).toBe(false);
+  });
+});
+
+describe("documentPdfSourceUrl", () => {
+  it("streams a PDF from storage untouched", () => {
+    expect(documentPdfSourceUrl("abc", "facture.pdf")).toBe("/knowledge-flow/v1/raw_content/stream/abc");
+  });
+
+  it("routes a Word document through the render endpoint", () => {
+    expect(documentPdfSourceUrl("abc", "rapport.docx")).toBe("/knowledge-flow/v1/raw_content/pdf/abc");
+  });
+
+  it("routes a PowerPoint deck through the same render endpoint", () => {
+    expect(documentPdfSourceUrl("abc", "deck.pptx")).toBe("/knowledge-flow/v1/raw_content/pdf/abc");
   });
 });
 

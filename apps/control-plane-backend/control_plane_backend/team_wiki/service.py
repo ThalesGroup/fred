@@ -1,0 +1,1008 @@
+from __future__ import annotations
+
+import base64
+import re
+import secrets
+from datetime import datetime, timezone
+
+from fred_core import KeycloakUser
+from fred_core.common import TeamId
+from fred_core.security.rebac.rebac_engine import TeamPermission
+
+from control_plane_backend.capabilities.authz import can_team_use_capability
+from control_plane_backend.models.team_wiki_models import (
+    MAX_PAGE_DEPTH,
+    MAX_REVISION_PAGE_SIZE,
+    RULES_PAGE_SLUG,
+)
+from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.team_wiki.schemas import (
+    CreateWikiPageRequest,
+    ProposeEditRequest,
+    ProposePageRequest,
+    SetNeedsReviewRequest,
+    UpdateWikiPageContentRequest,
+    UpdateWikiPageMetadataRequest,
+    UpdateWikiRulesRequest,
+    WikiAvailability,
+    WikiPageDetail,
+    WikiPageSummary,
+    WikiPageTree,
+    WikiProposal,
+    WikiRevisionList,
+    WikiRevisionSummary,
+)
+from control_plane_backend.team_wiki.store import (
+    RevisionCursor,
+    TeamWikiStore,
+    WikiPageConstraintError,
+    WikiPageDepthExceededError,
+    WikiPageHasChildrenError,
+    WikiPageInvalidMoveError,
+    WikiPageNotFoundError,
+    WikiPageRecord,
+    WikiPageRulesParentError,
+    WikiProposalNoLongerPendingError,
+    WikiRevisionConflictError,
+    WikiRevisionRecord,
+    _child_depth_under,
+    _StaleBaseWrite,
+)
+from control_plane_backend.teams.service import require_team_access
+
+# Read is member-only, NOT `CAN_READ`: `can_read` is `team_member or public`, so
+# on a team flagged public it would hand the wiki to non-members — and a wiki
+# holds a team's internal knowledge. `CAN_READ_MEMEBERS` is the codebase's
+# existing idiom for "member-only read of a team's internals"; the routing
+# policy read gate uses it the same way.
+WIKI_READ_PERMISSION = TeamPermission.CAN_READ_MEMEBERS
+
+# Write is `team_editor`, exactly as for the team's other content.
+# `team_admin` has no write authority here — the roles are orthogonal, not
+# hierarchical (`platform/REBAC.md`). A personal-space owner holds
+# `team_editor` on their own space, so this is one code path for both.
+WIKI_WRITE_PERMISSION = TeamPermission.CAN_UPDATE_RESOURCES
+
+#: The agent capability whose enablement makes a team's wiki exist at all.
+#: An admin turning it off takes the wiki away from the team's agents AND its
+#: people — the two are one decision on purpose: a wiki nothing can read into a
+#: conversation is a document store, which the team space already is. Turning it
+#: off never deletes anything; the tables are untouched and re-enabling brings
+#: the wiki back exactly as it was.
+TEAM_WIKI_CAPABILITY_ID = "team_wiki"
+
+#: `revision_id` is `uuid.uuid4().hex` (`store._new_id`) — 32 lowercase hex
+#: characters, never the separator below. A cursor failing this is either a
+#: client bug or someone probing the endpoint, not a value this API ever
+#: produced.
+_REVISION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_CURSOR_PART_SEP = "|"
+
+
+def _encode_revision_cursor(created_at: datetime, revision_id: str) -> str:
+    """The opaque `cursor` a history response's `next_cursor` carries.
+
+    Base64 rather than the raw `"<isoformat>|<id>"` text: a client is not
+    meant to construct or read one, and encoding it closes off the temptation
+    before it starts. `astimezone(UTC)` first so two cursors for the same
+    instant compare and round-trip identically regardless of which offset the
+    row happened to carry.
+    """
+
+    raw = f"{created_at.astimezone(timezone.utc).isoformat()}{_CURSOR_PART_SEP}{revision_id}"
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+
+def _decode_revision_cursor(cursor: str) -> RevisionCursor:
+    """The inverse of `_encode_revision_cursor`, or a 400 — never a 500 or a
+    silently wrong query. A malformed cursor must not reach the store: it
+    would either raise deep inside SQLAlchemy or, worse, compare cleanly
+    against nothing and quietly return an empty or wrong page."""
+
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+        created_at_raw, revision_id = raw.split(_CURSOR_PART_SEP, 1)
+        created_at = datetime.fromisoformat(created_at_raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise WikiRequestError(
+            "This history cursor is invalid.", http_status=400
+        ) from exc
+    if created_at.tzinfo is None or not _REVISION_ID_RE.match(revision_id):
+        raise WikiRequestError("This history cursor is invalid.", http_status=400)
+    return RevisionCursor(created_at=created_at, revision_id=revision_id)
+
+
+async def _require_wiki_access(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+    permissions: list[TeamPermission],
+) -> TeamId:
+    """Resolve the caller's access to this team's wiki, or refuse.
+
+    Two gates, in this order: the team membership/role one every wiki route
+    already had, then the capability one. Both live here rather than in each
+    entry point so a route added later cannot forget either — the whole
+    service reaches its store through this function.
+
+    404, not 403, when the capability is off: to a team without it, this team
+    has no wiki, and that is the same answer a nonexistent team gets. The
+    anti-guessing rule the rest of the codebase applies to hidden templates.
+    """
+
+    team_id = await require_team_access(
+        user, team_id, deps.team_dependencies, permissions
+    )
+    if not await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=TEAM_WIKI_CAPABILITY_ID,
+    ):
+        raise WikiRequestError("This team has no wiki.", http_status=404)
+    return team_id
+
+
+class WikiRequestError(Exception):
+    """A wiki operation the caller cannot perform, with the status to return."""
+
+    def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+class WikiConflictError(Exception):
+    """A write whose base revision is stale, carrying what to rebase onto."""
+
+    def __init__(self, current_revision_id: str, current_content_md: str) -> None:
+        super().__init__("This page has changed since your edit was prepared.")
+        self.current_revision_id = current_revision_id
+        self.current_content_md = current_content_md
+
+
+async def _unique_slug(store: TeamWikiStore, team_id: TeamId) -> str:
+    """A fresh opaque identifier for a page's URL, free in this team.
+
+    Deliberately NOT derived from the title. A slug minted from the first
+    title outlives it — renaming does not change it, because the slug is the
+    URL and nothing here maps an old one to a page — so a page renamed to "Les
+    Shinigamis" kept the URL `sous-page-11`. That mismatch misleads every
+    reader of it, and a model given `Les Shinigamis — sous-page-11` in its
+    index read the pair as one name and called back with a slug that did not
+    exist. An identifier that never claimed to mean anything cannot go stale.
+    """
+
+    taken = {page.slug for page in await store.list_pages(team_id)}
+    for _ in range(100):
+        candidate = secrets.token_hex(4)
+        if candidate not in taken:
+            return candidate
+    raise WikiRequestError("Could not allocate a page identifier.", http_status=500)
+
+
+# ASCII whitespace only, and `lower` rather than `casefold`: this MUST fold a
+# title exactly as `uq_team_wiki_pages_sibling_title` does, or the index stops
+# backing the rule and two concurrent writes can still land two namesakes on
+# one parent. Postgres `\s` under a UTF-8 ctype does not cover U+00A0, and its
+# `lower()` does not do the extra foldings `casefold()` does — so this side is
+# the one that gives ground. Keep the two in step.
+_TITLE_WHITESPACE = re.compile(r"[ \t\n\r\f\v]+")
+
+
+def title_key(title: str) -> str:
+    """A page title as the sibling-uniqueness rule compares it."""
+
+    return _TITLE_WHITESPACE.sub(" ", title).strip(" \t\n\r\f\v").lower()
+
+
+def _require_free_title(
+    pages: dict[str, WikiPageRecord] | list[WikiPageRecord],
+    *,
+    parent_page_id: str | None,
+    title: str,
+    ignoring: str | None = None,
+) -> None:
+    """Refuse a title a sibling already carries.
+
+    Two pages under one parent may not share a title, because an agent
+    addresses a page by its path — its titles from the root — and two identical
+    paths would make that address ambiguous. Folded to lower case and with
+    whitespace collapsed: "Réunions" and "réunions " are the same name to
+    everyone who reads them.
+    """
+
+    wanted = title_key(title)
+    siblings = pages.values() if isinstance(pages, dict) else pages
+    for page in siblings:
+        if page.page_id == ignoring or page.parent_page_id != parent_page_id:
+            continue
+        if title_key(page.title) == wanted:
+            raise WikiRequestError(
+                "A page with this title already exists at the same level.",
+                http_status=409,
+            )
+
+
+def _rules_parent_error() -> WikiRequestError:
+    """The one `WikiPageRulesParentError` translation, shared by every
+    structural writer that can name a parent (create, move, publish)."""
+
+    return WikiRequestError("The rules page cannot have children.", http_status=400)
+
+
+def _summary(page: WikiPageRecord) -> WikiPageSummary:
+    return WikiPageSummary(
+        page_id=page.page_id,
+        slug=page.slug,
+        title=page.title,
+        kind=page.kind,
+        parent_page_id=page.parent_page_id,
+        position=page.position,
+        needs_review=page.needs_review,
+        updated_at=page.updated_at,
+        updated_by=page.updated_by,
+    )
+
+
+async def _require_page(
+    store: TeamWikiStore, team_id: TeamId, page_id: str
+) -> WikiPageRecord:
+    page = await store.get_page(team_id, page_id)
+    if page is None:
+        raise WikiRequestError("This wiki page does not exist.", http_status=404)
+    return page
+
+
+async def _detail(
+    store: TeamWikiStore, team_id: TeamId, page: WikiPageRecord
+) -> WikiPageDetail:
+    revision = (
+        await store.get_revision(team_id, page.current_revision_id)
+        if page.current_revision_id
+        else None
+    )
+    return WikiPageDetail(
+        page=_summary(page),
+        content_md=revision.content_md if revision else "",
+        revision_id=revision.revision_id if revision else None,
+        author_kind=revision.author_kind if revision else "human",
+    )
+
+
+# ---- reads ----------------------------------------------------------------
+
+
+async def get_wiki_availability(
+    user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
+) -> WikiAvailability:
+    """Does this team have a wiki?
+
+    Deliberately NOT behind `_require_wiki_access`: the whole point is to
+    answer "no" for a team whose capability is off, which that helper turns
+    into a 404. Team membership is still required — whether a team runs a wiki
+    is its own business.
+    """
+
+    team_id = await require_team_access(
+        user, team_id, deps.team_dependencies, [WIKI_READ_PERMISSION]
+    )
+    enabled = await can_team_use_capability(
+        deps.team_dependencies.rebac,
+        team_id,
+        capability_id=TEAM_WIKI_CAPABILITY_ID,
+    )
+    return WikiAvailability(enabled=enabled)
+
+
+async def get_wiki_tree(
+    user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
+) -> WikiPageTree:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    pages = await store.list_pages(team_id)
+    return WikiPageTree(pages=[_summary(p) for p in pages])
+
+
+async def get_wiki_page(
+    user: KeycloakUser, team_id: TeamId, slug: str, deps: ProductServiceDependencies
+) -> WikiPageDetail:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await store.get_page_by_slug(team_id, slug)
+    if page is None:
+        raise WikiRequestError("This wiki page does not exist.", http_status=404)
+    return await _detail(store, team_id, page)
+
+
+async def list_wiki_revisions(
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    deps: ProductServiceDependencies,
+    cursor: str | None = None,
+) -> WikiRevisionList:
+    """One page of history, newest first, and a `next_cursor` to walk older.
+
+    This is a live walk, not a snapshot: a proposal keeps the `created_at` it
+    was given when proposed, so approving one after the caller has already
+    paged past that timestamp will not surface it, since `cursor` only ever
+    moves forward. Reopening history from the top is what surfaces it — see
+    CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
+    """
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    await _require_page(store, team_id, page_id)
+    before = _decode_revision_cursor(cursor) if cursor else None
+
+    # One extra row, dropped below, is how "is there more?" is answered
+    # without a second COUNT query. `next_cursor` is built from the last row
+    # actually returned, never from this extra one.
+    fetched = await store.list_revisions(
+        team_id, page_id, limit=MAX_REVISION_PAGE_SIZE + 1, before=before
+    )
+    revisions = fetched[:MAX_REVISION_PAGE_SIZE]
+    next_cursor = None
+    if len(fetched) > MAX_REVISION_PAGE_SIZE:
+        oldest = revisions[-1]
+        assert oldest.created_at is not None  # always set once persisted
+        next_cursor = _encode_revision_cursor(oldest.created_at, oldest.revision_id)
+
+    return WikiRevisionList(
+        revisions=[
+            WikiRevisionSummary(
+                revision_id=r.revision_id,
+                status=r.status,
+                author_user_id=r.author_user_id,
+                author_kind=r.author_kind,
+                agent_instance_id=r.agent_instance_id,
+                session_id=r.session_id,
+                created_at=r.created_at,
+                reviewed_at=r.reviewed_at,
+                reviewed_by=r.reviewed_by,
+            )
+            for r in revisions
+        ],
+        contents={r.revision_id: r.content_md for r in revisions},
+        next_cursor=next_cursor,
+    )
+
+
+async def get_wiki_rules(
+    user: KeycloakUser, team_id: TeamId, deps: ProductServiceDependencies
+) -> WikiPageDetail:
+    """The rules page, or an empty stand-in when the team has never written one.
+
+    This is a READ, gated on the member-only read permission, so it must not
+    write. Materialising the row here would let any team member create the page
+    that steers every agent's system prompt, and be recorded as its author. The
+    row appears on the first PUT, which is editor-only.
+    """
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
+    if page is not None:
+        return await _detail(store, team_id, page)
+
+    return WikiPageDetail(
+        page=WikiPageSummary(
+            page_id="", slug=RULES_PAGE_SLUG, title="Rules", kind="rules"
+        ),
+        content_md="",
+        revision_id=None,
+    )
+
+
+# ---- writes ---------------------------------------------------------------
+
+
+async def create_wiki_page(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: CreateWikiPageRequest,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+
+    # Fetched for the sibling-title check below, a best-effort pre-check like
+    # the DB's own index behind it. Parent existence, kind and depth are the
+    # store's job now, re-validated inside its structural lock.
+    pages = {p.page_id: p for p in await store.list_pages(team_id)}
+    _require_free_title(
+        pages, parent_page_id=request.parent_page_id, title=request.title
+    )
+    slug = await _unique_slug(store, team_id)
+    try:
+        created = await store.create_page(
+            team_id=team_id,
+            slug=slug,
+            title=request.title,
+            content_md=request.content_md,
+            parent_page_id=request.parent_page_id,
+            position=request.position,
+            author_user_id=user.uid,
+        )
+    except WikiPageConstraintError as exc:
+        raise WikiRequestError(
+            "A page with this title already exists at the same level.",
+            http_status=409,
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "The parent page does not exist.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+            http_status=400,
+        ) from exc
+    return WikiPageDetail(
+        page=_summary(created.page),
+        content_md=request.content_md,
+        revision_id=created.revision.revision_id if created.revision else None,
+    )
+
+
+async def update_wiki_page_content(
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    request: UpdateWikiPageContentRequest,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await _require_page(store, team_id, page_id)
+    if page.kind == "rules":
+        raise WikiRequestError(
+            "The rules page is edited through its own endpoint.", http_status=400
+        )
+    return await _publish(
+        store,
+        team_id=team_id,
+        page=page,
+        content_md=request.content_md,
+        base_revision_id=request.base_revision_id,
+        author_user_id=user.uid,
+    )
+
+
+async def update_wiki_rules(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: UpdateWikiRulesRequest,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    """Edit the rules page. Editors only, and never reachable by an agent —
+    the agent write path has no tool that targets a `kind="rules"` page."""
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
+    if page is None:
+        try:
+            # No `parent_page_id`: the rules page always lands at the root, so
+            # `create_page`'s parent-existence/rules/depth exceptions cannot
+            # fire here — only the slug collision below is reachable.
+            created = await store.create_page(
+                team_id=team_id,
+                slug=RULES_PAGE_SLUG,
+                title="Rules",
+                content_md=request.content_md,
+                kind="rules",
+                author_user_id=user.uid,
+            )
+        except WikiPageConstraintError:
+            # Two editors saved the rules page for the first time at once. The
+            # loser re-reads and takes the ordinary conflict path rather than
+            # surfacing an integrity error as a 500.
+            page = await store.get_page_by_slug(team_id, RULES_PAGE_SLUG)
+            if page is None:
+                # Not a race: the rules page is created at the root titled
+                # "Rules", so a root page the team already titled "Rules" holds
+                # that name. Left bare this re-raised into a 500, and the team
+                # could never save its rules again.
+                raise WikiRequestError(
+                    'A page at the top level is already called "Rules". '
+                    "Rename it, then save the rules page again.",
+                    http_status=409,
+                ) from None
+        else:
+            return WikiPageDetail(
+                page=_summary(created.page),
+                content_md=request.content_md,
+                revision_id=created.revision.revision_id if created.revision else None,
+            )
+    # No fallback to the page's own current revision: omitting `base_revision_id`
+    # on a page that already has one is REFUSED, not read as consent to
+    # overwrite. The caller reads, then writes back what it read.
+    return await _publish(
+        store,
+        team_id=team_id,
+        page=page,
+        content_md=request.content_md,
+        base_revision_id=request.base_revision_id,
+        author_user_id=user.uid,
+    )
+
+
+async def _publish(
+    store: TeamWikiStore,
+    *,
+    team_id: TeamId,
+    page: WikiPageRecord,
+    content_md: str,
+    base_revision_id: str | None,
+    author_user_id: str,
+) -> WikiPageDetail:
+    try:
+        revision = await store.publish_revision(
+            team_id=team_id,
+            page_id=page.page_id,
+            content_md=content_md,
+            base_revision_id=base_revision_id,
+            author_user_id=author_user_id,
+        )
+    except WikiRevisionConflictError as exc:
+        raise WikiConflictError(
+            exc.current_revision_id, exc.current_content_md
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "This wiki page does not exist.", http_status=404
+        ) from exc
+
+    refreshed = await store.get_page(team_id, page.page_id)
+    return WikiPageDetail(
+        page=_summary(refreshed or page),
+        content_md=revision.content_md,
+        revision_id=revision.revision_id,
+        author_kind=revision.author_kind,
+    )
+
+
+async def update_wiki_page_metadata(
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    request: UpdateWikiPageMetadataRequest,
+    deps: ProductServiceDependencies,
+) -> WikiPageSummary:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    pages = {p.page_id: p for p in await store.list_pages(team_id)}
+    page = pages.get(page_id)
+    if page is None:
+        raise WikiRequestError("This wiki page does not exist.", http_status=404)
+    if page.kind == "rules":
+        raise WikiRequestError(
+            "The rules page cannot be renamed or moved.", http_status=400
+        )
+
+    # A move carries the title with it, so this checks the destination, not
+    # where the page sits today — best-effort, like `create_wiki_page`'s.
+    # Everything else about the destination is the store's job now.
+    destination = (
+        None
+        if request.move_to_root
+        else (
+            request.parent_page_id
+            if request.parent_page_id is not None
+            else page.parent_page_id
+        )
+    )
+    _require_free_title(
+        pages,
+        parent_page_id=destination,
+        title=request.title if request.title is not None else page.title,
+        ignoring=page_id,
+    )
+
+    try:
+        updated = await store.update_page_metadata(
+            team_id=team_id,
+            page_id=page_id,
+            title=request.title,
+            parent_page_id=request.parent_page_id,
+            position=request.position,
+            clear_parent=request.move_to_root,
+            updated_by=user.uid,
+        )
+    except WikiPageConstraintError as exc:
+        raise WikiRequestError(
+            "A page with this title already exists at the same level.",
+            http_status=409,
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        if exc.args and exc.args[0] == page_id:
+            raise WikiRequestError(
+                "This wiki page does not exist.", http_status=404
+            ) from exc
+        raise WikiRequestError(
+            "The parent page does not exist.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageInvalidMoveError as exc:
+        raise WikiRequestError(
+            "A page cannot be moved under itself or one of its own descendants.",
+            http_status=400,
+        ) from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+            http_status=400,
+        ) from exc
+    return _summary(updated)
+
+
+async def restore_wiki_revision(
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    revision_id: str,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    """Restore an earlier revision by publishing its content as a NEW revision.
+
+    History is never rewritten: what was there stays readable, and the restore
+    is itself an entry in the page's history.
+    """
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await _require_page(store, team_id, page_id)
+    revision = await store.get_revision(team_id, revision_id)
+    if revision is None or revision.page_id != page_id:
+        raise WikiRequestError(
+            "This revision does not belong to this page.", http_status=404
+        )
+    if revision.status in ("proposed", "rejected"):
+        # A proposal is not history. Restoring one would publish an agent's
+        # draft as a human edit — clearing the review mark in the process —
+        # which is exactly the decision the approval gate exists to record.
+        raise WikiRequestError("This revision was never published.", http_status=404)
+    return await _publish(
+        store,
+        team_id=team_id,
+        page=page,
+        content_md=revision.content_md,
+        base_revision_id=page.current_revision_id,
+        author_user_id=user.uid,
+    )
+
+
+async def set_wiki_page_needs_review(
+    user: KeycloakUser,
+    team_id: TeamId,
+    page_id: str,
+    request: SetNeedsReviewRequest,
+    deps: ProductServiceDependencies,
+) -> WikiPageSummary:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    await _require_page(store, team_id, page_id)
+    try:
+        updated = await store.set_needs_review(
+            team_id=team_id,
+            page_id=page_id,
+            needs_review=request.needs_review,
+            reviewed_by=user.uid,
+            base_revision_id=request.base_revision_id,
+        )
+    except WikiRevisionConflictError as exc:
+        raise WikiConflictError(
+            exc.current_revision_id, exc.current_content_md
+        ) from exc
+    return _summary(updated)
+
+
+async def delete_wiki_page(
+    user: KeycloakUser, team_id: TeamId, page_id: str, deps: ProductServiceDependencies
+) -> None:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_WRITE_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await _require_page(store, team_id, page_id)
+    if page.kind == "rules":
+        raise WikiRequestError("The rules page cannot be deleted.", http_status=400)
+    try:
+        await store.delete_page(team_id=team_id, page_id=page_id)
+    except WikiPageHasChildrenError as exc:
+        raise WikiRequestError(
+            "Delete or move this page's children first.", http_status=409
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "This wiki page does not exist.", http_status=404
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Agent proposals (WIKI-04)
+#
+# The write half is deliberately two steps. The platform's HITL gate pauses a
+# tool BEFORE it runs and carries only a truncated argument preview, which
+# cannot hold a page. So an agent first stores a proposal — invisible in the
+# wiki, changing nothing — and then asks to publish it; that second call is
+# what a human approves, and the approval modal fetches the proposal by id to
+# show the diff.
+#
+# Proposing is member-level, not editor: §9 of the RFC opens contribution to
+# any member driving an agent, and the approval gate plus the review mark are
+# what make that defensible. Nothing an agent proposes reaches the wiki
+# without a person saying so.
+# ---------------------------------------------------------------------------
+
+
+def _proposal_view(
+    proposal: WikiRevisionRecord,
+    *,
+    page: WikiPageRecord | None,
+    current_content_md: str,
+    parent_slug: str | None,
+) -> WikiProposal:
+    return WikiProposal(
+        proposal_id=proposal.revision_id,
+        # From the proposal itself, never from whether the page still resolves:
+        # an edit whose page was deleted while it waited is a broken edit, and
+        # rendering it as a brand-new page would show the approver a diff of the
+        # whole body against nothing.
+        kind="page" if proposal.proposed_title is not None else "edit",
+        title=page.title if page is not None else (proposal.proposed_title or ""),
+        slug=page.slug if page is not None else None,
+        parent_slug=parent_slug,
+        content_md=proposal.content_md,
+        current_content_md=current_content_md,
+        created_at=proposal.created_at,
+        author_user_id=proposal.author_user_id,
+        agent_instance_id=proposal.agent_instance_id,
+    )
+
+
+async def propose_wiki_page(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: ProposePageRequest,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    pages = {p.page_id: p for p in await store.list_pages(team_id)}
+
+    parent: WikiPageRecord | None = None
+    if request.parent_slug:
+        parent = next(
+            (p for p in pages.values() if p.slug == request.parent_slug), None
+        )
+        if parent is None:
+            raise WikiRequestError(
+                f"No wiki page has the slug {request.parent_slug!r}.", http_status=404
+            )
+        if parent.kind == "rules":
+            raise WikiRequestError(
+                "The rules page cannot have children.", http_status=400
+            )
+        if _child_depth_under(pages, parent.page_id) > MAX_PAGE_DEPTH:
+            raise WikiRequestError(
+                f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels.",
+                http_status=400,
+            )
+
+    # Refused here rather than only at publish, so an agent learns the title is
+    # taken while it can still choose another — not after a human approved it.
+    _require_free_title(
+        pages,
+        parent_page_id=parent.page_id if parent else None,
+        title=request.title,
+    )
+
+    proposal = await store.create_proposal(
+        team_id=team_id,
+        page_id=None,
+        content_md=request.content_md,
+        base_revision_id=None,
+        proposed_title=request.title,
+        proposed_parent_page_id=parent.page_id if parent else None,
+        author_user_id=user.uid,
+        agent_instance_id=request.agent_instance_id,
+        session_id=request.session_id,
+    )
+    return _proposal_view(
+        proposal,
+        page=None,
+        current_content_md="",
+        parent_slug=parent.slug if parent else None,
+    )
+
+
+async def propose_wiki_edit(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: ProposeEditRequest,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    page = await store.get_page_by_slug(team_id, request.slug)
+    if page is None:
+        raise WikiRequestError("This wiki page does not exist.", http_status=404)
+    if page.kind == "rules":
+        # §8.6: no agent can touch the rules page under any configuration. This
+        # is the only place that could have been the exception, so it is not.
+        raise WikiRequestError(
+            "The rules page cannot be changed by an agent.", http_status=403
+        )
+
+    current = (
+        await store.get_revision(team_id, page.current_revision_id)
+        if page.current_revision_id
+        else None
+    )
+    # Best-effort, not the atomic guarantee (that's the store's own
+    # compare-and-swap at publish time): CONTROL-PLANE-PRODUCT-CONTRACT.md §49.
+    if request.base_revision_id != page.current_revision_id:
+        raise WikiConflictError(
+            page.current_revision_id or "", current.content_md if current else ""
+        )
+
+    # A proposal that would change nothing is refused rather than stored.
+    # Field evidence, 2026-09-07: asked to MOVE two pages, an agent used the
+    # only write tool it had and re-proposed each page's existing text
+    # byte-for-byte. Both published, both changed nothing, and the agent read
+    # "published" as "moved" — then told the user a hierarchy that did not
+    # exist. Refusing here is what turns that silent no-op into a dead end.
+    if current is not None and current.content_md == request.content_md:
+        raise WikiRequestError(
+            "This proposal is identical to the page as it stands, so it would "
+            "change nothing. Note that content is the only thing an agent can "
+            "change: a page cannot be moved, renamed or deleted this way.",
+            http_status=409,
+        )
+
+    proposal = await store.create_proposal(
+        team_id=team_id,
+        page_id=page.page_id,
+        content_md=request.content_md,
+        base_revision_id=request.base_revision_id,
+        proposed_title=None,
+        proposed_parent_page_id=None,
+        author_user_id=user.uid,
+        agent_instance_id=request.agent_instance_id,
+        session_id=request.session_id,
+    )
+    return _proposal_view(
+        proposal,
+        page=page,
+        current_content_md=current.content_md if current else "",
+        parent_slug=None,
+    )
+
+
+async def get_wiki_proposal(
+    user: KeycloakUser,
+    team_id: TeamId,
+    proposal_id: str,
+    deps: ProductServiceDependencies,
+) -> WikiProposal:
+    """What the approval modal reads to render the diff."""
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    proposal = await store.get_proposal(team_id, proposal_id)
+    if proposal is None:
+        raise WikiRequestError("This proposal is no longer pending.", http_status=404)
+    page = await store.get_page(team_id, proposal.page_id)
+    current = (
+        await store.get_revision(team_id, page.current_revision_id)
+        if page and page.current_revision_id
+        else None
+    )
+    parent_slug = None
+    if page is None and proposal.proposed_parent_page_id:
+        parent = await store.get_page(team_id, proposal.proposed_parent_page_id)
+        parent_slug = parent.slug if parent else None
+    return _proposal_view(
+        proposal,
+        page=page,
+        current_content_md=current.content_md if current else "",
+        parent_slug=parent_slug,
+    )
+
+
+async def publish_wiki_proposal(
+    user: KeycloakUser,
+    team_id: TeamId,
+    proposal_id: str,
+    deps: ProductServiceDependencies,
+) -> WikiPageDetail:
+    """Approve a pending proposal. The approver becomes the author of record.
+
+    The page keeps its review mark: approving says the change is wanted, not
+    that the whole page has been read.
+    """
+
+    team_id = await _require_wiki_access(user, team_id, deps, [WIKI_READ_PERMISSION])
+    store = deps.get_team_wiki_store()
+    proposal = await store.get_proposal(team_id, proposal_id)
+    if proposal is None:
+        raise WikiRequestError("This proposal is no longer pending.", http_status=404)
+
+    slug = ""
+    if proposal.proposed_title is not None:
+        # Best-effort, like `create_wiki_page`'s: this snapshot only picks the
+        # slug and gives a fast title-collision message in the ordinary case.
+        pages = {p.page_id: p for p in await store.list_pages(team_id)}
+        parent_id = proposal.proposed_parent_page_id
+        if parent_id is not None and parent_id not in pages:
+            parent_id = None
+        _require_free_title(
+            pages, parent_page_id=parent_id, title=proposal.proposed_title
+        )
+        slug = await _unique_slug(store, team_id)
+    try:
+        page = await store.publish_proposal(
+            team_id=team_id,
+            revision_id=proposal_id,
+            slug=slug,
+            approver_user_id=user.uid,
+        )
+    except _StaleBaseWrite:
+        # Someone edited the page while the proposal waited for an answer.
+        # Refusing carries the current text so the agent can redo its edit on
+        # top of it rather than the approver losing the other person's work.
+        current_page = await store.get_page(team_id, proposal.page_id)
+        if current_page is None:
+            # Deleted in the gap between the failed compare-and-swap (which
+            # confirmed the page still existed) and this re-read: a real 404,
+            # not a 409 with a fabricated empty revision to rebase onto.
+            raise WikiRequestError(
+                "The page this proposal targets no longer exists.",
+                http_status=404,
+            ) from None
+        current = (
+            await store.get_revision(team_id, current_page.current_revision_id)
+            if current_page.current_revision_id
+            else None
+        )
+        raise WikiConflictError(
+            current_page.current_revision_id or "",
+            current.content_md if current else "",
+        ) from None
+    except WikiProposalNoLongerPendingError as exc:
+        # Lost the race to a concurrent decline/expiry/session-erasure reject:
+        # by the time this transaction would have committed, the proposal was
+        # no longer pending — same outcome, and same message, as finding it
+        # already rejected at the lookup above.
+        raise WikiRequestError(
+            "This proposal is no longer pending.", http_status=404
+        ) from exc
+    except WikiPageNotFoundError as exc:
+        raise WikiRequestError(
+            "The page this proposal targets no longer exists.", http_status=404
+        ) from exc
+    except WikiPageRulesParentError as exc:
+        raise _rules_parent_error() from exc
+    except WikiPageDepthExceededError as exc:
+        raise WikiRequestError(
+            f"A wiki page cannot sit deeper than {MAX_PAGE_DEPTH} levels. "
+            "The page this one would go under has moved since it was "
+            "proposed.",
+            http_status=409,
+        ) from exc
+    except WikiPageConstraintError as exc:
+        # Everything was free a moment ago. Someone took the title, or this
+        # same proposal is being published twice at once — either way the
+        # caller can act on a 409, where a 500 tells them nothing.
+        raise WikiRequestError(
+            "A page with this title already exists at the same level.",
+            http_status=409,
+        ) from exc
+    return WikiPageDetail(
+        page=_summary(page),
+        content_md=proposal.content_md,
+        revision_id=proposal_id,
+        author_kind="agent",
+    )
