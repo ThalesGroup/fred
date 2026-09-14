@@ -33,12 +33,7 @@ import {
   folderPathDepth,
   relativeDirSegments,
 } from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
-import {
-  DocumentViewer,
-  DocumentViewerModeToggle,
-  type ViewMode,
-} from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
+import DocumentPreviewDrawer from "@shared/molecules/DocumentPreviewDrawer/DocumentPreviewDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   type DocumentMetadata,
@@ -73,7 +68,6 @@ import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
-import { hasNativePreview } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
@@ -518,15 +512,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
   });
-  // The Fichier/Raw toggle lives in the preview drawer's own header (next to
-  // its close button), not inside DocumentViewer's body — so this workspace,
-  // not the viewer, owns which mode is showing. Reset to "file" on every new
-  // target so a previous document's "Raw" choice doesn't leak into the next.
-  const [previewView, setPreviewView] = useState<ViewMode>("file");
-  useEffect(() => {
-    setPreviewView("file");
-  }, [commands.previewTarget?.documentUid]);
-
   // When an ingestion task settles, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
@@ -1761,26 +1746,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         </div>
       )}
 
-      <InlineDrawer
-        open={!!commands.previewTarget}
-        onClose={commands.closePreview}
-        title={commands.previewTarget?.fileName ?? t("rework.resources.preview.title")}
-        width="80vw"
-        background="var(--surface-container-high)"
-        headerActions={
-          hasNativePreview(commands.previewTarget?.fileName) ? (
-            <DocumentViewerModeToggle view={previewView} onChange={setPreviewView} />
-          ) : undefined
-        }
-      >
-        {commands.previewTarget && (
-          <DocumentViewer
-            documentUid={commands.previewTarget.documentUid}
-            fileName={commands.previewTarget.fileName}
-            view={previewView}
-          />
-        )}
-      </InlineDrawer>
+      <DocumentPreviewDrawer target={commands.previewTarget} onClose={commands.closePreview} />
       <DocumentUploadDrawer
         isOpen={uploadOpen}
         onClose={() => {

@@ -35,6 +35,10 @@ const probe = vi.hoisted(() => ({
   uploaders: [] as { id: string; [key: string]: unknown }[],
   /** Every batched uid lookup the page made — one per page, never per row. */
   uploaderLookups: [] as string[][],
+  previewed: [] as Record<string, unknown>[],
+  preview: (doc: Record<string, unknown>) => {
+    probe.previewed.push(doc);
+  },
 }));
 
 // One trigger for the life of the module, as RTK Query guarantees. A fresh
@@ -62,6 +66,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => 
     probe.uploaderLookups.push(args.ids);
     return { data: probe.uploaders, isFetching: false };
   },
+}));
+
+vi.mock("../../../../components/documents/common/useDocumentCommands", () => ({
+  useDocumentCommands: () => ({ preview: probe.preview, previewTarget: null, closePreview: () => {} }),
 }));
 
 vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts", () => ({
@@ -101,6 +109,7 @@ beforeEach(() => {
   probe.browseRejects = false;
   probe.uploaders = [];
   probe.uploaderLookups = [];
+  probe.previewed = [];
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -131,13 +140,28 @@ describe("KnowledgeBaseDocumentsPage", () => {
     expect(container.textContent).toContain("Local folder");
   });
 
-  it("offers no action over a document", async () => {
+  it("offers no action that changes a document", async () => {
     probe.page = { documents: [doc("report.pdf", "uid-1")], total: 1 };
     await render();
 
     expect(container.querySelectorAll("input[type=checkbox]")).toHaveLength(0);
-    const labels = [...container.querySelectorAll("button")].map((button) => button.textContent ?? "");
+    const labels = [...container.querySelectorAll("button")].flatMap((button) => [
+      button.textContent ?? "",
+      button.getAttribute("aria-label") ?? "",
+    ]);
     expect(labels.some((label) => /delete|rename|download|supprim/i.test(label))).toBe(false);
+  });
+
+  it("still lets a reader open a document", async () => {
+    probe.page = { documents: [doc("report.pdf", "uid-1")], total: 1 };
+    await render();
+
+    const open = [...container.querySelectorAll("button")].find(
+      (button) => button.getAttribute("aria-label") === "rework.resources.action.preview",
+    );
+    expect(open).toBeDefined();
+    act(() => open!.click());
+    expect(probe.previewed).toHaveLength(1);
   });
 
   it("says so when the base holds nothing yet", async () => {

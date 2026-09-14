@@ -15,11 +15,15 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
+import DocumentPreviewDrawer from "@shared/molecules/DocumentPreviewDrawer/DocumentPreviewDrawer.tsx";
 import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
 import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
+import { useDocumentCommands } from "../../../../components/documents/common/useDocumentCommands";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -62,6 +66,10 @@ export default function KnowledgeBaseDocumentsPage() {
   const [documentsError, setDocumentsError] = useState(false);
 
   const libraryId = instance?.library_id;
+
+  // No refreshers: nothing on this page changes a document, so there is
+  // nothing to refetch after. Only reading is offered.
+  const commands = useDocumentCommands();
 
   // One lookup for the page, not one per row — the same batching a team's
   // resources use, so a library of 25 documents costs a single request.
@@ -143,6 +151,24 @@ export default function KnowledgeBaseDocumentsPage() {
       size: "8rem",
       cellRenderer: (doc) => <StatusChip status={deriveDocStatus(doc).status} errors={doc.processing?.errors} />,
     },
+    {
+      // Reading is not acting: a page that withholds every change still owes
+      // its reader a way to open what it lists.
+      label: "",
+      size: "3rem",
+      cellRenderer: (doc) => (
+        <Tooltip text={t("rework.resources.action.preview")}>
+          <IconButton
+            color="on-surface-retreat"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "visibility" }}
+            aria-label={t("rework.resources.action.preview")}
+            onClick={() => commands.preview(doc)}
+          />
+        </Tooltip>
+      ),
+    },
   ];
 
   return (
@@ -191,6 +217,8 @@ export default function KnowledgeBaseDocumentsPage() {
           />
         </div>
       )}
+
+      <DocumentPreviewDrawer target={commands.previewTarget} onClose={commands.closePreview} />
     </div>
   );
 }
