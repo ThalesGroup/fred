@@ -986,14 +986,14 @@ embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, �
 `import_export/api.py` derives the single-active-migration index name it matches
 in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
 
-Task rows are progress bookkeeping, so the split ships with **no backfill**. It
-also does **not drop** the old shared `task_run`/`task_event_log`: they are left
-orphaned for a later release. The two Temporal workers have no `migration:` block
-in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
-running old code — which writes the shared table through an unguarded activity
-that is the first step of every push-file ingestion. Dropping it mid-deploy would
-fail those workflows outright and lose the document, not just its task row.
-Expand now, contract in a later release.
+Task rows are progress bookkeeping, so the split shipped with **no backfill**. The
+old shared `task_run`/`task_event_log` stayed orphaned for one release and were
+dropped in a later one (control-plane revision `d3f8a2c6e174`, issue #2377). The
+two Temporal workers have no `migration:` block in `deploy/charts/fred/values.yaml`,
+so they get no scale-down hook and run the **previous** image through a rollout:
+a table they write can only be dropped once the release before already stopped
+writing it. Any future rename of a worker-written table needs the same two-release
+split.
 
 ### Ownership boundary
 
@@ -3892,3 +3892,48 @@ computed relations and the agent-capability packages; the page governs
 platform features — capabilities, agent templates and models — so it takes the
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
+
+## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
+
+**What it is.** A platform admin picks any number of registry teams that every
+new user joins as `team_member` when they accept the GCU for the first time.
+
+**Endpoints.**
+
+| Method | Path                                             | Permission            |
+| ------ | ------------------------------------------------ | --------------------- |
+| GET    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+| PUT    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+
+`GET` returns `list[DefaultTeamForNewUsers]` `{team_id, name}`, sorted by name;
+`[]` when none is set. `PUT` takes `SetDefaultTeamsForNewUsersRequest`
+`{team_ids: string[]}`, `extra="forbid"`, and replaces the whole list: `[]`
+clears it, duplicates are ignored. 204 on success; 404 naming the first team
+without a registry row - personal spaces included, they never have one - and
+nothing is written. Gated on `can_manage_platform` rather than a new narrow
+relation: it decides where every future account lands, and no delegated role
+owns that decision today.
+
+**Storage.** A `platform_default_teams` table, one row per team keyed by
+`team_id`; a `PUT` deletes and re-inserts the list in one transaction. `team_id`
+has no foreign key, since `teammetadata` belongs to the fred-core metadata: a
+deleted team is skipped on every read, so deleting a team needs no cleanup
+here. The setting stays out of `teammetadata` on purpose - a per-team flag would
+ship a field on every `Team` for a platform-wide choice.
+
+**Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
+still empty:
+
+- membership on every default team is written, concurrently, before the
+  acceptance is persisted, so a ReBAC failure on any of them fails the call and
+  the retry is still a first acceptance;
+- a user already holding any role on one of the teams is left untouched there;
+  a concurrent second call is harmless, OpenFGA writes ignore duplicates;
+- re-accepting a newer GCU version does not re-add someone who left a team;
+- users who already accepted are not backfilled, but an account that never
+  accepted joins at its first acceptance, even if it predates the setting.
+
+**Limits.** A deployment without `app.gcu_version` never calls `POST /gcu`, so
+the setting is inert there and the admin page says so. Two admins saving
+overlapping lists at the same instant can collide on the primary key (500 for
+one of them). The setting is not part of the platform export bundle.

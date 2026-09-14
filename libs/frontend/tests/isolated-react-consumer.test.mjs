@@ -35,11 +35,11 @@ test("missing explicit UI CSS fails before installation", async (context) => {
   const source = await readFile(sourcePath, "utf8");
   await writeFile(
     sourcePath,
-    source.replace('import "@fred/ui/styles.css";\n', ""),
+    source.replace('import "@fred-oss/ui/styles.css";\n', ""),
   );
   await assert.rejects(
     assertReactConsumerFixture(temporary),
-    /must explicitly import.*@fred\/ui\/styles\.css/,
+    /must explicitly import.*@fred-oss\/ui\/styles\.css/,
   );
 });
 

@@ -1,7 +1,7 @@
 import type {
   FredApplicationContext,
   FredApplicationRoute,
-} from "@fred/iframe-sdk";
+} from "@fred-oss/iframe-sdk";
 
 declare const context: FredApplicationContext;
 declare const route: FredApplicationRoute;

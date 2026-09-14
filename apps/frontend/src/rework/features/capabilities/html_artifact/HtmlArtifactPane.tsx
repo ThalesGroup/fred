@@ -268,7 +268,9 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
               {([0, 1] as const).map((i) => (
                 <iframe
                   key={i}
-                  srcDoc={buffers[i]}
+                  // No attribute while empty: in Chromium, a doc set while the empty srcdoc is
+                  // still loading paints blank.
+                  srcDoc={buffers[i] || undefined}
                   className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
                   title={selected.title || untitled}
                   sandbox=""

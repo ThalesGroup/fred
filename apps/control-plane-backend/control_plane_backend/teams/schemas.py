@@ -6,7 +6,7 @@ from typing import Literal
 
 from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from control_plane_backend.scheduler.policies.policy_models import (
     _validate_optional_duration,
@@ -248,6 +248,21 @@ class RescueTeamAdminRequest(BaseModel):
     """
 
     user_id: str = Field(min_length=1)
+
+
+class SetDefaultTeamsForNewUsersRequest(BaseModel):
+    """`PUT /admin/platform/default-teams`: the whole list; `[]` clears it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team_ids: list[TeamId]
+
+
+class DefaultTeamForNewUsers(BaseModel):
+    """One of the teams every new user joins on first GCU acceptance."""
+
+    team_id: TeamId
+    name: str
 
 
 class AddTeamMemberRequest(BaseModel):

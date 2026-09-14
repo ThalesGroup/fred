@@ -414,6 +414,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, SchedulerBackend.MEMORY),
         get_team_metadata_store=lambda: store,
+        get_default_team_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),

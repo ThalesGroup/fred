@@ -3,7 +3,7 @@ import {
   parseApplicationFrameMessage,
   type ApplicationFrameMessage,
   type ApplicationHostMessage,
-} from "@fred/iframe-sdk/protocol";
+} from "@fred-oss/iframe-sdk/protocol";
 
 import {
   applicationFixtureUrl,

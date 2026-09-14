@@ -12,6 +12,8 @@
   border-radius: var(--radius-s);
   background: var(--surface-container-low);
   padding: var(--spacing-2xs) var(--spacing-xs);
+  /* Never stretched by a column flex parent: the remove button stays by the label. */
+  width: fit-content;
   max-width: 18rem;
   color: var(--on-surface);
 }

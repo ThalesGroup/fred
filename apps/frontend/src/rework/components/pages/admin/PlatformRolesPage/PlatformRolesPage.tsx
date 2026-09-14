@@ -56,13 +56,15 @@ export default function PlatformRolesPage() {
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
 
-  const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
+  const [selectedUsers, setSelectedUsers] = useState<UserSummary[]>([]);
   const [userQuery, setUserQuery] = useState("");
+  // Local, not the mutation's `isLoading`: a grant fires one call per selected user.
+  const [isGranting, setIsGranting] = useState(false);
   const [relation, setRelation] = useState<PlatformRoleRelation>("team_manager");
 
   const { data: platformRoles, isLoading: isLoadingRoles, isError: isRolesError } = usePlatformRolesQuery();
   const { data: allUsers } = useListUsersQuery();
-  const [grantRole, { isLoading: isGranting }] = useGrantPlatformRoleMutation();
+  const [grantRole] = useGrantPlatformRoleMutation();
   const [revokeRole] = useRevokePlatformRoleMutation();
 
   const callerIsRoot = platformRoles?.caller_is_bootstrap_root ?? false;
@@ -141,38 +143,46 @@ export default function PlatformRolesPage() {
   const suggestions = useMemo(() => {
     if (!allUsers) return [];
     const query = userQuery.toLowerCase().trim();
+    const selectedIds = new Set(selectedUsers.map((user) => user.id));
     return allUsers
-      .filter((user) => user.id !== selectedUser?.id)
+      .filter((user) => !selectedIds.has(user.id))
       .filter((user) => !query || userHaystack(user).includes(query));
-  }, [allUsers, userQuery, selectedUser]);
+  }, [allUsers, userQuery, selectedUsers]);
 
-  const canSubmit = selectedUser !== null && !isGranting && (relation !== "platform_admin" || callerIsRoot);
+  const canSubmit = selectedUsers.length > 0 && !isGranting && (relation !== "platform_admin" || callerIsRoot);
 
   const handleGrant = async () => {
-    if (!selectedUser || !canSubmit) return;
-    await runMutationAction({
-      action: () =>
-        grantRole({
-          userId: selectedUser.id,
-          grantPlatformRoleRequest: { relation },
-        }).unwrap(),
-      onSuccess: () => {
-        showSuccess({
-          summary: t("rework.platformRoles.grant.successSummary", {
-            role: t(`rework.platformRoles.roles.${relation}`),
-            user: displayName(selectedUser),
-          }),
-        });
-        setSelectedUser(null);
-      },
-      onError: (error) =>
-        notifyApiError(error, {
-          summary: t("rework.platformRoles.grant.errors.summary"),
-          fallbackDetail: t("rework.platformRoles.grant.errors.fallbackDetail"),
-          forbiddenDetail: t("rework.platformRoles.grant.errors.forbiddenDetail"),
-          conflictDetail: t("rework.platformRoles.grant.errors.conflictDetail"),
+    if (!canSubmit) return;
+    const users = selectedUsers;
+    setIsGranting(true);
+    // One call per user, settled together: a failed grant must not hide the others.
+    const results = await Promise.allSettled(
+      users.map((user) => grantRole({ userId: user.id, grantPlatformRoleRequest: { relation } }).unwrap()),
+    );
+    setIsGranting(false);
+
+    const granted = users.filter((_, index) => results[index].status === "fulfilled");
+    const failed = users.filter((_, index) => results[index].status === "rejected");
+    if (granted.length > 0) {
+      showSuccess({
+        summary: t("rework.platformRoles.grant.successSummary", {
+          role: t(`rework.platformRoles.roles.${relation}`),
+          count: granted.length,
+          user: displayName(granted[0]),
         }),
-    });
+      });
+    }
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (firstFailure) {
+      notifyApiError(firstFailure.reason, {
+        summary: t("rework.platformRoles.grant.errors.summary", { users: failed.map(displayName).join(", ") }),
+        fallbackDetail: t("rework.platformRoles.grant.errors.fallbackDetail"),
+        forbiddenDetail: t("rework.platformRoles.grant.errors.forbiddenDetail"),
+        conflictDetail: t("rework.platformRoles.grant.errors.conflictDetail"),
+      });
+    }
+    // Users whose grant failed stay selected, so a retry targets exactly them.
+    setSelectedUsers(failed);
   };
 
   const relationOptions: PlatformRoleRelation[] = [
@@ -207,27 +217,32 @@ export default function PlatformRolesPage() {
             textInput={{
               placeholder: t("rework.platformRoles.grant.userPlaceholder"),
               icon: { category: "outlined", type: "search" },
+              disabled: isGranting,
             }}
-            onFieldValueChange={(value) => {
-              setUserQuery(value);
-              // Typing a new search drops the previous pick so the submit can
-              // never target a user the visible text no longer names. The ""
-              // fired by Autocomplete on selection must not clear it.
-              if (value) setSelectedUser(null);
-            }}
+            onFieldValueChange={setUserQuery}
             options={suggestions.map((user) => ({
               label: user.username ? `${displayName(user)} (${user.username})` : displayName(user),
               value: user,
               key: user.id,
             }))}
-            onSelect={setSelectedUser}
+            onSelect={(user) => setSelectedUsers((previous) => [...previous, user])}
           />
-          {selectedUser && (
-            <Chip
-              label={displayName(selectedUser)}
-              onRemove={() => setSelectedUser(null)}
-              removeAriaLabel={t("rework.platformRoles.grant.clearSelection")}
-            />
+          {selectedUsers.length > 0 && (
+            <ul className={styles.selectedUsers}>
+              {selectedUsers.map((user) => (
+                <li key={user.id}>
+                  <Chip
+                    label={displayName(user)}
+                    onRemove={
+                      isGranting
+                        ? undefined
+                        : () => setSelectedUsers((previous) => previous.filter((picked) => picked.id !== user.id))
+                    }
+                    removeAriaLabel={t("rework.platformRoles.grant.removeUser", { user: displayName(user) })}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
         <div className={styles.grantField}>

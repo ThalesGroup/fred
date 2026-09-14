@@ -26,8 +26,6 @@ const state = vi.hoisted(() => ({ entries: [] as unknown[], clicks: [] as Array<
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock("./sessionProbeRegistry", () => ({ sessionProbesForCapabilities: () => [] }));
-
 vi.mock("./sidePanelRegistry", () => ({ sidePanelsForCapabilities: () => state.entries }));
 
 // Stubbed down to what the rail actually decides: which glyph, which label,

@@ -28,7 +28,7 @@ const { archivePath } = await packUi();
 
 test("accepts the actual packed UI archive", async () => {
   const evidence = await validateUiArchive(archivePath);
-  assert.equal(evidence.package, "@fred/ui@0.0.0-development");
+  assert.equal(evidence.package, "@fred-oss/ui@0.1.0-alpha.1");
   assert.equal(evidence.glyphCount, 132);
   assert.deepEqual(evidence.externalModules, ["react", "react/jsx-runtime"]);
 });
@@ -105,6 +105,14 @@ for (const peerMutation of [
     "workspace protocol",
     (manifest) => {
       manifest.peerDependencies.react = "workspace:*";
+    },
+    /deep-equal|local dependency/,
+  ],
+  [
+    "local Git checkout",
+    (manifest) => {
+      manifest.peerDependencies.react =
+        "\tGiT+FiLe:///tmp/fred-frontend-checkout";
     },
     /deep-equal|local dependency/,
   ],

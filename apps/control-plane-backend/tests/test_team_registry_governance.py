@@ -237,6 +237,7 @@ def _deps(
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, lambda: store),
+        get_default_team_store=cast(Any, object),
         get_prompt_store=cast(Any, lambda: prompt_store or cast(Any, object())),
         get_prompt_category_store=cast(
             Any, lambda: prompt_category_store or cast(Any, object())
