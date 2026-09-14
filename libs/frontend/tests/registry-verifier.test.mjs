@@ -754,6 +754,16 @@ test("controlled registry orchestration verifies identity before consumers", asy
     };
   }
   let installed = false;
+  const provenanceExpectations = Object.fromEntries(
+    Object.entries(packages).map(([role, candidate]) => [
+      role,
+      {
+        ...candidate.expectedProvenance,
+        sourceCommit:
+          role === "designTokens" ? "fixture-commit" : "recovery-commit",
+      },
+    ]),
+  );
   const result = await verifyRegistryTooling({
     contract,
     evidence: {
@@ -769,6 +779,7 @@ test("controlled registry orchestration verifies identity before consumers", asy
       packages,
     },
     coordinates,
+    provenanceExpectations,
     resolvePackage: async ({ coordinate }) => {
       const role = Object.entries(coordinates).find(
         ([, value]) => value === coordinate,
@@ -784,14 +795,14 @@ test("controlled registry orchestration verifies identity before consumers", asy
       { role },
       { expectedProvenance, certificateIssuer },
     ) => {
-      assert.equal(expectedProvenance, packages[role].expectedProvenance);
+      assert.equal(expectedProvenance, provenanceExpectations[role]);
       assert.equal(
         certificateIssuer,
         contract.expectedProvenance.certificateIssuer,
       );
       return {
         cryptographicallyVerified: true,
-        identity: packages[role].expectedProvenance,
+        identity: provenanceExpectations[role],
       };
     },
     installConsumers: async () => {

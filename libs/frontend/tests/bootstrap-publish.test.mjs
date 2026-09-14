@@ -106,6 +106,14 @@ async function fixture(context) {
   return { root, contract, evidence, github };
 }
 
+function registryMetadata(contract, evidence, role) {
+  return {
+    name: contract.packages[role].name,
+    version: contract.packages[role].version,
+    dist: { integrity: evidence.packages[role].integrity },
+  };
+}
+
 test("bootstrap publication uses validated bytes in dependency order", async (context) => {
   const { root, contract, evidence, github } = await fixture(context);
   const published = [];
@@ -119,9 +127,10 @@ test("bootstrap publication uses validated bytes in dependency order", async (co
     inspectRegistry: async ({ coordinate }) => registry.get(coordinate) ?? null,
     publishArchive: async ({ role, candidate }) => {
       published.push(role);
-      registry.set(candidate.coordinate, {
-        dist: { integrity: candidate.integrity },
-      });
+      registry.set(
+        candidate.coordinate,
+        registryMetadata(contract, evidence, role),
+      );
     },
   });
   assert.deepEqual(published, ["designTokens", "ui", "iframeSdk"]);
@@ -129,6 +138,128 @@ test("bootstrap publication uses validated bytes in dependency order", async (co
     result.published,
     published.map((role) => evidence.packages[role].coordinate),
   );
+});
+
+test("post-publication visibility retries an exact 404 without republishing", async (context) => {
+  const { root, contract, evidence, github } = await fixture(context);
+  const registry = new Map();
+  const inspections = new Map();
+  const publishes = [];
+  const result = await publishBootstrapRelease({
+    contract,
+    evidence,
+    archiveRoot: root,
+    github,
+    identifyPublisher: async () => "marc.fawaz",
+    inspectRegistry: async ({ coordinate }) => {
+      const count = (inspections.get(coordinate) ?? 0) + 1;
+      inspections.set(coordinate, count);
+      if (!registry.has(coordinate) || count === 2) return null;
+      return registry.get(coordinate);
+    },
+    publishArchive: async ({ role, candidate }) => {
+      publishes.push(role);
+      registry.set(candidate.coordinate, {
+        name: contract.packages[role].name,
+        version: contract.packages[role].version,
+        dist: { integrity: candidate.integrity },
+      });
+    },
+    visibilityAttempts: 3,
+    waitForVisibility: async () => {},
+  });
+  assert.deepEqual(publishes, ["designTokens", "ui", "iframeSdk"]);
+  assert.deepEqual(result.published, [
+    evidence.packages.designTokens.coordinate,
+    evidence.packages.ui.coordinate,
+    evidence.packages.iframeSdk.coordinate,
+  ]);
+});
+
+test("exhausted visibility retries stop before the next package and never republish", async (context) => {
+  const { root, contract, evidence, github } = await fixture(context);
+  const publishes = [];
+  await assert.rejects(
+    publishBootstrapRelease({
+      contract,
+      evidence,
+      archiveRoot: root,
+      github,
+      identifyPublisher: async () => "marc.fawaz",
+      inspectRegistry: async () => null,
+      publishArchive: async ({ role }) => publishes.push(role),
+      visibilityAttempts: 3,
+      waitForVisibility: async () => {},
+    }),
+    /visibility retries exhausted.*stop before continuing/,
+  );
+  assert.deepEqual(publishes, ["designTokens"]);
+});
+
+test("malformed or mismatched post-publication metadata fails without retrying or progressing", async (context) => {
+  const variants = [
+    null,
+    {},
+    { name: "@fred-oss/wrong", version: "0.1.0-alpha.1" },
+    { name: "@fred-oss/design-tokens", version: "9.9.9" },
+    {
+      name: "@fred-oss/design-tokens",
+      version: "0.1.0-alpha.1",
+      dist: { integrity: "sha512-wrong" },
+    },
+  ];
+  for (const [index, metadata] of variants.entries()) {
+    const { root, contract, evidence, github } = await fixture(context);
+    let inspections = 0;
+    const publishes = [];
+    await assert.rejects(
+      publishBootstrapRelease({
+        contract,
+        evidence,
+        archiveRoot: root,
+        github,
+        identifyPublisher: async () => "marc.fawaz",
+        inspectRegistry: async () => {
+          inspections += 1;
+          return inspections <= 3 ? null : metadata;
+        },
+        publishArchive: async ({ role }) => publishes.push(role),
+        visibilityAttempts: metadata === null ? 2 : 3,
+        waitForVisibility: async () => {},
+      }),
+      metadata === null
+        ? /visibility retries exhausted/
+        : /metadata name differs|metadata version differs|registry integrity differs/,
+      `variant ${index}`,
+    );
+    assert.deepEqual(publishes, ["designTokens"]);
+  }
+});
+
+test("an authentication failure is not retried and stops before the next package", async (context) => {
+  const { root, contract, evidence, github } = await fixture(context);
+  let inspections = 0;
+  const publishes = [];
+  await assert.rejects(
+    publishBootstrapRelease({
+      contract,
+      evidence,
+      archiveRoot: root,
+      github,
+      identifyPublisher: async () => "marc.fawaz",
+      inspectRegistry: async () => {
+        inspections += 1;
+        if (inspections <= 3) return null;
+        throw new Error("E401 registry authentication failed");
+      },
+      publishArchive: async ({ role }) => publishes.push(role),
+      visibilityAttempts: 3,
+      waitForVisibility: async () => assert.fail("must not retry E401"),
+    }),
+    /registry verification failed.*E401 registry authentication failed/,
+  );
+  assert.equal(inspections, 4);
+  assert.deepEqual(publishes, ["designTokens"]);
 });
 
 test("an existing or partial version stops before any publication", async (context) => {
@@ -143,7 +274,7 @@ test("an existing or partial version stops before any publication", async (conte
       identifyPublisher: async () => "marc.fawaz",
       inspectRegistry: async ({ coordinate }) =>
         coordinate === evidence.packages.designTokens.coordinate
-          ? { version: "existing" }
+          ? registryMetadata(contract, evidence, "designTokens")
           : null,
       publishArchive: async () => {
         publishes += 1;
@@ -206,10 +337,12 @@ test("a failure after publication reports the exact partial sequence", async (co
         registry.get(coordinate) ?? null,
       publishArchive: async ({ role, candidate }) => {
         if (role === "ui") throw new Error("controlled publish failure");
-        registry.set(candidate.coordinate, {
-          dist: { integrity: candidate.integrity },
-        });
+        registry.set(
+          candidate.coordinate,
+          registryMetadata(contract, evidence, role),
+        );
       },
+      visibilityAttempts: 1,
     }),
     /outcome is indeterminate.*previously confirmed from this evidence: @fred-oss\/design-tokens@0\.1\.0-alpha\.1/,
   );
@@ -229,6 +362,7 @@ test("a post-publish registry failure still reports the package as published", a
       publishArchive: async () => {
         published = true;
       },
+      visibilityAttempts: 1,
     }),
     /publication completed.*registry verification failed.*confirmed publish commands from this evidence: @fred-oss\/design-tokens@0\.1\.0-alpha\.1/,
   );
@@ -247,10 +381,11 @@ test("an ambiguous publish failure reconciles registry state before reporting", 
       identifyPublisher: async () => "marc.fawaz",
       inspectRegistry: async ({ coordinate }) =>
         registry.get(coordinate) ?? null,
-      publishArchive: async ({ candidate }) => {
-        registry.set(candidate.coordinate, {
-          dist: { integrity: candidate.integrity },
-        });
+      publishArchive: async ({ role, candidate }) => {
+        registry.set(
+          candidate.coordinate,
+          registryMetadata(contract, evidence, role),
+        );
         throw new Error("connection lost after registry accepted bytes");
       },
     }),

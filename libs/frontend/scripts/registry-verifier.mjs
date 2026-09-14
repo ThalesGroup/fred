@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { verify as verifySigstoreBundle } from "sigstore";
 
+import { validateBootstrapRecoveryEvidence } from "./bootstrap-recovery.mjs";
 import { assertRegistryConsumer } from "./dependency-boundaries.mjs";
 import {
   assertProvisionedChromium,
@@ -178,6 +179,7 @@ export async function verifyRegistryTooling({
   resolvePackage,
   verifyPackageSignature,
   installConsumers,
+  provenanceExpectations,
 }) {
   assert.equal(
     contract.state,
@@ -214,14 +216,16 @@ export async function verifyRegistryTooling({
       candidate.integrity,
       `${role} registry integrity differs`,
     );
+    const expectedProvenance =
+      provenanceExpectations?.[role] ?? candidate.expectedProvenance;
     const signatureResult = await verifyPackageSignature(registryPackage, {
-      expectedProvenance: candidate.expectedProvenance,
+      expectedProvenance,
       certificateIssuer: contract.expectedProvenance.certificateIssuer,
     });
     assertProvenanceIdentity({
       cryptographicallyVerified: signatureResult.cryptographicallyVerified,
       actual: signatureResult.identity,
-      expected: candidate.expectedProvenance,
+      expected: expectedProvenance,
     });
     resolved[role] = registryPackage;
   }
@@ -599,6 +603,36 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const evidence = JSON.parse(
     await readFile(path.resolve(evidencePath), "utf8"),
   );
+  const recoveryEvidencePath = optionValue("--recovery-evidence");
+  const recoveryPlanPath = optionValue("--recovery-plan");
+  let provenanceExpectations;
+  if (recoveryEvidencePath || recoveryPlanPath) {
+    assert(recoveryEvidencePath, "--recovery-evidence is required");
+    assert(recoveryPlanPath, "--recovery-plan is required");
+    const recoveryEvidence = JSON.parse(
+      await readFile(path.resolve(recoveryEvidencePath), "utf8"),
+    );
+    const plan = JSON.parse(
+      await readFile(path.resolve(recoveryPlanPath), "utf8"),
+    );
+    validateBootstrapRecoveryEvidence({
+      contract,
+      plan,
+      evidence,
+      recoveryEvidence,
+      github: {
+        actions: process.env.GITHUB_ACTIONS,
+        repository: process.env.GITHUB_REPOSITORY,
+        ref: process.env.GITHUB_REF,
+        sha: process.env.GITHUB_SHA,
+        workflowRef: process.env.GITHUB_WORKFLOW_REF,
+        workflow: process.env.GITHUB_WORKFLOW,
+        runId: process.env.GITHUB_RUN_ID,
+        runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      },
+    });
+    provenanceExpectations = recoveryEvidence.expectedProvenance;
+  }
   const coordinates = {
     designTokens: optionValue("--design-tokens"),
     ui: optionValue("--ui"),
@@ -672,6 +706,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           ),
         });
       },
+      provenanceExpectations,
     });
     process.stdout.write(
       `${JSON.stringify({ ...result, kind: "public-registry-verification" }, null, 2)}\n`,

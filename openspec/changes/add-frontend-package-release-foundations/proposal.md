@@ -62,9 +62,15 @@ that publish only exact reviewed bytes after explicit approval.
   releases. GitHub reviewer `marcfawaz` remains a distinct operational identity.
 - Add a `workflow_dispatch`-only, `swift`-restricted publication workflow that defaults to
   preparation only, transfers immutable candidates across the release and application
-  toolchains, uses the protected `npm-publish` environment and its bootstrap token only in the
-  explicitly selected initial publishing step, and performs genuine registry verification
+  toolchains, uses the protected `npm-publish` environment and its bootstrap token only in an
+  explicitly selected initial or partial-recovery publishing step, and performs genuine registry verification
   after publication.
+- Correct exact-version post-publication reconciliation to tolerate bounded npm visibility lag
+  without ever retrying publication, and add an explicit protected recovery operation for the
+  partial first release from run `34853407387`. The recovery preserves the original candidate
+  artifact and evidence, verifies the already-published design-token bytes and provenance, and
+  publishes only the still-absent UI and SDK archives while binding their provenance to the
+  recovery workflow's actual `GITHUB_SHA`.
 
 This change prepares but does not trigger the publishing workflow. It does not create GitHub/npm
 settings, publish or stage packages, claim public-registry success, or migrate FRED or RAGS.

@@ -548,7 +548,8 @@ production-host gates and add approved evidence only for a complete `maintainer-
 contract. The workflow MUST NOT rebuild archives during or after this transfer.
 
 Initial publication MUST use a protected GitHub environment named `npm-publish`. The environment
-secret `NPM_BOOTSTRAP_TOKEN` MUST be referenced only by the explicit initial publishing step and
+secret `NPM_BOOTSTRAP_TOKEN` MUST be referenced only by an explicitly selected initial or
+partial-recovery publishing step and
 MUST NOT be available to checkout, installation, build, test, transfer, or registry-verification
 steps. The publishing job MUST grant `id-token: write`, reverify the exact archive bytes and
 evidence, require the expected repository, commit, ref, workflow identity, and authenticated
@@ -557,9 +558,21 @@ registry mutation. It MUST publish design tokens before UI, use public access an
 GitHub Actions provenance, and verify registry integrity after each successful package publish.
 The SDK MAY follow independently within the same sequence.
 
+Post-publication reconciliation MUST query exact-version metadata, require the selected name,
+version, and candidate SHA-512, and use bounded retries only for temporary exact-version 404
+visibility. It MUST NOT retry a publication command. Authentication failures, malformed metadata,
+identity or integrity mismatches, and exhausted visibility retries MUST stop before the next
+package.
+
 A preflight existing version or a failure after partial publication MUST stop without rebuilding,
 overwriting, or silently accepting different bytes. Logs and evidence SHALL identify which exact
-packages succeeded so maintainers can choose a newly versioned recovery. If a publish command
+packages succeeded so maintainers can choose an explicit recovery. Ordinary bootstrap MUST
+continue to reject every pre-existing selected coordinate. A partial-bootstrap recovery MAY
+reuse unchanged original candidate bytes only through a separate manual operation that pins and
+verifies the original artifact identity and digest, verifies every already-published coordinate's
+exact bytes and cryptographic provenance, requires every remaining coordinate to be absent, and
+publishes only those absent archives behind the same protected environment. If those conditions
+fail, recovery MUST use a newly versioned candidate. If a publish command
 fails after the registry may have accepted it, the workflow MUST query that exact coordinate and
 compare integrity before reporting the outcome. Matching bytes MAY be reported as confirmed;
 otherwise the outcome MUST remain explicitly indeterminate and MUST NOT be described as no
@@ -602,8 +615,46 @@ success.
 #### Scenario: Publication fails after one package succeeds
 
 - **WHEN** a package publish or integrity check fails after an earlier package was created
-- **THEN** the workflow stops, retains the immutable evidence and result logs, and requires an
-  explicit newly versioned recovery decision without rebuilding under the prior evidence
+- **THEN** the workflow stops and retains immutable evidence and logs; a separately reviewed
+  partial recovery may use the same unchanged bytes only when the published subset and missing
+  subset satisfy the recovery contract, otherwise a newly versioned candidate is required
+
+#### Scenario: Exact-version visibility is delayed after publication
+
+- **WHEN** an exact-version lookup returns 404 immediately after one publish command and a bounded
+  later read returns matching name, version, and candidate SHA-512 metadata
+- **THEN** the workflow records that package once and proceeds without executing another publish
+  command for it
+
+#### Scenario: Post-publication reconciliation cannot establish exact identity
+
+- **WHEN** exact-version visibility retries are exhausted, the registry read is unauthorized, or
+  metadata is malformed or differs in package name, version, or candidate SHA-512
+- **THEN** the workflow stops before the next package and does not repeat the publication command
+
+#### Scenario: Maintainers explicitly recover the recorded partial bootstrap
+
+- **WHEN** a maintainer selects partial recovery for the pinned original artifact, preparation
+  verifies its ID/name/ZIP digest and unchanged candidate evidence, cryptographically verifies
+  the existing design-token version, and confirms UI and SDK are absent
+- **THEN** protected-environment recovery may publish only the original UI and SDK archives in
+  order, with no design-token publication command
+
+#### Scenario: Recovery and original provenance have different source commits
+
+- **WHEN** the retained candidate came from the original commit but missing packages are
+  published by a later recovery workflow execution
+- **THEN** evidence preserves the original artifact commit/run unchanged, requires the existing
+  design token to attest the original source commit, and requires UI and SDK to attest the actual
+  recovery `GITHUB_SHA`, while retaining the approved repository, workflow, issuer, and archive
+  digests
+
+#### Scenario: Partial recovery prerequisites drift
+
+- **WHEN** the original artifact expires or changes, an existing package differs in bytes or
+  provenance, a supposedly missing coordinate appears, or recovery execution identity differs
+- **THEN** recovery stops before publication and requires an explicit newly versioned path rather
+  than relabeling evidence, spoofing GitHub identity, or weakening provenance checks
 
 #### Scenario: A publish command fails after an ambiguous registry mutation
 

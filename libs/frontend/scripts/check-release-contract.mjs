@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { validateBootstrapRecoveryPlan } from "./bootstrap-recovery.mjs";
 import {
   assertExpectedManifest,
   assertProducerLockfile,
@@ -28,6 +29,14 @@ export async function checkReleaseContracts() {
           path.join(workspaceRoot, "release/proposed-release-contract.json"),
           "utf8",
         ),
+      ),
+    ),
+  );
+  const recoveryPlan = validateBootstrapRecoveryPlan(
+    JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, "release/bootstrap-recovery.json"),
+        "utf8",
       ),
     ),
   );
@@ -57,6 +66,7 @@ export async function checkReleaseContracts() {
     kind: "release-contract-tooling",
     contracts: [fixture.state, selected.state],
     producerMembers: Object.keys(selected.packages),
+    recoveryPlan: recoveryPlan.state,
   };
 }
 

@@ -36,6 +36,12 @@ const publishWorkflowSource = await readFile(
   "utf8",
 );
 const publishWorkflow = parse(publishWorkflowSource);
+const recoveryPlan = JSON.parse(
+  await readFile(
+    path.join(repositoryRoot, "libs/frontend/release/bootstrap-recovery.json"),
+    "utf8",
+  ),
+);
 const changeStep = workflow.jobs["detect-changes"].steps.find(
   ({ id }) => id === "changes",
 );
@@ -130,7 +136,11 @@ test("manual publication workflow is branch-guarded and disabled by default", ()
   assert.deepEqual(Object.keys(publishWorkflow.on), ["workflow_dispatch"]);
   const publication = publishWorkflow.on.workflow_dispatch.inputs.publication;
   assert.equal(publication.default, "prepare-only");
-  assert.deepEqual(publication.options, ["prepare-only", "publish-bootstrap"]);
+  assert.deepEqual(publication.options, [
+    "prepare-only",
+    "publish-bootstrap",
+    "recover-bootstrap",
+  ]);
   assert.equal(
     publishWorkflow.jobs["authorize-source"].steps[0].run,
     'test "${GITHUB_REF}" = "refs/heads/swift"',
@@ -139,28 +149,83 @@ test("manual publication workflow is branch-guarded and disabled by default", ()
   assert.equal(publish.if, "inputs.publication == 'publish-bootstrap'");
   assert.equal(publish.environment, "npm-publish");
   assert.equal(publish.permissions["id-token"], "write");
+  const recovery = publishWorkflow.jobs["publish-bootstrap-recovery"];
+  assert.equal(recovery.if, "inputs.publication == 'recover-bootstrap'");
+  assert.equal(recovery.environment, "npm-publish");
+  assert.equal(recovery.permissions["id-token"], "write");
 });
 
-test("bootstrap token is referenced only by the publication step", () => {
+test("bootstrap token is referenced only by the mutually exclusive publication steps", () => {
   assert.equal(
     (publishWorkflowSource.match(/NPM_BOOTSTRAP_TOKEN/g) ?? []).length,
-    1,
+    2,
   );
-  const publishSteps = publishWorkflow.jobs["publish-bootstrap"].steps;
-  const secretStep = publishSteps.find(
-    (step) =>
-      step.env?.NODE_AUTH_TOKEN === "${{ secrets.NPM_BOOTSTRAP_TOKEN }}",
+  const secretSteps = ["publish-bootstrap", "publish-bootstrap-recovery"].map(
+    (jobName) =>
+      publishWorkflow.jobs[jobName].steps.find(
+        (step) =>
+          step.env?.NODE_AUTH_TOKEN === "${{ secrets.NPM_BOOTSTRAP_TOKEN }}",
+      ),
   );
-  assert.equal(secretStep.name, "Publish the initial package versions");
+  assert.deepEqual(
+    secretSteps.map(({ name }) => name),
+    [
+      "Publish the initial package versions",
+      "Publish only the missing initial package versions",
+    ],
+  );
   for (const [jobName, job] of Object.entries(publishWorkflow.jobs)) {
     for (const step of job.steps)
-      if (step !== secretStep)
+      if (!secretSteps.includes(step))
         assert.equal(
           JSON.stringify(step).includes("NPM_BOOTSTRAP_TOKEN"),
           false,
           `${jobName}.${step.name}`,
         );
   }
+});
+
+test("partial-bootstrap recovery reuses the exact incident artifact without rebuilding", () => {
+  const prepare = publishWorkflow.jobs["prepare-bootstrap-recovery"];
+  const publish = publishWorkflow.jobs["publish-bootstrap-recovery"];
+  const verify = publishWorkflow.jobs["verify-public-registry"];
+  assert.equal(prepare.needs, "authorize-source");
+  assert.equal(prepare.if, "inputs.publication == 'recover-bootstrap'");
+  assert.equal(publish.needs, "prepare-bootstrap-recovery");
+  assert.equal(publish.if, "inputs.publication == 'recover-bootstrap'");
+  const retrieval = prepare.steps.find(
+    (step) => step.name === "Retrieve the exact original release artifact",
+  );
+  assert.match(
+    retrieval.run,
+    new RegExp(`actions/artifacts/${recoveryPlan.incident.artifactId}/zip`),
+  );
+  assert.match(
+    retrieval.run,
+    new RegExp(recoveryPlan.incident.artifactZipSha256),
+  );
+  const reverify = publish.steps.find(
+    (step) => step.name === "Reverify the original candidate bytes",
+  );
+  assert.match(
+    reverify.run,
+    new RegExp(recoveryPlan.incident.artifactZipSha256),
+  );
+  assert.match(reverify.run, /release:verify-evidence/);
+  assert(prepare.steps.some((step) => step.run?.includes("--mode prepare")));
+  assert(publish.steps.some((step) => step.run?.includes("--mode publish")));
+  assert.equal(
+    [...prepare.steps, ...publish.steps].some((step) =>
+      [
+        "make release-transfer-create",
+        "make release-transfer-validate",
+      ].includes(step.run),
+    ),
+    false,
+  );
+  assert(
+    verify.steps.some((step) => step.run?.includes("--recovery-evidence")),
+  );
 });
 
 test("release workflow transfers one candidate to application tooling before publication", () => {
