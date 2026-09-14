@@ -1,7 +1,7 @@
 """add knowledge_base_definitions
 
 Revision ID: c1e4f70a2b95
-Revises: b7d4c1a9e802
+Revises: d3f8a2c6e174
 Create Date: 2026-09-11
 
 A Knowledge Base definition exists because its image published a declaration:
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c1e4f70a2b95"  # pragma: allowlist secret
-down_revision: Union[str, None] = "b7d4c1a9e802"  # pragma: allowlist secret
+down_revision: Union[str, None] = "d3f8a2c6e174"  # pragma: allowlist secret
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
