@@ -373,6 +373,51 @@ def test_the_workflow_validates_under_the_sandbox_serve_actually_uses() -> None:
     asyncio.run(validate())
 
 
+@pytest.mark.parametrize("outcome", ["succeeded", "failed", "cancelled"])
+def test_a_reported_failure_does_not_leave_a_completed_workflow(
+    monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    """A handler's own verdict has to reach the engine's terminal state.
+
+    The engine's history is where a run's fate is read, so a handler reporting
+    `failed` while the workflow closes as Completed makes every run look fine.
+    Business cancellation is a failure too, under its own type: nothing here
+    asked the engine to cancel, so it must not be reported as if it had.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base import _workflow
+    from temporalio.exceptions import ApplicationError
+
+    # `_workflow` spells these out rather than importing the enum, so tie the
+    # two together here; the vocabulary itself is pinned a few tests above.
+    assert outcome in {o.value for o in KnowledgeBaseRunOutcome}
+
+    monkeypatch.setattr(
+        _workflow.workflow, "execute_activity", AsyncMock(return_value=outcome)
+    )
+    monkeypatch.setattr(
+        _workflow.workflow, "info", lambda: SimpleNamespace(run_id="run")
+    )
+    run = _workflow.SynchronizeWorkflow().run(
+        _workflow.SynchronizeInput("fred.samples.local-folder", "instance", "team")
+    )
+
+    if outcome == "succeeded":
+        assert asyncio.run(run) == "succeeded"
+        return
+
+    with pytest.raises(ApplicationError) as raised:
+        asyncio.run(run)
+    assert raised.value.non_retryable
+    assert raised.value.type == (
+        "KnowledgeBaseSyncFailed"
+        if outcome == "failed"
+        else "KnowledgeBaseSyncCancelled"
+    )
+
+
 def test_the_workflow_module_imports_only_what_the_sandbox_would_allow() -> None:
     """Reads by hand what the sandbox is configured not to check.
 

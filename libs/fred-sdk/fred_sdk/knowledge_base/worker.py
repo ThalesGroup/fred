@@ -76,12 +76,9 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
             run_id,
         )
         result = await handler(context)
-        # Nothing is reported back. Fred runs the workflow engine, so it already
-        # knows this run started, is still running, ended or crashed, and a pod
-        # killed mid-run reports nothing at all — a second source for a fact
-        # Fred already holds would disagree exactly when it matters. The
-        # outcome returned here is the workflow's own result, which Fred reads
-        # from the engine like everything else about the run.
+        # Nothing but the outcome travels back: Fred runs the engine, so a second
+        # source for a run's state would disagree exactly when a pod is killed
+        # mid-run. The workflow turns this outcome into a terminal state.
         return result.outcome.value
 
     return synchronize

@@ -30,6 +30,7 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 
 SYNCHRONIZE_ACTIVITY = "fred_knowledge_base_synchronize"
 SYNCHRONIZE_WORKFLOW = "FredKnowledgeBaseSynchronize"
@@ -68,7 +69,7 @@ class SynchronizeWorkflow:
         # is distinguishable without anything being frozen into a schedule. It
         # travels as an argument rather than being read from ambient context in
         # the activity: the workflow is the side that knows it for certain.
-        return await workflow.execute_activity(
+        outcome = await workflow.execute_activity(
             SYNCHRONIZE_ACTIVITY,
             args=[payload, workflow.info().run_id],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
@@ -78,3 +79,15 @@ class SynchronizeWorkflow:
             # what makes exhaustion — and therefore a failed run — reachable.
             retry_policy=RetryPolicy(maximum_attempts=payload.max_attempts),
         )
+        # The engine's history is the only place a run's fate is visible, so a
+        # handler that reported failure must not leave a Completed workflow there.
+        # Spelled out, not imported: the models module is not stdlib-only.
+        if outcome in ("failed", "cancelled"):
+            raise ApplicationError(
+                f"Knowledge Base synchronization {outcome}",
+                type="KnowledgeBaseSyncFailed"
+                if outcome == "failed"
+                else "KnowledgeBaseSyncCancelled",
+                non_retryable=True,
+            )
+        return outcome
