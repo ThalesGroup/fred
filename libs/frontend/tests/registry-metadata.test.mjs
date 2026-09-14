@@ -6,6 +6,9 @@ import { reconcilePublishedCandidate } from "../scripts/bootstrap-publish.mjs";
 import {
   exactVersionMetadataUrl,
   fetchExactPackageMetadata,
+  fetchPackageMetadata,
+  packageMetadataUrl,
+  waitForPackageMetadata,
 } from "../scripts/registry-metadata.mjs";
 
 const candidate = {
@@ -183,4 +186,78 @@ test("exact metadata requests are individually bounded", async (context) => {
     /exact-version metadata request failed/,
   );
   assert.equal(controlled.requests.length, 1);
+});
+
+test("package-wide readiness tolerates bounded visibility lag after exact metadata", async (context) => {
+  const controlled = await controlledRegistry(
+    context,
+    (_request, response, count) => {
+      if (count < 3) json(response, 404, { error: "not visible" });
+      else
+        json(response, 200, {
+          name: "@fred-oss/design-tokens",
+          versions: { "0.1.0-alpha.1": matchingMetadata() },
+        });
+    },
+  );
+  const metadata = await waitForPackageMetadata({
+    ...controlled,
+    coordinate: candidate.coordinate,
+    candidate,
+    visibilityDelayMilliseconds: 0,
+  });
+  assert.equal(metadata.name, "@fred-oss/design-tokens");
+  assert.deepEqual(
+    controlled.requests,
+    Array(3).fill(
+      packageMetadataUrl({
+        coordinate: candidate.coordinate,
+        registry: controlled.registry,
+      }).pathname,
+    ),
+  );
+});
+
+test("package-wide readiness exhausts 404s and rejects malformed identity immediately", async (context) => {
+  const absent = await controlledRegistry(context, (_request, response) => {
+    json(response, 404, { error: "not visible" });
+  });
+  await assert.rejects(
+    waitForPackageMetadata({
+      ...absent,
+      coordinate: candidate.coordinate,
+      candidate,
+      visibilityAttempts: 2,
+      visibilityDelayMilliseconds: 0,
+    }),
+    /visibility retries exhausted after 2 reads/,
+  );
+  assert.equal(absent.requests.length, 2);
+
+  const mismatched = await controlledRegistry(context, (_request, response) => {
+    json(response, 200, {
+      name: "@fred-oss/other",
+      versions: { "0.1.0-alpha.1": matchingMetadata() },
+    });
+  });
+  await assert.rejects(
+    waitForPackageMetadata({
+      ...mismatched,
+      coordinate: candidate.coordinate,
+      candidate,
+      visibilityAttempts: 6,
+      visibilityDelayMilliseconds: 0,
+    }),
+    /package metadata name differs/,
+  );
+  assert.equal(mismatched.requests.length, 1);
+
+  await assert.rejects(
+    fetchPackageMetadata({
+      ...mismatched,
+      coordinate: candidate.coordinate,
+      candidate: { ...candidate, coordinate: "@fred-oss/other@0.1.0-alpha.1" },
+    }),
+    /candidate coordinate differs/,
+  );
 });

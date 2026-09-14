@@ -453,10 +453,13 @@ async function controlledFixture(context) {
           .slice(1)
           .split("/");
         const name = decodeURIComponent(encodedName);
-        const version = decodeURIComponent(encodedVersion);
+        const version = encodedVersion
+          ? decodeURIComponent(encodedVersion)
+          : undefined;
         const role = Object.entries(input.contract.packages).find(
           ([, selected]) =>
-            selected.name === name && selected.version === version,
+            selected.name === name &&
+            (version === undefined || selected.version === version),
         )?.[0];
         assert(role, `unexpected controlled metadata ${selectedUrl.pathname}`);
         const published = JSON.parse(
@@ -469,20 +472,28 @@ async function controlledFixture(context) {
         }
         const candidate = input.evidence.packages[role];
         response.writeHead(200, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify({
-            name: input.contract.packages[role].name,
-            version: input.contract.packages[role].version,
-            dist: {
-              integrity: candidate.integrity,
-              attestations: {
-                url: new URL(
-                  `${attestationPrefix}${encodeURIComponent(candidate.coordinate)}`,
-                  input.contract.registry,
-                ).href,
-              },
+        const metadata = {
+          name: input.contract.packages[role].name,
+          version: input.contract.packages[role].version,
+          dist: {
+            integrity: candidate.integrity,
+            attestations: {
+              url: new URL(
+                `${attestationPrefix}${encodeURIComponent(candidate.coordinate)}`,
+                input.contract.registry,
+              ).href,
             },
-          }),
+          },
+        };
+        response.end(
+          JSON.stringify(
+            version === undefined
+              ? {
+                  name: metadata.name,
+                  versions: { [metadata.version]: metadata },
+                }
+              : metadata,
+          ),
         );
       } catch (error) {
         response.writeHead(500, { "content-type": "application/json" });

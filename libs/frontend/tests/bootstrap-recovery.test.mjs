@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   cp,
+  mkdir,
   mkdtemp,
   readFile,
   rm,
@@ -34,6 +35,12 @@ import {
   sha512Integrity,
 } from "../scripts/release-evidence.mjs";
 import { run } from "../scripts/process.mjs";
+import {
+  prepareRegistryVerificationContinuation,
+  registryVerificationContinuationPlanDigest,
+  validateRegistryVerificationInputs,
+  verifyRegistryVerificationContinuation,
+} from "../scripts/registry-verification-continuation.mjs";
 
 const producerToolchain = { node: "24.21.0", npm: "11.19.0" };
 const applicationToolchain = {
@@ -269,6 +276,127 @@ async function preparedFixture(context) {
   return { ...input, recoveryEvidence, registry };
 }
 
+async function continuationFixture(context) {
+  const input = await preparedFixture(context);
+  const recoveryRoot = path.join(input.root, "recovery-artifact");
+  await mkdir(recoveryRoot);
+  const candidateFiles = [
+    "candidate-evidence.json",
+    "candidate-transfer.json",
+    ...packageRoles.map((role) => input.evidence.packages[role].filename),
+  ];
+  for (const filename of candidateFiles)
+    await cp(
+      path.join(input.root, filename),
+      path.join(recoveryRoot, filename),
+    );
+  await cp(
+    input.artifactZipPath,
+    path.join(recoveryRoot, "original-release-artifact.zip"),
+  );
+  await writeFile(
+    path.join(recoveryRoot, "original-artifact-metadata.json"),
+    `${JSON.stringify(input.artifactMetadata, null, 2)}\n`,
+  );
+  await writeFile(
+    path.join(recoveryRoot, "bootstrap-recovery-evidence.json"),
+    `${JSON.stringify(input.recoveryEvidence, null, 2)}\n`,
+  );
+  const recoveryArtifactZip = path.join(input.root, "recovery-artifact.zip");
+  const recoveryFiles = [
+    "bootstrap-recovery-evidence.json",
+    "original-artifact-metadata.json",
+    "original-release-artifact.zip",
+    ...candidateFiles,
+  ];
+  await run("zip", ["-q", recoveryArtifactZip, ...recoveryFiles], {
+    cwd: recoveryRoot,
+  });
+  const recoveryArtifact = {
+    sourceCommit: input.github.sha,
+    workflowRunId: input.github.runId,
+    workflowRunAttempt: input.github.runAttempt,
+    artifactId: 90000000001,
+    artifactName: `frontend-packages-bootstrap-recovery-${input.github.sha}-${input.github.runId}-${input.github.runAttempt}`,
+    artifactZipSha256: createHash("sha256")
+      .update(await readFile(recoveryArtifactZip))
+      .digest("hex"),
+  };
+  const recoveryArtifactMetadata = {
+    id: recoveryArtifact.artifactId,
+    name: recoveryArtifact.artifactName,
+    expired: false,
+    digest: `sha256:${recoveryArtifact.artifactZipSha256}`,
+    workflow_run: {
+      id: Number(recoveryArtifact.workflowRunId),
+      head_sha: recoveryArtifact.sourceCommit,
+      head_branch: "swift",
+    },
+  };
+  const continuationPlan = {
+    schemaVersion: 1,
+    kind: "frontend-registry-verification-continuation",
+    state: "reviewed",
+    recoveryArtifact,
+    originalCandidate: structuredClone(input.plan.incident),
+    publicationExecution: {
+      repository: input.github.repository,
+      ref: input.github.ref,
+      sourceCommit: input.github.sha,
+      workflowRef: input.github.workflowRef,
+      workflow: input.github.workflow,
+      runId: input.github.runId,
+      runAttempt: input.github.runAttempt,
+    },
+    publicationSourceCommits: {
+      designTokens: input.plan.incident.sourceCommit,
+      ui: input.github.sha,
+      iframeSdk: input.github.sha,
+    },
+    verificationExecution: structuredClone(input.plan.recoveryExecution),
+  };
+  const verificationGithub = {
+    ...input.github,
+    sha: "d".repeat(40),
+    runId: "50000000000",
+    runAttempt: "1",
+  };
+  return {
+    ...input,
+    continuationPlan,
+    recoveryArtifactZip,
+    recoveryArtifactMetadata,
+    recoveryArtifactMetadataPath: path.join(
+      input.root,
+      "recovery-artifact-metadata.json",
+    ),
+    verificationGithub,
+  };
+}
+
+async function prepareContinuation(input, outputRoot) {
+  await writeFile(
+    input.recoveryArtifactMetadataPath,
+    `${JSON.stringify(input.recoveryArtifactMetadata, null, 2)}\n`,
+  );
+  const result = await prepareRegistryVerificationContinuation({
+    contract: input.contract,
+    recoveryPlan: input.plan,
+    plan: input.continuationPlan,
+    artifactZipPath: input.recoveryArtifactZip,
+    artifactMetadataPath: input.recoveryArtifactMetadataPath,
+    artifactMetadata: input.recoveryArtifactMetadata,
+    github: input.verificationGithub,
+    outputRoot,
+    createdAt: "2026-09-14T20:00:00.000Z",
+  });
+  await writeFile(
+    path.join(outputRoot, "registry-verification-inputs.json"),
+    `${JSON.stringify(result.inputs, null, 2)}\n`,
+  );
+  return result;
+}
+
 test("reviewed recovery binds the original artifact and actual recovery identity", async (context) => {
   const input = await preparedFixture(context);
   validateBootstrapRecoveryPlan(input.plan);
@@ -285,6 +413,151 @@ test("reviewed recovery binds the original artifact and actual recovery identity
   assert.equal(
     input.recoveryEvidence.expectedProvenance.iframeSdk.sourceCommit,
     input.github.sha,
+  );
+});
+
+test("verification continuation preserves historical publication identity and is rerunnable", async (context) => {
+  const input = await continuationFixture(context);
+  const outputRoot = path.join(input.root, "verification-transfer");
+  const prepared = await prepareContinuation(input, outputRoot);
+  assert.equal(
+    prepared.inputs.planDigest,
+    registryVerificationContinuationPlanDigest(input.continuationPlan),
+  );
+  assert.equal(
+    prepared.inputs.publicationExecution.sourceCommit,
+    input.github.sha,
+  );
+  assert.equal(
+    prepared.inputs.verificationExecution.sourceCommit,
+    input.verificationGithub.sha,
+  );
+  assert.notEqual(
+    prepared.inputs.publicationExecution.runId,
+    prepared.inputs.verificationExecution.runId,
+  );
+  validateRegistryVerificationInputs({
+    contract: input.contract,
+    plan: input.continuationPlan,
+    inputs: prepared.inputs,
+    github: input.verificationGithub,
+  });
+
+  const verify = () =>
+    verifyRegistryVerificationContinuation({
+      contract: input.contract,
+      recoveryPlan: input.plan,
+      plan: input.continuationPlan,
+      inputs: prepared.inputs,
+      artifactZipPath: path.join(outputRoot, "bootstrap-recovery-artifact.zip"),
+      artifactMetadata: input.recoveryArtifactMetadata,
+      transferredRoot: outputRoot,
+      github: input.verificationGithub,
+    });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const verified = await verify();
+    assert.deepEqual(
+      verified.provenanceExpectations,
+      input.recoveryEvidence.expectedProvenance,
+    );
+    assert.equal(
+      verified.verificationExecution.sourceCommit,
+      input.verificationGithub.sha,
+    );
+  }
+});
+
+test("verification continuation rejects artifact and execution drift", async (context) => {
+  const input = await continuationFixture(context);
+  const outputRoot = path.join(input.root, "verification-transfer");
+  const prepared = await prepareContinuation(input, outputRoot);
+  const zipPath = path.join(outputRoot, "bootstrap-recovery-artifact.zip");
+  await writeFile(zipPath, "changed recovery artifact");
+  await assert.rejects(
+    verifyRegistryVerificationContinuation({
+      contract: input.contract,
+      recoveryPlan: input.plan,
+      plan: input.continuationPlan,
+      inputs: prepared.inputs,
+      artifactZipPath: zipPath,
+      artifactMetadata: input.recoveryArtifactMetadata,
+      transferredRoot: outputRoot,
+      github: input.verificationGithub,
+    }),
+    /bootstrap recovery artifact ZIP digest differs/,
+  );
+  assert.throws(
+    () =>
+      validateRegistryVerificationInputs({
+        contract: input.contract,
+        plan: input.continuationPlan,
+        inputs: prepared.inputs,
+        github: { ...input.verificationGithub, runAttempt: "2" },
+      }),
+    /verification execution differs/,
+  );
+});
+
+test("the verification continuation CLI materializes only pinned inputs", async (context) => {
+  const input = await continuationFixture(context);
+  const contractPath = path.join(input.root, "contract.json");
+  const recoveryPlanPath = path.join(input.root, "recovery-plan.json");
+  const continuationPlanPath = path.join(input.root, "continuation-plan.json");
+  await Promise.all([
+    writeFile(contractPath, `${JSON.stringify(input.contract, null, 2)}\n`),
+    writeFile(recoveryPlanPath, `${JSON.stringify(input.plan, null, 2)}\n`),
+    writeFile(
+      continuationPlanPath,
+      `${JSON.stringify(input.continuationPlan, null, 2)}\n`,
+    ),
+    writeFile(
+      input.recoveryArtifactMetadataPath,
+      `${JSON.stringify(input.recoveryArtifactMetadata, null, 2)}\n`,
+    ),
+  ]);
+  const outputRoot = path.join(input.root, "cli-verification-transfer");
+  const output = path.join(outputRoot, "registry-verification-inputs.json");
+  const result = await run(
+    process.execPath,
+    [
+      path.join(
+        workspaceRoot,
+        "scripts/registry-verification-continuation.mjs",
+      ),
+      "--contract",
+      contractPath,
+      "--recovery-plan",
+      recoveryPlanPath,
+      "--plan",
+      continuationPlanPath,
+      "--artifact-zip",
+      input.recoveryArtifactZip,
+      "--artifact-metadata",
+      input.recoveryArtifactMetadataPath,
+      "--output-root",
+      outputRoot,
+      "--output",
+      output,
+    ],
+    {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: "true",
+        GITHUB_REPOSITORY: input.verificationGithub.repository,
+        GITHUB_REF: input.verificationGithub.ref,
+        GITHUB_SHA: input.verificationGithub.sha,
+        GITHUB_WORKFLOW_REF: input.verificationGithub.workflowRef,
+        GITHUB_WORKFLOW: input.verificationGithub.workflow,
+        GITHUB_RUN_ID: input.verificationGithub.runId,
+        GITHUB_RUN_ATTEMPT: input.verificationGithub.runAttempt,
+      },
+    },
+  );
+  assert.match(result.stdout, /prepared registry verification inputs/);
+  assert.equal(
+    JSON.parse(await readFile(output, "utf8")).kind,
+    "frontend-registry-verification-inputs",
   );
 });
 
@@ -598,7 +871,7 @@ test("recovery rejects traversal and link entries before extraction", async (con
         inspectRegistry: async () => assert.fail("must reject before registry"),
         verifyExistingPackage: async () => assert.fail("must not verify"),
       }),
-      /recovery ZIP candidate file set differs/,
+      /original recovery artifact ZIP file set differs/,
     );
   });
 
