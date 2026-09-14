@@ -187,3 +187,4 @@ below are what to follow while writing the code, not just at review time.
 - **`tsc --noEmit` and Prettier must pass** before reporting any frontend task done.
   For files under `apps/frontend/src/rework/`, also read
   `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md`.
+
