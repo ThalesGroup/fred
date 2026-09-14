@@ -1471,6 +1471,9 @@
       },
       "timeRange": {
         "apply": "Apply",
+        "months": "Months",
+        "next": "Next period",
+        "previous": "Previous period",
         "since": "From",
         "until": "To"
       },

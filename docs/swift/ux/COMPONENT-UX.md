@@ -2700,10 +2700,10 @@ now share one consistent header pattern instead of diverging per page:
 
 | Page                                                   | Slots used                                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
 | `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
-| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
 | `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
@@ -2712,6 +2712,14 @@ now share one consistent header pattern instead of diverging per page:
 | `TeamSettingsMembers`                                  | title, actions (search + `LeaveTeamButton` + Add members)                                |
 | `TeamSettingsParameters`                               | title only (new)                                                                         |
 | `TeamSettingsRouting`                                  | title only (new)                                                                         |
+
+`sticky` (2026-09-14) pins the header to the top of the scrolling `<main>` so the two usage
+dashboards keep their time range reachable next to the charts far down the page. It bleeds over
+the page's `--spacing-xl` gutter to hide what scrolls under it, so it only fits pages with that
+gutter. The `TimeRangeSelector` in those headers steps the range back/forward with ‹ › (calendar
+presets by a whole day/week/month, rolling and custom ranges by their length, weeks starting
+Monday) and ends its dropdown with a month timeline: current month on the right, older months
+loaded as you scroll left, each year labelled once above its months.
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
