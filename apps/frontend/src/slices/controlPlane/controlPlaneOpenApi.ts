@@ -122,6 +122,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/teams/all` }),
     }),
+    searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
+      SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/candidate-admins`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
     getTeamControlPlaneV1TeamsTeamIdGet: build.query<
       GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
       GetTeamControlPlaneV1TeamsTeamIdGetApiArg
@@ -158,6 +169,22 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/teams/${queryArg.teamId}/rescue-admin`,
         method: "POST",
         body: queryArg.rescueTeamAdminRequest,
+      }),
+    }),
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: build.query<
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse,
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/default-teams` }),
+    }),
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: build.mutation<
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse,
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/default-teams`,
+        method: "PUT",
+        body: queryArg.setDefaultTeamsForNewUsersRequest,
       }),
     }),
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
@@ -1432,6 +1459,11 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
+  query: string;
+};
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
@@ -1455,6 +1487,13 @@ export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiResponse =
 export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
   rescueTeamAdminRequest: RescueTeamAdminRequest;
+};
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse =
+  /** status 200 Successful Response */ DefaultTeamForNewUsers[];
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg = void;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse = unknown;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
+  setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
 };
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
@@ -2381,7 +2420,12 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
-export type PlatformRoleRelation = "platform_admin" | "platform_observer";
+export type PlatformRoleRelation =
+  | "platform_admin"
+  | "platform_observer"
+  | "team_manager"
+  | "feature_manager"
+  | "prompt_editor";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -2477,6 +2521,13 @@ export type UpdateTeamRequest = {
 export type RescueTeamAdminRequest = {
   user_id: string;
 };
+export type DefaultTeamForNewUsers = {
+  team_id: string;
+  name: string;
+};
+export type SetDefaultTeamsForNewUsersRequest = {
+  team_ids: string[];
+};
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
   file: string;
@@ -2533,10 +2584,8 @@ export type FrontendFeatureFlags = {
   enableInformationSystems?: boolean;
 };
 export type PermissionSummary = {
-  /** OpenFGA-derived platform-admin flag (organization `can_manage_platform`). The single source of truth for gating admin-only UI surfaces — never derive admin UI access from Keycloak roles directly. */
-  is_platform_admin?: boolean;
-  /** OpenFGA-derived platform-observer flag (organization `platform_observer` relation, checked directly). Grants read-only platform observability surfaces without full platform-admin rights. */
-  is_platform_observer?: boolean;
+  /** OpenFGA-derived org-level roles the caller EFFECTIVELY holds — the single source of truth for gating admin UI surfaces, never Keycloak roles. Union-resolved, so a platform_admin holds every role here; that is deliberately unlike `GET /users/platform-roles`, which reports directly-granted tuples only because those are what a revoke can actually delete. */
+  platform_roles?: PlatformRoleRelation[];
 };
 export type UploadWarning = {
   /** Visual severity variant of the banner. */
@@ -3874,12 +3923,17 @@ export const {
   useCreateTeamControlPlaneV1TeamsPostMutation,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery,
   useLazyListAllTeamsControlPlaneV1TeamsAllGetQuery,
+  useSearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
+  useLazySearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

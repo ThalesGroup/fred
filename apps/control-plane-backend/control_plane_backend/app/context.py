@@ -65,6 +65,7 @@ from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.team_wiki.store import TeamWikiStore
+from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
+        self._platform_default_team_store: PlatformDefaultTeamStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
@@ -361,6 +363,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_prompt_store
+
+    def get_platform_default_team_store(self) -> PlatformDefaultTeamStore:
+        if self._platform_default_team_store is None:
+            self._platform_default_team_store = PlatformDefaultTeamStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_default_team_store
 
     def get_model_reasoning_store(self) -> ModelReasoningStore:
         if self._model_reasoning_store is None:

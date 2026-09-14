@@ -87,6 +87,13 @@ class RelationType(str, Enum):
     PLATFORM_ADMIN = "platform_admin"
     PLATFORM_OBSERVER = "platform_observer"
 
+    # Delegated admin-tier roles, one per admin surface. Each unions in
+    # `platform_admin` in schema.fga, so an admin holds them all by computation
+    # — only directly-written tuples are real grants.
+    TEAM_MANAGER = "team_manager"
+    FEATURE_MANAGER = "feature_manager"
+    PROMPT_EDITOR = "prompt_editor"
+
     # AUTHZ-05 target team roles (RFC §26 — renamed from owner/manager/member
     # during the second implementation pass). team_admin and team_editor are
     # orthogonal, not hierarchical (REBAC.md "hard cross-write rule").
@@ -214,8 +221,8 @@ class OrganizationPermission(str, Enum):
     resource instance to scope on (observability, platform administration).
     The check target is always the singleton ``organization:fred``. AUTHZ-05
     review item 8a removed the "any connected user" tier entirely (it never
-    protected anything specific) — only platform_admin-gated capabilities and
-    the raw `platform_observer` relation check remain.
+    protected anything specific) — only admin-tier capabilities and the raw
+    role-relation checks remain.
     """
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
@@ -252,11 +259,20 @@ class OrganizationPermission(str, Enum):
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
 
-    # Direct check against the raw `platform_observer` relation — not a
-    # computed capability. Used to derive display-only frontend flags
-    # (`PermissionSummary.is_platform_observer`, AUTHZ-05 review item 4/8a)
-    # where no gated action exists to piggyback on.
+    # Carved out of the `can_manage_platform` catch-all (which also gates
+    # import/export, tasks and platform reset) so one narrow surface can be
+    # delegated to `feature_manager` / `prompt_editor` without the rest.
+    CAN_MANAGE_CAPABILITIES = "can_manage_capabilities"
+    CAN_EDIT_PLATFORM_PROMPT = "can_edit_platform_prompt"
+
+    # Direct checks against the raw role relations — not computed
+    # capabilities. Used to derive the display-only frontend role list
+    # (`PermissionSummary.platform_roles`, AUTHZ-05 review item 4/8a) where no
+    # single gated action stands for the role.
     IS_PLATFORM_OBSERVER = "platform_observer"
+    IS_TEAM_MANAGER = "team_manager"
+    IS_FEATURE_MANAGER = "feature_manager"
+    IS_PROMPT_EDITOR = "prompt_editor"
 
 
 class CapabilityPermission(str, Enum):
@@ -272,7 +288,9 @@ class CapabilityPermission(str, Enum):
       the user's teams into every team context they browse. Answers the
       tri-state (inherited via default-on / explicitly enabled / disabled).
     - `CAN_MANAGE`: may an actor enable/disable it for a team or toggle its
-      default-on marker? Org admin only.
+      default-on marker? Defined as `can_manage_capabilities from
+      organization`, so it admits exactly the same actors as the org-level
+      gate on the aggregate list and can never drift away from it.
     """
 
     CAN_USE = "can_use"

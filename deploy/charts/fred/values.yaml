@@ -1032,6 +1032,32 @@ applications:
         value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH
         value: "true"
+    # Deployment theme: a zip of branding assets (images/, contrib/, root *.md)
+    # fetched at startup and served over the baked files, so logos and legal
+    # pages change without rebuilding the image. Unset here: no theme, no
+    # behaviour change. Layout and variables: apps/frontend/README.md.
+    #
+    # Prefer a prefix the store serves anonymously - every byte ends up served
+    # unauthenticated by nginx anyway, so the URL is the whole configuration:
+    #
+    # extraEnvVars:
+    #   - name: FRONTEND_THEME_URL
+    #     value: "http://minio:9000/fred-themes/acme-1.0.zip"
+    #
+    # For a store that demands authentication, add the two key variables and
+    # point them at a Secret this deployment already has. The chart's own
+    # <app>-env Secrets cannot serve here: each holds a single `.env` key whose
+    # value is the whole dotenv file, not one credential per key.
+    #
+    #   - name: FRONTEND_THEME_S3_ACCESS_KEY
+    #     valueFrom:
+    #       secretKeyRef: { name: your-s3-secret, key: accessKey, optional: true }
+    #   - name: FRONTEND_THEME_S3_SECRET_KEY
+    #     valueFrom:
+    #       secretKeyRef: { name: your-s3-secret, key: secretKey, optional: true }
+    #
+    # optional: true keeps the pod schedulable when the Secret is absent; the
+    # fetch then degrades to anonymous instead of blocking startup over branding.
     ports:
       - name: http
         containerPort: 8080

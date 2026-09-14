@@ -155,9 +155,9 @@ and personal-class controls, while retaining cleanup of stale personal tuples.
 
 ### Requirement: Application administration remains independent of agents
 
-App `can_manage` SHALL derive from `platform_admin from organization`.
-Existing platform-admin capability administration routes SHALL remain the
-app enablement writers. App operations SHALL NOT enter agent dependency,
+App `can_manage` SHALL derive from `can_manage_capabilities from organization`,
+the same relation as capability `can_manage`. Existing capability
+administration routes SHALL remain the app enablement writers. App operations SHALL NOT enter agent dependency,
 impact, health, suspension, revival, settings, or model-binding paths.
 
 #### Scenario: Changing an app grant does not change managed agents

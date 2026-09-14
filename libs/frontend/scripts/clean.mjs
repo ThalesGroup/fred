@@ -32,4 +32,16 @@ await Promise.all([
     recursive: true,
     force: true,
   }),
+  rm(path.join(workspaceRoot, "iframe-sdk/.generated"), {
+    recursive: true,
+    force: true,
+  }),
+  rm(path.join(workspaceRoot, "iframe-sdk/dist"), {
+    recursive: true,
+    force: true,
+  }),
+  rm(path.join(workspaceRoot, "iframe-sdk/LICENSE"), { force: true }),
+  rm(path.join(workspaceRoot, "iframe-sdk/build-evidence.json"), {
+    force: true,
+  }),
 ]);

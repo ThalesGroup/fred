@@ -12,6 +12,8 @@ class TagItemService(Protocol):
 
     async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]: ...
 
+    async def retrieve_items_ids_for_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]: ...
+
     async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None: ...
 
     async def remove_tag_id_from_item(self, user: KeycloakUser, item_id: str, tag_id_to_remove: str) -> None: ...
@@ -25,6 +27,9 @@ class DocumentTagItemService(TagItemService):
 
     async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
         return [d.document_uid for d in await self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)]
+
+    async def retrieve_items_ids_for_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]:
+        return await self.document_metadata_service.get_document_uids_in_tags(user, tag_ids)
 
     async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None:
         doc = await self.document_metadata_service.get_document_metadata(user, item_id)
@@ -50,6 +55,17 @@ class ResourceTagItemService(TagItemService):
     async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
         all_resources = await self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
         return [res.id for res in all_resources if tag_id in res.library_tags]
+
+    async def retrieve_items_ids_for_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]:
+        # One listing bucketed per tag: the per-tag variant re-lists the whole
+        # kind for each tag, and the listing does not depend on the tag.
+        all_resources = await self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
+        result: dict[str, list[str]] = {tag_id: [] for tag_id in tag_ids}
+        for res in all_resources:
+            for tag_id in res.library_tags:
+                if tag_id in result:
+                    result[tag_id].append(res.id)
+        return result
 
     async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None:
         await self.resource_service.add_tag_to_resource(user, item_id, new_tag_id)

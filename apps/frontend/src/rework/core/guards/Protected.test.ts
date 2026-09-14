@@ -13,30 +13,63 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { isProtectedAllowed } from "./Protected";
+import {
+  canEnterAdminSection,
+  isProtectedAllowed,
+  type ProtectedCapabilities,
+  type ProtectedRequirement,
+} from "./Protected";
+
+const NONE: ProtectedCapabilities = {
+  canAdmin: false,
+  canObservePlatform: false,
+  canManageTeams: false,
+  canManageFeatures: false,
+  canEditPlatformPrompt: false,
+};
+
+const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({ ...NONE, ...held });
+
+/** Each requirement and the one flag that satisfies it on its own. */
+const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
+  ["admin", "canAdmin"],
+  ["observer", "canObservePlatform"],
+  ["teams", "canManageTeams"],
+  ["features", "canManageFeatures"],
+  ["platformPrompt", "canEditPlatformPrompt"],
+];
 
 describe("isProtectedAllowed", () => {
-  describe('requires="admin"', () => {
-    it("allows a platform_admin", () => {
-      expect(isProtectedAllowed("admin", { canAdmin: true, canObservePlatform: false })).toBe(true);
-    });
-    it("denies a platform_observer who is not also admin", () => {
-      expect(isProtectedAllowed("admin", { canAdmin: false, canObservePlatform: true })).toBe(false);
-    });
-    it("denies a user with neither flag", () => {
-      expect(isProtectedAllowed("admin", { canAdmin: false, canObservePlatform: false })).toBe(false);
-    });
+  it.each(REQUIREMENTS)('allows the holder of the matching role for requires="%s"', (requires, flag) => {
+    expect(isProtectedAllowed(requires, caps({ [flag]: true }))).toBe(true);
   });
 
-  describe('requires="observer"', () => {
-    it("allows a platform_observer", () => {
-      expect(isProtectedAllowed("observer", { canAdmin: false, canObservePlatform: true })).toBe(true);
-    });
-    it("allows a platform_admin too, even without the observer flag set", () => {
-      expect(isProtectedAllowed("observer", { canAdmin: true, canObservePlatform: false })).toBe(true);
-    });
-    it("denies a user with neither flag", () => {
-      expect(isProtectedAllowed("observer", { canAdmin: false, canObservePlatform: false })).toBe(false);
-    });
+  it.each(REQUIREMENTS)('allows a platform_admin for requires="%s"', (requires) => {
+    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(true);
+  });
+
+  it.each(REQUIREMENTS)('denies a user with no role for requires="%s"', (requires) => {
+    expect(isProtectedAllowed(requires, NONE)).toBe(false);
+  });
+
+  it("does not let one delegated role stand in for another", () => {
+    const teamManager = caps({ canManageTeams: true });
+    expect(isProtectedAllowed("features", teamManager)).toBe(false);
+    expect(isProtectedAllowed("platformPrompt", teamManager)).toBe(false);
+    expect(isProtectedAllowed("admin", teamManager)).toBe(false);
+  });
+
+  it("denies a platform_observer the admin tier", () => {
+    expect(isProtectedAllowed("admin", caps({ canObservePlatform: true }))).toBe(false);
+  });
+});
+
+describe("canEnterAdminSection", () => {
+  it.each(REQUIREMENTS)("opens the admin shell for a holder of %s", (_requires, flag) => {
+    expect(canEnterAdminSection(caps({ [flag]: true }))).toBe(true);
+  });
+
+  it("keeps a user with no platform role out", () => {
+    expect(canEnterAdminSection(NONE)).toBe(false);
   });
 });

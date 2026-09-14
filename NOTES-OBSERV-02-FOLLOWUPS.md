@@ -197,9 +197,10 @@ active for at least one team, `platform_admin` must toggle default-on for
 the desired model(s) (e.g. the mock-openai profile used for perf campaigns)
 in the same deploy window as B7's enforcement code — before, or immediately
 as, enforcement reaches that team. Skipping this step breaks all chat for
-that team until the toggle is flipped by hand through `CapabilitiesPage`
-(now filterable to `kind="model"` — "Frontend F5 — done" above) or the raw
-API. Documented as the
+that team until the toggle is flipped by hand through `FeaturesPage`
+(`/admin/features`; renamed from `CapabilitiesPage` when the admin tier split
+into delegated roles — now filterable to `kind="model"`, "Frontend F5 — done"
+above) or the raw API. Documented as the
 resolved hazard (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §17) — repeating it here
 because forgetting the runbook step is exactly the kind of gap that's
 invisible in code review and only shows up as a production incident; a

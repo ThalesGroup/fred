@@ -20,6 +20,10 @@ one" — pods fall back to their own `config/platform_prompt.json`) is NOT the
 same as **row present with an empty string** ("an admin deliberately suppressed
 the block"). Every layer has to keep them apart, because collapsing them would
 silently resurrect the pod default for an admin who meant to turn the block off.
+
+The second half pins the surface's authorization: it asks for the narrow
+`can_edit_platform_prompt`, never the `can_manage_platform` catch-all it used
+to share with import/export, tasks and platform reset.
 """
 
 from __future__ import annotations
@@ -33,9 +37,14 @@ from control_plane_backend.platform_prompt.schemas import (
 )
 from control_plane_backend.platform_prompt.service import (
     _to_platform_prompt,
+    get_platform_instructions,
+    get_platform_prompt,
     resolve_platform_prompt_text,
+    set_platform_prompt,
 )
 from control_plane_backend.platform_prompt.store import StoredPlatformPrompt
+from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
+from fred_core.security.models import Resource
 
 
 class _Store:
@@ -213,3 +222,178 @@ async def test_resaving_identical_text_still_refreshes_updated_at() -> None:
     assert first.updated_at is not None
     assert second.updated_at > stale
     await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Authorization: the delegated `prompt_editor` surface
+# ---------------------------------------------------------------------------
+#
+# The narrowness these tests exist to pin: this surface asks for
+# `can_edit_platform_prompt` (`platform_admin or prompt_editor`) and NOT the
+# `can_manage_platform` catch-all it used to share with import/export, tasks,
+# platform reset and platform stats. Gaining the prompt must not gain any of
+# those, and a `platform_admin` must lose none of them.
+
+
+class _RoleRebac:
+    """Answers `check_user_permission_or_raise` from a fixed permission set —
+    the tuples one role actually holds, per `schema.fga`."""
+
+    def __init__(self, *allowed: OrganizationPermission) -> None:
+        self._allowed = set(allowed)
+        self.asked: list[OrganizationPermission] = []
+
+    async def check_user_permission_or_raise(
+        self, user, permission, resource_id, **kwargs
+    ) -> None:
+        self.asked.append(permission)
+        if permission not in self._allowed:
+            raise AuthorizationError(
+                user.uid, str(permission), Resource.ORGANIZATION, "denied"
+            )
+
+
+def _prompt_editor() -> _RoleRebac:
+    """A user holding `organization#prompt_editor` and nothing else. Reaches
+    `can_edit_platform_prompt` through the schema union; `can_manage_platform`
+    stays `platform_admin`-only (pinned in fred-core's schema tests)."""
+
+    return _RoleRebac(OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT)
+
+
+def _platform_admin() -> _RoleRebac:
+    return _RoleRebac(
+        OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+    )
+
+
+class _WritableStore(_Store):
+    def __init__(self, stored: StoredPlatformPrompt | None = None) -> None:
+        super().__init__(stored)
+        self.written: list[str] = []
+
+    async def set(self, *, text: str, updated_by: str | None) -> StoredPlatformPrompt:
+        self.written.append(text)
+        self._stored = StoredPlatformPrompt(
+            text=text, updated_by=updated_by, updated_at=None
+        )
+        return self._stored
+
+
+def _authz_deps(rebac: _RoleRebac, store: _Store) -> SimpleNamespace:
+    """`ProductServiceDependencies` stand-in: the gate, the store, and an empty
+    runtime source list so the pod fetch resolves offline."""
+
+    return SimpleNamespace(
+        get_platform_prompt_store=lambda: store,
+        team_dependencies=SimpleNamespace(rebac=rebac),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(runtime_catalog_sources=[])
+        ),
+    )
+
+
+def _user() -> KeycloakUser:
+    return KeycloakUser(uid="u", username="u", roles=[], email=None)
+
+
+@pytest.mark.asyncio
+async def test_prompt_editor_reads_the_platform_prompt() -> None:
+    rebac = _prompt_editor()
+    stored = StoredPlatformPrompt(text="SAVED", updated_by="a", updated_at=None)
+
+    result = await get_platform_prompt(
+        user=_user(),
+        deps=_authz_deps(rebac, _Store(stored)),  # type: ignore[arg-type]
+    )
+
+    assert result.text == "SAVED"
+    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+
+
+@pytest.mark.asyncio
+async def test_prompt_editor_updates_the_platform_prompt() -> None:
+    # Reading without writing would make the role pointless; this is the whole
+    # surface the role exists to own.
+    rebac = _prompt_editor()
+    store = _WritableStore()
+
+    result = await set_platform_prompt(
+        user=_user(),
+        text="NEW",
+        deps=_authz_deps(rebac, store),  # type: ignore[arg-type]
+    )
+
+    assert store.written == ["NEW"]
+    assert result.text == "NEW"
+    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+
+
+@pytest.mark.asyncio
+async def test_prompt_editor_reads_the_shipped_instructions() -> None:
+    # The read-only pane is the reference the editor writes against — gating it
+    # higher than the editor itself would leave them writing blind.
+    rebac = _prompt_editor()
+
+    result = await get_platform_instructions(
+        user=_user(),
+        deps=_authz_deps(rebac, _Store(None)),  # type: ignore[arg-type]
+    )
+
+    assert result.source_unavailable is True
+    assert rebac.asked == [OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT]
+
+
+@pytest.mark.asyncio
+async def test_a_user_without_the_relation_is_denied_on_every_entry_point() -> None:
+    rebac = _RoleRebac()
+    deps = _authz_deps(rebac, _WritableStore())
+
+    for call in (
+        lambda: get_platform_prompt(user=_user(), deps=deps),  # type: ignore[arg-type]
+        lambda: set_platform_prompt(user=_user(), text="x", deps=deps),  # type: ignore[arg-type]
+        lambda: get_platform_instructions(user=_user(), deps=deps),  # type: ignore[arg-type]
+    ):
+        with pytest.raises(AuthorizationError):
+            await call()
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_still_reaches_the_whole_surface() -> None:
+    # The schema union (`prompt_editor: [user] or platform_admin`) is what makes
+    # this hold; carving the relation out must not have cost an admin a surface.
+    rebac = _platform_admin()
+    store = _WritableStore()
+    deps = _authz_deps(rebac, store)
+
+    await get_platform_prompt(user=_user(), deps=deps)  # type: ignore[arg-type]
+    await set_platform_prompt(user=_user(), text="ADMIN", deps=deps)  # type: ignore[arg-type]
+    await get_platform_instructions(user=_user(), deps=deps)  # type: ignore[arg-type]
+
+    assert store.written == ["ADMIN"]
+
+
+@pytest.mark.asyncio
+async def test_prompt_editor_cannot_reach_a_can_manage_platform_surface() -> None:
+    """The narrowness regression: the role must buy the prompt and nothing else.
+
+    Platform stats stands in for the whole catch-all family (import, export,
+    reset, tasks) — they all check `CAN_MANAGE_PLATFORM` on the organization
+    singleton through the same call. The gate runs before any dependency is
+    touched, so the unused ones can be `None`.
+    """
+
+    from control_plane_backend.import_export.api import build_import_export_router
+
+    router = build_import_export_router()
+    endpoint = next(
+        route.endpoint  # type: ignore[attr-defined]
+        for route in router.routes
+        if getattr(route, "name", None) == "platform_stats"
+    )
+
+    with pytest.raises(AuthorizationError):
+        await endpoint(
+            user=_user(), team_deps=None, engine=None, rebac=_prompt_editor()
+        )

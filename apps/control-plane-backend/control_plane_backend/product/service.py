@@ -128,7 +128,7 @@ from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
 from control_plane_backend.teams.service import list_teams as list_teams_from_service
-from control_plane_backend.users.schemas import UserSummary
+from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
 logger = logging.getLogger(__name__)
 
@@ -302,18 +302,28 @@ class _RuntimeTemplatePayload:
         )
 
 
+# One OpenFGA check per platform role. `platform_admin` goes through
+# `can_manage_platform` (its own named capability); the delegated roles have no
+# single capability standing for them, so they check the raw relation.
+_PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
+    PlatformRoleRelation.PLATFORM_ADMIN: OrganizationPermission.CAN_MANAGE_PLATFORM,
+    PlatformRoleRelation.PLATFORM_OBSERVER: OrganizationPermission.IS_PLATFORM_OBSERVER,
+    PlatformRoleRelation.TEAM_MANAGER: OrganizationPermission.IS_TEAM_MANAGER,
+    PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
+    PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+}
+
+
 async def _build_permission_summary(
     user: KeycloakUser, rebac: RebacEngine
 ) -> PermissionSummary:
     """Build the frontend permission projection.
 
-    `is_platform_admin`/`is_platform_observer` are derived from OpenFGA via the
-    same `RebacEngine.has_user_permission` used to gate the platform-level
-    endpoints themselves, so the frontend never re-derives admin access from
-    Keycloak roles independently (AUTHZ-05 review item 4). `is_platform_observer`
-    checks the raw `platform_observer` relation directly (`IS_PLATFORM_OBSERVER`)
-    rather than a capability, since the "any connected user" capability tier it
-    used to piggyback on (`can_read_kpi`) was removed entirely in review item 8a.
+    Roles are derived from OpenFGA via the same `has_user_permission` used to
+    gate the platform-level endpoints themselves, so the frontend never
+    re-derives admin access from Keycloak roles independently (AUTHZ-05 review
+    item 4). Checks run concurrently: this is on the bootstrap path, and one
+    round trip per role would put five in series.
 
     Team-scoped gating (agents, resources, MCP servers, feedback, sessions...)
     does not belong here at all — it goes through
@@ -323,17 +333,18 @@ async def _build_permission_summary(
     computed from it; both were removed in review item 11 once Keycloak app
     roles disappeared platform-wide and left them permanently unpopulated.
     """
-    is_platform_admin, is_platform_observer = await asyncio.gather(
-        rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        ),
-        rebac.has_user_permission(
-            user, OrganizationPermission.IS_PLATFORM_OBSERVER, ORGANIZATION_ID
-        ),
+    held = await asyncio.gather(
+        *(
+            rebac.has_user_permission(user, permission, ORGANIZATION_ID)
+            for permission in _PLATFORM_ROLE_CHECKS.values()
+        )
     )
     return PermissionSummary(
-        is_platform_admin=is_platform_admin,
-        is_platform_observer=is_platform_observer,
+        platform_roles=[
+            role
+            for role, is_held in zip(_PLATFORM_ROLE_CHECKS, held, strict=True)
+            if is_held
+        ],
     )
 
 

@@ -1,4 +1,4 @@
-import { Button, IconButton } from "@fred/ui";
+import { Button, IconButton } from "@fred-oss/ui";
 
 const badButton = (
   // @ts-expect-error xs is intentionally unsupported by the packaged Button.

@@ -1,6 +1,6 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Button, Icon, IconButton, Spinner, TextInput } from "@fred/ui";
+import { Button, Icon, IconButton, Spinner, TextInput } from "@fred-oss/ui";
 import type {
   ButtonProps,
   ButtonSize,
@@ -12,9 +12,9 @@ import type {
   MaterialIconType,
   SpinnerProps,
   TextInputProps,
-} from "@fred/ui";
-import "@fred/design-tokens/tokens.css";
-import "@fred/ui/styles.css";
+} from "@fred-oss/ui";
+import "@fred-oss/design-tokens/tokens.css";
+import "@fred-oss/ui/styles.css";
 import "./consumer.css";
 
 const reviewedIcon: MaterialIconType = "search";

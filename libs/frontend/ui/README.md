@@ -1,4 +1,4 @@
-# `@fred/ui`
+# `@fred-oss/ui`
 
 This package contains the first application-agnostic React components generated from
 FRED's canonical implementations: `Button`, `IconButton`, `Icon`, `TextInput`, and
@@ -10,13 +10,13 @@ The public root exports the five component values and the reviewed `ButtonProps`
 `ButtonVariant`, `IconButtonVariant`, `ColorTheme`, and `MaterialIconType` contracts.
 No component subpath is public.
 
-Install this archive together with the matching `@fred/design-tokens` archive and
+Install this archive together with the matching `@fred-oss/design-tokens` archive and
 consumer-owned React 19.2.4 / React DOM 19.2.4. Import the contracts explicitly:
 
 ```tsx
-import { Button, Icon, TextInput } from "@fred/ui";
-import "@fred/design-tokens/tokens.css";
-import "@fred/ui/styles.css";
+import { Button, Icon, TextInput } from "@fred-oss/ui";
+import "@fred-oss/design-tokens/tokens.css";
+import "@fred-oss/ui/styles.css";
 ```
 
 Wrap reusable UI in a consumer-owned `.fred-ui` root and set `data-theme="light"` or
@@ -25,7 +25,7 @@ CSS and the packaged Material Symbols Outlined font. It does not apply FRED shel
 rules. Icons are decorative unless `accessibleName` is supplied, and only names in the
 exported `MaterialIconType` are supported.
 
-Geist remains optional. Import `@fred/design-tokens/fonts.css` only when the consumer
+Geist remains optional. Import `@fred-oss/design-tokens/fonts.css` only when the consumer
 wants the packaged Geist faces, then set its own font-family policy.
 
 The producer's separate provisioning commands populate a lockfile-pinned dependency
@@ -38,3 +38,7 @@ Canonical ownership, package boundaries, and future work are described by the ex
 [frontend packaging RFC](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/FRED-FRONTEND-PACKAGING-RFC.md). Rounded,
 Sharp, custom SVG icons, deferred components, overlays, iframe SDK work, registry
 publication, and adopter migrations are outside this package milestone.
+
+The checked-in manifest uses the selected first-release coordinate. Release candidates must still
+be compared with a complete, maintainer-confirmed contract as described in
+[../RELEASE.md](../RELEASE.md).

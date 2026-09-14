@@ -129,12 +129,18 @@ class TagService:
         # 5) paginate
         sliced = tags[offset : offset + limit]
 
-        # 6) attach item ids
-        tags_with_items: list[TagWithItemsId] = []
+        # 6) attach item ids — one batched resolution per tag type, never one
+        # per tag: the authorization lookup behind it is per user, so a per-tag
+        # loop recomputed the same answer once per library.
+        ids_by_tag: dict[str, list[str]] = {}
+        tag_ids_by_type: dict[TagType, list[str]] = {}
         for tag in sliced:
-            item_service = get_specific_tag_item_service(tag.type)
-            item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
-            tags_with_items.append(TagWithItemsId.from_tag(tag, item_ids))
+            tag_ids_by_type.setdefault(tag.type, []).append(tag.id)
+        for tag_type_key, type_tag_ids in tag_ids_by_type.items():
+            item_service = get_specific_tag_item_service(tag_type_key)
+            ids_by_tag.update(await item_service.retrieve_items_ids_for_tags(user, type_tag_ids))
+
+        tags_with_items: list[TagWithItemsId] = [TagWithItemsId.from_tag(tag, ids_by_tag.get(tag.id, [])) for tag in sliced]
 
         # 7) batch-resolve permissions for all returned tags
         tag_ids = {t.id for t in tags_with_items}
@@ -180,18 +186,17 @@ class TagService:
         - pass the team id (or None/"personal" for the caller's personal corpus)
         """
         tag_ids = await self.list_authorized_tags_ids(user, None, team_id)
-        seen_uids: set[str] = set()
+        # One batched read for the whole corpus: the per-tag loop this replaces
+        # re-ran the authorization lookup and a full metadata scan per library.
+        # The union is already de-duplicated, so a document filed under two of
+        # the team's libraries is still counted once.
+        docs = await self.document_metadata_service.get_documents_metadata_in_tags(user, list(tag_ids))
         totals: dict[FileTypeBucket, list[int]] = {}
-        for tag_id in tag_ids:
-            docs = await self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
-            for doc in docs:
-                if doc.document_uid in seen_uids:
-                    continue
-                seen_uids.add(doc.document_uid)
-                bucket = file_type_bucket(doc.document_name)
-                entry = totals.setdefault(bucket, [0, 0])
-                entry[0] += 1
-                entry[1] += doc.file.file_size_bytes or 0
+        for doc in docs:
+            bucket = file_type_bucket(doc.document_name)
+            entry = totals.setdefault(bucket, [0, 0])
+            entry[0] += 1
+            entry[1] += doc.file.file_size_bytes or 0
         return {bucket: (count, size) for bucket, (count, size) in totals.items()}
 
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:

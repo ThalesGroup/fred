@@ -181,6 +181,54 @@ class MetadataService:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
+    async def get_document_uids_in_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]:
+        """
+        Uids of the readable documents in each of `tag_ids`.
+
+        One authorization lookup and one store query for the whole batch: the
+        ReBAC answer is per user, not per tag, so resolving it inside a per-tag
+        loop recomputes the same list once per library and throws all but one
+        away.
+        """
+        if not tag_ids:
+            return {}
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        try:
+            uids_by_tag = await self.metadata_store.document_uids_by_tags(tag_ids)
+        except Exception as e:
+            # Count, not the ids: this batch can carry the endpoint's whole
+            # 10 000-tag ceiling, and a store blip would write that list once
+            # per concurrent request.
+            logger.error(f"Error retrieving document uids for {len(tag_ids)} tags: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve document uids for tags: {e}")
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return uids_by_tag
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        return {tag_id: [uid for uid in uids if uid in authorized_doc_ids] for tag_id, uids in uids_by_tag.items()}
+
+    async def get_documents_metadata_in_tags(self, user: KeycloakUser, tag_ids: list[str]) -> list[DocumentMetadata]:
+        """
+        Every readable document carrying at least one of `tag_ids`, once each.
+
+        Same batching rationale as `get_document_uids_in_tags`; used where the
+        caller aggregates over a whole corpus and a document sitting in two of
+        the requested tags must not be counted twice.
+        """
+        if not tag_ids:
+            return []
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        try:
+            docs = await self.metadata_store.metadata_in_tags(tag_ids)
+        except Exception as e:
+            logger.error(f"Error retrieving metadata for {len(tag_ids)} tags: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata for tags: {e}")
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")

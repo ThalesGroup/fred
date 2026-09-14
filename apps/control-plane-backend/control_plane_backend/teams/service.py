@@ -60,6 +60,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RetentionFieldView,
@@ -215,12 +216,16 @@ async def list_all_teams_for_registry(
     """List every team in the registry (RFC §32, `GET /teams/all`).
 
     Why this function exists:
-    - platform_admin needs a registry-governance view of every team that is
-      gated on `can_list_all_teams`, distinct from `can_manage_platform`
+    - the registry-governance view of every team is gated on
+      `can_list_all_teams`, distinct from `can_manage_platform`
       (`compute_platform_stats`'s caller) — narrower intent, own capability
 
     How to use it:
-    - call from the platform-admin-gated `GET /teams/all` route
+    - call from the `can_list_all_teams`-gated `GET /teams/all` route, which
+      `team_manager` and `feature_manager` reach as well as `platform_admin`
+    - the response is the full `Team` DTO (admins roster, storage usage,
+      description), not bare names and ids — read-only registry metadata that
+      still grants nothing over a team's agents, prompts or files
 
     Example:
     - `teams = await list_all_teams_for_registry(user, deps)`
@@ -329,6 +334,83 @@ async def rescue_team_admin(
         "Rescued one orphaned team via platform-admin registry action: "
         "granted team_admin to one account"
     )
+
+
+async def _resolve_default_teams(
+    deps: TeamServiceDependencies,
+) -> list[TeamMetadata]:
+    team_ids = [
+        TeamId(team_id)
+        for team_id in await deps.get_default_team_store().list_team_ids()
+    ]
+    if not team_ids:
+        return []
+    # A deleted team leaves its id behind: it is simply not found here.
+    by_id = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+    return sorted(by_id.values(), key=lambda metadata: metadata.name.casefold())
+
+
+async def get_default_teams_for_new_users(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> list[DefaultTeamForNewUsers]:
+    """Return the teams every new user joins on first GCU acceptance."""
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    return [
+        DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
+        for metadata in await _resolve_default_teams(deps)
+    ]
+
+
+async def set_default_teams_for_new_users(
+    user: KeycloakUser,
+    team_ids: list[TeamId],
+    deps: TeamServiceDependencies,
+) -> None:
+    """Replace the teams every new user joins on first GCU acceptance; `[]` clears them.
+
+    Personal spaces have no registry row, so they are refused as unknown teams.
+    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    unique_ids = list(dict.fromkeys(team_ids))
+    found = await deps.get_team_metadata_store().get_by_team_ids(unique_ids)
+    missing = next((team_id for team_id in unique_ids if team_id not in found), None)
+    if missing is not None:
+        raise TeamNotFoundError(missing)
+    await deps.get_default_team_store().replace(
+        [str(team_id) for team_id in unique_ids], updated_by=user.uid
+    )
+    logger.info("Default teams for new users set to %s", unique_ids)
+
+
+async def join_default_teams_for_new_user(
+    user_id: str,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Grant `team_member` on every default team for new users.
+
+    A user already holding any role on one of them is left untouched there.
+    """
+    teams = await _resolve_default_teams(deps)
+    await asyncio.gather(
+        *(_join_unless_already_in_team(deps.rebac, team.id, user_id) for team in teams)
+    )
+
+
+async def _join_unless_already_in_team(
+    rebac: RebacEngine, team_id: TeamId, user_id: str
+) -> None:
+    if await _get_user_roles_in_team(rebac, team_id, user_id):
+        return
+    await _add_team_member_relation(
+        rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+    )
+    logger.info("A new user joined the default team %s", team_id)
 
 
 async def _list_teams(
@@ -480,12 +562,13 @@ async def create_team(
       Keycloak root group, discovered lazily, and every membership endpoint
       requires the group (and a `team_admin`) to already exist — a freshly
       created Keycloak group was unreachable by any of them
-    - `platform_admin` must not gain a standing team relation from creating a
-      team (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples
-      only for the subjects named in the request
+    - the creator must not gain a standing team relation from creating a team
+      (RFC §24.2/§24.7); this action writes explicit `team_admin` tuples only
+      for the subjects named in the request
 
     How to use it:
-    - call from the platform-admin-gated `POST /teams` route
+    - call from the `can_create_team`-gated `POST /teams` route, which a
+      `team_manager` reaches as well as a `platform_admin`
     - one-shot by construction: `team_metadata.name`'s DB-level unique
       constraint (migration a8b9c0d1e2f3) makes a second call for the same
       name fail with `TeamAlreadyExistsError` (409) rather than silently
@@ -1052,6 +1135,51 @@ async def add_team_member(
     )
 
 
+async def _search_users_bounded(
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """Shared Keycloak lookup behind both candidate searches.
+
+    The minimum length is enforced here, not only by the API layer's
+    `min_length`: that validates the raw string, so `"  "` alone would reach
+    Keycloak's search un-narrowed and degrade it into a full directory dump.
+    """
+    stripped_query = query.strip()
+    if len(stripped_query) < 2:
+        return []
+    return await deps.search_users(stripped_query)
+
+
+async def search_candidate_team_admins(
+    user: KeycloakUser,
+    query: str,
+    deps: TeamServiceDependencies,
+) -> list[UserSummary]:
+    """
+    Search Keycloak users eligible to be a brand-new team's first `team_admin`.
+
+    Why this function exists:
+    - `create_team` requires at least one `initial_team_admin_ids` entry, and
+      the only org-wide directory (`GET /users`) is gated on
+      `can_administer_users` — `platform_admin`-only. A `team_manager` could
+      reach `/admin/teams` and hold `can_create_team`, yet had no way to name
+      an admin, so the form was unusable for the very role that owns the page.
+
+    How to use it:
+    - call from `GET /teams/candidate-admins`
+    - gated on the same `can_create_team` as the action it feeds, and bounded
+      like the team-scoped search rather than widening the directory listing
+
+    Example:
+    - `matches = await search_candidate_team_admins(user, "cohen", deps)`
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+    )
+    return await _search_users_bounded(query, deps)
+
+
 async def search_candidate_team_members(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1073,10 +1201,8 @@ async def search_candidate_team_members(
 
     How to use it:
     - call from `GET /teams/{team_id}/candidate-members`
-    - `query` must have at least 2 non-whitespace characters — checked here,
-      not just via the API layer's `min_length` (which validates the raw
-      string, so " " alone would otherwise pass through and reach Keycloak's
-      search un-widened)
+    - `query` must have at least 2 non-whitespace characters (enforced by
+      `_search_users_bounded`)
     - users already holding any role on the team are filtered out of the
       result
 
@@ -1092,8 +1218,8 @@ async def search_candidate_team_members(
         deps,
     )
 
-    stripped_query = query.strip()
-    if len(stripped_query) < 2:
+    matches = await _search_users_bounded(query, deps)
+    if not matches:
         return []
 
     admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
@@ -1104,7 +1230,6 @@ async def search_candidate_team_members(
     )
     existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
 
-    matches = await deps.search_users(stripped_query)
     return [
         candidate for candidate in matches if candidate.id not in existing_member_ids
     ]

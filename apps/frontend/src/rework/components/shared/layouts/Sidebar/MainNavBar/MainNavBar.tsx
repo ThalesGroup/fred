@@ -24,6 +24,7 @@ const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { canEnterAdminSection } from "@core/guards/Protected";
 
 interface MainNavEntry {
   key: string;
@@ -45,7 +46,7 @@ export default function MainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { canAdmin, canObservePlatform } = useUserCapabilities();
+  const capabilities = useUserCapabilities();
   // Basename-aware href — the Help Center opens in its own tab (HELP-01).
   const helpCenterHref = useHref("/help");
 
@@ -75,7 +76,10 @@ export default function MainNavBar() {
     },
   ];
 
-  if (canAdmin || canObservePlatform) {
+  // Any admin-tier role opens the console — gating the shell on canAdmin
+  // alone would leave a delegated role holder with no way to reach the one
+  // page they own.
+  if (canEnterAdminSection(capabilities)) {
     entries.push({
       key: "admin",
       icon: "admin_panel_settings",

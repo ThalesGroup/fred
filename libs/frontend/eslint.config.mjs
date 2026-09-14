@@ -11,6 +11,8 @@ export default [
       "ui/.generated/**",
       "ui/dist/**",
       "ui/licenses/**",
+      "iframe-sdk/.generated/**",
+      "iframe-sdk/dist/**",
     ],
   },
   eslint.configs.recommended,

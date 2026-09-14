@@ -14,11 +14,10 @@ reports them correctly for every seeded user.
 
 One schema subtlety this file locks in explicitly (verified live against the
 running stack before writing these assertions, not assumed from the docs):
-`organization#platform_observer` is defined as `[user] or platform_admin`
-(`schema.fga`), so a platform_admin computes as `is_platform_observer: true`
-too - it is not an exclusive-or between the two roles. Do not "simplify" this
-back to `is_platform_observer == user.is_platform_observer` without re-reading
-the schema.
+every non-admin role is defined as `[user] or platform_admin` (`schema.fga`),
+so a platform_admin appears in `platform_roles` under every role - it is not
+an exclusive choice between them. Do not "simplify" this back to a direct
+comparison with the seeded role without re-reading the schema.
 """
 
 from __future__ import annotations
@@ -38,33 +37,45 @@ def _platform_admin_username() -> str:
 NON_PLATFORM_ADMINS = sorted(u for u in USERS if not USERS[u].is_platform_admin)
 
 
-@pytest.mark.parametrize("username", sorted(USERS))
-def test_bootstrap_reports_platform_admin_flag_from_openfga(username: str, cp) -> None:
-    """FrontendBootstrap.permissions.is_platform_admin matches the seeded platform role. [username={username}]"""
+def _bootstrap_roles(cp, username: str) -> list[str]:
     resp = cp(username).get("/frontend/bootstrap")
     assert resp.status_code == 200, f"{username}: {resp.status_code} {resp.text[:200]}"
-    permissions = resp.json()["permissions"]
+    return resp.json()["permissions"]["platform_roles"]
+
+
+@pytest.mark.parametrize("username", sorted(USERS))
+def test_bootstrap_reports_platform_admin_role_from_openfga(username: str, cp) -> None:
+    """FrontendBootstrap.permissions.platform_roles carries platform_admin iff seeded. [username={username}]"""
+    roles = _bootstrap_roles(cp, username)
     expected = USERS[username].is_platform_admin
-    assert permissions["is_platform_admin"] is expected, (
-        f"{username}: expected is_platform_admin={expected}, got "
-        f"{permissions['is_platform_admin']!r} - admin UI gating must be driven by the OpenFGA "
-        f"platform_admin relation, never a Keycloak role (AUTHZ-05 review item 4)."
+    assert ("platform_admin" in roles) is expected, (
+        f"{username}: expected platform_admin={expected}, got roles={roles!r} - admin UI "
+        f"gating must be driven by the OpenFGA platform_admin relation, never a Keycloak "
+        f"role (AUTHZ-05 review item 4)."
     )
 
 
 @pytest.mark.parametrize("username", sorted(USERS))
-def test_bootstrap_reports_platform_observer_flag_including_admin_union(username: str, cp) -> None:
-    """FrontendBootstrap.permissions.is_platform_observer matches platform_observer OR platform_admin. [username={username}]"""
-    resp = cp(username).get("/frontend/bootstrap")
-    assert resp.status_code == 200, f"{username}: {resp.status_code} {resp.text[:200]}"
-    permissions = resp.json()["permissions"]
+def test_bootstrap_reports_every_delegated_role_through_the_admin_union(username: str, cp) -> None:
+    """A platform_admin holds every delegated role through the schema union. [username={username}]"""
+    roles = _bootstrap_roles(cp, username)
     user = USERS[username]
-    expected = user.is_platform_observer or user.is_platform_admin
-    assert permissions["is_platform_observer"] is expected, (
-        f"{username}: expected is_platform_observer={expected} "
-        f"(platform_observer={user.is_platform_observer}, platform_admin={user.is_platform_admin}; "
-        f"schema.fga defines organization#platform_observer as '[user] or platform_admin'), got "
-        f"{permissions['is_platform_observer']!r}."
+    delegated = ("platform_observer", "team_manager", "feature_manager", "prompt_editor")
+
+    if user.is_platform_admin:
+        assert set(delegated) <= set(roles), (
+            f"{username} is platform_admin, so schema.fga's `[user] or platform_admin` "
+            f"unions must put every delegated role in platform_roles; got {roles!r}."
+        )
+        return
+
+    assert ("platform_observer" in roles) is user.is_platform_observer, (
+        f"{username}: expected platform_observer={user.is_platform_observer}, got {roles!r}."
+    )
+    # The validation fixtures seed no delegated-role holder yet, so a non-admin
+    # must carry none of them.
+    assert not (set(delegated[1:]) & set(roles)), (
+        f"{username} holds a delegated role no fixture grants: {roles!r}."
     )
 
 

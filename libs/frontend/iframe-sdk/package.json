@@ -1,0 +1,43 @@
+{
+  "name": "@fred-oss/iframe-sdk",
+  "version": "0.1.0-alpha.1",
+  "description": "Framework-independent child client for FRED application iframes",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ThalesGroup/fred.git",
+    "directory": "libs/frontend/iframe-sdk"
+  },
+  "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/iframe-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/ThalesGroup/fred/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/types/.generated/applicationProtocol.d.ts",
+      "import": "./dist/protocol.js"
+    }
+  },
+  "types": "./dist/types/src/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "build-evidence.json"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "next",
+    "provenance": true
+  }
+}

@@ -415,6 +415,26 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     [currentTag, loadTagPage],
   );
 
+  // Explicit "reload what I'm looking at". The knowledge-flow cache now serves
+  // the previous answer for a short window instead of refetching on every
+  // mount, which is what makes coming back to this page instant — this is the
+  // way to force the round trip when you know someone else has just changed
+  // something. refetchTags also refreshes the usage stats and the storage
+  // quota, so one press updates the whole view.
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshView = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const tagId = currentTag?.id;
+      await Promise.all([
+        refetchTags(),
+        tagId ? loadTagPage(tagId, perTagRef.current[tagId]?.offset ?? 0) : Promise.resolve(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchTags, loadTagPage, currentTag]);
+
   const navigateTo = useCallback(
     (full: string | null) => {
       setNavigationHistory((prev) => [...prev, currentFolderFull]);
@@ -1705,33 +1725,47 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
               downloadLoading={bulkDownloading}
             />
           ) : (
-            canCreateFolder && (
-              <>
-                <Tooltip text={t("rework.resources.menu.newFolder")}>
-                  <IconButton
-                    color="primary"
-                    variant="icon"
-                    size="medium"
-                    icon={{ category: "outlined", type: "create_new_folder" }}
-                    aria-label={t("rework.resources.menu.newFolder")}
-                    onClick={() => setCreateOpen(true)}
-                  />
-                </Tooltip>
-                <Tooltip
-                  text={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
-                >
-                  <IconButton
-                    color="primary"
-                    variant="icon"
-                    size="medium"
-                    icon={{ category: "outlined", type: "upload_file" }}
-                    aria-label={t("rework.resources.action.addFile")}
-                    disabled={!currentTag}
-                    onClick={() => setUploadOpen(true)}
-                  />
-                </Tooltip>
-              </>
-            )
+            <>
+              {/* Outside the write gate on purpose: refreshing the view is not
+                  a mutation, and a read-only member needs it as much as anyone. */}
+              <Tooltip text={t("rework.resources.action.refresh")}>
+                <IconButton
+                  variant="icon"
+                  size="medium"
+                  icon={{ category: "outlined", type: "refresh" }}
+                  aria-label={t("rework.resources.action.refresh")}
+                  loading={refreshing}
+                  onClick={() => void refreshView()}
+                />
+              </Tooltip>
+              {canCreateFolder && (
+                <>
+                  <Tooltip text={t("rework.resources.menu.newFolder")}>
+                    <IconButton
+                      color="primary"
+                      variant="icon"
+                      size="medium"
+                      icon={{ category: "outlined", type: "create_new_folder" }}
+                      aria-label={t("rework.resources.menu.newFolder")}
+                      onClick={() => setCreateOpen(true)}
+                    />
+                  </Tooltip>
+                  <Tooltip
+                    text={currentTag ? t("rework.resources.action.addFile") : t("rework.resources.action.addFileHint")}
+                  >
+                    <IconButton
+                      color="primary"
+                      variant="icon"
+                      size="medium"
+                      icon={{ category: "outlined", type: "upload_file" }}
+                      aria-label={t("rework.resources.action.addFile")}
+                      disabled={!currentTag}
+                      onClick={() => setUploadOpen(true)}
+                    />
+                  </Tooltip>
+                </>
+              )}
+            </>
           )
         }
         loading={tagsLoading}
