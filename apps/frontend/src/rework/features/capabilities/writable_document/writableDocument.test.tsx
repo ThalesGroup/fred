@@ -18,7 +18,6 @@ import { describe, expect, it } from "vitest";
 import { rendererForPartKind } from "../partRendererRegistry";
 import { sidePanelsForCapabilities } from "../sidePanelRegistry";
 import { WritableDocumentCardRenderer } from "./WritableDocumentCardRenderer";
-import { WritableDocumentPane } from "./WritableDocumentPane";
 import type { WritableDocumentPartData } from "./types";
 import reducer, {
   clearWritableDocuments,
@@ -42,15 +41,29 @@ describe("writable_document plugin registration", () => {
     expect(rendererForPartKind("writable_document")).toBe(WritableDocumentCardRenderer);
   });
 
+  // Not asserted by component identity: the pane is code-split, so the plugin
+  // holds a lazy wrapper — and importing the concrete component here to compare
+  // against would drag MDXEditor back into the graph this split exists to keep
+  // it out of. What matters is the registration the host reads.
   it("contributes the writable_document_pane side panel when the capability is active", () => {
     const entries = sidePanelsForCapabilities(["writable_document"]);
     expect(entries).toContainEqual(
       expect.objectContaining({
         capabilityId: "writable_document",
         widget: "writable_document_pane",
-        Component: WritableDocumentPane,
+        icon: "edit_document",
+        ownsHeader: true,
+        Component: expect.anything(),
       }),
     );
+  });
+
+  it("code-splits the pane so a chat page does not load the editor until it opens", async () => {
+    const [entry] = sidePanelsForCapabilities(["writable_document"]);
+    // React marks a lazy component with its own element type rather than a
+    // function — a plain function here would mean the split silently regressed.
+    expect(typeof entry.Component).toBe("object");
+    expect((entry.Component as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for("react.lazy"));
   });
 });
 

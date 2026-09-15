@@ -14,27 +14,48 @@
 
 import { Navigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import type { UserCapabilities } from "../../types/conversation.ts";
 
 /**
- * `"admin"` — only `canAdmin` (org-level `platform_admin`).
- * `"observer"` — `canAdmin` or `canObservePlatform`, so an admin never loses
- * an observer-gated page (mirrors the OpenFGA schema, where `platform_admin`
- * always satisfies `platform_observer` too).
+ * One requirement per org-level role: `"admin"` is the full `platform_admin`
+ * tier, the others are the delegated roles that own a single admin surface.
  *
  * There is no team-scoped variant here: no route in this app is guarded at
  * the router level by a team capability today — team-scoped gating happens
  * inside the page (see `useTeamCapabilities`), not on the route. Add one only
  * when a route genuinely needs it.
  */
-export type ProtectedRequirement = "admin" | "observer";
+export type ProtectedRequirement = "admin" | "observer" | "teams" | "features" | "platformPrompt";
 
-/** Pure decision, isolated from React/routing so it's trivially unit-testable. */
-export function isProtectedAllowed(
-  requires: ProtectedRequirement,
-  capabilities: { canAdmin: boolean; canObservePlatform: boolean },
-): boolean {
-  if (requires === "admin") return capabilities.canAdmin;
-  return capabilities.canAdmin || capabilities.canObservePlatform;
+export type ProtectedCapabilities = Pick<
+  UserCapabilities,
+  "canAdmin" | "canObservePlatform" | "canManageTeams" | "canManageFeatures" | "canEditPlatformPrompt"
+>;
+
+/** The capability flag that satisfies each requirement. Adding a delegated
+ * role is one entry here plus one flag on `useUserCapabilities`. */
+const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabilities> = {
+  admin: "canAdmin",
+  observer: "canObservePlatform",
+  teams: "canManageTeams",
+  features: "canManageFeatures",
+  platformPrompt: "canEditPlatformPrompt",
+};
+
+/** Pure decision, isolated from React/routing so it's trivially unit-testable.
+ * `canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
+ * each role relation unions in `platform_admin`. */
+export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  return capabilities.canAdmin || capabilities[REQUIREMENT_CAPABILITY[requires]];
+}
+
+/** Does this user reach the admin section at all? Any single delegated role
+ * is enough — gating the shell on `canAdmin` would leave every new role with
+ * pages it can pass `Protected` for but never navigate to. */
+export function canEnterAdminSection(capabilities: ProtectedCapabilities): boolean {
+  return (Object.keys(REQUIREMENT_CAPABILITY) as ProtectedRequirement[]).some((requirement) =>
+    isProtectedAllowed(requirement, capabilities),
+  );
 }
 
 interface ProtectedProps {
@@ -49,14 +70,14 @@ interface ProtectedProps {
  * AUTHZ-05 removed app roles — see `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`).
  */
 export const Protected = ({ children, requires }: ProtectedProps) => {
-  const { canAdmin, canObservePlatform, isLoading } = useUserCapabilities();
-  // On a hard refresh, `/frontend/bootstrap` hasn't resolved yet and
-  // canAdmin/canObservePlatform default to `false` — deciding here would
-  // redirect every admin to `/unauthorized` on every reload, with no way
-  // back (the redirect replaces history; a later capability flip doesn't
-  // un-redirect it). Render nothing until the real answer is known.
+  const { isLoading, ...capabilities } = useUserCapabilities();
+  // On a hard refresh, `/frontend/bootstrap` hasn't resolved yet and every
+  // role flag defaults to `false` — deciding here would redirect every admin
+  // to `/unauthorized` on every reload, with no way back (the redirect
+  // replaces history; a later capability flip doesn't un-redirect it).
+  // Render nothing until the real answer is known.
   if (isLoading) return null;
-  if (!isProtectedAllowed(requires, { canAdmin, canObservePlatform })) {
+  if (!isProtectedAllowed(requires, capabilities)) {
     return <Navigate to="/unauthorized" replace />;
   }
   return <>{children}</>;

@@ -370,6 +370,20 @@
           "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
+    },
+    "team_wiki": {
+      "name": "Wiki d'équipe",
+      "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres.",
+      "fields": {
+        "mode": {
+          "title": "Ce que l'agent peut faire",
+          "description": "En lecture, l'agent consulte le wiki. En lecture et proposition, il peut aussi proposer des pages et des modifications — vous serez toujours invité à les approuver avant qu'elles ne soient écrites. Aucun mode ne permet de supprimer, renommer ou déplacer une page.",
+          "options": {
+            "read": "Lecture seule",
+            "read_write": "Lecture et proposition"
+          }
+        }
+      }
     }
   },
   "chatbot": {
@@ -405,6 +419,13 @@
       "processing": "Traitement",
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
+    },
+    "fullReasoning": {
+      "title": "Raisonnement complet",
+      "copy": "Copier le raisonnement complet",
+      "copied": "Copié",
+      "empty": "L'agent n'a pas encore raisonné dans cette conversation.",
+      "hideRestatements": "Masquer les reformulations"
     },
     "debugRaw": {
       "title": "Débogage — messages bruts",
@@ -1097,7 +1118,7 @@
         "loading": "Chargement des fonctionnalités…",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
-        "manageTeams": "Gérer les équipes",
+        "manageTeams": "Gérer par équipe",
         "kindFilter": {
           "tool": "Capacités",
           "agent": "Agents",
@@ -1135,7 +1156,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — agents suspendus",
-          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
@@ -1412,11 +1433,8 @@
         "valueLabel": "Tours"
       },
       "presets": {
-        "last15m": "15 dernières minutes",
-        "last1h": "Dernière heure",
         "last24h": "24 dernières heures",
         "last30d": "30 derniers jours",
-        "last6h": "6 dernières heures",
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
@@ -1460,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Appliquer",
+        "months": "Mois",
+        "next": "Période suivante",
+        "previous": "Période précédente",
         "since": "Depuis",
         "until": "Jusqu'à"
       },
@@ -1540,6 +1561,7 @@
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
+      "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
@@ -1858,6 +1880,7 @@
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
         "process": "Traiter",
+        "refresh": "Rafraîchir cette vue",
         "rename": "Renommer",
         "reprocess": "Retraiter",
         "searchable": "Exclure de la recherche",
@@ -2037,8 +2060,8 @@
         },
         "menu": {
           "analytics": "Analytiques",
-          "capabilities": "Fonctionnalités",
           "corpusAudit": "Audit du corpus",
+          "features": "Fonctionnalités",
           "migration": "Données plateforme",
           "platformRoles": "Rôles plateforme",
           "selftest": "Auto-test",
@@ -2072,7 +2095,8 @@
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",
-          "resources": "Ressources"
+          "resources": "Ressources",
+          "wiki": "Wiki"
         },
         "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
@@ -2098,6 +2122,17 @@
         "title": "Auto-test d'autorisation",
         "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",
+        "expiry": {
+          "title": "Auto-test de renouvellement des identifiants",
+          "run": "Lancer l'expiration des identifiants",
+          "warning": {
+            "title": "Gardez cette page ouverte jusqu'à la fin du test",
+            "message": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc environ {{minutes}} minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "messageUnknownWait": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc plusieurs minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "confirm": "Lancer et garder la page ouverte"
+          },
+          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
+        },
         "testProfile": {
           "title": "Tester un autre profil",
           "usernameLabel": "Compte",
@@ -2230,19 +2265,30 @@
       },
       "roles": {
         "platform_admin": "Admin plateforme",
-        "platform_observer": "Observateur plateforme"
+        "platform_observer": "Observateur plateforme",
+        "team_manager": "Gestionnaire d'équipes",
+        "feature_manager": "Gestionnaire de fonctionnalités",
+        "prompt_editor": "Éditeur du prompt plateforme"
+      },
+      "roleDescriptions": {
+        "platform_admin": "Administration complète : toutes les pages d'admin, import/export et réinitialisation de la plateforme.",
+        "platform_observer": "Accès en lecture seule aux analyses de la plateforme.",
+        "team_manager": "Créer des équipes et voir toutes les équipes de la plateforme.",
+        "feature_manager": "Activer ou désactiver les capacités, modèles et gabarits d'agents.",
+        "prompt_editor": "Modifier le prompt plateforme ajouté à chaque agent."
       },
       "grant": {
         "title": "Attribuer un rôle",
-        "userLabel": "Utilisateur",
-        "userPlaceholder": "Rechercher un utilisateur",
-        "clearSelection": "Effacer la sélection",
+        "userLabel": "Utilisateurs",
+        "userPlaceholder": "Rechercher et ajouter des utilisateurs",
+        "removeUser": "Retirer {{user}}",
         "roleLabel": "Rôle",
         "rootOnlyHint": "Seul l'admin principal peut nommer ou révoquer des admins plateforme.",
         "submit": "Attribuer",
-        "successSummary": "{{role}} attribué à {{user}}",
+        "successSummary_one": "{{role}} attribué à {{user}}",
+        "successSummary_other": "{{role}} attribué à {{count}} utilisateurs",
         "errors": {
-          "summary": "Impossible d'attribuer le rôle",
+          "summary": "Impossible d'attribuer le rôle à {{users}}",
           "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
           "forbiddenDetail": "Seul l'admin principal peut gérer les admins plateforme.",
           "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."
@@ -2268,12 +2314,25 @@
           "admins": "Administrateur(s)"
         }
       },
+      "defaultTeam": {
+        "title": "Équipes par défaut des nouveaux utilisateurs",
+        "description": "Chaque nouvel utilisateur rejoint ces équipes en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
+        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra ces équipes automatiquement.",
+        "none": "Aucune équipe par défaut.",
+        "searchPlaceholder": "Ajouter une équipe par nom",
+        "remove": "Retirer {{name}}",
+        "savedSummary": "Équipes par défaut mises à jour",
+        "errors": {
+          "summary": "Échec de la mise à jour des équipes par défaut",
+          "fallbackDetail": "Impossible de mettre à jour les équipes par défaut. Veuillez réessayer."
+        }
+      },
       "createTeam": {
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",
         "namePlaceholder": "ex. swiftpost",
         "adminsLabel": "Administrateur(s) initial(aux)",
-        "adminsPlaceholder": "Rechercher des utilisateurs...",
+        "adminsPlaceholder": "Entrer un nom, prénom ou ID utilisateur",
         "submit": "Créer l'équipe",
         "successSummary": "Équipe créée",
         "errors": {
@@ -2494,6 +2553,10 @@
             "teamResources": {
               "title": "Accès aux ressources de l'équipe",
               "description": "Permet à l'agent d'exploiter les ressources de l'équipe pour remplir sa mission."
+            },
+            "teamWiki": {
+              "title": "Accès au Wiki de l'équipe",
+              "description": "Permet à l'agent de lire les pages du wiki de l'équipe et de suivre les règles qui y sont fixées."
             },
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
@@ -3018,15 +3081,16 @@
     },
     "platformPrompt": {
       "title": "Prompt global de la plateforme",
-      "subtitle": "La personnalité et les instructions standardisées de cette plateforme. C'est le premier bloc du prompt système de chaque agent, avant les instructions propres à chaque agent.",
+      "subtitle": "Les deux blocs communs à toute la plateforme que chaque agent reçoit, dans l'ordre où le modèle les lit : les instructions livrées avec la plateforme, puis votre prompt global. Viennent ensuite les règles des outils et les instructions propres à chaque agent.",
       "editor": {
         "title": "Prompt global",
         "badge": "Modifiable",
-        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé en premier, avant tout le reste, à chaque appel de chaque agent."
+        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé juste après les instructions de la plateforme, à chaque appel de chaque agent, avant les règles des outils et les instructions de chaque agent, sur lesquelles il prime."
       },
       "field": {
         "label": "Texte du prompt",
-        "explanation": "Restez concis : chaque caractère est du contexte permanent."
+        "explanation": "Restez concis : chaque caractère est du contexte permanent.",
+        "tooLong": "Le prompt dépasse {{max}} caractères."
       },
       "save": "Enregistrer",
       "saving": "Enregistrement...",
@@ -3039,16 +3103,131 @@
       "instructions": {
         "title": "Instructions globales de la plateforme",
         "badge": "Lecture seule",
-        "subtitle": "Livrées avec la plateforme et rendues juste après votre prompt, pour tous les agents. Elles ne changent qu'avec un déploiement.",
+        "subtitle": "Livrées avec la plateforme et envoyées en premier, pour tous les agents. Elles disent quel bloc l'emporte en cas d'instructions contradictoires, et ne changent qu'avec un déploiement.",
         "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
         "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
       },
       "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu."
     },
+    "wiki": {
+      "title": "Wiki",
+      "betaBadge": {
+        "label": "Beta",
+        "tooltip": "Ceci est une proposition, pas encore une fonctionnalité figée. Nous recueillons vos retours avant de nous engager sur sa conception — dites-nous ce qui fonctionne ou pas."
+      },
+      "resizeRail": "Redimensionner la liste des pages",
+      "newPage": "Nouvelle page",
+      "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
+      "notFound": "Cette page n'existe pas.",
+      "empty": {
+        "editor": "Le wiki de votre équipe est vide. Créez la première page pour commencer à consigner ce que l'équipe sait.",
+        "member": "Le wiki de votre équipe est vide. Un éditeur peut créer la première page."
+      },
+      "tree": {
+        "ariaLabel": "Pages du wiki",
+        "empty": "Aucune page pour l'instant.",
+        "expand": "Déplier",
+        "collapse": "Replier",
+        "needsReview": "Un agent a écrit cette page et personne ne l'a encore relue",
+        "pendingReview": "{{count}} page à relire",
+        "pendingReview_other": "{{count}} pages à relire",
+        "nothingToReview": "Rien à relire.",
+        "addChild": "Ajouter une sous-page à {{title}}",
+        "addChildTooltip": "Ajouter une sous-page"
+      },
+      "article": {
+        "breadcrumb": "Fil d’Ariane",
+        "edit": "Modifier",
+        "rename": "Renommer ou déplacer cette page",
+        "delete": "Supprimer cette page",
+        "history": "Historique des versions",
+        "empty": "Cette page est vide.",
+        "writtenByAgent": "Écrit par un agent",
+        "lastEditedBy": "Dernière modification par {{user}}",
+        "lastEditedByAt": "Dernière modification par {{user}} le {{when}}",
+        "lastEditedAt": "Dernière modification le {{when}}",
+        "awaitingReview": "En attente de relecture",
+        "markReviewed": "Marquer comme relue",
+        "clearReviewHint": "Retirez la marque une fois la page relue"
+      },
+      "editor": {
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
+        "loadCurrent": "Charger sa version",
+        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document."
+      },
+      "history": {
+        "title": "Historique des versions",
+        "close": "Fermer l'historique",
+        "empty": "Aucune version antérieure.",
+        "current": "Actuelle",
+        "restore": "Restaurer",
+        "loadMore": "Charger les versions antérieures",
+        "end": "Début de l'historique.",
+        "event": {
+          "humanEdit": "Édition manuelle",
+          "agentEdit": "Édition par agent ({{agent}})",
+          "agentEditUnnamed": "Édition par un agent",
+          "agentReview": "Validation de l'édition de l'agent",
+          "review": "Validation du contenu"
+        }
+      },
+      "rules": {
+        "title": "Règles pour les agents",
+        "notice": "Chaque agent ayant accès au wiki lit cette page avant de répondre. Seuls les éditeurs peuvent la modifier, et aucun agent ne peut jamais y écrire.",
+        "empty": "Aucune règle pour l'instant. Un éditeur peut y écrire les consignes que tout agent doit suivre.",
+        "template": "## Ce que fait cette équipe\n\n## Vocabulaire de l'équipe\n\n## Comment répondre\n\n- Une page du wiki peut être périmée ou fausse. Si elle contredit ce que dit la conversation, signale-le plutôt que de trancher en silence.\n- N'invente jamais un sigle, un nom d'outil ou un processus interne : s'il n'est pas dans le wiki, dis que tu ne le connais pas.\n\n## À ne jamais faire\n",
+        "templateHint": "Cette page démarre sur une trame. Remplissez les sections vides, supprimez celles qui ne servent pas : chaque agent lit ce texte à chaque question, alors écrivez court, à l'impératif, et dites ce qu'un nouveau collègue devinerait sans qu'on le lui dise."
+      },
+      "proposal": {
+        "newPage": "Cet agent propose une nouvelle page « {{title}} » ({{added}} lignes).",
+        "edit": "Cet agent propose de modifier « {{title}} » : {{added}} lignes ajoutées, {{removed}} retirées.",
+        "seeChanges": "Voir les modifications",
+        "dialogTitle": "Modifications proposées — {{title}}",
+        "close": "Fermer",
+        "unavailable": "Cette proposition n’est plus disponible."
+      },
+      "newPageDialog": {
+        "title": "Nouvelle page de wiki",
+        "childTitle": "Nouvelle page sous « {{parent}} »",
+        "label": "Titre de la page",
+        "confirm": "Créer la page"
+      },
+      "renameDialog": {
+        "title": "Titre et emplacement",
+        "label": "Titre de la page",
+        "parentLabel": "Page parente",
+        "root": "Aucune — premier niveau",
+        "confirm": "Enregistrer"
+      },
+      "leaveDialog": {
+        "title": "Abandonner vos modifications ?",
+        "message": "Vous êtes en train de modifier « {{title}} ». Si vous ouvrez une autre page, le texte que vous n’avez pas enregistré sera perdu.",
+        "confirm": "Abandonner les modifications",
+        "cancel": "Continuer à écrire"
+      },
+      "deleteDialog": {
+        "title": "Supprimer cette page ?",
+        "message": "« {{title}} » et toutes ses versions seront supprimées définitivement. Cette action est irréversible.",
+        "confirm": "Supprimer la page"
+      },
+      "errors": {
+        "save": "Impossible d'enregistrer cette page",
+        "create": "Impossible de créer la page",
+        "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
+        "delete": "Impossible de supprimer la page",
+        "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre.",
+        "review": "Impossible d'enregistrer la marque de revue",
+        "reviewConflict": "Cette page a changé depuis que vous l'avez consultée. Rechargez-la et relisez la nouvelle version avant de valider.",
+        "restore": "Impossible de restaurer cette version"
+      }
+    },
     "promptEditor": {
       "copy": "Copier le prompt",
       "copied": "Prompt copié dans le presse-papier",
-      "copyFailed": "Impossible de copier le prompt"
+      "copyFailed": "Impossible de copier le prompt",
+      "reservedTag": "Ce texte ne peut pas contenir <{{tag}}> : c'est une balise réservée qui délimite un bloc du prompt système. Toute autre balise est acceptée."
     }
   },
   "runtime": {

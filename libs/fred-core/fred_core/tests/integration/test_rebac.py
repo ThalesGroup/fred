@@ -27,6 +27,7 @@ from pydantic import AnyHttpUrl, ValidationError
 
 from fred_core import (
     AgentPermission,
+    AppPermission,
     AuthorizationError,
     CapabilityPermission,
     DocumentPermission,
@@ -41,6 +42,11 @@ from fred_core import (
     Resource,
     TagPermission,
     TeamPermission,
+    usable_capability_ids,
+)
+from fred_core.security.rebac.capability_authz import (
+    CapabilityEnablementFacts,
+    can_team_use_from_facts,
 )
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from fred_core.security.structure import KeycloakUser, M2MSecurity
@@ -609,6 +615,132 @@ async def test_platform_admin_and_observer_never_grant_team_access(
             consistency_token=token,
         ), (
             f"{label} must not administer team analysts - that would let it self-promote into team data access"
+        )
+
+
+# Enumerated rather than hand-listed so a newly added capability joins the
+# closed-world check below instead of silently escaping it. The `IS_*` members
+# are raw role relations, not capabilities, so the `can_` prefix filters them.
+ORGANIZATION_CAPABILITIES = tuple(
+    permission
+    for permission in list(OrganizationPermission)
+    if permission.value.startswith("can_")
+)
+
+# The exact capability set each delegated role may reach: one admin surface
+# each, so appointing one never hands over the import/export, platform-reset
+# and user-administration surfaces. The `IS_*` entry is the raw role check
+# behind the frontend's platform-role list.
+DELEGATED_ROLE_REACH: tuple[
+    tuple[str, RelationType, set[OrganizationPermission], OrganizationPermission], ...
+] = (
+    (
+        "team_manager",
+        RelationType.TEAM_MANAGER,
+        {
+            OrganizationPermission.CAN_CREATE_TEAM,
+            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+        },
+        OrganizationPermission.IS_TEAM_MANAGER,
+    ),
+    (
+        "feature_manager",
+        RelationType.FEATURE_MANAGER,
+        {
+            OrganizationPermission.CAN_MANAGE_CAPABILITIES,
+            OrganizationPermission.CAN_LIST_ALL_TEAMS,
+        },
+        OrganizationPermission.IS_FEATURE_MANAGER,
+    ),
+    (
+        "prompt_editor",
+        RelationType.PROMPT_EDITOR,
+        {OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT},
+        OrganizationPermission.IS_PROMPT_EDITOR,
+    ),
+)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("label", "role", "expected", "role_check"),
+    DELEGATED_ROLE_REACH,
+    ids=[label for label, _, _, _ in DELEGATED_ROLE_REACH],
+)
+async def test_delegated_role_reaches_exactly_its_own_capabilities(
+    rebac_engine: RebacEngine,
+    label: str,
+    role: RelationType,
+    expected: set[OrganizationPermission],
+    role_check: OrganizationPermission,
+) -> None:
+    """Closed-world check: a delegated role reaches its own surface and nothing
+    else. Asserting the whole reachable set, rather than hand-picked denials,
+    is what makes a capability that later unions in one of these roles fail."""
+    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    holder = _make_reference(Resource.USER, prefix=label)
+    platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
+    team = _make_reference(Resource.TEAM, prefix="northbridge")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=holder, relation=role, resource=organization),
+            Relation(
+                subject=platform_admin,
+                relation=RelationType.PLATFORM_ADMIN,
+                resource=organization,
+            ),
+            Relation(
+                subject=organization, relation=RelationType.ORGANIZATION, resource=team
+            ),
+        ]
+    )
+
+    reached = {
+        capability
+        for capability in ORGANIZATION_CAPABILITIES
+        if await rebac_engine.has_permission(
+            holder, capability, organization, consistency_token=token
+        )
+    }
+    assert reached == expected, (
+        f"{label} must reach exactly {sorted(c.value for c in expected)}; "
+        f"got {sorted(c.value for c in reached)}"
+    )
+
+    # Each delegated role unions in platform_admin, so appointing one never
+    # removes a surface from an admin. The role check itself has to pass too:
+    # it is what the frontend's platform-role list reads.
+    for capability in expected:
+        assert await rebac_engine.has_permission(
+            platform_admin, capability, organization, consistency_token=token
+        ), f"platform_admin must still reach {capability.value}"
+    assert await rebac_engine.has_permission(
+        platform_admin, role_check, organization, consistency_token=token
+    ), f"platform_admin must satisfy {role_check.value} through the union"
+    assert await rebac_engine.has_permission(
+        holder, role_check, organization, consistency_token=token
+    ), f"{label} must satisfy its own {role_check.value} check"
+
+    for capability in (
+        TeamPermission.CAN_READ,
+        TeamPermission.CAN_UPDATE_INFO,
+        TeamPermission.CAN_ADMINISTER_ADMINS,
+    ):
+        assert not await rebac_engine.has_permission(
+            holder, capability, team, consistency_token=token
+        ), (
+            f"{label} must not reach team.{capability.value} — a platform role "
+            f"never grants access to a team's data"
+        )
+
+    # The role is grantable to a user and nothing else: a team-subject grant
+    # would hand the surface to every member of that team at once. The engine
+    # refuses the write outright, so the restriction cannot be checked.
+    with pytest.raises(Exception, match="not an allowed type restriction"):
+        await rebac_engine.add_relation(
+            Relation(subject=team, relation=role, resource=organization)
         )
 
 
@@ -1407,6 +1539,275 @@ async def test_capability_lookup_resources_lists_usable(
     )
     assert not isinstance(other_resources, RebacDisabledResult)
     assert usable.id not in {ref.id for ref in other_resources}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_local_can_use_fold_agrees_with_openfga(
+    rebac_engine: RebacEngine,
+) -> None:
+    """The admin display folds `can_use` from a capability's own tuples instead
+    of asking OpenFGA, so pin that second copy of the schema against the real
+    engine - every branch of `capability#can_use`, both team kinds."""
+
+    org = _organization_ref()
+    personal = _make_reference(Resource.TEAM, prefix="personal")
+    collaborative = _make_reference(Resource.TEAM, prefix="team")
+
+    # One capability per schema branch.
+    default_on = _make_reference(Resource.CAPABILITY, prefix="cap")
+    personal_class = _make_reference(Resource.CAPABILITY, prefix="cap")
+    team_granted = _make_reference(Resource.CAPABILITY, prefix="cap")
+    personal_blocked = _make_reference(Resource.CAPABILITY, prefix="cap")
+    blocked_but_granted = _make_reference(Resource.CAPABILITY, prefix="cap")
+    team_opted_out = _make_reference(Resource.CAPABILITY, prefix="cap")
+    admin_gated = _make_reference(Resource.CAPABILITY, prefix="cap")
+    capabilities = [
+        default_on,
+        personal_class,
+        team_granted,
+        personal_blocked,
+        blocked_but_granted,
+        team_opted_out,
+        admin_gated,
+    ]
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=cap)
+            for cap in capabilities
+        ]
+        + [
+            # default_on alone: inherited by BOTH team kinds.
+            Relation(
+                subject=org, relation=RelationType.DEFAULT_ON, resource=default_on
+            ),
+            # personal_on alone: the personal class only.
+            Relation(
+                subject=org, relation=RelationType.PERSONAL_ON, resource=personal_class
+            ),
+            # An explicit per-team grant, no org marker.
+            Relation(
+                subject=collaborative,
+                relation=RelationType.ENABLED,
+                resource=team_granted,
+            ),
+            # personal_disabled subtracts from the inherited layer only...
+            Relation(
+                subject=org,
+                relation=RelationType.DEFAULT_ON,
+                resource=personal_blocked,
+            ),
+            Relation(
+                subject=org,
+                relation=RelationType.PERSONAL_DISABLED,
+                resource=personal_blocked,
+            ),
+            # ...so an explicit grant survives it.
+            Relation(
+                subject=org,
+                relation=RelationType.DEFAULT_ON,
+                resource=blocked_but_granted,
+            ),
+            Relation(
+                subject=org,
+                relation=RelationType.PERSONAL_DISABLED,
+                resource=blocked_but_granted,
+            ),
+            Relation(
+                subject=personal,
+                relation=RelationType.ENABLED,
+                resource=blocked_but_granted,
+            ),
+            # A per-team opt-out of a default-on capability.
+            Relation(
+                subject=org, relation=RelationType.DEFAULT_ON, resource=team_opted_out
+            ),
+            Relation(
+                subject=collaborative,
+                relation=RelationType.DISABLED,
+                resource=team_opted_out,
+            ),
+        ]
+    )
+
+    facts_by_id = {}
+    for cap in capabilities:
+        relations = await rebac_engine.list_direct_relations(
+            cap, consistency_token=token
+        )
+        assert not isinstance(relations, RebacDisabledResult)
+        facts_by_id[cap.id] = CapabilityEnablementFacts.from_relations(relations)
+
+    created_ids = {cap.id for cap in capabilities}
+    for team in (personal, collaborative):
+        listed = await usable_capability_ids(rebac_engine, team.id)
+        assert listed is not None
+        folded = {
+            cap_id
+            for cap_id, facts in facts_by_id.items()
+            if can_team_use_from_facts(team.id, facts)
+        }
+        assert listed & created_ids == folded
+
+    # Spelled out per branch, so set equality cannot be satisfied by a fold
+    # that answers "nothing" (or that confuses the two team kinds).
+    def can_use(cap: RebacReference, team: RebacReference) -> bool:
+        return can_team_use_from_facts(team.id, facts_by_id[cap.id])
+
+    assert can_use(default_on, personal) and can_use(default_on, collaborative)
+    assert can_use(personal_class, personal) and not can_use(
+        personal_class, collaborative
+    )
+    assert can_use(team_granted, collaborative) and not can_use(team_granted, personal)
+    assert not can_use(personal_blocked, personal) and can_use(
+        personal_blocked, collaborative
+    )
+    assert can_use(blocked_but_granted, personal)
+    assert can_use(team_opted_out, personal) and not can_use(
+        team_opted_out, collaborative
+    )
+    assert not can_use(admin_gated, personal) and not can_use(
+        admin_gated, collaborative
+    )
+
+
+# ---------------------------------------------------------------------------
+# Product application team scoping
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_can_use_is_typed_and_team_scoped(rebac_engine: RebacEngine) -> None:
+    org = _organization_ref()
+    raw_id = _unique_id("shared-id")
+    app = RebacReference(Resource.APP, raw_id)
+    capability = RebacReference(Resource.CAPABILITY, raw_id)
+    team = _make_reference(Resource.TEAM, prefix="team")
+    other_team = _make_reference(Resource.TEAM, prefix="other")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(
+                subject=org,
+                relation=RelationType.ORGANIZATION,
+                resource=capability,
+            ),
+            Relation(subject=team, relation=RelationType.ENABLED, resource=app),
+        ]
+    )
+
+    assert await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        CapabilityPermission.CAN_USE,
+        capability,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        other_team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(other_team),
+        consistency_token=token,
+    )
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=team, relation=RelationType.DISABLED, resource=app)
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_default_on_is_inherited_and_can_be_disabled(
+    rebac_engine: RebacEngine,
+) -> None:
+    org = _organization_ref()
+    app = _make_reference(Resource.APP, prefix="app")
+    team = _make_reference(Resource.TEAM, prefix="team")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.DEFAULT_ON, resource=app),
+        ]
+    )
+    assert await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not await rebac_engine.has_permission(
+        team, AppPermission.CAN_USE, app, consistency_token=token
+    )
+
+    token = await rebac_engine.add_relation(
+        Relation(subject=team, relation=RelationType.DISABLED, resource=app)
+    )
+    assert not await rebac_engine.has_permission(
+        team,
+        AppPermission.CAN_USE,
+        app,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_app_can_manage_and_lookup_resources(rebac_engine: RebacEngine) -> None:
+    org = _organization_ref()
+    app = _make_reference(Resource.APP, prefix="app")
+    hidden = _make_reference(Resource.APP, prefix="hidden-app")
+    team = _make_reference(Resource.TEAM, prefix="team")
+    admin = _make_reference(Resource.USER, prefix="admin")
+    plain = _make_reference(Resource.USER, prefix="plain")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=app),
+            Relation(subject=org, relation=RelationType.ORGANIZATION, resource=hidden),
+            Relation(subject=team, relation=RelationType.ENABLED, resource=app),
+            Relation(subject=admin, relation=RelationType.PLATFORM_ADMIN, resource=org),
+        ]
+    )
+
+    assert await rebac_engine.has_permission(
+        admin, AppPermission.CAN_MANAGE, app, consistency_token=token
+    )
+    assert not await rebac_engine.has_permission(
+        plain, AppPermission.CAN_MANAGE, app, consistency_token=token
+    )
+
+    resources = await rebac_engine.lookup_resources(
+        team,
+        AppPermission.CAN_USE,
+        Resource.APP,
+        contextual_relations=_org_team_edge(team),
+        consistency_token=token,
+    )
+    assert not isinstance(resources, RebacDisabledResult)
+    ids = {resource.id for resource in resources}
+    assert app.id in ids
+    assert hidden.id not in ids
 
 
 @pytest.mark.integration

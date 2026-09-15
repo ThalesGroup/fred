@@ -63,4 +63,10 @@ describe("Spinner", () => {
     expect(svg().hasAttribute("aria-label")).toBe(false);
     expect(svg().getAttribute("aria-hidden")).toBe("true");
   });
+
+  it("uses caller-supplied status text", () => {
+    render(<Spinner statusText="Saving changes" />);
+    expect(svg().getAttribute("role")).toBe("status");
+    expect(svg().getAttribute("aria-label")).toBe("Saving changes");
+  });
 });

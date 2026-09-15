@@ -128,6 +128,13 @@ class RuntimeConfig:
     knowledge_flow_url: str
     service_name: str | None = None
     control_plane_url: str | None = None
+    # The pod-wide async HTTP client for control-plane calls, built once at
+    # startup (`PodApplicationContext.initialize_control_plane_client`). Carried
+    # here so per-turn adapters deep in the execution path reach the shared
+    # connection pool instead of opening a client each — the same reason
+    # `platform_sql` below is a pod-lifetime object rather than a per-turn one.
+    # Typed Any to avoid importing httpx in this module.
+    control_plane_http_client: Any | None = None
     # Pod-side ReBAC engine (RUNTIME-07 rev. 2). The pod is the execution
     # authority: every execute/stream/evaluate/resume request is authorized here
     # against OpenFGA on the caller's team. Built from `security.rebac` at startup

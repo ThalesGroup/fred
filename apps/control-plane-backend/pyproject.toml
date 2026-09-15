@@ -15,7 +15,7 @@ dependencies = [
   "python-dotenv>=1.0.1,<2.0.0",
   "pydantic>=2.10.0,<3.0.0",
   "temporalio>=1.11.1,<2.0.0",
-  "fred-core>=3.9.0",
+  "fred-core>=3.10.0",
   "fred-sdk>=3.5.0",
   "alembic>=1.18.4",
   # SQLAlchemy async engine requires greenlet at runtime.
@@ -46,6 +46,7 @@ asyncio_default_fixture_loop_scope = "function"
 cache_dir = "/tmp/.pytest"
 markers = [
   "integration: mark integration tests",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
 ]
 
 [tool.uv.sources]

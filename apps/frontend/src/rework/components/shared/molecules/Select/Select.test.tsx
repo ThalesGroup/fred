@@ -217,3 +217,61 @@ describe("Select keyboard navigation — disabled options", () => {
     expect(activeDescendantLabel(options)).toBe("C");
   });
 });
+
+// A Dialog listens for Enter and Escape on `window` to confirm and cancel. A
+// select inside one used to let both through: Enter opened the options AND
+// saved the dialog (with the pre-selection value still in the handler's
+// closure), Escape closed the menu AND threw away the user's edits.
+describe("Select does not leak the keys it handles to its host", () => {
+  const OPTS: OptionModel<string>[] = [
+    { value: "a", key: "a", label: "A" },
+    { value: "b", key: "b", label: "B" },
+  ];
+
+  function countingHost() {
+    const seen: string[] = [];
+    const handler = (e: KeyboardEvent) => seen.push(e.key);
+    window.addEventListener("keydown", handler);
+    return { seen, stop: () => window.removeEventListener("keydown", handler) };
+  }
+
+  it("keeps Enter from reaching the host, open or closed", () => {
+    const onChange = vi.fn();
+    render(<Select options={OPTS} value="a" onChange={onChange} size="medium" />);
+    const host = countingHost();
+
+    pressKey("Enter"); // opens the menu
+    pressKey("ArrowDown");
+    pressKey("Enter"); // picks the active option
+
+    host.stop();
+    expect(host.seen).toEqual([]);
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("keeps Escape from reaching the host while the menu is open", () => {
+    render(<Select options={OPTS} value="a" onChange={() => {}} size="medium" />);
+    pressKey("ArrowDown"); // open
+    const host = countingHost();
+
+    act(() => {
+      trigger().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+
+    host.stop();
+    expect(host.seen).toEqual([]);
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("still lets Escape through once the menu is closed, so the host can act on it", () => {
+    render(<Select options={OPTS} value="a" onChange={() => {}} size="medium" />);
+    const host = countingHost();
+
+    act(() => {
+      trigger().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+
+    host.stop();
+    expect(host.seen).toEqual(["Escape"]);
+  });
+});

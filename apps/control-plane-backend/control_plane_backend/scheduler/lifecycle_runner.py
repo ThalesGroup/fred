@@ -9,6 +9,11 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
+    ListWikiProposalCandidatesInput,
+    RejectWikiProposalInput,
+    WikiProposalActionResult,
+    WikiProposalCandidateBatch,
+    WikiProposalLifecycleResult,
 )
 
 
@@ -23,6 +28,14 @@ ListConversationCandidatesExecutor = Callable[
 DeleteConversationExecutor = Callable[
     [DeleteConversationInput],
     Awaitable[ConversationActionResult],
+]
+ListWikiProposalCandidatesExecutor = Callable[
+    [ListWikiProposalCandidatesInput],
+    Awaitable[WikiProposalCandidateBatch],
+]
+RejectWikiProposalExecutor = Callable[
+    [RejectWikiProposalInput],
+    Awaitable[WikiProposalActionResult],
 ]
 
 
@@ -83,5 +96,65 @@ async def run_lifecycle_manager_once(
     return LifecycleManagerResult(
         scanned=scanned,
         deleted=deleted,
+        dry_run_actions=dry_run_actions,
+    )
+
+
+async def run_wiki_proposal_lifecycle_once(
+    *,
+    input_data: LifecycleManagerInput,
+    list_candidates: ListWikiProposalCandidatesExecutor,
+    reject_proposal: RejectWikiProposalExecutor,
+    logger: _Logger,
+    log_prefix: str,
+) -> WikiProposalLifecycleResult:
+    """The wiki-proposal counterpart of `run_lifecycle_manager_once` (WIKI-05)
+    — same shape, same reasons: Temporal and memory execution share one
+    decision flow, so offline tests validate the same behavior as a real
+    workflow run.
+    """
+    scanned = 0
+    rejected = 0
+    dry_run_actions = 0
+
+    batch = await list_candidates(
+        ListWikiProposalCandidatesInput(limit=input_data.batch_size)
+    )
+    if not batch.candidates:
+        logger.info("%s[WIKI] no due candidates", log_prefix)
+        return WikiProposalLifecycleResult()
+
+    logger.info(
+        "%s[WIKI] processing due candidates size=%s",
+        log_prefix,
+        len(batch.candidates),
+    )
+
+    for candidate in batch.candidates:
+        scanned += 1
+        if input_data.dry_run:
+            dry_run_actions += 1
+            logger.info(
+                "%s[WIKI][DRY_RUN] revision_id=%s",
+                log_prefix,
+                candidate.revision_id,
+            )
+            continue
+
+        result = await reject_proposal(RejectWikiProposalInput(candidate=candidate))
+        if result.changed:
+            rejected += 1
+
+    logger.info(
+        "%s[WIKI] completed scanned=%s rejected=%s dry_run_actions=%s",
+        log_prefix,
+        scanned,
+        rejected,
+        dry_run_actions,
+    )
+
+    return WikiProposalLifecycleResult(
+        scanned=scanned,
+        rejected=rejected,
         dry_run_actions=dry_run_actions,
     )

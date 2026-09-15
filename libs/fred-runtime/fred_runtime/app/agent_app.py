@@ -98,6 +98,7 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
+    DeepAgentDefinition,
     ExecutionCategory,
     GraphAgentDefinition,
     MCPServerConfiguration,
@@ -140,6 +141,7 @@ from fred_runtime.capabilities.errors import (
     UnknownCapabilityError,
 )
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.deep.deep_runtime import DeepAgentRuntime
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import (
@@ -165,6 +167,7 @@ from ..integrations.v2_runtime.adapters import (
     FredMcpToolProvider,
     FredWorkspaceFs,
     KPIWriterMetricsAdapter,
+    TeamWikiAdapter,
     _refresh_runtime_context_access_token,
     build_default_tracer,
 )
@@ -869,6 +872,14 @@ def _build_runtime_services(
         # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
         # row cap and timeout clamp all live server-side in the adapter.
         platform_sql=runtime_config.platform_sql,
+        # The calling team's wiki (WIKI-03). Per-turn like the document ports —
+        # it binds this turn's team and token privately — over the pod-lifetime
+        # control-plane client.
+        team_wiki=TeamWikiAdapter(
+            binding=binding,
+            control_plane_url=runtime_config.control_plane_url,
+            http_client=runtime_config.control_plane_http_client,
+        ),
     )
 
 
@@ -1044,8 +1055,8 @@ class _ModelCatalogEntry(BaseModel):
     name: str
     description: str | None = None
     profile_ids: list[str] = Field(default_factory=list)
-    """Every `models_catalog.yaml` profile_id sharing this entry's
-    (provider, name) — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
+    """Every `models_catalog.yaml` profile_id sharing this entry's model
+    identity — TEAM-ROUTING-POLICY-RFC.md §7.1's id-space
     translation: a routing policy picks by profile_id (finer-grained than
     this capability id). The complete list describes the model inventory;
     chat policy uses the typed subset below. Declaration order in the source
@@ -1146,8 +1157,9 @@ class _ModelCatalogResponse(BaseModel):
 
 
 def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
-    """One `_ModelCatalogEntry` per distinct (provider, name) pair in a
-    loaded `ModelCatalog` (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+    """One `_ModelCatalogEntry` per distinct model identity
+    (`ModelProfile.capability_id`) in a loaded `ModelCatalog` (OBSERV-02 v3,
+    `AGENT-CAPABILITY-RFC.md` §8.7).
 
     Pulled out of `get_models_catalog` as a pure function so it is directly
     unit-testable without a running app (`agent_app.py` has no existing
@@ -1157,11 +1169,9 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
     `..model_routing` import (see the route's own lazy import for why);
     callers pass a real `ModelCatalog`.
     """
-    from fred_sdk.contracts.capability.manifest import model_capability_id
-
     from ..model_routing import ModelCapability
 
-    seen: dict[tuple[str, str], _ModelCatalogEntry] = {}
+    seen: dict[str, _ModelCatalogEntry] = {}
     for profile in catalog.profiles:
         provider = profile.model.provider
         name = profile.model.name
@@ -1172,11 +1182,14 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
         assert provider and name, (
             f"ModelProfile {profile.profile_id!r} passed validation without provider/name"
         )
-        key = (provider, name)
+        # Grouped by the entry id itself, not the wire name (which a gateway's
+        # models share): keying on anything else could emit two entries whose
+        # ids collide once normalized.
+        key = profile.capability_id
         existing = seen.get(key)
         if existing is None:
             existing = _ModelCatalogEntry(
-                id=model_capability_id(provider, name),
+                id=key,
                 provider=provider,
                 name=name,
                 description=profile.description,
@@ -1200,8 +1213,8 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
 
 def _project_model_catalog_response(catalog: Any) -> _ModelCatalogResponse:
     """Project a loaded `ModelCatalog` into the full `/agents/models-catalog`
-    payload: the per-(provider, name) inventory plus the two pod-owned
-    precedence levels control-plane needs (#2387).
+    payload: the per-model-identity inventory plus the two pod-owned
+    precedence levels control-plane needs.
 
     Pure, for the same reason `_project_model_catalog_entries` is — this is the
     logic worth unit-testing, and `agent_app.py` has no FastAPI TestClient
@@ -3536,7 +3549,7 @@ async def _iterate_runtime_event_payloads(
         invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
-    runtime: ReActRuntime | GraphRuntime | None = None
+    runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     try:
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
@@ -3597,7 +3610,15 @@ async def _iterate_runtime_event_payloads(
                     )
                 yield payload
         else:
-            runtime = ReActRuntime(
+            # DeepAgentDefinition is-a ReActAgentDefinition (same typed
+            # input/output, same event contract), so it shares this branch's
+            # ReActInput plumbing below — only the runtime class differs.
+            runtime_cls = (
+                DeepAgentRuntime
+                if isinstance(definition, DeepAgentDefinition)
+                else ReActRuntime
+            )
+            runtime = runtime_cls(
                 definition=definition,
                 services=services,
                 capability_block=capability_block,
@@ -3637,10 +3658,9 @@ async def _iterate_runtime_event_payloads(
             if request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
-                    # Unnamespaced: this branch is ReAct-only, and LangGraph
-                    # stores every root-graph checkpoint at ns "" whatever the
-                    # runtime configures — the claim must key on the same
-                    # occurrence the early gate validated.
+                    # Unnamespaced: this branch is ReAct/Deep only (never Graph),
+                    # and LangGraph stores every root-graph checkpoint at ns ""
+                    # regardless of runtime configuration.
                     checkpoint_ns="",
                     interrupt_id=request.interrupt_id,
                 )
@@ -3965,15 +3985,15 @@ def _build_agent_router(
     @router.get("/models-catalog")
     async def get_models_catalog() -> _ModelCatalogResponse:
         """
-        Return this pod's routable models, one entry per distinct
-        (provider, name) pair (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
+        Return this pod's routable models, one entry per distinct model
+        identity (OBSERV-02 v3, `AGENT-CAPABILITY-RFC.md` §8.7).
 
         Why this endpoint exists:
         - control-plane's capability catalog aggregation
           (`aggregate_capability_catalog`) has no other way to learn what
           models this pod can route to — `models_catalog.yaml` is loaded
           only here, for routing, with no prior control-plane consumer.
-        - one entry per (provider, name), not per catalog profile: model
+        - one entry per model identity, not per catalog profile: model
           enablement is independent from the typed usage (`chat` today,
           potentially `embedding` once a production consumer exists).
 
@@ -5073,6 +5093,7 @@ def create_agent_app(
                     ),
                     inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
+                    control_plane_http_client=container.get_control_plane_http_client(),
                     rebac_engine=rebac_engine,
                     security_profile=(
                         security.profile if security is not None else None

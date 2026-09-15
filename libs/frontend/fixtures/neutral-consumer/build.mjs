@@ -3,8 +3,8 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const outputRoot = path.resolve("dist");
-const tokensUrl = import.meta.resolve("@fred/design-tokens/tokens.css");
-const fontsUrl = import.meta.resolve("@fred/design-tokens/fonts.css");
+const tokensUrl = import.meta.resolve("@fred-oss/design-tokens/tokens.css");
+const fontsUrl = import.meta.resolve("@fred-oss/design-tokens/fonts.css");
 const tokensPath = fileURLToPath(tokensUrl);
 const fontsPath = fileURLToPath(fontsUrl);
 const tokensCss = await readFile(tokensPath, "utf8");
@@ -29,6 +29,9 @@ for (const fontUrl of fontUrls) {
 }
 
 const probeStyles = `
+  html, body { overflow: visible; }
+  body { user-select: text; }
+  #outside-probe { box-sizing: content-box; }
   .probe {
     color: var(--on-surface);
     background-color: var(--surface-main);
@@ -48,7 +51,10 @@ await writeFile(
     <style>${probeStyles}</style>
     <title>Neutral token consumer</title>
   </head>
-  <body><div class="probe" id="probe">Token probe</div></body>
+  <body>
+    <div id="outside-probe">Consumer-owned shell probe</div>
+    <div class="probe" id="probe">Token probe</div>
+  </body>
 </html>
 `,
 );

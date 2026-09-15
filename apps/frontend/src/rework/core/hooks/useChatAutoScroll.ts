@@ -16,8 +16,14 @@
 // the answer starts. Full autoscroll moves the line being read; none at all
 // leaves the whole turn below the fold.
 //
-// Sole owner of the conversation container's scroll position — a second
-// mechanism on the same element cannot be reasoned about.
+// Sole owner of the conversation container's scroll position WHILE A TURN IS
+// LIVE — a second mechanism writing it on the same frames cannot be reasoned
+// about. The refinement matters: this hook writes only in the work/answer
+// phases (`shouldFollowBottom` returns false when idle), so `useConversationJump`
+// may drive the same element once a turn has ended. That is safe only for as
+// long as its caller stays inert while `isStreaming || isAwaitingHuman` — the
+// outline rail freezes itself for exactly that reason. Anything else wanting to
+// scroll this container during a turn belongs in here, not beside it.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 

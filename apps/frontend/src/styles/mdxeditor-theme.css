@@ -1,0 +1,19 @@
+/* MDXEditor's dark theme, completed.
+ *
+ * `@mdxeditor/editor` flips its Radix colour scales under `.dark-theme`, but
+ * `--basePageBg` is a hardcoded `white` that no theme selector redefines. It
+ * paints the toolbar, the block-type dropdown, the popovers and the popover
+ * arrow — so in dark mode those stayed white while everything around them went
+ * dark, which is what "the style picker is still light" turns out to be.
+ *
+ * Fixed here rather than in one page's module because every MDXEditor surface
+ * has it: the wiki editor and the collaborative document alike. Scoped to
+ * MDXEditor's own classes, so it reaches nothing else. The popup container is
+ * appended to <body> and carries both classes, which is why it is named
+ * explicitly — it is not inside the editor's own subtree.
+ */
+
+.mdxeditor.dark-theme,
+.mdxeditor-popup-container.dark-theme {
+  --basePageBg: var(--surface-container-high);
+}

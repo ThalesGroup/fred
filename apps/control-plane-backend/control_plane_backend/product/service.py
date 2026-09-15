@@ -25,8 +25,8 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
 from fred_core.security.rebac.rebac_engine import RebacReference, Relation, RelationType
 from fred_core.tasks import ErasureReason
@@ -40,6 +40,7 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
 )
 from fred_sdk.contracts.models import TeamScopePolicy
+from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -127,7 +128,7 @@ from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
 from control_plane_backend.teams.service import list_teams as list_teams_from_service
-from control_plane_backend.users.schemas import UserSummary
+from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +257,7 @@ class _RuntimeTemplatePayload:
             entry.id
             for entry in parsed_capabilities
             if entry.kind == "app"
-            or entry.id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+            or entry.id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
         }
         if quarantined_capability_ids:
             logger.warning(
@@ -293,7 +294,7 @@ class _RuntimeTemplatePayload:
                 if isinstance(cid, str)
                 and cid
                 and cid not in quarantined_capability_ids
-                and not cid.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX)
+                and not cid.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
             ],
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.
@@ -301,18 +302,28 @@ class _RuntimeTemplatePayload:
         )
 
 
+# One OpenFGA check per platform role. `platform_admin` goes through
+# `can_manage_platform` (its own named capability); the delegated roles have no
+# single capability standing for them, so they check the raw relation.
+_PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
+    PlatformRoleRelation.PLATFORM_ADMIN: OrganizationPermission.CAN_MANAGE_PLATFORM,
+    PlatformRoleRelation.PLATFORM_OBSERVER: OrganizationPermission.IS_PLATFORM_OBSERVER,
+    PlatformRoleRelation.TEAM_MANAGER: OrganizationPermission.IS_TEAM_MANAGER,
+    PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
+    PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+}
+
+
 async def _build_permission_summary(
     user: KeycloakUser, rebac: RebacEngine
 ) -> PermissionSummary:
     """Build the frontend permission projection.
 
-    `is_platform_admin`/`is_platform_observer` are derived from OpenFGA via the
-    same `RebacEngine.has_user_permission` used to gate the platform-level
-    endpoints themselves, so the frontend never re-derives admin access from
-    Keycloak roles independently (AUTHZ-05 review item 4). `is_platform_observer`
-    checks the raw `platform_observer` relation directly (`IS_PLATFORM_OBSERVER`)
-    rather than a capability, since the "any connected user" capability tier it
-    used to piggyback on (`can_read_kpi`) was removed entirely in review item 8a.
+    Roles are derived from OpenFGA via the same `has_user_permission` used to
+    gate the platform-level endpoints themselves, so the frontend never
+    re-derives admin access from Keycloak roles independently (AUTHZ-05 review
+    item 4). Checks run concurrently: this is on the bootstrap path, and one
+    round trip per role would put five in series.
 
     Team-scoped gating (agents, resources, MCP servers, feedback, sessions...)
     does not belong here at all — it goes through
@@ -322,17 +333,18 @@ async def _build_permission_summary(
     computed from it; both were removed in review item 11 once Keycloak app
     roles disappeared platform-wide and left them permanently unpopulated.
     """
-    is_platform_admin, is_platform_observer = await asyncio.gather(
-        rebac.has_user_permission(
-            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-        ),
-        rebac.has_user_permission(
-            user, OrganizationPermission.IS_PLATFORM_OBSERVER, ORGANIZATION_ID
-        ),
+    held = await asyncio.gather(
+        *(
+            rebac.has_user_permission(user, permission, ORGANIZATION_ID)
+            for permission in _PLATFORM_ROLE_CHECKS.values()
+        )
     )
     return PermissionSummary(
-        is_platform_admin=is_platform_admin,
-        is_platform_observer=is_platform_observer,
+        platform_roles=[
+            role
+            for role, is_held in zip(_PLATFORM_ROLE_CHECKS, held, strict=True)
+            if is_held
+        ],
     )
 
 
@@ -1223,9 +1235,13 @@ def _validate_tuning_field_values(
                 _fail(key, f"expected a string for type {field.type!r}")
             if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
                 _fail(key, f"value does not match pattern {field.pattern!r}")
-            # `prompt` fields carry no token validation (#2277): the runtime
-            # renderer substitutes only PROMPT_SAFE_TOKENS and leaves every other
-            # `{…}` verbatim, so an unknown token is harmless rather than invalid.
+            # No token validation: the runtime renderer leaves any unknown `{…}`
+            # verbatim. A reserved system-prompt tag is the one thing refused, on
+            # every string field: the runtime substitutes each one into the
+            # agent template, where it could close the <agent_instructions> block.
+            reserved = find_reserved_prompt_tag(value)
+            if reserved is not None:
+                _fail(key, f"reserved system-prompt tag <{reserved}> is not allowed")
         elif field.type == "select":
             if not isinstance(value, str):
                 _fail(key, "expected a string for type 'select'")

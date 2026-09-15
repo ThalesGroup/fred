@@ -1,0 +1,32 @@
+html,
+body {
+  margin: 0;
+  overflow: visible;
+  user-select: text;
+}
+
+#outside-probe {
+  box-sizing: content-box;
+}
+
+.consumer-shell {
+  display: grid;
+  gap: var(--spacing-m);
+  background: var(--surface-main);
+  padding: var(--spacing-l);
+  color: var(--on-surface);
+}
+
+.consumer-shell section {
+  display: grid;
+  gap: var(--spacing-m);
+  max-width: 30rem;
+}
+
+.consumer-button {
+  justify-self: start;
+}
+
+.consumer-icon-button {
+  justify-self: start;
+}

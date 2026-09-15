@@ -28,7 +28,7 @@ How to use:
   owns ``out_dir`` lifecycle (typically a ``tempfile.TemporaryDirectory``).
 
 This mirrors the LibreOffice pattern of ``fred_core.conversion``
-(``convert_pptx_file_to_pdf``).
+(``convert_office_file_to_pdf``).
 """
 
 from __future__ import annotations

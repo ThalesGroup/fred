@@ -66,24 +66,69 @@ export function isPdfFile(fileName: string | null | undefined): boolean {
   return !!fileName && fileName.toLowerCase().endsWith(".pdf");
 }
 
+/** Word and PowerPoint extensions the backend can render as PDF for the viewer. */
+const OFFICE_DOCUMENT_SUFFIXES = [".docx", ".doc", ".odt", ".pptx", ".ppt"];
+
+/**
+ * Whether a file name denotes an office document the backend renders as PDF.
+ *
+ * Why this function exists:
+ * - browsers cannot display a Word or PowerPoint document, so its "view the file itself" mode goes
+ *   through `GET /raw_content/pdf/{uid}`, which converts it once with LibreOffice.
+ *   The extension is the one signal available at both viewer call sites
+ * - the list is deliberately the same one the backend accepts
+ *   (`PDF_RENDERABLE_SUFFIXES` in `content_service.py`): a format listed here but not
+ *   there would offer a toggle that 415s
+ *
+ * How to use it:
+ * - pass the document's real file name (with extension), not its display title
+ *
+ * Example:
+ * - `isOfficeDocumentFile("rapport.docx") // true`
+ */
+export function isOfficeDocumentFile(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  const lower = fileName.toLowerCase();
+  return OFFICE_DOCUMENT_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
+
 /**
  * Whether a file name has a native (non-markdown) renderer in the document viewer.
  *
  * Why this function exists:
- * - the preview offers a markdown/original toggle, but that toggle is only meaningful
- *   when the two modes actually differ. A `.docx`/`.csv` has no native renderer — it is
+ * - the preview offers a file/markdown toggle, but that toggle is only meaningful when
+ *   the two modes actually differ. A `.csv`/`.xlsx` has no native renderer — it is
  *   ALREADY shown as its markdown extraction — so a toggle there would be inert
- * - keeping the predicate here (rather than re-testing `.pdf` at each host) means a
- *   future native renderer (docx, images) lights the toggle up everywhere at once
+ * - keeping the predicate here (rather than re-testing extensions at each host) means a
+ *   future native renderer lights the toggle up everywhere at once
  *
  * How to use it:
  * - pass the document's real file name (with extension); gate the toggle affordance on it
  *
  * Example:
- * - `hasNativePreview("facture.pdf") // true — offer the "view as markdown" button`
+ * - `hasNativePreview("facture.pdf") // true — offer the file/markdown toggle`
  */
 export function hasNativePreview(fileName: string | null | undefined): boolean {
-  return isPdfFile(fileName);
+  return isPdfFile(fileName) || isOfficeDocumentFile(fileName);
+}
+
+/**
+ * The URL serving a document as PDF bytes, for the native `PdfStreamingDocumentViewer`.
+ *
+ * Why this function exists:
+ * - a PDF is streamed from storage untouched, while a Word or PowerPoint document has to go
+ *   through the rendering endpoint. Resolving that here keeps the format knowledge in
+ *   one place instead of leaking it into the PDF viewer component
+ *
+ * How to use it:
+ * - call only for a file `hasNativePreview` accepts; the result is the viewer's `sourceUrl`
+ *
+ * Example:
+ * - `documentPdfSourceUrl("abc", "rapport.docx") // "/knowledge-flow/v1/raw_content/pdf/abc"`
+ */
+export function documentPdfSourceUrl(documentUid: string, fileName: string | null | undefined): string {
+  const route = isPdfFile(fileName) ? "stream" : "pdf";
+  return `/knowledge-flow/v1/raw_content/${route}/${documentUid}`;
 }
 
 /**

@@ -64,6 +64,8 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
+from control_plane_backend.team_wiki.store import TeamWikiStore
+from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +89,12 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
+        self._platform_default_team_store: PlatformDefaultTeamStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
+        self._team_wiki_store: TeamWikiStore | None = None
         self._prompt_category_store: PromptCategoryStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
@@ -360,6 +364,13 @@ class ApplicationContext:
             )
         return self._platform_prompt_store
 
+    def get_platform_default_team_store(self) -> PlatformDefaultTeamStore:
+        if self._platform_default_team_store is None:
+            self._platform_default_team_store = PlatformDefaultTeamStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_default_team_store
+
     def get_model_reasoning_store(self) -> ModelReasoningStore:
         if self._model_reasoning_store is None:
             self._model_reasoning_store = ModelReasoningStore(
@@ -385,6 +396,11 @@ class ApplicationContext:
         if self._prompt_store is None:
             self._prompt_store = PromptStore(engine=self.get_pg_async_engine())
         return self._prompt_store
+
+    def get_team_wiki_store(self) -> TeamWikiStore:
+        if self._team_wiki_store is None:
+            self._team_wiki_store = TeamWikiStore(engine=self.get_pg_async_engine())
+        return self._team_wiki_store
 
     def get_prompt_category_store(self) -> PromptCategoryStore:
         if self._prompt_category_store is None:

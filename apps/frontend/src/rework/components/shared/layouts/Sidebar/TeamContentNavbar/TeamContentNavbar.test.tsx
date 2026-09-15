@@ -23,6 +23,9 @@ const h = vi.hoisted(() => ({
     data?: { items: Array<Record<string, unknown>> };
     isError: boolean;
   },
+  wikiEnabled: undefined as boolean | undefined,
+  defaultTeamAvatarFile: "",
+  teamAvatarImageUrl: undefined as string | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -36,13 +39,23 @@ vi.mock("react-router-dom", () => ({
   ),
 }));
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
-  useFrontendProperties: () => ({ agentIconName: "smart_toy", agentsNicknamePlural: "agents" }),
+  useFrontendProperties: () => ({
+    agentIconName: "smart_toy",
+    agentsNicknamePlural: "agents",
+    defaultTeamAvatarFile: h.defaultTeamAvatarFile,
+  }),
 }));
 vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
     teamId: "team-1",
     isPersonalTeam: h.isPersonalTeam,
-    selectedTeam: { id: "team-1", name: "Team One", is_member: true, my_relations: ["team_member"] },
+    selectedTeam: {
+      id: "team-1",
+      name: "Team One",
+      is_member: true,
+      my_relations: ["team_member"],
+      avatar_image_url: h.teamAvatarImageUrl,
+    },
     canOpenTeamSettings: false,
   }),
 }));
@@ -55,6 +68,11 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
+}));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useWikiAvailabilityQuery: () => ({
+    data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
+  }),
 }));
 vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div data-chat-list /> }));
 
@@ -115,5 +133,70 @@ describe("TeamContentNavbar applications entry", () => {
   it("hides Apps behind the default-off deployment switch despite a compatible cached catalog", () => {
     h.result.data = { items: [application] };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  });
+});
+
+// WIKI-03: the wiki exists for a team only where an admin enabled the
+// `team_wiki` capability. The entry has to follow that, or a member clicks
+// into a page the control-plane refuses.
+describe("TeamContentNavbar — the wiki entry", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.applicationsEnabled = false;
+    h.result = { data: undefined, isError: false };
+    h.wikiEnabled = undefined;
+  });
+
+  it("offers the wiki when the capability is enabled for the team", () => {
+    h.wikiEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/wiki");
+  });
+
+  it("hides it when the capability is off", () => {
+    h.wikiEnabled = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
+  });
+
+  it("hides it while the answer is still unknown", () => {
+    // Showing it optimistically means an entry that appears and then vanishes
+    // on a slow answer — worse than one that arrives a moment late.
+    h.wikiEnabled = undefined;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/wiki");
+  });
+});
+
+describe("TeamContentNavbar — the team avatar", () => {
+  beforeEach(() => {
+    h.isPersonalTeam = false;
+    h.defaultTeamAvatarFile = "";
+    h.teamAvatarImageUrl = undefined;
+  });
+
+  it("falls back to the deployment default when the team has no image of its own", () => {
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('src="/images/acme-team-avatar.svg"');
+  });
+
+  it("keeps the team's own image ahead of the deployment default", () => {
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    h.teamAvatarImageUrl = "https://store.example/team-1.png";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('src="https://store.example/team-1.png"');
+    expect(html).not.toContain("acme-team-avatar.svg");
+  });
+
+  it("renders initials when no default is configured", () => {
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).not.toContain("/images/");
+    expect(html).toContain("TO");
+  });
+
+  // The personal space says "this is you" with the user's own avatar; a team
+  // default there would erase that signal.
+  it("leaves the personal space on the user avatar", () => {
+    h.isPersonalTeam = true;
+    h.defaultTeamAvatarFile = "acme-team-avatar.svg";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("acme-team-avatar.svg");
   });
 });

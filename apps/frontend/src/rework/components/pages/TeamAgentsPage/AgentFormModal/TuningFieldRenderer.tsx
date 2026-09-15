@@ -110,13 +110,18 @@ export function TuningFieldRenderer({
   const label = `${fieldTitle}${field.required ? " *" : ""}`;
 
   if (field.enum && field.enum.length > 0) {
+    // Enum values are stored verbatim (`read`, `read_write`) and are not labels.
+    // A field whose title is an i18n key carries its option labels in the same
+    // namespace; one whose title is a literal falls back to the raw value.
+    const optionLabel = (opt: string) =>
+      t(`${field.title.replace(/\.title$/, "")}.options.${opt}`, { defaultValue: opt });
     return (
       <div className={styles.field}>
         <Select
           size="medium"
           label={label}
           value={String(fieldValue)}
-          options={field.enum.map((opt) => ({ value: opt, label: opt, key: opt }))}
+          options={field.enum.map((opt) => ({ value: opt, label: optionLabel(opt), key: opt }))}
           onChange={(v) => onChange(field.key, v)}
           disabled={disabled}
           error={error}

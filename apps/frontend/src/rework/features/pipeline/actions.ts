@@ -27,9 +27,51 @@ import {
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
 import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { RuntimeExecuteRequest } from "../../../slices/runtime/runtimeOpenApi";
-import type { AgentTurnResult } from "./types";
+import { MAX_HOLD_SECONDS, type AgentTurnResult } from "./types";
+import type { CapturedCredential } from "./sessionCredential";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
+
+/** The execute-stream POST was refused outright: the turn never started, so
+ * nothing that happened later can be read into it. */
+export class AgentTurnRejectedError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super(`agent execution: HTTP ${status}`);
+    this.status = status;
+  }
+}
+
+// The harness agent's three fixed verdicts for a call made as the person. Each
+// reaches the caller bare on an error event, or wrapped by a final event.
+const CREDENTIAL_EXPIRED = "credential expired during protected call";
+const PROTECTED_CALL_REFUSED = "protected call refused";
+const PROTECTED_CALL_FAILED = "protected call failed";
+
+function isVerdict(message: string, verdict: string): boolean {
+  return message === verdict || message === `An error occurred: ${verdict}`;
+}
+
+export function isCredentialExpiryFailure(message: string): boolean {
+  return isVerdict(message, CREDENTIAL_EXPIRED);
+}
+
+export function isProtectedCallRefusal(message: string): boolean {
+  return isVerdict(message, PROTECTED_CALL_REFUSED);
+}
+
+export function isProtectedCallUnreachable(message: string): boolean {
+  return isVerdict(message, PROTECTED_CALL_FAILED);
+}
+
+export class AgentTurnExecutionError extends Error {
+  constructor(
+    readonly statusSeenAt: Record<string, number>,
+    readonly credentialExpired = false,
+  ) {
+    super("agent execution failed");
+  }
+}
 
 async function bearer(): Promise<string> {
   await KeyCloakService.ensureFreshToken(30);
@@ -70,8 +112,16 @@ export async function streamAgentTurn(
     question: string;
     libraryIds: string[];
     sessionId?: string | null;
+    /** Stream on this captured credential rather than the caller's session. */
+    bearer?: CapturedCredential;
+    signal?: AbortSignal;
+    onProgress?: (detail: string) => void;
+    /** Called as each named status arrives, so a long turn can report what it
+     *  has already proven instead of only at the end. */
+    onStatus?: (status: string) => void;
   },
 ): Promise<AgentTurnResult> {
+  args.signal?.throwIfAborted();
   const runtimeContext = buildComposerRuntimeContext({
     selectedLibraryIds: args.libraryIds,
     selectedDocumentUids: [],
@@ -98,36 +148,58 @@ export async function streamAgentTurn(
   const response = await fetch(prep.execute_stream_url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${await bearer()}`,
+      Authorization: `Bearer ${args.bearer ?? (await bearer())}`,
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
     body: JSON.stringify(body),
+    signal: args.signal,
   });
-  if (!response.ok || !response.body) throw new Error(`agent execution: HTTP ${response.status}`);
+  if (!response.ok) throw new AgentTurnRejectedError(response.status);
+  if (!response.body) throw new AgentTurnExecutionError({});
 
   let answer = "";
   let sources: unknown[] = [];
   let sessionId = args.sessionId ?? null;
   let sawFinal = false;
   let runtimeError: string | null = null;
-  for await (const event of parseSseFrames(response.body)) {
-    if (event.kind === "final") {
-      sawFinal = true;
-      answer = typeof event.content === "string" ? event.content : "";
-      sources = Array.isArray(event.sources) ? event.sources : [];
-      if (typeof event.session_id === "string") sessionId = event.session_id;
-    } else if (event.kind === "execution_error" || event.kind === "node_error" || event.kind === "error") {
-      // A runtime failure must never pass as an empty answer (e.g. the BETA
-      // "marker absent" check would otherwise go falsely green).
-      runtimeError =
-        (typeof event.error === "string" && event.error) ||
-        (typeof event.message === "string" && event.message) ||
-        (typeof event.content === "string" && event.content) ||
-        `runtime ${event.kind}`;
+  const statusSeenAt: Record<string, number> = {};
+  try {
+    for await (const event of parseSseFrames(response.body)) {
+      args.signal?.throwIfAborted();
+      if (event.kind === "status") {
+        if (typeof event.status === "string") {
+          statusSeenAt[event.status] = Date.now();
+          args.onStatus?.(event.status);
+        }
+      } else if (event.kind === "thought_delta" && typeof event.delta === "string") {
+        // Display only the bounded diagnostic progress, never arbitrary tool text.
+        const hold = /^holding (\d{1,3})\/(\d{1,3}) s before retrieval$/.exec(event.delta);
+        if (hold && Number(hold[1]) <= Number(hold[2]) && Number(hold[2]) <= MAX_HOLD_SECONDS) {
+          args.onProgress?.(event.delta);
+        }
+      } else if (event.kind === "final") {
+        sawFinal = true;
+        answer = typeof event.content === "string" ? event.content : "";
+        sources = Array.isArray(event.sources) ? event.sources : [];
+        if (typeof event.session_id === "string") sessionId = event.session_id;
+      } else if (event.kind === "execution_error" || event.kind === "node_error" || event.kind === "error") {
+        // A runtime failure must never pass as an empty answer (e.g. the BETA
+        // "marker absent" check would otherwise go falsely green).
+        runtimeError =
+          (typeof event.error === "string" && event.error) ||
+          (typeof event.error_message === "string" && event.error_message) ||
+          (typeof event.message === "string" && event.message) ||
+          (typeof event.content === "string" && event.content) ||
+          `runtime ${event.kind}`;
+      }
     }
+  } catch {
+    args.signal?.throwIfAborted();
+    throw new AgentTurnExecutionError(statusSeenAt);
   }
-  if (runtimeError) throw new Error(`agent execution failed: ${runtimeError}`);
-  if (!sawFinal) throw new Error("agent execution produced no final answer");
-  return { answer, sources, sessionId };
+  args.signal?.throwIfAborted();
+  if (runtimeError) throw new AgentTurnExecutionError(statusSeenAt, isCredentialExpiryFailure(runtimeError));
+  if (!sawFinal) throw new AgentTurnExecutionError(statusSeenAt);
+  return { answer, sources, sessionId, statusSeenAt };
 }

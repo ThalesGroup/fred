@@ -14,8 +14,8 @@
 
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
-import CapabilitiesPage from "@components/pages/admin/CapabilitiesPage/CapabilitiesPage.tsx";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
+import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
@@ -32,6 +32,7 @@ import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
+import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
@@ -45,7 +46,7 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { Protected } from "@core/guards/Protected";
+import { isProtectedAllowed, Protected, type ProtectedRequirement } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
@@ -60,18 +61,22 @@ const ManagedChatPageRoute = () => {
   return <ManagedChatPage key={agentInstanceId} />;
 };
 
-// Bare `/admin` has no page of its own — land on the first page the caller
-// can actually see: `/admin/teams` for a platform_admin, or `/admin/analytics`
-// (`can_observe_platform`, item 16 — the one `/admin` page an observer may
-// see) otherwise. `Protected requires="admin"` on a hardcoded `/admin/teams`
-// redirect would bounce every observer to `/unauthorized` before they ever
-// reach analytics.
+// Bare `/admin` has no page of its own — land on the first page the caller can
+// actually see. A hardcoded redirect would bounce every delegated role holder
+// to `/unauthorized` before they ever reach the one page they own. Ordered:
+// the admin lands on teams, exactly as before.
+const ADMIN_LANDING: [ProtectedRequirement, string][] = [
+  ["teams", "/admin/teams"],
+  ["features", "/admin/features"],
+  ["platformPrompt", "/admin/platform-prompt"],
+  ["observer", "/admin/analytics"],
+];
+
 const AdminIndexRoute = () => {
-  const { canAdmin, canObservePlatform, isLoading } = useUserCapabilities();
+  const { isLoading, ...capabilities } = useUserCapabilities();
   if (isLoading) return null;
-  if (canAdmin) return <Navigate to="/admin/teams" replace />;
-  if (canObservePlatform) return <Navigate to="/admin/analytics" replace />;
-  return <Navigate to="/unauthorized" replace />;
+  const landing = ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities));
+  return <Navigate to={landing?.[1] ?? "/unauthorized"} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
@@ -127,6 +132,16 @@ export const routes: RouteObject[] = [
         element: <TeamResourcesPage />,
       },
       {
+        path: "team/:teamId/wiki",
+        element: <TeamWikiPage />,
+      },
+      {
+        // Same page: the slug selects which article is open, so a wiki page is
+        // deep-linkable and the browser's back button walks the pages.
+        path: "team/:teamId/wiki/:slug",
+        element: <TeamWikiPage />,
+      },
+      {
         path: "team/:teamId/apps",
         element: (
           <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
@@ -178,12 +193,12 @@ export const routes: RouteObject[] = [
         element: <AdminIndexRoute />,
       },
       {
-        // Platform-wide platform prompt: the first block of every agent's system
-        // prompt. Org-admin only, matching the backend's
-        // `require_manage_any` gate on both routes.
+        // Platform-wide platform prompt: the first block of every agent's
+        // system prompt. Gated on `can_edit_platform_prompt`, the narrow
+        // relation the backend routes enforce.
         path: "admin/platform-prompt",
         element: (
-          <Protected requires="admin">
+          <Protected requires="platformPrompt">
             <PlatformPromptPage />
           </Protected>
         ),
@@ -191,7 +206,7 @@ export const routes: RouteObject[] = [
       {
         path: "admin/teams",
         element: (
-          <Protected requires="admin">
+          <Protected requires="teams">
             <AdminTeamsPage />
           </Protected>
         ),
@@ -225,13 +240,13 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        // Admin Capabilities dashboard (CAPAB-01 / #1981, RFC §8.5). Gated on the
-        // admin role — the equivalent of `capability#can_manage` (org-admin), the
-        // same relation the backend list endpoint enforces.
-        path: "admin/capabilities",
+        // Platform features dashboard — capabilities, agent templates and
+        // models. Gated on `can_manage_capabilities`, the same narrow relation
+        // the backend enforces on the enablement endpoints.
+        path: "admin/features",
         element: (
-          <Protected requires="admin">
-            <CapabilitiesPage />
+          <Protected requires="features">
+            <FeaturesPage />
           </Protected>
         ),
       },

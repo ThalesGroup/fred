@@ -33,8 +33,13 @@ teams into every team context they browse.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.models import Resource
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     CapabilityPermission,
@@ -43,23 +48,17 @@ from fred_core.security.rebac.rebac_engine import (
     RebacReference,
     Relation,
     RelationType,
+    team_subject_and_context,
 )
 
-# Reserved id prefix for `kind="app"` catalog entries. Tools, templates,
-# models and applications share one flat `capability:<id>` namespace, so an
-# unprefixed app id can collide with any of them.
-APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
-
-
-def application_capability_id(app_id: str) -> str:
-    """Capability id one registered application's team grants are written against.
-
-    Derived, never authored: team admission filters on exactly this id. The
-    input is not normalized -- an id needing repair is one no catalog
-    accepted, and failing closed beats resolving onto a neighbouring id.
-    """
-
-    return f"{APPLICATION_CAPABILITY_NAMESPACE_PREFIX}{app_id}"
+__all__ = [
+    "APPLICATION_CAPABILITY_NAMESPACE_PREFIX",
+    "CapabilityEnablementFacts",
+    "can_team_use_capability",
+    "can_team_use_from_facts",
+    "team_capability_subject_and_context",
+    "usable_capability_ids",
+]
 
 
 def team_capability_subject_and_context(
@@ -75,18 +74,67 @@ def team_capability_subject_and_context(
     every team belongs to the singleton organization by construction.
     """
 
-    team_ref = RebacReference(type=Resource.TEAM, id=team_id)
-    org_ref = RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID)
-    context = [Relation(subject=team_ref, relation=RelationType.TEAM, resource=org_ref)]
-    if is_personal_team_id(team_id):
-        context.append(
-            Relation(
-                subject=team_ref,
-                relation=RelationType.PERSONAL_TEAM,
-                resource=org_ref,
-            )
+    return team_subject_and_context(team_id)
+
+
+@dataclass(frozen=True)
+class CapabilityEnablementFacts:
+    """One capability's direct tuples, folded into the five facts `can_use`
+    needs: the teams holding an explicit grant or opt-out, plus the three
+    org-subject markers."""
+
+    enabled: frozenset[str]
+    disabled: frozenset[str]
+    default_on: bool
+    personal_on: bool
+    personal_disabled: bool
+
+    @classmethod
+    def from_relations(cls, relations: list[Relation]) -> "CapabilityEnablementFacts":
+        """Fold the direct tuple set of ONE capability object.
+
+        Anything else on the object (the `organization` anchor, a non-team
+        subject on `enabled`/`disabled`) carries no `can_use` weight and is
+        dropped.
+        """
+
+        enabled: set[str] = set()
+        disabled: set[str] = set()
+        org_markers: set[RelationType] = set()
+        for rel in relations:
+            if rel.subject.type == Resource.TEAM:
+                if rel.relation == RelationType.ENABLED:
+                    enabled.add(rel.subject.id)
+                elif rel.relation == RelationType.DISABLED:
+                    disabled.add(rel.subject.id)
+            elif (
+                rel.subject.type == Resource.ORGANIZATION
+                and rel.subject.id == ORGANIZATION_ID
+            ):
+                org_markers.add(rel.relation)
+        return cls(
+            enabled=frozenset(enabled),
+            disabled=frozenset(disabled),
+            default_on=RelationType.DEFAULT_ON in org_markers,
+            personal_on=RelationType.PERSONAL_ON in org_markers,
+            personal_disabled=RelationType.PERSONAL_DISABLED in org_markers,
         )
-    return team_ref, context
+
+
+def can_team_use_from_facts(team_id: str, facts: CapabilityEnablementFacts) -> bool:
+    """`can_use` derived locally, without asking OpenFGA.
+
+    Mirrors `schema.fga`'s `capability#can_use` line for line and MUST change
+    with it; the `organization#team` / `organization#personal_team` edges are
+    contextual, so they are always true here. Display-only - never an
+    admission decision (`docs/swift/platform/REBAC.md`).
+    """
+
+    personal = is_personal_team_id(team_id)
+    inherited = (facts.default_on or (personal and facts.personal_on)) and not (
+        personal and facts.personal_disabled
+    )
+    return (team_id in facts.enabled or inherited) and team_id not in facts.disabled
 
 
 async def usable_capability_ids(rebac: RebacEngine, team_id: str) -> set[str] | None:

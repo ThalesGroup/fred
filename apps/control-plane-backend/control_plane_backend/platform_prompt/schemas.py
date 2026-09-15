@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Generous but finite. The platform prompt is re-sent on every model call of
 # every agent on the deployment, so an unbounded field is a live foot-gun:
@@ -76,6 +77,18 @@ class SetPlatformPromptRequest(BaseModel):
             "every agent, and does NOT restore the pod-shipped default."
         ),
     )
+
+    @field_validator("text")
+    @classmethod
+    def _refuse_reserved_tags(cls, value: str) -> str:
+        # The runtime wraps this text in <platform_prompt>; a reserved tag
+        # inside it could close that block and open another.
+        reserved = find_reserved_prompt_tag(value)
+        if reserved is not None:
+            raise ValueError(
+                f"reserved system-prompt tag <{reserved}> is not allowed in the platform prompt"
+            )
+        return value
 
 
 class PlatformInstructions(BaseModel):

@@ -30,8 +30,8 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from fred_core.security.rebac.capability_authz import (
-    application_capability_id,
+from fred_core.security.rebac.application_authz import (
+    application_catalog_id,
 )
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import (
@@ -145,8 +145,9 @@ class ApplicationSourceConfig(BaseModel):
         pattern=APPLICATION_ID_PATTERN,
         description=(
             "Application id. Interpolated into /apps/<app_id>/ and "
-            "/app-services/<app_id>/, and into the app__<app_id> capability "
-            "the team authorization grant is written against."
+            "/app-services/<app_id>/, and into the app__<app_id> identifier "
+            "used by the shared administration catalog. Authorization uses "
+            "the raw id as app:<app_id>."
         ),
     )
     ui_prefix: str = Field(
@@ -194,10 +195,10 @@ class ApplicationSourceConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_registration(self) -> "ApplicationSourceConfig":
-        if _CAPABILITY_ID_RE.fullmatch(self.capability_id) is None:
+        if _CAPABILITY_ID_RE.fullmatch(self.catalog_id) is None:
             raise ValueError(
-                f"Application {self.app_id!r} derives capability id "
-                f"{self.capability_id!r}, which does not match "
+                f"Application {self.app_id!r} derives catalog id "
+                f"{self.catalog_id!r}, which does not match "
                 f"{CAPABILITY_ID_PATTERN}."
             )
         own_origin_route = f"{_UI_ROUTE_ROOT}/{self.app_id}"
@@ -212,10 +213,16 @@ class ApplicationSourceConfig(BaseModel):
         return self
 
     @property
-    def capability_id(self) -> str:
-        """Derived, never authored: team admission filters on exactly this id."""
+    def catalog_id(self) -> str:
+        """Derived shared-catalog id; authorization uses ``app:<app_id>``."""
 
-        return application_capability_id(self.app_id)
+        return application_catalog_id(self.app_id)
+
+    @property
+    def capability_id(self) -> str:
+        """Compatibility alias for the shared catalog/admin identifier."""
+
+        return self.catalog_id
 
     def capability_entry(self) -> CapabilityCatalogEntry:
         """Project the application into the shared admin entitlement catalog.
@@ -225,7 +232,7 @@ class ApplicationSourceConfig(BaseModel):
         """
 
         return CapabilityCatalogEntry(
-            id=self.capability_id,
+            id=self.catalog_id,
             version=self.version,
             name=self.display_name["en"],
             description=self.description["en"],
@@ -264,7 +271,7 @@ class ApplicationCatalogSource(Protocol):
 def registered_applications(
     sources: Sequence[ApplicationSourceConfig],
 ) -> list[ApplicationSourceConfig]:
-    """Enabled entries only: `enabled: false` parks an app without deleting it."""
+    """Enabled entries only: `enabled: false` hides an app without deleting it."""
 
     return [source for source in sources if source.enabled]
 

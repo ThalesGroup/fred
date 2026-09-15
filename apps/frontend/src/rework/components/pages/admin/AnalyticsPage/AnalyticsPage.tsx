@@ -40,7 +40,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
-import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
+import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
@@ -55,9 +55,6 @@ import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpac
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { formatTrendWindow } from "./trendWindow";
 
-const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
-const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30d" };
-
 function sumRows(rows: { value: number }[] | undefined): number | undefined {
   if (rows === undefined) return undefined;
   return Math.round(rows.reduce((acc, r) => acc + r.value, 0));
@@ -65,7 +62,7 @@ function sumRows(rows: { value: number }[] | undefined): number | undefined {
 
 export default function AnalyticsPage() {
   const { t } = useTranslation();
-  const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange);
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
 
   // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
   // client-side TTL, does not re-fetch on every render" policy
@@ -284,10 +281,7 @@ export default function AnalyticsPage() {
   };
 
   const handleRefresh = () => {
-    if (timeRange.presetKey) {
-      const preset = TIME_PRESETS.find((p) => p.key === timeRange.presetKey)!;
-      setTimeRange({ ...preset.resolve(), presetKey: timeRange.presetKey });
-    }
+    setTimeRange(refreshTimeRange(timeRange));
   };
 
   // When every metric query fails, the control plane is unreachable — show the
@@ -329,6 +323,7 @@ export default function AnalyticsPage() {
     <div className={styles.page}>
       <PageHeader
         title={t("rework.analytics.title")}
+        sticky
         actions={
           <>
             <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
@@ -621,7 +616,7 @@ export default function AnalyticsPage() {
               isLoading={storageByTeamIsLoading}
               isError={storageByTeamIsError}
             />
-            <Link to="/admin/capabilities?kind=model" className={styles.governanceLink}>
+            <Link to="/admin/features?kind=model" className={styles.governanceLink}>
               {t("rework.analytics.administration.modelsGovernanceLink")}
             </Link>
           </div>

@@ -14,15 +14,16 @@
 
 """Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
 
-Model: root-managed admins, delegated observers. Any `platform_admin` may
-grant/revoke `platform_observer`; granting and revoking `platform_admin` is
-reserved to the bootstrap root — the uid in `platformbootstrap.completed_by`.
-The root itself is unrevocable, for every caller including itself.
+Model: root-managed admins, delegated everything else. Any `platform_admin`
+may grant/revoke every role in `PlatformRoleRelation` except `platform_admin`
+itself, which is reserved to the bootstrap root — the uid in
+`platformbootstrap.completed_by`. The root itself is unrevocable, for every
+caller including itself.
 
-Direct tuples only: schema.fga defines `platform_observer: [user] or
+Direct tuples only: every non-admin role in schema.fga is `[user] or
 platform_admin`, so any expanded read (`lookup_subjects` — OpenFGA ListUsers)
-would report every admin as a computed observer: a phantom chip in the UI
-whose revocation passes the held-check and then silently no-ops
+would report every admin as a computed holder of all of them: phantom chips in
+the UI whose revocation passes the held-check and then silently no-ops
 (`on_missing_deletes=IGNORE`). Every read here therefore goes through the
 direct-tuple primitives (`list_direct_relations` / `has_direct_relation`).
 """
@@ -82,16 +83,15 @@ async def _direct_holders(
 ) -> dict[PlatformRoleRelation, set[str]]:
     """Uids holding each platform role as a *direct* tuple on the org object.
 
-    One exact Read (`list_direct_relations`) instead of two ListUsers calls —
-    see the module docstring for why expanded reads are wrong here.
+    One exact Read (`list_direct_relations`) instead of one ListUsers call per
+    role — see the module docstring for why expanded reads are wrong here.
     """
     tuples = await rebac.list_direct_relations(_ORGANIZATION_REF)
     if isinstance(tuples, RebacDisabledResult):
         raise PlatformRolesRebacDisabledError()
 
     holders: dict[PlatformRoleRelation, set[str]] = {
-        PlatformRoleRelation.PLATFORM_ADMIN: set(),
-        PlatformRoleRelation.PLATFORM_OBSERVER: set(),
+        role: set() for role in list(PlatformRoleRelation)
     }
     for relation in tuples:
         if relation.subject.type is not Resource.USER:
@@ -189,7 +189,7 @@ async def grant_platform_role(
 
     How to use it:
     - call from `POST /users/{user_id}/platform-roles`
-    - `platform_observer`: any `platform_admin` may grant
+    - every role except `platform_admin`: any `platform_admin` may grant
     - `platform_admin`: bootstrap root only (`PlatformAdminRootOnlyError`),
       409 if bootstrap never ran
     - the target must exist in Keycloak (`UserNotFoundError`, 404) — an
@@ -231,13 +231,13 @@ async def revoke_platform_role(
 
     How to use it:
     - call from `DELETE /users/{user_id}/platform-roles/{relation}`
-    - `platform_observer`: any `platform_admin` may revoke
+    - every role except `platform_admin`: any `platform_admin` may revoke
     - `platform_admin`: bootstrap root only, and never targeting the root
       itself (`PlatformRoleRootProtectedError`), 409 if bootstrap never ran
     - revoking a role the target does not hold as a *direct* tuple is a 404
-      (`PlatformRoleNotHeldError`) — a computed-only membership (an admin's
-      implied observer role) has no tuple to delete, so it 404s instead of
-      returning a success that changed nothing
+      (`PlatformRoleNotHeldError`) — a computed-only membership (the roles an
+      admin holds through the schema union) has no tuple to delete, so it
+      404s instead of returning a success that changed nothing
     """
     _require_rebac(rebac)
     await rebac.check_user_permission_or_raise(

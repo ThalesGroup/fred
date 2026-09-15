@@ -122,11 +122,15 @@ export default function Select<T>({
     return () => document.removeEventListener("mousedown", handler);
   }, [isOpen]);
 
-  // Close on Escape.
+  // Close on Escape. The event is stopped here: an open menu is what Escape
+  // dismisses, and letting it travel on would also close whatever hosts the
+  // select — a Dialog listening on `window` cancels, taking the user's edits.
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setIsOpen(false);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -176,20 +180,26 @@ export default function Select<T>({
 
   const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
+    // A key this select acts on never travels past it. Enter used to open the
+    // menu through the button's native click and reach the host as well, which
+    // inside a Dialog opened the options and confirmed the dialog at once.
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
+        e.stopPropagation();
         if (!isOpen) openMenu();
         else moveActive(1);
         break;
       case "ArrowUp":
         e.preventDefault();
+        e.stopPropagation();
         if (!isOpen) openMenu();
         else moveActive(-1);
         break;
       case "Home":
         if (isOpen) {
           e.preventDefault();
+          e.stopPropagation();
           const first = firstEnabledIndex();
           if (first >= 0) setActiveIndex(first);
         }
@@ -197,14 +207,18 @@ export default function Select<T>({
       case "End":
         if (isOpen) {
           e.preventDefault();
+          e.stopPropagation();
           const last = lastEnabledIndex();
           if (last >= 0) setActiveIndex(last);
         }
         break;
       case "Enter":
       case " ":
-        if (isOpen && activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled) {
-          e.preventDefault();
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isOpen) {
+          openMenu();
+        } else if (activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled) {
           const option = options[activeIndex];
           setIsOpen(false);
           onChange(option.value);

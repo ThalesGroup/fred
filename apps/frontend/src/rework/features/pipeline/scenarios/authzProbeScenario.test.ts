@@ -32,10 +32,10 @@ describe("assertAccessMatchesPlatformAdmin", () => {
     expect(() => assertAccessMatchesPlatformAdmin("x", 403, false)).not.toThrow();
   });
   it("throws when a non-admin is unexpectedly allowed (200)", () => {
-    expect(() => assertAccessMatchesPlatformAdmin("registry access", 200, false)).toThrow(/is_platform_admin=false/);
+    expect(() => assertAccessMatchesPlatformAdmin("registry access", 200, false)).toThrow(/platform_admin=false/);
   });
   it("throws when a platform_admin is unexpectedly denied (403)", () => {
-    expect(() => assertAccessMatchesPlatformAdmin("registry access", 403, true)).toThrow(/is_platform_admin=true/);
+    expect(() => assertAccessMatchesPlatformAdmin("registry access", 403, true)).toThrow(/platform_admin=true/);
   });
 });
 

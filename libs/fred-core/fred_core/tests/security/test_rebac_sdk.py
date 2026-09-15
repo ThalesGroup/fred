@@ -30,6 +30,7 @@ from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac import rebac_sdk as rebac_sdk_module
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
+    AppPermission,
     CapabilityPermission,
     RebacEngine,
     RebacReference,
@@ -416,13 +417,13 @@ async def test_check_user_team_permission_refuses_personal_spaces(
 async def test_check_team_capability_is_one_check_on_the_capability() -> None:
     rebac = FakeRebacEngine(permitted=True)
 
-    await _sdk(rebac).check_team_capability("team-1", "app__acme-forecast")
+    await _sdk(rebac).check_team_capability("team-1", "report_export")
 
     assert rebac.checked == [
         (
             RebacReference(type=Resource.TEAM, id="team-1"),
             CapabilityPermission.CAN_USE,
-            RebacReference(type=Resource.CAPABILITY, id="app__acme-forecast"),
+            RebacReference(type=Resource.CAPABILITY, id="report_export"),
         )
     ]
 
@@ -432,7 +433,7 @@ async def test_check_team_capability_raises_a_permission_error_on_denial() -> No
     rebac = FakeRebacEngine(permitted=False)
 
     with pytest.raises(AuthorizationError) as denial:
-        await _sdk(rebac).check_team_capability("team-1", "app__acme-forecast")
+        await _sdk(rebac).check_team_capability("team-1", "report_export")
 
     assert isinstance(denial.value, PermissionError)
     assert denial.value.user_id == "team-1"
@@ -447,12 +448,25 @@ async def test_check_team_capability_refuses_personal_spaces(team_id: str) -> No
     rebac = FakeRebacEngine(permitted=True)
 
     with pytest.raises(AuthorizationError) as denial:
-        await _sdk(rebac).check_team_capability(team_id, "app__acme-forecast")
+        await _sdk(rebac).check_team_capability(team_id, "report_export")
 
     assert denial.value.user_id == team_id
     assert denial.value.actor_uid is None
     assert denial.value.subject_type == Resource.TEAM
     assert denial.value.subject_id == team_id
+    assert rebac.checked == []
+
+
+@pytest.mark.asyncio
+async def test_check_team_capability_refuses_application_catalog_ids() -> None:
+    rebac = FakeRebacEngine(permitted=True)
+
+    with pytest.raises(AuthorizationError) as denial:
+        await _sdk(rebac).check_team_capability("team-1", "app__acme-forecast")
+
+    assert "check_application_access" in str(denial.value)
+    assert denial.value.subject_type == Resource.TEAM
+    assert denial.value.subject_id == "team-1"
     assert rebac.checked == []
 
 
@@ -465,16 +479,20 @@ async def test_check_team_capability_denial_reaches_the_rebac_denial_log(
     with caplog.at_level(logging.WARNING, logger=_ENGINE_LOGGER):
         caplog.clear()
         with pytest.raises(AuthorizationError):
-            await _sdk(rebac).check_team_capability("team-1", "app__acme-forecast")
+            await _sdk(rebac).check_team_capability("team-1", "report_export")
 
-    assert [
+    messages = [
         record.getMessage()
         for record in caplog.records
         if record.name == _ENGINE_LOGGER
-    ] == [
-        "ReBAC authorization denied: subject=team:team-1 permission=can_use "
-        "resource=capability:app__acme-forecast"
     ]
+    assert messages == [
+        "ReBAC authorization denied: subject_type=team permission=can_use "
+        "resource_type=capability"
+    ]
+    # The denial is recorded; which team wanted which capability is not.
+    assert "team-1" not in messages[0]
+    assert "report_export" not in messages[0]
 
 
 @pytest.mark.asyncio
@@ -489,8 +507,8 @@ async def test_check_application_access_asks_membership_then_the_app_grant() -> 
         _team_check(TeamPermission.CAN_USE_TEAM_APPLICATIONS, "team-1"),
         (
             RebacReference(type=Resource.TEAM, id="team-1"),
-            CapabilityPermission.CAN_USE,
-            RebacReference(type=Resource.CAPABILITY, id="app__acme-forecast"),
+            AppPermission.CAN_USE,
+            RebacReference(type=Resource.APP, id="acme-forecast"),
         ),
     ]
 
@@ -541,9 +559,7 @@ async def test_check_application_access_refuses_personal_spaces(team_id: str) ->
 async def test_check_application_access_denies_a_member_whose_team_lacks_the_grant() -> (
     None
 ):
-    rebac = FakeRebacEngine(
-        permitted=True, denied_permissions={CapabilityPermission.CAN_USE}
-    )
+    rebac = FakeRebacEngine(permitted=True, denied_permissions={AppPermission.CAN_USE})
 
     with pytest.raises(AuthorizationError) as denial:
         await _sdk(rebac).check_application_access(
@@ -552,7 +568,7 @@ async def test_check_application_access_denies_a_member_whose_team_lacks_the_gra
 
     assert [permission for _subject, permission, _resource in rebac.checked] == [
         TeamPermission.CAN_USE_TEAM_APPLICATIONS,
-        CapabilityPermission.CAN_USE,
+        AppPermission.CAN_USE,
     ]
     assert denial.value.user_id == _USER.uid
     assert denial.value.actor_uid == _USER.uid
@@ -577,7 +593,25 @@ async def test_async_context_manager_reuses_and_closes_the_sdk() -> None:
 
     async with sdk as entered:
         assert entered is sdk
-        await entered.check_team_capability("team-1", "app__acme-forecast")
+        await entered.check_team_capability("team-1", "report_export")
 
     assert engine.close_calls == 1
     assert len(engine.checked) == 1
+
+
+@pytest.mark.asyncio
+async def test_application_grant_check_reads_at_higher_consistency() -> None:
+    """A direct backend request must not be admitted by a stale read.
+
+    The membership check keeps the engine default; only the app grant, which
+    an administrator can revoke at any moment, is forced fresh.
+    """
+    rebac = FakeRebacEngine(permitted=True)
+
+    await _sdk(rebac).check_application_access(
+        _USER, team_id="team-1", app_id="acme-forecast"
+    )
+
+    membership_token, grant_token = rebac.checked_consistency_tokens
+    assert membership_token is None
+    assert grant_token == RebacEngine.HIGHER_CONSISTENCY

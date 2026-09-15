@@ -144,9 +144,12 @@ def test_organization_declares_team_reverse_edges() -> None:
     ]
 
 
-def test_can_manage_is_platform_admin() -> None:
+def test_can_manage_resolves_through_the_org_feature_relation() -> None:
+    """The per-object gate must delegate to `organization#can_manage_capabilities`,
+    not name `platform_admin` itself: a `feature_manager` would otherwise pass the
+    org-level gate on the enablement endpoints and fail this one."""
     cap = _capability_type()
     can_manage = cap["relations"]["can_manage"]
     ttu = can_manage["tupleToUserset"]
     assert ttu["tupleset"]["relation"] == "organization"
-    assert ttu["computedUserset"]["relation"] == "platform_admin"
+    assert ttu["computedUserset"]["relation"] == "can_manage_capabilities"

@@ -31,15 +31,24 @@ Covers the two things the health/impact work turns on:
 #   test_capability_selection_1974.py / test_capability_enablement_1980.py).
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 import pytest
+from _rebac_test_doubles import CountingRebacEngine
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capabilities import enablement as enablement_mod
 from control_plane_backend.capabilities import impact as impact_mod
 from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.product.service import template_capability_id
-from fred_core import KeycloakUser
+from fred_core import (
+    KeycloakUser,
+    RebacDisabledResult,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+)
 from test_main import _FakeAgentInstanceStore, _make_record
 
 
@@ -66,12 +75,11 @@ def _record_with(
 
 
 class _NoOpRebac:
-    """Stands in for `ReBAC` in tests that never exercise a real lookup — the
-    platform-wide preview now reads `explicitly_enabled_team_ids`, so a bare
-    `object()` no longer suffices as the `rebac` stand-in."""
+    """Stands in for `ReBAC` where the tuple fetch itself is stubbed out, so no
+    lookup should ever reach the engine."""
 
-    async def lookup_subjects(self, *_args: object, **_kwargs: object) -> list:
-        return []
+    async def lookup_resources(self, *_args: object, **_kwargs: object) -> list:
+        raise AssertionError("ListObjects must not be called by the impact module")
 
 
 def _deps_with(store: _FakeAgentInstanceStore) -> SimpleNamespace:
@@ -82,28 +90,63 @@ def _deps_with(store: _FakeAgentInstanceStore) -> SimpleNamespace:
     )
 
 
-def _patch_availability(
+def _team_subject(team_id: str) -> RebacReference:
+    return RebacReference(type=Resource.TEAM, id=team_id)
+
+
+def _cap_relation(
+    subject: RebacReference, relation: RelationType, cap_id: str
+) -> Relation:
+    return Relation(
+        subject=subject, relation=relation, resource=enablement_mod.cap_ref(cap_id)
+    )
+
+
+def _relations_for(usable_by_team: dict[str, set[str]], cap_id: str) -> list[Relation]:
+    """Turn the test's "which teams may use this capability" intent into the
+    capability's direct tuples, so the impact module folds `can_use` from the
+    same tuple shape production reads."""
+
+    return [
+        _cap_relation(_team_subject(team_id), RelationType.ENABLED, cap_id)
+        for team_id, usable in usable_by_team.items()
+        if cap_id in usable
+    ]
+
+
+def _patch_pod_availability(
     monkeypatch: pytest.MonkeyPatch,
-    *,
     available_by_source: dict[str, frozenset[str] | None],
-    usable_by_team: dict[str, set[str] | None],
 ) -> None:
-    """Stub the two live-fact fetches the impact module makes."""
-
-    async def _fake_available(_deps):
-        return available_by_source
-
-    async def _fake_usable(_rebac, team_id):
-        return usable_by_team.get(str(team_id))
-
     # `_available_capability_ids_by_source` is imported lazily from
     # product.service INSIDE the impact functions, so patch it at the source.
     from control_plane_backend.product import service as product_service
 
+    async def _fake_available(_deps):
+        return available_by_source
+
     monkeypatch.setattr(
         product_service, "_available_capability_ids_by_source", _fake_available
     )
-    monkeypatch.setattr(impact_mod, "usable_capability_ids", _fake_usable)
+
+
+def _patch_availability(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    available_by_source: dict[str, frozenset[str] | None],
+    usable_by_team: dict[str, set[str]],
+    rebac_disabled: bool = False,
+) -> None:
+    """Stub the two live-fact fetches the impact module makes."""
+
+    _patch_pod_availability(monkeypatch, available_by_source)
+
+    async def _fake_relations(_rebac, resource):
+        if rebac_disabled:
+            return RebacDisabledResult()
+        return _relations_for(usable_by_team, resource.id)
+
+    monkeypatch.setattr(impact_mod, "get_enablement_relations_cached", _fake_relations)
 
 
 # ---------------------------------------------------------------------------
@@ -309,8 +352,221 @@ async def test_impact_unreachable_pod_skips_template_dependency_too(
 
 
 # ---------------------------------------------------------------------------
+# The call budget: `can_use` is folded from each capability's own tuples, so
+# the cost tracks the referenced capabilities, never the number of teams.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_impact_folds_can_use_without_one_listobjects_per_team(
+    monkeypatch,
+) -> None:
+    """Five teams, two referenced capabilities: the verdicts must come from one
+    tuple read per REFERENCED capability and no `ListObjects` at all, so the
+    cost tracks the catalog rather than the user base."""
+
+    org = enablement_mod.ORG_REF
+    # `_for_all` is default-on but opted out for the whole personal class;
+    # `_for_one` is granted to a single collaborative team.
+    for_all = "fold_budget_for_all"
+    for_one = "fold_budget_for_one"
+    for cap_id in (for_all, for_one):
+        enablement_mod.invalidate_capability_relations_cache(cap_id)
+
+    personal_teams = [f"personal-u{index}" for index in range(3)]
+    collaborative_teams = ["team-collab-0", "team-collab-1"]
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id=f"inst-{team_id}",
+                team_id=team_id,
+                selected=[for_all, for_one],
+                # Gate-exempt template, so the only referenced ids are the two
+                # tool capabilities above.
+                source_agent_id="fred.github.self_test",
+            )
+            for team_id in personal_teams + collaborative_teams
+        ]
+    )
+    rebac = CountingRebacEngine(
+        direct_relations=[
+            _cap_relation(org, RelationType.ORGANIZATION, for_all),
+            _cap_relation(org, RelationType.DEFAULT_ON, for_all),
+            _cap_relation(org, RelationType.PERSONAL_DISABLED, for_all),
+            _cap_relation(org, RelationType.ORGANIZATION, for_one),
+            _cap_relation(
+                _team_subject("team-collab-0"), RelationType.ENABLED, for_one
+            ),
+        ]
+    )
+    _patch_pod_availability(monkeypatch, {"runtime-a": frozenset({for_all, for_one})})
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: store,
+        get_kpi_writer=lambda: None,
+        team_dependencies=SimpleNamespace(rebac=rebac),
+    )
+
+    result = await impact_mod.compute_capability_impact(deps, collect_instances=True)
+
+    # The personal class is opted out of the default-on capability; only
+    # team-collab-0 holds the explicit grant on the other one.
+    assert {item.team_id for item in result[for_all].instances} == set(personal_teams)
+    assert {item.team_id for item in result[for_one].instances} == set(
+        personal_teams + ["team-collab-1"]
+    )
+    # One read per referenced capability id, not one per team.
+    read_ids = [resource.id for resource, _subject in rebac.list_direct_relations_calls]
+    assert sorted(read_ids) == sorted([for_all, for_one])
+
+
+@pytest.mark.asyncio
+async def test_impact_skips_the_authorization_axis_when_rebac_is_disabled(
+    monkeypatch,
+) -> None:
+    """ReBAC disabled means "no scoping": the fold reports `None` per team, the
+    same signal `usable_capability_ids` used to return, so nothing is called
+    broken on the authorization axis."""
+
+    store = _FakeAgentInstanceStore(
+        [_record_with(agent_instance_id="i", team_id="t", selected=["capa1"])]
+    )
+    _patch_availability(
+        monkeypatch,
+        available_by_source={"runtime-a": frozenset({"capa1"})},
+        usable_by_team={},
+        rebac_disabled=True,
+    )
+
+    result = await impact_mod.compute_capability_impact(_deps_with(store))
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_impact_attributes_a_team_level_opt_out_of_a_default_on_capability(
+    monkeypatch,
+) -> None:
+    """A `disabled` tuple revokes a default-on capability for that team alone -
+    the tri-state the health column has to render, and the one branch a fold
+    that only ever reads `enabled` would get wrong."""
+
+    org = enablement_mod.ORG_REF
+    cap_id = "fold_opt_out_capability"
+    enablement_mod.invalidate_capability_relations_cache(cap_id)
+
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id=f"inst-{team_id}",
+                team_id=team_id,
+                selected=[cap_id],
+                source_agent_id="fred.github.self_test",
+            )
+            for team_id in ("team-opted-out", "team-inherits", "personal-u0")
+        ]
+    )
+    rebac = CountingRebacEngine(
+        direct_relations=[
+            _cap_relation(org, RelationType.ORGANIZATION, cap_id),
+            _cap_relation(org, RelationType.DEFAULT_ON, cap_id),
+            _cap_relation(
+                _team_subject("team-opted-out"), RelationType.DISABLED, cap_id
+            ),
+        ]
+    )
+    _patch_pod_availability(monkeypatch, {"runtime-a": frozenset({cap_id})})
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: store,
+        get_kpi_writer=lambda: None,
+        team_dependencies=SimpleNamespace(rebac=rebac),
+    )
+
+    result = await impact_mod.compute_capability_impact(deps, collect_instances=True)
+
+    assert {item.team_id for item in result[cap_id].instances} == {"team-opted-out"}
+
+
+@pytest.mark.asyncio
+async def test_preview_revoke_reads_the_capability_fresh_not_the_cache(
+    monkeypatch,
+) -> None:
+    """An admin confirms a mutation against this number, and only the writing
+    replica invalidates the 45s cache. A stale entry saying "nobody is granted"
+    must not make the dialog under-report."""
+
+    org = enablement_mod.ORG_REF
+    cap_id = "fold_preview_capability"
+    store = _FakeAgentInstanceStore(
+        [
+            _record_with(
+                agent_instance_id=f"inst-{index}",
+                team_id=f"personal-u{index}",
+                selected=[cap_id],
+                source_agent_id="fred.github.self_test",
+            )
+            for index in range(3)
+        ]
+    )
+    rebac = CountingRebacEngine(
+        direct_relations=[
+            _cap_relation(org, RelationType.ORGANIZATION, cap_id),
+            _cap_relation(org, RelationType.PERSONAL_ON, cap_id),
+        ]
+    )
+    # Another replica granted the class; this one still caches the pre-write
+    # snapshot, under which every instance reads as already broken.
+    enablement_mod._CAPABILITY_RELATIONS_CACHE.set(
+        enablement_mod.cap_ref(cap_id), (time.time() + 60, [])
+    )
+    _patch_pod_availability(monkeypatch, {"runtime-a": frozenset({cap_id})})
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: store,
+        get_kpi_writer=lambda: None,
+        team_dependencies=SimpleNamespace(rebac=rebac),
+    )
+
+    result = await impact_mod.preview_revoke_impact(
+        deps, capability_id=cap_id, team_id=None
+    )
+
+    assert result.suspended_instances == 3
+    # One fresh read of that capability; no ListObjects, no ListUsers.
+    assert [
+        resource.id for resource, _subject in rebac.list_direct_relations_calls
+    ] == [cap_id]
+    assert rebac.lookup_resources_calls == 0
+    assert rebac.lookup_subjects_calls == 0
+
+
+# ---------------------------------------------------------------------------
 # Revoke preview — forward-looking, excludes the already-broken
 # ---------------------------------------------------------------------------
+
+
+def _preview_deps(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakeAgentInstanceStore,
+    relations: list[Relation],
+    *,
+    available_by_source: dict[str, frozenset[str] | None] | None = None,
+) -> SimpleNamespace:
+    """Deps for a revoke preview. It reads the capability's tuples fresh off
+    the engine, so these tests state them literally instead of going through
+    `_patch_availability`'s cached-fetch stub."""
+
+    _patch_pod_availability(
+        monkeypatch,
+        available_by_source
+        if available_by_source is not None
+        else {"runtime-a": frozenset({"capa1"})},
+    )
+    return SimpleNamespace(
+        get_agent_instance_store=lambda: store,
+        get_kpi_writer=lambda: None,
+        team_dependencies=SimpleNamespace(
+            rebac=CountingRebacEngine(direct_relations=relations)
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -334,17 +590,17 @@ async def test_preview_excludes_already_broken_instances(monkeypatch) -> None:
             ),
         ]
     )
-    _patch_availability(
+    deps = _preview_deps(
         monkeypatch,
-        available_by_source={"runtime-a": frozenset({"capa1"})},
-        usable_by_team={
-            "team-ok": {"capa1"},  # works today → revoke would break it
-            "team-gone": set(),  # already lost capa1 → already broken
-        },
+        store,
+        [
+            _cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, "capa1"),
+            _cap_relation(_team_subject("team-gone"), RelationType.DISABLED, "capa1"),
+        ],
     )
 
     result = await impact_mod.preview_revoke_impact(
-        _deps_with(store), capability_id="capa1", team_id=None
+        deps, capability_id="capa1", team_id=None
     )
 
     assert result.suspended_instances == 1
@@ -376,24 +632,19 @@ async def test_preview_default_off_excludes_explicitly_enabled_teams(
             ),
         ]
     )
-    _patch_availability(
+    deps = _preview_deps(
         monkeypatch,
-        available_by_source={"runtime-a": frozenset({"capa1"})},
-        usable_by_team={
-            "team-inherits": {"capa1"},
-            "team-explicit": {"capa1"},
-        },
-    )
-
-    async def _fake_explicitly_enabled(_rebac, _capability_id):
-        return {"team-explicit"}
-
-    monkeypatch.setattr(
-        enablement_mod, "explicitly_enabled_team_ids", _fake_explicitly_enabled
+        store,
+        [
+            _cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, "capa1"),
+            _cap_relation(
+                _team_subject("team-explicit"), RelationType.ENABLED, "capa1"
+            ),
+        ],
     )
 
     result = await impact_mod.preview_revoke_impact(
-        _deps_with(store), capability_id="capa1", team_id=None
+        deps, capability_id="capa1", team_id=None
     )
 
     assert result.suspended_instances == 1
@@ -417,21 +668,18 @@ async def test_preview_single_team_disable_ignores_explicit_enabled_exclusion(
             ),
         ]
     )
-    _patch_availability(
+    deps = _preview_deps(
         monkeypatch,
-        available_by_source={"runtime-a": frozenset({"capa1"})},
-        usable_by_team={"team-explicit": {"capa1"}},
-    )
-
-    async def _fake_explicitly_enabled(_rebac, _capability_id):
-        return {"team-explicit"}
-
-    monkeypatch.setattr(
-        enablement_mod, "explicitly_enabled_team_ids", _fake_explicitly_enabled
+        store,
+        [
+            _cap_relation(
+                _team_subject("team-explicit"), RelationType.ENABLED, "capa1"
+            ),
+        ],
     )
 
     result = await impact_mod.preview_revoke_impact(
-        _deps_with(store), capability_id="capa1", team_id="team-explicit"
+        deps, capability_id="capa1", team_id="team-explicit"
     )
 
     assert result.suspended_instances == 1
@@ -459,14 +707,17 @@ async def test_preview_revoke_includes_agent_template_instances(monkeypatch) -> 
         ]
     )
     template_id = template_capability_id("runtime-a", "rags.sample.echo")
-    _patch_availability(
+    deps = _preview_deps(
         monkeypatch,
+        store,
+        # Works today through the org-wide default, with no explicit grant to
+        # exclude it from the platform-wide preview.
+        [_cap_relation(enablement_mod.ORG_REF, RelationType.DEFAULT_ON, template_id)],
         available_by_source={"runtime-a": frozenset()},
-        usable_by_team={"team-a": {template_id}},  # works today
     )
 
     result = await impact_mod.preview_revoke_impact(
-        _deps_with(store), capability_id=template_id, team_id=None
+        deps, capability_id=template_id, team_id=None
     )
 
     assert result.suspended_instances == 1

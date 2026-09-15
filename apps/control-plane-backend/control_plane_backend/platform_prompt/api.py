@@ -48,7 +48,7 @@ ProductDependencies = Annotated[
 @router.get(
     "/admin/platform/prompt",
     response_model=PlatformPrompt,
-    summary="Get the platform-wide platform prompt (org admin).",
+    summary="Get the platform-wide platform prompt (prompt editor).",
 )
 async def get_platform_prompt(
     deps: ProductDependencies,
@@ -60,7 +60,7 @@ async def get_platform_prompt(
 @router.put(
     "/admin/platform/prompt",
     response_model=PlatformPrompt,
-    summary="Set the platform-wide platform prompt (org admin).",
+    summary="Set the platform-wide platform prompt (prompt editor).",
 )
 async def put_platform_prompt(
     request: SetPlatformPromptRequest,
@@ -75,7 +75,7 @@ async def put_platform_prompt(
 @router.get(
     "/admin/platform/instructions",
     response_model=PlatformInstructions,
-    summary="Get the read-only platform operating instructions (org admin).",
+    summary="Get the read-only platform operating instructions (prompt editor).",
 )
 async def get_platform_instructions(
     deps: ProductDependencies,

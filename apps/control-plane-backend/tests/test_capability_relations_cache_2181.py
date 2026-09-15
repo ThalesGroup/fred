@@ -73,6 +73,19 @@ def _entry(cap_id: str = "corp_drive") -> CapabilityCatalogEntry:
     )
 
 
+def _app_entry(app_id: str = "corp-drive") -> CapabilityCatalogEntry:
+    return CapabilityCatalogEntry(
+        id=f"app__{app_id}",
+        version="1.0.0",
+        name=f"app.{app_id}.name",
+        description=f"app.{app_id}.desc",
+        icon="extension",
+        team_scope=TeamScopePolicy.ADMIN_GATED,
+        team_settings_fields=[],
+        kind="app",
+    )
+
+
 def _seed_relations(cap_id: str) -> list[Relation]:
     resource = cap_ref(cap_id)
     return [
@@ -110,6 +123,27 @@ async def _build_item(engine: CountingRebacEngine, cap_id: str):
     )
 
 
+async def _build_app_item(engine: CountingRebacEngine, app_id: str):
+    return await _build_enablement_item(
+        _app_entry(app_id),
+        rebac=engine,
+        total_team_count=10,
+        total_personal_space_count=5,
+        impact={},
+        reasoning_enabled_ids=frozenset(),
+    )
+
+
+def _team_grant(
+    team_id: str, relation: RelationType, resource: RebacReference
+) -> Relation:
+    return Relation(
+        subject=RebacReference(Resource.TEAM, team_id),
+        relation=relation,
+        resource=resource,
+    )
+
+
 @pytest.mark.asyncio
 async def test_build_enablement_item_uses_one_read_never_list_users() -> None:
     """#2181: one row's ReBAC-derived fields must resolve from a SINGLE
@@ -144,6 +178,57 @@ async def test_build_enablement_item_serves_repeat_calls_from_cache() -> None:
     assert len(engine.list_direct_relations_calls) == 1, (
         "second call within the TTL window must be served entirely from cache"
     )
+
+
+@pytest.mark.asyncio
+async def test_enablement_cache_isolates_app_and_capability_with_same_raw_id() -> None:
+    """Cache keys include the resource type and raw object id."""
+
+    raw_id = "shared"
+    capability = RebacReference(Resource.CAPABILITY, raw_id)
+    application = RebacReference(Resource.APP, raw_id)
+    engine = CountingRebacEngine(
+        direct_relations=[
+            Relation(
+                subject=RebacReference(Resource.TEAM, "team-capability"),
+                relation=RelationType.ENABLED,
+                resource=capability,
+            ),
+            Relation(
+                subject=RebacReference(Resource.TEAM, "team-application"),
+                relation=RelationType.ENABLED,
+                resource=application,
+            ),
+        ]
+    )
+
+    capability_item = await _build_item(engine, raw_id)
+    application_item = await _build_enablement_item(
+        _app_entry(raw_id),
+        rebac=engine,
+        total_team_count=10,
+        total_personal_space_count=5,
+        impact={},
+        reasoning_enabled_ids=frozenset(),
+    )
+
+    assert capability_item.enabled_team_ids == ["team-capability"]
+    assert application_item.enabled_team_ids == ["team-application"]
+    assert [call[0] for call in engine.list_direct_relations_calls] == [
+        capability,
+        application,
+    ]
+
+    await _build_item(engine, raw_id)
+    await _build_enablement_item(
+        _app_entry(raw_id),
+        rebac=engine,
+        total_team_count=10,
+        total_personal_space_count=5,
+        impact={},
+        reasoning_enabled_ids=frozenset(),
+    )
+    assert len(engine.list_direct_relations_calls) == 2
 
 
 @pytest.mark.asyncio
@@ -250,3 +335,108 @@ async def test_has_org_relation_sees_a_write_immediately_on_the_same_pod() -> No
     )
 
     assert await enablement.has_org_relation(engine, cap_id, RelationType.DEFAULT_ON)
+
+
+class _AppGrantFailsRebac(CountingRebacEngine):
+    """Fails the grant write only, after the opt-out delete has landed."""
+
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        if relation.relation is RelationType.ENABLED:
+            raise RuntimeError("grant write failed")
+        return await super()._persist_relation(relation)
+
+
+@pytest.mark.asyncio
+async def test_app_write_invalidates_only_the_app_row_of_a_shared_raw_id() -> None:
+    """Invalidation is keyed by typed object: a capability sharing the raw id
+    keeps its cached row and its tuples across an application write."""
+
+    raw_id = "shared"
+    capability = RebacReference(Resource.CAPABILITY, raw_id)
+    application = RebacReference(Resource.APP, raw_id)
+    capability_grant = _team_grant("team-capability", RelationType.ENABLED, capability)
+    engine = CountingRebacEngine(
+        direct_relations=[
+            capability_grant,
+            _team_grant("team-application", RelationType.ENABLED, application),
+        ]
+    )
+
+    await _build_item(engine, raw_id)
+    await _build_app_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 2
+
+    await enable_capability_for_team(
+        rebac=engine,
+        settings_store=None,
+        catalog_entry=_app_entry(raw_id),
+        team_id=TeamId("team-new"),
+        settings={},
+        updated_by="admin",
+    )
+
+    capability_item = await _build_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 2, (
+        "an application write must not drop the capability's cache entry"
+    )
+    assert capability_item.enabled_team_ids == ["team-capability"]
+
+    application_item = await _build_app_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 3
+    assert engine.list_direct_relations_calls[-1][0] == application
+    assert application_item.enabled_team_ids == ["team-application", "team-new"]
+
+    # State, not just call counts: the grant landed on the application object
+    # and nothing was written against the capability sharing its raw id.
+    assert capability_grant in engine.direct_relations
+    assert _team_grant("team-new", RelationType.ENABLED, application) in (
+        engine.direct_relations
+    )
+    assert not any(
+        stored.resource == capability and stored.subject.id == "team-new"
+        for stored in engine.direct_relations
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_app_grant_invalidates_only_the_app_row() -> None:
+    """A write that clears the opt-out then fails to grant must still drop the
+    application's cached row, and leave the same-raw-id capability alone."""
+
+    raw_id = "shared"
+    capability = RebacReference(Resource.CAPABILITY, raw_id)
+    application = RebacReference(Resource.APP, raw_id)
+    capability_grant = _team_grant("team-capability", RelationType.ENABLED, capability)
+    opt_out = _team_grant("team-new", RelationType.DISABLED, application)
+    engine = _AppGrantFailsRebac(direct_relations=[capability_grant, opt_out])
+
+    assert (await _build_app_item(engine, raw_id)).disabled_team_ids == ["team-new"]
+    await _build_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 2
+
+    with pytest.raises(RuntimeError):
+        await enable_capability_for_team(
+            rebac=engine,
+            settings_store=None,
+            catalog_entry=_app_entry(raw_id),
+            team_id=TeamId("team-new"),
+            settings={},
+            updated_by="admin",
+        )
+
+    # The half-written state the invalidation exists for: opt-out gone, no grant.
+    assert opt_out not in engine.direct_relations
+    assert not any(
+        stored.relation is RelationType.ENABLED and stored.resource == application
+        for stored in engine.direct_relations
+    )
+
+    capability_item = await _build_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 2
+    assert capability_item.enabled_team_ids == ["team-capability"]
+    assert capability_grant in engine.direct_relations
+
+    application_item = await _build_app_item(engine, raw_id)
+    assert len(engine.list_direct_relations_calls) == 3
+    assert application_item.disabled_team_ids == []
+    assert application_item.enabled_team_ids == []

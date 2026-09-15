@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import postcss from "postcss";
 import valueParser from "postcss-value-parser";
 
+import {
+  assertArchiveEntriesSafe,
+  assertNoArchiveLinks,
+  dependencyEntries,
+  listArchiveFiles,
+} from "./archive-safety.mjs";
 import { FONT_SOURCES, LICENSE_FILES } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
+import {
+  assertExpectedManifest,
+  isLocalDependencyReference,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
 import {
   assertNoCssImports,
   assertTokenCssContract,
@@ -34,38 +46,6 @@ const expectedExports = {
 
 function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
-}
-
-async function listFiles(root, relativeDirectory = "") {
-  const directory = path.join(root, relativeDirectory);
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const relativePath = path.posix.join(relativeDirectory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await listFiles(root, relativePath)));
-    } else {
-      files.push(relativePath);
-    }
-  }
-  return files.sort();
-}
-
-function dependencyEntries(manifest) {
-  const fields = [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-    "overrides",
-  ];
-  return fields.flatMap((field) =>
-    Object.entries(manifest[field] ?? {}).map(([name, version]) => ({
-      field,
-      name,
-      version,
-    })),
-  );
 }
 
 async function validateCssAssets(packageRoot, relativePath) {
@@ -112,50 +92,35 @@ async function validateCssAssets(packageRoot, relativePath) {
   return assets.sort();
 }
 
-async function validateNoLinks(packageRoot, files) {
-  for (const relativePath of files) {
-    const stat = await lstat(path.join(packageRoot, relativePath));
-    assert(
-      !stat.isSymbolicLink(),
-      `archive contains a symbolic link: ${relativePath}`,
-    );
-  }
-}
-
-export async function validateArchive(archivePath) {
+export async function validateArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "designTokens");
   const archive = path.resolve(archivePath);
   const temporaryRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-package-archive-"),
   );
   try {
     const { stdout: listing } = await run("tar", ["-tzf", archive]);
-    const archiveEntries = listing.trim().split("\n").filter(Boolean);
-    for (const entry of archiveEntries) {
-      assert(
-        entry === "package" || entry.startsWith("package/"),
-        `archive entry escapes package/: ${entry}`,
-      );
-      assert(
-        !entry.split("/").includes(".."),
-        `archive entry contains traversal: ${entry}`,
-      );
-    }
+    assertArchiveEntriesSafe(listing);
     await run("tar", ["-xzf", archive, "-C", temporaryRoot]);
     const packageRoot = path.join(temporaryRoot, "package");
-    const files = await listFiles(packageRoot);
+    const files = await listArchiveFiles(packageRoot);
     assert.deepEqual(
       files,
       expectedArchiveFiles,
       "packed inventory differs from the allowlist",
     );
-    await validateNoLinks(packageRoot, files);
+    await assertNoArchiveLinks(packageRoot, files);
 
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),
     );
     assert.equal(
       manifest.name,
-      "@fred/design-tokens",
+      expectedPackage.name,
       "archive is not the design-token member",
     );
     assert.notEqual(
@@ -195,7 +160,7 @@ export async function validateArchive(archivePath) {
     const dependencies = dependencyEntries(manifest);
     for (const dependency of dependencies) {
       assert(
-        !/^(?:file:|workspace:|link:)/.test(String(dependency.version)),
+        !isLocalDependencyReference(String(dependency.version)),
         `${dependency.field}.${dependency.name} uses a local dependency protocol`,
       );
     }
@@ -210,11 +175,7 @@ export async function validateArchive(archivePath) {
       "design tokens must not declare runtime dependencies",
     );
 
-    const generatedTextFiles = [
-      "dist/tokens.css",
-      "dist/fonts.css",
-      "package.json",
-    ];
+    const generatedTextFiles = ["dist/tokens.css", "dist/fonts.css"];
     const forbiddenReferences = [
       { pattern: /@(?:shared|rework)\b/, description: "FRED source alias" },
       {
@@ -295,6 +256,8 @@ export async function validateArchive(archivePath) {
       licenseHashes[license.packedPath] = actualHash;
     }
 
+    assertExpectedManifest(manifest, expectedPackage);
+
     return {
       archive,
       package: `${manifest.name}@${manifest.version}`,
@@ -316,6 +279,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("Usage: node scripts/validate-archive.mjs <archive.tgz>");
   }
   process.stdout.write(
-    `${JSON.stringify(await validateArchive(archivePath), null, 2)}\n`,
+    `${JSON.stringify(
+      await validateArchive(archivePath, {
+        contract: await loadReleaseContract(
+          process.argv.includes("--contract")
+            ? process.argv[process.argv.indexOf("--contract") + 1]
+            : undefined,
+        ),
+      }),
+      null,
+      2,
+    )}\n`,
   );
 }

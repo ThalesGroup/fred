@@ -18,7 +18,6 @@ import contextlib
 import hashlib
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -70,10 +69,6 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
         dict(config.connect_args) if config.connect_args else {}
     )
 
-    def _mask_dsn(dsn: str) -> str:
-        return re.sub(r":([^:@]+)@", ":***@", dsn)
-
-    masked_dsn = _mask_dsn(config.dsn())
     effective_pool_size = config.pool_size or 5
     effective_max_overflow = (
         config.max_overflow if config.max_overflow is not None else 10
@@ -88,38 +83,17 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
     effective_pool_pre_ping = (
         config.pool_pre_ping if config.pool_pre_ping is not None else True
     )
-    logger.warning(
-        "[SQL][Engine] Creating engine (single PG config assumed): "
-        "dsn=%s host=%s port=%s db=%s user=%s password_set=%s "
-        "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s "
-        "connect_args=%s raw_config=%s",
-        masked_dsn,
-        config.host,
-        config.port,
-        config.database,
-        config.username,
-        bool(config.password),
+    # Pool tuning only: the DSN, host, database, account and connect arguments
+    # identify the deployment and its credentials, and this runs on every start.
+    logger.info(
+        "[SQL][Engine] Creating engine: echo=%s pool_size=%s max_overflow=%s "
+        "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
         config.echo,
         effective_pool_size,
         effective_max_overflow,
         effective_pool_timeout,
         effective_pool_recycle,
         effective_pool_pre_ping,
-        connect_args,
-        {
-            "host": config.host,
-            "port": config.port,
-            "database": config.database,
-            "username": config.username,
-            "password_set": bool(config.password),
-            "echo": config.echo,
-            "pool_size": config.pool_size,
-            "max_overflow": config.max_overflow,
-            "pool_timeout": config.pool_timeout,
-            "pool_recycle": config.pool_recycle,
-            "pool_pre_ping": config.pool_pre_ping,
-            "connect_args": connect_args,
-        },
     )
 
     try:
@@ -133,36 +107,21 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
             pool_pre_ping=effective_pool_pre_ping,
             connect_args=connect_args,
         )
-        logger.warning(
-            "[SQL][Engine] Engine created successfully with pool_size=%s max_overflow=%s "
-            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
+        logger.info(
+            "[SQL][Engine] Engine created: pool_size=%s max_overflow=%s "
+            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
             effective_pool_size,
             effective_max_overflow,
             effective_pool_timeout,
             effective_pool_recycle,
             effective_pool_pre_ping,
-            connect_args,
         )
         return engine
-    except Exception as exc:
-        logger.exception("[SQL][Engine] Failed to create engine: %s", exc)
-        logger.error(
-            "[SQL][Engine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s "
-            "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
-            masked_dsn,
-            config.host,
-            config.port,
-            config.database,
-            config.username,
-            bool(config.password),
-            config.echo,
-            config.pool_size,
-            config.max_overflow,
-            config.pool_timeout,
-            config.pool_recycle,
-            config.pool_pre_ping,
-            connect_args,
-        )
+    except Exception:
+        # No traceback either: the driver's own error text routinely embeds the
+        # connection URL, and this line outlives the deployment in a log sink.
+        # The exception still propagates unchanged to the caller.
+        logger.error("[SQL][Engine] Failed to create engine")
         raise
 
 
@@ -179,33 +138,25 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
         sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
         sqlite_path = str(sqlite_path_obj)
         async_dsn = f"sqlite+aiosqlite:///{sqlite_path}"
-        logger.info(
-            "[SQL][AsyncEngine] sqlite_path provided; using SQLite fallback at %s",
-            sqlite_path,
-        )
         try:
             engine = create_async_engine(
                 async_dsn,
                 echo=config.echo,
                 connect_args={"check_same_thread": False},
             )
-            logger.info(
-                "[SQL][AsyncEngine] SQLite async engine created path=%s", sqlite_path
-            )
+            # No path: it names a filesystem location on the host, and on a
+            # workstation that includes the account it runs under.
+            logger.info("[SQL][AsyncEngine] SQLite async engine created")
             return engine
-        except Exception as exc:
-            logger.exception(
-                "[SQL][AsyncEngine] Failed to create SQLite engine at %s: %s",
-                sqlite_path,
-                exc,
-            )
+        except Exception:
+            logger.error("[SQL][AsyncEngine] Failed to create SQLite engine")
             raise
 
     if not os.getenv("FRED_POSTGRES_PASSWORD"):
-        logger.error(
-            "[TASKS][STORE] Missing FRED_POSTGRES_PASSWORD environment variable (required for Postgres task store)"
-        )
-        raise RuntimeError("FRED_POSTGRES_PASSWORD is required for Postgres task store")
+        # The variable name is a secret name: it belongs in the deployment
+        # documentation, not in a log line or a propagating error message.
+        logger.error("[SQL][AsyncEngine] No database password is configured")
+        raise RuntimeError("A database password is required but is not configured")
     missing = [
         name
         for name in ("host", "database", "username")
@@ -220,11 +171,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
         dict(config.connect_args) if config.connect_args else {}
     )
 
-    def _mask_dsn(dsn: str) -> str:
-        return re.sub(r":([^:@]+)@", ":***@", dsn)
-
     async_dsn = config.async_dsn()
-    masked_dsn = _mask_dsn(async_dsn)
     effective_pool_size = config.pool_size or 5
     effective_max_overflow = (
         config.max_overflow if config.max_overflow is not None else 10
@@ -239,38 +186,15 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
         config.pool_pre_ping if config.pool_pre_ping is not None else True
     )
 
-    logger.warning(
-        "[SQL][AsyncEngine] Creating async engine (single PG config assumed): "
-        "dsn=%s host=%s port=%s db=%s user=%s password_set=%s "
-        "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s "
-        "connect_args=%s raw_config=%s",
-        masked_dsn,
-        config.host,
-        config.port,
-        config.database,
-        config.username,
-        bool(config.password),
+    logger.info(
+        "[SQL][AsyncEngine] Creating engine: echo=%s pool_size=%s max_overflow=%s "
+        "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
         config.echo,
         effective_pool_size,
         effective_max_overflow,
         effective_pool_timeout,
         effective_pool_recycle,
         effective_pool_pre_ping,
-        connect_args,
-        {
-            "host": config.host,
-            "port": config.port,
-            "database": config.database,
-            "username": config.username,
-            "password_set": bool(config.password),
-            "echo": config.echo,
-            "pool_size": config.pool_size,
-            "max_overflow": config.max_overflow,
-            "pool_timeout": config.pool_timeout,
-            "pool_recycle": config.pool_recycle,
-            "pool_pre_ping": config.pool_pre_ping,
-            "connect_args": connect_args,
-        },
     )
 
     try:
@@ -284,36 +208,18 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             pool_pre_ping=effective_pool_pre_ping,
             connect_args=connect_args,
         )
-        logger.warning(
-            "[SQL][AsyncEngine] Engine created successfully with pool_size=%s max_overflow=%s "
-            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
+        logger.info(
+            "[SQL][AsyncEngine] Engine created: pool_size=%s max_overflow=%s "
+            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
             effective_pool_size,
             effective_max_overflow,
             effective_pool_timeout,
             effective_pool_recycle,
             effective_pool_pre_ping,
-            connect_args,
         )
         return engine
-    except Exception as exc:
-        logger.exception("[SQL][AsyncEngine] Failed to create engine: %s", exc)
-        logger.error(
-            "[SQL][AsyncEngine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s "
-            "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
-            masked_dsn,
-            config.host,
-            config.port,
-            config.database,
-            config.username,
-            bool(config.password),
-            config.echo,
-            config.pool_size,
-            config.max_overflow,
-            config.pool_timeout,
-            config.pool_recycle,
-            config.pool_pre_ping,
-            connect_args,
-        )
+    except Exception:
+        logger.error("[SQL][AsyncEngine] Failed to create engine")
         raise
 
 

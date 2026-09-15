@@ -177,12 +177,44 @@ class GcsContentStore(BaseContentStore):
                 doc_uids.add(prefix)
         return sorted(doc_uids)
 
-    def get_preview_bytes(self, doc_path: str) -> bytes:
+    def get_output_artifact(self, doc_path: str) -> bytes:
         blob = self.document_bucket.blob(doc_path)
         try:
             return blob.download_as_bytes()
         except NotFound as e:
-            raise FileNotFoundError(f"Preview image not found for document {doc_path}") from e
+            raise FileNotFoundError(f"Derived artifact not found: {doc_path}") from e
+
+    def put_output_artifact(self, doc_path: str, data: bytes, *, content_type: str) -> None:
+        blob = self.document_bucket.blob(doc_path)
+        blob.upload_from_string(data, content_type=content_type)
+        logger.info("[CONTENT][GCS] Wrote derived artifact path=%s bytes=%d", doc_path, len(data))
+
+    def delete_output_artifact(self, doc_path: str) -> None:
+        try:
+            self.document_bucket.blob(doc_path).delete()
+            logger.info("[CONTENT][GCS] Deleted derived artifact path=%s", doc_path)
+        except NotFound:
+            return
+
+    def list_output_artifacts(self, artifact_name: str) -> List[StoredObjectInfo]:
+        # match_glob filters server-side: only the artifacts cross the wire, never
+        # the whole bucket. A single `*` stops at `/`, so exactly one uid level.
+        blobs = self.client.list_blobs(self.document_bucket_name, match_glob=f"*/output/{artifact_name}")
+        items: List[StoredObjectInfo] = []
+        for blob in blobs:
+            document_uid = blob.name.split("/", 1)[0]
+            items.append(
+                StoredObjectInfo(
+                    key=blob.name,
+                    size=blob.size or 0,
+                    file_name=artifact_name,
+                    content_type=blob.content_type,
+                    modified=blob.updated,
+                    etag=blob.etag,
+                    document_uid=document_uid,
+                )
+            )
+        return items
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         media_object = f"{document_uid}/output/media/{media_id}"

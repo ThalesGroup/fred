@@ -26,11 +26,13 @@ How to read this file:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import logging
+from collections.abc import Collection, Mapping, Sequence
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.models import ToolApprovalPolicy
 from fred_sdk.contracts.runtime import Executor, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
@@ -38,6 +40,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.react.middleware.hitl import (
+    CapabilityHitlBinding,
+    FredHitlMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -52,7 +59,6 @@ from fred_runtime.react.react_runtime import (
     ReActInput,
     ReActOutput,
     ReActRuntime,
-    _build_runtime_tool_prompt_suffix,
     _CompiledReActAgent,
     _TransportBackedReActExecutor,
 )
@@ -60,9 +66,14 @@ from fred_runtime.react.react_tool_binding import (
     ReActToolBinder,
 )
 from fred_runtime.react.react_tool_binding import (
+    build_runtime_tool_prompt_suffix as _build_runtime_tool_prompt_suffix,
+)
+from fred_runtime.react.react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
+
+logger = logging.getLogger(__name__)
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",
@@ -72,11 +83,6 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "glob",
     "grep",
     "execute",
-)
-
-_FILESYSTEM_DISABLED_PROMPT_SUFFIX = (
-    "\n\nFilesystem tools are disabled in this runtime. "
-    "Do not call ls/read_file/write_file/edit_file/glob/grep/execute."
 )
 
 
@@ -96,19 +102,27 @@ class DeepAgentRuntime(ReActRuntime):
         if self._model is None:
             raise RuntimeError("DeepAgentRuntime model is not initialized.")
 
+        # DeepAgentRuntime overrides build_executor wholesale, so it needs its
+        # own copy of ReActRuntime's "[V2][EXECUTOR] build start" line under
+        # this module's own logger to stay distinguishable in the logs.
+        logger.debug(
+            "[V2][EXECUTOR] build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
+            type(self).__name__,
+            self.definition.agent_id,
+            [r.tool_ref for r in self.definition.declared_tool_refs],
+            self._toolset_key(),
+        )
+
         policy = self.definition.policy()
         if policy.system_prompt_template is None:
             raise RuntimeError(
                 "DeepAgentRuntime requires a non-empty system_prompt_template."
             )
-        if policy.tool_approval.enabled:
-            raise NotImplementedError(
-                "DeepAgentRuntime does not support tool approval in this minimal version."
-            )
         if policy.tool_selection.max_tool_calls_per_turn is not None:
             raise NotImplementedError(
                 "DeepAgentRuntime does not support per-turn tool-call limits in this minimal version."
             )
+        capability_block = self._capability_block
 
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
@@ -121,7 +135,15 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        filesystem_tools_enabled = _allows_standard_filesystem_tools(bound_tools)
+        available_tool_names = {
+            bound_tool.runtime_name
+            for bound_tool in bound_tools
+            if bound_tool.runtime_name
+        }
+        if capability_block is not None:
+            available_tool_names.update(
+                tool.name for tool in capability_block.tools if tool.name
+            )
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -131,11 +153,27 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt,
             binding=binding,
             agent_id=self.definition.agent_id,
-            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
-            runtime_suffixes=(
-                _filesystem_prompt_suffix(
-                    filesystem_tools_enabled=filesystem_tools_enabled
-                ),
+            tool_suffix="\n\n".join(
+                part
+                for part in (
+                    _build_runtime_tool_prompt_suffix(
+                        bound_tools,
+                        mcp_prompt_groups=(
+                            capability_block.mcp_prompt_groups
+                            if capability_block is not None
+                            else ()
+                        ),
+                        capability_tools=(
+                            capability_block.tools
+                            if capability_block is not None
+                            else ()
+                        ),
+                    ),
+                    _filesystem_prompt_suffix(
+                        available_tool_names=available_tool_names
+                    ),
+                )
+                if part
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
@@ -145,16 +183,19 @@ class DeepAgentRuntime(ReActRuntime):
             system_prompt=system_prompt,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             middleware=_build_deepagent_runtime_middleware(
-                filesystem_tools_enabled=filesystem_tools_enabled,
                 tracer=self.services.tracer,
                 kpi=self.services.kpi_writer,
                 binding=binding,
+                approval_policy=policy.tool_approval,
+                available_tool_names=available_tool_names,
+                capability_block=capability_block,
             ),
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
             binding=binding,
             services=self.services,
+            runtime_class_name=type(self).__name__,
         )
 
 
@@ -196,97 +237,62 @@ def _create_compiled_deep_agent(
     )
 
 
-def _allows_standard_filesystem_tools(bound_tools: Sequence[object]) -> bool:
-    """
-    Tell Deep runtime whether standard filesystem tools are actually available.
-
-    Why this exists:
-    - Deep should only disable filesystem operations when the runtime did not
-      inject the standard filesystem MCP tools
-    - this keeps filesystem enablement declarative: if the definition/bootstrap
-      path provides the tools, Deep should pass them through unchanged
-
-    How to use it:
-    - call after tool binding and before building the deep-agent middleware
-    - pass the resolved bound tools for the current run
-
-    Example:
-    - `enabled = _allows_standard_filesystem_tools(bound_tools)`
-    """
-    tool_names = {
-        getattr(getattr(bound_tool, "tool", bound_tool), "name", "").strip()
-        for bound_tool in bound_tools
-    }
-    return any(tool_name in tool_names for tool_name in _FILESYSTEM_TOOL_NAMES)
+def _unavailable_filesystem_tool_names(
+    available_tool_names: Collection[str],
+) -> tuple[str, ...]:
+    """Return Deep filesystem names that the runtime did not bind."""
+    return tuple(
+        name for name in _FILESYSTEM_TOOL_NAMES if name not in available_tool_names
+    )
 
 
-def _filesystem_prompt_suffix(*, filesystem_tools_enabled: bool) -> str:
-    """
-    Return the Deep prompt suffix that explains filesystem availability.
-
-    Why this exists:
-    - Deep should only warn the model away from filesystem calls when the
-      standard filesystem tool set is absent
-    - keeping this in one helper avoids mismatches between prompt text and
-      middleware policy
-
-    How to use it:
-    - call while assembling the final system prompt for one Deep run
-
-    Example:
-    - `suffix = _filesystem_prompt_suffix(filesystem_tools_enabled=False)`
-    """
-    if filesystem_tools_enabled:
+def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
+    """Tell the model exactly which Deep filesystem tools remain unavailable."""
+    unavailable_tool_names = _unavailable_filesystem_tool_names(available_tool_names)
+    if not unavailable_tool_names:
         return ""
-    return _FILESYSTEM_DISABLED_PROMPT_SUFFIX
+    return (
+        "The following filesystem tools are disabled in this runtime: "
+        f"{', '.join(unavailable_tool_names)}. Do not call them."
+    )
 
 
 def _build_deepagent_runtime_middleware(
     *,
-    filesystem_tools_enabled: bool,
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
+    approval_policy: ToolApprovalPolicy,
+    available_tool_names: set[str] | frozenset[str],
+    capability_block: CapabilityAgentBlock | None = None,
 ) -> list[AgentMiddleware]:
     """
-    Build Deep runtime middleware: platform observability first, then the
-    filesystem-tool policy guard.
-
-    Why this exists:
-    - Deep used to bypass `build_react_platform_middleware_frame()` entirely
-      (it overrides `build_executor`, so it never went through
-      `_create_compiled_react_agent`), which meant a Deep turn emitted no
-      `[LLM][CALL]`/`[LLM][RESPONSE]` logs, no `llm.call_latency_ms` KPI, and
-      no `agent.tool.invocation.*` audit events — the same
-      `TracingKpiMiddleware`/`ToolObservabilityMiddleware` pair ReAct always
-      gets. `create_deep_agent` accepts a plain `middleware=` list, so the
-      fix is to hand it the same two middleware instances, same order, no
-      new machinery.
-    - when the standard filesystem MCP tools are absent, Deep should block
-      accidental filesystem calls explicitly
-    - when those tools are present, Deep should not add special blocking and
-      should let the injected MCP tool surface behave normally
-
-    How to use it:
-    - call once while creating the compiled deep agent
-    - pass whether standard filesystem tools are available in the resolved tool
-      list, plus the same tracer/kpi/binding used to build the tool bindings
-
-    Example:
-    - `middleware = _build_deepagent_runtime_middleware(filesystem_tools_enabled=True, tracer=tracer, kpi=kpi, binding=binding)`
+    Assemble Deep's middleware list: capability stack, platform observability,
+    the HITL gate (capability-declared and operator-configured approval
+    alike), then the filesystem-tool guard — same relative order as
+    `build_react_platform_middleware_frame` (`after_model` hooks run in
+    REVERSE list order, so the filesystem guard still blocks a disabled call
+    before the human gate ever sees it). RUNTIME-EXECUTION-CONTRACT.md §8.77.
     """
+    capability_hitl: Mapping[str, CapabilityHitlBinding] | None = (
+        capability_block.hitl if capability_block is not None else None
+    )
     middleware: list[AgentMiddleware] = [
+        *(capability_block.middleware if capability_block is not None else ()),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,
             binding=binding,
         ),
         ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+        FredHitlMiddleware(
+            binding=binding,
+            approval_policy=approval_policy,
+            available_tool_names=available_tool_names,
+            capability_hitl=capability_hitl,
+        ),
     ]
-    if filesystem_tools_enabled:
-        return middleware
-
-    for tool_name in _FILESYSTEM_TOOL_NAMES:
+    for tool_name in _unavailable_filesystem_tool_names(available_tool_names):
         middleware.append(
             cast(
                 AgentMiddleware,

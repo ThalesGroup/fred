@@ -15,18 +15,78 @@
 import asyncio
 import logging
 import mimetypes
+import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
-from typing import BinaryIO, Tuple
+from pathlib import Path
+from typing import BinaryIO, NamedTuple, Tuple
 
 import pandas as pd
-from fred_core import AuthorizationError, DocumentPermission, KeycloakUser
+from fred_core import AuthorizationError, DocumentPermission, KeycloakUser, convert_office_file_to_pdf
 from fred_core.documents.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from tabulate import tabulate
 
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
 from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact
 
 logger = logging.getLogger(__name__)
+
+# Office formats the viewer can show as-is, by rendering them to PDF. LibreOffice reads
+# each directly (no OOXML upgrade first). Only formats ingestion accepts belong here:
+# one no processor handles never reaches the library, so listing it would be inert.
+PDF_RENDERABLE_SUFFIXES = {".docx", ".doc", ".odt", ".pptx", ".ppt"}
+
+# Name of the derived PDF cached under the document's own output/ prefix, so it is
+# wiped along with everything else when the document is deleted.
+PDF_RENDER_ARTIFACT_NAME = "render.pdf"
+
+# Renders run on their OWN small pool, never the default executor `asyncio.to_thread`
+# would use. A conversion holds its worker for the whole `soffice` run — up to the
+# 60 s timeout — and the default executor is shared with RAG search, summarization,
+# metadata deletes and ingestion. Left there, a handful of Word previews would stall
+# the retrieval path of every agent turn on the pod. The worker count doubles as the
+# cap on concurrent `soffice` processes, each of which costs hundreds of MB of RSS.
+# Same admission shape as `features/tabular/execution.py`.
+PDF_RENDER_MAX_CONCURRENCY = 2
+
+_render_executor: ThreadPoolExecutor | None = None
+_render_executor_lock = threading.Lock()
+
+
+def _get_render_executor() -> ThreadPoolExecutor:
+    global _render_executor
+    if _render_executor is None:
+        with _render_executor_lock:
+            if _render_executor is None:
+                _render_executor = ThreadPoolExecutor(
+                    max_workers=PDF_RENDER_MAX_CONCURRENCY,
+                    thread_name_prefix="office-pdf-render",
+                )
+    return _render_executor
+
+
+class PdfRenderUnsupportedError(ValueError):
+    """Raised when a document's format has no PDF rendering path."""
+
+
+class PdfRenderFailedError(RuntimeError):
+    """Raised when LibreOffice could not produce a PDF for a supported format."""
+
+
+class PdfRender(NamedTuple):
+    """One document rendered as PDF, and whether those exact bytes are persisted.
+
+    `cached` is what makes byte ranges safe to serve: LibreOffice stamps
+    /CreationDate and /ID, so two renders of the same document differ in length
+    and offsets. Only bytes that came from (or were just written to) the cache
+    are guaranteed to be the same object a follow-up range request will read.
+    """
+
+    content: bytes
+    file_name: str
+    cached: bool
 
 
 class ContentService:
@@ -43,7 +103,10 @@ class ContentService:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
         self.rebac = ApplicationContext.get_instance().get_rebac_engine()
+        self.kpi: BaseKPIWriter = ApplicationContext.get_instance().get_kpi_writer()
         self._tabular_service = None
+        # Per-document cold-render locks; see `_render_lock`.
+        self._render_locks: dict[str, asyncio.Lock] = {}
 
     @staticmethod
     def _preview_status(metadata: DocumentMetadata) -> ProcessingStatus:
@@ -125,10 +188,10 @@ class ContentService:
         )
         return self._dataframe_to_markdown_preview(preview_frame)
 
-    def _get_preview_bytes(self, document_uid: str, *candidate_names: str) -> tuple[str, bytes]:
+    def _get_output_artifact(self, document_uid: str, *candidate_names: str) -> tuple[str, bytes]:
         for candidate_name in candidate_names:
             try:
-                data = self.content_store.get_preview_bytes(f"{document_uid}/output/{candidate_name}")
+                data = self.content_store.get_output_artifact(f"{document_uid}/output/{candidate_name}")
                 return candidate_name, data
             except FileNotFoundError:
                 continue
@@ -196,7 +259,7 @@ class ContentService:
             raise FileNotFoundError("Preview artifact path is empty.")
 
         try:
-            data = self.content_store.get_preview_bytes(f"{document_uid}/output/{artifact_name}")
+            data = self.content_store.get_output_artifact(f"{document_uid}/output/{artifact_name}")
         except FileNotFoundError:
             raise FileNotFoundError(f"No preview artifact found for document {document_uid} at path {artifact_name}")
 
@@ -255,7 +318,7 @@ class ContentService:
         mime_type = document_metadata.file.mime_type
         if self._is_tabular_document(document_metadata):
             try:
-                candidate_name, preview_bytes = self._get_preview_bytes(
+                candidate_name, preview_bytes = self._get_output_artifact(
                     document_uid,
                     "table.csv",
                     "output.md",
@@ -271,7 +334,7 @@ class ContentService:
             return preview_bytes.decode("utf-8")
 
         try:
-            _, preview_bytes = self._get_preview_bytes(document_uid, "output.md", "output.txt")
+            _, preview_bytes = self._get_output_artifact(document_uid, "output.md", "output.txt")
             return preview_bytes.decode("utf-8")
         except FileNotFoundError:
             raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
@@ -299,3 +362,120 @@ class ContentService:
         if start < 0 or length <= 0:
             raise ValueError("Invalid byte range requested.")
         return self.content_store.get_content_range(document_uid, start=start, length=length)
+
+    def _render_office_to_pdf(self, document_uid: str, suffix: str) -> tuple[bytes, bool] | None:
+        """Blocking: pull the original file, convert it with LibreOffice, cache the PDF.
+
+        Called through `asyncio.to_thread` — both the store round-trips and the
+        `soffice` subprocess are blocking, and a conversion can take seconds.
+        """
+        with tempfile.TemporaryDirectory(prefix="pdf-render-") as tmp:
+            source_path = Path(tmp) / f"source{suffix}"
+            stream = self.content_store.get_content(document_uid)
+            try:
+                with source_path.open("wb") as out:
+                    while chunk := stream.read(1024 * 1024):
+                        out.write(chunk)
+            finally:
+                getattr(stream, "close", lambda: None)()
+
+            pdf_path = convert_office_file_to_pdf(source_path)
+            if pdf_path is None:
+                return None
+            pdf_bytes = pdf_path.read_bytes()
+
+        try:
+            self.content_store.put_output_artifact(
+                f"{document_uid}/output/{PDF_RENDER_ARTIFACT_NAME}",
+                pdf_bytes,
+                content_type="application/pdf",
+            )
+        except Exception:
+            # Not fatal, but the caller must not serve byte ranges out of bytes no
+            # follow-up request can read back — see PdfRender.cached.
+            logger.warning("[CONTENT] Could not cache the PDF render of %s", document_uid, exc_info=True)
+            return pdf_bytes, False
+        return pdf_bytes, True
+
+    def _render_lock(self, document_uid: str) -> asyncio.Lock:
+        """Serialize cold renders of ONE document within this worker.
+
+        Without it a document opened by several viewers at once is converted once
+        per viewer, and the losing renders overwrite the cache the winners' range
+        requests are reading. Best-effort by nature: it does not span replicas,
+        which is why `PdfRender.cached` — not this lock — is what actually keeps a
+        ranged response consistent.
+        """
+        lock = self._render_locks.get(document_uid)
+        if lock is None:
+            lock = self._render_locks[document_uid] = asyncio.Lock()
+        return lock
+
+    async def _read_cached_render(self, document_uid: str) -> bytes | None:
+        """Read the cached PDF off the event loop; None when it is not there yet."""
+
+        def _read() -> bytes | None:
+            try:
+                return self._get_output_artifact(document_uid, PDF_RENDER_ARTIFACT_NAME)[1]
+            except FileNotFoundError:
+                return None
+
+        return await asyncio.to_thread(_read)
+
+    async def get_pdf_render(self, user: KeycloakUser, document_uid: str) -> PdfRender:
+        """
+        Return the document rendered as PDF, plus the name to serve it under.
+
+        A supported office format (see `PDF_RENDERABLE_SUFFIXES`) is converted by
+        LibreOffice and cached under the document's own `output/` prefix, so only
+        the first viewer pays the conversion and the artifact is deleted with the
+        document. A `.pdf` is NOT handled here — it needs no rendering and is
+        served untouched by `/raw_content/stream/{uid}`.
+
+        Raises `PdfRenderUnsupportedError` for a format with no rendering path and
+        `PdfRenderFailedError` when the conversion itself could not be performed.
+        """
+        metadata = await self.get_document_metadata(user, document_uid)
+        document_name = metadata.document_name
+        suffix = Path(document_name).suffix.lower()
+
+        if suffix not in PDF_RENDERABLE_SUFFIXES:
+            detail = "is already a PDF — stream it from /raw_content/stream" if suffix == ".pdf" else "has no PDF rendering path"
+            raise PdfRenderUnsupportedError(f"Document {document_uid} ({suffix or 'no extension'}) {detail}.")
+
+        pdf_name = f"{Path(document_name).stem}.pdf"
+        cached = await self._read_cached_render(document_uid)
+        if cached is not None:
+            return PdfRender(cached, pdf_name, cached=True)
+
+        lock = self._render_lock(document_uid)
+        try:
+            async with lock:
+                # A conversion may have completed while this request waited for the lock.
+                cached = await self._read_cached_render(document_uid)
+                if cached is not None:
+                    return PdfRender(cached, pdf_name, cached=True)
+
+                loop = asyncio.get_running_loop()
+                with self.kpi.timer(
+                    "content.pdf_render_latency_ms",
+                    dims={"file_type": suffix.lstrip(".")},
+                    actor=KPIActor(type="system"),
+                ) as kpi_dims:
+                    rendered = await loop.run_in_executor(
+                        _get_render_executor(),
+                        self._render_office_to_pdf,
+                        document_uid,
+                        suffix,
+                    )
+                    kpi_dims["status"] = "error" if rendered is None else "ok"
+        finally:
+            # Keep the registry from growing one Lock per document ever previewed:
+            # the entry only exists to rendezvous concurrent cold opens.
+            if not lock.locked():
+                self._render_locks.pop(document_uid, None)
+
+        if rendered is None:
+            raise PdfRenderFailedError(f"LibreOffice could not render document {document_uid} as PDF.")
+        pdf_bytes, is_cached = rendered
+        return PdfRender(pdf_bytes, pdf_name, cached=is_cached)

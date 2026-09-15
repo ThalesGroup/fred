@@ -30,6 +30,7 @@ export type ButtonVariant = "filled" | "outlined" | "text";
  * every value maps to a rule in every component.
  */
 export type ComponentSize = "medium" | "small" | "xs" | "2xs";
+export type ButtonSize = Extract<ComponentSize, "2xs" | "small" | "medium">;
 
 export type IconButtonVariant = "filled" | "tonal" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
@@ -56,7 +57,6 @@ export const materialIcons = [
   "folder",
   "delete",
   "delete_sweep",
-  "infos",
   "person",
   "person_add",
   "arrow_drop_down",

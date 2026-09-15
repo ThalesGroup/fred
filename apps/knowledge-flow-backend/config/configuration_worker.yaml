@@ -19,6 +19,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  pdf_render_ttl_days: 30
 
 observability:
   kpi:

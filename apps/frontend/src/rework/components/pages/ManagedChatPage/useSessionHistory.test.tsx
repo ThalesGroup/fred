@@ -49,10 +49,13 @@ vi.mock("../../../../security/KeycloakService", () => ({
   },
 }));
 
-const prepareExecutionCalls: unknown[] = [];
+// History prepares WITHOUT a session id on purpose (it needs only the messages
+// URL template): asking for a session the caller has only just minted would be
+// refused and cost the thread its history.
+const prepareExecutionCalls: Record<string, unknown>[] = [];
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation: () => [
-    (args: unknown) => {
+    (args: Record<string, unknown>) => {
       prepareExecutionCalls.push(args);
       return {
         unwrap: async () => ({ messages_url_template: "/runtime/sessions/{session_id}/messages" }),
@@ -160,6 +163,7 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(latest.isLoading).toBe(false);
     expect(onLoaded).toHaveBeenCalledWith(history);
     expect(getCachedSessionHistory("session-a")).toEqual(history);
+    expect(prepareExecutionCalls).toEqual([{ teamId: "team-1", agentInstanceId: "agent-1" }]);
   });
 
   it("cache hit: renders synchronously with no loading state, then revalidates in the background", async () => {
@@ -200,6 +204,60 @@ describe("useSessionHistory — #2239 serve-then-revalidate cache", () => {
     expect(onLoaded).not.toHaveBeenCalled(); // A's history never rendered under B
     expect(getCachedSessionHistory("session-a")).toBeUndefined(); // and never cached as fresh
     expect(getCachedSessionHistory("session-b")).toEqual(bHistory);
+    // ...nor does it report ITS completion as B's: callers sequence work behind
+    // this flag, and B's own load has already settled and will not settle twice.
+    expect(latest.isSettled).toBe(true);
+  });
+
+  // A chat with no session id yet has no history to resolve. Reporting it as
+  // unsettled would put callers that sequence work behind the thread — the
+  // welcome stage, the capability panel — into a wait that never ends.
+  it("is settled with no session, even after leaving one that had settled", async () => {
+    mount("session-a");
+    await settle();
+    expect(latest.isSettled).toBe(true);
+
+    render(null);
+
+    expect(latest.isSettled).toBe(true);
+  });
+
+  it("re-entering a conversation is not settled by its previous visit", async () => {
+    setCachedSessionHistory("session-a", [msg("a1")]);
+    const slowB = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = (url) => (url.includes("session-b") ? slowB.promise : Promise.resolve(okResponse([msg("a1")])));
+
+    mount("session-a");
+    await settle();
+    expect(latest.isSettled).toBe(true);
+
+    // Leave for B, which never answers, then come straight back to A: A's own
+    // load is in flight again, so the verdict from its first visit is stale.
+    render("session-b");
+    render("session-a");
+
+    expect(latest.isSettled).toBe(false);
+  });
+
+  // Leaving mid-load discards the answer (the stale guard) and caches nothing.
+  // Coming back therefore has to load again — a visit suppressed as if it were
+  // a re-render would never settle, and callers waiting on that wait forever.
+  it("loads again on re-entry after leaving mid-load", async () => {
+    const slowA = deferred<{ ok: boolean; json: () => Promise<ChatMessage[]> }>();
+    fetchImpl = () => slowA.promise;
+
+    mount("session-a");
+    render(null);
+    slowA.resolve(okResponse([msg("a1")]));
+    await settle();
+    expect(latest.isSettled).toBe(true); // no session: nothing to resolve
+
+    fetchImpl = async () => okResponse([msg("a1")]);
+    render("session-a");
+    await settle();
+
+    expect(latest.isSettled).toBe(true);
+    expect(onLoaded).toHaveBeenLastCalledWith([msg("a1")]);
   });
 
   it("an empty response is not applied — a brand-new session's optimistic first message survives", async () => {

@@ -139,15 +139,16 @@ branding channel in control-plane.
 Permissions are exposed via:
 
 - `PermissionSummary`
-  - `is_platform_admin`, `is_platform_observer` — the only fields, both
-    OpenFGA-derived (organization `platform_admin`/`platform_observer`
-    relations). See Contract Note §14 (AUTHZ-05 review item 11): the former
-    `items` flattened-permission list and six unwired `can_*` booleans were
-    removed — they were Keycloak-role-derived and had gone permanently empty
-    once AUTHZ-05 removed Keycloak app roles.
+  - `platform_roles: PlatformRoleRelation[]` — the only field, OpenFGA-derived
+    (the organization role relations) and union-resolved, so a `platform_admin`
+    carries every role. See Contract Note §51: it replaced the
+    `is_platform_admin` / `is_platform_observer` booleans when the admin tier
+    split into five delegated roles. Contract Note §14 records the earlier
+    removal of the Keycloak-derived `items` list and six unwired `can_*`
+    booleans.
   - no raw RBAC/REBAC graph internals
 
-Org-level gating stops at these two booleans. Team-scoped gating (agents,
+Org-level gating stops at this one list. Team-scoped gating (agents,
 resources, member administration, evaluation, …) does not belong on
 `PermissionSummary` at all — it is exposed per team on
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
@@ -167,7 +168,7 @@ Terms-gating behavior and current deployment limitations are documented in
 
 `FrontendBootstrap` is authenticated and answers post-login product questions. It
 **cannot** carry the "is user security enabled?" decision: the frontend must make
-that decision *before* it can authenticate (chicken-and-egg). That single pre-auth
+that decision _before_ it can authenticate (chicken-and-egg). That single pre-auth
 value is served by a separate **public (unauthenticated)** surface:
 
 - `GET /control-plane/v1/frontend/config` → `FrontendConfig`
@@ -194,7 +195,7 @@ team/session/product state. Those stay on the authenticated `FrontendBootstrap`.
 
 **Why `gcu_version` lives here and not (only) on the bootstrap.** The CGU version
 is a pre-auth value for the same reason `user_auth` is: the GCU guard must decide
-whether to show the acceptance page *before* the user has accepted, but
+whether to show the acceptance page _before_ the user has accepted, but
 `/frontend/bootstrap` is `get_current_user`-gated and **403s with
 `user_not_accept_gcu` until acceptance** — it cannot deliver the version needed to
 render its own acceptance page (chicken-and-egg, FRONT-10). `build_frontend_config`
@@ -218,7 +219,7 @@ CLI display) and must **not** be used to gate the UI. See
 the deploy-time secret. Neither alone is sufficient: the JWT proves a real
 identity in this realm, the secret proves legitimate deploy-time access. This
 does not reopen the bootstrap chicken-and-egg — Keycloak authentication
-depends on nothing Fred/OpenFGA owns, only *authorization* did, and there is
+depends on nothing Fred/OpenFGA owns, only _authorization_ did, and there is
 none here. The secret is never generated or logged by Fred, in any
 environment: it is supplied externally, via `bootstrap_token_env_var` (an
 environment variable sourced from a Kubernetes Secret — the deployment's
@@ -255,7 +256,7 @@ Endpoint authorization matrix entry:
 - `root_bootstrap_required` — the **authoritative frontend gating decision**
   for `BootstrapGuard`. Computed by `build_frontend_config()` as
   `security.user.enabled AND security.rebac.enabled AND NOT
-  root_bootstrap_completed`.
+root_bootstrap_completed`.
 
 These necessarily diverge on deployments where user authentication or ReBAC is
 disabled: `root_bootstrap_completed` stays `false` on a fresh database (no one
@@ -579,9 +580,9 @@ Planned purge surfaces:
 | All data for one session         | Combined call to both above _(pending)_                      |
 | Bulk purge by team / age         | `POST /agents/sessions/purge` with policy filter _(pending)_ |
 
-**`session_purge_queue` — deferred-delete scheduler (CTRLP-12, §35):** The *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The lifecycle worker (`scheduler/lifecycle_actions.py`) invokes `erase_session` at expiry and marks the queue entry done only on `receipt.ok` — see §35 for the full contract.
+**`session_purge_queue` — deferred-delete scheduler (CTRLP-12, §35):** The _scheduler_ for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention _mechanism_ is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The lifecycle worker (`scheduler/lifecycle_actions.py`) invokes `erase_session` at expiry and marks the queue entry done only on `receipt.ok` — see §35 for the full contract.
 
-**Soft-deleted session read contract (CTRLP-12 A5):** During the deferred-delete window a soft-deleted conversation is hidden from the session *list* (`list_by_team` filters `deleted_at IS NULL`) but remains directly fetchable by id (`SessionMetadataStore.get` does not filter `deleted_at`) and its attachments remain listable — intentional, to support a bounded post-incident / evaluation read. The row is fully erased only at window expiry. `DELETE /teams/{id}/sessions/{session_id}` returns 404 for a missing or non-owned session.
+**Soft-deleted session read contract (CTRLP-12 A5):** During the deferred-delete window a soft-deleted conversation is hidden from the session _list_ (`list_by_team` filters `deleted_at IS NULL`) but remains directly fetchable by id (`SessionMetadataStore.get` does not filter `deleted_at`) and its attachments remain listable — intentional, to support a bounded post-incident / evaluation read. The row is fully erased only at window expiry. `DELETE /teams/{id}/sessions/{session_id}` returns 404 for a missing or non-owned session.
 
 #### 3.5.7 Session lifecycle
 
@@ -659,8 +660,8 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
 - publishing sets `PromptRow.published` on the team's own row — the marketplace
   shows that live record, so edits and the shared `session_count` usage counter
   propagate immediately; publishing never changes team ownership
-- nothing persistently references the published row: *use* is a clipboard copy,
-  *import* is copy-by-value (a fresh row via `promote`, counter reset to 0), so
+- nothing persistently references the published row: _use_ is a clipboard copy,
+  _import_ is copy-by-value (a fresh row via `promote`, counter reset to 0), so
   no agent instance or team prompt record ever points at a marketplace row
 - only real team prompts are publishable; personal-space prompts stay private
 - endpoints: `POST .../prompts/{id}/publish` and `.../unpublish`
@@ -743,7 +744,7 @@ See `docs/swift/design/FILESYSTEM.md`.
 > non-public agents (`RUNTIME-EXECUTION-CONTRACT.md`).
 >
 > **2026-06-26 (VALID-02, amends the above):** the **direct path** is closed to non-public
-> agents for *everyone*. `prepare_runtime_agent_execution` now resolves with
+> agents for _everyone_. `prepare_runtime_agent_execution` now resolves with
 > `include_non_public=False` unconditionally → a hidden `agent_id` is 404 even for admins.
 > Reason: the runtime refuses direct execution of non-public agents regardless of caller, so
 > an admin direct-prepare would resolve an **unusable** target. Non-public agents are reachable
@@ -792,14 +793,14 @@ All public endpoints are product/metadata-oriented and independent of runtime me
 
 ## 5. Source Of Truth Map
 
-| Concern                                  | Source of truth                                               | Notes                            |
-| ---------------------------------------- | ------------------------------------------------------------- | -------------------------------- |
-| Runtime execution contracts              | `docs/design/RUNTIME-EXECUTION-CONTRACT.md` + `libs/fred-sdk` | Do not redefine in control-plane |
-| Product/session/admin migration sequence | `BACKLOG.md`                                                  | Phase order and next slice       |
-| API ownership                            | `docs/platform/PLATFORM_RUNTIME_MAP.md`                       | Architecture boundary            |
-| Phase 3a control-plane contracts         | this document                                                 | Product-surface source of truth  |
-| Generated frontend runtime types         | `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`               | Generated; never hand-edit       |
-| Generated frontend control-plane types   | `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`     | Generated; never hand-edit       |
+| Concern                                  | Source of truth                                                | Notes                            |
+| ---------------------------------------- | -------------------------------------------------------------- | -------------------------------- |
+| Runtime execution contracts              | `docs/design/RUNTIME-EXECUTION-CONTRACT.md` + `libs/fred-sdk`  | Do not redefine in control-plane |
+| Product/session/admin migration sequence | `BACKLOG.md`                                                   | Phase order and next slice       |
+| API ownership                            | `docs/platform/PLATFORM_RUNTIME_MAP.md`                        | Architecture boundary            |
+| Phase 3a control-plane contracts         | this document                                                  | Product-surface source of truth  |
+| Generated frontend runtime types         | `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`           | Generated; never hand-edit       |
+| Generated frontend control-plane types   | `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts` | Generated; never hand-edit       |
 
 ---
 
@@ -954,11 +955,11 @@ task kinds that support cooperative cancellation.
 2026-08-14, issue #2170 — supersedes the "dedicated database per backend" design
 in `TASK-EVENT-STREAM-RFC.md` rev. 4 §2.9, which was confirmed but never built):
 
-| Owner           | Tables                              | Alembic tree           |
-| --------------- | ----------------------------------- | ---------------------- |
-| control-plane   | `cp_task_run`, `cp_task_event_log`  | `alembic_version_control_plane` |
-| knowledge-flow  | `kf_task_run`, `kf_task_event_log`  | `alembic_version_knowledge_flow` |
-| evaluation      | `task_run`, `task_event_log`        | its own database (provisioned 2026-07-07) |
+| Owner          | Tables                             | Alembic tree                              |
+| -------------- | ---------------------------------- | ----------------------------------------- |
+| control-plane  | `cp_task_run`, `cp_task_event_log` | `alembic_version_control_plane`           |
+| knowledge-flow | `kf_task_run`, `kf_task_event_log` | `alembic_version_knowledge_flow`          |
+| evaluation     | `task_run`, `task_event_log`       | its own database (provisioned 2026-07-07) |
 
 - `<prefix>task_run` — current-state summary (one row per task, updated in place)
 - `<prefix>task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
@@ -969,7 +970,7 @@ concrete pair on **its own** `Base` and hands the pair to `TaskStore` /
 `TaskService.build` as a `TaskTables`. fred-core maps nothing itself.
 
 **Why prefixes rather than a database per backend.** control-plane and
-knowledge-flow share the `fred` database, and both mapped the *same* `task_run`
+knowledge-flow share the `fred` database, and both mapped the _same_ `task_run`
 on the shared `CoreBase`. Nothing scoped either backend's `GET /tasks` to the
 rows it created, so each returned the other's and the Activity page — which
 queries every backend and merges client-side, by design — listed every task
@@ -985,14 +986,14 @@ embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, �
 `import_export/api.py` derives the single-active-migration index name it matches
 in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
 
-Task rows are progress bookkeeping, so the split ships with **no backfill**. It
-also does **not drop** the old shared `task_run`/`task_event_log`: they are left
-orphaned for a later release. The two Temporal workers have no `migration:` block
-in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
-running old code — which writes the shared table through an unguarded activity
-that is the first step of every push-file ingestion. Dropping it mid-deploy would
-fail those workflows outright and lose the document, not just its task row.
-Expand now, contract in a later release.
+Task rows are progress bookkeeping, so the split shipped with **no backfill**. The
+old shared `task_run`/`task_event_log` stayed orphaned for one release and were
+dropped in a later one (control-plane revision `d3f8a2c6e174`, issue #2377). The
+two Temporal workers have no `migration:` block in `deploy/charts/fred/values.yaml`,
+so they get no scale-down hook and run the **previous** image through a rollout:
+a table they write can only be dropped once the release before already stopped
+writing it. Any future rename of a worker-written table needs the same two-release
+split.
 
 ### Ownership boundary
 
@@ -1036,6 +1037,7 @@ GET    /control-plane/v1/evaluation-campaigns/{campaign_id}/cases/{case_id}
 ```
 
 Task progress and cancellation reuse generic task endpoints:
+
 ```
 GET    /control-plane/v1/tasks/{task_id}/events
 POST   /control-plane/v1/tasks/{task_id}/cancel
@@ -1043,12 +1045,12 @@ POST   /control-plane/v1/tasks/{task_id}/cancel
 
 ### Authorization
 
-| Operation | Required permission |
-| --- | --- |
-| List/read team campaigns and results | `TeamPermission.CAN_READ` |
-| Create a campaign for a team | `TeamPermission.CAN_UPDATE_AGENTS` |
-| Cancel a running campaign | campaign creator, platform owner, or `CAN_UPDATE_AGENTS` on campaign team |
-| Read own campaign | campaign creator |
+| Operation                            | Required permission                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| List/read team campaigns and results | `TeamPermission.CAN_READ`                                                 |
+| Create a campaign for a team         | `TeamPermission.CAN_UPDATE_AGENTS`                                        |
+| Cancel a running campaign            | campaign creator, platform owner, or `CAN_UPDATE_AGENTS` on campaign team |
+| Read own campaign                    | campaign creator                                                          |
 
 No new OpenFGA relation is introduced in the MVP.
 
@@ -1061,13 +1063,13 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 
 ### Server-side limits (strict — requests may choose lower values)
 
-| Limit | Default | Hard max |
-| --- | ---: | ---: |
-| Cases per campaign | 50 | 200 |
-| Concurrent cases | 3 | 10 |
-| Agent execution timeout | 600 s | 900 s |
-| Judge timeout per metric | 120 s | 300 s |
-| Input size per case | 32 KiB | 64 KiB |
+| Limit                    | Default | Hard max |
+| ------------------------ | ------: | -------: |
+| Cases per campaign       |      50 |      200 |
+| Concurrent cases         |       3 |       10 |
+| Agent execution timeout  |   600 s |    900 s |
+| Judge timeout per metric |   120 s |    300 s |
+| Input size per case      |  32 KiB |   64 KiB |
 
 ### RFC reference
 
@@ -1102,7 +1104,7 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
   **absent** field leaves the context unchanged (so freshness-only PATCHes never
   wipe attached prompts).
 - **`SessionListItem`** — `context_prompt_id: str | null` → `context_prompt_ids:
-  list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
+list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
   session open.
 - **`ExecutionPreparation.context_prompt_text`** — **unchanged scalar type**.
   Control-plane resolves each attached id in `position` order (library prompts via
@@ -1147,7 +1149,8 @@ unreachable/disabled for all users.
 
 `PermissionSummary` now carries exactly `is_platform_admin` and
 `is_platform_observer` — unchanged, already OpenFGA-derived since review item
-4. Team-scoped gating was never this field's job; it goes through
+4. (Superseded 2026-09-09 by §51: both booleans became `platform_roles`.)
+Team-scoped gating was never this field's job; it goes through
 `TeamWithPermissions.permissions` (`list[TeamPermission]`), already returned
 by every team-fetching endpoint and unaffected by this change.
 
@@ -1276,15 +1279,14 @@ changed, but the enforcement semantics did: `can_use` is now checked with the
 TEAM in the URL as subject (RFC §8.1 amendment). Consequence visible on this
 surface: `GET /teams/{team_id}/agent-templates` filters each template's
 `available_capabilities` to what THAT team can use — a capability enabled for
-another of the caller's teams no longer appears (and can no longer be saved,
-403) outside its enabled team.
+another of the caller's teams no longer appears (and can no longer be saved, 403) outside its enabled team.
 
-| Method + path | Request | Response | Effect |
-| --- | --- | --- | --- |
-| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs), `default_capability_ids` (2026-08-25, see below). |
-| `PUT /admin/capabilities/{capability_id}/teams/{team_id}` | `EnableTeamCapabilityRequest` (`settings`) | `TeamCapabilityEnablementResult` | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple. |
-| `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | — | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension. |
-| `PUT /admin/capabilities/{capability_id}/default-on` | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`) | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances. |
+| Method + path                                                | Request                                        | Response                                                 | Effect                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/capabilities`                                    | —                                              | `CapabilityEnablementList`                               | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs), `default_capability_ids` (2026-08-25, see below). |
+| `PUT /admin/capabilities/{capability_id}/teams/{team_id}`    | `EnableTeamCapabilityRequest` (`settings`)     | `TeamCapabilityEnablementResult`                         | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple.                                                                                                                                                             |
+| `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | —                                              | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension.                                                                                                                                                     |
+| `PUT /admin/capabilities/{capability_id}/default-on`         | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`)      | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances.                                                                                                                                                            |
 
 `suspended_instances` on the two revoking mutations is the **delta** the action
 caused (#1975 reconciliation), surfaced by the #1981 dashboard as post-action
@@ -1299,8 +1301,8 @@ withdrawn config-only `platform.capabilities.personal_defaults` first-touch
 seeding. One new route (org-admin-gated on `capability#can_manage`, same as
 `/default-on`), and one new field on the aggregate list item.
 
-| Method + path | Request | Response | Effect |
-| --- | --- | --- | --- |
+| Method + path                                            | Request                                                                             | Response                                                         | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PUT /admin/capabilities/{capability_id}/personal-scope` | `SetCapabilityPersonalScopeRequest` (`scope: "enabled" \| "disabled" \| "default"`) | `CapabilityPersonalScopeResult` (`scope`, `suspended_instances`) | Set the personal-space class tri-state: `enabled` writes the `personal_on` org tuple (usable by ALL personal spaces), `disabled` writes `personal_disabled` (blocked for all), `default` clears both. Idempotent. A transition that loses access for personal spaces (enabled→disabled, enabled→default without default_on, default→disabled with default_on) suspends dependent **personal-space** instances whose team lacks an explicit `enabled` grant. `enabled` is rejected (409) for a capability with a required team setting, mirroring `default_on`. |
 
 The `GET /admin/capabilities` item gains **`personal_scope`** (`"enabled" \|
@@ -1321,7 +1323,7 @@ so existing rows are unchanged). `GET /admin/capabilities` now also lists a
 `kind="agent"` row per registered agent template (control-plane-side
 projection — never a runtime pod change), enabled/disabled through the exact
 same `PUT`/`DELETE .../teams/{team_id}` and gated the exact same way. The
-frontend (`CapabilitiesPage.tsx`) filters the one dataset by `kind` (a
+frontend (`FeaturesPage.tsx`) filters the one dataset by `kind` (a
 "Tools"/"Agents" toggle) rather than adding a second page or route. Also
 newly gated on `can_use`, using the same `capability` object space with id
 `f"{runtime_id}__{agent_id}"`: `GET /teams/{team_id}/agent-templates` (hides
@@ -1354,7 +1356,7 @@ entry when the team (or, for personal-scope, every personal space) isn't
 already `can_use` on all of its `default_capability_ids` — prevents enabling
 an agent whose tools aren't granted yet. `PATCH /teams/{team_id}/agent-instances/{id}`
 now 403s once the instance's own template grant is revoked (previously only
-*tool* capability selections were re-checked on update; unenroll is still
+_tool_ capability selections were re-checked on update; unenroll is still
 always allowed).
 
 **2026-07-26 — `kind="model"`, a third projection (CAPAB-01/OBSERV-02).**
@@ -1365,17 +1367,18 @@ manifest** — like `kind="agent"`, no one hand-writes a `kind="model"`
 `fred_runtime.model_routing.catalog`) stays the sole source of truth for
 routing. Every mechanism already built for `kind="tool"`/`kind="agent"` —
 schema, `can_use`, the enablement write path, the admin dashboard — governs
-`kind="model"` uniformly; `CapabilitiesPage.tsx` needed only a widened
+`kind="model"` uniformly; `FeaturesPage.tsx` needed only a widened
 `KIND_FILTERS` value and one i18n key, no `kind`-specific branch anywhere
 else (the team matrix, health column, and default-on toggle are all
 kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
-has one enablement decision even if different typed consumers eventually use
-it) — and deriving the id itself
-(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+per distinct model identity — not per `profile_id` (a concrete model has one
+enablement decision even if different typed consumers eventually use it) — and
+deriving the id itself (`ModelProfile.capability_id`, which is
+`model_capability_id(provider, model_id or name)` — see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
 agent fetches (same best-effort contract — `None` on an unreachable pod),
@@ -1448,7 +1451,7 @@ stated for the other per-kind fields. This is the missing half of the
 capabilities were not usable by the target team, but the list contract carried
 no way for the dashboard to know it.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, predicates in `capabilityEnablement.ts`):
 the drawer disables "Enable" and names the blocking dependencies for a team
 that cannot use them; the personal-space class row does the same against the
@@ -1476,7 +1479,7 @@ mismatch is cosmetic and not worth a second code path.
 UI offers to satisfy it (GitHub #2470).** Three write paths grant a
 `kind="agent"` capability; only two of them enforced the 2026-07-19 gate.
 `PUT /admin/capabilities/{capability_id}/default-on` had **no dependency check
-at all** — so turning an agent template default-on handed it to *every* team
+at all** — so turning an agent template default-on handed it to _every_ team
 while its `default_capability_ids` stayed ungranted, enrolling a
 non-functional agent platform-wide with no error at any point. Surfaced by the
 `platform_ops` template (#2458), the first shipped template that declares a
@@ -1493,11 +1496,11 @@ route's error contract is unchanged (plain-string `detail`, no `error_code`).
 
 `default_on` is the only satisfying marker here, deliberately stricter than
 the personal-scope rule (`(personal_on OR default_on) AND NOT
-personal_disabled`): default-on reaches every team *present and future*, so a
+personal_disabled`): default-on reaches every team _present and future_, so a
 dependency merely granted to the teams that exist today would still leave
 tomorrow's team inheriting a template it cannot use.
 
-Client-side consequences (`CapabilitiesPage.tsx`,
+Client-side consequences (`FeaturesPage.tsx`,
 `CapabilityTeamMatrixDrawer.tsx`, `missingAgentDependenciesForPlatform` in
 `capabilityEnablement.ts`): the 2026-08-25 entry's disabled "Enable" segment
 is **replaced by an "Enable all" confirmation** on all three paths. The
@@ -1512,7 +1515,7 @@ better-error affordance and never an enforcement point.
 
 **Not transactional, and ordered on purpose.** "Enable all" issues one write
 per dependency and then the template, sequentially. A dependency that fails
-aborts the sequence *before* the template, so a partial failure always leaves
+aborts the sequence _before_ the template, so a partial failure always leaves
 "dependency granted, template not" — never the inverse, which is the broken
 state being fixed. The failing dependency is named in the error toast.
 
@@ -1575,9 +1578,9 @@ the caller's personal prompts into a non-personal team's context (#2023) — a
 team space returns only the team's own prompts; the personal space returns
 only the caller's prompts (scope `personal`). Response shape unchanged.
 Already-attached personal prompts keep resolving at prepare-execution (see
-`design/PROMPTS.md` §5/§6). *(2026-07-30, PROMPT-09: "+ platform defaults" no
+`design/PROMPTS.md` §5/§6). _(2026-07-30, PROMPT-09: "+ platform defaults" no
 longer applies — the platform default-prompt catalog this note originally
-described is removed, see §32.)*
+described is removed, see §32.)_
 
 ## 21. Contract Notes — personal team isolation rule (CTRLP-10 / AUTHZ-08)
 
@@ -1607,11 +1610,11 @@ JSON routes are unchanged and remain the path for every save without uploads:
 
 Body (`multipart/form-data`):
 
-| Field | Meaning |
-| --- | --- |
-| `request` | The corresponding JSON request (`CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`) as a JSON object string |
-| `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files` |
-| `asset_files` | The uploaded binaries |
+| Field         | Meaning                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `request`     | The corresponding JSON request (`CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`) as a JSON object string |
+| `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files`                    |
+| `asset_files` | The uploaded binaries                                                                                                |
 
 Semantics: control-plane is a pure relay — it never opens the bytes. Files are
 grouped per capability and forwarded to the pod's
@@ -1640,7 +1643,7 @@ serving surface (agentic-backend frontend properties) no longer exists on
 swift.
 
 Boundary rationale (§3.1): this is **not** a branding label — it is a
-deployer *policy/compliance notice* (e.g. "do not upload classified
+deployer _policy/compliance notice_ (e.g. "do not upload classified
 documents"), structured (severity + locale map), which the static
 `config.json` `properties` surface (`Record<string, string>`) cannot express.
 It follows the `gcu_version` precedent: deployment-config-owned policy
@@ -1923,7 +1926,7 @@ own members.
 **Interaction with `joining_mode` — downgrade, never reject.** A `PRIVATE`
 team cannot be `OPEN` (self-service join onto an undiscoverable,
 unreadable-to-non-members team is incoherent). `update_team` resolves the
-patch's *resulting* `visibility`/`joining_mode` (an untouched field keeps
+patch's _resulting_ `visibility`/`joining_mode` (an untouched field keeps
 its current stored value) and, if that combination would be
 `PRIVATE`+`OPEN`, silently rewrites `joining_mode` to `INVITE_ONLY` in the
 same patch — never trusts which field the client "meant" to win, and never
@@ -1933,8 +1936,8 @@ while `visibility === private`, so the invalid combination is unreachable
 from the UI in the first place; the server-side downgrade is the
 authoritative backstop.
 
-**Default and migration.** *(Superseded 2026-08-26 — new teams default to
-`PRIVATE` since #2433, see §44; accurate for its own date below.)*
+**Default and migration.** _(Superseded 2026-08-26 — new teams default to
+`PRIVATE` since #2433, see §44; accurate for its own date below.)_
 `PUBLIC` for both new and pre-existing teams
 (migration `8092a626d4d0`, `server_default='public'`) — preserves every
 team's current unconditional marketplace presence exactly; nothing becomes
@@ -1989,7 +1992,7 @@ writes, a seeding failure logs a warning and does not fail team creation. The
 personal prompt space is **not** seeded.
 
 **Migration (`8ca7cafc292f`)** backfills the same starter kit into every
-*existing* team that had zero prompt rows at migration time (teams that
+_existing_ team that had zero prompt rows at migration time (teams that
 already authored custom prompts are left untouched), migrates every existing
 prompt's legacy `category` string into a real per-team category row named
 after the old enum's French label, then drops `prompt.category` and
@@ -2071,16 +2074,17 @@ only enabled ids.
 administrator switches it on (RFC §5.6.1). Release-noted, not silent. Chosen on
 safety grounds — measured 10/10 turns
 with duplicate tool calls on the profile this affects — and it puts the live
-per-model off switch in place *before* levels 3–4 widen exposure to it (RFC §9).
+per-model off switch in place _before_ levels 3–4 widen exposure to it (RFC §9).
 
 ### Contract additions
 
-| Field | On | Meaning |
-| ----- | -- | ------- |
-| `CapabilityEnablementItem.thinking_profile_ids` | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all** |
-| `CapabilityEnablementItem.reasoning_enabled` | `GET /admin/capabilities` | Current activation; `false` when no row is stored |
-| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction |
-| `ExecutionPreparation.reasoning_enabled_model_ids` | prepare-execution | The activation snapshot the runtime enforces against |
+| Field                                               | On                        | Meaning                                                                                                                                                               |
+| --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                                |
+| `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                                     |
+| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
+| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction         |
+| `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                                  |
 
 ### Delivery to the runtime
 
@@ -2102,23 +2106,23 @@ change and remain resolved once at session prep and forwarded by the frontend
 unchanged — routing-profile choice is a cost/comfort lever already bounded by
 the per-turn model authorization check, not an admin control, so the same
 freshness requirement does not apply to it. The platform-wide `chat` model
-binding (§40, issue #2365) is a fourth, unrelated field that *does* get the
+binding (§40, issue #2365) is a fourth, unrelated field that _does_ get the
 freshness treatment — see `RUNTIME-EXECUTION-CONTRACT.md` §8.55.
 
 ### Addendum — REASON-01 phase 2, reasoning is an agent property (2026-07-30)
 
 Levels 3-4 shipped (`RUNTIME-EXECUTION-CONTRACT.md` §8.30). Reasoning is **not**
 a capability (RFC §15, Amendment A) — it was built as one and withdrawn before
-release, because an agent does not *use* reasoning the way it uses a tool.
+release, because an agent does not _use_ reasoning the way it uses a tool.
 
 ### Contract additions
 
-| Field | On | Meaning |
-| ----- | -- | ------- |
-| `reasoning_enabled` | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Level 3: does this agent offer the composer's reasoning toggle |
-| `reasoning_enabled` | `ManagedAgentInstanceSummary` | Current setting, so the edit and duplicate flows can hydrate it |
-| `reasoning_enabled` | `ManagedAgentTuning` | Where it is persisted — a plain agent property beside `role`/`description`, **not** a `capability_config` slice |
-| `reasoning_disabled` | `CapabilityDefaultOnResult` | True when switching this **model** off also switched its reasoning off (RFC §5.7, 2026-07-30) |
+| Field                | On                                                                                                | Meaning                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `reasoning_enabled`  | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Level 3: does this agent offer the composer's reasoning toggle                                                  |
+| `reasoning_enabled`  | `ManagedAgentInstanceSummary`                                                                     | Current setting, so the edit and duplicate flows can hydrate it                                                 |
+| `reasoning_enabled`  | `ManagedAgentTuning`                                                                              | Where it is persisted — a plain agent property beside `role`/`description`, **not** a `capability_config` slice |
+| `reasoning_disabled` | `CapabilityDefaultOnResult`                                                                       | True when switching this **model** off also switched its reasoning off (RFC §5.7, 2026-07-30)                   |
 
 `UpdateAgentInstanceRequest.reasoning_enabled` follows the same "omit means
 unchanged" convention as `role` and `usage_statement`, so a partial update such
@@ -2161,11 +2165,11 @@ consequences worth stating:
 `params.default` on the emitted `reasoning_toggle` descriptor was hardcoded
 `False`; it is now the agent's own `reasoning_default_on` (RFC §16).
 
-| Field | On | Meaning |
-| ----- | -- | ------- |
-| `reasoning_default_on` | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Does a new conversation start with the composer's reasoning toggle already on |
-| `reasoning_default_on` | `ManagedAgentInstanceSummary` | Current setting, so the edit and duplicate flows hydrate it like `reasoning_enabled` |
-| `reasoning_default_on` | `ManagedAgentTuning` | Where it is persisted — beside `reasoning_enabled`, still not a `capability_config` slice |
+| Field                  | On                                                                                                | Meaning                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `reasoning_default_on` | `CreateAgentInstanceRequest` (default `False`), `UpdateAgentInstanceRequest` (`None` = unchanged) | Does a new conversation start with the composer's reasoning toggle already on             |
+| `reasoning_default_on` | `ManagedAgentInstanceSummary`                                                                     | Current setting, so the edit and duplicate flows hydrate it like `reasoning_enabled`      |
+| `reasoning_default_on` | `ManagedAgentTuning`                                                                              | Where it is persisted — beside `reasoning_enabled`, still not a `capability_config` slice |
 
 **This is a seed, not a gate, and the distinction is the contract.** §8's gates
 are evaluated first and unchanged: with the offer off, or no model reasoning
@@ -2198,7 +2202,7 @@ guarantees the aptitude gate: `PATCH /admin/capabilities/{id}/reasoning` 409s
 stored enabled row can only ever name a reasoning-capable model.
 
 **Deliberately not narrowed to the profile the turn will route to.** Routing
-resolves a profile per *operation* at runtime while chat controls are computed
+resolves a profile per _operation_ at runtime while chat controls are computed
 once per session (RFC §12 q3). Erring toward under-hiding — showing a control a
 later operation might not honour — beats over-hiding one that would have worked.
 
@@ -2223,11 +2227,11 @@ agent's job needs reasoning". Amendment B's own title says "let an agent
 — the SDK's `AgentTuning` did not even declare `reasoning_default_on`. #2473
 closes that gap.
 
-| Field | On | Meaning |
-| ----- | -- | ------- |
-| `reasoning_enabled`, `reasoning_default_on` | `AgentDefinition` (fred-sdk) | What a template DECLARES; both default `False` |
+| Field                                       | On                                   | Meaning                                                                                     |
+| ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentDefinition` (fred-sdk)         | What a template DECLARES; both default `False`                                              |
 | `reasoning_enabled`, `reasoning_default_on` | `AgentTuning` / pod `default_tuning` | How the declaration reaches control-plane — `_definition_to_agent_tuning` now projects both |
-| `reasoning_enabled`, `reasoning_default_on` | `AgentTemplateSummary` | What the agent-creation form reads to pre-tick its Reasoning card |
+| `reasoning_enabled`, `reasoning_default_on` | `AgentTemplateSummary`               | What the agent-creation form reads to pre-tick its Reasoning card                           |
 
 **A seed, not a gate — the same contract Amendment B set.** The form pre-ticks
 from the template exactly as `default_capability_ids` pre-ticks capabilities
@@ -2268,7 +2272,7 @@ with **no check** that the resolved session belonged to the calling user,
 the requested `team_id`, or the requested `agent_instance_id`. The sibling
 `get_session` (same file) already guards its identical raw fetch with a
 `record.team_id != team_id` check; `prepare_execution` never applied that
-idiom. Exploitability was accidentally limited (prompt *text* resolution is
+idiom. Exploitability was accidentally limited (prompt _text_ resolution is
 scoped to the caller's own team/personal team, not the session's team, so a
 foreign-team session's prompt ids resolved to nothing) but the gap was real
 and untested.
@@ -2661,7 +2665,7 @@ passthrough container exist to receive one; any key outside the named
 allowlist is rejected, and every URL-typed field rejects non-`http(s)`
 schemes and userinfo (`user:pass@host`); numeric/boolean fields are strict
 (no `"4096"` → `4096`, no `1` → `True`) and range-checked, never silently
-coerced. What it does **not** do: inspect whether an arbitrary *value*
+coerced. What it does **not** do: inspect whether an arbitrary _value_
 placed in an allowed field is itself a secret — operators must never place
 a credential in an allowed value, this only closes the field-shape channel.
 `provider` is restricted to `fred_core.model.models.ModelProvider` (closed
@@ -2683,11 +2687,11 @@ retries once on the concurrent first-insert race (two admins, or a client
 retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
-**Authorization:** `organization_authz.require_manage_any`
-(`organization#can_manage_platform`), the same shared gate as
-`GET /admin/capabilities` — org-admin only, no team dimension (this is a
-platform-wide routing assertion, not a per-team permission, same reasoning
-as `model_reasoning`).
+**Authorization:** `organization_authz.require_manage_capabilities`
+(`organization#can_manage_capabilities`, §51), the same shared gate as
+`GET /admin/capabilities` — no team dimension (this is a platform-wide
+routing assertion, not a per-team permission, same reasoning as
+`model_reasoning`).
 
 **API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
 — no `{model_capability}` path segment (chat-only, nothing to select
@@ -2701,7 +2705,7 @@ time, before this route's authz even runs, so a 422 on a bad binding never
 reaches the store.
 
 **Frontend:** `PlatformModelBindingsPanel` — an `InlineDrawer` opened from
-`CapabilitiesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
+`FeaturesPage`'s Models tab, sibling to `CapabilityTeamMatrixDrawer`.
 Renders exactly one row (chat), never a 4-capability list. Settings are
 edited as raw JSON text (not a key/value rows editor, since
 `ModelBindingSettings` is a strict typed shape a rows editor storing
@@ -2721,14 +2725,14 @@ design (§8.55), never forwarded through the client the way
 
 ## 41. Contract Notes — the composer's effective chat model (2026-08-17, issue #2387)
 
-**Problem.** The composer named the model whose *reasoning* was enabled
+**Problem.** The composer named the model whose _reasoning_ was enabled
 platform-wide (§40 / REASON-01 §7), not the one the turn routes to. With a
 platform binding or any override in force, it displayed a model that was not
 answering.
 
 The justification recorded in `_platform_reasoning_control`'s docstring rested
 on two premises, both of which had become false: that routing "resolves per
-*operation* at runtime" (operations were removed by #2365) and that "chat
+_operation_ at runtime" (operations were removed by #2365) and that "chat
 controls are computed once per session" (prepare-execution returns a fresh
 `chat_controls` on every send).
 
@@ -2738,13 +2742,13 @@ controls are computed once per session" (prepare-execution returns a fresh
         ?agent_instance_id={id}
     → EffectiveChatModel
 
-| Field | Meaning |
-| ----- | ------- |
-| `name` | The concrete model name. All model fields are `None` together, meaning nothing resolved. |
-| `display_name` | Ops-authored label; `None` leaves the frontend on its name/id prettifying fallback. |
-| `capability_id` | The `kind="model"` capability id, for joining against team enablement. |
-| `enabled_for_team` | `false` when the resolved model is not `can_use`-enabled for this team, so the turn will fail with `ModelNotUsableError` before the LLM call. |
-| `reasoning_enabled` | Whether reasoning actually runs on **this** model. The composer must not offer the reasoning toggle when `false`. |
+| Field               | Meaning                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | The concrete model name. All model fields are `None` together, meaning nothing resolved.                                                      |
+| `display_name`      | Ops-authored label; `None` leaves the frontend on its name/id prettifying fallback.                                                           |
+| `capability_id`     | The `kind="model"` capability id, for joining against team enablement.                                                                        |
+| `enabled_for_team`  | `false` when the resolved model is not `can_use`-enabled for this team, so the turn will fail with `ModelNotUsableError` before the LLM call. |
+| `reasoning_enabled` | Whether reasoning actually runs on **this** model. The composer must not offer the reasoning toggle when `false`.                             |
 
 **Scoped to what the composer renders.** It deliberately does not report which
 precedence level won, or the winning profile id. That is POLICY detail, readable
@@ -2760,7 +2764,7 @@ that is safe precisely because the response carries no policy detail (above).
 Editing the policy stays `team_editor`-only.
 
 **`reasoning_enabled` and the reasoning toggle.** The `reasoning_toggle` control
-on `ExecutionPreparation` answers "the platform enabled reasoning on *some*
+on `ExecutionPreparation` answers "the platform enabled reasoning on _some_
 model and this agent offers it" — it cannot answer "the model this turn routes
 to is one of them", because that needs the pod catalog and the send path must
 stay free of catalog fetches. So the composer combines the two: the control
@@ -2791,9 +2795,9 @@ Azure endpoints) is never returned; only the two identity scalars are.
 
 Symmetrically, the read is scoped to a pod, not to the deployment-wide
 intersection §37's picker uses. That is not a contradiction: the intersection
-governs what a team may *select* (and is enforced at write time so a saved
+governs what a team may _select_ (and is enforced at write time so a saved
 choice means the same thing everywhere), while this answers what one pinned
-instance will actually *run*. If a pod's catalog drifts after a write, the
+instance will actually _run_. If a pod's catalog drifts after a write, the
 per-pod answer is the truthful one.
 
 **Pod scoping.** The pod consulted is the instance's own `source_runtime_id`,
@@ -2808,12 +2812,12 @@ all return an all-`None` result rather than raising. A pod being down must not
 break the chat page, and inventing a model would be worse than showing none.
 
 **`enabled_for_team` is reported, not hidden.** The composer names the model and
-flags it, so a user learns *why* a turn will fail instead of meeting an opaque
+flags it, so a user learns _why_ a turn will fail instead of meeting an opaque
 error — the same diagnosability rule REASON-01 §8 applies to the reasoning
 control. Always `true` when a platform binding decided, which bypasses team
 enablement by design (§40's ReBAC exemption).
 
-**Explicit non-goals:** making the chip a model *picker* (it stays read-only),
+**Explicit non-goals:** making the chip a model _picker_ (it stays read-only),
 surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
@@ -2835,7 +2839,7 @@ commented-out example blocks.
 
 Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
 surfaces only), the banner's whole point is to show on every page — the
-GCU-acceptance and root-bootstrap screens included, which render *before*
+GCU-acceptance and root-bootstrap screens included, which render _before_
 the authenticated `/frontend/bootstrap` can succeed. So it follows the
 `gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
 the public surface. It carries only deployer-authored announcement content
@@ -2854,8 +2858,8 @@ kea→swift migration, and the bundle importer):
 
 - `GET /users/platform-roles` — every `platform_admin` / `platform_observer`
   holder, as `PlatformRolesResponse`: per-holder `UserSummary` + `relations`
-  + `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
-  flag for the admin UI (the backend guards never rely on it).
+  - `is_bootstrap_root`, plus a top-level `caller_is_bootstrap_root` display
+    flag for the admin UI (the backend guards never rely on it).
 - `POST /users/{user_id}/platform-roles` — body
   `{relation: platform_admin | platform_observer}`; 204, idempotent
   (`add_relation` ignores duplicates); 404 when Keycloak affirmatively does
@@ -2924,7 +2928,7 @@ necessarily a member), and the registry/admin surfaces they operate are not
 keeps its value, so no team already in the registry changes state. Hiding
 one remains a per-team admin action.
 
-**Where a row is *materialized* for a team that pre-dates it, the platform
+**Where a row is _materialized_ for a team that pre-dates it, the platform
 default applies — nothing guesses a visibility.** Two paths can create a
 registry row for a team that already exists in the wild: `create_team`
 called by the bundle importer for a team referenced only from `users.json`,
@@ -2932,13 +2936,13 @@ and the knowledge-flow storage backfill (`backfill_storage_usage.py`).
 Neither knows what discoverability that team's admin intended, so neither
 states one: both take the platform default and land the team private.
 Consequence to know before running the backfill on a legacy platform: a
-team it materializes that *was* marketplace-listed loses that listing on
+team it materializes that _was_ marketplace-listed loses that listing on
 the next `GET /teams` (`_list_teams` revokes the ReBAC `public` relation
 for any private team), and a team admin re-publishes it deliberately.
 Publishing a team on a guess is the outcome this default exists to
 prevent. The one place that still forces `public` is `importer.py`'s
-`row.get("visibility", "public")` for a bundle exported *before the field
-existed* — there the value is not a guess but the exporting platform's
+`row.get("visibility", "public")` for a bundle exported _before the field
+existed_ — there the value is not a guess but the exporting platform's
 actual behavior, since every team was unconditionally public then.
 
 **Personal spaces now say so.** `build_personal_team` states
@@ -2968,7 +2972,7 @@ including `general_assistant`'s `document_access`.
 
 **The filtering asymmetry — deliberate.** `available_capabilities` on the same
 payload IS narrowed to what the team `can_use` (CAPAB-01 / #1980);
-`default_capability_ids` is NOT. The field describes what the *template*
+`default_capability_ids` is NOT. The field describes what the _template_
 declares, which is a static, non-secret property of a template the team was
 already granted in order to see the summary at all. The client intersects the
 two, so an admin-gated default a team is not enabled for is neither pre-ticked
@@ -2995,12 +2999,12 @@ only key the two registrations share. Duplicate `app_id` values are rejected
 at config load, as is an own-origin `ui_prefix` that is not exactly
 `/apps/<app_id>` — the gateway routes on that segment, so any other own-origin
 path is a silent 404 the browser cannot distinguish from a cold service.
-`enabled: false` parks an entry without deleting it, but withdraws it only
-from the catalog; its gateway routes keep serving until that half is removed
+In the current implementation, `enabled: false` deactivates an entry without deleting
+it, but withdraws it only from the catalog; its gateway routes keep serving until that half is removed
 too. Its existing team grants keep living as well: revoking one stays
-available for a parked entry, while granting a new one does not. An entry
+available for a deactivated entry, while granting a new one does not. An entry
 withdrawn from the catalog must still be unwindable, or the grants an operator
-parked it to retire are stranded. Removing an entry makes the application
+deactivated it to retire are stranded. Removing an entry makes the application
 unavailable on the next config load, not on the next rebuild.
 
 The typed deployment-wide `enableApplications` feature gate defaults to
@@ -3015,25 +3019,33 @@ Effective access is therefore:
 ```text
 enableApplications
 AND user can_use_team_applications on team:<team_id>
-AND team:<team_id> can_use capability:app__<app_id>
+AND team:<team_id> can_use app:<app_id>
 AND the frame answers the protocol handshake with an accepted version
 ```
 
-Applications reuse capability enablement for coarse admission. A registered
-`app_id` derives capability id `app__<app_id>`; `app__` is reserved for catalog
-`kind="app"`. The discriminator exists only on the JSON-safe
+Applications reuse the existing capability administration workflow for coarse
+admission, but they are first-class `app` resources in OpenFGA. A registered
+`app_id` derives the flat catalog and administration id `app__<app_id>` and the
+authorization object `app:<app_id>`. The `app__` prefix is reserved for catalog
+`kind="app"`; it prevents collisions in the shared catalog and is not part of
+the OpenFGA object id. The discriminator exists only on the JSON-safe
 `CapabilityCatalogEntry` and admin wire model: runtime `CapabilityManifest`
 continues to accept `tool | agent | model` only. Every registered application
 is `admin_gated`; registration alone grants no team access. The admin catalog
 entry carries single-string labels, so the mandatory `"en"` display strings are
 the ones projected there.
 
-Existing platform-admin capability routes remain the only enablement writers.
-Application rows support default-on and collaborative-team controls, but have
-no personal-space control or generic team-settings JSON. App changes do not
-enter agent dependency, impact, health, suspension, revival, reasoning, or
-model-binding paths. Attempts to grant an app to a personal team are rejected;
-revocation remains available to clean up a stale personal tuple.
+Existing platform-admin capability routes remain the entitlement writers,
+and establish the typed organization anchor during authorized mutations.
+Configuration registration is catalog-only; startup seeding skips admin-gated apps.
+No app lifecycle registry, global active marker or reconciliation command is
+required. The routes continue to accept and return `app__<app_id>` for application rows, then
+map that validated catalog entry to `app:<app_id>` for relation reads and
+writes. Application rows support default-on and collaborative-team controls,
+but have no personal-space control or generic team-settings JSON. App changes
+do not enter agent dependency, impact, health, suspension, revival, reasoning,
+or model-binding paths. Attempts to grant an app to a personal team are
+rejected; revocation remains available to clean up a stale personal tuple.
 
 The team discovery contract is:
 
@@ -3053,7 +3065,7 @@ Fred's translation bundle. `"en"` is always present and is the fallback.
 application API only through the proxy. The service canonicalizes the team id
 and checks the user's `can_use_team_applications` permission before team or
 application metadata. A collaborative team then sees only registered items for
-which that team has `capability#can_use`. Personal teams return an empty list.
+which that team has `app#can_use`. Personal teams return an empty list.
 With ReBAC disabled, all registered items are returned for collaborative teams.
 
 The frontend keeps two generic routes, `/team/:teamId/apps` and
@@ -3077,7 +3089,25 @@ frame -> host : fred:navigate { path, replace }
                 fred:request { requestId, path, method, headers, body }
 ```
 
-The host accepts a *set* of protocol versions (currently `"1"`) because fork
+The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
+protected-header predicate, and relative-path validation is
+`apps/frontend/src/rework/features/applications/applicationProtocol.ts`. The
+`@fred/iframe-sdk` archive is generated from that canonical file and exposes the wire
+surface separately at `@fred/iframe-sdk/protocol`; no second maintained protocol copy
+exists in the package producer. Its child client validates its configured HTTP(S)
+origin, captured parent window, application identity, and all received shapes before
+admission. It delivers every accepted route event to current subscribers—even when a
+sub-path repeats—while request replies are settled only once by live request id.
+
+The SDK adds client-side connection and request deadlines, a 16-request pending bound,
+local abort, and lifecycle disposal. These are local resource controls, not transferred
+cancellation or authorization. Its request API reconstructs buffered text/JSON
+`Response` objects, including inspectable HTTP errors and bodyless HEAD/204/205/304
+responses; it does not promise streams, binary bodies, remote cancellation, or
+automatic mutation retries. Host validation and all authority described below remain
+mandatory for legacy and SDK clients alike.
+
+The host accepts a _set_ of protocol versions (currently `"1"`) because fork
 teams release their UI images on their own cadence; a version outside that set
 renders `protocol-mismatch` rather than a broken screen. Frame messages are
 admitted only from a closed parser — unknown types, oversized header maps,
@@ -3112,7 +3142,7 @@ that choice is ambiguous.
 
 Nothing about the conversation travels on this message. An application that
 wants a conversation to be about one of its records records that intent through
-its own service, and its capability resolves it on the agent side from the
+its own service, and the receiving agent capability resolves it from the
 runtime identity — so the record never passes through a channel the model or
 the frame could redirect.
 
@@ -3156,24 +3186,25 @@ entitlement locally through the narrow SDK described below. A gateway
 registration with no matching `application_sources` entry still proxies both
 prefixes, so the gateway list must stay a subset of the catalog.
 
-`app__<app_id>` is derived by `application_capability_id` (fred-core), which
-unlike `model_capability_id` does **not** normalize characters outside the id
-charset. A registered `app_id` is already constrained to a subset of
-`CAPABILITY_ID_PATTERN` at config load, so an id needing repair is one no
-catalog accepted; normalizing it on an authorization path could resolve it
-onto a neighbouring capability's id instead of failing closed.
+The catalog and administration id `app__<app_id>` is derived by
+`application_catalog_id` (fred-core), which unlike `model_capability_id`
+does **not** normalize characters outside the id charset. A registered `app_id`
+is already constrained to a subset of `CAPABILITY_ID_PATTERN` at config load,
+so an id needing repair is one no catalog accepted; normalizing it while
+mapping to `app:<app_id>` could resolve it onto a neighbouring application's id
+instead of failing closed.
 
 ### Two application trust tiers (2026-09-04)
 
 An application backend authorizes each request in one of two ways, and the
 tier is a deployment decision, not something the application selects:
 
-| Boundary | Arm's-length | First-party |
-| --- | --- | --- |
-| Who | Independently deployed code, any language, with no Fred service or OpenFGA credential | A backend built and run inside the Fred perimeter; admission is an explicit devops act |
-| Entitlement | Forward the caller's bearer to `GET /teams/{team_id}/applications` and require its own id in the response | Ask the named checks on a process-lifetime `RebacSdk` created by `rebac_sdk_factory` |
-| Keycloak service identity | None required for entitlement | Its own enabled `security.m2m` client; this is for outbound service calls, not caller validation or OpenFGA |
-| OpenFGA identity | None | Its own secret named by `security.rebac.token_env_var`, provisioned and revocable independently; never shared with another backend |
+| Boundary                  | Arm's-length                                                                                              | First-party                                                                                                                        |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Who                       | Independently deployed code, any language, with no Fred service or OpenFGA credential                     | A backend built and run inside the Fred perimeter; admission is an explicit devops act                                             |
+| Entitlement               | Forward the caller's bearer to `GET /teams/{team_id}/applications` and require its own id in the response | Ask the named checks on a process-lifetime `RebacSdk` created by `rebac_sdk_factory`                                               |
+| Keycloak service identity | None required for entitlement                                                                             | Its own enabled `security.m2m` client; this is for outbound service calls, not caller validation or OpenFGA                        |
+| OpenFGA identity          | None                                                                                                      | Its own secret named by `security.rebac.token_env_var`, provisioned and revocable independently; never shared with another backend |
 
 Both tiers verify the caller's bearer locally before entitlement. A first-party
 backend runs with `security.profile: c3`, so the incoming JWT must carry the
@@ -3197,19 +3228,22 @@ The facade exposes only `check_user_team_permission`,
 `check_team_capability`, and `check_application_access`. These are
 authorization gates: they return no data and raise on denial. The combined
 application check asks team membership first, then the team's grant on
-`app__<app_id>`. Every facade check rejects personal spaces before contacting
-OpenFGA, so composing the two component checks cannot bypass the collaborative-
-team-only application boundary or trigger personal-team self-healing writes.
-It exposes no engine, tuple writer, general query, or raw OpenFGA client.
+`app:<app_id>`. `check_team_capability` remains capability-specific and must not
+be called with the `app__<app_id>` catalog id. Every facade check rejects
+personal spaces before contacting OpenFGA, so composing the two component
+checks cannot bypass the collaborative-team-only application boundary or
+trigger personal-team self-healing writes. It exposes no engine, tuple writer,
+general query, or raw OpenFGA client.
 
-The SDK deliberately reads neither catalog state nor the application feature
-gate. `enableApplications: false` still withdraws the normal browser path for
+In the current implementation, the SDK deliberately reads neither catalog state
+nor the application feature gate. `enableApplications: false` still withdraws the normal browser path for
 **both** tiers because the gateway returns 404 for `/apps` and
-`/app-services`. Parking one catalog entry (`enabled: false`) is narrower: the
+`/app-services`. Deactivating one catalog entry (`enabled: false`) is narrower: the
 arm's-length endpoint stops returning it while the gateway route and team grant
 remain, so a directly reachable first-party backend would still accept the
-grant. Parking is catalog state, **not a security kill switch**. Revoke the
-`app__<app_id>` team grant to withdraw entitlement from both tiers; for an
+grant. Deactivation is catalog state, **not a security kill switch**. Revoke the
+application through its `app__<app_id>` administration entry to remove the
+team's `app:<app_id>` grant and withdraw entitlement from both tiers; for an
 incident, also block or remove the gateway route. Remove both registration
 halves to retire the application.
 
@@ -3236,9 +3270,34 @@ footing as its agent pods, and the frame is not a sandbox for untrusted code.
 The `postMessage` handshake is what keeps the eventual separate-origin move a
 configuration edit — `ui_prefix` becomes an absolute `https` URL and nothing
 else changes. Anything that would only work same-origin is a defect against
-this contract. Durable installed/tombstoned registration, admin-visible
-stale-grant cleanup after removal, and `pending_reactivation` on id
-reappearance remain deferred lifecycle requirements.
+this contract. Administrator lifecycle status/actions and tombstone presentation remain
+outside this change.
+
+### Application authorization scope and deferred lifecycle (2026-09-09)
+
+This change delivers the dedicated app resource and configuration-based
+registration/activation under existing team entitlements. App admission is
+`(enabled or inherited) but not disabled`; it has no additional global active
+marker. Registration alone grants nothing. Higher-consistency app checks and
+typed local administration-cache invalidation are retained.
+
+Global Deactivate/Activate/Delete is a future cross-resource design for all or
+most applicable ReBAC types, not an application-only lifecycle subsystem.
+It must establish ownership, desired-state authority, retained settings,
+safe cleanup, interrupted-write recovery, stale-writer exclusion, cache
+coherence, re-registration and rollout semantics. No storage design is selected
+for that future work.
+
+Setting `enabled: false` or removing an app entry affects catalog availability,
+not guaranteed global first-party authorization revocation or deletion of
+stored permissions. Re-adding an identifier can reuse surviving permissions.
+Existing team disable/reset/default-off controls remain; default-off alone
+does not revoke explicit grants. No new frontend lifecycle presentation,
+lifecycle API, migration or recovery command is introduced.
+
+Deployment requires compatible database revisions and authorization models.
+Incompatible state requires a separately approved state-preserving migration
+plan. No automatic database downgrade or authorization-state migration is provided.
 
 ---
 
@@ -3289,13 +3348,14 @@ template. Runtime side, block ordering and trust boundary:
 
 **Endpoints.**
 
-| Method | Path | Permission |
-| ------ | ---- | ---------- |
-| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
-| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` (`require_manage_any`) |
+| Method | Path                                      | Permission                                                  |
+| ------ | ----------------------------------------- | ----------------------------------------------------------- |
+| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
+| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
 
-Same shared org-admin gate as the platform model-binding trio (§40). Both are
-registered in `authz-endpoint-matrix.yaml`.
+Both are registered in `authz-endpoint-matrix.yaml`. The gate was
+`can_manage_platform` until §51 carved this surface out of that catch-all so a
+`prompt_editor` could hold it without import/export, tasks and platform reset.
 
 **No DELETE, on purpose.** Unlike a `(provider, name)` model binding, a text
 field has a natural "off" value, and `""` is it. Keeping `DELETE` would give
@@ -3304,7 +3364,7 @@ two ways to say "nothing" with two different meanings:
 - **row absent** → `is_default: true` → the pod's `config/platform_prompt.json`
   applies;
 - **row present, `text: ""`** → `is_default: false` → **no block at all**, and
-  the pod default is deliberately *not* restored.
+  the pod default is deliberately _not_ restored.
 
 `PlatformPrompt.is_default` exists so the admin UI can tell the two apart, and
 conflating them would silently reinstate the default for an admin who meant to
@@ -3344,8 +3404,8 @@ an admin had chosen to. `source_unavailable` is always false when a row exists �
 a stored value needs no pod.
 
 `resolve_platform_prompt_text` keeps returning `None` for an absent row. The
-asymmetry is deliberate: GET *describes the deployment to a human*, resolve
-*carries an admin decision to the runtime*. Substituting the default there would
+asymmetry is deliberate: GET _describes the deployment to a human_, resolve
+_carries an admin decision to the runtime_. Substituting the default there would
 send the pod a value it already has on disk and would erase the `None` vs `""`
 distinction that lets an admin suppress the block. `is_default: true` also keeps
 Save enabled on an untouched default, since adopting it verbatim writes a row
@@ -3354,11 +3414,11 @@ and is a real state change.
 **Amendment (2026-08-31).** Renamed from "master prompt", and paired with a
 read-only sibling.
 
-| Method | Path | Permission |
-| ------ | ---- | ---------- |
-| GET | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
-| PUT | `/control-plane/v1/admin/platform/prompt` | `can_manage_platform` |
-| GET | `/control-plane/v1/admin/platform/instructions` | `can_manage_platform` |
+| Method | Path                                            | Permission            |
+| ------ | ----------------------------------------------- | --------------------- |
+| GET    | `/control-plane/v1/admin/platform/prompt`       | `can_manage_platform` |
+| PUT    | `/control-plane/v1/admin/platform/prompt`       | `can_manage_platform` |
+| GET    | `/control-plane/v1/admin/platform/instructions` | `can_manage_platform` |
 
 `/admin/platform/instructions` returns `PlatformInstructions` — the markdown
 shipped in the `platform_instructions` field of the pod's
@@ -3375,3 +3435,525 @@ surface is easier to reason about than two.
 Both are read by the same admin page, which renders the instructions verbatim
 under the editor with no input control, in the same order the runtime composes
 them.
+
+---
+
+## 49. Contract Notes — team wiki (2026-09-06, issue #2571)
+
+A per-team tree of Markdown pages, owned by control-plane. Design and rationale:
+[`../rfc/TEAM-WIKI-RFC.md`](../rfc/TEAM-WIKI-RFC.md); this section records the
+wire surface only.
+
+**Why control-plane owns it and not the capability that will read it.** A
+capability-owned table would live in the agent pod's own database, and there is
+more than one agent pod: the same capability installed in two of them would give
+one team two silent wikis. A capability's route base URL is also published only
+on `ExecutionPreparation`, i.e. during a chat, while the Wiki page lives in the
+team navigation and has no chat to be prepared. And a pod being down must not
+take a team's written memory with it. The capability (slice 3) reaches this API
+through a typed port, the way `platform_postgres` and `document_access` already
+reach theirs.
+
+| Method | Path                                                                    | Permission             |
+| ------ | ----------------------------------------------------------------------- | ---------------------- |
+| GET    | `/teams/{team_id}/wiki/availability`                                    | `can_read_members`     |
+| GET    | `/teams/{team_id}/wiki/pages`                                           | `can_read_members`     |
+| POST   | `/teams/{team_id}/wiki/pages`                                           | `can_update_resources` |
+| GET    | `/teams/{team_id}/wiki/pages/{slug}`                                    | `can_read_members`     |
+| PATCH  | `/teams/{team_id}/wiki/pages/{page_id}`                                 | `can_update_resources` |
+| DELETE | `/teams/{team_id}/wiki/pages/{page_id}`                                 | `can_update_resources` |
+| PUT    | `/teams/{team_id}/wiki/pages/{page_id}/content`                         | `can_update_resources` |
+| POST   | `/teams/{team_id}/wiki/pages/{page_id}/review`                          | `can_update_resources` |
+| GET    | `/teams/{team_id}/wiki/pages/{page_id}/revisions`                       | `can_read_members`     |
+| POST   | `/teams/{team_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `can_update_resources` |
+| GET    | `/teams/{team_id}/wiki/rules`                                           | `can_read_members`     |
+| PUT    | `/teams/{team_id}/wiki/rules`                                           | `can_update_resources` |
+| POST   | `/teams/{team_id}/wiki/proposals/page`                                  | `can_read_members`     |
+| POST   | `/teams/{team_id}/wiki/proposals/edit`                                  | `can_read_members`     |
+| GET    | `/teams/{team_id}/wiki/proposals/{proposal_id}`                         | `can_read_members`     |
+| POST   | `/teams/{team_id}/wiki/proposals/{proposal_id}/publish`                 | `can_read_members`     |
+
+**Reads are `can_read_members`, deliberately not `can_read`.** `can_read` is
+`team_member or public`, so on a team flagged public it would hand a team's
+internal knowledge to non-members. Writes are `can_update_resources`
+(`team_editor`), like every other team content surface — `team_admin` has no
+write authority here, the roles being orthogonal rather than hierarchical.
+
+**A team has a wiki only where the `team_wiki` capability is enabled**
+(2026-09-07, issue #2573). Every route in the table above is refused with 404
+when an admin has not enabled that agent capability for the team — one gate in
+`_require_wiki_access`, so a route added later cannot forget it. 404 rather than
+403 for the same reason a hidden agent template answers 404: to a team without
+the capability, this wiki does not exist.
+
+One switch covers the team's agents and its people on purpose. A wiki nothing
+can read into a conversation is a document store, which the team space already
+is; the point of the wiki is that agents work from it. `/wiki/availability` is
+the one route NOT behind that gate — answering "no" is its whole purpose, and
+the team navigation panel asks it to decide whether to offer the entry.
+
+**Disabling never deletes anything.** The tables are untouched, and re-enabling
+brings the wiki back exactly as it was, revisions and all. Revoking access is
+not a destructive operation and must never become one.
+
+**Agent writes are two steps, and member-level** (2026-09-07, issue #2574).
+`propose_*` stores a revision at `status = "proposed"` — invisible in the tree,
+absent from the page's history, changing nothing — and `publish` is what makes
+it the page's current revision. The split exists because the platform's HITL
+gate pauses a tool _before_ it runs and carries only a truncated argument
+preview: too little to diff a page, but ample for a proposal id, which is what
+the approval card resolves to render the change.
+
+The proposal routes are `can_read_members`, not `can_update_resources`. This is
+deliberate (RFC §5.4, §9) and it has a consequence worth stating plainly: a plain
+member can propose and publish, so the editor role does not gate wiki content the
+way it gates the direct `PUT` routes. What makes that defensible is not a check
+but two properties — every published proposal is stamped `author_kind = "agent"`
+and leaves the page `needs_review`, and any editor can restore an earlier
+revision. Contribution is open; the audit trail and reversibility are the
+mitigation.
+
+Three things no configuration reaches: the rules page (refused by its `kind` on
+both propose paths), deletion, and renaming or moving — no tool and no endpoint
+exists for an agent to do any of them. A `proposed` or `rejected` revision also
+cannot be restored: doing so would publish an agent's draft as a human edit and
+clear the review mark, undoing the very decision the statuses record.
+
+Declining an approval leaves the proposal pending rather than marking it
+refused — the runtime never runs the tool, so nothing reports the decision back.
+A queue of pending proposals for editors stays deferred (RFC §12.2).
+
+**A proposal's base is caller-supplied and checked twice (2026-09-08).**
+`POST .../proposals/edit` requires `base_revision_id` — the `revision_id` a
+prior read of the page returned — rather than assuming "whatever is current
+now". It is refused with the same 409 shape as publishing (`current_revision_id`
+
+- `current_content_md`) unless it matches the page's current revision at that
+  instant, catching a stale read before a proposal is even stored. The store's
+  existing compare-and-swap at publish time is the atomic guarantee for a write
+  landing after the proposal is created; this is the earlier, best-effort half —
+  neither replaces the other. Before this, the server derived the base from
+  `current_revision_id` itself, so a write racing between an agent's read and its
+  propose call went undetected and could be silently overwritten.
+
+**Content is append-only.** An edit inserts a revision and moves the page's
+`current_revision_id`; it never updates content in place. History, restore and
+conflict detection are consequences of that shape, not features layered on it —
+which is why there is no content field on a page, and why `restore` publishes a
+new revision rather than deleting the ones after it.
+
+**A stale write is refused, and the refusal carries the current state.**
+`UpdateWikiPageContentRequest.base_revision_id` is the revision the author
+started from. If the page has moved on, the response is `409` with
+`current_revision_id` and `current_content_md` in the body, because whoever
+retries — a human in the editor or, from slice 4, an agent redoing its edit —
+needs something to rebase onto, and a bare error costs a second round trip to
+get it. That payload is read AFTER the failed write's transaction rolls back:
+reading it inside would report the revision that transaction opened on — already
+superseded under a real interleaving — sending a rebase-and-retry client round
+the same loop forever.
+
+**There is no unconditional overwrite.** Omitting `base_revision_id` on a page
+that already has a revision is refused exactly like a stale one: a caller cannot
+opt out of the check by leaving the field off. It is absent only when creating
+the rules page for the first time.
+
+**A proposal identical to the page it targets is refused** (2026-09-07,
+WIKI-05, 409). Field evidence: asked to MOVE two pages, an agent used the only
+write tool it has and re-proposed each page's existing text byte-for-byte. Both
+published, both changed nothing, and the agent read "published" as "moved" —
+then told the user a hierarchy that did not exist. A write that cannot change
+anything is now a dead end rather than a silent success, and the refusal says
+that content is the only thing an agent can change.
+
+**Two pages under one parent cannot share a title** (2026-09-07, WIKI-05).
+An agent addresses a page by its path — its titles from the root — so two
+namesakes under one parent would give two pages the same address. Refused with
+409 on create, rename, move, propose and publish; enforced under concurrent
+writes by `uq_team_wiki_pages_sibling_title`, case-folded and
+whitespace-collapsed, `NULLS NOT DISTINCT` so the rule reaches root pages too.
+The migration renames existing collisions rather than failing. It is the one
+part of this change a user can see: a refusal when they pick a title a sibling
+already has.
+
+**Every structural writer serializes per team** (2026-09-08, WIKI-05). Create,
+move, delete, and proposal publication each run inside
+`TeamWikiStore._structural_lock`: a Postgres transaction-scoped
+`pg_advisory_xact_lock` keyed on the team, held for the writer's whole
+transaction — same primitive as `TeamMetadataStore.advisory_lock`. Parent
+existence, the rules-page restriction, the depth cap and the cycle check all
+re-run inside that lock against a fresh read, not a snapshot taken before the
+write. Without it, two writers touching different rows (an opposing move on
+each side, or a child insert racing its parent's delete) could each pass
+validation and commit, since neither a bare transaction nor a lock on the
+moved row alone serializes across rows with no foreign key between them
+(`parent_page_id` deliberately carries none — §5.3). Content-only writes
+(`publish_revision`) do not take this lock: they cannot change the tree's
+shape, and are already serialized by their own conditional `UPDATE` on
+`current_revision_id`. No-op on SQLite, so the guarantee is proven only
+against a real PostgreSQL — see the `integration_postgres`-marked tests in
+`test_team_wiki_store_postgres_integration.py`.
+
+**A page's slug is an opaque identifier** (2026-09-07), eight random hex
+characters minted at creation. It never reaches an agent: the injected index
+carries titles only, and the capability resolves a path to a slug itself, so
+the HTTP API is unchanged. It is the page's URL and a rename never changes
+it — nothing maps an old slug to a page — so deriving it from the title would
+guarantee it goes stale on the first rename. Existing rows keep their slugs.
+
+**The rules page is an ordinary page at a reserved slug**, `kind="rules"`. That
+is what makes it unique per team: `(team_id, slug)` is already constrained, so
+no partial index is needed, and the page inherits history, attribution and
+restore for free. Its **content** is reachable only through `/wiki/rules`: the
+ordinary page routes refuse a `rules` page for content edit, rename, move and
+delete, so it cannot be rewritten by addressing it as a normal page.
+
+`restore` and the review mark are deliberately NOT refused on it. Both are
+`can_update_resources`, both are things an editor legitimately wants on the
+rules page, and neither is reachable by an agent — the capability (slice 4)
+ships no tool for either. Blocking them would cost an editor the ability to roll
+back a bad rules edit while buying no isolation, since that same editor can
+rewrite the page through `/wiki/rules` anyway.
+
+`GET /wiki/rules` **never creates the row.** It is gated on the member-only read
+permission, so materialising the page there would let any team member create the
+page that steers every agent's system prompt, and be recorded as its author. A
+team that has never written rules gets an empty representation with no
+`revision_id`; the row appears on the first `PUT`, which is editor-only.
+
+**One table holds every team's pages.** `team_id` is therefore the tenant
+boundary, and it is always derived server-side from the authenticated request —
+never read from a body parameter, never assembled by a client. A table per team
+was rejected: it would mean DDL at team creation, outside Alembic and invisible
+to the migration history.
+
+**`needs_review`** is set when an agent-authored revision is published and
+cleared when a human edits the page or an editor clears it explicitly. It is
+what gives editors a review queue without building one, and it is the
+counterpart of the wiki being open to every member's contributions through an
+agent (RFC §5.4).
+
+**2026-09-07 (WIKI-05) — clearing the review mark is recorded, and is not an
+edit.** `POST .../review` now stamps `reviewed_at`/`reviewed_by` on the page's
+currently published revision, and `WikiRevisionSummary` exposes both. Setting
+`needs_review` back to true clears them: the same text is under review again,
+so an earlier approval must not still stand against it.
+
+Two bugs closed by that. The endpoint used to overwrite the page's
+`updated_by`/`updated_at`, so validating an agent's page relabelled it as
+edited by whoever read it — those columns are now left alone, since reviewing
+is not editing. And the validation itself was recorded nowhere, which mattered
+because the person who approves an agent's text need not be the one it was
+written for. The frontend renders the stamp as its own entry in the page
+history, at its own time, next to the edit it approves.
+
+**The review mark is anchored to the revision the reviewer displayed**
+(2026-09-08, WIKI-05). `SetNeedsReviewRequest` gained `base_revision_id`
+(same field, same semantics as the content/rules writes above), and
+`TeamWikiStore.set_needs_review`'s page-mark `UPDATE` carries the same
+`current_revision_id == base_revision_id` compare-and-swap `publish_revision`
+already uses — not a preceding `SELECT`, so a write racing between the
+reviewer's read and this call cannot slip through a check that already
+passed. Before this, the endpoint took no revision at all: a validation could
+land on whatever text happened to be current at UPDATE time, certifying a
+revision the reviewer never actually saw if one was published in between.
+The refusal reuses the existing 409 shape (`current_revision_id`,
+`current_content_md`) rather than inventing a second one, and `updated_at`/
+`updated_by` stay untouched either way — the paragraph above's "reviewing is
+not editing" holds for the refused path too.
+
+**History is paginated by keyset, not offset, and bounded in SQL** (2026-09-08,
+WIKI-05). `GET .../revisions` used to load every revision of a page — content
+included — before slicing to `MAX_REVISION_PAGE_SIZE` (50) in Python; a page
+edited a thousand times pulled a thousand Markdown bodies out of the database
+to return 50. `TeamWikiStore.list_revisions` now takes `limit` and an optional
+`before: RevisionCursor` and applies both as a real `WHERE`/`LIMIT`, still
+ordered `(created_at DESC, revision_id DESC)`. The endpoint accepts an optional
+`cursor` query parameter and `WikiRevisionList` gained `next_cursor`
+(`str | None`); the service fetches `limit + 1` rows to learn whether more
+remain without a second `COUNT` query, and builds `next_cursor` from the last
+row actually **returned**, never the extra one.
+
+The cursor is `base64(isoformat(created_at) + "|" + revision_id)` — opaque to
+the client, validated on decode (well-formed base64, both parts present, the
+timestamp timezone-aware, the id matching `_new_id()`'s 32-lowercase-hex
+shape) and refused with `400`, never left to reach the store or fail as a
+`500`. It is a keyset, not an offset: offset pagination on `ORDER BY created_at
+DESC` breaks the moment a new revision is inserted while a reader is mid-walk,
+since every row after it shifts by one position, producing exactly the
+duplicate/gap this fix exists to prevent — a keyset anchored on an
+already-seen `(created_at, revision_id)` is unaffected by inserts elsewhere,
+because it names a value, not a position. The same tuple that breaks ties in
+the `ORDER BY` is what the keyset condition compares on
+(`created_at < cursor.created_at OR (created_at = cursor.created_at AND
+revision_id < cursor.revision_id)`), so several revisions sharing one
+timestamp — an edit then a restore inside the same second, which `_utcnow()`'s
+own docstring already calls ordinary — do not destabilize a walk.
+
+**Not a frozen snapshot, and that is closed rather than merely documented for
+the one case that mattered.** A pending proposal's `created_at` is
+proposal-creation time, not approval time, so in principle an approved
+proposal could surface behind a cursor a reader had already established.
+`publish_proposal`'s existing base-revision guard (above) closes this for
+edit-proposals: a proposal can only be approved while its base is still the
+page's current revision, i.e. nothing else was published since it was
+proposed — which means the approved revision is always the newest thing on
+the page, never older than anything a reader has already paged past. A
+new-page proposal cannot exhibit this at all: the page does not exist, and so
+has no pre-existing history to page past, until the proposal is approved.
+
+**Restore is unaffected by pagination.** `restore` addresses a revision by id,
+returned from any page a reader has fetched — never by its position within
+one. `list_revisions` bounding the query changes what one response returns,
+never what a caller can act on.
+
+**A proposal a human never acts on resolves after 30 days, not never**
+(2026-09-08, WIKI-05). Declining a HITL approval card is invisible to
+control-plane: the runtime jumps back to `model` on cancel and
+`wiki_publish_proposal`'s body never runs, so nothing reports the decision
+back — a decline and simple abandonment are indistinguishable today, and both
+left the proposal at `status="proposed"` forever, publishable by any later
+retry that reused its id.
+
+The platform HITL epic (issue #1080) confirms this is not settled anywhere
+else either — "maximum age of an unanswered prompt" is explicitly listed as
+an unresolved, platform-wide gap. `PolicyConfig.wiki_policies.proposal.
+retention` (`conversation_policy_catalog.yaml`, default `P30D`, an ISO-8601
+duration parsed the same way as every other retention value in that file) is
+the platform-wide answer for wiki proposals specifically — not a team
+override, since nothing asked for one.
+
+**The lifecycle sweep reuses the existing Temporal `LifecycleManagerWorkflow`
+tick — no second scheduled entrypoint.** The same 10-minute `Schedule`, the
+same worker, the same `POST /lifecycle/run-once` manual trigger now also list
+`status="proposed"` rows older than the retention cutoff
+(`scheduler/wiki_proposal_actions.py`) and reject each with a single
+conditional `UPDATE ... WHERE status = 'proposed'` — the identical
+compare-and-swap idiom `store.py` already uses for every other proposal
+transition. `LifecycleManagerResult.wiki_proposals` carries that sweep's own
+`scanned`/`rejected`/`dry_run_actions` counts alongside the conversation
+sweep's.
+
+**Correction (2026-09-08).** The paragraph above originally claimed the
+initial `WHERE status == "proposed"` lookup closed the retry hole with no
+change to the publish path, "proven under real concurrency" by an
+`asyncio.gather` test. Both halves were wrong: `publish_proposal` read the row
+once at the top of its transaction and then wrote `status="published"` back
+from that in-memory copy, unconditionally, as an ORM attribute flush keyed
+only on `revision_id` — a reject that committed after the read but before
+that write was silently overwritten. `asyncio.gather` never forced that
+window open (nothing pins two independent DB round trips' relative order), so
+the test could pass without the interleaving ever occurring. Fixed by making
+that final write a second CAS — `WHERE ... AND status = 'proposed'` — in the
+same transaction as every other write `publish_proposal` makes; a miss raises
+`WikiProposalNoLongerPendingError`, mapped to the same 404 as the top-of-
+function lookup, and rolls back the page create/update alongside it, so a
+losing publish leaves no partial write. Proven with a genuinely forced
+interleaving (an `AsyncSession.execute` pause keyed to the exact statement,
+not `asyncio.gather` timing) in `test_team_wiki_store_postgres_integration.py`:
+`test_publish_loses_to_a_reject_committed_between_its_read_and_write` (edit),
+`test_publish_loses_to_a_reject_of_a_new_page_proposal_creates_no_page`
+(new page), and `test_publish_loses_to_a_session_erasure_reject_committed_mid_transaction`
+(session erasure). The same guard is what makes the sweep safe against a
+concurrent approval in the other direction too: whichever of {reject,
+publish} commits first is the only one that changes anything.
+
+**Erasing a session rejects its still-pending proposals immediately**, rather
+than waiting out the retention window: `team_wiki_revisions.session_id`
+already existed but `ConversationErasureService.erase_session` never looked
+at it. A proposal from a conversation that no longer exists is unambiguously
+abandoned. This runs as its own isolated store step (`wiki_proposals` in the
+erase receipt), matching every other store there — a failure there alone
+makes the whole erase retryable, never destructive.
+
+**Not built here, and why.** A synchronous decline→reject callback would mean
+teaching `HitlSpec` an on-cancel hook that reaches back into a specific
+capability's owning service — a new cross-stack contract surface belonging to
+the HITL epic (#1080), not this fix. An editor review inbox for pending
+proposals (RFC §12.2) stays deferred; retention does not need it, and building
+one only to solve retention would be solving a smaller problem with a bigger
+one.
+
+---
+
+## 50. Contract Notes — reserved system-prompt tags are refused at save time (2026-09-09, issue #2595)
+
+The runtime wraps the system prompt's four blocks in XML tags
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.76): `platform_instructions`,
+`platform_prompt`, `tools`, `agent_instructions`. An authored text that
+contains one of those tags — opening, closing or self-closing, any case,
+whitespace tolerated inside the brackets — could close a block and open
+another, so control-plane refuses it where the text is written:
+
+| Surface                                                                   | Field                                                                                                                                                         | Response                                                                                                                   |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `PUT /control-plane/v1/admin/platform/prompt`                             | `text`                                                                                                                                                        | 422, Pydantic validation error naming the tag (`reserved system-prompt tag <tools> is not allowed in the platform prompt`) |
+| `POST /teams/{team_id}/agent-instances` and `PATCH …/{agent_instance_id}` | every string-valued tuning field (`string`, `text`, `text-multiline`, `prompt`) — the runtime substitutes each one into the agent template as a `{key}` token | 422 `EnrollmentError` naming the field and the tag                                                                         |
+
+The check is `find_reserved_prompt_tag` from fred-sdk
+`contracts/prompt_utils.py`, next to `PROMPT_SAFE_TOKENS`; the list of names
+there is the single definition of what is reserved. Every other XML or HTML
+tag is accepted — authors structure prompts with `<example>` or `<rules>` and
+the prompt editor colours tags on purpose. Token validation is unchanged
+(none, `PROMPTS.md` §2).
+
+Not validated, by decision: the prompt library (`/teams/{team_id}/prompts`),
+whose text reaches the model either as the user's own message or by copy
+into a validated agent field; and code-owned content (the pod's
+`platform_prompt.json`, `mcp_catalog.yaml` `agent_instructions`).
+
+The generated client was regenerated for this change; the schema itself does
+not move (a validator adds no field), so `controlPlaneOpenApi.ts` is
+byte-identical. The frontend mirrors the check
+(`rework/utils/promptValidation.ts`) to show the refusal while typing; the
+backend remains the reference.
+
+---
+
+## 51. Contract Notes — the admin tier splits into delegated roles (2026-09-09, issue #2592)
+
+**Extends §43.** `organization:fred` gains three role relations, each
+`[user] or platform_admin` in `schema.fga` — `team_manager`,
+`feature_manager`, `prompt_editor` — plus two computed relations carved out
+of the `can_manage_platform` catch-all: `can_manage_capabilities` and
+`can_edit_platform_prompt`. `can_create_team` now reads `platform_admin or
+team_manager` and `can_list_all_teams` `platform_admin or team_manager or
+feature_manager` (see the capability paragraph below); `can_delete_team` and
+`can_rescue_team_admin` stay `platform_admin`-only, so registry governance is
+deliberately split from team creation. `can_manage_platform` is unchanged and
+still gates import/export, tasks and platform reset.
+
+**Re-gated endpoints — feature governance.** The whole `/admin/features`
+surface moves off `can_manage_platform` onto `can_manage_capabilities`: the
+seven `/control-plane/v1/admin/capabilities*` routes (aggregate list,
+revoke-impact preview, per-team enable/disable, default-on, personal-scope,
+model reasoning) and the `GET`/`PUT`/`DELETE`
+`/control-plane/v1/admin/platform/model-bindings` trio, which is a panel of
+that same page. Paths are unchanged. `capability#can_manage` — the per-object
+gate every enablement mutation resolves through — is redefined from
+`platform_admin from organization` to `can_manage_capabilities from
+organization`; without that, a `feature_manager` would pass the org gate and
+fail the object gate on the very next line. `app#can_manage` follows the same
+redefinition: `app__` rows are listed and toggled on the same page, behind the
+same org gate. `can_list_all_teams` joins the
+role for the same reason: the per-team enablement matrix is a team picker, and
+it renders empty without the roster. That listing is read-only and carries no
+authority over any team's data, but it is the full `Team` DTO rather than bare
+names and ids — see `REBAC.md` for exactly what a holder sees. Nothing else moves — import/export,
+platform reset, tasks, platform stats and corpus audit stay on
+`can_manage_platform`, which is what makes this delegation safe.
+
+**New endpoint — `GET /teams/candidate-admins?query=<string>`** →
+`list[UserSummary]`, gated on `can_create_team`. `POST /teams` requires at
+least one `initial_team_admin_ids` entry, and the only org-wide directory
+(`GET /users`) is gated on `can_administer_users`, which stays
+`platform_admin`-only — so `/admin/teams` rendered for a `team_manager` with a
+permanently empty admin picker and a submit button that could never enable.
+The search is bounded exactly like `GET /teams/{team_id}/candidate-members`
+(§ above): minimum 2 non-whitespace characters, at most 20 Keycloak matches,
+never a full directory listing. Registered before `/teams/{team_id}` so the
+literal segment is not captured as a team id.
+
+**Re-gated endpoints — platform prompt.** All three routes of the
+platform-prompt surface move off `can_manage_platform` onto
+`can_edit_platform_prompt`: `GET` and `PUT
+/control-plane/v1/admin/platform/prompt`, and the read-only `GET
+/control-plane/v1/admin/platform/instructions`. The read moves with the write
+deliberately — an editor who cannot see what they are overwriting is useless,
+and the instructions pane is the reference they write against; neither was
+readable below the admin tier before, so this widens rather than narrows. The
+runtime path is untouched: `resolve_platform_prompt_text` is a server-side
+platform assertion resolved per turn and has never been gated on the caller.
+Team-scoped prompts (`/teams/{id}/prompts`) are unaffected — they are governed
+by team relations, and `prompt_editor` grants nothing there.
+
+`PlatformRoleRelation` grows the three values, so §43's three routes accept
+them with no other change. The service layer iterates the enum instead of
+naming roles, and the root guards remain scoped to `platform_admin` alone:
+**any `platform_admin` grants and revokes the three new roles**, exactly as
+for `platform_observer`. §43's direct-tuple rule now carries five relations'
+worth of weight — every non-admin role unions in `platform_admin`, so an
+expanded read would list every admin as a holder of all five and offer four
+revokes that delete nothing.
+
+**Breaking (frontend bootstrap):** `PermissionSummary` replaces
+`is_platform_admin` / `is_platform_observer` with
+`platform_roles: PlatformRoleRelation[]` — the roles the caller
+_effectively_ holds, union-resolved, so a `platform_admin` carries all five.
+That is deliberately unlike `GET /users/platform-roles`, which reports
+directly-granted tuples only because those are what a revoke can delete.
+Five parallel `is_*` booleans over one closed enum is a list, and each future
+role would otherwise have cost a field, a codegen run and an edit in every
+consumer. The generated client, the frontend capability hook and the CLI
+bootstrap summary move with it.
+
+**Frontend surface renamed:** the admin page `feature_manager` owns moves from
+`/admin/capabilities` to `/admin/features` (`FeaturesPage`, i18n key
+`rework.sidebar.admin.menu.features`). "Capabilities" already means the ReBAC
+computed relations and the agent-capability packages; the page governs
+platform features — capabilities, agent templates and models — so it takes the
+name of the role that governs it. The backend endpoints keep their
+`/admin/capabilities` prefix: there the word is accurate.
+
+## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
+
+**What it is.** A platform admin picks any number of registry teams that every
+new user joins as `team_member` when they accept the GCU for the first time.
+
+**Endpoints.**
+
+| Method | Path                                             | Permission            |
+| ------ | ------------------------------------------------ | --------------------- |
+| GET    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+| PUT    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+
+`GET` returns `list[DefaultTeamForNewUsers]` `{team_id, name}`, sorted by name;
+`[]` when none is set. `PUT` takes `SetDefaultTeamsForNewUsersRequest`
+`{team_ids: string[]}`, `extra="forbid"`, and replaces the whole list: `[]`
+clears it, duplicates are ignored. 204 on success; 404 naming the first team
+without a registry row - personal spaces included, they never have one - and
+nothing is written. Gated on `can_manage_platform` rather than a new narrow
+relation: it decides where every future account lands, and no delegated role
+owns that decision today.
+
+**Storage.** A `platform_default_teams` table, one row per team keyed by
+`team_id`; a `PUT` deletes and re-inserts the list in one transaction. `team_id`
+has no foreign key, since `teammetadata` belongs to the fred-core metadata: a
+deleted team is skipped on every read, so deleting a team needs no cleanup
+here. The setting stays out of `teammetadata` on purpose - a per-team flag would
+ship a field on every `Team` for a platform-wide choice.
+
+**Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
+still empty:
+
+- membership on every default team is written, concurrently, before the
+  acceptance is persisted, so a ReBAC failure on any of them fails the call and
+  the retry is still a first acceptance;
+- a user already holding any role on one of the teams is left untouched there;
+  a concurrent second call is harmless, OpenFGA writes ignore duplicates;
+- re-accepting a newer GCU version does not re-add someone who left a team;
+- users who already accepted are not backfilled, but an account that never
+  accepted joins at its first acceptance, even if it predates the setting.
+
+**Limits.** A deployment without `app.gcu_version` never calls `POST /gcu`, so
+the setting is inert there and the admin page says so. Two admins saving
+overlapping lists at the same instant can collide on the primary key (500 for
+one of them). The setting is not part of the platform export bundle.
+
+---
+
+## 53. Contract Notes - registry listing without membership (2026-09-15, issue #2631)
+
+**Extends §51.** `GET /control-plane/v1/teams/all` takes an optional
+`include_membership` query parameter, default `true`: the response is unchanged
+when it is omitted.
+
+With `include_membership=false` the route returns the same `list[Team]` built
+from the registry rows alone, with no per-team OpenFGA `Read`, so its cost no
+longer grows with the number of teams. `member_count` is omitted, `admins` and
+`my_relations` are `[]` and `is_member` is `false`: read them as unknown, not as
+empty. Name, description, visibility, joining mode, avatar and storage fields
+are unchanged, and the `can_list_all_teams` gate still runs first.
+
+`/admin/features` uses it for the per-team enablement picker, which only needs
+ids and names. `/admin/teams` keeps the full listing for its admins column.

@@ -14,7 +14,7 @@
 
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import type { ComponentSize } from "@shared/utils/Type.ts";
+import type { ButtonSize, ComponentSize } from "@shared/utils/Type.ts";
 import { useRef, type FocusEventHandler } from "react";
 import styles from "./SearchInput.module.scss";
 
@@ -51,7 +51,7 @@ export default function SearchInput({
   // the reserved right padding shrinks to match. Every other size keeps the
   // original 32px clear + 2rem reserve — existing call sites are unchanged.
   const compact = size === "xs" || size === "2xs";
-  const clearSize: ComponentSize = compact ? "2xs" : "small";
+  const clearSize: ButtonSize = compact ? "2xs" : "small";
   const clearReserve = compact ? "1.5rem" : "2rem";
 
   return (

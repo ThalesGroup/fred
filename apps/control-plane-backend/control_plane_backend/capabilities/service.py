@@ -28,12 +28,11 @@ from typing import Any, Mapping
 
 from fred_core import CapabilityPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import TeamId, is_personal_team_id
-from fred_core.security.models import Resource
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
+from fred_core.security.rebac.application_authz import (
+    APPLICATION_CATALOG_NAMESPACE_PREFIX,
 )
+from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
     RebacEngine,
     Relation,
     RelationType,
@@ -51,11 +50,12 @@ from control_plane_backend.capabilities.enablement import (
     CapabilityNotFound,
     ReasoningNotSupported,
     cap_ref,
-    capability_relation_subjects,
     disable_capability_for_team,
     enable_capability_for_team,
+    enablement_ref,
     ensure_capability_anchor,
-    get_capability_relations_cached,
+    get_enablement_relations_cached,
+    has_enablement_org_relation,
     has_org_relation,
     is_template_capability_instance,
     reset_capability_for_team,
@@ -80,7 +80,7 @@ from control_plane_backend.capabilities.schemas import (
     PersonalScope,
     TeamCapabilityEnablementResult,
 )
-from control_plane_backend.organization_authz import require_manage_any
+from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
     count_all_collaborative_teams,
@@ -102,36 +102,43 @@ async def _require_can_manage(
     *,
     deps: ProductServiceDependencies,
 ) -> None:
-    """Gate a mutation on `capability#can_manage` (org admin, RFC §8.1/§8.5).
+    """Gate a feature-governance mutation on the org's `can_manage_capabilities`.
 
-    The capability is anchored first (idempotent) so `can_manage` resolves even
-    for a brand-new capability an admin has never touched.
+    Capabilities are checked through ``capability#can_manage``, which the
+    schema resolves through that relation. Applications
+    first pass the equivalent organization gate, then resolve an exact
+    configured ``app__`` catalog entry. Their typed anchor is left to the
+    mutation itself, after any team-scope guard has run, so a rejected request
+    cannot write an application tuple.
     """
 
-    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+    if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         # Validate reserved application ids without first anchoring an
         # arbitrary path parameter. The org-level gate runs before loading
         # application metadata, preserving the admin boundary. The deployment
         # kill switch is then checked before reading registered applications or
         # creating any structural tuple, so disabled applications are both
         # undiscoverable and immutable through the generic capability API.
-        await require_manage_any(rebac, user)
+        await require_manage_capabilities(rebac, user)
         if not is_feature_enabled(deps.configuration, "enableApplications"):
             raise CapabilityNotFound(
-                f"Application capability {capability_id!r} is not installed."
+                f"Application catalog entry {capability_id!r} is not installed."
             )
-        # Parked (`enabled: false`) entries stay manageable: parking withdraws
-        # an app from the catalog while its grants keep living, so gating here
-        # would strand them. Granting stays refused by the strict catalog read.
-        known_ids = {
-            item.capability_id
-            for item in deps.configuration.platform.application_sources
-        }
-        if capability_id not in known_ids:
+        # Catalog-hidden (`enabled: false`) entries stay manageable: their
+        # grants keep living, so gating here would strand them. Granting is
+        # still refused by the strict catalog read.
+        application = next(
+            (
+                item
+                for item in deps.configuration.platform.application_sources
+                if item.catalog_id == capability_id
+            ),
+            None,
+        )
+        if application is None:
             raise CapabilityNotFound(
-                f"Application capability {capability_id!r} is not installed."
+                f"Application catalog entry {capability_id!r} is not installed."
             )
-        await ensure_capability_anchor(rebac, capability_id)
         return
 
     await ensure_capability_anchor(rebac, capability_id)
@@ -165,7 +172,7 @@ def _catalog_entry_for_revoke(
     needed to carry out the revoke; requiring one anyway means an admin
     cannot revoke a live model grant for exactly as long as the model pod's
     `/agents/models-catalog` endpoint is having trouble (2026-08-01, GitHub
-    #2191) — fail-OPEN on an authorization-management surface. A parked
+    #2191) — fail-OPEN on an authorization-management surface. A catalog-hidden
     application (`enabled: false`) leaves the catalog the same way while its
     gateway routes and its grants keep living, so `kind="app"` ids get the
     same fallback for the same reason. `kind="tool"`/`"agent"` ids are NOT
@@ -188,7 +195,7 @@ def _catalog_entry_for_revoke(
             kind="model",
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
-    if capability_id.startswith(APPLICATION_CAPABILITY_NAMESPACE_PREFIX):
+    if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         return CapabilityCatalogEntry(
             id=capability_id,
             version="0",
@@ -215,23 +222,33 @@ def _canonical_team_id_for_entry(
     return resolve_system_team_id(user, team_id) or team_id
 
 
-def _fold_personal_scope(
-    relations: list[Relation] | RebacDisabledResult,
-) -> PersonalScope:
-    """Derive the personal-space class tri-state from the two org-subject
-    tuples (RFC §8.4), folded from an already-fetched relation set. `enabled`
-    wins if both are somehow present (matches the FGA setter, which never
-    leaves both)."""
+def _fold_personal_scope(facts: CapabilityEnablementFacts) -> PersonalScope:
+    """Derive the personal-space class tri-state (RFC §8.4) from the shared
+    fold. `enabled` wins if both markers are somehow present (matches the FGA
+    setter, which never leaves both)."""
 
-    if ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.PERSONAL_ON, Resource.ORGANIZATION
-    ):
+    if facts.personal_on:
         return "enabled"
-    if ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.PERSONAL_DISABLED, Resource.ORGANIZATION
-    ):
+    if facts.personal_disabled:
         return "disabled"
     return "default"
+
+
+def _enablement_facts(
+    relations: list[Relation] | RebacDisabledResult,
+) -> CapabilityEnablementFacts:
+    """The five `can_use` facts for one capability. ReBAC disabled folds to the
+    all-empty shape, which every caller already renders as "nothing granted"."""
+
+    if isinstance(relations, RebacDisabledResult):
+        return CapabilityEnablementFacts(
+            enabled=frozenset(),
+            disabled=frozenset(),
+            default_on=False,
+            personal_on=False,
+            personal_disabled=False,
+        )
+    return CapabilityEnablementFacts.from_relations(relations)
 
 
 async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> PersonalScope:
@@ -255,7 +272,7 @@ async def _read_personal_scope(rebac: RebacEngine, capability_id: str) -> Person
     relations = await rebac.list_direct_relations(
         cap_ref(capability_id), subject=ORG_REF
     )
-    return _fold_personal_scope(relations)
+    return _fold_personal_scope(_enablement_facts(relations))
 
 
 async def _build_enablement_item(
@@ -270,28 +287,20 @@ async def _build_enablement_item(
     """Build one row's ReBAC-derived fields.
 
     #2089: originally 4 concurrent `lookup_subjects` reads per row. #2181
-    follow-up: `enabled`/`disabled` team grants and `default_on`/personal-scope
-    org markers all live on the SAME literal tuple set for this capability, so
-    they no longer need 4 separate OpenFGA round-trips (5, counting
-    `_read_personal_scope`'s own pair) — one cached `list_direct_relations`
-    Read (`get_capability_relations_cached`) is fetched ONCE here and folded
-    locally, the same "fetch once, derive many" shape `_bulk_team_membership`/
-    `_fold_team_role_relations` already use for teams. Fetching once (instead
-    of gathering several calls that would each independently race the same
-    cache key) also avoids a per-row thundering herd on a cold cache.
+    follow-up: every field below lives on the SAME literal tuple set, so one
+    cached `list_direct_relations` Read is fetched ONCE here and folded
+    locally - the same "fetch once, derive many" shape
+    `_fold_team_role_relations` uses for teams, and through the same
+    `CapabilityEnablementFacts` the health column derives `can_use` from, so
+    the two cannot drift.
     """
 
-    relations = await get_capability_relations_cached(rebac, entry.id)
-    default_on = ORGANIZATION_ID in capability_relation_subjects(
-        relations, RelationType.DEFAULT_ON, Resource.ORGANIZATION
-    )
-    enabled_team_ids = sorted(
-        capability_relation_subjects(relations, RelationType.ENABLED, Resource.TEAM)
-    )
-    disabled_team_ids = sorted(
-        capability_relation_subjects(relations, RelationType.DISABLED, Resource.TEAM)
-    )
-    personal_scope = _fold_personal_scope(relations)
+    relations = await get_enablement_relations_cached(rebac, enablement_ref(entry))
+    facts = _enablement_facts(relations)
+    default_on = facts.default_on
+    enabled_team_ids = sorted(facts.enabled)
+    disabled_team_ids = sorted(facts.disabled)
+    personal_scope = _fold_personal_scope(facts)
     if entry.kind == "app":
         enabled_team_ids = [
             team_id
@@ -350,6 +359,7 @@ async def _build_enablement_item(
         # §5.6 — no stored row means off. One pre-fetched set for the whole
         # list, not a per-row query.
         reasoning_enabled=(entry.kind != "app" and entry.id in reasoning_enabled_ids),
+        model_display_name=entry.model_display_name,
     )
 
 
@@ -359,11 +369,10 @@ async def list_capability_enablement(
     """List every advertised capability with its scope + enablement state (§8.5)."""
 
     rebac = _rebac(deps)
-    # Aggregate-list read gate: `can_manage` is org-admin, so probe it on the
-    # organization singleton via the same admin relation. Kept before every
-    # other step below — authorization must resolve before any of this
-    # request's work runs.
-    await require_manage_any(rebac, user)
+    # Aggregate-list read gate: no single capability object to check, so probe
+    # the org relation `capability#can_manage` itself resolves through. Kept
+    # before every other step — authorization resolves before any work runs.
+    await require_manage_capabilities(rebac, user)
 
     # Lazy import breaks the product.service ↔ capabilities import cycle, same
     # reason `catalog.py`/`impact.py` defer their own product.service imports.
@@ -373,9 +382,9 @@ async def list_capability_enablement(
     # so run them concurrently instead of one after another (#2089). Platform-
     # wide denominators (collaborative teams for default-on inheritance §8.5,
     # personal spaces for personal-class access §8.4) and resting health
-    # (#1975: one ReBAC `ListObjects` per team holding instances, `collect_instances`
-    # names the broken agents inline so the health-column drill-down needs no
-    # second endpoint) all fold into the same gather as the catalog fetch.
+    # (`collect_instances` names the broken agents inline, so the health-column
+    # drill-down needs no second endpoint) all fold into the same gather as the
+    # catalog fetch.
     # `_pod_catalog_fetch_scope()` de-dupes the pod `/agents/templates` fetch
     # that `aggregate_capability_catalog` and `compute_capability_impact`
     # would otherwise each make independently (#2089).
@@ -541,7 +550,9 @@ async def reset_team_capability(
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
     team_id = _canonical_team_id_for_entry(user, entry, team_id)
-    default_on = await has_org_relation(rebac, capability_id, RelationType.DEFAULT_ON)
+    default_on = await has_enablement_org_relation(
+        rebac, enablement_ref(entry), RelationType.DEFAULT_ON
+    )
     suspended = await reset_capability_for_team(
         rebac=rebac,
         agent_instance_store=(

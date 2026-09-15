@@ -97,6 +97,41 @@ class BaseDocumentMetadataStore:
         total = len(all_docs)
         return all_docs[offset : offset + limit], total
 
+    async def document_uids_by_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> dict[str, list[str]]:
+        """Uids of the documents carrying each of ``tag_ids``.
+
+        Exists so that listing N libraries costs one query instead of N: the
+        caller wants uids only, never the metadata behind them. This default
+        loops; SQL-backed stores override it with a single array-overlap query.
+        """
+        result: dict[str, list[str]] = {}
+        for tag_id in dict.fromkeys(tag_ids):
+            docs = await self.get_metadata_in_tag(tag_id, session=session)
+            result[tag_id] = [d.identity.document_uid for d in docs]
+        return result
+
+    async def metadata_in_tags(
+        self, tag_ids: List[str], session: AsyncSession | None = None
+    ) -> List[DocumentMetadata]:
+        """Every document carrying at least one of ``tag_ids``, once each.
+
+        A document may sit in several of the requested tags; callers aggregating
+        over a whole corpus must not count it twice, so the union is returned
+        rather than a per-tag mapping.
+        """
+        seen: set[str] = set()
+        merged: List[DocumentMetadata] = []
+        for tag_id in dict.fromkeys(tag_ids):
+            for doc in await self.get_metadata_in_tag(tag_id, session=session):
+                uid = doc.identity.document_uid
+                if uid in seen:
+                    continue
+                seen.add(uid)
+                merged.append(doc)
+        return merged
+
     async def total_size_by_tags(
         self, tag_ids: List[str], session: AsyncSession | None = None
     ) -> dict[str, int]:

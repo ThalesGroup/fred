@@ -26,6 +26,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         }
     )
     config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(update={"enabled": True})
+    config.app = config.app.model_copy(update={"pdf_render_ttl_days": 45})
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,
@@ -47,11 +48,13 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         *,
         max_concurrent_workflow_tasks: int = 1,
         max_concurrent_activities: int = 1,
+        pdf_render_ttl_days: int = 30,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
         observed["temporal_config"] = temporal_config
         observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
         observed["max_concurrent_activities"] = max_concurrent_activities
+        observed["pdf_render_ttl_days"] = pdf_render_ttl_days
         await asyncio.sleep(0)
 
     async def fake_emit_process_kpis(interval_s: float, writer) -> None:
@@ -111,4 +114,5 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     assert observed["temporal_config"] == config.scheduler.temporal
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
+    assert observed["pdf_render_ttl_days"] == 45
     assert observed["shutdown_called"] is True

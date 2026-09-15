@@ -34,6 +34,7 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
+import { useWikiAvailabilityQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -48,7 +49,7 @@ import { useTeamApplications } from "@rework/features/applications/useTeamApplic
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { agentIconName, agentsNicknamePlural, defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
@@ -95,6 +96,15 @@ export default function TeamContentNavbar() {
   const showApplications =
     applicationsEnabled && !isPersonalTeam && !applicationsError && (teamApplications?.items?.length ?? 0) > 0;
 
+  // A team has a wiki when an admin has enabled the `team_wiki` agent
+  // capability for it (WIKI-03) — one decision covering the team's agents and
+  // its people. Hidden while the answer is unknown rather than shown
+  // optimistically: an entry that appears and then vanishes on a slow answer
+  // reads worse than one that arrives a moment late, and the control-plane
+  // refuses the wiki routes anyway.
+  const { data: wikiAvailability } = useWikiAvailabilityQuery({ teamId: teamId ?? "" }, { skip: !teamId });
+  const showWiki = wikiAvailability?.enabled === true;
+
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
   // can_manage_evaluation_corpus are granted to team_analyst AND team_admin,
@@ -124,15 +134,18 @@ export default function TeamContentNavbar() {
   })();
   const showRoleLabel = !isPersonalTeam && !!selectedTeam?.is_member && relationsLoaded;
 
-  // Team avatar (28×28, 4px): the custom image when set, else colour-tinted
-  // square initials (same fallback as the Home team list). The personal space
-  // reuses that list's round user avatar (UserAvatar) — the "this is you"
-  // signal — sized down to fit this compact header.
+  // Team avatar (28×28, 4px): the team's own image, else the deployment default,
+  // else colour-tinted square initials — the same chain as the Home team list
+  // and the team cards, so one team looks the same on every surface. The
+  // personal space keeps that list's round user avatar (UserAvatar) — the "this
+  // is you" signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
     <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
   ) : selectedTeam?.avatar_image_url ? (
     <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+  ) : defaultTeamAvatarFile ? (
+    <img className={styles.teamPanelAvatar} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true" />
   ) : (
     <TeamInitials
       className={styles.teamPanelAvatar}
@@ -163,6 +176,14 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
+  if (showWiki) {
+    navigationItems.push({
+      type: "link",
+      label: t("rework.sidebar.team.menu.wiki"),
+      icon: { category: "outlined", type: "book_2", filled: true },
+      linkProps: { to: `/team/${teamId}/wiki` },
+    });
+  }
   if (showApplications) {
     navigationItems.push({
       type: "link",

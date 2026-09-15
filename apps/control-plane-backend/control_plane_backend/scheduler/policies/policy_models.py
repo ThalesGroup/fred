@@ -188,11 +188,39 @@ class ConversationPolicies(FrozenModel):
     purge: PurgePolicy = Field(default_factory=PurgePolicy)
 
 
+class WikiProposalPolicy(FrozenModel):
+    """How long an agent's wiki proposal may sit un-answered before the
+    lifecycle sweep rejects it (WIKI-05, CONTROL-PLANE-PRODUCT-CONTRACT.md
+    §49). Platform-wide, not per-team: nothing in that decision asked for a
+    team override, and one fewer knob is one fewer thing to explain."""
+
+    retention: str = Field(default="P30D", min_length=1)
+
+    @field_validator("retention")
+    @classmethod
+    def _validate_retention(cls, value: str) -> str:
+        parse_iso8601_duration(value)
+        return value
+
+    @property
+    def retention_seconds(self) -> int:
+        return duration_to_seconds(self.retention)
+
+
+class WikiPolicies(FrozenModel):
+    proposal: WikiProposalPolicy = Field(default_factory=WikiProposalPolicy)
+
+
 class ConversationPolicyCatalog(FrozenModel):
     version: Literal["v1"] = "v1"
     conversation_policies: ConversationPolicies = Field(
         default_factory=ConversationPolicies
     )
+    # Not conversation-shaped, but the same file and the same load path — see
+    # `load_conversation_policy_catalog`. Splitting it into a second catalog
+    # file would only mean a second path/default to keep in sync for one
+    # small policy.
+    wiki_policies: WikiPolicies = Field(default_factory=WikiPolicies)
 
 
 class PolicyEvaluationResult(BaseModel):

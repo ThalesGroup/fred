@@ -52,6 +52,12 @@
   gap: var(--spacing-xs);
 }
 
+/* 1px, not empty: Firefox leaves an empty last child outside the scrollable area. */
+.gcuEnd {
+  flex-shrink: 0;
+  height: 1px;
+}
+
 .gcuActions {
   display: flex;
   justify-content: flex-end;

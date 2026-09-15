@@ -12,21 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PLATFORM-ADMIN-DELEGATION-RFC.md (#2405): root-managed admins, delegated
-observers.
+"""PLATFORM-ADMIN-DELEGATION-RFC.md: root-managed admins, every other role
+delegated to any admin.
 
 The load-bearing guarantees these tests lock in:
 - `platform_admin` is granted and revoked by the bootstrap root only — the
   uid in `platformbootstrap.completed_by`, never a live tuple count;
 - the root itself is unrevocable, for every caller including itself;
-- `platform_observer` carries none of those restrictions;
+- every other role (`platform_observer` and the three delegated ones)
+  carries none of those restrictions — any admin grants and revokes them;
 - with no bootstrap marker there is no root, so `platform_admin` management
   refuses (409-mapped) instead of falling open;
-- every read is a *direct-tuple* read: schema.fga's `platform_observer:
-  [user] or platform_admin` union means an expanded read (`lookup_subjects`,
-  OpenFGA ListUsers) would report every admin as a phantom observer whose
-  revocation silently no-ops — the fake's `lookup_subjects` raises to make
-  any regression to expanded reads fail loudly.
+- every read is a *direct-tuple* read: schema.fga defines every non-admin
+  role as `[user] or platform_admin`, so an expanded read (`lookup_subjects`,
+  OpenFGA ListUsers) would report every admin as a phantom holder of all of
+  them, with revocations that silently no-op — the fake's `lookup_subjects`
+  raises to make any regression to expanded reads fail loudly.
 """
 
 from __future__ import annotations
@@ -75,8 +76,8 @@ def _org_tuple(uid: str, relation: RelationType) -> Relation:
 
 
 class _FakeRebac:
-    """Direct-tuple semantics only: `admins`/`observers` are the literally
-    persisted tuples, never the computed union the real schema adds on top."""
+    """Direct-tuple semantics only: `holders` are the literally persisted
+    tuples per role, never the computed union the real schema adds on top."""
 
     def __init__(
         self,
@@ -84,11 +85,17 @@ class _FakeRebac:
         enabled: bool = True,
         admins: set[str] | None = None,
         observers: set[str] | None = None,
+        holders: dict[PlatformRoleRelation, set[str]] | None = None,
         disabled_reads: bool = False,
     ) -> None:
         self.enabled = enabled
-        self._admins = admins if admins is not None else set()
-        self._observers = observers if observers is not None else set()
+        self._holders: dict[PlatformRoleRelation, set[str]] = {
+            role: set() for role in list(PlatformRoleRelation)
+        }
+        self._holders[PlatformRoleRelation.PLATFORM_ADMIN] = set(admins or ())
+        self._holders[PlatformRoleRelation.PLATFORM_OBSERVER] = set(observers or ())
+        for role, uids in (holders or {}).items():
+            self._holders[role] = set(uids)
         self._disabled_reads = disabled_reads
         self.added: list[tuple[Relation, str | None]] = []
         self.deleted: list[Relation] = []
@@ -100,8 +107,8 @@ class _FakeRebac:
     async def lookup_subjects(self, *args, **kwargs):
         raise AssertionError(
             "platform-role code must never use expanded reads (ListUsers): "
-            "schema.fga's `platform_observer: [user] or platform_admin` union "
-            "would report every admin as a phantom observer"
+            "every non-admin role is `[user] or platform_admin` in schema.fga, "
+            "so an expanded read would report every admin as a phantom holder"
         )
 
     async def list_direct_relations(self, resource, **kwargs):
@@ -109,22 +116,14 @@ class _FakeRebac:
             return RebacDisabledResult()
         assert resource == _ORG_REF
         return [
-            *(
-                _org_tuple(uid, RelationType.PLATFORM_ADMIN)
-                for uid in sorted(self._admins)
-            ),
-            *(
-                _org_tuple(uid, RelationType.PLATFORM_OBSERVER)
-                for uid in sorted(self._observers)
-            ),
+            _org_tuple(uid, role.to_relation())
+            for role, uids in self._holders.items()
+            for uid in sorted(uids)
         ]
 
     async def has_direct_relation(self, subject, relation, resource, **kwargs):
         assert resource == _ORG_REF
-        holders = (
-            self._admins if relation == RelationType.PLATFORM_ADMIN else self._observers
-        )
-        return subject.id in holders
+        return subject.id in self._holders[PlatformRoleRelation(relation.value)]
 
     async def add_relation(self, relation: Relation, *, actor_uid=None):
         self.added.append((relation, actor_uid))
@@ -477,5 +476,120 @@ async def test_revoke_refuses_when_rebac_disabled_before_root_guards():
             OTHER_UID,
             PlatformRoleRelation.PLATFORM_ADMIN,
             *_args(rebac, _FakeBootstrapStore(completed_by=None)),
+        )
+    assert rebac.deleted == []
+
+
+# ---------------------------------------------------------------------------
+# delegated roles (team_manager / feature_manager / prompt_editor)
+# ---------------------------------------------------------------------------
+
+# Every role but `platform_admin`: the root guards are scoped to that one
+# relation, so all of these behave exactly like `platform_observer`.
+_DELEGATED_ROLES = [
+    role
+    for role in list(PlatformRoleRelation)
+    if role is not PlatformRoleRelation.PLATFORM_ADMIN
+]
+
+
+@pytest.mark.parametrize("role", _DELEGATED_ROLES)
+@pytest.mark.asyncio
+async def test_any_admin_grants_a_delegated_role(role: PlatformRoleRelation):
+    """No root guard outside `platform_admin` — an appointed admin may appoint
+    a team manager, a feature manager or a prompt editor."""
+    rebac = _FakeRebac()
+    await grant_platform_role(
+        _user(ADMIN_UID),
+        OTHER_UID,
+        role,
+        *_args(rebac, _FakeBootstrapStore()),
+        _USER_DEPS,
+    )
+
+    assert len(rebac.added) == 1
+    relation, actor_uid = rebac.added[0]
+    assert relation.relation == role.to_relation()
+    assert relation.resource == _ORG_REF
+    assert actor_uid == ADMIN_UID
+
+
+@pytest.mark.parametrize("role", _DELEGATED_ROLES)
+@pytest.mark.asyncio
+async def test_any_admin_revokes_a_delegated_role(role: PlatformRoleRelation):
+    rebac = _FakeRebac(holders={role: {OTHER_UID}})
+    await revoke_platform_role(
+        _user(ADMIN_UID),
+        OTHER_UID,
+        role,
+        *_args(rebac, _FakeBootstrapStore()),
+    )
+
+    assert len(rebac.deleted) == 1
+    assert rebac.deleted[0].relation == role.to_relation()
+
+
+@pytest.mark.parametrize("role", _DELEGATED_ROLES)
+@pytest.mark.asyncio
+async def test_delegated_roles_need_no_bootstrap_root(role: PlatformRoleRelation):
+    """The 409 for a platform without a bootstrap marker is a `platform_admin`
+    rule only: a delegated grant must still work on such a platform."""
+    rebac = _FakeRebac()
+    await grant_platform_role(
+        _user(ADMIN_UID),
+        OTHER_UID,
+        role,
+        *_args(rebac, _FakeBootstrapStore(completed_by=None)),
+        _USER_DEPS,
+    )
+    assert len(rebac.added) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_reports_every_role_from_its_own_direct_tuples():
+    rebac = _FakeRebac(
+        holders={
+            PlatformRoleRelation.TEAM_MANAGER: {OTHER_UID},
+            PlatformRoleRelation.PROMPT_EDITOR: {OTHER_UID},
+        }
+    )
+    response = await list_platform_roles(
+        _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
+    )
+    by_uid = {h.user.id: h for h in response.holders}
+    assert set(by_uid[OTHER_UID].relations) == {
+        PlatformRoleRelation.TEAM_MANAGER,
+        PlatformRoleRelation.PROMPT_EDITOR,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_never_reports_the_roles_an_admin_holds_by_union():
+    """The phantom-holder trap, now five relations wide: every delegated role
+    is `[user] or platform_admin` in schema.fga, so an expanded read would
+    show an admin holding all five and offer four revokes that delete
+    nothing."""
+    rebac = _FakeRebac(admins={ADMIN_UID})
+    response = await list_platform_roles(
+        _user(ROOT_UID), *_args(rebac, _FakeBootstrapStore()), _USER_DEPS
+    )
+    by_uid = {h.user.id: h for h in response.holders}
+    assert by_uid[ADMIN_UID].relations == [PlatformRoleRelation.PLATFORM_ADMIN]
+
+
+@pytest.mark.parametrize("role", _DELEGATED_ROLES)
+@pytest.mark.asyncio
+async def test_revoking_a_union_only_delegated_role_is_a_404(
+    role: PlatformRoleRelation,
+):
+    """An admin reaches every delegated role through the union but holds no
+    tuple for it — 404, never a 204 that changed nothing."""
+    rebac = _FakeRebac(admins={ADMIN_UID})
+    with pytest.raises(PlatformRoleNotHeldError):
+        await revoke_platform_role(
+            _user(ROOT_UID),
+            ADMIN_UID,
+            role,
+            *_args(rebac, _FakeBootstrapStore()),
         )
     assert rebac.deleted == []
