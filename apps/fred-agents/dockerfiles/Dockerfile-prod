@@ -87,9 +87,23 @@ ARG GROUP_ID=1000
 
 # The PPT-filler preview needs Impress at runtime. The headless package keeps
 # PDF export without the full office suite, GUI/media stack or system Python.
+#
+# The fonts stand in for the ones corporate templates use and the image cannot ship
+# (Arial, Calibri, Cambria, Century Gothic): with a narrower or wider substitute the
+# preview breaks one-line titles ("Merc|i"). Liberation, Carlito and Caladea alias
+# themselves; Century Gothic is mapped to URW Gothic, its closest free metrics.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libreoffice-impress-nogui && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        libreoffice-impress-nogui \
+        fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
+    rm -rf /var/lib/apt/lists/* && \
+    printf '%s\n' \
+        '<?xml version="1.0"?>' \
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+        '<fontconfig>' \
+        '  <alias binding="same"><family>Century Gothic</family><accept><family>URW Gothic</family></accept></alias>' \
+        '</fontconfig>' > /etc/fonts/conf.d/60-century-gothic.conf && \
+    fc-cache -f
 
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
