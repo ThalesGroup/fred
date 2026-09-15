@@ -3938,62 +3938,70 @@ the setting is inert there and the admin page says so. Two admins saving
 overlapping lists at the same instant can collide on the primary key (500 for
 one of them). The setting is not part of the platform export bundle.
 
-## 53. Contract Notes - team administrator charter (2026-09-14, issue #2658)
+## 53. Contract Notes - team administrator charter (2026-09-14, reworked 2026-09-15, issue #2658)
 
-**What it is.** A deployment can require every `team_admin` to accept a charter
-of responsibilities before their admin-only team permissions apply. The text is
-frontend markdown (`team-admin-charter.md`, `team-admin-charter.fr.md`),
-replaced from the theme archive like `gcu.md`; the stock file is a template.
+**What it is.** A deployment can require every team administrator to accept a
+charter of responsibilities before they hold `team_admin`. The text is frontend
+markdown (`team-admin-charter.md`, `team-admin-charter.fr.md`), replaced from
+the theme archive like `gcu.md`; the stock file is a template.
 
 **Configuration.** `app.team_admin_charter_version: str | None`. `None`, the
 default, turns the charter off. Changing the value asks every admin to accept
-again.
+again (see Reconciliation).
 
-**Endpoints.**
+**Model.** `schema.fga` adds `team.pending_team_admin: [user]`, part of the
+`team_member` union and of nothing else. A pending admin is a member with no
+admin authority, in every service that asks OpenFGA, by construction.
+
+**Nomination.** Every write of `team_admin` (add member, grant role, rescue,
+team creation, import) writes `pending_team_admin` instead while a version is
+set and the user has not accepted it. `pending_team_admin` cannot be requested
+directly (422). Revoking it cancels the nomination and needs
+`can_administer_admins`; removing the member deletes it with the other roles.
+`my_relations` and the member list expose it.
+
+**Endpoint.**
 
 | Method | Path                                   | Permission    |
 | ------ | -------------------------------------- | ------------- |
-| GET    | `/control-plane/v1/team-admin-charter` | authenticated |
 | POST   | `/control-plane/v1/team-admin-charter` | authenticated |
 
-Both return the caller's `TeamAdminCharterStatus`
-`{required: bool, accepted_at: datetime | null}`. `required` is true when a
-version is set, the caller holds `team_admin` on at least one team (one
-ListObjects on `can_administer_admins`, skipped once accepted) and has not
-accepted that version. `POST` records the acceptance and is idempotent: a repeat
-keeps the first time. The first one emits the audit event
-`team_admin.charter.accepted` `{actor_uid, charter_version}`. With no version
-set, `POST` answers 409 `team_admin_charter_disabled`.
+Records the caller's acceptance of the configured version, then turns every
+`pending_team_admin` they hold into `team_admin`, writing the new tuple before
+deleting the old one. Idempotent: a repeat also promotes a nomination that raced
+the first call. Returns `TeamAdminCharterAcceptance {accepted_at}`. The first
+acceptance of a version emits the audit event `team_admin.charter.accepted`
+`{actor_uid, charter_version}`. With no version set: 409
+`team_admin_charter_disabled`.
 
-**Gate.** While a version is set and the caller has not accepted it, a
-`team_admin` keeps only what their other roles grant:
+**Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`
+plus `accepted_at`, where `user_id` is the Keycloak uid used as the OpenFGA
+subject and rows are never updated; `team_admin_charter_state`, one row holding
+the last `applied_version` ("" when off).
 
-- `can_update_info`, `can_administer_members`, `can_administer_editors`,
-  `can_administer_analysts` and `can_administer_admins` answer 403
-  `team_admin_charter_not_accepted` and are left out of
-  `TeamWithPermissions.permissions`. They are exactly the `team_admin`-only
-  permissions of `schema.fga`, kept in sync by a test;
-- `can_run_evaluations` and `can_manage_evaluation_corpus` are left out too,
-  unless the caller also holds `team_analyst`, told apart by the analyst-only
-  `can_read_conversations_for_evaluation`. No route checks them; they drive the
-  elevated team views of the UI;
-- the routing policy read, which accepts any elevated role, applies the same
-  filter;
-- the `team_admin` relation is granted, revoked and counted as before (last-admin
-  guard, rescue), and `my_relations` still lists it;
-- one acceptance covers every team the user administers.
+**Reconciliation.** At startup, under an advisory lock, and only when the
+configured version differs from `applied_version`:
 
-**Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`,
-plus `accepted_at`. `user_id` is the Keycloak uid used as the OpenFGA subject.
-Rows are never updated, so past versions stay on record. No in-process cache: a
-replica would keep refusing an admin who just accepted on another one.
+- a `team_admin` who has not accepted the version becomes `pending_team_admin`;
+- a pending admin who has accepted it, or every one when the charter is off, is
+  promoted;
+- `applied_version` is stored last, so a failed pass is retried.
 
-**Frontend.** On the pages of a team where the user holds `team_admin`, never on
-the home page, a user whose status is `required` gets a pop-up with Accept,
-enabled once the end of the text is visible, and Later, which closes it until the
-next app load. Team settings show a Responsibilities section to `team_admin`s,
-from `my_relations`, and a notice while acceptance is pending.
+It costs one ReBAC read per team, once per version change, and is fail-closed:
+an error stops the startup.
+
+**Unchanged invariants.** The last-admin guard and the rescue "orphaned team"
+check count `team_admin` only, so a team whose nominated admin never accepts can
+still be rescued.
+
+**Frontend.** On the pages of a team where `my_relations` holds
+`pending_team_admin`, the charter page replaces the team content until Accept,
+enabled once the end of the text is visible. The home page, the personal space
+and other teams stay usable. Team settings show a read-only Responsibilities
+section to `team_admin`s, and the member list shows "Admin (pending)" on the
+admin chip.
 
 **Rollout.** Publish the theme archive with the charter first, then set the
-version: every admin is prompted the next time they open one of their teams. Unsetting the version turns
-the gate off and keeps the rows.
+version: existing admins become pending at the next startup and see the charter
+when they open their team. Unsetting the version promotes every pending admin
+at the next startup.

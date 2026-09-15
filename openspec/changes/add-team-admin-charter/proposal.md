@@ -4,15 +4,15 @@ Team administrators are part of the security chain: they decide who belongs to a
 
 ## What Changes
 
-- New legal markdown document, the team administrator charter (`team-admin-charter.md` and `team-admin-charter.fr.md`), served and overridable exactly like the terms of use: a generic template ships in the frontend image, a deployment replaces it from its theme archive.
+- New legal markdown document, the team administrator charter (`team-admin-charter.md` and `team-admin-charter.fr.md`), served and overridable like the terms of use: a generic template ships in the frontend image, a deployment replaces it from its theme archive.
 - New control-plane setting `app.team_admin_charter_version`. Unset means the feature is off and nothing below applies.
-- The control-plane records each user's acceptance of a charter version in the database, and exposes two endpoints: one tells the caller whether they must accept, the other records the acceptance and emits an audit event.
-- A `team_admin` who has not accepted the current version is denied the administrator-only team permissions (`can_update_info`, `can_administer_members`, `can_administer_editors`, `can_administer_analysts`, `can_administer_admins`), and those permissions are left out of the team permissions returned to the frontend. The `team_admin` relation itself is still granted, revoked and counted as today.
-- One acceptance per user covers every team they administer. Changing the configured version requires every administrator to accept again.
-- Frontend: a pop-up on the pages of a team the user administers, never on the home page, while their acceptance is pending (Accept or Later), and a "Responsibilities" section in team settings to read the charter and accept it.
+- New OpenFGA relation `team.pending_team_admin`, part of `team_member` and nothing else. A nominated admin who has not accepted the configured version gets it instead of `team_admin`, so they hold a member's rights only, in every service.
+- `POST /control-plane/v1/team-admin-charter` records the acceptance (audited) and turns every `pending_team_admin` of the caller into `team_admin`. One acceptance covers every team.
+- At startup, when the configured version changed, the control-plane moves admins between `team_admin` and `pending_team_admin` to match.
+- Frontend: the charter page replaces the pages of a team where the user is a pending admin, until they accept; a read-only Responsibilities section in team settings; an "Admin (pending)" chip in the member list.
 - Refactor: `GcuPage` and `GdprPage` share one markdown loading hook, which the charter reuses.
 
-Not breaking: with the setting unset, behaviour is unchanged. Turning it on for an existing deployment suspends every existing administrator's rights until they accept, which is the intent.
+Not breaking: with the setting unset, behaviour is unchanged. Turning it on for an existing deployment makes every existing administrator pending until they accept, which is the intent.
 
 ## Capabilities
 
@@ -20,16 +20,16 @@ Capabilities here are OpenSpec spec domains (`openspec/specs/<name>/`), unrelate
 
 ### New Capabilities
 
-- `team-admin-charter`: the charter document and its override, acceptance recording, the rule that administrator-only team permissions require acceptance of the current version, and the prompts that lead an administrator to accept.
+- `team-admin-charter`: the charter document and its override, the pending admin relation, acceptance and promotion, reconciliation on version change, and the team pages that lead a pending admin to accept.
 
 ### Modified Capabilities
 
-None. `frontend-package-archives` is unrelated.
+None.
 
 ## Impact
 
-- Control-plane backend: configuration model, a new acceptance table and its Alembic migration, the team permission check and permission projection in `teams/service.py`, a new router for the two endpoints.
-- No change to the OpenFGA model, to fred-core, to knowledge-flow or to fred-runtime: every administrator-only team permission is checked in the control-plane only.
-- Frontend: the pop-up, the team settings section, the markdown hook refactor, the regenerated `controlPlaneOpenApi.ts`, i18n.
+- fred-core: `schema.fga` and its compiled JSON, `RelationType.PENDING_TEAM_ADMIN`, `lookup_resources` accepting a relation.
+- Control-plane backend: configuration model, two tables and their migrations, nomination writes in `teams/service.py` and the importer, the acceptance endpoint, the startup reconciliation.
+- Frontend: charter gate and page, Responsibilities section, role chips and labels, markdown hook refactor, regenerated `controlPlaneOpenApi.ts`, i18n.
 - Theme tooling: `build-theme-archive.sh` and the frontend README list the new document.
-- Docs: a dated section in `CONTROL-PLANE-PRODUCT-CONTRACT.md`, `authz-endpoint-matrix.yaml`, the team admin section of `REBAC.md`, `TERMS_OF_USE.md`.
+- Docs: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §53, `authz-endpoint-matrix.yaml`, `REBAC.md`, `TERMS_OF_USE.md`.

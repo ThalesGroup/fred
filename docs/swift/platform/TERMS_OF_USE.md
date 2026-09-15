@@ -153,10 +153,11 @@ without changing frontend code.
 ## Team Administrator Charter
 
 The same versioned acceptance, scoped to team administrators. Set
-`app.team_admin_charter_version` in the control-plane configuration and every
-`team_admin` must accept that version before their admin-only team permissions
-apply. They are prompted when they open one of their teams, never on the home page, and
-can read the charter at any time from team settings, Responsibilities.
+`app.team_admin_charter_version` in the control-plane configuration and a user
+nominated team admin holds `pending_team_admin`, with a member's rights, until
+they accept that version. Opening one of their teams shows the charter until
+they do; the home page and the personal space stay usable. Admins read it again
+from team settings, Responsibilities.
 
 The charter text is deployment-owned: ship `team-admin-charter.md` and
 `team-admin-charter.fr.md` at the root of the frontend theme archive (see

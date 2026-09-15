@@ -100,15 +100,12 @@ Can:
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
 
-When `app.team_admin_charter_version` is set, a `team_admin` who has not
-accepted that charter version keeps only what their other roles grant: the
-admin-only permissions (`can_update_info`, `can_administer_*`) answer 403
-`team_admin_charter_not_accepted`, and those plus the evaluation permissions
-shared with `team_analyst` are left out of the team projection. The
-`team_admin` relation is still granted, revoked and counted as usual. The rule
-lives in `_validate_team_and_check_permission` and
-`drop_unaccepted_team_admin_permissions` (control-plane `teams/service.py`),
-which any check a `team_admin` can satisfy must go through. Contract:
+A nominated admin who has not accepted the configured team administrator
+charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
+a `team_member` with no admin authority. Accepting the charter
+(`POST /team-admin-charter`) turns it into `team_admin`, and a version change
+moves admins back to pending at the next startup. The last-admin guard and the
+rescue check count `team_admin` only. Contract:
 `CONTROL-PLANE-PRODUCT-CONTRACT.md` §53.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
