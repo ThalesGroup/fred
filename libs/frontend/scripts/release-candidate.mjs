@@ -24,43 +24,97 @@ import {
   verifyCandidateEvidence,
 } from "./release-evidence.mjs";
 import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
+import { resolveUiTokenDependency } from "./compatibility-baselines.mjs";
+import { assertCompatibleTokenProvision } from "./provision-compatible-token.mjs";
+import { selectReleaseMembers, selectionOption } from "./release-selection.mjs";
 import { candidateRecordFromEvidence } from "./release-record.mjs";
 import { assertMemberChangelog } from "./release-changelog.mjs";
 
-async function runCandidateGates({ contract, archivePaths, integrities }) {
-  const tokens = await stageIsolatedConsumer({
-    contract,
-    archivePath: archivePaths.designTokens,
-    expectedIntegrity: integrities.designTokens,
-    stagedOutputPath: "target/staged-consumers/tokens",
+export async function runCandidateGates({
+  contract,
+  archivePaths,
+  integrities,
+  selectedIds,
+  ledger,
+  stageRoot = path.join(workspaceRoot, "target/staged-consumers"),
+}) {
+  const needsUiBaseline =
+    selectedIds.includes("ui") && !selectedIds.includes("designTokens");
+  const compatibleToken = needsUiBaseline
+    ? await assertCompatibleTokenProvision({ contract, ledger })
+    : undefined;
+  const tokens =
+    selectedIds.includes("designTokens") || needsUiBaseline
+      ? await stageIsolatedConsumer({
+          contract,
+          archivePath:
+            compatibleToken?.archivePath ?? archivePaths.designTokens,
+          expectedIntegrity:
+            compatibleToken?.receipt.integrity ?? integrities.designTokens,
+          compatibleToken: compatibleToken
+            ? {
+                archivePath: compatibleToken.archivePath,
+                coordinate: compatibleToken.receipt.coordinate,
+                integrity: compatibleToken.receipt.integrity,
+              }
+            : undefined,
+          stagedOutputPath: path.join(stageRoot, "tokens"),
+        })
+      : undefined;
+  const ui = selectedIds.includes("ui")
+    ? await stageIsolatedReactConsumer({
+        contract,
+        tokenArchivePath: archivePaths.designTokens,
+        uiArchivePath: archivePaths.ui,
+        expectedIntegrities: integrities,
+        compatibleToken: compatibleToken
+          ? {
+              archivePath: compatibleToken.archivePath,
+              coordinate: compatibleToken.receipt.coordinate,
+              integrity: compatibleToken.receipt.integrity,
+            }
+          : undefined,
+        stagedOutputPath: path.join(stageRoot, "react"),
+      })
+    : undefined;
+  const iframeSdk = selectedIds.includes("iframeSdk")
+    ? await stageIsolatedIframeSdkConsumer({
+        contract,
+        archivePath: archivePaths.iframeSdk,
+        expectedIntegrity: integrities.iframeSdk,
+        stagedOutputPath: path.join(stageRoot, "iframe-sdk"),
+      })
+    : undefined;
+  const host = iframeSdk
+    ? await runIframeSdkHostIntegration({
+        contract,
+        archivePath: archivePaths.iframeSdk,
+        expectedIntegrity: integrities.iframeSdk,
+      })
+    : undefined;
+  const browser = await runBrowserSmoke({
+    tokenOutput: path.join(stageRoot, "tokens"),
+    reactOutput: path.join(stageRoot, "react"),
+    iframeSdkOutput: path.join(stageRoot, "iframe-sdk"),
+    checks: [
+      ...(tokens ? ["tokens", "fonts"] : []),
+      ...(ui ? ["ui"] : []),
+      ...(iframeSdk ? ["iframeSdk"] : []),
+    ],
   });
-  const ui = await stageIsolatedReactConsumer({
-    contract,
-    tokenArchivePath: archivePaths.designTokens,
-    uiArchivePath: archivePaths.ui,
-    expectedIntegrities: integrities,
-    stagedOutputPath: "target/staged-consumers/react",
-  });
-  const iframeSdk = await stageIsolatedIframeSdkConsumer({
-    contract,
-    archivePath: archivePaths.iframeSdk,
-    expectedIntegrity: integrities.iframeSdk,
-    stagedOutputPath: "target/staged-consumers/iframe-sdk",
-  });
-  const host = await runIframeSdkHostIntegration({
-    contract,
-    archivePath: archivePaths.iframeSdk,
-    expectedIntegrity: integrities.iframeSdk,
-  });
-  const browser = await runBrowserSmoke();
   return {
     archives: { validated: true, reusedPackedBytes: true },
     consumers: {
-      designTokens: tokens.evidence,
-      ui: ui.evidence,
-      iframeSdk,
+      ...(selectedIds.includes("designTokens")
+        ? { designTokens: tokens.evidence }
+        : {}),
+      ...(ui ? { ui: ui.evidence } : {}),
+      ...(iframeSdk ? { iframeSdk } : {}),
     },
-    host,
+    ...(compatibleToken
+      ? { compatibility: { designTokens: compatibleToken.receipt } }
+      : {}),
+    ...(host ? { host } : {}),
     browser,
   };
 }
@@ -79,8 +133,13 @@ export async function buildReleaseCandidate({
     ui: packUi,
     iframeSdk: packIframeSdk,
   },
+  selection,
 }) {
   validateReleaseContract(contract);
+  const selectedIds = selectReleaseMembers(contract, selection);
+  const ledger = await loadCompatibilityLedger();
+  if (selectedIds.includes("ui"))
+    resolveUiTokenDependency({ contract, ledger, selectedIds });
   assert.equal(clean, true, "release candidate requires a clean checkout");
   assertReleaseToolchain(contract, producerToolchain);
   if (approved)
@@ -104,21 +163,23 @@ export async function buildReleaseCandidate({
       designTokens: packDesignTokens,
       ui: packUi,
       iframeSdk: packIframeSdk,
-    }))
+    }).filter(([id]) => selectedIds.includes(id)))
       assert.equal(
         packers[id],
         builder,
         `approved candidate requires the actual ${id} packer`,
       );
   }
-  for (const member of contract.inventory.members)
+  for (const member of contract.inventory.members.filter(({ id }) =>
+    selectedIds.includes(id),
+  ))
     await assertMemberChangelog(
       root,
       member,
       contract.packages[member.id].version,
     );
   const archives = [];
-  for (const role of ["designTokens", "iframeSdk", "ui"]) {
+  for (const role of selectedIds) {
     const result = await packers[role]({ contract, validate: true });
     archives.push({ role, path: result.archivePath });
   }
@@ -133,7 +194,13 @@ export async function buildReleaseCandidate({
       ]),
     ),
   );
-  const gates = await runGates({ contract, archivePaths, integrities });
+  const gates = await runGates({
+    contract,
+    archivePaths,
+    integrities,
+    selectedIds,
+    ledger,
+  });
   for (const role of Object.keys(archivePaths))
     assert.equal(
       await sha512Integrity(archivePaths[role]),
@@ -153,7 +220,12 @@ export async function buildReleaseCandidate({
   const record = await candidateRecordFromEvidence({
     evidence,
     contract,
-    ledger: await loadCompatibilityLedger(),
+    ledger,
+    selectedIds,
+    compatibilityOnly:
+      selectedIds.includes("ui") && !selectedIds.includes("designTokens")
+        ? ["designTokens"]
+        : [],
     archivePaths,
   });
   return { archives, evidence, record };
@@ -188,6 +260,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       npm: npmVersion.trim(),
     },
     approved,
+    selection: selectionOption(),
   });
   const evidencePath = path.resolve(
     workspaceRoot,

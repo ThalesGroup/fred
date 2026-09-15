@@ -115,6 +115,9 @@ export const VALIDATION_ORCHESTRATION_PATHS = [
 ];
 
 export const RELEASE_TOOLING_INPUTS = [
+  "libs/frontend/Makefile",
+  "libs/frontend/package.json",
+  "libs/frontend/package-lock.json",
   "libs/frontend/release/release-contract.schema.json",
   "libs/frontend/release/package-inventory.json",
   "libs/frontend/release/package-inventory.schema.json",
@@ -132,6 +135,10 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/scripts/schema-validation.mjs",
   "libs/frontend/scripts/release-changelog.mjs",
   "libs/frontend/scripts/compatibility-baselines.mjs",
+  "libs/frontend/scripts/release-selection.mjs",
+  "libs/frontend/scripts/provision-compatible-token.mjs",
+  "libs/frontend/scripts/provision-react-consumer.mjs",
+  "libs/frontend/scripts/provision-iframe-sdk-consumer.mjs",
   "libs/frontend/scripts/release-record.mjs",
   "libs/frontend/scripts/dependency-boundaries.mjs",
   "libs/frontend/scripts/release-evidence.mjs",
@@ -144,12 +151,15 @@ export const RELEASE_TOOLING_INPUTS = [
   "libs/frontend/scripts/consumer-contract.mjs",
   "libs/frontend/tests/release-contract.test.mjs",
   "libs/frontend/tests/release-foundations.test.mjs",
+  "libs/frontend/tests/release-selection.test.mjs",
+  "libs/frontend/tests/provision-compatible-token.test.mjs",
   "libs/frontend/tests/release-candidate.test.mjs",
   "libs/frontend/tests/fixture-transfer.test.mjs",
   "libs/frontend/tests/release-evidence.test.mjs",
   "libs/frontend/tests/dependency-boundaries.test.mjs",
   "libs/frontend/tests/registry-verifier.test.mjs",
   "libs/frontend/tests/registry-metadata.test.mjs",
+  "libs/frontend/fixtures/release-fourth-package.json",
   "libs/frontend/RELEASE.md",
   "docs/swift/FRED-FRONTEND-PACKAGING-RFC.md",
 ];

@@ -36,6 +36,15 @@ import {
   fetchExactPackageMetadata,
   waitForPackageMetadata,
 } from "./registry-metadata.mjs";
+import {
+  loadCompatibilityLedger,
+  resolveUiTokenDependency,
+} from "./compatibility-baselines.mjs";
+import {
+  orderInventoryMembers,
+  selectReleaseMembers,
+  selectionOption,
+} from "./release-selection.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const consumerFixtures = {
@@ -182,7 +191,10 @@ export async function verifyRegistryTooling({
   resolvePackage,
   verifyPackageSignature,
   installConsumers,
+  selectedIds = evidence.selectedIds ?? packageRoles,
+  ledger,
 }) {
+  selectedIds = selectReleaseMembers(contract, selectedIds.join(","));
   assert.equal(
     contract.state,
     "maintainer-confirmed",
@@ -198,11 +210,30 @@ export async function verifyRegistryTooling({
     releaseContractDigest(contract),
     "release contract differs from approved candidate evidence",
   );
+  assertSelectedRegistryInputs({
+    inventory: contract.inventory,
+    packages: contract.packages,
+    selectedIds,
+    coordinates,
+    evidence,
+  });
   const resolved = {};
   const verifiedPackages = {};
-  for (const role of packageRoles) {
+  let compatibilityOnly = [];
+  if (selectedIds.includes("ui") && !selectedIds.includes("designTokens")) {
+    assert(
+      ledger,
+      "UI-only registry verification requires the approved compatibility ledger",
+    );
+    const { baseline } = resolveUiTokenDependency({
+      contract,
+      ledger,
+      selectedIds,
+    });
+    compatibilityOnly = [baseline];
+  }
+  for (const role of selectedIds) {
     const expectedPackage = contract.packages[role];
-    assertExactRegistryCoordinate(coordinates[role], expectedPackage);
     const candidate = evidence.packages[role];
     assert(candidate, `candidate evidence missing ${role}`);
     const registryPackage = await resolvePackage({
@@ -236,17 +267,72 @@ export async function verifyRegistryTooling({
       provenance: signatureResult.identity,
     };
   }
+  const consumerContract = structuredClone(contract);
+  const verificationEvidence = {
+    ...evidence,
+    packages: { ...evidence.packages },
+  };
+  for (const baseline of compatibilityOnly) {
+    const role = baseline.memberId;
+    const version = baseline.coordinate.slice(
+      baseline.coordinate.lastIndexOf("@") + 1,
+    );
+    consumerContract.packages[role].version = version;
+    const expectedPackage = consumerContract.packages[role];
+    const candidate = {
+      coordinate: baseline.coordinate,
+      integrity: baseline.expected.integrity,
+    };
+    const registryPackage = await resolvePackage({
+      coordinate: baseline.coordinate,
+      registry: baseline.registry,
+      role,
+      contract: consumerContract,
+      evidence: { packages: { [role]: candidate } },
+      expectedPackage,
+      candidate,
+    });
+    assert.equal(
+      registryPackage.integrity,
+      baseline.expected.integrity,
+      `${role} compatibility registry integrity differs`,
+    );
+    const signature = await verifyPackageSignature(registryPackage, {
+      expectedProvenance: baseline.expected,
+      certificateIssuer: baseline.expected.certificateIssuer,
+    });
+    assertProvenanceIdentity({
+      cryptographicallyVerified: signature.cryptographicallyVerified,
+      actual: signature.identity,
+      expected: baseline.expected,
+    });
+    resolved[role] = registryPackage;
+    verificationEvidence.packages[role] = candidate;
+    verifiedPackages[role] = {
+      coordinate: baseline.coordinate,
+      integrity: registryPackage.integrity,
+      provenance: signature.identity,
+      compatibilityOnly: true,
+    };
+  }
   await verifyCandidateEvidence(
     evidence,
     Object.fromEntries(
-      packageRoles.map((role) => [role, resolved[role].archivePath]),
+      selectedIds.map((role) => [role, resolved[role].archivePath]),
     ),
     { contract },
   );
-  await installConsumers({ contract, evidence, resolved });
+  await installConsumers({
+    contract: consumerContract,
+    evidence: verificationEvidence,
+    resolved,
+    selectedIds,
+    compatibilityOnly: compatibilityOnly.map(({ memberId }) => memberId),
+  });
   return {
     kind: "registry-verifier-tooling",
     registry: contract.registry,
+    selectedIds,
     packages: verifiedPackages,
     gates: {
       exactRegistryArchives: true,
@@ -259,17 +345,53 @@ export async function verifyRegistryTooling({
   };
 }
 
+// Generic identity/selection boundary; a disposable profile can exercise this
+// without bypassing the confirmed-contract and specialized archive gates.
+export function assertSelectedRegistryInputs({
+  inventory,
+  packages,
+  selectedIds,
+  coordinates,
+  evidence,
+}) {
+  orderInventoryMembers({ inventory, packages, selectedIds });
+  assert.deepEqual(
+    Object.keys(evidence.packages ?? {}).sort(),
+    [...selectedIds].sort(),
+    "registry candidate set differs from selection",
+  );
+  for (const id of selectedIds) {
+    const expectedPackage = packages[id];
+    assert(expectedPackage, `registry package ${id} is not registered`);
+    assertExactRegistryCoordinate(coordinates[id], expectedPackage);
+    assert.equal(
+      evidence.packages[id]?.coordinate,
+      coordinates[id],
+      `${id} candidate coordinate differs`,
+    );
+    assert.match(
+      evidence.packages[id]?.integrity ?? "",
+      /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+      `${id} candidate integrity missing`,
+    );
+  }
+  return true;
+}
+
 export async function buildRegistryConsumers({
   contract,
   evidence,
   createRoot = () => mkdtemp(path.join(os.tmpdir(), "fred-registry-consumer-")),
   runCommand = run,
+  selectedIds = packageRoles,
+  compatibilityOnly = [],
 }) {
   const results = {};
-  for (const role of packageRoles) {
+  const consumerIds = [...new Set([...selectedIds, ...compatibilityOnly])];
+  for (const role of consumerIds) {
     const root = await createRoot(role);
     await cp(consumerFixtures[role], root, { recursive: true });
-    await parameterizeConsumerSources(root, contract, packageRoles);
+    await parameterizeConsumerSources(root, contract, consumerIds);
     const manifestPath = path.join(root, "package.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.dependencies ??= {};
@@ -607,6 +729,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assert(contractPath, "--contract is required");
   assert(evidencePath, "--evidence is required");
   const contract = await loadReleaseContract(contractPath);
+  const selection = selectionOption();
+  const selectedIds = selectReleaseMembers(contract, selection);
   const evidence = JSON.parse(
     await readFile(path.resolve(evidencePath), "utf8"),
   );
@@ -616,12 +740,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     iframeSdk: optionValue("--iframe-sdk"),
   };
   const roots = [];
+  const ledger =
+    selectedIds.includes("ui") && !selectedIds.includes("designTokens")
+      ? await loadCompatibilityLedger()
+      : undefined;
   try {
     await assertProvisionedChromium();
     const result = await verifyRegistryTooling({
       contract,
       evidence,
       coordinates,
+      selectedIds,
+      ledger,
       resolvePackage: async ({
         coordinate,
         registry,
@@ -655,10 +785,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           expectedProvenance,
           certificateIssuer,
         }),
-      installConsumers: async ({ contract: selected, evidence: candidate }) => {
+      installConsumers: async ({
+        contract: selected,
+        evidence: candidate,
+        selectedIds: members,
+        compatibilityOnly,
+      }) => {
         const consumers = await buildRegistryConsumers({
           contract: selected,
           evidence: candidate,
+          selectedIds: members,
+          compatibilityOnly,
           createRoot: async () => {
             const root = await mkdtemp(
               path.join(os.tmpdir(), "fred-registry-consumer-"),
@@ -668,25 +805,41 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           },
         });
         await runBrowserSmoke({
-          tokenOutput: path.join(consumers.designTokens.root, "dist"),
-          reactOutput: path.join(consumers.ui.root, "dist"),
-          iframeSdkOutput: path.join(consumers.iframeSdk.root, "dist"),
+          tokenOutput: consumers.designTokens
+            ? path.join(consumers.designTokens.root, "dist")
+            : undefined,
+          reactOutput: consumers.ui
+            ? path.join(consumers.ui.root, "dist")
+            : undefined,
+          iframeSdkOutput: consumers.iframeSdk
+            ? path.join(consumers.iframeSdk.root, "dist")
+            : undefined,
+          checks: [
+            ...(consumers.designTokens ? ["tokens", "fonts"] : []),
+            ...(consumers.ui ? ["ui"] : []),
+            ...(consumers.iframeSdk ? ["iframeSdk"] : []),
+          ],
         });
-        const sdk = selected.packages.iframeSdk;
-        await runIframeSdkHostIntegration({
-          contract: selected,
-          sdkEntry: path.join(
-            consumers.iframeSdk.root,
-            "node_modules",
-            ...sdk.name.split("/"),
-            "dist/index.js",
-          ),
-        });
+        if (consumers.iframeSdk) {
+          const sdk = selected.packages.iframeSdk;
+          await runIframeSdkHostIntegration({
+            contract: selected,
+            sdkEntry: path.join(
+              consumers.iframeSdk.root,
+              "node_modules",
+              ...sdk.name.split("/"),
+              "dist/index.js",
+            ),
+          });
+        }
       },
     });
     const finalEvidence = {
       ...result,
-      kind: "public-registry-verification",
+      kind:
+        selection === undefined
+          ? "public-registry-verification"
+          : "controlled-selected-registry-tooling",
     };
     const outputPath = optionValue("--output");
     if (outputPath)

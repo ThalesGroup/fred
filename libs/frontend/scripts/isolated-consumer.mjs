@@ -19,6 +19,8 @@ import { parameterizeConsumerSources } from "./consumer-contract.mjs";
 import { sha512Integrity } from "./release-evidence.mjs";
 import { loadReleaseContract } from "./release-contract.mjs";
 import { validateArchive } from "./validate-archive.mjs";
+import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
+import { assertCompatibleTokenProvision } from "./provision-compatible-token.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = path.resolve(
@@ -90,11 +92,44 @@ export async function stageIsolatedConsumer({
   contract: selectedContract,
   archivePath: suppliedArchive,
   expectedIntegrity,
+  compatibleToken,
 } = {}) {
   const contract = selectedContract ?? (await loadReleaseContract());
+  if (compatibleToken) {
+    const prepared = await assertCompatibleTokenProvision({
+      contract,
+      ledger: await loadCompatibilityLedger(),
+      outputRoot: compatibleToken.outputRoot,
+    });
+    assert.equal(
+      prepared.archivePath,
+      compatibleToken.archivePath,
+      "neutral consumer token archive differs from prepared baseline",
+    );
+    assert.equal(
+      prepared.receipt.coordinate,
+      compatibleToken.coordinate,
+      "neutral consumer token coordinate differs from prepared baseline",
+    );
+    assert.equal(
+      prepared.receipt.integrity,
+      compatibleToken.integrity,
+      "neutral consumer token integrity differs from prepared baseline",
+    );
+    if (suppliedArchive)
+      assert.equal(
+        suppliedArchive,
+        prepared.archivePath,
+        "neutral consumer supplied archive differs from prepared baseline",
+      );
+  }
   const archivePath =
-    suppliedArchive ?? (await packDesignTokens({ contract })).archivePath;
-  await validateArchive(archivePath, { contract });
+    compatibleToken?.archivePath ??
+    suppliedArchive ??
+    (await packDesignTokens({ contract })).archivePath;
+  // Compatibility bytes are a separately approved historical release, not a
+  // new candidate to compare against today's canonical FRED token sources.
+  if (!compatibleToken) await validateArchive(archivePath, { contract });
   if (expectedIntegrity)
     assert.equal(
       await sha512Integrity(archivePath),
@@ -230,10 +265,26 @@ export async function stageIsolatedConsumer({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const contract = await loadReleaseContract(optionValue("--contract"));
+  const prepared = process.argv.includes("--compatible-token")
+    ? await assertCompatibleTokenProvision({
+        contract,
+        ledger: await loadCompatibilityLedger(),
+      })
+    : undefined;
   const result = await stageIsolatedConsumer({
     evidencePath: optionValue("--evidence"),
     stagedOutputPath: "target/staged-consumers/tokens",
-    contract: await loadReleaseContract(optionValue("--contract")),
+    contract,
+    archivePath: prepared?.archivePath,
+    expectedIntegrity: prepared?.receipt.integrity,
+    compatibleToken: prepared
+      ? {
+          archivePath: prepared.archivePath,
+          coordinate: prepared.receipt.coordinate,
+          integrity: prepared.receipt.integrity,
+        }
+      : undefined,
   });
   process.stdout.write(`${JSON.stringify(result.evidence, null, 2)}\n`);
 }

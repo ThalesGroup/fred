@@ -113,6 +113,45 @@ test("inventory, policy, baseline, records, changelogs, and manifests select rel
   assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
 });
 
+test("selected-candidate parsing, compatibility provisioning, and fourth-profile fixtures select CI", () => {
+  for (const sourcePath of [
+    "libs/frontend/scripts/release-selection.mjs",
+    "libs/frontend/scripts/provision-compatible-token.mjs",
+    "libs/frontend/scripts/isolated-react-consumer.mjs",
+    "libs/frontend/scripts/fixture-transfer-validation.mjs",
+    "libs/frontend/tests/provision-compatible-token.test.mjs",
+    "libs/frontend/fixtures/release-fourth-package.json",
+    "libs/frontend/Makefile",
+    "libs/frontend/package-lock.json",
+  ])
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+  assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
+  const receiver = publishWorkflow.jobs["validate-application-compatibility"];
+  const provision = receiver.steps.findIndex(
+    (step) => step.run === "make consumer-provision",
+  );
+  const browser = receiver.steps.findIndex(
+    (step) => step.run === "make browser-install",
+  );
+  const validate = receiver.steps.findIndex(
+    (step) => step.run === "make release-transfer-validate",
+  );
+  assert(
+    provision >= 0 &&
+      browser >= 0 &&
+      provision < validate &&
+      browser < validate,
+  );
+  assert.equal(
+    publishWorkflow.on.workflow_dispatch.inputs.publication.default,
+    "prepare-only",
+  );
+  assert.equal(
+    publishWorkflow.on.workflow_dispatch.inputs.selection,
+    undefined,
+  );
+});
+
 test("the governing frontend packaging RFC selects release validation", () => {
   assert(selectsPackageJob(["docs/swift/FRED-FRONTEND-PACKAGING-RFC.md"]));
 });
