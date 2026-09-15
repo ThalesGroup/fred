@@ -285,3 +285,34 @@ export async function waitForPackageMetadata({
     `${coordinate} package-wide metadata visibility retries exhausted after ${visibilityAttempts} reads`,
   );
 }
+
+export async function waitForExactPackageMetadata({
+  candidate,
+  registry,
+  inspectRegistry = fetchExactPackageMetadata,
+  visibilityAttempts = defaultVisibilityAttempts,
+  visibilityDelayMilliseconds = defaultVisibilityDelayMilliseconds,
+  waitForVisibility = (delay) =>
+    new Promise((resolve) => setTimeout(resolve, delay)),
+}) {
+  const coordinate = candidate?.coordinate;
+  assert(coordinate, "candidate coordinate is required");
+  assert(
+    Number.isSafeInteger(visibilityAttempts) && visibilityAttempts > 0,
+    "exact metadata visibility attempts must be a positive integer",
+  );
+  assert(
+    Number.isSafeInteger(visibilityDelayMilliseconds) &&
+      visibilityDelayMilliseconds >= 0,
+    "exact metadata visibility delay must be a non-negative integer",
+  );
+  for (let attempt = 1; attempt <= visibilityAttempts; attempt += 1) {
+    const metadata = await inspectRegistry({ coordinate, registry, candidate });
+    if (metadata) return assertExactPublishedMetadata(metadata, candidate);
+    if (attempt < visibilityAttempts)
+      await waitForVisibility(visibilityDelayMilliseconds);
+  }
+  throw new Error(
+    `${coordinate} exact-version metadata visibility retries exhausted after ${visibilityAttempts} reads`,
+  );
+}

@@ -352,7 +352,7 @@
 - [x] 14.6 From committed `swift`, dispatch and approve the explicit recovery only after reviewing
   its exact original-artifact and cryptographic design-token evidence; publish no design-token
   command and retain the generated recovery evidence.
-- [ ] 14.7 Complete genuine public-registry signature, Sigstore, per-package identity, clean
+- [x] 14.7 Complete genuine public-registry signature, Sigstore, per-package identity, clean
   consumer, browser, and production-host verification for all three coordinates after recovery.
 
 ## 15. Exact metadata and pinned-ZIP recovery corrections
@@ -423,7 +423,7 @@
       and `git diff --check`; where access permits, run live read-only registry/provenance/consumer/
       browser/host tooling against the pinned artifact, then obtain independent review and resolve
       in-scope findings.
-- [ ] 17.6 From committed `swift`, dispatch `verify-existing` with no publication credential or
+- [x] 17.6 From committed `swift`, dispatch `verify-existing` with no publication credential or
       environment approval; confirm only the authorized read-only jobs run and retain final genuine
       public-registry evidence only after every exact archive, signature, Sigstore, consumer, browser,
       and production-host gate passes.
@@ -796,3 +796,25 @@
   cold review found no correctness, security, workflow, or scope finding. The genuine
   `verify-existing` dispatch and retention of final execution-bound evidence remain task 17.6;
   the combined publication/final-verification tasks 12.7 and 14.7 also remain unchecked.
+
+## Successful public-registry verification evidence (2026-09-15)
+
+- [Workflow run 34890367123](https://github.com/ThalesGroup/fred/actions/runs/34890367123),
+  attempt `1`, succeeded on `swift` at `97920a0ad2df4ec90829819c9174fee4dc798d17`.
+  Only source authorization, retained-evidence preparation, and public-registry verification
+  ran; candidate preparation, application-candidate transfer, and both publication jobs skipped.
+- Retained artifact `10365859307`, named
+  `frontend-packages-public-registry-verification-97920a0ad2df4ec90829819c9174fee4dc798d17-34890367123-1`,
+  remains unexpired. Its API and downloaded ZIP SHA-256 both equal
+  `9d3ba17c4016fd194c64527cb10f95d6c711e5963a37b7cf95386d23620981b4`;
+  the ZIP contains only `final-evidence.json`. That record matches the three exact published
+  candidate SHA-512 integrities and the original design-token commit `f49f2439d54b44f7739c5bd7fca3f789e0e528d6`
+  versus UI/SDK recovery commit `a1fedc661c9ec1846b5333aa4e546af0f0810033`. It records
+  successful exact archive, npm-signature, Sigstore, clean-consumer, browser, and production-host
+  gates plus the actual verifier commit/run/attempt separately. This completes tasks 14.7 and
+  17.6; the earlier local verifier run remained tooling evidence only.
+- Task 12.7 stays unchecked: the completed first release and public-registry verification do
+  not establish each package's subsequent Trusted Publisher configuration or revocation of the
+  temporary bootstrap token. Neither npm nor GitHub credential settings were inspected or changed
+  for this planning close-out. The predecessor must not be synchronized/archived as fully complete
+  until that remaining acceptance evidence is supplied or its disposition is explicitly reviewed.
