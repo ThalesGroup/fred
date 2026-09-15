@@ -1724,6 +1724,7 @@ async def post_prepare_execution(
     http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
+    agent_model_override: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -1737,6 +1738,10 @@ async def post_prepare_execution(
     Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
     when the session has a context prompt configured. Library prompts are stored
     verbatim (language-agnostic).
+
+    Pass ``agent_model_override`` (query param) to force this instance's chat
+    model for this call only — service-agent callers only, validated against
+    the team's `can_use`-enabled profiles; see ``prepare_execution``.
 
     HITL resume needs no special preparation — the runtime derives the resume action
     from the request's ``resume_payload``.
@@ -1769,6 +1774,7 @@ async def post_prepare_execution(
             # auth sees the acting user — same pattern as the validate-config
             # round-trip on enroll/update.
             authorization=http_request.headers.get("Authorization"),
+            agent_model_override=agent_model_override,
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

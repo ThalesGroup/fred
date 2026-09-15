@@ -19,6 +19,7 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    is_service_agent,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
@@ -3197,6 +3198,7 @@ async def prepare_execution(
     session_id: str | None = None,
     deps: ProductServiceDependencies,
     authorization: str | None = None,
+    agent_model_override: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3210,6 +3212,11 @@ async def prepare_execution(
     - pass request-scoped product dependencies when available
     - the returned payload now includes `effective_chat_options`, the typed
       chat-affordance surface resolved from the stored managed-agent config
+    - `agent_model_override`, when set, replaces this instance's entry in the
+      `agent_profile_overrides` snapshot for THIS call only — never persisted,
+      never visible via `GET .../routing-policy`. Restricted to the evaluator's
+      service identity (`is_service_agent`); rejected outright for any other
+      caller, and rejected if the profile isn't `can_use`-enabled for the team.
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -3366,6 +3373,47 @@ async def prepare_execution(
         # back.
         deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
+
+    # One-shot evaluator override (fred-agent-evaluator): replaces this
+    # instance's entry in the snapshot for this call only, never persisted.
+    # Fails closed rather than silently falling back to the team default —
+    # a caller who asked for model X and silently got the team default would
+    # draw wrong conclusions from the resulting evaluation scores.
+    if agent_model_override is not None:
+        if not is_service_agent(user):
+            raise ExecutionPreparationError(
+                "agent_model_override is only honored for the evaluator's "
+                "service identity.",
+                http_status=403,
+            )
+        # Lazy import: breaks the product.service <-> routing_policy import
+        # cycle (same reason routing_policy/service.py imports this module
+        # lazily for `_pod_catalog_fetch_scope`).
+        from control_plane_backend.routing_policy.schemas import (
+            ProfileNotUsableError,
+            UnknownProfileError,
+        )
+        from control_plane_backend.routing_policy.service import (
+            check_profile_usable_for_team,
+        )
+
+        try:
+            await check_profile_usable_for_team(
+                deps,
+                team_id=team_id,
+                profile_id=agent_model_override,
+                source_runtime_ids={instance.source_runtime_id},
+            )
+        except (UnknownProfileError, ProfileNotUsableError) as exc:
+            # 422, not 400: fred-agent-evaluator's error mapper only classifies
+            # 401/403/404/409/422 from this endpoint, and 422 ("target_invalid")
+            # is the closest existing fit for a bad request parameter.
+            raise ExecutionPreparationError(str(exc), http_status=422) from exc
+        agent_profile_overrides = {
+            **agent_profile_overrides,
+            instance.source_agent_id: agent_model_override,
+        }
+
     sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in
