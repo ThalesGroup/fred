@@ -21,10 +21,8 @@ import { splitDuration } from "@shared/molecules/ScheduleField/ScheduleField.tsx
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { KnowledgeBaseInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-// A Knowledge Base card and an agent card are the same object on screen: an
-// icon, what it is called, what kind it is, a menu, an info bubble and one way
-// in. Sharing the stylesheet is what keeps them identical — a copy would drift
-// the first time either is touched.
+// Share the agent card layout; document navigation uses the standard Button
+// appearance rather than the animated conversation action.
 import styles from "../AgentCard/AgentCard.module.scss";
 
 type MoreMenuAction = "edit" | "delete";
@@ -145,13 +143,7 @@ export default function KnowledgeBaseCard({
           />
         </Tooltip>
         <Link to={`/team/${teamId}/knowledge-bases/${instance.id}`} className={styles.chatLink}>
-          <Button
-            color="primary"
-            variant="outlined"
-            size="medium"
-            icon={{ category: "outlined", type: "folder" }}
-            className={styles.chatButton}
-          >
+          <Button color="on-surface" variant="outlined" size="medium" icon={{ category: "outlined", type: "folder" }}>
             {t("rework.knowledgeBases.card.open")}
           </Button>
         </Link>

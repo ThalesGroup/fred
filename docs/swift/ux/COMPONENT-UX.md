@@ -2954,7 +2954,7 @@ _(none yet)_
 **Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
 **Status:** `Functional`
 
-Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; unknown or failed availability stays hidden. An enabled definition is sufficient even before an instance is created.
+Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; unknown or failed availability stays hidden. An enabled definition is sufficient even before an instance is created. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
 #### Open UX issues
 
