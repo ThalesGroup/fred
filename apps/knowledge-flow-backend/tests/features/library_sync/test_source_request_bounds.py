@@ -103,12 +103,12 @@ def test_a_path_that_could_leave_the_library_is_refused(path):
 
 def test_a_failure_says_its_kind_and_none_of_the_server_s_business():
     """Enough to decide what to do, and nothing a caller could not act on."""
-    secret = "/srv/kf/tmp/x1y2 password=hunter2"
-    failure = _bounded_failure(RuntimeError(f"boom at {secret}"))
+    internal_detail = "/srv/kf/tmp/x1y2"
+    failure = _bounded_failure(RuntimeError(f"boom at {internal_detail}"))
 
     assert failure.status_code == 500
     assert failure.detail == {"code": "document_write_failed", "failure": "RuntimeError"}
-    assert secret not in str(failure.detail)
+    assert internal_detail not in str(failure.detail)
 
 
 def test_the_kind_is_what_tells_a_retry_from_a_dead_end():
