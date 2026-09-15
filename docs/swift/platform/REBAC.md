@@ -237,7 +237,13 @@ Discovery and first-party app checks request higher consistency from the
 authorization engine and never use administration caches as admission decisions.
 Typed administration caches remain process-local, with mutation invalidation and
 expiry rather than a database permission-revision protocol. They do not promise
-immediate cross-replica display freshness.
+immediate cross-replica display freshness. The admin capability health column
+folds `can_use` from that 45-second cached per-capability tuple set rather than
+issuing one `ListObjects` per team: same-replica writes invalidate it, so
+another replica's write may show up to 45 seconds late. The revoke preview
+folds the same way but from a fresh read of the one capability it is about,
+because an admin confirms a mutation against that number. Neither is an
+admission decision.
 
 **Deferred shared lifecycle:** global Deactivate/Activate/Delete requires a
 separate design across all or most applicable ReBAC types, including ownership,
