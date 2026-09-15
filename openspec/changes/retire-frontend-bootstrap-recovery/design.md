@@ -1,0 +1,55 @@
+## Context
+
+See `proposal.md` for motivation and `specs/frontend-package-archives/spec.md` for the observable contract. The checked-out `add-frontend-package-release-foundations` delta has not been synchronized into `openspec/specs/frontend-package-archives/spec.md`. Its release-gate and CI-selection requirements currently prescribe first-release operations. The [successful read-only run 34890367123](https://github.com/ThalesGroup/fred/actions/runs/34890367123) and artifact `10365859307` establish genuine public-registry verification but do not prove the remaining Trusted Publisher setup and bootstrap-token revocation in predecessor task 12.7. Do not sync or archive that change on this evidence alone. When that task is independently resolved, synchronize the predecessor first; then this change's two complete `MODIFIED` requirement blocks supersede only its release-gate and CI-selection blocks. Preserve every other main-spec requirement and scenario.
+
+The successful artifact ZIP SHA-256 is `9d3ba17c4016fd194c64527cb10f95d6c711e5963a37b7cf95386d23620981b4`. Its `final-evidence.json` records exact SHA-512 for all three `@fred-oss/*@0.1.0-alpha.1` packages, signature/Sigstore/provenance/consumer/browser/host gates, initial design-token publication commit `f49f2439d54b44f7739c5bd7fca3f789e0e528d6`, UI/SDK recovery publication commit `a1fedc661c9ec1846b5333aa4e546af0f0810033`, and separate verification commit `97920a0ad2df4ec90829819c9174fee4dc798d17`. The retained GitHub artifact expires; historical source and evidence references must not be presented as a substitute for lost tarball bytes.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Leave one functioning manual preparation/compatibility route under the existing workflow filename and `swift` guard, with no registry-write capability.
+- Eliminate live incident configuration and exclusive recovery/continuation implementations while retaining shared exact-registry, archive, signature, provenance, dependency-boundary, consumer, browser, and host validation.
+- Preserve historical publication/verification identities in a compact existing runbook section, not an active replacement configuration.
+- Prove the cleanup changes selection and CLI behavior without weakening the three package archive contracts.
+
+**Non-Goals:** Independent member selection, a fourth package, generic publish/verify dispatch, direct OIDC workflow, new npm release, registry or trust configuration, FRED/RAGS adoption, SDK ownership transfer, or a change to package manifests/versions.
+
+## Decisions
+
+### 1. Keep the workflow and prepare-only path; delete privileged branches
+
+Keep `.github/workflows/Publish-frontend-packages.yml`, `workflow_dispatch`, branch authorization, `prepare-candidate`, and `validate-application-compatibility`. Simplify the dispatch input to the existing `prepare-only` operation (or a single equivalent preparation choice if YAML parsing requires it); default remains preparation. Remove exclusive jobs `publish-bootstrap`, `prepare-bootstrap-recovery`, `publish-bootstrap-recovery`, `prepare-registry-verification`, and `verify-public-registry`, plus their `needs`, branch conditions, artifact-download steps, pinned incident IDs, `npm-publish` environment, `NPM_BOOTSTRAP_TOKEN`, and `id-token: write`. Keep the same candidate transfer and application-toolchain gates, including source/commit/run identity and exact archive-byte checks. A new generic publication or verifier workflow now would combine the priority cleanup with the separate release-simplification change.
+
+### 2. Delete configuration only after tracing every reader
+
+Delete `libs/frontend/release/bootstrap-recovery.json` and `libs/frontend/release/registry-verification-continuation.json`. `libs/frontend/scripts/check-release-contract.mjs` imports the recovery contract and reads the first file unconditionally; remove that read, its validation, and recovery-only output without altering proposed/confirmed contract, schema, ownership, or toolchain checks. Remove both filenames and exclusive scripts/tests from `libs/frontend/scripts/package-inputs.mjs`; selection tests must prove the cleanup diff selects relevant jobs and later unrelated changes do not require the files. Remove `release:publish-bootstrap`, `release:bootstrap-recovery`, and `registry:prepare-existing` from `libs/frontend/package.json`, `bootstrap-recovery` and `registry-prepare-existing` from `libs/frontend/Makefile`, and matching workflow/README/runbook command references. Keep `release:check`, `release:prepare`, fixture/candidate transfer, archive/consumer, `registry:verify`, and other generic commands.
+
+### 3. Retire incident modules but keep generic exact-registry behavior
+
+Audit call graphs before deletion. Target exclusive production modules: `libs/frontend/scripts/bootstrap-publish.mjs`, `bootstrap-recovery.mjs`, `bootstrap-recovery-contract.mjs`, `recovery-artifact.mjs`, and `registry-verification-continuation.mjs`. Remove recovery/continuation imports and CLI branches from `registry-verifier.mjs`; explicitly reject the former `--recovery-*` and `--verification-*` options. Keep its supported generic `--contract`, `--evidence`, and exact archive-coordinate inputs, registry dependency-graph installation, `npm audit signatures`, Sigstore certificate verification, independent digest/repository/commit/workflow comparison, and clean registry consumers. Keep `registry-metadata.mjs` exact-version and package-wide read-only readiness functions. The only nonincident direct caller of `bootstrap-publish.mjs` is `registry-metadata.test.mjs`'s exact-version reconciliation test: move the reusable bounded read-only helper into the existing metadata module or rewrite its tests against equivalent generic metadata behavior before deleting the publisher. Do not carry publisher identity, npm write, or protected-boundary code into that generic module. Preserve existing expected-provenance and retry negative tests.
+
+Exclusive test deletion targets are `libs/frontend/tests/bootstrap-publish.test.mjs`, `bootstrap-recovery.test.mjs`, `bootstrap-recovery-cli.test.mjs`, and `libs/frontend/tests/fixtures/recovery-cli-{loader,loader-hooks,npm,sigstore}.mjs`, subject to a final import audit. Rewrite `ci-selection.test.mjs` workflow contract assertions and `registry-metadata.test.mjs` generic retry coverage; extend `registry-verifier.test.mjs` with fresh-process import/CLI, rejected retired flags, and still-supported positive/negative boundary tests. Keep release contract, evidence, candidate, fixture transfer, token/UI/SDK archive, offline consumer, browser, and production-host tests. Avoid deleting a shared fixture because its name looks historical; require a no-live-caller proof.
+
+### 4. Preserve history without active incident settings
+
+Condense `libs/frontend/RELEASE.md`'s current operator path to preparation-only operation and future publication as a separate milestone. Keep one historical appendix linking initial run `34853407387`, recovery run `34882883783`, successful verification run `34890367123`, their pinned source commits/artifacts and exact package integrities/provenance identities. Explain artifact retention/expiry and that verification gates completed, but do not claim later trust setup or token revocation. Update `libs/frontend/README.md` only where commands/status are stale. The [RFC](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md) remains open; make only a minimal status correction if current text still asserts the three published coordinates are absent, and do not duplicate its wider release/adoption plan.
+
+### 5. Preserve the existing release contract, versions, and validation boundaries
+
+`libs/frontend/release/proposed-release-contract.json` and its schema remain active preparation/generic-verifier inputs. The existing package manifests and npm lockfile continue to declare `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk` at `0.1.0-alpha.1`; this change does not normalize release metadata or add OIDC publishing. A generic verification invocation still requires explicit candidate evidence and expected publication identities, never trusts downloaded metadata as the expected contract, and never falls back to FRED source, local tarballs, or application dependencies for registry consumers. Historical release evidence is documentation, not a live verifier input or hidden release policy.
+
+## Risks / Trade-offs
+
+- [Predecessor delta remains active and unsynchronized] → Keep task 12.7 visibly unchecked; require independently verified trust/revocation evidence and predecessor sync before syncing this complete modification. Until then strict validation is syntactically valid but the archive planner correctly reports that the predecessor's release-gate requirement is absent from the main spec. Do not overwrite the main spec with either delta.
+- [Workflow has a temporary publication gap] → Document preparation-only interim behavior explicitly; already-published packages remain unchanged, and routine direct OIDC publishing belongs to the next independently reviewed change.
+- [A shared helper appears incident-named] → Trace imports and move only generic read-only metadata logic, keeping its negative tests, before removing exclusive modules.
+- [Artifact expiry could erase downloadable bytes] → Preserve the reviewed immutable identities, SHA-512 values, and run links now; state that historical documentation does not replace a missing archive and never recreate incident JSON as active config.
+- [Removing a branch accidentally weakens the verifier] → Fresh-process generic CLI and positive/negative signature, provenance, installed-tree, visibility, and local-fallback tests are required, with retired flags rejected before a success result.
+
+## Migration Plan
+
+1. Confirm checkout/stashes and predecessor task evidence; preserve successful `final-evidence.json` facts in the existing runbook. Resolve task 12.7 externally before predecessor sync/archive; do not claim cleanup implementation supplied that evidence.
+2. Inventory live readers and test imports; rewrite generic metadata/verifier tests before deleting incident modules and JSON. Remove privileged workflow branches, commands, and inputs while keeping preparation and compatibility runnable.
+3. Run workflow-selection, release contract, generic verifier, producer/archive, offline-consumer, browser, host, and OpenSpec gates under their respective pinned toolchains; obtain independent implementation review.
+4. Deliver one cleanup diff for review. If regression occurs, restore the prior workflow/source commit rather than republish or modify existing npm versions. Sync this delta only after the predecessor's release requirements are in the main spec and every modified block/scenario is verified semantically.
