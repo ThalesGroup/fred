@@ -946,7 +946,7 @@ export type CapabilityCatalogEntry = {
   /** Material Symbols name; see CapabilityManifest.icon */
   icon: string;
   id: string;
-  kind?: "tool" | "agent" | "model" | "app";
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   model_chat_profile_ids?: string[];
   model_display_name?: string | null;
   model_profile_ids?: string[];

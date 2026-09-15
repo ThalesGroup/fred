@@ -387,6 +387,21 @@
       "type": "object",
       "additionalProperties": false
     },
+    "KnowledgeBasesConfig": {
+      "description": "What Fred decides about running a Knowledge Base, wherever its image\ncame from.\n\nA Knowledge Base pod is contributed, often by somebody outside this\nrepository, so anything Fred must be able to change without waiting for a\nnew image belongs here rather than in the SDK.",
+      "properties": {
+        "run_max_attempts": {
+          "default": 2,
+          "description": "How many times one synchronization run is attempted before it is recorded as failed. Without a bound the workflow engine retries for ever, so a handler that fails the same way every time never reaches a terminal state and its instance shows a run that is permanently in progress. Counts the first attempt: 1 means no retry.",
+          "minimum": 1,
+          "title": "Run Max Attempts",
+          "type": "integer"
+        }
+      },
+      "title": "KnowledgeBasesConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "KpiLogSinkConfig": {
       "properties": {
         "enabled": {
@@ -1368,6 +1383,9 @@
     },
     "policies": {
       "$ref": "#/$defs/PolicyConfig"
+    },
+    "knowledge_bases": {
+      "$ref": "#/$defs/KnowledgeBasesConfig"
     }
   },
   "required": [

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
@@ -10,6 +10,7 @@ from fred_core.teams.metadata_store import TeamMetadataStore
 
 if TYPE_CHECKING:
     from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+    from temporalio.client import Client as TemporalClient
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.container import ControlPlaneContainer
@@ -20,6 +21,10 @@ from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
 )
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.knowledge_bases.instance_store import (
+    KnowledgeBaseInstanceStore,
+)
+from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
@@ -66,6 +71,12 @@ class ProductServiceDependencies:
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
     get_platform_prompt_store: Callable[[], PlatformPromptStore]
+    get_knowledge_base_definition_store: Callable[[], KnowledgeBaseDefinitionStore]
+    get_knowledge_base_instance_store: Callable[[], KnowledgeBaseInstanceStore]
+    # Awaited, not held: the connection is a lazy singleton inside the provider,
+    # so a deployment with no workflow engine configured only fails where a run
+    # is actually dispatched.
+    get_temporal_client: Callable[[], Awaitable["TemporalClient"]]
     get_model_reasoning_store: Callable[[], ModelReasoningStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_team_metadata_store: Callable[[], TeamMetadataStore]
@@ -107,6 +118,11 @@ def build_product_service_dependencies(
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,
         get_platform_prompt_store=container.get_platform_prompt_store,
+        get_knowledge_base_definition_store=container.get_knowledge_base_definition_store,
+        get_knowledge_base_instance_store=container.get_knowledge_base_instance_store,
+        get_temporal_client=lambda: (
+            container.get_temporal_client_provider().get_client()
+        ),
         get_model_reasoning_store=container.get_model_reasoning_store,
         get_session_metadata_store=container.get_session_metadata_store,
         get_team_metadata_store=container.get_team_metadata_store,

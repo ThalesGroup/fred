@@ -140,6 +140,7 @@ export function TuningFieldRenderer({
           description={fieldDescription ?? ""}
           checked={Boolean(fieldValue)}
           onChange={(checked) => onChange(field.key, checked)}
+          disabled={disabled}
         />
         {error && <p className={styles.error}>{error}</p>}
       </div>

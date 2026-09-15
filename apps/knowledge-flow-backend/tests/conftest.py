@@ -90,6 +90,21 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
         item = self._items.get(document_uid)
         return item.model_copy(deep=True) if item else None
 
+    async def get_metadata_by_source_key(self, source_library_id: str, source_key: str, session=None) -> DocumentMetadata | None:
+        # The real store relies on a unique index over the pair; here the scan
+        # is the same rule stated the only way an in-memory dict can state it.
+        for doc in self._items.values():
+            if doc.source.source_library_id == source_library_id and doc.source.source_key == source_key:
+                return doc.model_copy(deep=True)
+        return None
+
+    async def update_metadata(self, metadata: DocumentMetadata, session=None) -> bool:
+        # Never creates: mirrors the store contract a mid-flight writer depends on.
+        if metadata.document_uid not in self._items:
+            return False
+        self._items[metadata.document_uid] = metadata.model_copy(deep=True)
+        return True
+
     async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
         out: list[DocumentMetadata] = []
         for doc in self._items.values():

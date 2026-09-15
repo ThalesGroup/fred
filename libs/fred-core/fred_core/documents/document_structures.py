@@ -213,6 +213,33 @@ class SourceInfo(BaseModel):
         default=None, description="Path within the repository (POSIX style)"
     )
 
+    # Set only by the synchronizing ingestion surface, where a system mirrors a
+    # source instead of a person uploading a file. Absent everywhere else, and a
+    # document that has no source key is never matched by one.
+    source_library_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Library the source key is scoped to. The pair is unique, so writing "
+            "a key the library already holds updates that document rather than "
+            "creating a second one."
+        ),
+    )
+    source_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "The calling system's own name for this document within its library — "
+            "for most sources the path relative to it. Stored and matched verbatim, "
+            "never parsed, and never used to derive the document's identifier."
+        ),
+    )
+    document_version: Optional[str] = Field(
+        default=None,
+        description=(
+            "The source's own version of this document: an etag, a content hash, a "
+            "revision number. Opaque — stored and returned, never ordered or parsed."
+        ),
+    )
+
 
 class FileInfo(BaseModel):
     file_type: FileType = FileType.OTHER

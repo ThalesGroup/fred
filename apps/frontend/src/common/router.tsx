@@ -31,6 +31,8 @@ import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/Mar
 import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
+import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage.tsx";
+import TeamKnowledgeBasesPage from "@components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
@@ -130,6 +132,14 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases",
+        element: <TeamKnowledgeBasesPage />,
+      },
+      {
+        path: "team/:teamId/knowledge-bases/:instanceId",
+        element: <KnowledgeBaseDocumentsPage />,
       },
       {
         path: "team/:teamId/wiki",

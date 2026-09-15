@@ -311,6 +311,44 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    writeDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost: build.mutation<
+      WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiResponse,
+      WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        method: "POST",
+        body: queryArg.bodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost,
+      }),
+    }),
+    removeDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDelete: build.mutation<
+      RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiResponse,
+      RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        method: "DELETE",
+        params: {
+          source_key: queryArg.sourceKey,
+        },
+      }),
+    }),
+    readSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGet: build.query<
+      ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiResponse,
+      ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/source-version` }),
+    }),
+    recordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPut: build.mutation<
+      RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiResponse,
+      RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/source-version`,
+        method: "PUT",
+        body: queryArg.librarySourceVersion,
+      }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -1194,6 +1232,30 @@ export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg 
   /** Optional user-storage key to delete alongside the fast-ingest artifacts. */
   storageKey?: string | null;
 };
+export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiResponse =
+  /** status 200 Successful Response */ DocumentWritten;
+export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiArg = {
+  libraryId: string;
+  bodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost: BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost;
+};
+export type RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiResponse =
+  /** status 200 Successful Response */ DocumentRemoved;
+export type RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiArg = {
+  libraryId: string;
+  /** The key the document was written under. */
+  sourceKey: string;
+};
+export type ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiResponse =
+  /** status 200 Successful Response */ LibrarySourceVersion;
+export type ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiArg = {
+  libraryId: string;
+};
+export type RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiResponse =
+  /** status 200 Successful Response */ LibrarySourceVersion;
+export type RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutApiArg = {
+  libraryId: string;
+  librarySourceVersion: LibrarySourceVersion;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -1866,6 +1928,12 @@ export type SourceInfo = {
   repo_ref?: string | null;
   /** Path within the repository (POSIX style) */
   file_path?: string | null;
+  /** Library the source key is scoped to. The pair is unique, so writing a key the library already holds updates that document rather than creating a second one. */
+  source_library_id?: string | null;
+  /** The calling system's own name for this document within its library — for most sources the path relative to it. Stored and matched verbatim, never parsed, and never used to derive the document's identifier. */
+  source_key?: string | null;
+  /** The source's own version of this document: an etag, a content hash, a revision number. Opaque — stored and returned, never ordered or parsed. */
+  document_version?: string | null;
 };
 export type FileType = "pdf" | "docx" | "pptx" | "xlsx" | "csv" | "md" | "html" | "txt" | "other";
 export type FileInfo = {
@@ -2063,6 +2131,33 @@ export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
   /** Logical scope label, default 'session' */
   scope?: string;
 };
+export type DocumentWritten = {
+  source_key: string;
+  path: string;
+  document_version?: string | null;
+  /** True when this key was new to the library, False when it updated the document already there. */
+  created: boolean;
+};
+export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
+  /** The document's bytes. */
+  file: string;
+  /** Where the document goes inside the library, e.g. 'specs/api/openapi.md'. */
+  path: string;
+  /** The caller's own name for this document, unique within the library. */
+  source_key: string;
+  /** The source's version of this document. Opaque to Fred. */
+  document_version?: string | null;
+  /** Which configured document source this caller is. */
+  source_tag?: string;
+};
+export type DocumentRemoved = {
+  source_key: string;
+  /** False when the library did not hold that key — not an error: a source that removes twice is still in sync. */
+  removed: boolean;
+};
+export type LibrarySourceVersion = {
+  source_version?: string | null;
+};
 export type TagType = "document" | "prompt" | "template" | "chat-context";
 export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
 export type TagWithPermissions = {
@@ -2074,6 +2169,7 @@ export type TagWithPermissions = {
   path?: string | null;
   description?: string | null;
   type: TagType;
+  source_version?: string | null;
   item_ids: string[];
   permissions?: TagPermission[];
 };
@@ -2087,6 +2183,7 @@ export type TagWithItemsId = {
   path?: string | null;
   description?: string | null;
   type: TagType;
+  source_version?: string | null;
   item_ids: string[];
 };
 export type TagCreate = {
@@ -2671,6 +2768,11 @@ export const {
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
+  useWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostMutation,
+  useRemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteMutation,
+  useReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
+  useLazyReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
+  useRecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

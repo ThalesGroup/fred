@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-html-artifact"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fred agent capability: render agent-generated static HTML/CSS in a sandboxed viewer beside the chat (html_artifact)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

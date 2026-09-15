@@ -2693,7 +2693,7 @@ _(none — design approved at implementation)_
 
 Complete create / edit modal for managed agent instances, organized as a clean sub-component tree:
 
-- `AgentFormModal.tsx` — modal shell + `FormState` ownership; no field rendering
+- `AgentFormModal.tsx` — `FormState` ownership; no field rendering. The shell itself is `shared/organisms/SettingsModal/` (see below)
 - `AgentFormBody.tsx` — controlled form body; 4-tab layout, create or edit
 - `TemplateBrowser/` — responsive card grid for template selection
 - `TemplateCard/` — single selectable card with category label, name, clamped description
@@ -2708,7 +2708,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
 
-Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop `--surface-container`, form card `--surface-main`, no drop shadow — scoped to this modal only via `FullPageModal`'s new `background` prop (other `FullPageModal` consumers unchanged).
+Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop `--surface-container`, form card `--surface-main`, no drop shadow — carried by `SettingsModal` through `FullPageModal`'s `background` prop, and shared since 2026-09-14 with the Knowledge Base settings panel (other `FullPageModal` consumers unchanged).
 
 #### Open UX issues
 
@@ -2728,6 +2728,40 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
+
+---
+
+### `SettingsModal`
+
+**Location:** `src/rework/components/shared/organisms/SettingsModal/`
+**Status:** `Functional`
+
+The shell every full-page settings or creation form renders in: `FullPageModal`
+(`background="container"`) wrapping one `--surface-main` card — header with
+title, optional subtitle and a right-aligned `actions` block, the form as
+children, an optional left-aligned `footer` below a rule. Extracted from
+`AgentFormModal` on 2026-09-14 so the Knowledge Base settings panel is the same
+object on screen rather than a copy of it.
+
+**Not for a couple of questions** — that is `molecules/Dialog`, the app's
+central centred dialog (scrim, Escape/Enter/click-outside, `maxWidth`).
+`KnowledgeBaseFormModal` uses both in sequence: `Dialog` asks for a name and a
+source, and choosing a source turns the panel into this page, which renders
+what that source declared.
+
+Takes focus onto the card itself when opening leaves focus on `document.body` —
+a panel whose fields are all disabled (the read-only Knowledge Base view)
+autofocuses nothing otherwise, stranding a keyboard user behind an
+`aria-modal` overlay. A form with its own autofocused first field keeps it.
+
+#### Open UX issues
+
+- **No height cap** — the card grows with its content and the page scrolls it,
+  so a very tall form scrolls its header (and its Cancel/Save) off the top.
+  Inherited from `AgentFormModal`, which has always behaved this way.
+- **`ManageCategoriesDialog` is a third copy** — it hand-rolls a centred
+  card/header/footer at `min(32rem, …)` over `FullPageModal`, which is what
+  `molecules/Dialog` already is. It belongs there, not here.
 
 ---
 

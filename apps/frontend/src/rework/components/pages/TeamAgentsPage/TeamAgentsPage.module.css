@@ -5,19 +5,10 @@
   min-height: 0;
 }
 
+/* Only the inset the header sits in: PageHeader owns its type, colour and the
+   right-alignment of the controls. */
 .title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
-  color: var(--on-surface);
-  font: var(--font-title-large);
-}
-
-/* Title text pushes the create button to the right edge of the toolbar
-   (matches the team prompts page header). */
-.titleText {
-  margin-right: auto;
 }
 
 /* Caps the field so it stays a compact search box in a wide toolbar rather

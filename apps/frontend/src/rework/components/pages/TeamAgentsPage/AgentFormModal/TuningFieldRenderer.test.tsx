@@ -224,3 +224,32 @@ describe("TuningFieldRenderer enum labels", () => {
     expect(text).not.toContain("options.auto");
   });
 });
+
+describe("TuningFieldRenderer when the form is read-only", () => {
+  // A disabled renderer is what a read-only settings panel is made of. A field
+  // type that ignores the flag offers a control whose change nothing can save —
+  // the boolean one did, and every Knowledge Base declares one.
+  const BOOLEAN_FIELD = {
+    key: "fred.suspended",
+    type: "boolean",
+    title: "Paused",
+  } as unknown as ManagedAgentFieldSpec;
+
+  it("disables the switch a boolean field renders", () => {
+    act(() => {
+      root.render(<TuningFieldRenderer field={BOOLEAN_FIELD} value={false} onChange={vi.fn()} disabled />);
+    });
+
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it("leaves it usable when the form is not", () => {
+    act(() => {
+      root.render(<TuningFieldRenderer field={BOOLEAN_FIELD} value={false} onChange={vi.fn()} disabled={false} />);
+    });
+
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).disabled).toBe(false);
+  });
+});

@@ -23,7 +23,9 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
-import { FOLDER_ICON, fileIconSpec } from "../../../../utils/fileIconSpec.ts";
+import { FOLDER_ICON } from "../../../../utils/fileIconSpec.ts";
+import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
+import { documentDisplayName } from "@shared/molecules/DocumentNameCell/documentNaming.ts";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import {
   MAX_FOLDER_DEPTH,
@@ -31,12 +33,7 @@ import {
   folderPathDepth,
   relativeDirSegments,
 } from "@shared/organisms/DocumentUploadDrawer/droppedPaths.ts";
-import {
-  DocumentViewer,
-  DocumentViewerModeToggle,
-  type ViewMode,
-} from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
-import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
+import DocumentPreviewDrawer from "@shared/molecules/DocumentPreviewDrawer/DocumentPreviewDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   type DocumentMetadata,
@@ -71,14 +68,13 @@ import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
-import { hasNativePreview } from "../../../../utils/documentViewerUtils.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import ManageLabelsModal from "../ManageLabelsModal/ManageLabelsModal.tsx";
 import RenameModal from "../RenameModal/RenameModal.tsx";
-import { StatusChip } from "../StatusChip/StatusChip.tsx";
+import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
 import type { DocStatus } from "@shared/atoms/DocStatusBadge/DocStatusBadge.tsx";
 import BulkActionsBar from "../BulkActionsBar/BulkActionsBar.tsx";
-import { deriveDocStatus, isTabularOnlyDoc } from "./deriveDocStatus.ts";
+import { deriveDocStatus, isTabularOnlyDoc } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 import { pagesToRefreshOnTaskCompletion } from "./refreshOnCompletion.ts";
 import {
   buildFolderRollups,
@@ -149,28 +145,6 @@ const isFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes
 function documentExtension(doc: DocumentMetadata): string {
   const dot = doc.identity.document_name.lastIndexOf(".");
   return dot > 0 ? doc.identity.document_name.slice(dot) : "";
-}
-
-// The Name column always shows document_name: identity.title is populated
-// ingestion-time straight from the file's own embedded metadata
-// (PDF /Title, docx core_properties.title) with no validation, so it's as
-// likely to be empty, a stale value copied from a shared template, or a
-// generic "Untitled" placeholder as it is a real paper/document title.
-function documentDisplayName(doc: DocumentMetadata): string {
-  return doc.identity.document_name;
-}
-
-// Surfaced as a hint next to the filename, not as the primary label: still
-// useful (e.g. an arXiv PDF's real paper title) when it isn't just noise —
-// filtered out when blank or when it doesn't actually add anything over the
-// filename itself (base_input_processor.py defaults title to the filename
-// stem, so most never-renamed, no-metadata documents would otherwise show an
-// identical-looking hint).
-function embeddedTitle(doc: DocumentMetadata): string | null {
-  const title = doc.identity.title?.trim();
-  if (!title) return null;
-  const stem = doc.identity.document_name.replace(/\.[^./]+$/, "");
-  return title === doc.identity.document_name || title === stem ? null : title;
 }
 
 function rowLabel(row: Row): string {
@@ -538,15 +512,6 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
   });
-  // The Fichier/Raw toggle lives in the preview drawer's own header (next to
-  // its close button), not inside DocumentViewer's body — so this workspace,
-  // not the viewer, owns which mode is showing. Reset to "file" on every new
-  // target so a previous document's "Raw" choice doesn't leak into the next.
-  const [previewView, setPreviewView] = useState<ViewMode>("file");
-  useEffect(() => {
-    setPreviewView("file");
-  }, [commands.previewTarget?.documentUid]);
-
   // When an ingestion task settles, the browse snapshot that backs its row is
   // stale (still "raw") and would need a manual refresh to show "Ready". Reload
   // just the loaded folder page(s) showing that document so its status goes live.
@@ -1382,29 +1347,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             </button>
           );
         }
-        const spec = fileIconSpec(row.doc.file?.file_type);
-        const title = embeddedTitle(row.doc);
-        return (
-          <span className={styles.nameCell}>
-            <span className={styles.rowIcon} style={{ color: spec.color }}>
-              <Icon category="outlined" type={spec.type} filled={spec.filled} />
-            </span>
-            <span>{documentDisplayName(row.doc)}</span>
-            {title && (
-              <span className={styles.titleHintWrapper}>
-                <Tooltip text={t("rework.resources.embeddedTitleHint", { title })}>
-                  <span
-                    className={styles.titleHintIcon}
-                    tabIndex={0}
-                    aria-label={t("rework.resources.embeddedTitleHint", { title })}
-                  >
-                    <Icon category="outlined" type="info" />
-                  </span>
-                </Tooltip>
-              </span>
-            )}
-          </span>
-        );
+        return <DocumentNameCell doc={row.doc} />;
       },
     },
     {
@@ -1803,26 +1746,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         </div>
       )}
 
-      <InlineDrawer
-        open={!!commands.previewTarget}
-        onClose={commands.closePreview}
-        title={commands.previewTarget?.fileName ?? t("rework.resources.preview.title")}
-        width="80vw"
-        background="var(--surface-container-high)"
-        headerActions={
-          hasNativePreview(commands.previewTarget?.fileName) ? (
-            <DocumentViewerModeToggle view={previewView} onChange={setPreviewView} />
-          ) : undefined
-        }
-      >
-        {commands.previewTarget && (
-          <DocumentViewer
-            documentUid={commands.previewTarget.documentUid}
-            fileName={commands.previewTarget.fileName}
-            view={previewView}
-          />
-        )}
-      </InlineDrawer>
+      <DocumentPreviewDrawer target={commands.previewTarget} onClose={commands.closePreview} />
       <DocumentUploadDrawer
         isOpen={uploadOpen}
         onClose={() => {

@@ -22,6 +22,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
@@ -430,41 +431,45 @@ export default function TeamAgentsPage() {
     <div className={styles.teamAgentContainer}>
       {hasAgents && !templatesUnavailable && (
         <div className={styles.title}>
-          <span className={styles.titleText}>
-            {isPersonalTeam ? t("rework.teams.agents.titlePersonal") : t("rework.teams.agents.title")}
-          </span>
-          {canManageAgents && (
-            <Button
-              color={"primary"}
-              variant={"filled"}
-              size={"medium"}
-              icon={{ category: "outlined", type: "add" }}
-              onClick={() => setIsEnrollOpen(true)}
-            >
-              {t("rework.teams.agents.create", { agentsNicknameSingular })}
-            </Button>
-          )}
-          <div className={styles.searchBar}>
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder={t("rework.teams.agents.searchPlaceholder", {
-                agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
-              })}
-              clearAriaLabel={t("rework.teams.agents.clearSearch")}
-              size="small"
-            />
-          </div>
-          <div className={styles.sortSelect}>
-            <Select<AgentSortValue>
-              size="small"
-              compact
-              options={sortOptions}
-              value={sort}
-              onChange={setSort}
-              ariaLabel={t("rework.teams.agents.sortLabel")}
-            />
-          </div>
+          <PageHeader
+            title={isPersonalTeam ? t("rework.teams.agents.titlePersonal") : t("rework.teams.agents.title")}
+            actions={
+              <>
+                {canManageAgents && (
+                  <Button
+                    color={"primary"}
+                    variant={"filled"}
+                    size={"medium"}
+                    icon={{ category: "outlined", type: "add" }}
+                    onClick={() => setIsEnrollOpen(true)}
+                  >
+                    {t("rework.teams.agents.create", { agentsNicknameSingular })}
+                  </Button>
+                )}
+                <div className={styles.searchBar}>
+                  <SearchInput
+                    value={search}
+                    onChange={setSearch}
+                    placeholder={t("rework.teams.agents.searchPlaceholder", {
+                      agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
+                    })}
+                    clearAriaLabel={t("rework.teams.agents.clearSearch")}
+                    size="small"
+                  />
+                </div>
+                <div className={styles.sortSelect}>
+                  <Select<AgentSortValue>
+                    size="small"
+                    compact
+                    options={sortOptions}
+                    value={sort}
+                    onChange={setSort}
+                    ariaLabel={t("rework.teams.agents.sortLabel")}
+                  />
+                </div>
+              </>
+            }
+          />
         </div>
       )}
 

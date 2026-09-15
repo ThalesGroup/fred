@@ -38,6 +38,13 @@ class DocumentMetadataRow(Base):
         TimestampColumn, nullable=True
     )
     tag_ids: Mapped[list | None] = mapped_column(TagIdsColumn, nullable=True)
+    # Denormalized out of `doc` (like `source_tag` and `tag_ids`) because the pair
+    # carries a uniqueness rule the database has to enforce, and is the key a
+    # synchronizing caller addresses its documents by. Both NULL for every
+    # document not written through that surface — and NULLs never collide, so
+    # ordinary ingestion is unaffected by the unique index below.
+    source_library_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_key: Mapped[str | None] = mapped_column(String, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
 
 
@@ -48,4 +55,14 @@ _tag_ids_gin_index = Index(
     "idx_metadata_tag_ids_gin",
     DocumentMetadataRow.tag_ids,
     postgresql_using="gin",
+)
+
+# One document per (library, source key): re-writing a key updates the document
+# already there instead of adding a second. Also the index the lookup uses.
+# codeql[py/unused-global-variable]
+_source_key_unique_index = Index(
+    "uq_metadata_source_library_key",
+    DocumentMetadataRow.source_library_id,
+    DocumentMetadataRow.source_key,
+    unique=True,
 )

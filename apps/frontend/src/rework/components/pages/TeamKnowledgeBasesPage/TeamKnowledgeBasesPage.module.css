@@ -1,0 +1,30 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Only the inset the header sits in: PageHeader owns its type, colour and the
+   right-alignment of the controls. */
+.title {
+  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding: var(--spacing-l);
+}
+
+/* Same track as the agent list: the two screens are read side by side. */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 320px);
+  grid-auto-rows: minmax(210px, auto);
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-l);
+  overflow: auto;
+}
