@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx";
@@ -23,22 +22,19 @@ import styles from "./TeamAdminCharterPage.module.css";
 export default function TeamAdminCharterPage() {
   const { t } = useTranslation();
   const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
-  const [endReached, setEndReached] = useState(false);
-  const handleEndReached = useCallback(() => setEndReached(true), []);
 
   return (
     <div className={styles.page}>
       <div className={styles.title}>{t("rework.teamAdminCharter.title")}</div>
       <div className={styles.content}>
-        <TeamAdminCharterContent onEndReached={handleEndReached} />
+        <TeamAdminCharterContent />
       </div>
       <div className={styles.actions}>
-        <span className={styles.information}>{t("rework.teamAdminCharter.lockInformation")}</span>
         <Button
           color="primary"
           variant="filled"
           size="medium"
-          disabled={!endReached || isLoading}
+          disabled={isLoading}
           onClick={() => void acceptCharter()}
         >
           {t("rework.teamAdminCharter.accept")}

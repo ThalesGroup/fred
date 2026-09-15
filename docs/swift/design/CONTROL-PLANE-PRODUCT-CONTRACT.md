@@ -4029,8 +4029,8 @@ check count `team_admin` only, so a team whose nominated admin never accepts can
 still be rescued.
 
 **Frontend.** On the pages of a team where `my_relations` holds
-`pending_team_admin`, the charter page replaces the team content until Accept,
-enabled once the end of the text is visible. The home page, the personal space
+`pending_team_admin`, the charter page replaces the team content until Accept.
+The home page, the personal space
 and other teams stay usable. Team settings show a read-only Responsibilities
 section to `team_admin`s, and the member list shows "Admin (pending)" on the
 admin chip.

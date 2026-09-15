@@ -2372,7 +2372,6 @@
     },
     "teamAdminCharter": {
       "accept": "Accepter",
-      "lockInformation": "Lisez la charte jusqu'au bout avant de pouvoir l'accepter",
       "title": "Charte de l'administrateur d'équipe"
     },
     "teamSettings": {

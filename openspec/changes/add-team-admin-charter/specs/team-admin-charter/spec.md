@@ -86,18 +86,18 @@ At startup, when the configured version differs from the last version applied, t
 
 ### Requirement: A team's pages show the charter to its pending administrators
 
-When a user opens a page of a team on which they hold `pending_team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action that stays disabled until the end of the text has been reached. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show it. After Accept, the team's pages MUST become available without reloading the app.
+When a user opens a page of a team on which they hold `pending_team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show it. After Accept, the team's pages MUST become available without reloading the app.
 
 #### Scenario: Pending administrator opens their team
 - **WHEN** a user holding `pending_team_admin` on a team opens one of its pages
-- **THEN** the charter is shown with Accept disabled until the end of the text is reached
+- **THEN** the charter is shown with an Accept action
 
 #### Scenario: Home page
 - **WHEN** the same user is on the home page or in their personal space
 - **THEN** no charter is shown
 
 #### Scenario: Accept
-- **WHEN** the user reaches the end of the charter and chooses Accept
+- **WHEN** the user chooses Accept
 - **THEN** the acceptance is recorded and the team's page is shown without a reload
 
 ### Requirement: Team settings show the charter to administrators and the pending state to everyone

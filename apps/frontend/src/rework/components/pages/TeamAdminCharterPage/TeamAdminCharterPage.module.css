@@ -36,9 +36,3 @@
   padding: var(--spacing-m);
   width: min(660px, 100%);
 }
-
-.information {
-  margin-right: auto;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-}

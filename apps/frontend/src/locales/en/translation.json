@@ -2372,7 +2372,6 @@
     },
     "teamAdminCharter": {
       "accept": "Accept",
-      "lockInformation": "Read the charter to the end before you can accept it",
       "title": "Team administrator charter"
     },
     "teamSettings": {
