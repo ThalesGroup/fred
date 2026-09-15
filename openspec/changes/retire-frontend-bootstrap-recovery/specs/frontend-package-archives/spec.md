@@ -1,68 +1,99 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Bootstrap, publication, and adoption remain separate gates
+### Requirement: First-release incident operations are retired from the preparation workflow
 
-Release documentation SHALL distinguish repository readiness, the completed initial npm package creation and partial recovery, subsequent Trusted Publishing configuration, actual publication, registry verification, FRED adoption, and external adoption. The confirmed scope, package-creation authority, bootstrap actor, and historical publishing workflow identity MUST remain traceable in durable historical evidence; a later Trusted Publishing identity MUST be recorded separately and MUST NOT be inferred from that bootstrap identity. Unconfirmed later trust or credential-revocation evidence MUST remain an explicit maintainer gate rather than be inferred from a successful registry-verification run. The selected policy for subsequent FRED frontend releases remains direct Trusted Publishing with GitHub environment approval, but enabling routine publication is outside this cleanup.
+The existing `.github/workflows/Publish-frontend-packages.yml` SHALL remain a `workflow_dispatch`-only workflow restricted to `swift`, with candidate preparation and application compatibility validation as its only active operation. The preparation path MUST retain the exact immutable archive transfer between the separately selected release and application toolchains, with no rebuild or re-baseline of candidate bytes. It MUST NOT schedule registry mutation or historical retained-artifact verification, grant `id-token: write`, receive `NPM_BOOTSTRAP_TOKEN` or another publishing credential, or use the `npm-publish` environment. The `publish-bootstrap`, `recover-bootstrap`, and `verify-existing` dispatch operations SHALL be unavailable.
 
-The existing `workflow_dispatch` workflow at `.github/workflows/Publish-frontend-packages.yml` SHALL reject refs other than `swift` and, during this interim cleanup slice, SHALL offer preparation only. It MUST build and validate candidate archives under the release toolchain, transfer that exact immutable set for separately provisioned application-toolchain compatibility validation, and MUST NOT rebuild or re-baseline candidate bytes during transfer. Its dispatch, authorization, preparation, and compatibility paths MUST NOT schedule registry mutation or historical retained-artifact verification, grant `id-token: write`, receive `NPM_BOOTSTRAP_TOKEN` or other publishing credentials, or require the `npm-publish` environment. The operator path MUST NOT offer `publish-bootstrap`, `recover-bootstrap`, or `verify-existing` choices.
+The completed bootstrap-recovery and registry-verification-continuation JSON configuration files MUST be absent from the active source tree. No active workflow, contract checker, producer input selection, script, npm command, Makefile target, test loader, or package-validation path SHALL depend on or recreate either incident configuration. Package manifests, versions, the private producer root, candidate evidence, and the approved release contract MUST remain unchanged by this retirement.
 
-Active release-contract checking, producer inputs, commands, and generic verifier loading MUST NOT require the completed bootstrap-recovery or registry-verification-continuation configuration. The two incident configuration files SHALL be absent from the active source tree, and no live workflow, script, command, test loader, or package input selection SHALL read them or silently recreate equivalent active configuration. Retired recovery/continuation CLI options MUST fail with an actionable unsupported-option error; they MUST NOT be ignored while a weaker generic check runs. The generic registry verifier MUST retain exact coordinate and archive-integrity comparison, installed-tree and dependency-boundary checks, npm signature auditing, Sigstore certificate and independent provenance-identity matching, bounded read-only registry-visibility handling, and clean consumer/browser/host gates when invoked for a future authorized verification. Controlled tests MUST NOT claim public-registry success unless the genuine registry gates complete.
+#### Scenario: Preparation is dispatched without publication
 
-Dependencies SHALL be released before consumers: a compatible design-token version before its UI consumer, while the independent SDK may be sequenced separately in a later publication change. FRED adoption SHALL occur only after required prereleases pass genuine registry verification. If later protocol-ownership transfer changes SDK bytes, its corresponding version MUST be built, validated, and published before FRED adopts it. RAGS adoption remains separately tracked under the generic contract. Published versions MUST remain immutable; a future correction SHALL use a newly versioned candidate rather than overwrite an existing version. Adoption rollback SHALL restore a prior validated dependency set or application image.
+- **WHEN** a maintainer dispatches the existing workflow on `swift` using its default preparation operation
+- **THEN** candidate production, immutable transfer, and application compatibility validation run under their respective toolchains without publication approval, registry mutation, a bootstrap secret, or OIDC write permission
 
-The completed first-release source, candidate, publication, recovery, and successful verification identities and recorded SHA-512 integrities SHALL remain available as a compact historical record. Deleting active incident configuration MUST NOT alter historical evidence, package versions, registry state, or attestations. The record MUST identify historical publication identities separately from the later verification execution and link to retained original artifacts while available; artifact expiry MUST NOT be concealed by treating source history as a replacement for archive bytes.
+#### Scenario: An obsolete workflow operation is requested
 
-#### Scenario: Preparation remains runnable without publication
+- **WHEN** a caller requests `publish-bootstrap`, `recover-bootstrap`, or `verify-existing` after retirement
+- **THEN** the operation is unavailable or rejected and cannot schedule candidate publication or historical-artifact verification
 
-- **WHEN** a maintainer dispatches the existing workflow on `swift` with its default preparation input
-- **THEN** candidate production, immutable transfer, and application compatibility validation run under their respective toolchains without publication approval, registry mutation, a bootstrap token, or OIDC write permission
+#### Scenario: Completed incident configuration is absent
 
-#### Scenario: A retired dispatch operation is requested
+- **WHEN** either obsolete first-release JSON file is absent
+- **THEN** preparation, release-contract checking, package selection, and offline validation continue without reading or recreating that file
 
-- **WHEN** a caller requests `publish-bootstrap`, `recover-bootstrap`, or `verify-existing` from the cleanup workflow
-- **THEN** the input is unavailable or rejected, and no candidate publication or historical-verification job is scheduled
+#### Scenario: Preparation retains exact archive transfer
 
-#### Scenario: An incident configuration file is removed
+- **WHEN** the application compatibility job receives the producer's candidate transfer
+- **THEN** it verifies the approved source, execution identity, evidence, and original archive bytes before and after its isolated-consumer, browser, and host checks without rebuilding candidates
 
-- **WHEN** either completed bootstrap-recovery or registry-verification-continuation JSON file is absent
-- **THEN** preparation, release-contract checking, CI input selection, and a fresh-process generic verifier load continue without reading or recreating that file
+### Requirement: Generic registry verification and historical evidence survive incident retirement
 
-#### Scenario: A retired verifier option is passed
+The supported generic registry verifier SHALL continue to validate exact expected package coordinates and archive SHA-512 against the approved contract and candidate evidence; independently verify the registry dependency graph and installed tree, npm signatures, Sigstore certificate and expected repository/commit/workflow/artifact identity; and exercise clean registry consumers, browser smoke, and production-host compatibility without workspace, checkout, local-tarball, or application-dependency fallback. Bounded read-only metadata visibility checks MAY retry transient 404 results but MUST fail on unauthorized, malformed, or identity/integrity-mismatched responses. Retired recovery and continuation CLI options MUST fail with an actionable unsupported-option error rather than be ignored and produce a weaker apparent success. Controlled local tooling tests MUST NOT claim genuine public-registry success.
 
-- **WHEN** the generic registry-verifier CLI receives a recovery-plan, recovery-evidence, recovery-artifact, verification-plan, or verification-inputs option
+The original validated candidate record, historical initial and partial publication identities, per-package archive integrities and provenance expectations, and successful later verification identity and gates SHALL remain traceable in a compact historical record. Removing active incident configuration MUST NOT change those original records, package versions, registry state, or attestations. Publication source identities MUST remain separate from later verifier execution identity. An expiring or unavailable GitHub artifact MUST be identified as such; a source-history link MUST NOT be treated as replacement archive bytes.
+
+#### Scenario: Generic registry verification still works
+
+- **WHEN** an authorized caller supplies exact approved coordinates, candidate integrity, and independent expected publication identities through the supported generic verifier entry point
+- **THEN** a fresh process loads without incident modules and retains installed-tree signature, cryptographic provenance, clean-consumer, browser, and host checks with no local fallback
+
+#### Scenario: A retired verifier option is supplied
+
+- **WHEN** the verifier CLI receives a `--recovery-*` or `--verification-*` option
 - **THEN** it exits nonzero with an actionable unsupported-option error before reporting successful verification
-
-#### Scenario: Generic registry verification is still authorized
-
-- **WHEN** a future authorized caller supplies exact approved coordinates, candidate integrity, and independent expected publication identities through the supported generic verifier interface
-- **THEN** the verifier retains exact registry resolution, installed dependency-tree signature audit, cryptographic provenance matching, and clean consumers without checkout, workspace, or local-tarball fallback
 
 #### Scenario: Temporary registry visibility differs between endpoints
 
-- **WHEN** approved exact-version metadata is visible but package-wide metadata returns a temporary 404
-- **THEN** bounded read-only readiness checks may proceed to matching metadata without repeating any publication command, while malformed, unauthorized, or integrity-mismatched data fails
+- **WHEN** exact-version metadata is visible but package-wide metadata temporarily returns 404
+- **THEN** bounded read-only readiness checks may reach matching metadata without repeating a publication command, while an unauthorized, malformed, or integrity-mismatched result fails
 
-#### Scenario: Historical release evidence is consulted after cleanup
+#### Scenario: Registry validation cannot establish the intended release
 
-- **WHEN** a maintainer reviews the initial and partial publication and the later successful registry verification
-- **THEN** the original candidate and publishing commits/runs, each package's recorded integrity and provenance expectations, and the separate verifier commit/run remain traceable without an active incident configuration file
+- **WHEN** a package has a validly signed attestation or matching metadata but an unexpected archive digest, repository, publication commit, workflow identity, dependency graph, or installed-tree resolution
+- **THEN** verification fails rather than accepting signature validity or downloaded metadata alone
 
-#### Scenario: Later publishing trust is not evidenced
+#### Scenario: Completed first-release evidence is reviewed
 
-- **WHEN** registry verification succeeds but Trusted Publisher configuration or bootstrap-token revocation remains unconfirmed
-- **THEN** the maintainer gate remains explicit and the cleanup does not claim those actions completed or enable routine publication
+- **WHEN** a maintainer consults the initial publication, partial recovery, and successful later registry-verification history
+- **THEN** original candidate and publishing identities, each package's SHA-512 and provenance expectations, the distinct verifier commit/run/attempt, and artifact retention limitations remain traceable without active incident configuration
+
+#### Scenario: Only generic verifier tooling was tested locally
+
+- **WHEN** controlled offline tests of the generic verifier pass without genuinely published packages and full registry gates
+- **THEN** the result remains tooling evidence and does not claim public-registry success
+
+### Requirement: Publication and adoption gates remain distinct after first-release retirement
+
+Release documentation SHALL distinguish repository readiness, completed first-package creation and partial recovery, later Trusted Publishing configuration, optional staged-publishing policy, actual future publication, registry verification, FRED adoption, and external adoption. New public-package creation MUST require confirmed scope ownership and an account/organization permission model capable of creating the package; it MUST NOT assume a package-scoped credential can create a nonexistent package. The historical bootstrap actor and any later Trusted Publishing workflow identity MUST be recorded separately, and one identity MUST NOT be inferred from the other. Unconfirmed trust setup or bootstrap-token revocation MUST remain an explicit maintainer gate rather than be inferred from registry-verification success. The selected subsequent release policy remains direct Trusted Publishing with GitHub environment approval, whose implementation is deferred to another change; staged publishing is a documented alternative only for already-created packages when its prerequisites are approved.
+
+A compatible design-token version SHALL precede its UI consumer; the independent SDK MAY be sequenced separately in a later release. FRED adoption SHALL follow genuine verification of its required registry prereleases, and any later SDK protocol-ownership transfer that changes SDK bytes MUST be validated and published at a corresponding version before FRED adopts it. RAGS adoption remains separately tracked under the same generic external-application contract. Published versions MUST remain immutable: correction or partial-failure recovery MUST use a previously validated version or a new version, never overwrite the existing bytes. Adoption rollback SHALL restore a prior validated dependency/lockfile set or application image.
+
+#### Scenario: A future new public package is proposed
+
+- **WHEN** a selected package name does not yet exist in the approved npm scope
+- **THEN** maintainers establish scope ownership and actual package-creation authority before authorizing a distinct future publication path, rather than reactivating the retired bootstrap operation
+
+#### Scenario: Later publishing trust is unconfirmed
+
+- **WHEN** public-registry verification succeeds but Trusted Publisher configuration or bootstrap-token revocation has not been evidenced
+- **THEN** that maintainer gate remains explicit and preparation-only operation does not claim routine publishing is enabled
+
+#### Scenario: Maintainers choose staged publishing
+
+- **WHEN** staged publishing is selected as a later release policy
+- **THEN** it is used only after package creation and required npm, Node, access, two-factor, and maintainer approval prerequisites are satisfied
 
 #### Scenario: FRED adoption is proposed
 
 - **WHEN** maintainers prepare a later change to consume registry packages in FRED
-- **THEN** required prereleases have matching integrity, provenance, and clean-consumer evidence, and any changed SDK artifact is released first
+- **THEN** required prereleases have matching integrity, provenance, and clean-consumer registry evidence, and any changed SDK artifact is released first
 
 #### Scenario: A released candidate must be rolled back
 
 - **WHEN** a defect is found after publication or adoption
 - **THEN** maintainers supersede the affected version and restore a prior validated dependency set or image without replacing published bytes
 
-### Requirement: CI selection covers every package-validation input
+### Requirement: CI selection covers every active package-validation input
 
 Pull-request validation SHALL select the frontend-package job when the producer workspace; a consumed canonical component, type, stylesheet, protocol source, or path validator; the FRED frontend React manifest or lockfile baseline; a packaged Geist or Material Symbols asset; an applicable license or notice input; an SDK compatibility or isolated-consumer fixture; or relevant validation orchestration changes. Release readiness validation SHALL also be selected when a release coordinate contract, candidate metadata, exact producer-toolchain pin, release-evidence schema, generic registry verifier, fixture-transfer helper or metadata, release runbook, retained workflow, governing frontend packaging RFC, or release-specific orchestration changes. It MUST NOT depend on the deleted incident configuration or select obsolete bootstrap/recovery/continuation scripts as active release inputs. It MAY skip that job for application changes that affect neither package generation nor package/host compatibility or release validation. Existing frontend selection MUST continue to run the FRED host, request, path, and proxy regressions when their application inputs change. Every selected job that executes isolated-consumer validation MUST provision its own exact consumer prerequisites in a distinct network-capable step before offline tests begin; it MUST NOT depend on another job's filesystem or introduce network fallback into validation.
 
@@ -145,3 +176,17 @@ Pull-request validation SHALL select the frontend-package job when the producer 
 
 - **WHEN** a pull request changes only application files that are not consumed by or responsible for frontend-package, SDK/host compatibility, or release validation
 - **THEN** CI may skip the frontend-package job while retaining normal application validation
+
+## REMOVED Requirements
+
+### Requirement: Bootstrap, publication, and adoption remain separate gates
+
+**Reason**: Its first-release publication, partial-recovery, and `verify-existing` workflow/CLI scenarios describe completed historical incident operations and cannot remain active after their configuration and jobs are deleted.
+
+**Migration**: Use `First-release incident operations are retired from the preparation workflow` for the interim dispatch, `Generic registry verification and historical evidence survive incident retirement` for reusable verification/history, and `Publication and adoption gates remain distinct after first-release retirement` for the preserved release/adoption policy. Future routine OIDC publication is separately scoped.
+
+### Requirement: CI selection covers every package-validation input
+
+**Reason**: The predecessor block selects bootstrap/recovery inputs as active validation dependencies; those inputs are retired while all canonical package, archive, consumer, host, and release-readiness selection guarantees remain.
+
+**Migration**: Use `CI selection covers every active package-validation input`. Its scenarios retain the unaffected producer, canonical CSS/component/protocol/asset/license, React, transfer, consumer-provisioning, validation-orchestration, and unrelated-file behavior and replace incident-only workflow selection with preparation-only selection.
