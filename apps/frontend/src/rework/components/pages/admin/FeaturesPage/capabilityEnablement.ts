@@ -171,12 +171,19 @@ export function missingAgentDependenciesForPlatform(
 /**
  * Human-readable name for one capability row. Catalog `name`s are i18n keys
  * for first-party capabilities and plain strings for out-of-tree ones, so the
- * key is looked up with itself as the default value.
+ * key is looked up with itself as the default value. A model row prefers its
+ * ops-authored display name: its `name` is the wire model value, which several
+ * models behind one gateway can share.
  *
  * Takes `t` rather than calling `useTranslation`: this module is deliberately
  * framework-free so the enablement rules stay unit-testable without rendering.
  */
-export function capabilityLabel(t: TFunc, capability: Pick<CapabilityEnablementItem, "name">): string {
+export function capabilityLabel(
+  t: TFunc,
+  capability: Pick<CapabilityEnablementItem, "name" | "model_display_name">,
+): string {
+  const displayName = capability.model_display_name?.trim();
+  if (displayName) return displayName;
   return t(capability.name, { defaultValue: capability.name });
 }
 

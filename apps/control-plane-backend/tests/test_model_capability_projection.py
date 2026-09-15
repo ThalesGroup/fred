@@ -21,14 +21,18 @@ test_capability_enablement_1980.py; this file covers only this one
 function's own contract: parses a well-formed response into
 CapabilityCatalogEntry(kind="model"), and degrades to None (never raises)
 on an unreachable pod or malformed payload — the same best-effort contract
-`_agent_capabilities_for_source` already has.
+`_agent_capabilities_for_source` already has. Plus the one model field the
+admin row carries on from it, `model_display_name`.
 """
 
 from __future__ import annotations
 
 import httpx
 import pytest
+from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.capabilities.service import _build_enablement_item
 from control_plane_backend.product.service import _model_capabilities_for_source
+from fred_sdk.contracts.capability import CapabilityCatalogEntry
 
 
 @pytest.mark.asyncio
@@ -165,9 +169,37 @@ async def test_carries_the_ops_authored_display_name(
     entries = pod_models.entries
     assert entries[0].model_display_name == "Claude Sonnet 4.6"
     assert entries[1].model_display_name is None
-    # The technical name is untouched — routing, the capability id and the
-    # admin table all still key on it.
+    # The technical name is untouched — routing and the capability id still
+    # key on it.
     assert entries[0].name == "claude-sonnet-4-6"
+
+
+@pytest.mark.asyncio
+async def test_admin_row_carries_the_display_name() -> None:
+    """Two gateway models sharing one wire name would otherwise both read as
+    that name in the admin table, with nothing to tell them apart."""
+
+    entry = CapabilityCatalogEntry(
+        id="model__openai__mistral-medium",
+        version="1",
+        name="mistral",
+        description="mistral",
+        icon="neurology",
+        kind="model",
+        model_display_name="Mistral Medium 3.1",
+    )
+
+    item = await _build_enablement_item(
+        entry,
+        rebac=CountingRebacEngine(direct_relations=[]),
+        total_team_count=0,
+        total_personal_space_count=0,
+        impact={},
+        reasoning_enabled_ids=frozenset(),
+    )
+
+    assert item.model_display_name == "Mistral Medium 3.1"
+    assert item.name == "mistral"
 
 
 @pytest.mark.asyncio
