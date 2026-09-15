@@ -22,8 +22,11 @@ import os
 import pytest
 from builder_decks import (
     FOOTER,
+    add_agenda_slide,
+    add_divider_slide,
     build_layouts_only_template,
     build_showcase_template,
+    build_slides,
 )
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.lexicon import (
@@ -181,6 +184,20 @@ def test_example_slide_of_an_existing_intent_is_preferred(showcase):
     assert photo.preferred  # the default template has a Picture with Caption layout
     agenda = _slide(showcase, "Agenda")
     assert not agenda.preferred
+
+
+def test_decorative_fixed_slide_is_never_preferred():
+    # Used verbatim, a decorative example would otherwise outrank the closing layout.
+    def name_blank_layout_merci(presentation):
+        presentation.slide_layouts[6]._element.cSld.set("name", "Merci")
+
+    inventory = analyze_template(
+        build_slides([name_blank_layout_merci, add_agenda_slide, add_divider_slide])
+    ).inventory
+    assert inventory is not None
+    assert _layout(inventory, "Merci").intent == "fixed"
+    motif = _slide(inventory, "Motif")
+    assert motif.intent == "fixed" and not motif.preferred
 
 
 def test_example_slide_placeholders_inherit_their_font_size(showcase):

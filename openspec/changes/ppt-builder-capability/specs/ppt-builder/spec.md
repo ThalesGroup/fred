@@ -31,7 +31,7 @@ The system SHALL inventory the usable patterns of an uploaded `.pptx` template w
 #### Scenario: Slides with nothing to fill are fixed slides
 
 - **WHEN** an example slide has no fillable zone (for example a closing "thank you" slide)
-- **THEN** it is inventoried with intent `fixed` and can only be included verbatim
+- **THEN** it is inventoried with intent `fixed`, can only be included verbatim, is never marked as the preferred pattern of its intent, and the catalogue offers no zone for it
 
 #### Scenario: Resource slides are excluded by default
 
@@ -108,7 +108,7 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 #### Scenario: Overflow control
 
 - **WHEN** a text value is too long for its zone at the zone's font size
-- **THEN** the font size is reduced within the zone's autofit rule down to a floor, and the tool result tells the agent which zones were still truncated so it can shorten them
+- **THEN** the font size is reduced within the zone's autofit rule down to a floor, and the tool result tells the agent which zones were still truncated so it can shorten them; a one-line heading or label that still does not fit is reported with the number of characters that would fit
 
 #### Scenario: Missing intent degrades gracefully
 
@@ -123,7 +123,17 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 #### Scenario: Malformed plan from the model
 
 - **WHEN** the plan has the wrong JSON shapes (a bullet list given as one string, numbers as integers, a non-object entry in the slide list, unknown keys)
-- **THEN** the tool coerces what it can, skips entries that are not slides, builds the deck from the remaining slides and reports what it skipped; it never fails argument validation
+- **THEN** the tool coerces what it can (including zone role names used as keys, such as `body` for an item's `text` or a slide's `bullets`), skips entries that are not slides, builds the deck from the remaining slides and reports what it skipped; it never fails argument validation
+
+#### Scenario: Content the pattern cannot show is reported
+
+- **WHEN** a slide gives content its pattern has no zone for (bullets on a section slide, an item text on a figures slide, content on a fixed slide other than its own title)
+- **THEN** the deck is built without that content and the tool result names it per slide, so the agent can move it to a pattern that shows it
+
+#### Scenario: Closing slide by intent
+
+- **WHEN** the plan asks for the `fixed` intent
+- **THEN** the tool uses a fixed pattern named as a closing slide ("Merci", "Thank you") before any other fixed pattern
 
 #### Scenario: Every error result is readable
 
@@ -171,6 +181,11 @@ The system SHALL write the generated deck to the agent workspace of the conversa
 
 - **WHEN** the deck is generated and the PDF conversion succeeds
 - **THEN** the chat shows the same preview card and side pane as `ppt_filler`, with a download of the `.pptx`, and the pane opens on its own even when the agent has no `ppt_filler` capability
+
+#### Scenario: Preview keeps one-line text on one line
+
+- **WHEN** the deck holds a text box set not to wrap (a template's closing "Merci"), which LibreOffice would break when its substitute font runs wider
+- **THEN** the PDF preview is converted from a copy where such boxes are widened around their alignment, and the delivered `.pptx` keeps the template's geometry
 
 #### Scenario: Deck regenerated within one answer
 

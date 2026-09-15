@@ -393,9 +393,12 @@ class _Analyzer:
             p.intent for p in patterns if p.source == "layout" and p.included
         }
         for pattern in patterns:
+            # A fixed slide is used verbatim, so "the designer's version" means
+            # nothing there: a decorative example must not outrank a closing layout.
             if (
                 pattern.source == "slide"
                 and pattern.included
+                and pattern.intent != "fixed"
                 and pattern.intent in layout_intents
             ):
                 pattern.preferred = True

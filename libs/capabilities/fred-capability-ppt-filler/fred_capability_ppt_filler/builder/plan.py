@@ -89,6 +89,26 @@ def _as_text_list(value: Any) -> List[str]:
     return [text] if text else []
 
 
+def _with_aliases(value: Dict[str, Any], aliases: Dict[str, str]) -> Dict[str, Any]:
+    """Rename the field names a model guesses from zone roles to the plan's
+    own; a field given under its own name wins over an alias."""
+    out = {k: v for k, v in value.items() if k not in aliases}
+    for alias, field in aliases.items():
+        if alias in value and not out.get(field):
+            out[field] = value[alias]
+    return out
+
+
+# The catalogue shows these zone roles; a model naturally reuses them as keys.
+_ITEM_ALIASES = {
+    "body": "text",
+    "description": "text",
+    "value": "number",
+    "title": "heading",
+}
+_SLIDE_ALIASES = {"body": "bullets", "text": "bullets", "content": "bullets"}
+
+
 class PlanItem(BaseModel):
     """One entry of a repeated group (agenda line, KPI card, step, person)."""
 
@@ -114,7 +134,9 @@ class PlanItem(BaseModel):
     @classmethod
     def _coerce(cls, value: Any) -> Any:
         if isinstance(value, dict):
-            return {k: _as_text(v) for k, v in value.items()}
+            return {
+                k: _as_text(v) for k, v in _with_aliases(value, _ITEM_ALIASES).items()
+            }
         return {"heading": _as_text(value)}
 
 
@@ -168,7 +190,7 @@ class SlidePlan(BaseModel):
     def _coerce(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return {"invalid_entry": str(value)[:80]}
-        return value
+        return _with_aliases(value, _SLIDE_ALIASES)
 
     @field_validator("title", "subtitle", "image", "notes", mode="before")
     @classmethod
@@ -214,10 +236,20 @@ def included_patterns(inventory: TemplateInventory) -> List[Pattern]:
 
 def best_for_intent(inventory: TemplateInventory, intent: str) -> Optional[Pattern]:
     """The preferred included pattern of ``intent``: an example slide first,
-    then a layout, in inventory order."""
+    then a layout, in inventory order. A fixed slide asked by intent closes the
+    deck, so one named as a closing slide ("Merci", "Thank you") comes first."""
     candidates = [p for p in included_patterns(inventory) if p.intent == intent]
     if not candidates:
         return None
+    if intent == "fixed":
+        closing = [
+            p
+            for p in candidates
+            if lexicon.name_matches(p.label, lexicon.CLOSING_NAMES)
+            or lexicon.name_matches(p.name, lexicon.CLOSING_NAMES)
+        ]
+        if closing:
+            return closing[0]
     preferred = [p for p in candidates if p.preferred]
     return (preferred or candidates)[0]
 

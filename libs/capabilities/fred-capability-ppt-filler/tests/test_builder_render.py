@@ -33,12 +33,16 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanColumn,
     PlanItem,
     SlidePlan,
+    best_for_intent,
 )
 from fred_capability_ppt_filler.builder.render import RenderError, render_deck
+from fred_capability_ppt_filler.builder.tools import catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
+from pptx.util import Inches, Pt
 
 TEMPLATE = build_showcase_template()
 _analysed = analyze_template(TEMPLATE).inventory
@@ -231,7 +235,7 @@ def test_columns_without_enough_bodies_are_reported():
             ],
         )
     )
-    assert any("column(s) 2, 3" in w for w in result.warnings)
+    assert any("no place for column 2, column 3" in w for w in result.warnings)
 
 
 def test_columns_fill_two_content_and_comparison_headings():
@@ -394,6 +398,139 @@ def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():
     slide = deck.slides[0]
     assert _title(slide) == "Motif"
     assert cast(Any, slide.notes_slide.notes_text_frame).text == "Say hello"
+
+
+def test_content_the_pattern_cannot_show_is_reported():
+    # The agent only learns what the deck lost from these warnings.
+    result, _ = _render(
+        SlidePlan(
+            pattern=_pattern("Title Only").id, title="Spain", bullets=["55 years"]
+        ),
+        SlidePlan(
+            pattern=_pattern("Key figures").id,
+            title="Figures",
+            items=[PlanItem(number="1 600", label="People", text="Across 5 sites")],
+        ),
+        SlidePlan(pattern=_pattern("Motif").id, title="Merci"),
+        SlidePlan(pattern=_pattern("Motif").id, title="Motif"),
+        SlidePlan(
+            pattern=_pattern("Free text").id,
+            title="No list",
+            items=[PlanItem(heading="x")],
+        ),
+    )
+    warnings = " ".join(result.warnings)
+    assert "Slide 1: 'Title Only' has no place for bullets" in warnings
+    assert "Slide 2: 'Key figures' has no place for items' text" in warnings
+    assert "Slide 3: 'Motif' is a fixed slide used as is" in warnings
+    assert (
+        "Slide 4:" not in warnings
+    )  # a fixed slide named by its own title lost nothing
+    assert "Slide 5: 'Free text' has no place for items" in warnings
+
+
+def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
+    steps = SlidePlan.model_validate(
+        {
+            "pattern": _pattern("Process").id,
+            "title": "Plan",
+            "items": [{"number": "1", "heading": "Start", "body": "Kick-off meeting"}],
+        }
+    )
+    content = SlidePlan.model_validate(
+        {
+            "pattern": _pattern("Title and Content").id,
+            "title": "Plan",
+            "body": ["one", "two"],
+        }
+    )
+    result, deck = _render(steps, content)
+    assert result.warnings == []
+    assert "Kick-off meeting" in _texts(deck.slides[0])
+    assert any("one" in text and "two" in text for text in _texts(deck.slides[1]))
+    assert PlanItem.model_validate({"text": "kept", "body": "alias"}).text == "kept"
+
+
+def test_one_line_heading_shrinks_then_asks_to_be_shortened():
+    process = _pattern("Process")
+    result, deck = _render(
+        SlidePlan(
+            pattern=process.id,
+            title="Plan",
+            items=[
+                PlanItem(heading="Kick-off", text="a"),
+                PlanItem(heading="A heading far too long for its one line", text="b"),
+            ],
+        )
+    )
+    long_heading = [w for w in result.warnings if "does not fit on one line" in w]
+    assert len(long_heading) == 1 and "A heading far too long" in long_heading[0]
+
+
+def test_catalogue_names_plan_fields_and_offers_nothing_on_fixed_slides():
+    lines = {line.split(" ")[1]: line for line in catalogue(INVENTORY).splitlines()}
+    assert "items×3 [number, heading, text]" in lines[_pattern("Process").id]
+    assert "bullets" in lines[_pattern("Title and Content").id]
+    assert "no editable zone" in lines[_pattern("Motif").id]
+    assert "(preferred)" not in catalogue(
+        INVENTORY.model_copy(
+            update={
+                "patterns": [_pattern("Motif").model_copy(update={"preferred": True})]
+            }
+        )
+    )
+    assert "title" not in lines[_pattern("Motif").id].split(":", 1)[1]
+
+
+def test_fixed_intent_closes_on_a_closing_slide_before_a_preferred_decoration():
+    decoration = _pattern("Motif").model_copy(update={"preferred": True})
+    closing = decoration.model_copy(
+        update={
+            "id": "layout:99",
+            "label": "Merci",
+            "name": "Merci",
+            "preferred": False,
+        }
+    )
+    inventory = INVENTORY.model_copy(update={"patterns": [decoration, closing]})
+    found = best_for_intent(inventory, "fixed")
+    assert found is not None and found.label == "Merci"
+
+
+def test_preview_copy_widens_one_line_text_the_delivered_deck_keeps():
+    # LibreOffice breaks a "do not wrap" box once its substitute font runs wide.
+    template = Presentation(io.BytesIO(TEMPLATE))
+    layout = next(lay for lay in template.slide_layouts if lay.name == "Title Only")
+    scratch = template.slides.add_slide(layout)
+    box = scratch.shapes.add_textbox(Inches(4), Inches(3), Inches(2), Inches(1))
+    box.text_frame.text = "Merci"
+    box.text_frame.paragraphs[0].runs[0].font.size = Pt(60)
+    body = box.text_frame._txBody.find(qn("a:bodyPr"))
+    body.set("wrap", "none")
+    box.text_frame.paragraphs[0]._p.get_or_add_pPr().set("algn", "ctr")
+    layout.shapes._spTree.append(box._element)
+    buffer = io.BytesIO()
+    template.save(buffer)
+
+    result = render_deck(
+        buffer.getvalue(),
+        INVENTORY,
+        DeckPlan(slides=[SlidePlan(pattern=_pattern("Title Only").id, title="End")]),
+    )
+
+    def merci_box(pptx: bytes):
+        deck = Presentation(io.BytesIO(pptx))
+        shape = next(
+            s
+            for s in deck.slides[0].slide_layout.shapes
+            if s.has_text_frame and cast(Any, s).text_frame.text == "Merci"
+        )
+        return shape.left, shape.width
+
+    assert merci_box(result.pptx) == (Inches(4), Inches(2))
+    left, width = merci_box(result.preview_pptx)
+    assert width > Inches(2)
+    assert left + width // 2 == Inches(5)  # still centred where the designer put it
 
 
 REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")

@@ -36,6 +36,7 @@ from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
+from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.analysis import estimate_capacity
 from fred_capability_ppt_filler.builder.models import (
     Pattern,
@@ -43,7 +44,12 @@ from fred_capability_ppt_filler.builder.models import (
     TemplateInventory,
     Zone,
 )
-from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan, resolve
+from fred_capability_ppt_filler.builder.plan import (
+    DeckPlan,
+    SlidePlan,
+    has_content,
+    resolve,
+)
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
@@ -68,6 +74,70 @@ class RenderResult:
     # Human-readable notes for the agent: truncations, substitutions, unfilled images.
     warnings: List[str] = field(default_factory=list)
     slide_count: int = 0
+    # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
+    preview_pptx: bytes = b""
+
+
+def _widen_no_wrap_text(presentation) -> int:
+    """Give every one-line text box the room it would take in PowerPoint.
+
+    LibreOffice ignores "do not wrap" and breaks such a box as soon as its
+    substitute font runs wider than the designer's ("Merc|i"). Widening it in
+    the preview copy, anchored on its alignment, changes nothing a reader of the
+    .pptx would see; the delivered file is never touched.
+    """
+    width = presentation.slide_width
+    widened = 0
+    parts = [slide for slide in presentation.slides]
+    for master in presentation.slide_masters:
+        parts.append(master)
+        parts.extend(master.slide_layouts)
+    for part in parts:
+        for sp in part.shapes._spTree.iter(qn("p:sp")):
+            body = sp.find(f"{qn('p:txBody')}/{qn('a:bodyPr')}")
+            xfrm = sp.find(f"{qn('p:spPr')}/{qn('a:xfrm')}")
+            if (
+                body is None
+                or body.get("wrap") != "none"
+                or body.get("vert") not in (None, "horz")
+                or xfrm is None
+                or xfrm.get("rot") not in (None, "0")
+                or sp.find(f"{qn('p:nvSpPr')}/{qn('p:nvPr')}/{qn('p:ph')}") is not None
+                or not "".join(t.text or "" for t in sp.iter(qn("a:t"))).strip()
+            ):
+                continue
+            off, ext = xfrm.find(qn("a:off")), xfrm.find(qn("a:ext"))
+            if off is None or ext is None:
+                continue
+            low, high = 0, width
+            parent = sp.getparent()
+            if parent is not None and parent.tag == qn("p:grpSp"):
+                ch_off = parent.find(
+                    f"{qn('p:grpSpPr')}/{qn('a:xfrm')}/{qn('a:chOff')}"
+                )
+                ch_ext = parent.find(
+                    f"{qn('p:grpSpPr')}/{qn('a:xfrm')}/{qn('a:chExt')}"
+                )
+                if ch_off is None or ch_ext is None:
+                    continue
+                low = int(ch_off.get("x", "0"))
+                high = low + int(ch_ext.get("cx", "0"))
+            left, box = int(off.get("x", "0")), int(ext.get("cx", "0"))
+            ppr = sp.find(f"{qn('p:txBody')}/{qn('a:p')}/{qn('a:pPr')}")
+            align = ppr.get("algn") if ppr is not None else None
+            if align == "ctr":
+                center = left + box // 2
+                half = min(center - low, high - center)
+                new_left, new_box = center - half, 2 * half
+            elif align == "r":
+                new_left, new_box = low, left + box - low
+            else:
+                new_left, new_box = left, high - left
+            if new_box > box:
+                off.set("x", str(new_left))
+                ext.set("cx", str(new_box))
+                widened += 1
+    return widened
 
 
 @dataclass
@@ -374,37 +444,51 @@ class _ZoneMap:
 
 
 def _assign_text(
-    pattern: Pattern, plan: SlidePlan, dropped: Optional[List[int]] = None
+    pattern: Pattern, plan: SlidePlan, lost: Optional[List[str]] = None
 ) -> Dict[str, List[_Line]]:
-    """Decide which lines go into which text zone (by zone key). Column numbers
-    the pattern has no body for are appended to ``dropped``."""
+    """Decide which lines go into which text zone (by zone key). Plan content
+    no zone receives is named in ``lost``, so the agent hears about it."""
     zmap = _ZoneMap(pattern)
     out: Dict[str, List[_Line]] = {}
-    dropped = dropped if dropped is not None else []
+    lost = lost if lost is not None else []
 
-    def put(zone: Optional[Zone], lines: List[_Line]) -> None:
-        if zone is not None and lines:
-            out[zone.key] = lines
+    def put(zone: Optional[Zone], lines: List[_Line], what: str) -> None:
+        if not lines:
+            return
+        if zone is None or zone.key in out:
+            lost.append(what)
+            return
+        out[zone.key] = lines
 
     title = _lines_from_bullets([plan.title]) if plan.title else []
     subtitle = _lines_from_bullets([plan.subtitle]) if plan.subtitle else []
     bullets = _lines_from_bullets(plan.bullets)
 
     if zmap.titles:
-        put(zmap.titles[0], title)
+        put(zmap.titles[0], title, "title")
     elif zmap.headings and title and not plan.columns:
-        put(zmap.headings[0], title)
+        put(zmap.headings[0], title, "title")
+    else:
+        put(None, title, "title")
 
     if pattern.intent in ("title", "section", "statement"):
         # Covers put their subtitle in whatever sits under the title.
         target = zmap.subtitles or zmap.body_like()
-        put(target[0] if target else None, subtitle or bullets)
+        put(
+            target[0] if target else None,
+            subtitle or bullets,
+            "subtitle" if subtitle else "bullets",
+        )
+        if subtitle and bullets:
+            lost.append("bullets")
         return out
 
     if zmap.subtitles:
-        put(zmap.subtitles[0], subtitle)
+        put(zmap.subtitles[0], subtitle, "subtitle")
     elif subtitle and not bullets and zmap.bodies:
         bullets = subtitle
+    elif subtitle:
+        lost.append("subtitle")
 
     if plan.columns:
         for index, column in enumerate(plan.columns):
@@ -412,28 +496,59 @@ def _assign_text(
             heading = zmap.headings[index] if index < len(zmap.headings) else None
             lines = _lines_from_bullets(column.bullets)
             if column.heading and heading is not None:
-                put(heading, _lines_from_bullets([column.heading]))
+                put(
+                    heading,
+                    _lines_from_bullets([column.heading]),
+                    f"column {index + 1}",
+                )
             elif column.heading:
                 lines = [_Line(f"**{column.heading}**")] + lines
-            if body is None and lines:
-                dropped.append(index + 1)
-            put(body, lines)
+            put(body, lines, f"column {index + 1}")
+        if bullets:
+            lost.append("bullets")
         return out
 
     if pattern.intent == "contact" and bullets:
-        for zone, line in zip(zmap.stacked(), bullets):
-            put(zone, [line])
+        zones = zmap.stacked()
+        for zone, line in zip(zones, bullets):
+            put(zone, [line], "bullets")
+        if len(bullets) > len(zones):
+            lost.append(f"{len(bullets) - len(zones)} bullet(s)")
         return out
     bodies = zmap.body_like()
-    if not bullets or not bodies:
+    if not bullets:
+        return out
+    if not bodies:
+        lost.append("bullets")
         return out
     if len(bodies) > 1 and pattern.intent in ("two_columns", "comparison"):
         half = math.ceil(len(bullets) / 2)
-        put(bodies[0], bullets[:half])
-        put(bodies[1], bullets[half:])
+        put(bodies[0], bullets[:half], "bullets")
+        put(bodies[1], bullets[half:], "bullets")
     else:
-        put(bodies[0], bullets)
+        put(bodies[0], bullets, "bullets")
     return out
+
+
+def _unused_item_fields(group: RepeatGroup, plan: SlidePlan) -> List[str]:
+    """Item fields the plan fills that this group has no zone for."""
+    roles = set(group.item_zones)
+    lost: Dict[str, None] = {}
+    for item in plan.items[: group.count]:
+        heading_shown = bool(roles & {"heading", "title", "subtitle"}) or (
+            "label" in roles and not item.label
+        )
+        checks = (
+            ("number", item.number, "number" in roles),
+            ("heading", item.heading, heading_shown),
+            ("text", item.text, bool(roles & {"body", "caption"})),
+            ("label", item.label, "label" in roles),
+            ("image", item.image, "image" in roles),
+        )
+        for name, value, shown in checks:
+            if value and not shown:
+                lost[name] = None
+    return [f"items' {name}" for name in lost]
 
 
 def _assign_group(
@@ -466,6 +581,19 @@ def _assign_group(
 
 
 # --- rendering ------------------------------------------------------------------------------
+
+
+def _only_names_the_slide(plan: SlidePlan, pattern: Pattern) -> bool:
+    """A closing slide given its own title ("Merci" on "Merci") lost nothing."""
+    alone = plan.model_copy(update={"title": None})
+    return (
+        bool(plan.title)
+        and not has_content(alone)
+        and (
+            lexicon.normalize(plan.title or "")
+            in {lexicon.normalize(pattern.label), lexicon.normalize(pattern.name)}
+        )
+    )
 
 
 class _Renderer:
@@ -502,6 +630,13 @@ class _Renderer:
             slide = self._create(pattern)
             if pattern.intent != "fixed":
                 self._fill(slide, pattern, slide_plan, position)
+            elif has_content(slide_plan) and not _only_names_the_slide(
+                slide_plan, pattern
+            ):
+                self.warnings.append(
+                    f"Slide {position}: '{pattern.label}' is a fixed slide used as is; the content "
+                    "given for it was ignored (nothing to do unless that content matters)."
+                )
             frame = (
                 slide.notes_slide.notes_text_frame
                 if slide_plan.notes
@@ -515,8 +650,15 @@ class _Renderer:
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()
         self.prs.save(buffer)
+        preview = buffer
+        if _widen_no_wrap_text(self.prs):
+            preview = io.BytesIO()
+            self.prs.save(preview)
         return RenderResult(
-            pptx=buffer.getvalue(), warnings=self.warnings, slide_count=rendered
+            pptx=buffer.getvalue(),
+            warnings=self.warnings,
+            slide_count=rendered,
+            preview_pptx=preview.getvalue(),
         )
 
     def _create(self, pattern: Pattern):
@@ -534,23 +676,23 @@ class _Renderer:
 
     def _fill(self, slide, pattern: Pattern, plan: SlidePlan, position: int) -> None:
         index = _shape_index(slide)
-        dropped_columns: List[int] = []
-        text = _assign_text(pattern, plan, dropped_columns)
-        if dropped_columns:
-            self.warnings.append(
-                f"Slide {position}: '{pattern.label}' has no zone for column(s) "
-                f"{', '.join(str(c) for c in dropped_columns)}; their content was dropped."
-            )
+        lost: List[str] = []
+        text = _assign_text(pattern, plan, lost)
         image_ids: Dict[str, Optional[str]] = {}
         zmap = _ZoneMap(pattern)
         plan_images = list(plan.images) or ([plan.image] if plan.image else [])
         for zone, image_id in zip(zmap.images, plan_images + [None] * len(zmap.images)):
             image_ids[zone.key] = image_id
+        if len(plan_images) > len(zmap.images):
+            lost.append(f"{len(plan_images) - len(zmap.images)} image(s)")
+        if plan.items and not pattern.groups:
+            lost.append("items")
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(group, plan)
             text.update(group_text)
             image_ids.update(group_images)
+            lost.extend(f for f in _unused_item_fields(group, plan) if f not in lost)
             if len(plan.items) > group.count:
                 self.warnings.append(
                     f"Slide {position}: '{pattern.label}' holds {group.count} items, "
@@ -573,6 +715,11 @@ class _Renderer:
                 if placed is not None:
                     self._remove_with_decoration(placed, index, pattern, kept_boxes)
             self._even_out_item_widths(group, index)
+        if lost:
+            self.warnings.append(
+                f"Slide {position}: '{pattern.label}' has no place for {', '.join(lost)}; "
+                "that content is not in the deck. Put it on a pattern that shows it, or drop it."
+            )
         if pattern.groups:
             # Widths and removals changed the slide: re-read absolute geometry.
             index = _shape_index(slide)
@@ -601,8 +748,9 @@ class _Renderer:
                 lines = [
                     _Line(line.text.replace(" ", " "), line.level) for line in lines
                 ]
+            one_line_room: Optional[int] = None
             if _grows_with_text(shape):
-                scale = self._no_wrap_scale(
+                scale, one_line_room = self._no_wrap_scale(
                     zone, lines, placed, containers.get(zone.key)
                 )
                 truncated = False
@@ -611,6 +759,11 @@ class _Renderer:
             _write_lines(shape, lines)
             if scale is not None:
                 _set_font_scale(shape, scale, zone.font_pt)
+            if one_line_room is not None:
+                self.warnings.append(
+                    f"Slide {position}: the {zone.role} '{lines[0].text}' of '{pattern.label}' does not fit "
+                    f"on one line and runs into the text below; keep it under {one_line_room} characters."
+                )
             if truncated:
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
@@ -717,18 +870,19 @@ class _Renderer:
         lines: List[_Line],
         placed: PlacedShape,
         container: Optional[PlacedShape],
-    ) -> Optional[float]:
+    ) -> Tuple[Optional[float], Optional[int]]:
         """Keep a box that grows with its text (a KPI figure, its caption)
         inside its card, identically in PowerPoint and in the PDF preview.
 
         The room runs to the card's right edge (or the slide's). A box too
-        narrow for its text is widened to that room — renderers that ignore
-        "no wrap" otherwise break inside the figure. A figure stays on one line
-        and shrinks if even the room is too small; a caption may wrap between
-        words and only shrinks for a word longer than the room.
+        narrow for its text is widened to that room. A figure stays on one line
+        and shrinks as needed; a one-line heading or label shrinks down to the
+        overflow floor, then wraps and returns how many characters would fit, so
+        the agent shortens it; other text wraps between words and only shrinks
+        for a word longer than the room. Returns ``(font scale, one-line room)``.
         """
         if not zone.font_pt or placed.width <= 0:
-            return None
+            return None, None
         right = (
             container.left + container.width
             if container is not None and container.width > 0
@@ -736,22 +890,33 @@ class _Renderer:
         )
         room = int((right - placed.left) * 0.95)
         if room <= 0:
-            return None
+            return None, None
         per_char = zone.font_pt * _GLYPH_EM / 72 * 914400
         texts = [line.text for line in lines]
         needed = max((len(t) for t in texts), default=0) * per_char
         longest_word = max((len(w) for t in texts for w in t.split()), default=0)
         if needed <= placed.width:
-            return None
+            return None, None
         shape = cast(Any, placed.shape)
         shape.width = Emu(round(min(needed, room) * shape.width / placed.width))
         if zone.role == "number":
-            return round(max(0.4, room / needed), 2) if needed > room else None
+            return (round(max(0.4, room / needed), 2) if needed > room else None), None
+        if needed <= room:
+            return None, None
+        if (zone.max_lines or 1) <= 1 and len(texts) == 1:
+            if room / needed >= MIN_FONT_SCALE:
+                return round(room / needed, 2), None
+            shrunk = MIN_FONT_SCALE
+            fits = int(room / (per_char * shrunk))
+        else:
+            shrunk, fits = None, None
         bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
-        if bodyPr is not None and needed > room:
+        if bodyPr is not None:
             bodyPr.set("wrap", "square")
-        word_needed = longest_word * per_char
-        return round(max(0.4, room / word_needed), 2) if word_needed > room else None
+        word_scale = room / (longest_word * per_char) if longest_word else 1.0
+        if word_scale < (shrunk or 1.0):
+            shrunk = round(max(0.4, word_scale), 2)
+        return shrunk, fits
 
     @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:

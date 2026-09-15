@@ -105,27 +105,52 @@ _BUSY_MESSAGE = "The server is busy building other presentations right now. Plea
 # --- catalogue --------------------------------------------------------------------------
 
 
+# The catalogue names the plan field a zone is filled from, not the zone's role:
+# a model copies these names into the plan, and a role name it cannot map to a
+# field is content silently lost. Roles absent here are never filled.
+_SLIDE_FIELDS = {
+    "title": "title",
+    "subtitle": "subtitle",
+    "body": "bullets",
+    "caption": "bullets",
+    "heading": "columns.heading",
+}
+_ITEM_FIELDS = {
+    "number": "number",
+    "heading": "heading",
+    "title": "heading",
+    "subtitle": "heading",
+    "body": "text",
+    "caption": "text",
+    "label": "label",
+    "image": "image",
+}
+
+
 def _zone_summary(pattern: Pattern) -> str:
+    if pattern.intent == "fixed":
+        return "used as is, no editable zone (content given for it is ignored)"
     parts: List[str] = []
     seen: set[str] = set()
     for zone in pattern.zones:
-        if zone.role in ("keep", "image") or zone.role in seen:
+        field = _SLIDE_FIELDS.get(zone.role)
+        if field is None or field in seen:
             continue
-        seen.add(zone.role)
+        seen.add(field)
         limit = f" ≤{zone.max_chars} chars" if zone.max_chars else ""
         lines = (
             f" ≤{zone.max_lines} lines" if zone.max_lines and zone.max_lines > 1 else ""
         )
-        count = sum(1 for z in pattern.zones if z.role == zone.role)
-        parts.append(
-            f"{zone.role}{'×' + str(count) if count > 1 else ''}{limit}{lines}"
-        )
+        count = sum(1 for z in pattern.zones if _SLIDE_FIELDS.get(z.role) == field)
+        parts.append(f"{field}{'×' + str(count) if count > 1 else ''}{limit}{lines}")
     images = sum(1 for z in pattern.zones if z.role == "image")
     if images:
         parts.append(f"images×{images}")
     for group in pattern.groups:
-        roles = ", ".join(r for r in group.item_zones if r != "keep")
-        parts.append(f"items×{group.count} [{roles}]")
+        fields = dict.fromkeys(
+            _ITEM_FIELDS[r] for r in group.item_zones if r in _ITEM_FIELDS
+        )
+        parts.append(f"items×{group.count} [{', '.join(fields)}]")
     return "; ".join(parts) or "no editable zone"
 
 
@@ -142,7 +167,8 @@ def catalogue(inventory: TemplateInventory) -> str:
     """One line per usable pattern, for the tool description."""
     lines = []
     for pattern in included_patterns(inventory):
-        star = " (preferred)" if pattern.preferred else ""
+        # Inventories analysed before fixed slides stopped being preferred still carry it.
+        star = " (preferred)" if pattern.preferred and pattern.intent != "fixed" else ""
         lines.append(
             f'- {pattern.id} [{pattern.intent}]{star} "{pattern.label}": {_zone_summary(pattern)}'
         )
@@ -387,7 +413,9 @@ def build_builder_tools(
                 + " ".join(result.warnings)
             )
 
-        pdf_bytes = await convert_office_bytes_to_pdf(result.pptx, suffix=".pptx")
+        pdf_bytes = await convert_office_bytes_to_pdf(
+            result.preview_pptx or result.pptx, suffix=".pptx"
+        )
         pdf_url: Optional[str] = None
         if pdf_bytes is not None:
             try:
