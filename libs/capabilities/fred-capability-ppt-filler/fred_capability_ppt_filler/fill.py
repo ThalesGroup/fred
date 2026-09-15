@@ -153,6 +153,9 @@ class PptPreviewPart(BaseModel):
     version: str  # per-fill token; drives cache-busting + react-pdf remount
     pptx_download_url: Optional[str] = None  # durable href for the source .pptx
     file_name: Optional[str] = None  # .pptx download file name
+    # Both capabilities of this package deliver this part; the card opens the
+    # preview pane of the one that produced it, the only one the agent may have.
+    capability_id: str = "ppt_filler"
 
 
 def _slide_field_name(slide_number: int) -> str:

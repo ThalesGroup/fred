@@ -5,7 +5,7 @@
 Constraints that shape the approach:
 
 - `validate_config` receives `SaveContext.services` (asset store, folder resolution); no model call is guaranteed on the save path, so analysis must be deterministic.
-- One chat-part kind per owner: `ppt_builder` cannot re-declare `ppt_preview`. It returns the part `ppt_filler` declares (same package, always installed together) and declares its own side-panel widget id pointing at the same pane component.
+- One chat-part kind per owner: `ppt_builder` cannot re-declare `ppt_preview`. It returns the part `ppt_filler` declares (same package, always installed together) stamped with `capability_id="ppt_builder"`, and declares the same `ppt_preview_pane` widget on the same pane component, so the card opens the pane of the capability the agent actually has.
 - The pod mounts a capability router with the caller's bearer available (`Security(oauth2_scheme)`), and Knowledge Flow serves agent config assets at `teams/{team}/agents/{instance}/config/{key}` to team members.
 - Real reference: the Thales FR template (20 typed layouts, 38 example slides). Its free-form slides (agenda with 8 numbered groups, 4 KPI cards, 3/6 icon cards, 3 process steps, 6-year timeline, team pairs, contacts) are the bar the heuristics must clear; its icon banks, chart and table slides are the cases to exclude by default.
 

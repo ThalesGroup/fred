@@ -71,7 +71,10 @@ from fred_capability_ppt_filler.builder.overrides import (
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.theme import default_theme
-from fred_capability_ppt_filler.builder.tools import build_builder_tools
+from fred_capability_ppt_filler.builder.tools import (
+    PPT_BUILDER_CAPABILITY_ID,
+    build_builder_tools,
+)
 from fred_capability_ppt_filler.capability import (
     CODE_INVALID_UPLOAD,
     CODE_SERVER_BUSY,
@@ -85,7 +88,6 @@ from fred_capability_ppt_filler.concurrency import (
 
 logger = logging.getLogger(__name__)
 
-PPT_BUILDER_CAPABILITY_ID = "ppt_builder"
 PPT_BUILDER_TEMPLATE_KEY = "ppt_builder_template.pptx"
 PPT_BUILDER_PATTERNS_KEY = "ppt_builder_patterns.pdf"
 
@@ -325,7 +327,7 @@ class PptBuilderCapability(
         ],
         # The preview part is declared by ppt_filler (same package, one owner per kind).
         chat_parts=[],
-        side_panels=[SidePanelSpec(widget="ppt_builder_preview_pane")],
+        side_panels=[SidePanelSpec(widget="ppt_preview_pane")],
         router=_build_router(),
         # The build tool's `pattern` enum is built per turn from the stored inventory.
         execution_models=("react",),

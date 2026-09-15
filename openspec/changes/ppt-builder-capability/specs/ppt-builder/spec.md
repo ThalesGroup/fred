@@ -170,7 +170,7 @@ The system SHALL write the generated deck to the agent workspace of the conversa
 #### Scenario: Preview available
 
 - **WHEN** the deck is generated and the PDF conversion succeeds
-- **THEN** the chat shows the same preview card and side pane as `ppt_filler`, with a download of the `.pptx`
+- **THEN** the chat shows the same preview card and side pane as `ppt_filler`, with a download of the `.pptx`, and the pane opens on its own even when the agent has no `ppt_filler` capability
 
 #### Scenario: Preview unavailable
 

@@ -78,6 +78,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 logger = logging.getLogger(__name__)
 
+PPT_BUILDER_CAPABILITY_ID = "ppt_builder"
 BUILD_TOOL_NAME = "build_presentation"
 LIST_IMAGES_TOOL_NAME = "list_images_in_folder"
 _TOOL_REF = "ppt_builder_build"
@@ -411,6 +412,7 @@ def build_builder_tools(
                 version=_preview_version(pdf_bytes),
                 pptx_download_url=pptx_artifact.href,
                 file_name=pptx_artifact.file_name,
+                capability_id=PPT_BUILDER_CAPABILITY_ID,
             )
             return (
                 f"The presentation '{file_name}' ({result.slide_count} slides) is ready. A preview opens beside "

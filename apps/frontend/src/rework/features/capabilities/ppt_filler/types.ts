@@ -41,4 +41,6 @@ export interface PptPreviewPartData {
   pptx_download_url?: string;
   /** Suggested download file name for the `.pptx`. */
   file_name?: string;
+  /** Capability that produced the deck, whose pane opens it (absent on older parts: ppt_filler). */
+  capability_id?: string;
 }

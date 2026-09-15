@@ -57,11 +57,11 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
 
   const key = `${preview.preview_id}:${preview.version}`;
 
-  // Opening = register the deck AND signal the page to open the ppt_filler
-  // side-panel column (the page owns the single-push-drawer state).
+  // Opening = register the deck AND signal the page to open the pane of the
+  // capability that produced it (the page owns the single-push-drawer state).
   const openPane = (data: PptPreviewPartData) => {
     dispatch(openPreview({ sessionId, preview: data }));
-    dispatch(requestSidePanelOpen({ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }));
+    dispatch(requestSidePanelOpen({ capabilityId: data.capability_id ?? "ppt_filler", widget: "ppt_preview_pane" }));
   };
 
   useEffect(() => {

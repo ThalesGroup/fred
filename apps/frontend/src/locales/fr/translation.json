@@ -469,6 +469,12 @@
       "errors": {
         "invalid_upload": "Le fichier n'a pas pu être lu comme un .pptx.",
         "server_busy": "Le serveur est occupé. Réessayez dans un instant."
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Aperçu de la présentation",
+          "launcher": "Viewer PPT"
+        }
       }
     }
   },

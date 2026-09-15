@@ -239,6 +239,8 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     (part,) = result.ui_parts
     assert isinstance(part, PptPreviewPart)
     assert part.file_name == "Kick off 2026.pptx"
+    # The card opens this capability's pane: an agent may not have ppt_filler.
+    assert part.capability_id == "ppt_builder"
     assert "2 slides" in text
     paths = [w["path"] for w in workspace.writes]
     assert paths == [

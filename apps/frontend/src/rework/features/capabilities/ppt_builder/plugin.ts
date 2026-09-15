@@ -24,7 +24,7 @@ export const pptBuilderCapability: CapabilityUiPlugin = {
   // only declares its own launcher for the same preview pane.
   configWidgets: { ppt_builder_template: PptBuilderConfigForm },
   sidePanels: {
-    ppt_builder_preview_pane: {
+    ppt_preview_pane: {
       Component: PptPreviewPane,
       icon: "slideshow",
       useHasContent: useHasPptPreview,
