@@ -64,7 +64,7 @@ The last-admin guard and the rescue check keep counting `team_admin` only. Count
 - [Existing admins lose their rights at the startup that applies a new version] → Intended; they accept from their team page. The rollout order in the contract publishes the text first.
 - [A nomination racing an acceptance leaves the user pending] → The team page shows the charter again and a repeat acceptance promotes it.
 - [A user holding only `pending_team_admin` cannot drop it by revoking, it is their last role] → An admin removes the member instead, as for any last role.
-- [During a rolling update that changes the version, a pod still on the previous configuration can grant `team_admin` to someone who has not accepted the new version, and reconciliation, which only runs when the version differs from the applied one, never corrects it] → Open: either change the version with a rollout that stops old pods first, or reconcile at every startup at the cost of one ReBAC read per team per replica.
+- [During a rolling update that changes the version, a pod still on the previous configuration can grant `team_admin` to someone who has not accepted the new version, and reconciliation, which only runs when the version differs from the applied one, never corrects it] → Accepted: the window is the rollout itself. When it matters, change the version with a rollout that stops old pods first; reconciling at every startup was rejected for its cost of one ReBAC read per team per replica.
 - [The two control-plane migrations must stay linear with `swift`] → Re-parent on the current head before merge, per CLAUDE.md.
 
 ## Migration Plan
