@@ -32,6 +32,7 @@ import {
   selectReleaseMembers,
   selectionOption,
 } from "./release-selection.mjs";
+import { assertDocumentSchema } from "./schema-validation.mjs";
 
 export const fixtureTransferMetadataFilename = "fixture-transfer.json";
 export const releaseCandidateTransferMetadataFilename =
@@ -189,6 +190,11 @@ export function validateFixtureTransferMetadata(
   { contract, sourceCommit, sourceTreeClean, execution },
 ) {
   validateReleaseContract(contract);
+  assertDocumentSchema(
+    metadata,
+    path.join(workspaceRoot, "release/fixture-transfer.schema.json"),
+    "archive transfer metadata",
+  );
   const profile = transferProfile(contract);
   assertFixtureExecution(execution);
   exactKeys(
@@ -289,7 +295,7 @@ export function validateFixtureTransferMetadata(
     browser: false,
     host: false,
   });
-  const selectedIds = metadata.selectedIds ?? packageRoles;
+  const selectedIds = metadata.selectedIds ?? selectReleaseMembers(contract);
   orderReleaseMembers(contract, selectedIds);
   if (metadata.selectedIds !== undefined)
     assert.deepEqual(
@@ -446,11 +452,10 @@ export async function verifyFixtureTransfer({
     JSON.parse(await readFile(metadataPath, "utf8")),
     { contract, sourceCommit, sourceTreeClean, execution },
   );
+  const selectedIds = metadata.selectedIds ?? selectReleaseMembers(contract);
   const expectedFiles = [
     profile.metadataFilename,
-    ...(metadata.selectedIds ?? packageRoles).map(
-      (role) => metadata.packages[role].filename,
-    ),
+    ...selectedIds.map((role) => metadata.packages[role].filename),
   ].sort();
   const entries = await readdir(root, { withFileTypes: true });
   assert.deepEqual(
@@ -459,7 +464,7 @@ export async function verifyFixtureTransfer({
     "fixture transfer file set differs",
   );
   const archivePaths = {};
-  for (const role of metadata.selectedIds ?? packageRoles) {
+  for (const role of selectedIds) {
     const record = metadata.packages[role];
     const archivePath = path.join(root, record.filename);
     const stats = await assertRegularFile(
@@ -484,10 +489,7 @@ export async function verifyFixtureTransfer({
     metadataDigest: await fileSha256(metadataPath),
     archivePaths,
     integrities: Object.fromEntries(
-      (metadata.selectedIds ?? packageRoles).map((role) => [
-        role,
-        metadata.packages[role].integrity,
-      ]),
+      selectedIds.map((role) => [role, metadata.packages[role].integrity]),
     ),
   };
 }

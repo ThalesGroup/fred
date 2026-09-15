@@ -24,6 +24,7 @@ import {
   fixtureArchiveFilename,
   fixtureExecution,
   fixtureTransferMetadataFilename,
+  validateFixtureTransferMetadata,
   verifyFixtureTransfer,
 } from "../scripts/fixture-transfer.mjs";
 import {
@@ -36,6 +37,7 @@ import {
   workspaceRoot,
 } from "../scripts/release-contract.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
+import { assertDocumentSchema } from "../scripts/schema-validation.mjs";
 
 const sourceCommit = "a".repeat(40);
 const execution = fixtureExecution({
@@ -123,13 +125,14 @@ async function packerFixtures(root, contract, calls = []) {
   return packers;
 }
 
-async function createTransfer(context) {
+async function createTransfer(context, selection) {
   const paths = await roots(context);
   const contract = await loadReleaseContract();
   const calls = [];
   await createFixtureTransfer({
     outputRoot: paths.producer,
     contract,
+    selection,
     sourceCommit,
     sourceTreeClean: true,
     producerToolchain: contract.releaseToolchain,
@@ -140,6 +143,139 @@ async function createTransfer(context) {
   await cp(paths.producer, paths.receiver, { recursive: true });
   return { paths, contract, calls };
 }
+
+test("schema and shared validator accept actual generated selected transfers and legacy all-member metadata", async (context) => {
+  const schemaPath = path.join(
+    workspaceRoot,
+    "release/fixture-transfer.schema.json",
+  );
+  for (const [selection, expected] of [
+    [undefined, ["designTokens", "ui", "iframeSdk"]],
+    ["iframeSdk", ["iframeSdk"]],
+    ["designTokens", ["designTokens"]],
+    ["ui", ["ui"]],
+    ["ui,designTokens", ["designTokens", "ui"]],
+  ]) {
+    await context.test(
+      selection ?? "default all-member",
+      async (subcontext) => {
+        const { paths, contract, calls } = await createTransfer(
+          subcontext,
+          selection,
+        );
+        const metadata = JSON.parse(
+          await readFile(
+            path.join(paths.producer, fixtureTransferMetadataFilename),
+            "utf8",
+          ),
+        );
+        assert.deepEqual(calls, expected);
+        assert.deepEqual(metadata.selectedIds, expected);
+        assert.deepEqual(Object.keys(metadata.packages), expected);
+        assert.equal(
+          assertDocumentSchema(metadata, schemaPath, "generated transfer"),
+          metadata,
+        );
+        assert.equal(
+          validateFixtureTransferMetadata(metadata, {
+            contract,
+            sourceCommit,
+            sourceTreeClean: true,
+            execution,
+          }),
+          metadata,
+        );
+        if (selection === undefined) {
+          delete metadata.selectedIds;
+          await writeFile(
+            path.join(paths.receiver, fixtureTransferMetadataFilename),
+            `${JSON.stringify(metadata, null, 2)}\n`,
+          );
+          assertDocumentSchema(
+            metadata,
+            schemaPath,
+            "legacy all-member transfer",
+          );
+          const verified = await verifyFixtureTransfer({
+            transferRoot: paths.receiver,
+            contract,
+            sourceCommit,
+            sourceTreeClean: true,
+            execution,
+          });
+          assert.deepEqual(Object.keys(verified.archivePaths), expected);
+          const result = await validateTransferredFixture({
+            transferRoot: paths.receiver,
+            evidencePath: paths.evidence,
+            stageRoot: paths.stage,
+            contract,
+            sourceCommit,
+            sourceTreeClean: true,
+            execution,
+            applicationToolchain,
+            runGates: async ({ selectedIds }) => {
+              assert.deepEqual(selectedIds, expected);
+              return successfulGates;
+            },
+          });
+          assert.equal(result.record.readiness, "fixture");
+        }
+      },
+    );
+  }
+});
+
+test("generated transfer metadata rejects invalid selection and package-set mismatches", async (context) => {
+  const { paths, contract } = await createTransfer(context, "ui");
+  const generated = JSON.parse(
+    await readFile(
+      path.join(paths.producer, fixtureTransferMetadataFilename),
+      "utf8",
+    ),
+  );
+  const validate = (metadata) =>
+    validateFixtureTransferMetadata(metadata, {
+      contract,
+      sourceCommit,
+      sourceTreeClean: true,
+      execution,
+    });
+  for (const [selectedIds, failure] of [
+    [[], /schema invalid.*selectedIds/],
+    [["ui", "ui"], /schema invalid.*selectedIds/],
+    [["unknown"], /unregistered selected member/],
+    [["frontend-packages-workspace"], /schema invalid.*selectedIds/],
+    [["ui", "designTokens"], /transfer selection order differs/],
+  ]) {
+    const changed = structuredClone(generated);
+    changed.selectedIds = selectedIds;
+    assert.throws(() => validate(changed), failure);
+  }
+  const future = structuredClone(generated);
+  future.selectedIds = ["futureTool"];
+  future.packages.futureTool = { ...future.packages.ui, role: "futureTool" };
+  delete future.packages.ui;
+  assertDocumentSchema(
+    future,
+    path.join(workspaceRoot, "release/fixture-transfer.schema.json"),
+    "future registration shape",
+  );
+  assert.throws(() => validate(future), /unregistered selected member/);
+  for (const mutate of [
+    (metadata) => delete metadata.packages.ui,
+    (metadata) => {
+      metadata.packages.designTokens = {
+        ...metadata.packages.ui,
+        role: "designTokens",
+      };
+    },
+    (metadata) => delete metadata.selectedIds,
+  ]) {
+    const changed = structuredClone(generated);
+    mutate(changed);
+    assert.throws(() => validate(changed), /schema invalid|packages keys/);
+  }
+});
 
 async function mutateMetadata(root, mutate) {
   const metadataPath = path.join(root, fixtureTransferMetadataFilename);
@@ -400,7 +536,7 @@ test("invalid transfer sets fail before downstream installation or execution", a
         mutateMetadata(paths.receiver, (metadata) => {
           delete metadata.packages.iframeSdk.integrity;
         }),
-      error: /transfer package keys/,
+      error: /schema invalid/,
     },
     {
       name: "malformed integrity",
@@ -408,7 +544,7 @@ test("invalid transfer sets fail before downstream installation or execution", a
         mutateMetadata(paths.receiver, (metadata) => {
           metadata.packages.designTokens.integrity = "sha512-not base64";
         }),
-      error: /integrity is invalid/,
+      error: /schema invalid/,
     },
     {
       name: "wrong-length integrity",
@@ -416,7 +552,7 @@ test("invalid transfer sets fail before downstream installation or execution", a
         mutateMetadata(paths.receiver, (metadata) => {
           metadata.packages.designTokens.integrity = "sha512-YQ==";
         }),
-      error: /not a SHA-512 digest/,
+      error: /schema invalid/,
     },
     {
       name: "inconsistent integrity",
