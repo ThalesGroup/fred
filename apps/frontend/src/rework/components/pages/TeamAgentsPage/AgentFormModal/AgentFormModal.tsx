@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
+import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
@@ -23,7 +23,6 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
-import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 
@@ -416,89 +415,82 @@ export default function AgentFormModal({
     : t("rework.teams.formAgent.subtitle", { team: teamLabel });
 
   return (
-    <FullPageModal isOpen={isOpen} onClose={onClose} id="agent-form-modal" background="container">
-      <div className={styles.modalCard}>
-        <div className={styles.modalHeader}>
-          <div className={styles.modalPresentation}>
-            <div className={styles.modalTitleBlock}>
-              <div className={styles.modalTitle}>{title}</div>
-              <div className={styles.modalSubtitle}>{subtitle}</div>
-            </div>
-          </div>
-
-          <div className={styles.modalActions}>
-            <Button color="primary" variant="text" size="medium" onClick={onClose}>
-              {t("rework.cancel")}
+    <SettingsModal
+      isOpen={isOpen}
+      onClose={onClose}
+      id="agent-form-modal"
+      title={title}
+      subtitle={subtitle}
+      actions={
+        <>
+          <Button color="primary" variant="text" size="medium" onClick={onClose}>
+            {t("rework.cancel")}
+          </Button>
+          {step === 2 && (
+            <Button
+              color={submitAttempted && !isFormValid ? "warning" : "primary"}
+              variant="filled"
+              size="medium"
+              onClick={handleSubmit}
+            >
+              {mode === "edit" ? t("rework.save") : t("rework.create")}
             </Button>
-            {step === 2 && (
-              <Button
-                color={submitAttempted && !isFormValid ? "warning" : "primary"}
-                variant="filled"
-                size="medium"
-                onClick={handleSubmit}
-              >
-                {mode === "edit" ? t("rework.save") : t("rework.create")}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.modalContent}>
-          {step === 1 ? (
-            <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
-          ) : (
-            <AgentFormBody
-              mode={mode}
-              templates={templates}
-              templateId={form.templateId}
-              displayName={form.displayName}
-              role={form.role}
-              description={form.description}
-              usageStatement={form.usageStatement}
-              reasoningEnabled={form.reasoningEnabled}
-              reasoningDefaultOn={form.reasoningDefaultOn}
-              tuningFieldValues={form.tuningValues}
-              selectedCapabilityIds={form.selectedCapabilityIds}
-              capabilityConfigValues={form.capabilityConfigValues}
-              capabilityAssetFiles={form.capabilityAssetFiles}
-              isSubmitting={isSubmitting}
-              submitAttempted={submitAttempted}
-              activeSection={activeSection}
-              onSectionChange={setActiveSection}
-              errorSections={errorSections}
-              editInstance={editInstance}
-              teamId={teamId}
-              onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
-              onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
-              onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
-              onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-              onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, reasoningEnabled: v }))}
-              onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
-              onTuningChange={handleTuningChange}
-              onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
-              onCapabilitySelectionReplace={(next) =>
-                setForm((prev) => ({
-                  ...prev,
-                  selectedCapabilityIds: next.selectedCapabilityIds,
-                  capabilityConfigValues: next.capabilityConfigValues,
-                  reasoningEnabled: next.reasoningEnabled,
-                }))
-              }
-              onCapabilityConfigChange={handleCapabilityConfigChange}
-              onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
-              onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
-            />
           )}
-        </div>
-
-        {mode === "edit" && onDelete && (
-          <div className={styles.modalFooter}>
-            <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-              {t("rework.delete")}
-            </Button>
-          </div>
-        )}
-      </div>
-    </FullPageModal>
+        </>
+      }
+      footer={
+        mode === "edit" && onDelete ? (
+          <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
+            {t("rework.delete")}
+          </Button>
+        ) : undefined
+      }
+    >
+      {step === 1 ? (
+        <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
+      ) : (
+        <AgentFormBody
+          mode={mode}
+          templates={templates}
+          templateId={form.templateId}
+          displayName={form.displayName}
+          role={form.role}
+          description={form.description}
+          usageStatement={form.usageStatement}
+          reasoningEnabled={form.reasoningEnabled}
+          reasoningDefaultOn={form.reasoningDefaultOn}
+          tuningFieldValues={form.tuningValues}
+          selectedCapabilityIds={form.selectedCapabilityIds}
+          capabilityConfigValues={form.capabilityConfigValues}
+          capabilityAssetFiles={form.capabilityAssetFiles}
+          isSubmitting={isSubmitting}
+          submitAttempted={submitAttempted}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+          errorSections={errorSections}
+          editInstance={editInstance}
+          teamId={teamId}
+          onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
+          onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
+          onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+          onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
+          onReasoningEnabledChange={(v) => setForm((prev) => ({ ...prev, reasoningEnabled: v }))}
+          onReasoningDefaultOnChange={(v) => setForm((prev) => ({ ...prev, reasoningDefaultOn: v }))}
+          onTuningChange={handleTuningChange}
+          onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
+          onCapabilitySelectionReplace={(next) =>
+            setForm((prev) => ({
+              ...prev,
+              selectedCapabilityIds: next.selectedCapabilityIds,
+              capabilityConfigValues: next.capabilityConfigValues,
+              reasoningEnabled: next.reasoningEnabled,
+            }))
+          }
+          onCapabilityConfigChange={handleCapabilityConfigChange}
+          onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
+          onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+        />
+      )}
+    </SettingsModal>
   );
 }
