@@ -1132,6 +1132,20 @@ list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
 
+**`POST …/prepare-execution` `agent_model_override` query param** (added
+2026-09-10) — optional, evaluator-only. When set, `prepare_execution`
+validates it against the team's `can_use`-enabled chat profiles (fails
+closed, 422, on an unknown or disabled profile) and overwrites this
+instance's entry in the returned `agent_profile_overrides` snapshot for
+**this call only** — never persisted, never visible via
+`GET …/routing-policy`. Restricted to the evaluator's M2M service identity
+(`is_service_agent`); rejected (403) for a regular user token. This sits at
+the "team override" precedence level — a platform chat binding or pod
+static override still wins silently over it; `fred-agent-evaluator` detects
+that by comparing the requested override against the model that actually
+answered (`EvalTrace.model_name`), not by anything this endpoint can
+guarantee.
+
 ## 14. Contract Notes — AUTHZ-05 review item 11 (2026-07-11)
 
 ### `PermissionSummary` shrunk to its two OpenFGA-derived booleans
@@ -3939,3 +3953,21 @@ still empty:
 the setting is inert there and the admin page says so. Two admins saving
 overlapping lists at the same instant can collide on the primary key (500 for
 one of them). The setting is not part of the platform export bundle.
+
+---
+
+## 53. Contract Notes - registry listing without membership (2026-09-15, issue #2631)
+
+**Extends §51.** `GET /control-plane/v1/teams/all` takes an optional
+`include_membership` query parameter, default `true`: the response is unchanged
+when it is omitted.
+
+With `include_membership=false` the route returns the same `list[Team]` built
+from the registry rows alone, with no per-team OpenFGA `Read`, so its cost no
+longer grows with the number of teams. `member_count` is omitted, `admins` and
+`my_relations` are `[]` and `is_member` is `false`: read them as unknown, not as
+empty. Name, description, visibility, joining mode, avatar and storage fields
+are unchanged, and the `can_list_all_teams` gate still runs first.
+
+`/admin/features` uses it for the per-team enablement picker, which only needs
+ids and names. `/admin/teams` keeps the full listing for its admins column.

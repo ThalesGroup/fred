@@ -35,6 +35,7 @@ import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
 } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useAvailableModelProfilesQuery } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation } from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationForms.module.css";
 
@@ -87,6 +88,7 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
   const [agentInstanceId, setAgentInstanceId] = useState("");
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["answer_relevancy"]);
   const [customMetrics, setCustomMetrics] = useState<CustomMetricRow[]>([]);
+  const [agentModelOverride, setAgentModelOverride] = useState("");
 
   const {
     data: instances,
@@ -97,6 +99,7 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
     { teamId },
     { skip: !teamId },
   );
+  const { data: availableModels } = useAvailableModelProfilesQuery({ teamId }, { skip: !teamId });
 
   const [startRun, { isLoading }] = useStartRunEvaluationV1EvaluationsEvaluationIdRunsPostMutation();
 
@@ -104,6 +107,12 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
     value: inst.agent_instance_id,
     label: inst.display_name,
     key: inst.agent_instance_id,
+  }));
+
+  const modelOverrideOptions: OptionModel<string>[] = (availableModels?.profiles ?? []).map((profile) => ({
+    value: profile.profile_id,
+    label: t(profile.name, { defaultValue: profile.name }),
+    key: profile.profile_id,
   }));
 
   // Tool access on an instance can be changed by any teammate at any time — refetch
@@ -158,6 +167,7 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
           team_id: teamId,
           target: { kind: "managed_instance", agent_instance_id: agentInstanceId },
           metrics: selectedMetrics,
+          agent_model_override: agentModelOverride || undefined,
           custom_metrics: validCustomMetrics.map((r) => ({
             name: r.name.trim(),
             criteria: r.criteria.trim(),
@@ -244,6 +254,17 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
               </div>
             )}
           </div>
+        )}
+
+        {agentInstanceId && (
+          <Select<string>
+            label={t("rework.evaluation.create.modelOverride.label")}
+            size="medium"
+            options={modelOverrideOptions}
+            value={agentModelOverride}
+            placeholder={t("rework.evaluation.create.modelOverride.placeholder")}
+            onChange={setAgentModelOverride}
+          />
         )}
 
         <p className={styles.note}>{t("rework.evaluation.create.securityNote")}</p>
@@ -362,6 +383,14 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
           <span className={styles.muted}>{t("rework.evaluation.create.recap.metrics")}</span>
           <span className={styles.recapValue}>{selectedMetrics.length}</span>
         </div>
+        {agentModelOverride && (
+          <div className={styles.recapRow}>
+            <span className={styles.muted}>{t("rework.evaluation.create.recap.modelOverride")}</span>
+            <span className={styles.recapValue}>
+              {modelOverrideOptions.find((o) => o.value === agentModelOverride)?.label ?? agentModelOverride}
+            </span>
+          </div>
+        )}
         {validCustomMetrics.length > 0 && (
           <div className={styles.recapRow}>
             <span className={styles.muted}>{t("rework.evaluation.create.recap.customMetrics")}</span>

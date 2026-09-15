@@ -1433,11 +1433,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
-        "last15m": "Last 15 minutes",
-        "last1h": "Last 1 hour",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
-        "last6h": "Last 6 hours",
         "last7d": "Last 7 days",
         "thisMonth": "This month",
         "thisWeek": "This week",
@@ -1481,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Apply",
+        "months": "Months",
+        "next": "Next period",
+        "previous": "Previous period",
         "since": "From",
         "until": "To"
       },
@@ -2752,6 +2752,10 @@
           "inherited": "This instance follows its template's default tools — no per-instance override.",
           "none": "No tools enabled on this instance."
         },
+        "modelOverride": {
+          "label": "Model override (optional)",
+          "placeholder": "Use the team's default model"
+        },
         "agent": {
           "label": "Agent ID",
           "placeholder": "agent-..."
@@ -2835,7 +2839,8 @@
           "metrics": "Metrics",
           "customMetrics": "Custom metrics",
           "profile": "Profile",
-          "profileAuto": "Automatic"
+          "profileAuto": "Automatic",
+          "modelOverride": "Model override"
         }
       },
       "detail": {
@@ -2879,6 +2884,7 @@
           "author": "Author",
           "profile": "Structural-check profile",
           "judge": "Judge",
+          "modelOverride": "Model override",
           "team": "Evaluation ID",
           "created": "Created",
           "started": "Started",
@@ -2901,6 +2907,7 @@
         "downloading": "Preparing…",
         "downloadError": "Download failed",
         "latency": "Latency",
+        "actualModel": "Actual model",
         "input": "Input",
         "expected": "Expected output",
         "actual": "Actual output",

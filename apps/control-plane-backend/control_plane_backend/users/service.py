@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from collections.abc import Iterable
 from typing import Optional
@@ -29,6 +30,10 @@ from control_plane_backend.users.schemas import (
 logger = logging.getLogger(__name__)
 
 _USER_PAGE_SIZE = 200
+# From this many cache misses, reading the directory by pages may take fewer
+# Keycloak calls than one `a_get_user` per id; the realm size decides.
+_DIRECTORY_SCAN_MIN_IDS = 20
+_PER_ID_LOOKUP_CONCURRENCY = 10
 
 _USER_SUMMARY_CACHE_TTL_SECONDS = 300
 _USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
@@ -235,6 +240,9 @@ async def get_users_by_ids(
     How to use it:
     - pass any iterable of user ids; empty or falsey ids are ignored
     - missing Keycloak users fall back to `UserSummary(id=...)`
+    - many misses are read from the directory by pages when that takes fewer
+      calls than one lookup per id; per-id lookups run at most
+      `_PER_ID_LOOKUP_CONCURRENCY` at a time
 
     Example:
     - `summaries = await get_users_by_ids(["u-1", "u-2"], deps)`
@@ -272,11 +280,24 @@ async def get_users_by_ids(
         return summaries
 
     ordered_ids = sorted(ids_to_fetch)
-    coroutines = {user_id: admin.a_get_user(user_id) for user_id in ordered_ids}
-    raw_results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
+    raw_results: dict[str, dict | BaseException] = {}
+    if len(ordered_ids) >= _DIRECTORY_SCAN_MIN_IDS and await _directory_scan_is_cheaper(
+        admin, len(ordered_ids)
+    ):
+        raw_results = {
+            raw["id"]: raw
+            for raw in await _fetch_all_users(admin, keep_ids=set(ordered_ids))
+        }
+    # Ids the scan did not return (service accounts, deleted users) still get an
+    # exact per-id lookup, so the 404 fallback below keeps its meaning.
+    missing_ids = [user_id for user_id in ordered_ids if user_id not in raw_results]
+    raw_results.update(
+        zip(missing_ids, await _get_users_one_by_one(admin, missing_ids))
+    )
 
     expires_at = time.time() + _USER_SUMMARY_CACHE_TTL_SECONDS
-    for user_id, result in zip(ordered_ids, raw_results):
+    for user_id in ordered_ids:
+        result = raw_results[user_id]
         if isinstance(result, BaseException):
             if isinstance(result, KeycloakGetError) and result.response_code == 404:
                 logger.debug("User %s not found in Keycloak.", user_id)
@@ -302,7 +323,32 @@ async def get_users_by_ids(
     return summaries
 
 
-async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
+async def _directory_scan_is_cheaper(admin: KeycloakAdmin, id_count: int) -> bool:
+    # Pages are read one after another, per-id lookups ten at a time: compare
+    # rounds, which also guarantees the scan makes fewer calls.
+    total_users = int(await admin.a_users_count())
+    return math.ceil(total_users / _USER_PAGE_SIZE) <= math.ceil(
+        id_count / _PER_ID_LOOKUP_CONCURRENCY
+    )
+
+
+async def _get_users_one_by_one(
+    admin: KeycloakAdmin, user_ids: list[str]
+) -> list[dict | BaseException]:
+    semaphore = asyncio.Semaphore(_PER_ID_LOOKUP_CONCURRENCY)
+
+    async def _get_user(user_id: str) -> dict:
+        async with semaphore:
+            return await admin.a_get_user(user_id)
+
+    return await asyncio.gather(
+        *(_get_user(user_id) for user_id in user_ids), return_exceptions=True
+    )
+
+
+async def _fetch_all_users(
+    admin: KeycloakAdmin, keep_ids: set[str] | None = None
+) -> list[dict]:
     """
     Fetch every Keycloak user page using the configured page size.
 
@@ -325,7 +371,12 @@ async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
         if not batch:
             break
 
-        users.extend(batch)
+        # `keep_ids` holds only the wanted users instead of the whole directory.
+        users.extend(
+            batch
+            if keep_ids is None
+            else [raw for raw in batch if raw.get("id") in keep_ids]
+        )
         if len(batch) < _USER_PAGE_SIZE:
             break
 

@@ -1433,11 +1433,8 @@
         "valueLabel": "Tours"
       },
       "presets": {
-        "last15m": "15 dernières minutes",
-        "last1h": "Dernière heure",
         "last24h": "24 dernières heures",
         "last30d": "30 derniers jours",
-        "last6h": "6 dernières heures",
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
@@ -1481,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Appliquer",
+        "months": "Mois",
+        "next": "Période suivante",
+        "previous": "Période précédente",
         "since": "Depuis",
         "until": "Jusqu'à"
       },
@@ -2752,6 +2752,10 @@
           "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
           "none": "Aucun tool activé sur cette instance."
         },
+        "modelOverride": {
+          "label": "Surcharge de modèle (optionnel)",
+          "placeholder": "Utiliser le modèle par défaut de l'équipe"
+        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
@@ -2835,7 +2839,8 @@
           "metrics": "Métriques",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
-          "profileAuto": "Automatique"
+          "profileAuto": "Automatique",
+          "modelOverride": "Surcharge de modèle"
         }
       },
       "detail": {
@@ -2879,6 +2884,7 @@
           "author": "Auteur",
           "profile": "Profil de vérifications structurelles",
           "judge": "Juge",
+          "modelOverride": "Surcharge de modèle",
           "team": "Identifiant d'évaluation",
           "created": "Créée le",
           "started": "Démarrée le",
@@ -2901,6 +2907,7 @@
         "downloading": "Préparation…",
         "downloadError": "Échec du téléchargement",
         "latency": "Latence",
+        "actualModel": "Modèle réel",
         "input": "Entrée",
         "expected": "Sortie attendue",
         "actual": "Sortie réelle",
