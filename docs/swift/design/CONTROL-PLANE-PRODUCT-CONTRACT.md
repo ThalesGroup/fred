@@ -1132,6 +1132,20 @@ list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
 
+**`POST …/prepare-execution` `agent_model_override` query param** (added
+2026-09-10) — optional, evaluator-only. When set, `prepare_execution`
+validates it against the team's `can_use`-enabled chat profiles (fails
+closed, 422, on an unknown or disabled profile) and overwrites this
+instance's entry in the returned `agent_profile_overrides` snapshot for
+**this call only** — never persisted, never visible via
+`GET …/routing-policy`. Restricted to the evaluator's M2M service identity
+(`is_service_agent`); rejected (403) for a regular user token. This sits at
+the "team override" precedence level — a platform chat binding or pod
+static override still wins silently over it; `fred-agent-evaluator` detects
+that by comparing the requested override against the model that actually
+answered (`EvalTrace.model_name`), not by anything this endpoint can
+guarantee.
+
 ## 14. Contract Notes — AUTHZ-05 review item 11 (2026-07-11)
 
 ### `PermissionSummary` shrunk to its two OpenFGA-derived booleans

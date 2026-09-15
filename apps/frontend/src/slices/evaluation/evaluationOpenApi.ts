@@ -341,6 +341,7 @@ export type StartRunRequest = {
   target: ManagedInstanceTarget;
   metrics: string[];
   custom_metrics?: CustomMetricSpecInput[];
+  agent_model_override?: string | null;
 };
 export type RuntimeAgentTarget = {
   kind: "runtime_agent";
@@ -357,6 +358,7 @@ export type RunSnapshot = {
   } | null;
   profile: string;
   judge_profile_id: string;
+  agent_model_override?: string | null;
   execution?: {
     [key: string]: number;
   } | null;
@@ -370,6 +372,7 @@ export type EvaluationRun = {
   target: ManagedInstanceTarget | RuntimeAgentTarget;
   profile: string;
   judge_profile_id: string;
+  agent_model_override: string | null;
   metrics: string[];
   custom_metrics: CustomMetricSpecInput[];
   operational_state: string;
@@ -431,6 +434,7 @@ export type EvaluationCaseResponse = {
   expected_output: string | null;
   actual_output: string | null;
   profile: string | null;
+  actual_model_name: string | null;
   latency_ms: number | null;
   execution_error: string | null;
   scoring_errors: string[];
