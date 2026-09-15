@@ -420,6 +420,13 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "fullReasoning": {
+      "title": "Full reasoning",
+      "copy": "Copy the full reasoning",
+      "copied": "Copied",
+      "empty": "The agent has not reasoned in this conversation yet.",
+      "hideRestatements": "Hide restatements"
+    },
     "debugRaw": {
       "title": "Debug — raw messages",
       "scopeAria": "Message scope",
@@ -1554,6 +1561,7 @@
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
+      "restatedReasoning": "Restates the earlier reasoning",
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
       "running": "running…",
