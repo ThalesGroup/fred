@@ -407,6 +407,13 @@ MUST confirm that Playwright resolves Chromium from that directory and that the 
 exists. Missing, default-cache, or differently resolved Chromium MUST fail actionably; registry
 verification MUST NOT install or download a browser.
 
+After exact-version metadata establishes the expected name, version, and candidate SHA-512, the
+verifier MAY perform bounded read-only package-wide metadata readiness checks required by npm
+transport. It MUST retry only an actual package-wide HTTP 404 and MUST fail immediately on
+authentication or authorization errors, redirects, malformed metadata, or identity/integrity
+mismatches. It MUST NOT interpret readiness as release identity, repeat publication, or use a
+local archive when npm transport remains unavailable.
+
 #### Scenario: Published candidates match recorded evidence
 
 - **WHEN** the command is given the three exact published coordinates and their recorded
@@ -498,6 +505,20 @@ verification MUST NOT install or download a browser.
   the expected coordinate and integrity
 - **THEN** verification fails and does not substitute a local archive or source tree
 
+#### Scenario: Package-wide metadata becomes visible after the exact version
+
+- **WHEN** exact-version metadata already matches approved identity and SHA-512 while npm's
+  package-wide metadata initially returns 404 and then returns the same exact version
+- **THEN** the verifier performs bounded read-only readiness retries and continues once without
+  changing the release identity or invoking publication
+
+#### Scenario: Package-wide readiness cannot establish matching metadata
+
+- **WHEN** package-wide 404 retries are exhausted or a read is unauthorized, redirected,
+  malformed, or inconsistent with the exact expected version and integrity
+- **THEN** verification fails before npm transport, consumers, or evidence completion and does
+  not fall back to local bytes
+
 #### Scenario: A registry consumer attempts local fallback
 
 - **WHEN** a registry-installed consumer resolves a FRED package from a tag, range, local
@@ -548,7 +569,8 @@ production-host gates and add approved evidence only for a complete `maintainer-
 contract. The workflow MUST NOT rebuild archives during or after this transfer.
 
 Initial publication MUST use a protected GitHub environment named `npm-publish`. The environment
-secret `NPM_BOOTSTRAP_TOKEN` MUST be referenced only by the explicit initial publishing step and
+secret `NPM_BOOTSTRAP_TOKEN` MUST be referenced only by an explicitly selected initial or
+partial-recovery publishing step and
 MUST NOT be available to checkout, installation, build, test, transfer, or registry-verification
 steps. The publishing job MUST grant `id-token: write`, reverify the exact archive bytes and
 evidence, require the expected repository, commit, ref, workflow identity, and authenticated
@@ -557,9 +579,24 @@ registry mutation. It MUST publish design tokens before UI, use public access an
 GitHub Actions provenance, and verify registry integrity after each successful package publish.
 The SDK MAY follow independently within the same sequence.
 
+Post-publication reconciliation MUST query the configured registry's exact-version HTTP endpoint
+directly, without requiring package-wide metadata, and require the selected name, version, and
+candidate SHA-512. The request MUST be bounded, MUST NOT follow a redirect away from the approved
+request, and MUST use bounded retries only when that exact endpoint returns an actual HTTP 404.
+It MUST NOT retry a publication command. Authentication or authorization failures, other HTTP
+failures, redirects, timeouts, malformed metadata, identity or integrity mismatches, and exhausted
+visibility retries MUST stop before the next package. Bootstrap preflight, reconciliation,
+recovery state checks, and registry-verifier metadata resolution MUST share this behavior.
+
 A preflight existing version or a failure after partial publication MUST stop without rebuilding,
 overwriting, or silently accepting different bytes. Logs and evidence SHALL identify which exact
-packages succeeded so maintainers can choose a newly versioned recovery. If a publish command
+packages succeeded so maintainers can choose an explicit recovery. Ordinary bootstrap MUST
+continue to reject every pre-existing selected coordinate. A partial-bootstrap recovery MAY
+reuse unchanged original candidate bytes only through a separate manual operation that pins and
+verifies the original artifact identity and digest, verifies every already-published coordinate's
+exact bytes and cryptographic provenance, requires every remaining coordinate to be absent, and
+publishes only those absent archives behind the same protected environment. If those conditions
+fail, recovery MUST use a newly versioned candidate. If a publish command
 fails after the registry may have accepted it, the workflow MUST query that exact coordinate and
 compare integrity before reporting the outcome. Matching bytes MAY be reported as confirmed;
 otherwise the outcome MUST remain explicitly indeterminate and MUST NOT be described as no
@@ -571,6 +608,42 @@ application toolchain rather than the release-production Node/npm installation.
 Local workflow and publication-helper tests MUST remain controlled tooling evidence and MUST NOT
 claim GitHub environment approval, emitted provenance, package creation, or public-registry
 success.
+
+Recovery preparation and protected publication MUST each verify the pinned original ZIP, reject
+missing, additional, traversal, linked, special, or otherwise unsafe candidate entries, and
+extract its exact candidate evidence, transfer metadata, and three archives into a fresh isolated
+directory. They MUST validate those files as one original candidate set. The protected boundary
+MUST reject any separately transferred candidate copy that differs from the ZIP and MUST publish
+only archive paths derived from its fresh verified extraction. It MUST clean that extraction and
+MUST NOT regenerate or re-baseline the original evidence.
+
+Reusable recovery plan, identity, provenance-expectation, and evidence validation MUST be
+independent of either executable CLI module. Recovery preparation MUST be able to dynamically load
+the real registry verifier for existing-package provenance without a circular module-evaluation
+wait, while the registry-verifier CLI MUST continue to load and enforce recovery evidence. CLI
+errors MUST propagate as nonzero exits. Controlled acceptance tests MUST execute the actual entry
+points in fresh processes with bounded timeouts and MUST NOT replace or bypass the existing-package
+verification path.
+
+After the three versions exist, the workflow SHALL provide a separate `verify-existing` choice
+that schedules only source authorization, pinned publication-evidence retrieval, dependency and
+browser provisioning, and public-registry verification. It MUST NOT schedule candidate creation,
+candidate compatibility transfer, bootstrap publication, or recovery publication. It MUST use
+only read access needed for artifact retrieval and MUST NOT use the `npm-publish` environment,
+`NPM_BOOTSTRAP_TOKEN`, publishing credentials, or `id-token: write`.
+
+Verification continuation MUST pin and validate the retained recovery artifact's ID, name,
+source commit, run/attempt, API digest, and downloaded ZIP SHA-256. It MUST validate the outer ZIP
+and its exact regular-file set, the nested original candidate ZIP and metadata, every unchanged
+candidate/recovery evidence record, and every archive copy before registry access. Historical
+publication expectations MUST remain bound to each package's actual publication commit and
+workflow; the current verification commit, run, and attempt MUST be recorded separately from
+GitHub's actual execution without overwriting, relabelling, or spoofing historical evidence.
+
+The same unexpired retained artifact MAY be verified by more than one later workflow execution.
+Final public-registry evidence MUST be written and retained only after all three exact registry
+archives and lock graphs, npm signatures, Sigstore bundles, expected provenance identities,
+clean registry consumers, browser smoke, and production-host compatibility succeed.
 
 #### Scenario: Maintainers bootstrap a new public package
 
@@ -602,8 +675,119 @@ success.
 #### Scenario: Publication fails after one package succeeds
 
 - **WHEN** a package publish or integrity check fails after an earlier package was created
-- **THEN** the workflow stops, retains the immutable evidence and result logs, and requires an
-  explicit newly versioned recovery decision without rebuilding under the prior evidence
+- **THEN** the workflow stops and retains immutable evidence and logs; a separately reviewed
+  partial recovery may use the same unchanged bytes only when the published subset and missing
+  subset satisfy the recovery contract, otherwise a newly versioned candidate is required
+
+#### Scenario: Exact-version visibility is delayed after publication
+
+- **WHEN** an exact-version lookup returns 404 immediately after one publish command and a bounded
+  later read returns matching name, version, and candidate SHA-512 metadata
+- **THEN** the workflow records that package once and proceeds without executing another publish
+  command for it
+
+#### Scenario: Package-wide metadata is unavailable for a visible exact version
+
+- **WHEN** package-wide registry metadata returns 404 but the exact-version HTTP endpoint returns
+  matching name, version, and candidate SHA-512 metadata
+- **THEN** bootstrap and recovery use the exact-version result without consulting package-wide
+  metadata or repeating a publication command
+
+#### Scenario: Post-publication reconciliation cannot establish exact identity
+
+- **WHEN** exact-version visibility retries are exhausted, the registry read is unauthorized, or
+  metadata is malformed or differs in package name, version, or candidate SHA-512
+- **THEN** the workflow stops before the next package and does not repeat the publication command
+
+#### Scenario: Maintainers explicitly recover the recorded partial bootstrap
+
+- **WHEN** a maintainer selects partial recovery for the pinned original artifact, preparation
+  verifies its ID/name/ZIP digest and unchanged candidate evidence, cryptographically verifies
+  the existing design-token version, and confirms UI and SDK are absent
+- **THEN** protected-environment recovery may publish only the original UI and SDK archives in
+  order, with no design-token publication command
+
+#### Scenario: A transferred recovery copy differs from the pinned ZIP
+
+- **WHEN** the pinned original ZIP is unchanged but a transferred archive, candidate evidence, or
+  transfer metadata copy is replaced and internally re-baselined
+- **THEN** both preparation and protected publication reject the mismatch before any publication
+  callback, and publication never uses the replacement archive
+
+#### Scenario: The pinned recovery ZIP has an unsafe or unexpected entry
+
+- **WHEN** the recovery ZIP contains traversal, a link or special file, an omitted expected file,
+  or an additional candidate file
+- **THEN** recovery rejects it before extracting or resolving any registry state
+
+#### Scenario: Recovery preparation loads the real verifier in a fresh process
+
+- **WHEN** the recovery preparation CLI verifies the published design-token package and
+  dynamically loads the registry verifier from a fresh Node process
+- **THEN** module evaluation completes, cryptographic provenance is enforced, recovery evidence is
+  written only on success, and the process does not exit with an unsettled top-level await
+
+#### Scenario: Recovery-aware registry verification loads the shared evidence contract
+
+- **WHEN** the public-registry verifier CLI receives a recovery plan and evidence
+- **THEN** it imports the independent validation contract, rejects invalid recovery evidence, and
+  continues past valid evidence without importing the executable recovery entry module
+
+#### Scenario: Maintainers continue verification without publication
+
+- **WHEN** all three coordinates already exist and a maintainer dispatches `verify-existing` on
+  `swift` against the pinned retained recovery artifact
+- **THEN** only authorization, artifact retrieval/verification, provisioning, and registry
+  verification run, with no protected environment, credential, candidate build, or publication
+
+#### Scenario: Historical publication and current verification differ
+
+- **WHEN** a later workflow verifies packages published by the original and recovery commits
+- **THEN** provenance is checked against each historical publication commit while final evidence
+  separately records the verifier's actual current commit, run ID, and attempt
+
+#### Scenario: A retained verification artifact or copy differs
+
+- **WHEN** the recovery artifact metadata or ZIP, nested original ZIP, evidence, or archive copy
+  differs from its reviewed identity and digest
+- **THEN** verification stops before registry consumption and does not rebuild, re-baseline, or
+  substitute the candidate
+
+#### Scenario: The same retained publication is verified again
+
+- **WHEN** another `verify-existing` execution receives the same unexpired pinned artifact and all
+  immutable checks pass
+- **THEN** it may repeat the complete read-only verification and records its own execution
+  identity without requiring any package to be absent
+
+#### Scenario: A continuation gate fails before completion
+
+- **WHEN** any archive, registry, signature, provenance, consumer, browser, or host gate fails
+- **THEN** no completed public-registry verification evidence is retained and no publication path
+  is scheduled
+
+#### Scenario: A recovery subprocess encounters a validation or publication failure
+
+- **WHEN** the original artifact, transferred copies, existing-package provenance, or publication
+  operation fails in a fresh recovery CLI process
+- **THEN** it returns a nonzero exit, performs no forbidden or subsequent publication, and cannot
+  hang beyond the bounded test deadline
+
+#### Scenario: Recovery and original provenance have different source commits
+
+- **WHEN** the retained candidate came from the original commit but missing packages are
+  published by a later recovery workflow execution
+- **THEN** evidence preserves the original artifact commit/run unchanged, requires the existing
+  design token to attest the original source commit, and requires UI and SDK to attest the actual
+  recovery `GITHUB_SHA`, while retaining the approved repository, workflow, issuer, and archive
+  digests
+
+#### Scenario: Partial recovery prerequisites drift
+
+- **WHEN** the original artifact expires or changes, an existing package differs in bytes or
+  provenance, a supposedly missing coordinate appears, or recovery execution identity differs
+- **THEN** recovery stops before publication and requires an explicit newly versioned path rather
+  than relabeling evidence, spoofing GitHub identity, or weakening provenance checks
 
 #### Scenario: A publish command fails after an ambiguous registry mutation
 

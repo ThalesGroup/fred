@@ -14,12 +14,18 @@
 
 import styles from "./Switch.module.scss";
 import { ComponentPropsWithRef } from "react";
+import { ComponentSize } from "../../utils/Type.ts";
 
-interface SwitchProps extends ComponentPropsWithRef<"input"> {}
+export type SwitchSize = Extract<ComponentSize, "small" | "medium">;
 
-export default function Switch({ ref, ...rest }: SwitchProps) {
+// `size` is the native input's character width, meaningless on a checkbox.
+interface SwitchProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
+  size?: SwitchSize;
+}
+
+export default function Switch({ ref, size = "medium", ...rest }: SwitchProps) {
   return (
-    <label className={styles["switch-container"]}>
+    <label className={styles["switch-container"]} data-size={size}>
       <input type="checkbox" ref={ref} className={styles["native-input"]} {...rest} />
       <div className={styles["switch"]}>
         <div className={styles["state-layer"]}>

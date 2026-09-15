@@ -162,6 +162,8 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
     evidence: { packages: { ui: candidate } },
     expectedPackage: selected,
     candidate,
+    fetchMetadata: async () => metadata,
+    waitForPackageVisibility: async () => metadata,
     runCommand,
   });
   assert.equal(registryPackage.provenanceUrl, provenanceUrl);
@@ -311,16 +313,14 @@ test("registry archive identity and candidate integrity fail before dependency i
       evidence: { packages: { ui: candidate } },
       expectedPackage: selected,
       candidate,
+      fetchMetadata: async () => ({
+        name: selected.name,
+        version: selected.version,
+        dist: { integrity },
+      }),
+      waitForPackageVisibility: async () => {},
       runCommand: async (_command, args) => {
         commands.push(args);
-        if (args[0] === "view")
-          return {
-            stdout: JSON.stringify({
-              name: selected.name,
-              version: selected.version,
-              dist: { integrity },
-            }),
-          };
         if (args[0] === "pack")
           return { stdout: JSON.stringify([{ filename }]) };
         return { stdout: "" };
@@ -355,20 +355,18 @@ test("registry lock fallback fails before npm ci", async (context) => {
       evidence: { packages: { ui: candidate } },
       expectedPackage: selected,
       candidate,
+      fetchMetadata: async () => ({
+        name: selected.name,
+        version: selected.version,
+        dist: {
+          integrity,
+          attestations: {
+            url: `${fixtureContract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
+          },
+        },
+      }),
+      waitForPackageVisibility: async () => {},
       runCommand: async (_command, args) => {
-        if (args[0] === "view")
-          return {
-            stdout: JSON.stringify({
-              name: selected.name,
-              version: selected.version,
-              dist: {
-                integrity,
-                attestations: {
-                  url: `${fixtureContract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
-                },
-              },
-            }),
-          };
         if (args[0] === "pack")
           return { stdout: JSON.stringify([{ filename }]) };
         if (args.includes("--package-lock-only")) {
@@ -463,8 +461,9 @@ test("rejects missing, malformed, and disallowed npm attestation URLs", async (c
         evidence: { packages: { ui: candidate } },
         expectedPackage: selected,
         candidate,
+        fetchMetadata: async () => metadata,
+        waitForPackageVisibility: async () => metadata,
         runCommand: async (_command, args) => {
-          if (args[0] === "view") return { stdout: JSON.stringify(metadata) };
           if (args[0] === "pack")
             return { stdout: JSON.stringify([{ filename }]) };
           return { stdout: "" };
@@ -754,6 +753,16 @@ test("controlled registry orchestration verifies identity before consumers", asy
     };
   }
   let installed = false;
+  const provenanceExpectations = Object.fromEntries(
+    Object.entries(packages).map(([role, candidate]) => [
+      role,
+      {
+        ...candidate.expectedProvenance,
+        sourceCommit:
+          role === "designTokens" ? "fixture-commit" : "recovery-commit",
+      },
+    ]),
+  );
   const result = await verifyRegistryTooling({
     contract,
     evidence: {
@@ -769,6 +778,7 @@ test("controlled registry orchestration verifies identity before consumers", asy
       packages,
     },
     coordinates,
+    provenanceExpectations,
     resolvePackage: async ({ coordinate }) => {
       const role = Object.entries(coordinates).find(
         ([, value]) => value === coordinate,
@@ -784,14 +794,14 @@ test("controlled registry orchestration verifies identity before consumers", asy
       { role },
       { expectedProvenance, certificateIssuer },
     ) => {
-      assert.equal(expectedProvenance, packages[role].expectedProvenance);
+      assert.equal(expectedProvenance, provenanceExpectations[role]);
       assert.equal(
         certificateIssuer,
         contract.expectedProvenance.certificateIssuer,
       );
       return {
         cryptographicallyVerified: true,
-        identity: packages[role].expectedProvenance,
+        identity: provenanceExpectations[role],
       };
     },
     installConsumers: async () => {

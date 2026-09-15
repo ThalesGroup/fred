@@ -94,7 +94,7 @@
 /* Three lines. The clamp used to be two, which hid four fifths of a block — and
    since reasoning models restate the task before adding anything new, those two
    lines were the repeated part, so consecutive rows read as duplicates. The
-   repeat is now removed upstream (`stripRepeatedPreamble`), so the lines that
+   repeat is now removed upstream (`traceRows`), so the lines that
    survive are the block's own content; three of them is a budget, not a
    preview of a preamble. The full markdown stays in the detail drawer. */
 .preview {

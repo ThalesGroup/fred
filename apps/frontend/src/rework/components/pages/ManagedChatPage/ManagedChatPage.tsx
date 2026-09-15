@@ -21,6 +21,7 @@ import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRa
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
+import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
@@ -95,6 +96,7 @@ type ActivePushDrawer =
   | { kind: "document-scope" }
   | { kind: "prompt-library" }
   | { kind: "debug" }
+  | { kind: "full-reasoning" }
   | null;
 
 export default function ManagedChatPage() {
@@ -540,19 +542,32 @@ export default function ManagedChatPage() {
     />
   );
 
-  // Admin tooling, so it sits at the rail's foot rather than among the
-  // conversation's own panels.
-  const debugLaunchers = isAdmin
-    ? [
-        {
-          key: "debug",
-          label: t("chatbot.debugRaw.title"),
-          icon: "build" as const,
-          selected: activePushDrawer?.kind === "debug",
-          onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
-        },
-      ]
-    : [];
+  // Expert tooling, so it sits at the rail's foot rather than among the
+  // conversation's own panels. The full reasoning is for everyone — each block is
+  // already readable in the trace drawer — the raw message dump for admins only.
+  const footerLaunchers = [
+    {
+      key: "full-reasoning",
+      label: t("chatbot.fullReasoning.title"),
+      // The glyph a reasoning row carries in the chain of thought.
+      icon: "settings" as const,
+      iconFilled: true,
+      selected: activePushDrawer?.kind === "full-reasoning",
+      onOpen: () =>
+        setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
+    },
+    ...(isAdmin
+      ? [
+          {
+            key: "debug",
+            label: t("chatbot.debugRaw.title"),
+            icon: "build" as const,
+            selected: activePushDrawer?.kind === "debug",
+            onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <TraceDrawerProvider value={traceDrawerApi}>
@@ -685,6 +700,12 @@ export default function ManagedChatPage() {
             onActiveKeyChange={handleCapabilityPanelChange}
           />
 
+          <FullReasoningPanel
+            open={activePushDrawer?.kind === "full-reasoning"}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : v))}
+            messages={chat.messages}
+          />
+
           {isAdmin && (
             <DebugRawDrawer
               open={activePushDrawer?.kind === "debug"}
@@ -745,7 +766,7 @@ export default function ManagedChatPage() {
           activeKey={activeCapabilityKey}
           onActiveKeyChange={handleCapabilityPanelChange}
           launchers={railLaunchers}
-          footerLaunchers={debugLaunchers}
+          footerLaunchers={footerLaunchers}
         />
 
         <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
