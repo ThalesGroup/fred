@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import semver from "semver";
 
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
 import { sha512Integrity } from "../scripts/release-evidence.mjs";
@@ -177,10 +178,11 @@ test("actual GitHub execution identity is independent of candidate source", asyn
   );
 });
 
-test("selected version history uses a disposable repository and rejects incomplete production history", async () => {
+async function assertSelectedVersionHistory(currentVersion) {
   const contract = await loadReleaseContract(
     "release/proposed-release-contract.json",
   );
+  contract.packages.iframeSdk.version = currentVersion;
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-version-history-"));
   try {
     const source = path.join(root, "source");
@@ -188,7 +190,13 @@ test("selected version history uses a disposable repository and rejects incomple
     const changelog = path.join(producer, "iframe-sdk", "CHANGELOG.md");
     await mkdir(path.dirname(changelog), { recursive: true });
     await run("git", ["init", "-q", "-b", "swift", source]);
-    const version = contract.packages.iframeSdk.version;
+    const { name: packageName, version } = contract.packages.iframeSdk;
+    const differentVersion = semver.inc(version, "prerelease", "alpha");
+    assert(
+      semver.valid(differentVersion),
+      "derived fixture version is invalid",
+    );
+    assert.notEqual(differentVersion, version);
     await writeFile(
       changelog,
       `## ${version}\nReview: approved\nChanges: fixture\n`,
@@ -287,7 +295,7 @@ test("selected version history uses a disposable repository and rejects incomple
           ...reviewed,
           selected: reviewed.selected.map((member) => ({
             ...member,
-            coordinate: "@fred-oss/iframe-sdk@0.1.0-alpha.2",
+            coordinate: `${packageName}@${differentVersion}`,
           })),
         }),
         contract,
@@ -298,7 +306,7 @@ test("selected version history uses a disposable repository and rejects incomple
       /differs from reviewed manifest/,
     );
     const futureContract = structuredClone(contract);
-    futureContract.packages.iframeSdk.version = "0.1.0-alpha.2";
+    futureContract.packages.iframeSdk.version = differentVersion;
     await writeFile(
       changelog,
       `## ${futureContract.packages.iframeSdk.version}\nReview: approved\nChanges: changed fixture\n\n## ${version}\nReview: approved\nChanges: fixture\n`,
@@ -354,7 +362,12 @@ test("selected version history uses a disposable repository and rejects incomple
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+}
+
+for (const currentVersion of ["0.1.0-alpha.1", "0.1.0-alpha.2"]) {
+  test(`selected ${currentVersion} version history uses a disposable repository and rejects incomplete production history`, () =>
+    assertSelectedVersionHistory(currentVersion));
+}
 
 test("reviewed version history ignores an earlier substring-colliding changelog heading", async () => {
   const contract = await loadReleaseContract(
