@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "frontend-registry-verification-continuation",
+  "state": "reviewed",
+  "recoveryArtifact": {
+    "sourceCommit": "a1fedc661c9ec1846b5333aa4e546af0f0810033",
+    "workflowRunId": "34882883783",
+    "workflowRunAttempt": "1",
+    "artifactId": 10363547296,
+    "artifactName": "frontend-packages-bootstrap-recovery-a1fedc661c9ec1846b5333aa4e546af0f0810033-34882883783-1",
+    "artifactZipSha256": "fe008c951be747cc496e9c82adf4f54f8ecd4d5c8c8bdbbf9dbda1d2a34e86b8"
+  },
+  "originalCandidate": {
+    "sourceCommit": "f49f2439d54b44f7739c5bd7fca3f789e0e528d6",
+    "workflowRunId": "34853407387",
+    "workflowRunAttempt": "1",
+    "artifactId": 10352121632,
+    "artifactName": "frontend-packages-release-f49f2439d54b44f7739c5bd7fca3f789e0e528d6-34853407387-1",
+    "artifactZipSha256": "25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82"
+  },
+  "publicationExecution": {
+    "repository": "ThalesGroup/fred",
+    "ref": "refs/heads/swift",
+    "sourceCommit": "a1fedc661c9ec1846b5333aa4e546af0f0810033",
+    "workflowRef": "ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    "workflow": "Publish frontend packages",
+    "runId": "34882883783",
+    "runAttempt": "1"
+  },
+  "publicationSourceCommits": {
+    "designTokens": "f49f2439d54b44f7739c5bd7fca3f789e0e528d6",
+    "ui": "a1fedc661c9ec1846b5333aa4e546af0f0810033",
+    "iframeSdk": "a1fedc661c9ec1846b5333aa4e546af0f0810033"
+  },
+  "verificationExecution": {
+    "repository": "ThalesGroup/fred",
+    "ref": "refs/heads/swift",
+    "workflow": "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    "sourceCommitPolicy": "github-actions-sha"
+  }
+}

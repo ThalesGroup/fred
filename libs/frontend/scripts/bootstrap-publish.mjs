@@ -10,9 +10,17 @@ import {
   packageRoles,
 } from "./release-contract.mjs";
 import { verifyCandidateEvidence } from "./release-evidence.mjs";
+import {
+  assertExactPublishedMetadata,
+  fetchExactPackageMetadata,
+} from "./registry-metadata.mjs";
+
+export { assertExactPublishedMetadata } from "./registry-metadata.mjs";
 
 const publishOrder = ["designTokens", "ui", "iframeSdk"];
 const candidateTransferMetadataFilename = "candidate-transfer.json";
+const defaultVisibilityAttempts = 6;
+const defaultVisibilityDelayMilliseconds = 5_000;
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -122,18 +130,6 @@ async function npmIdentity({ registry }) {
   return (await run("npm", ["whoami", "--registry", registry])).stdout.trim();
 }
 
-async function registryMetadata({ coordinate, registry }) {
-  try {
-    return JSON.parse(
-      (await run("npm", ["view", coordinate, "--json", "--registry", registry]))
-        .stdout,
-    );
-  } catch (error) {
-    if (/\bE404\b|(?:^|\s)404(?:\s|$)/i.test(error.message)) return null;
-    throw error;
-  }
-}
-
 async function npmPublish({ archivePath, contract }) {
   await run("npm", [
     "publish",
@@ -148,14 +144,49 @@ async function npmPublish({ archivePath, contract }) {
   ]);
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export async function reconcilePublishedCandidate({
+  candidate,
+  registry,
+  inspectRegistry,
+  visibilityAttempts = defaultVisibilityAttempts,
+  visibilityDelayMilliseconds = defaultVisibilityDelayMilliseconds,
+  waitForVisibility = wait,
+}) {
+  assert(
+    Number.isSafeInteger(visibilityAttempts) && visibilityAttempts > 0,
+    "visibilityAttempts must be a positive integer",
+  );
+  for (let attempt = 1; attempt <= visibilityAttempts; attempt += 1) {
+    const metadata = await inspectRegistry({
+      coordinate: candidate.coordinate,
+      registry,
+      candidate,
+    });
+    if (metadata !== null)
+      return assertExactPublishedMetadata(metadata, candidate);
+    if (attempt < visibilityAttempts)
+      await waitForVisibility(visibilityDelayMilliseconds);
+  }
+  throw new Error(
+    `${candidate.coordinate} visibility retries exhausted after ${visibilityAttempts} exact-version reads`,
+  );
+}
+
 export async function publishBootstrapRelease({
   contract,
   evidence,
   archiveRoot,
   github,
   identifyPublisher = npmIdentity,
-  inspectRegistry = registryMetadata,
+  inspectRegistry = fetchExactPackageMetadata,
   publishArchive = npmPublish,
+  visibilityAttempts = defaultVisibilityAttempts,
+  visibilityDelayMilliseconds = defaultVisibilityDelayMilliseconds,
+  waitForVisibility = wait,
 }) {
   assertMaintainerConfirmed(contract);
   assert.equal(
@@ -174,9 +205,16 @@ export async function publishBootstrapRelease({
 
   const existing = [];
   for (const role of publishOrder) {
-    const coordinate = evidence.packages[role].coordinate;
-    if (await inspectRegistry({ coordinate, registry: contract.registry }))
-      existing.push(coordinate);
+    const candidate = evidence.packages[role];
+    const metadata = await inspectRegistry({
+      coordinate: candidate.coordinate,
+      registry: contract.registry,
+      candidate,
+    });
+    if (metadata) {
+      assertExactPublishedMetadata(metadata, candidate);
+      existing.push(candidate.coordinate);
+    }
   }
   assert.equal(
     existing.length,
@@ -197,17 +235,21 @@ export async function publishBootstrapRelease({
     } catch (error) {
       let reconciliation;
       try {
-        reconciliation = await inspectRegistry({
-          coordinate: candidate.coordinate,
+        reconciliation = await reconcilePublishedCandidate({
+          candidate,
           registry: contract.registry,
+          inspectRegistry,
+          visibilityAttempts,
+          visibilityDelayMilliseconds,
+          waitForVisibility,
         });
-      } catch {
+      } catch (reconciliationError) {
         throw new Error(
-          `bootstrap publish command failed for ${candidate.coordinate}; outcome is indeterminate because registry reconciliation also failed; previously confirmed from this evidence: ${published.join(", ") || "no earlier coordinates"}; do not rebuild, overwrite, or continue until maintainers verify the registry`,
-          { cause: error },
+          `bootstrap publish command failed for ${candidate.coordinate}; outcome is indeterminate because exact-version registry reconciliation failed (${reconciliationError.message}); previously confirmed from this evidence: ${published.join(", ") || "no earlier coordinates"}; do not rebuild, overwrite, or continue until maintainers verify the registry`,
+          { cause: reconciliationError },
         );
       }
-      if (reconciliation?.dist?.integrity === candidate.integrity) {
+      if (reconciliation) {
         published.push(candidate.coordinate);
         throw new Error(
           `bootstrap publish command failed for ${candidate.coordinate}, but registry reconciliation confirmed the expected archive bytes; confirmed published from this evidence: ${published.join(", ")}; stop before continuing and select an explicit recovery`,
@@ -221,19 +263,17 @@ export async function publishBootstrapRelease({
     }
     published.push(candidate.coordinate);
     try {
-      const metadata = await inspectRegistry({
-        coordinate: candidate.coordinate,
+      await reconcilePublishedCandidate({
+        candidate,
         registry: contract.registry,
+        inspectRegistry,
+        visibilityAttempts,
+        visibilityDelayMilliseconds,
+        waitForVisibility,
       });
-      assert(metadata, `${candidate.coordinate} is missing after publication`);
-      assert.equal(
-        metadata.dist?.integrity,
-        candidate.integrity,
-        `${candidate.coordinate} registry integrity differs after publication`,
-      );
     } catch (error) {
       throw new Error(
-        `bootstrap publication completed for ${candidate.coordinate}, but registry verification failed; confirmed publish commands from this evidence: ${published.join(", ")}; stop before continuing and verify the registry without rebuilding or overwriting`,
+        `bootstrap publication completed for ${candidate.coordinate}, but registry verification failed (${error.message}); confirmed publish commands from this evidence: ${published.join(", ")}; stop before continuing and verify the registry without rebuilding or overwriting`,
         { cause: error },
       );
     }

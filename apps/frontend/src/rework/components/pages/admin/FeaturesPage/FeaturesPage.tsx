@@ -357,6 +357,7 @@ export default function FeaturesPage() {
         const blockedOn = !cap.default_on && requiresTeamSettings(cap);
         const control = (
           <Switch
+            size="small"
             checked={cap.default_on}
             disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
             onChange={() => onToggleDefault(cap)}
@@ -411,6 +412,7 @@ export default function FeaturesPage() {
                 <div className={styles.centered}>
                   <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
                     <Switch
+                      size="small"
                       checked={cap.reasoning_enabled ?? false}
                       disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
@@ -519,9 +521,7 @@ export default function FeaturesPage() {
         ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths, but still a
-      // shrinkable fr so narrow viewports fall back to the wrapped label
-      // rather than forcing the table to overflow.
+      // Wide enough for the one-line button at desktop widths.
       size: "1.4fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
@@ -592,7 +592,9 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && capabilities.length > 0 && <DataTable columns={columns} data={capabilities} />}
+      {!isLoading && !isError && capabilities.length > 0 && (
+        <DataTable columns={columns} data={capabilities} size="medium" />
+      )}
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}

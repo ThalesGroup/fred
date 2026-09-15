@@ -1111,7 +1111,7 @@
         "loading": "Loading features…",
         "loadError": "Could not load the feature catalog.",
         "empty": "No features are advertised by any runtime pod yet.",
-        "manageTeams": "Manage teams",
+        "manageTeams": "Manage by team",
         "kindFilter": {
           "tool": "Capabilities",
           "agent": "Agents",
@@ -1149,7 +1149,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — suspended agents",
-          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage teams to revive them.",
+          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage by team to revive them.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
@@ -2114,6 +2114,17 @@
         "title": "Authorization self-test",
         "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
         "runSelf": "Run for myself",
+        "expiry": {
+          "title": "Credential renewal self-test",
+          "run": "Run credential expiry",
+          "warning": {
+            "title": "Keep this page open until the check finishes",
+            "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "confirm": "Start and keep the page open"
+          },
+          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
+        },
         "testProfile": {
           "title": "Test another profile",
           "usernameLabel": "Account",
