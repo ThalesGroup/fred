@@ -4039,8 +4039,8 @@ while the team has no `team_admin`. Once the team has one, the pages stay
 available to the user's other roles under a notice leading to the charter. The
 home page, the personal space and other teams stay usable. Team settings show
 the Responsibilities section to `team_admin`s, with the time they accepted it,
-and to pending admins, with Accept. The member list shows "Admin (pending)" on
-the admin chip.
+and to pending admins, with Accept. The member list marks a pending admin's
+admin chip in light orange with a clock icon ("Admin (pending)" on hover).
 
 **Rollout.** Publish the theme archive with the charter first, then set the
 version: existing admins become pending at the next startup and see the charter

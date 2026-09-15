@@ -126,4 +126,4 @@ Team settings SHALL show a Responsibilities section with the charter to users wh
 
 #### Scenario: Member list
 - **WHEN** a team admin opens the member list of a team with a pending administrator
-- **THEN** that member's administrator chip reads "Admin (pending)"
+- **THEN** that member's administrator chip is marked pending, in light orange with a clock icon, and reads "Admin (pending)" on hover and to assistive technology

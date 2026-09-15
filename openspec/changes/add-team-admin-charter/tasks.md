@@ -22,7 +22,7 @@
 
 - [x] 4.1 Add `TeamAdminCharterGate` around the `MainLayout` outlet and `TeamAdminCharterPage`; verify tests: a pending admin sees the charter on a team with no `team_admin` and a notice otherwise, admins, members and the home page see neither, Accept calls the mutation
 - [x] 4.2 Open the Responsibilities section to `team_admin`s, with their acceptance time, and to pending admins, with Accept; verify the TeamSettingsPage and section tests
-- [x] 4.3 Show "Admin (pending)" on the role chip, the team banner and the team lists, and gate its revoke on `canAdministerAdmins`; verify `tsc` and the affected tests
+- [x] 4.3 Show a pending admin as a light orange admin chip with a clock icon in the member list, and "Admin (pending)" in the team banner and the team lists, and gate its revoke on `canAdministerAdmins`; verify `tsc` and the affected tests
 - [x] 4.4 Add the en and fr i18n keys and drop the first version's pop-up keys; verify `tsc`
 
 ## 5. Docs and handoff
