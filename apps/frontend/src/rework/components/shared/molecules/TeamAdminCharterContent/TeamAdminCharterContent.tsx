@@ -18,8 +18,8 @@ import { useLegalMarkdown } from "@hooks/useLegalMarkdown.ts";
 import styles from "./TeamAdminCharterContent.module.css";
 
 interface TeamAdminCharterContentProps {
-  /** Called once the end of the charter is visible. Pass a stable callback. */
-  onEndReached: () => void;
+  /** Called once the end of the charter is visible. Pass a stable callback; omit to only display it. */
+  onEndReached?: () => void;
 }
 
 /** The team administrator charter markdown, overridable from the theme archive. */
@@ -29,7 +29,7 @@ export default function TeamAdminCharterContent({ onEndReached }: TeamAdminChart
 
   useEffect(() => {
     const end = endRef.current;
-    if (!markdown || !end) return;
+    if (!markdown || !end || !onEndReached) return;
     // Any overlap counts: Firefox's fractional positions never reach a full-visibility threshold.
     const observer = new IntersectionObserver(
       ([entry]) => {

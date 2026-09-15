@@ -35,6 +35,7 @@ import { canAdministerTeamRole } from "@hooks/teamCapabilities.ts";
 
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
   team_admin: 0,
+  pending_team_admin: 0,
   team_editor: 1,
   team_analyst: 2,
   team_member: 3,

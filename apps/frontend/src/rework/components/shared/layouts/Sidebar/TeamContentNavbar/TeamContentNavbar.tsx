@@ -124,7 +124,7 @@ export default function TeamContentNavbar() {
   // analyst); no shield glyph — the team panel header keeps the roles line
   // typographic only, matching the Home team list item (#2298).
   const roleLabel = (() => {
-    const priority: Record<string, number> = { team_admin: 0, team_editor: 1, team_analyst: 2 };
+    const priority: Record<string, number> = { team_admin: 0, pending_team_admin: 0, team_editor: 1, team_analyst: 2 };
     const heldRoles = (selectedTeam?.my_relations ?? [])
       .filter((relation) => relation in priority)
       .slice()

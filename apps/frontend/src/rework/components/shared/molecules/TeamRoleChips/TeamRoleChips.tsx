@@ -72,7 +72,9 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
   return (
     <div className={styles.roleChips} role="group">
       {ELEVATED_TEAM_ROLES.map((role) => {
-        const held = heldRoles.includes(role);
+        // A pending nomination shows on the admin chip; toggling it cancels the nomination.
+        const pending = role === "team_admin" && heldRoles.includes("pending_team_admin");
+        const held = pending || heldRoles.includes(role);
         // `aria-disabled` rather than `disabled`: a disabled button leaves the
         // tab order and stops firing pointer events, so it would silently lose
         // the very description that tells the reader what the role they cannot
@@ -87,10 +89,10 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
               aria-pressed={held}
               aria-disabled={readOnly}
               onClick={() => {
-                if (!readOnly) onToggle(role, held);
+                if (!readOnly) onToggle(pending ? "pending_team_admin" : role, held);
               }}
             >
-              {t(`rework.teamRoles.${role}`)}
+              {t(pending ? "rework.teamRoles.pending_team_admin" : `rework.teamRoles.${role}`)}
             </button>
           </Tooltip>
         );

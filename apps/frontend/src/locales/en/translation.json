@@ -2331,11 +2331,13 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
+      "pending_team_admin": "Admin (pending)",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
       "team_member": "Member",
       "descriptions": {
         "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "pending_team_admin": "Nominated admin who has not accepted the team administrator charter yet: a member until they accept it.",
         "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
         "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
         "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
@@ -2346,11 +2348,7 @@
     },
     "teamAdminCharter": {
       "accept": "Accept",
-      "acceptedOn": "You accepted this charter on {{date}}.",
-      "later": "Later",
       "lockInformation": "Read the charter to the end before you can accept it",
-      "pendingNotice": "Your administrator rights are inactive until you accept the team administrator charter.",
-      "reviewCharter": "Review the charter",
       "title": "Team administrator charter"
     },
     "teamSettings": {

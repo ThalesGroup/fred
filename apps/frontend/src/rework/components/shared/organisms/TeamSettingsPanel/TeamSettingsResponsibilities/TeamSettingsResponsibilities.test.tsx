@@ -14,9 +14,8 @@
 // limitations under the License.
 
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TeamAdminCharterStatus } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -24,74 +23,27 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({
-  status: undefined as TeamAdminCharterStatus | undefined,
-  accept: vi.fn(() => Promise.resolve()),
-  endReached: undefined as (() => void) | undefined,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: { date?: string }) => (options?.date ? `${key}:${options.date}` : key),
-    i18n: { language: "en" },
-  }),
-}));
-
-vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
-  useTeamAdminCharterStatusQuery: () => ({ data: h.status }),
-  useAcceptTeamAdminCharterMutation: () => [h.accept, { isLoading: false }],
-}));
+const h = vi.hoisted(() => ({ onEndReached: "unset" as unknown }));
 
 vi.mock("@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx", () => ({
-  default: ({ onEndReached }: { onEndReached: () => void }) => {
-    h.endReached = onEndReached;
-    return <div>charter</div>;
+  default: ({ onEndReached }: { onEndReached?: () => void }) => {
+    h.onEndReached = onEndReached;
+    return "charter";
   },
 }));
 
 import TeamSettingsResponsibilities from "./TeamSettingsResponsibilities.tsx";
 
-let container: HTMLDivElement;
-let root: Root;
-
-function render() {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
-  act(() => {
-    root.render(<TeamSettingsResponsibilities />);
-  });
-}
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
-  container.remove();
-  h.status = undefined;
-  h.endReached = undefined;
-  h.accept.mockClear();
-});
-
 describe("TeamSettingsResponsibilities", () => {
-  it("lets a pending admin accept once the end of the charter is reached", () => {
-    h.status = { required: true, accepted_at: null };
-    render();
-    const accept = container.querySelector("button") as HTMLButtonElement;
+  it("shows the charter read-only, with nothing left to accept", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(<TeamSettingsResponsibilities />);
+    });
 
-    expect(accept.disabled).toBe(true);
-    act(() => h.endReached?.());
-    expect(accept.disabled).toBe(false);
-
-    act(() => accept.click());
-    expect(h.accept).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows when the charter was accepted, without an accept action", () => {
-    h.status = { required: false, accepted_at: "2026-09-14T10:00:00Z" };
-    render();
-
-    expect(container.textContent).toContain("rework.teamAdminCharter.acceptedOn:");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).toBe("charter");
+    expect(h.onEndReached).toBeUndefined();
+    act(() => root.unmount());
   });
 });
