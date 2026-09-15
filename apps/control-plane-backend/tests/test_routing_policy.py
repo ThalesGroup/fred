@@ -191,16 +191,7 @@ class _FakeDeps:
         source_runtime_ids: list[str] | None = None,
     ) -> None:
         self._store = store
-        self.team_dependencies = type(
-            "_TD",
-            (),
-            {
-                "rebac": rebac,
-                "configuration": SimpleNamespace(
-                    app=SimpleNamespace(team_admin_charter_version=None)
-                ),
-            },
-        )()
+        self.team_dependencies = type("_TD", (), {"rebac": rebac})()
         self._agent_instance_store = _FakeAgentInstanceStore(source_runtime_ids)
 
     def get_team_routing_policy_store(self):
@@ -313,8 +304,7 @@ class _FakeRebacElevatedCheck:
     a distinct interface from the `has_permission` (singular) fakes below,
     which back `_validate_write`'s `can_team_use_capability` checks instead.
     `allowed` is the fixed `[can_update_info, can_update_resources,
-    can_run_evaluations, can_read_conversations_for_evaluation]` result, in
-    `_ELEVATED_TEAM_ROLE_PERMISSIONS` order.
+    can_run_evaluations]` result, in `_ELEVATED_TEAM_ROLE_PERMISSIONS` order.
     """
 
     def __init__(self, allowed: list[bool]) -> None:
@@ -329,7 +319,7 @@ class _FakeRebacElevatedCheck:
 def _elevated_rebac(
     *, admin=True, editor=False, analyst=False
 ) -> _FakeRebacElevatedCheck:
-    return _FakeRebacElevatedCheck([admin, editor, analyst, analyst])
+    return _FakeRebacElevatedCheck([admin, editor, analyst])
 
 
 @pytest.mark.asyncio
@@ -604,7 +594,7 @@ async def test_available_models_excludes_profile_missing_from_some_pods(
 @pytest.mark.asyncio
 async def test_read_denied_for_plain_team_member() -> None:
     deps = _deps(
-        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False, False])
+        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False])
     )
     with pytest.raises(AuthorizationError):
         await routing_policy_service.get_team_routing_policy(
@@ -613,12 +603,7 @@ async def test_read_denied_for_plain_team_member() -> None:
 
 
 @pytest.mark.parametrize(
-    "allowed",
-    [
-        [True, False, False, False],
-        [False, True, False, False],
-        [False, False, True, True],
-    ],
+    "allowed", [[True, False, False], [False, True, False], [False, False, True]]
 )
 @pytest.mark.asyncio
 async def test_read_allowed_for_any_elevated_role(allowed: list[bool]) -> None:
@@ -629,30 +614,6 @@ async def test_read_allowed_for_any_elevated_role(allowed: list[bool]) -> None:
     assert policy.version == 0
 
 
-class _NoCharterAcceptance:
-    async def get_accepted_at(self, user_id: str, version: str) -> None:
-        return None
-
-
-@pytest.mark.asyncio
-async def test_read_denied_for_a_team_admin_who_has_not_accepted_the_charter() -> None:
-    # team_admin grants can_update_info and can_run_evaluations, both dropped
-    # until the charter is accepted: nothing elevated is left.
-    deps = _deps(
-        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([True, False, True, False])
-    )
-    vars(deps.team_dependencies).update(
-        configuration=SimpleNamespace(
-            app=SimpleNamespace(team_admin_charter_version="2026-09")
-        ),
-        get_team_admin_charter_store=_NoCharterAcceptance,
-    )
-    with pytest.raises(AuthorizationError):
-        await routing_policy_service.get_team_routing_policy(
-            _user(), TeamId("team-1"), deps
-        )
-
-
 @pytest.mark.asyncio
 async def test_available_models_denied_for_plain_team_member(monkeypatch) -> None:
     async def _fake_usable(rebac, team_id):
@@ -660,7 +621,7 @@ async def test_available_models_denied_for_plain_team_member(monkeypatch) -> Non
 
     monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
     deps = _deps(
-        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False, False])
+        store=_FakeStore(), rebac=_FakeRebacElevatedCheck([False, False, False])
     )
     with pytest.raises(AuthorizationError):
         await routing_policy_service.list_available_model_profiles(
@@ -674,7 +635,7 @@ async def test_elevated_role_check_skipped_for_personal_space() -> None:
     # be denied here even if a real ReBAC round trip would say otherwise
     # (e.g. a not-yet-self-healed tuple) — `is_personal_team_id` short-
     # circuits before `has_permissions` is ever called.
-    rebac = _FakeRebacElevatedCheck([False, False, False, False])
+    rebac = _FakeRebacElevatedCheck([False, False, False])
     deps = _deps(store=_FakeStore(), rebac=rebac)
     policy = await routing_policy_service.get_team_routing_policy(
         _user(), TeamId("personal-u1"), deps

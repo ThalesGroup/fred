@@ -109,9 +109,12 @@ type team
     # one-shot, `can_create_team`-gated bootstrap action outside this schema
     # (RFC §28, `POST /teams`), never by a standing relation grant here.
     define team_admin: [user]
+    # A nominated admin who has not accepted the team administrator charter yet:
+    # a member with no admin authority, promoted to team_admin on acceptance.
+    define pending_team_admin: [user]
     define team_editor: [user]
     define team_analyst: [user]
-    define team_member: [user] or team_admin or team_editor or team_analyst
+    define team_member: [user] or team_admin or pending_team_admin or team_editor or team_analyst
 
     # Public visibility - allows anyone to read team info. Profile/discovery
     # only: `public` is wired into `can_read` alone, never into any
