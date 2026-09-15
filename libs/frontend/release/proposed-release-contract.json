@@ -1,13 +1,15 @@
 {
   "$schema": "./release-contract.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "state": "maintainer-confirmed",
   "registry": "https://registry.npmjs.org/",
   "distTag": "next",
-  "releaseToolchain": {
-    "node": "24.21.0",
-    "npm": "11.19.0"
-  },
+  "sourceBranch": "swift",
+  "workflowFilename": "Publish-frontend-packages.yml",
+  "publishingEnvironment": "npm-publish",
+  "approvedBaselineDigest": "2cde70b055c308e69f371c5fe96c62a606c71bd5f8465a9f53b33be80348b263",
+  "releaseToolchain": { "node": "24.21.0", "npm": "11.19.0" },
+  "applicationToolchain": { "node": "22.13.0", "npm": "10.9.2" },
   "maintainerApproval": {
     "scopeOwner": "fred-oss",
     "owners": {
@@ -25,126 +27,5 @@
     "repository": "https://github.com/ThalesGroup/fred",
     "workflow": "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
     "certificateIssuer": "https://token.actions.githubusercontent.com"
-  },
-  "packages": {
-    "designTokens": {
-      "workspace": "design-tokens",
-      "name": "@fred-oss/design-tokens",
-      "version": "0.1.0-alpha.1",
-      "expectedManifest": {
-        "description": "FRED design tokens and optional packaged Geist fonts",
-        "license": "Apache-2.0",
-        "type": "module",
-        "repository": {
-          "type": "git",
-          "url": "git+https://github.com/ThalesGroup/fred.git",
-          "directory": "libs/frontend/design-tokens"
-        },
-        "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/design-tokens#readme",
-        "bugs": { "url": "https://github.com/ThalesGroup/fred/issues" },
-        "engines": { "node": ">=22.13.0" },
-        "exports": {
-          "./tokens.css": "./dist/tokens.css",
-          "./fonts.css": "./dist/fonts.css"
-        },
-        "files": [
-          "dist",
-          "LICENSE",
-          "README.md",
-          "THIRD_PARTY_NOTICES.md",
-          "licenses"
-        ],
-        "sideEffects": ["./dist/*.css"],
-        "publishConfig": {
-          "access": "public",
-          "registry": "https://registry.npmjs.org/",
-          "tag": "next",
-          "provenance": true
-        }
-      }
-    },
-    "ui": {
-      "workspace": "ui",
-      "name": "@fred-oss/ui",
-      "version": "0.1.0-alpha.1",
-      "expectedManifest": {
-        "description": "Application-agnostic React component foundations for FRED consumers",
-        "license": "Apache-2.0",
-        "type": "module",
-        "repository": {
-          "type": "git",
-          "url": "git+https://github.com/ThalesGroup/fred.git",
-          "directory": "libs/frontend/ui"
-        },
-        "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/ui#readme",
-        "bugs": { "url": "https://github.com/ThalesGroup/fred/issues" },
-        "engines": { "node": ">=22.13.0" },
-        "exports": {
-          ".": {
-            "types": "./dist/types/src/index.d.ts",
-            "import": "./dist/index.js"
-          },
-          "./styles.css": "./dist/styles.css"
-        },
-        "types": "./dist/types/src/index.d.ts",
-        "files": [
-          "dist",
-          "LICENSE",
-          "README.md",
-          "THIRD_PARTY_NOTICES.md",
-          "licenses",
-          "build-evidence.json"
-        ],
-        "sideEffects": ["./dist/styles.css"],
-        "peerDependencies": {
-          "@fred-oss/design-tokens": "^0.1.0-alpha.1",
-          "react": "^19.2.4",
-          "react-dom": "^19.2.4"
-        },
-        "publishConfig": {
-          "access": "public",
-          "registry": "https://registry.npmjs.org/",
-          "tag": "next",
-          "provenance": true
-        }
-      }
-    },
-    "iframeSdk": {
-      "workspace": "iframe-sdk",
-      "name": "@fred-oss/iframe-sdk",
-      "version": "0.1.0-alpha.1",
-      "expectedManifest": {
-        "description": "Framework-independent child client for FRED application iframes",
-        "license": "Apache-2.0",
-        "type": "module",
-        "repository": {
-          "type": "git",
-          "url": "git+https://github.com/ThalesGroup/fred.git",
-          "directory": "libs/frontend/iframe-sdk"
-        },
-        "homepage": "https://github.com/ThalesGroup/fred/tree/swift/libs/frontend/iframe-sdk#readme",
-        "bugs": { "url": "https://github.com/ThalesGroup/fred/issues" },
-        "engines": { "node": ">=22.13.0" },
-        "exports": {
-          ".": {
-            "types": "./dist/types/src/index.d.ts",
-            "import": "./dist/index.js"
-          },
-          "./protocol": {
-            "types": "./dist/types/.generated/applicationProtocol.d.ts",
-            "import": "./dist/protocol.js"
-          }
-        },
-        "types": "./dist/types/src/index.d.ts",
-        "files": ["dist", "LICENSE", "README.md", "build-evidence.json"],
-        "sideEffects": false,
-        "publishConfig": {
-          "access": "public",
-          "registry": "https://registry.npmjs.org/",
-          "tag": "next",
-          "provenance": true
-        }
-      }
-    }
   }
 }

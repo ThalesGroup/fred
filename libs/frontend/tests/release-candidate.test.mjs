@@ -48,7 +48,7 @@ test("candidate generation packs and verifies each selected archive once", async
   const calls = [];
   const result = await buildReleaseCandidate({
     contract,
-    sourceCommit: "fixture-commit",
+    sourceCommit: "f".repeat(40),
     clean: true,
     producerToolchain: expectedToolchain,
     applicationToolchain,
@@ -58,6 +58,12 @@ test("candidate generation packs and verifies each selected archive once", async
   assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
   assert.equal(result.archives.length, 3);
   assert.equal(result.evidence.kind, "fixture-candidate-evidence");
+  assert.equal(result.record.kind, "candidate");
+  assert.equal(result.record.readiness, "fixture");
+  assert.deepEqual(
+    result.record.selected.map(({ id }) => id),
+    ["designTokens", "ui", "iframeSdk"],
+  );
 });
 
 test("candidate generation fails before packing for dirty, drifted, or unconfirmed input", async (context) => {
