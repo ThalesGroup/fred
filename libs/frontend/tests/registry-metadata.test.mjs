@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 
-import { reconcilePublishedCandidate } from "../scripts/bootstrap-publish.mjs";
 import {
   exactVersionMetadataUrl,
   fetchExactPackageMetadata,
   fetchPackageMetadata,
   packageMetadataUrl,
+  waitForExactPackageMetadata,
   waitForPackageMetadata,
 } from "../scripts/registry-metadata.mjs";
 
@@ -78,7 +78,7 @@ test("only exact HTTP 404 is retried and six attempts are preserved", async (con
       else json(response, 200, matchingMetadata());
     },
   );
-  await reconcilePublishedCandidate({
+  await waitForExactPackageMetadata({
     candidate,
     registry: delayed.registry,
     inspectRegistry: fetchExactPackageMetadata,
@@ -90,13 +90,13 @@ test("only exact HTTP 404 is retried and six attempts are preserved", async (con
     json(response, 404, { error: "not visible" });
   });
   await assert.rejects(
-    reconcilePublishedCandidate({
+    waitForExactPackageMetadata({
       candidate,
       registry: absent.registry,
       inspectRegistry: fetchExactPackageMetadata,
       waitForVisibility: async () => {},
     }),
-    /visibility retries exhausted after 6 exact-version reads/,
+    /exact-version metadata visibility retries exhausted after 6 reads/,
   );
   assert.equal(absent.requests.length, 6);
 });
@@ -142,7 +142,7 @@ test("HTTP, redirect, JSON, identity, and integrity failures are immediate", asy
         (_request, response) => json(response, status, body, headers),
       );
       await assert.rejects(
-        reconcilePublishedCandidate({
+        waitForExactPackageMetadata({
           candidate,
           registry: controlled.registry,
           inspectRegistry: fetchExactPackageMetadata,

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
@@ -25,6 +27,51 @@ import {
 import { run } from "../scripts/process.mjs";
 
 const fixtureContract = await loadReleaseContract();
+const verifierCli = fileURLToPath(
+  new URL("../scripts/registry-verifier.mjs", import.meta.url),
+);
+
+test("generic verifier loads in a fresh process and rejects retired CLI options", () => {
+  const load = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import(${JSON.stringify(new URL("../scripts/registry-verifier.mjs", import.meta.url).href)})`,
+    ],
+    {
+      cwd: path.dirname(verifierCli),
+      encoding: "utf8",
+      timeout: 10000,
+    },
+  );
+  assert.equal(load.status, 0, load.stderr);
+  const generic = spawnSync(process.execPath, [verifierCli], {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  assert.match(generic.stderr, /--contract is required/);
+  for (const retired of [
+    "--recovery-evidence",
+    "--recovery-plan",
+    "--verification-plan",
+    "--verification-inputs",
+    "--recovery-artifact-zip",
+    "--verification-future",
+  ]) {
+    const rejected = spawnSync(
+      process.execPath,
+      [verifierCli, retired, "unused"],
+      {
+        encoding: "utf8",
+        timeout: 10000,
+      },
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /is retired/);
+    assert.doesNotMatch(rejected.stderr, /--contract is required/);
+  }
+});
 
 function expected(
   role = "ui",
@@ -753,16 +800,6 @@ test("controlled registry orchestration verifies identity before consumers", asy
     };
   }
   let installed = false;
-  const provenanceExpectations = Object.fromEntries(
-    Object.entries(packages).map(([role, candidate]) => [
-      role,
-      {
-        ...candidate.expectedProvenance,
-        sourceCommit:
-          role === "designTokens" ? "fixture-commit" : "recovery-commit",
-      },
-    ]),
-  );
   const result = await verifyRegistryTooling({
     contract,
     evidence: {
@@ -778,7 +815,6 @@ test("controlled registry orchestration verifies identity before consumers", asy
       packages,
     },
     coordinates,
-    provenanceExpectations,
     resolvePackage: async ({ coordinate }) => {
       const role = Object.entries(coordinates).find(
         ([, value]) => value === coordinate,
@@ -794,14 +830,14 @@ test("controlled registry orchestration verifies identity before consumers", asy
       { role },
       { expectedProvenance, certificateIssuer },
     ) => {
-      assert.equal(expectedProvenance, provenanceExpectations[role]);
+      assert.equal(expectedProvenance, packages[role].expectedProvenance);
       assert.equal(
         certificateIssuer,
         contract.expectedProvenance.certificateIssuer,
       );
       return {
         cryptographicallyVerified: true,
-        identity: provenanceExpectations[role],
+        identity: packages[role].expectedProvenance,
       };
     },
     installConsumers: async () => {
