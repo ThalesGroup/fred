@@ -48,6 +48,7 @@ from control_plane_backend.teams.service import (
     add_team_member,
     grant_team_member_role,
     reconcile_team_admin_charter_roles,
+    resolve_granted_team_relation,
 )
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -248,6 +249,29 @@ async def test_other_roles_are_written_as_requested() -> None:
     )
 
     assert rebac.tuples == {("editor", RelationType.TEAM_EDITOR.value, "team-a")}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("accepted", "version", "expected"),
+    [
+        (set(), _VERSION, UserTeamRelation.PENDING_TEAM_ADMIN),
+        ({("nominee", _VERSION)}, _VERSION, UserTeamRelation.TEAM_ADMIN),
+        (set(), None, UserTeamRelation.TEAM_ADMIN),
+    ],
+)
+async def test_an_imported_pending_nomination_is_resolved_again(
+    accepted: set[tuple[str, str]],
+    version: str | None,
+    expected: UserTeamRelation,
+) -> None:
+    deps = _deps(_FakeRebac(), _FakeCharterStore(accepted), version=version)
+
+    resolved = await resolve_granted_team_relation(
+        "nominee", UserTeamRelation.PENDING_TEAM_ADMIN, deps
+    )
+
+    assert resolved == expected
 
 
 def test_pending_team_admin_cannot_be_granted_directly() -> None:

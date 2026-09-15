@@ -1358,13 +1358,22 @@ async def search_candidate_team_members(
     if not matches:
         return []
 
-    admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
+    (
+        admin_ids,
+        pending_admin_ids,
+        editor_ids,
+        analyst_ids,
+        member_ids,
+    ) = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
+        _get_team_users_by_relation(rebac, team_id, RelationType.PENDING_TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER),
     )
-    existing_member_ids = admin_ids | editor_ids | analyst_ids | member_ids
+    existing_member_ids = (
+        admin_ids | pending_admin_ids | editor_ids | analyst_ids | member_ids
+    )
 
     return [
         candidate for candidate in matches if candidate.id not in existing_member_ids
@@ -2080,12 +2089,16 @@ async def resolve_granted_team_relation(
     user_id: str, relation: UserTeamRelation, deps: TeamServiceDependencies
 ) -> UserTeamRelation:
     """`team_admin` is written as `pending_team_admin` until the user accepted
-    the configured charter version. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
+    the configured charter version; a `pending_team_admin` coming back through an
+    import is resolved the same way. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
     """
-    if relation != UserTeamRelation.TEAM_ADMIN:
+    if relation not in (
+        UserTeamRelation.TEAM_ADMIN,
+        UserTeamRelation.PENDING_TEAM_ADMIN,
+    ):
         return relation
     if await _has_accepted_team_admin_charter(user_id, deps):
-        return relation
+        return UserTeamRelation.TEAM_ADMIN
     return UserTeamRelation.PENDING_TEAM_ADMIN
 
 
