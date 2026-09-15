@@ -272,6 +272,7 @@ export function validateReleaseRecord(record) {
         "candidateArtifact",
         "execution",
         "selected",
+        "commands",
       ],
       "publishing attempt record",
     );
@@ -289,17 +290,91 @@ export function validateReleaseRecord(record) {
         /^sha256-/.test(record.baselineDigest),
       "attempt source/policy/baseline binding missing",
     );
-    if (record.readiness === "persisted")
+    if (record.readiness === "persisted") {
+      exactKeys(
+        record.candidateArtifact,
+        [
+          "artifactId",
+          "runId",
+          "runAttempt",
+          "sourceCommit",
+          "zipSha256",
+          "recordDigest",
+        ],
+        "attempt candidate artifact",
+      );
       assert(
-        record.candidateArtifact &&
-          Number.isSafeInteger(record.candidateArtifact.id) &&
-          record.candidateArtifact.zipSha256,
+        Number.isSafeInteger(record.candidateArtifact.artifactId) &&
+          /^[a-f0-9]{64}$/.test(record.candidateArtifact.zipSha256),
         "persisted attempt candidate artifact identity missing",
       );
+    }
     assertActualExecution(record.execution);
     assert(
       Array.isArray(record.selected) && record.selected.length > 0,
       "attempt selection missing",
+    );
+    assert.deepEqual(
+      record.commands,
+      record.selected.map(({ id, coordinate, integrity }) => ({
+        id,
+        coordinate,
+        integrity,
+        command: "npm publish",
+        tag: "next",
+        access: "public",
+        provenance: true,
+      })),
+      "attempt command order differs from exact selected archives",
+    );
+  } else if (record.kind === "publishing-terminal") {
+    exactKeys(
+      record,
+      [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "attemptDigest",
+        "candidateDigest",
+        "candidateArtifact",
+        "execution",
+        "passedBoundaries",
+        "possiblyInvoked",
+        "neverInvoked",
+      ],
+      "publishing terminal record",
+    );
+    assert.equal(
+      record.readiness,
+      "aborted",
+      "terminal must describe an aborted publishing path",
+    );
+    assert(
+      /^sha256-/.test(record.attemptDigest) &&
+        /^sha256-/.test(record.candidateDigest),
+      "terminal attempt/candidate binding is incomplete",
+    );
+    assertActualExecution(record.execution);
+    assert(
+      Array.isArray(record.passedBoundaries) &&
+        Array.isArray(record.possiblyInvoked) &&
+        Array.isArray(record.neverInvoked),
+      "terminal boundaries are incomplete",
+    );
+    assert.equal(
+      new Set([...record.passedBoundaries, ...record.neverInvoked]).size,
+      record.passedBoundaries.length + record.neverInvoked.length,
+      "terminal boundaries overlap or repeat",
+    );
+    assert(
+      record.possiblyInvoked.every((id) =>
+        record.passedBoundaries.includes(id),
+      ),
+      "terminal invocation is outside its passed boundary",
+    );
+    assert(
+      record.neverInvoked.length,
+      "terminal has no untouched package boundary",
     );
   } else if (record.kind === "publication-outcome") {
     exactKeys(
@@ -516,24 +591,73 @@ export async function candidateRecordFromEvidence({
   return validateReleaseRecord(record);
 }
 
-export function publishingAttemptModel({ candidate, execution }) {
+export function publishingAttemptModel({
+  candidate,
+  execution,
+  candidateArtifact = null,
+}) {
   validateReleaseRecord(candidate);
   assert.equal(candidate.kind, "candidate");
+  const selected = candidate.selected.map(({ id, coordinate }) => ({
+    id,
+    coordinate,
+    integrity: candidate.archives[id].integrity,
+  }));
   return validateReleaseRecord({
     schemaVersion: 1,
     kind: "publishing-attempt",
-    readiness: "unpersisted",
+    readiness: candidateArtifact ? "persisted" : "unpersisted",
     candidateDigest: releaseRecordDigest(candidate),
     sourceCommit: candidate.sourceCommit,
     policyDigest: candidate.policyDigest,
     baselineDigest: candidate.baselineDigest,
-    candidateArtifact: null,
+    candidateArtifact,
     execution,
-    selected: candidate.selected.map(({ id, coordinate }) => ({
+    selected,
+    commands: selected.map(({ id, coordinate, integrity }) => ({
       id,
       coordinate,
-      integrity: candidate.archives[id].integrity,
+      integrity,
+      command: "npm publish",
+      tag: "next",
+      access: "public",
+      provenance: true,
     })),
+  });
+}
+
+export function publishingTerminalModel({
+  attempt,
+  passedBoundaries,
+  possiblyInvoked,
+}) {
+  validateReleaseRecord(attempt);
+  assert.equal(attempt.kind, "publishing-attempt");
+  const ordered = attempt.selected.map(({ id }) => id);
+  assert.deepEqual(
+    passedBoundaries,
+    ordered.slice(0, passedBoundaries.length),
+    "publishing terminal does not describe a serialized prefix",
+  );
+  assert(
+    possiblyInvoked.every((id) => passedBoundaries.includes(id)),
+    "terminal invocation differs from passed boundaries",
+  );
+  assert(
+    passedBoundaries.length < ordered.length,
+    "terminal has no untouched package",
+  );
+  return validateReleaseRecord({
+    schemaVersion: 1,
+    kind: "publishing-terminal",
+    readiness: "aborted",
+    attemptDigest: releaseRecordDigest(attempt),
+    candidateDigest: attempt.candidateDigest,
+    candidateArtifact: attempt.candidateArtifact,
+    execution: attempt.execution,
+    passedBoundaries,
+    possiblyInvoked,
+    neverInvoked: ordered.slice(passedBoundaries.length),
   });
 }
 
@@ -586,7 +710,10 @@ export function verificationModel({
   });
 }
 
-export function assertRecordAuthorizesPublication(record) {
+export function assertRecordAuthorizesPublication(
+  record,
+  { readback, candidate } = {},
+) {
   validateReleaseRecord(record);
   assert.equal(
     record.kind,
@@ -598,12 +725,37 @@ export function assertRecordAuthorizesPublication(record) {
     "persisted",
     "unpersisted model cannot authorize publication",
   );
-  throw new Error(
-    "durable attempt artifact upload/readback is not implemented in this migration slice",
+  assert(
+    readback && candidate,
+    "durable attempt artifact readback and candidate are required",
   );
+  assert.equal(
+    readback.recordDigest,
+    releaseRecordDigest(record),
+    "attempt readback digest differs",
+  );
+  assert.equal(
+    record.candidateDigest,
+    releaseRecordDigest(candidate),
+    "attempt candidate record differs",
+  );
+  assert.deepEqual(
+    record.candidateArtifact,
+    readback.candidateRef,
+    "attempt candidate artifact differs from readback",
+  );
+  assert.equal(
+    candidate.readiness,
+    "complete",
+    "publication requires a complete candidate",
+  );
+  return true;
 }
 
-export function assertRecordAuthorizesRegistrySuccess(record) {
+export function assertRecordAuthorizesRegistrySuccess(
+  record,
+  { candidate, verifiedResult } = {},
+) {
   validateReleaseRecord(record);
   assert.equal(
     record.kind,
@@ -615,7 +767,42 @@ export function assertRecordAuthorizesRegistrySuccess(record) {
     "registry-verified",
     "controlled fixture evidence is not registry success",
   );
-  throw new Error(
-    "genuine registry verifier record binding is not implemented in this migration slice",
+  assert(
+    candidate && verifiedResult,
+    "genuine registry result and retained candidate are required",
   );
+  assert.equal(
+    record.candidateDigest,
+    releaseRecordDigest(candidate),
+    "verification candidate digest differs",
+  );
+  assert.equal(
+    verifiedResult.kind,
+    "public-registry-verification",
+    "controlled tooling is not registry success",
+  );
+  assert.deepEqual(
+    verifiedResult.selectedIds,
+    candidate.selected.map(({ id }) => id),
+    "registry package selection differs",
+  );
+  for (const gate of [
+    "exactRegistryArchives",
+    "npmSignatures",
+    "sigstoreProvenance",
+    "cleanRegistryConsumers",
+    "browserSmoke",
+  ])
+    assert.equal(record.gates[gate], true, `${gate} public gate missing`);
+  assert.equal(
+    record.gates.productionHostCompatibility,
+    verifiedResult.selectedIds.includes("iframeSdk") ? true : "not-applicable",
+    "production host gate must reflect SDK applicability",
+  );
+  assert.equal(
+    record.outcomes.length,
+    candidate.selected.length,
+    "verified publication outcome set differs",
+  );
+  return true;
 }

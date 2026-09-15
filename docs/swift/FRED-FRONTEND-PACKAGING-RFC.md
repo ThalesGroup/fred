@@ -1,6 +1,6 @@
 # RFC: Versioned frontend packages for external application integration with FRED
 
-**Status:** Partially implemented — design-token, initial UI, protocol-`"1"` iframe SDK archive foundations, selected `@fred-oss` prerelease coordinates, first prerelease publication and registry verification, and preparation tooling are complete; subsequent publishing automation, FRED registry adoption, theme/live-locale extensions, catalog expansion, and external adoption remain open
+**Status:** Partially implemented — design-token, initial UI, protocol-`"1"` iframe SDK archive foundations, selected `@fred-oss` prerelease coordinates, first prerelease publication and registry verification, and selected release tooling are complete; subsequent direct publishing still requires maintainer trust review and real execution evidence, while FRED registry adoption, theme/live-locale extensions, catalog expansion, and external adoption remain open
 **Date:** 2026-09-07  
 **Area:** FRED frontend, design system, application integration, package delivery  
 **Scope:** Common frontend integration contract for independently deployed external applications  
@@ -312,7 +312,7 @@ Use public npm publication for the open-source packages, under a maintainer-cont
 
 Use a dedicated frontend-package CI workflow, separate from Python package publishing and Docker image releases. Pin a tested Node/npm toolchain for that workflow; the existing frontend image uses Node `22.13.0`, which must not be assumed to include the npm CLI needed for OIDC publishing.
 
-The first prereleases were created through a separately approved bootstrap operation. The retained `Publish-frontend-packages.yml` workflow is now preparation-only and cannot publish. Subsequent release automation and Trusted Publishing transition require separate review; this RFC does not imply that trust configuration or bootstrap-token revocation has been completed. ([npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/))
+The first prereleases were created through a separately approved bootstrap operation. The retained `Publish-frontend-packages.yml` workflow now defaults to selected-package preparation and has protected direct-OIDC publication and read-only verification paths for later versions. Their implementation is not evidence that each npm package's direct Trusted Publisher trust is configured or that the bootstrap token was revoked; maintainers review those prerequisites before actual publication. ([npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/))
 
 Release steps: build → quality/tests → `npm pack` → isolated consumer checks → publish prereleases → validate registry installation → release approval → stable publication. Publish dependencies before their consumers. Commit standard semver dependencies, not unresolved `workspace:` or local `file:` references, in released manifests.
 
