@@ -29,8 +29,8 @@ import logging
 from collections.abc import Sequence
 
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger(__name__)

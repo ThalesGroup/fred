@@ -47,6 +47,7 @@ deployment time, `run` serves runs. Configuration is declared with the same
 `fred_sdk.contracts.models`.
 """
 
+from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.documents import (
     DocumentPublisher,
@@ -58,7 +59,6 @@ from fred_sdk.knowledge_base.entrypoints import (
     publish_knowledge_base,
     run_knowledge_base,
 )
-from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
     KnowledgeBase,

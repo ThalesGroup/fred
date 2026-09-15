@@ -723,7 +723,7 @@ def _valid_configuration() -> dict:
             "m2m": {
                 "realm_url": "http://keycloak.invalid/realms/app",
                 "client_id": "kb-local-folder",
-                "secret_env_var": "ACME_KB_CLIENT_SECRET",
+                "secret_env_var": "ACME_KB_CLIENT_SECRET",  # pragma: allowlist secret
             }
         },
     }
@@ -738,7 +738,6 @@ def test_a_pod_is_configured_the_way_every_fred_component_is() -> None:
     """
     from fred_core.common import TemporalSchedulerConfig
     from fred_core.security.structure import M2MSecurity
-
     from fred_sdk.knowledge_base.configuration import PodConfiguration
 
     configuration = PodConfiguration.model_validate(_valid_configuration())
@@ -770,9 +769,8 @@ def test_a_configuration_without_credentials_is_refused_at_startup() -> None:
     So missing credentials are a startup error naming what is absent, not a pod
     that runs and is refused at its first document.
     """
-    from pydantic import ValidationError
-
     from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from pydantic import ValidationError
 
     without_security = _valid_configuration()
     del without_security["security"]
@@ -783,9 +781,8 @@ def test_a_configuration_without_credentials_is_refused_at_startup() -> None:
 
 @pytest.mark.parametrize("absent", ["realm_url", "client_id"])
 def test_a_configuration_missing_one_credential_names_it(absent: str) -> None:
-    from pydantic import ValidationError
-
     from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from pydantic import ValidationError
 
     payload = _valid_configuration()
     del payload["security"]["m2m"][absent]
@@ -804,7 +801,8 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
 
     configuration = PodConfiguration.model_validate(_valid_configuration())
 
-    assert configuration.m2m.secret_env == "ACME_KB_CLIENT_SECRET"
+    expected_env = "ACME_KB_CLIENT_SECRET"  # pragma: allowlist secret
+    assert configuration.m2m.secret_env == expected_env
     assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
 
 
@@ -829,9 +827,8 @@ def test_a_missing_configuration_file_is_its_own_error(
 
 def test_the_queue_is_derived_and_a_configured_one_is_not_read() -> None:
     """Both sides derive it, so neither can be configured out of agreement."""
-    from fred_sdk.knowledge_base.routing import task_queue_for
-
     from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from fred_sdk.knowledge_base.routing import task_queue_for
 
     payload = _valid_configuration()
     payload["scheduler"] = {"temporal": {"task_queue": "somebody-elses-queue"}}

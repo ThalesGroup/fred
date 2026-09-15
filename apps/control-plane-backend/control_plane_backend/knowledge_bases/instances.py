@@ -38,13 +38,13 @@ from typing import Any
 from uuid import uuid4
 
 from fred_core import KeycloakUser
+from fred_core.scheduler import Schedule
 from fred_core.security.models import AuthorizationError
 from fred_core.security.rebac.knowledge_base_authz import (
     can_team_use_knowledge_base,
     knowledge_base_library_grant,
 )
 from fred_sdk.contracts.models import TuningValue
-from fred_core.scheduler import Schedule
 
 from control_plane_backend.knowledge_bases.cadence import (
     drop_cadence,

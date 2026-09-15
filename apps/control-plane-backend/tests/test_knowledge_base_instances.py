@@ -11,9 +11,8 @@ at its own boundary, and what is asserted is the order, the undo and the scope.
 
 from __future__ import annotations
 
-import json
-
 import inspect
+import json
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -38,10 +37,10 @@ from control_plane_backend.knowledge_bases.validation import (
     InstanceConfigurationInvalid,
 )
 from fred_core import Resource
+from fred_core.scheduler import IntervalSchedule
 from fred_core.security.models import AuthorizationError
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 from fred_sdk.contracts.models import FieldSpec
-from fred_core.scheduler import IntervalSchedule
 from temporalio.client import ScheduleAlreadyRunningError
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -478,7 +477,12 @@ async def test_creating_an_instance_is_refused_while_the_definition_is_not_enabl
 async def test_two_instances_coexist_independently():
     deps = _deps()
 
-    await _create(deps, folder_name="First", schedule=IntervalSchedule(every_seconds=604_800), suspended=True)
+    await _create(
+        deps,
+        folder_name="First",
+        schedule=IntervalSchedule(every_seconds=604_800),
+        suspended=True,
+    )
     await _create(deps, folder_name="Second")
 
     listed = {

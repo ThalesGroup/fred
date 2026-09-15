@@ -37,6 +37,7 @@ from fred_core.security.rebac.knowledge_base_authz import (
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 from fred_sdk.knowledge_base import KnowledgeBaseDeclaration
 from pydantic import TypeAdapter
+
 from control_plane_backend.knowledge_bases.instances import (
     KnowledgeBaseNotEnabled,
     UnknownDefinition,

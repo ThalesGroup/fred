@@ -20,8 +20,8 @@ from datetime import datetime
 from typing import Any
 
 from fred_core import PREFIX_PATTERN
-from fred_sdk.contracts.models import FieldSpec
 from fred_core.scheduler import Schedule
+from fred_sdk.contracts.models import FieldSpec
 from pydantic import BaseModel, Field
 
 
