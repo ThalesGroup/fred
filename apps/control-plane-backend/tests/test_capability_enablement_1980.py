@@ -2179,9 +2179,9 @@ def _availability_deps(
     usable_ids: set[str] | None,
 ):
     """A `service.set_personal_scope`-shaped deps object with the live-fact
-    fetches (`_available_capability_ids_by_source` / `usable_capability_ids`)
-    stubbed the same way `test_capability_impact.py::_patch_availability`
-    stubs them for the impact module."""
+    fetches stubbed. `usable_capability_ids` here feeds
+    `impact.resolve_availability_for_team` (the grant revive path), which still
+    asks OpenFGA live - the display paths fold cached tuples instead."""
 
     from types import SimpleNamespace
 
