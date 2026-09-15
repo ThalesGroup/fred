@@ -96,4 +96,20 @@ describe("UiParts (#1977)", () => {
     expect(html).toContain("chatbot.uiParts.geoSummary");
     expect(html).toContain("HELLO");
   });
+
+  it("gives each renderer the parts of its message", async () => {
+    const seen: unknown[] = [];
+    vi.resetModules();
+    vi.doMock("../../../../features/capabilities/partRendererRegistry", () => ({
+      rendererForPartKind: () => (props: { messageParts?: unknown }) => {
+        seen.push(props.messageParts);
+        return null;
+      },
+    }));
+    const { UiParts: Isolated } = await import("./UiParts");
+    const parts = [DEMO_CARD, LINK];
+    renderToStaticMarkup(<Isolated parts={parts} />);
+    expect(seen).toEqual([parts, parts]);
+    vi.doUnmock("../../../../features/capabilities/partRendererRegistry");
+  });
 });

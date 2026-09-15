@@ -28,6 +28,8 @@ import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFl
 export interface UiPartRendererProps {
   /** The raw part; renderers narrow it to their generated type. */
   part: RawUiPart;
+  /** Every part of the same message, in order, `part` included (by reference). */
+  messageParts?: readonly RawUiPart[];
 }
 
 /** Renders ONE chat part of the kind it is registered under. */

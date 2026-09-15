@@ -172,6 +172,11 @@ The system SHALL write the generated deck to the agent workspace of the conversa
 - **WHEN** the deck is generated and the PDF conversion succeeds
 - **THEN** the chat shows the same preview card and side pane as `ppt_filler`, with a download of the `.pptx`, and the pane opens on its own even when the agent has no `ppt_filler` capability
 
+#### Scenario: Deck regenerated within one answer
+
+- **WHEN** the agent builds the same deck several times before answering (for example to fix the adjustments the tool reported)
+- **THEN** the answer shows a single preview card, for the last build
+
 #### Scenario: Preview unavailable
 
 - **WHEN** the PDF conversion fails or is unavailable

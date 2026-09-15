@@ -38,7 +38,7 @@ export function UiParts({ parts }: UiPartsProps) {
     <div className={styles.parts} aria-label={t("chatbot.uiParts.ariaLabel")}>
       {renderable.map(({ part, index, Renderer }) => {
         const PartRenderer = Renderer!;
-        return <PartRenderer key={`${part.type}-${index}`} part={part} />;
+        return <PartRenderer key={`${part.type}-${index}`} part={part} messageParts={parts} />;
       })}
     </div>
   );

@@ -15,7 +15,8 @@
 
 // Two capabilities deliver this card, and an agent may have only one of them:
 // "Open preview" must ask for the pane of the capability that produced the deck,
-// or the page finds no such panel and nothing opens.
+// or the page finds no such panel and nothing opens. An agent that regenerates a
+// deck within one answer shows one card for it, the last.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,11 +47,16 @@ const deck: PptPreviewPartData = {
 
 let root: Root | null = null;
 
-function clickOpen(part: PptPreviewPartData) {
+function mount(part: PptPreviewPartData, messageParts?: PptPreviewPartData[]): HTMLElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(<PptPreviewCardRenderer part={part as never} />));
+  act(() => root!.render(<PptPreviewCardRenderer part={part as never} messageParts={messageParts as never} />));
+  return container;
+}
+
+function clickOpen(part: PptPreviewPartData) {
+  const container = mount(part);
   const button = [...container.querySelectorAll("button")].find((b) =>
     b.textContent?.includes("capability.ppt_filler.preview.open"),
   );
@@ -74,5 +80,16 @@ describe("PptPreviewCardRenderer", () => {
 
   it("opens the ppt_filler pane for a part that predates the field", () => {
     expect(clickOpen(deck)).toEqual([{ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }]);
+  });
+
+  it("shows only the last card of a deck regenerated in the same message", () => {
+    const first = deck;
+    const second = { ...deck, version: "v2" };
+    const unrelated = { ...deck, preview_id: "deck-2" };
+    const parts = [first, unrelated, second];
+
+    expect(mount(first, parts).textContent).toBe("");
+    expect(mount(unrelated, parts).textContent).toContain("Q3 review");
+    expect(mount(second, parts).textContent).toContain("Q3 review");
   });
 });

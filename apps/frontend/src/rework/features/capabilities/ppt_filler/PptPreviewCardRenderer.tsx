@@ -49,11 +49,19 @@ const seenKeys = new Set<string>();
 const pageLoadedAt = Date.now();
 const AUTO_OPEN_MIN_AGE_MS = 5000;
 
-export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
+/** A later part of the same message regenerated this deck: only that one is shown. */
+function isSuperseded(part: UiPartRendererProps["part"], messageParts: UiPartRendererProps["messageParts"]): boolean {
+  if (!messageParts) return false;
+  const later = messageParts.slice(messageParts.indexOf(part) + 1);
+  return later.some((other) => other.type === part.type && other.preview_id === part.preview_id);
+}
+
+export function PptPreviewCardRenderer({ part, messageParts }: UiPartRendererProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const sessionId = useMountSessionId();
   const preview = part as unknown as PptPreviewPartData;
+  const superseded = isSuperseded(part, messageParts);
 
   const key = `${preview.preview_id}:${preview.version}`;
 
@@ -65,7 +73,7 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
   };
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || superseded) return;
     const firstSighting = !seenKeys.has(key);
     // Mark seen regardless, so a history-replay mount never auto-opens later and a
     // live fill only pops the panel the first time its part arrives.
@@ -75,7 +83,9 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
     // Intentionally keyed on the deck identity and conversation; `preview`/`dispatch`
     // are stable per that identity for this heuristic.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, sessionId]);
+  }, [key, sessionId, superseded]);
+
+  if (superseded) return null;
 
   const title = preview.title || t("capability.ppt_filler.preview.untitled", { defaultValue: "Presentation" });
 
