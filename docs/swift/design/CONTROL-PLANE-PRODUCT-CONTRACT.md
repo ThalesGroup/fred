@@ -1374,10 +1374,11 @@ kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
-has one enablement decision even if different typed consumers eventually use
-it) — and deriving the id itself
-(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+per distinct model identity — not per `profile_id` (a concrete model has one
+enablement decision even if different typed consumers eventually use it) — and
+deriving the id itself (`ModelProfile.capability_id`, which is
+`model_capability_id(provider, model_id or name)` — see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
 agent fetches (same best-effort contract — `None` on an unreachable pod),
@@ -2077,12 +2078,13 @@ per-model off switch in place _before_ levels 3–4 widen exposure to it (RFC §
 
 ### Contract additions
 
-| Field                                               | On                        | Meaning                                                                                                                                                       |
-| --------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                        |
-| `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                             |
-| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction |
-| `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                          |
+| Field                                               | On                        | Meaning                                                                                                                                                               |
+| --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                                |
+| `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                                     |
+| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
+| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction         |
+| `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                                  |
 
 ### Delivery to the runtime
 
@@ -3346,10 +3348,10 @@ template. Runtime side, block ordering and trust boundary:
 
 **Endpoints.**
 
-| Method | Path                                      | Permission                                                    |
-| ------ | ----------------------------------------- | ------------------------------------------------------------- |
-| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
-| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
+| Method | Path                                      | Permission                                                  |
+| ------ | ----------------------------------------- | ----------------------------------------------------------- |
+| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
+| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
 
 Both are registered in `authz-endpoint-matrix.yaml`. The gate was
 `can_manage_platform` until §51 carved this surface out of that catch-all so a
@@ -3877,7 +3879,7 @@ revokes that delete nothing.
 **Breaking (frontend bootstrap):** `PermissionSummary` replaces
 `is_platform_admin` / `is_platform_observer` with
 `platform_roles: PlatformRoleRelation[]` — the roles the caller
-*effectively* holds, union-resolved, so a `platform_admin` carries all five.
+_effectively_ holds, union-resolved, so a `platform_admin` carries all five.
 That is deliberately unlike `GET /users/platform-roles`, which reports
 directly-granted tuples only because those are what a revoke can delete.
 Five parallel `is_*` booleans over one closed enum is a list, and each future

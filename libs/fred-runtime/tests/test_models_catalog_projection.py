@@ -42,12 +42,14 @@ def _profile(
     display_name: str | None = None,
     supports_thinking: bool = False,
     settings: dict | None = None,
+    model_id: str | None = None,
 ) -> ModelProfile:
     return ModelProfile(
         profile_id=profile_id,
         capability=capability,
         model=ModelConfiguration(provider=provider, name=name, settings=settings),
         description=description,
+        model_id=model_id,
         model_display_name=display_name,
         supports_thinking=supports_thinking,
     )
@@ -144,6 +146,103 @@ def test_entry_id_uses_the_shared_fred_sdk_helper() -> None:
     entries = _project_model_catalog_entries(catalog)
 
     assert entries[0].id == model_capability_id("openai", "gpt-5.1")
+
+
+# ---------------------------------------------------------------------------
+# model_id — explicit model identity for gateways that reuse one wire name
+# ---------------------------------------------------------------------------
+
+
+def test_model_id_separates_profiles_that_share_provider_and_wire_name() -> None:
+    # The gateway case: both profiles must send `model: mistral`, but they are
+    # two different models for the label, the reasoning toggle and `can_use`.
+    from fred_sdk.contracts.capability.manifest import model_capability_id
+
+    catalog = _catalog(
+        (
+            _profile(
+                "chat.gw.small",
+                name="mistral",
+                model_id="mistral-small",
+                display_name="Mistral Small 4",
+                supports_thinking=True,
+            ),
+            _profile(
+                "chat.gw.medium",
+                name="mistral",
+                model_id="mistral-medium",
+                display_name="Mistral Medium 3.1",
+            ),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert [entry.id for entry in entries] == [
+        model_capability_id("openai", "mistral-small"),
+        model_capability_id("openai", "mistral-medium"),
+    ]
+    assert [entry.display_name for entry in entries] == [
+        "Mistral Small 4",
+        "Mistral Medium 3.1",
+    ]
+    assert [entry.profile_ids for entry in entries] == [
+        ["chat.gw.small"],
+        ["chat.gw.medium"],
+    ]
+    # Aptitude follows the profile that declared it, not its gateway sibling.
+    assert [entry.thinking_profile_ids for entry in entries] == [["chat.gw.small"], []]
+    # The wire name is untouched on both — that is what reaches the provider.
+    assert {entry.name for entry in entries} == {"mistral"}
+
+
+def test_the_same_profiles_without_model_id_still_merge() -> None:
+    # Unchanged behaviour for every catalog authored before the field existed.
+    catalog = _catalog(
+        (
+            _profile("chat.gw.small", name="mistral", display_name="Mistral Small 4"),
+            _profile("chat.gw.medium", name="mistral"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert len(entries) == 1
+    assert entries[0].display_name == "Mistral Small 4"
+    assert entries[0].profile_ids == ["chat.gw.small", "chat.gw.medium"]
+
+
+def test_a_profile_with_model_id_never_merges_with_one_without() -> None:
+    catalog = _catalog(
+        (
+            _profile("chat.gw.small", name="mistral", model_id="mistral-small"),
+            _profile("chat.gw.plain", name="mistral"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert [entry.profile_ids for entry in entries] == [
+        ["chat.gw.small"],
+        ["chat.gw.plain"],
+    ]
+
+
+def test_model_ids_that_normalize_to_one_id_produce_one_entry() -> None:
+    # `model_capability_id` normalizes non-id-safe characters, so two spellings
+    # can land on one id. Grouping on that id keeps them ONE entry; two entries
+    # sharing an id would re-create the merge, hidden behind a by-id union.
+    catalog = _catalog(
+        (
+            _profile("chat.gw.a", name="mistral", model_id="mistral/small"),
+            _profile("chat.gw.b", name="mistral", model_id="mistral-small"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert len(entries) == 1
+    assert entries[0].profile_ids == ["chat.gw.a", "chat.gw.b"]
 
 
 def test_empty_catalog_returns_no_entries() -> None:

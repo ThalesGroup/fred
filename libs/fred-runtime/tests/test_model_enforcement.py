@@ -173,6 +173,56 @@ def test_empty_usable_set_denies_everything() -> None:
         )
 
 
+def _gateway_factory() -> RoutedChatModelFactory:
+    """Two models behind one OpenAI-compatible gateway: distinct `base_url`s,
+    the same wire `model` value, told apart by `model_id`."""
+
+    def profile(profile_id: str, model_id: str, path: str) -> ModelProfile:
+        return ModelProfile(
+            profile_id=profile_id,
+            capability=ModelCapability.CHAT,
+            model=ModelConfiguration(
+                provider="openai", name="mistral", settings={"base_url": path}
+            ),
+            model_id=model_id,
+        )
+
+    policy = ModelRoutingPolicy(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.gw.medium"},
+        profiles=(
+            profile("chat.gw.medium", "mistral-medium", "https://gw/medium/v1"),
+            profile("chat.gw.small", "mistral-small", "https://gw/small/v1"),
+        ),
+        agent_profile_overrides={"small-agent": "chat.gw.small"},
+    )
+    return RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(policy), provider=_FakeProvider()
+    )
+
+
+def test_gateway_siblings_are_authorized_by_their_own_identity() -> None:
+    # Enabling the small model must not enable the medium one just because
+    # both send `model: mistral` on the wire.
+    with pytest.raises(ModelNotUsableError) as exc_info:
+        _gateway_factory().build_for_chat(
+            definition=_DEFINITION,
+            binding=_binding((model_capability_id("openai", "mistral-small"),)),
+        )
+    assert exc_info.value.capability_id == model_capability_id(
+        "openai", "mistral-medium"
+    )
+
+
+def test_gateway_sibling_allowed_by_its_own_identity_builds() -> None:
+    model, selection = _gateway_factory().build_for_chat(
+        definition=SimpleNamespace(agent_id="small-agent"),
+        binding=_binding((model_capability_id("openai", "mistral-small"),)),
+    )
+    assert model is not None
+    assert selection.profile_id == "chat.gw.small"
+    assert selection.capability_id == model_capability_id("openai", "mistral-small")
+
+
 def test_build_also_enforces_via_build_for_chat() -> None:
     # build() funnels through build_for_chat — confirming the gate isn't
     # bypassable via the public entry point runtimes actually call.

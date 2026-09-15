@@ -327,3 +327,72 @@ def test_level_2_stays_a_ceiling_the_user_cannot_raise() -> None:
     params = _build([], reasoning=True)
 
     assert "reasoning_effort" not in params
+
+
+# ---------------------------------------------------------------------------
+# The toggle follows the MODEL IDENTITY, not the wire name
+# ---------------------------------------------------------------------------
+
+
+def _gateway_factory() -> RoutedChatModelFactory:
+    """One OpenAI-compatible gateway, two models: distinct `base_url`s, the
+    same wire `model` value, told apart by `model_id`. Only the small one
+    reasons."""
+
+    small = ModelProfile(
+        profile_id="chat.gw.small",
+        capability=ModelCapability.CHAT,
+        model=ModelConfiguration(
+            provider="openai",
+            name="mistral",
+            settings={"base_url": "https://gw/small/v1", "reasoning_effort": "high"},
+        ),
+        model_id="mistral-small",
+        supports_thinking=True,
+    )
+    medium = ModelProfile(
+        profile_id="chat.gw.medium",
+        capability=ModelCapability.CHAT,
+        model=ModelConfiguration(
+            provider="openai",
+            name="mistral",
+            settings={"base_url": "https://gw/medium/v1"},
+        ),
+        model_id="mistral-medium",
+    )
+    policy = ModelRoutingPolicy(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.gw.small"},
+        profiles=(small, medium),
+        agent_profile_overrides={"medium-agent": "chat.gw.medium"},
+    )
+    return RoutedChatModelFactory(resolver=ModelRoutingResolver(policy))
+
+
+def _gateway_build(agent_id: str, enabled_ids: list[str]) -> tuple[dict[str, Any], str]:
+    model, selection = _gateway_factory().build_for_chat(
+        definition=SimpleNamespace(agent_id=agent_id),
+        binding=_binding(enabled_ids),
+    )
+    return _outbound_params(model), selection.capability_id
+
+
+def test_enabling_a_gateway_sibling_does_not_enable_the_other() -> None:
+    # The reported bug: the small model's toggle must not make its medium
+    # sibling reason, and must not offer an inert toggle for it either.
+    params, capability_id = _gateway_build(
+        "medium-agent", [model_capability_id("openai", "mistral-small")]
+    )
+
+    assert capability_id == model_capability_id("openai", "mistral-medium")
+    assert "reasoning_effort" not in params
+    # Both still send the gateway's one wire value.
+    assert params["model"] == "mistral"
+
+
+def test_a_gateway_sibling_reasons_when_its_own_identity_is_enabled() -> None:
+    params, capability_id = _gateway_build(
+        "chat-agent", [model_capability_id("openai", "mistral-small")]
+    )
+
+    assert capability_id == model_capability_id("openai", "mistral-small")
+    assert params["reasoning_effort"] == "high"
