@@ -77,6 +77,8 @@ A release SHALL accept a nonempty, duplicate-free selection of registered packag
 
 Before publication, the release process SHALL generate a release record from the reviewed committed source and selected manifests. It MUST identify selected and compatibility-only packages; exact coordinates and dependency/peer ranges; the approved policy and its digest; source commit; observed producer and application Node/npm versions; actual archive filenames, byte lengths, and SHA-512 integrities; self-contained prior-release baseline digests; and expected registry, issuer, repository, workflow, and publication artifact digest. The record and exact selected candidate archives SHALL be retained together and independently rechecked before every downstream gate and publish command. Original candidate fields MUST remain immutable. Before any publication command, a separate approved publishing-attempt record MUST bind original candidate identity/digest, exact selected coordinates and archive integrities, and the independently expected *actual* current publishing commit/run/attempt, repository, authorized workflow, signer identity/issuer; it MUST be durably retained and read back with verified artifact identity/digest. Its ordered package-specific intents MUST be read back again before each corresponding command; failure to retain or verify that intent MUST prevent that command. Retained intent means publication may have been attempted, not that a command ran or succeeded. Actual verified per-package publication outcomes and a later verifier's distinct commit/run/attempt SHALL be recorded truthfully in bound records, without replacing the original candidate or attempt or deriving expected identity from a downloaded attestation. A retained attempt alone MUST NOT be reported as a successful publication.
 
+For an ordinary release attributed to a retained attempt, the verifier MUST extract the cryptographically covered SLSA invocation identity and compare its source repository, run ID, and run attempt with that attempt, in addition to archive digest, workflow, source commit, and signer policy. Missing, malformed, mismatched, or multiply attributable invocation evidence MUST NOT establish a verified publication outcome. Historical compatibility baselines without a retained ordinary attempt remain governed by their separately reviewed historical expectations.
+
 #### Scenario: A selected candidate passes all applicable gates
 
 - **WHEN** a clean reviewed source builds and validates selected archives under the separate pinned producer/application toolchains
@@ -205,6 +207,11 @@ An ordinary retry SHALL explicitly select the original release record and exact 
 - **WHEN** a version appearing after a lost outcome has wrong SHA-512, attested artifact digest, repository, publishing commit, workflow, signer, or issuer compared with the durable pre-command attempt
 - **THEN** reconciliation fails before publishing another package and never derives a new expected identity from the downloaded attestation
 
+#### Scenario: Multiple attempts share the same publishing commit
+
+- **WHEN** two retained attempts name the same source commit but different GitHub run IDs or attempts, and a signed SLSA invocation identifies one exact execution
+- **THEN** publisher reconciliation skips a matching published version only for that uniquely identified execution; missing, conflicting, or ambiguous invocation attribution stops continuation
+
 #### Scenario: Temporary registry visibility lags
 
 - **WHEN** a successful publish initially yields exact-version or package-wide 404 followed by matching metadata within the bounded read window
@@ -218,6 +225,8 @@ An ordinary retry SHALL explicitly select the original release record and exact 
 ### Requirement: Selected registry verification preserves every applicable public gate
 
 Generic registry verification SHALL accept the exact selected release record and verified publication outcomes or durable pre-command attempts, resolve only approved exact registry versions plus self-contained exact prior-dependency baselines, and compare downloaded archive bytes and cryptographically verified attestation digest/repository/actual publishing commit/workflow/signer against independent expected values in those records. A pre-command attempt MUST yield success only after full registry reconciliation; it cannot be treated as a publication outcome by itself. It MUST validate the full registry dependency graph and installed non-linked tree before `npm audit signatures`, then run clean source-isolated consumers, local-only browser smoke, and production-host compatibility where applicable to the selection and declared dependency baseline. Dependency and Chromium provisioning SHALL be separate network-capable prerequisites; offline archive installation and browser smoke MUST neither fetch dependencies nor bootstrap a browser. A controlled fixture run MUST NOT claim genuine public-registry success.
+
+For selected ordinary packages, final verification MUST bind the signed invocation repository, run ID, and run attempt to exactly one retained authorized attempt. A valid signature and matching source commit alone MUST NOT choose among multiple attempts at that commit.
 
 #### Scenario: SDK-only registry verification
 
@@ -238,6 +247,11 @@ Generic registry verification SHALL accept the exact selected release record and
 
 - **WHEN** an attestation is cryptographically valid but its artifact digest, repository, actual publishing commit, workflow, or signer policy differs from the independent release outcome
 - **THEN** public verification fails rather than deriving intended identity from the downloaded attestation
+
+#### Scenario: Final verification encounters ambiguous same-commit attempts
+
+- **WHEN** retained attempts share a publishing commit but the cryptographically covered invocation is missing, names another run or attempt, or matches multiple retained records
+- **THEN** genuine public-registry verification fails before clean consumers or successful final evidence
 
 ### Requirement: An additional package can be registered without a three-role schema rewrite
 
@@ -731,6 +745,8 @@ source repository; an unrelated dependency's commit MUST NOT satisfy the compari
 a missing/ambiguous matching dependency MUST fail closed. A current verifier's commit,
 run, and attempt MUST remain separate from those actual package publication identities.
 
+For an ordinary release whose expected actual publishing execution comes from a retained attempt, the command MUST compare the signed SLSA invocation repository, run ID, and run attempt with exactly one retained attempt. The signed in-toto statement type and SLSA predicate type MUST identify the approved GitHub/npm provenance format and agree with registry metadata; an outer SLSA label cannot substitute for a signed SLSA predicate. A matching source commit or workflow without a unique matching invocation MUST NOT establish success. Multiple SLSA provenance entries or malformed invocation identifiers MUST fail rather than choosing one opportunistically. This extra ordinary-attempt check does not rewrite the separately verified historical first-release baseline.
+
 The command MUST reject tags, ranges, unexpected registries, missing provenance,
 integrity mismatches, local tarballs, workspace packages, source-checkout resolution,
 and silent fallback. Its local automated tests MUST use controlled fixtures or equivalent
@@ -831,6 +847,11 @@ use a local archive when npm transport remains unavailable.
 - **WHEN** a provenance statement is cryptographically valid but its publishing workflow
   identity differs from the independently authorized identity
 - **THEN** registry verification fails the release-identity comparison
+
+#### Scenario: Signed non-SLSA statement is relabeled by unsigned registry metadata
+
+- **WHEN** registry metadata labels a validly signed attestation as SLSA but its signed statement type or predicate type is not the approved in-toto SLSA format
+- **THEN** registry verification rejects the attestation despite its valid signature
 
 #### Scenario: A valid Sigstore bundle has an unauthorized signer identity
 

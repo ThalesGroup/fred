@@ -305,6 +305,8 @@ test("approved preparation rejects an unreviewed changelog from a disposable pro
 
 function syntheticAttestation(expected, mutate = () => {}) {
   const statement = {
+    _type: "https://in-toto.io/Statement/v1",
+    predicateType: "https://slsa.dev/provenance/v1",
     subject: [{ digest: { sha512: expected.integrity.slice(7) } }],
     predicate: {
       buildDefinition: {

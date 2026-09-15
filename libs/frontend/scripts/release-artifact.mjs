@@ -917,12 +917,12 @@ export function uploadedArtifactRef({
   sourceCommit,
 }) {
   assert(
-    /^sha256:[a-f0-9]{64}$/.test(artifactDigest),
+    /^[a-f0-9]{64}$/.test(artifactDigest),
     "uploaded artifact digest is malformed",
   );
   return validateArtifactRef({
     artifactId: Number(artifactId),
-    zipSha256: artifactDigest.slice(7),
+    zipSha256: artifactDigest,
     recordDigest,
     runId: String(runId),
     runAttempt: String(runAttempt),

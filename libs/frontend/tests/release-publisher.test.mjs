@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import { sha512Integrity } from "../scripts/release-evidence.mjs";
 import {
   baselineDigest,
   loadCompatibilityLedger,
@@ -25,6 +26,7 @@ import {
   assertNoKnownPublishedSelection,
   executeOrdinaryPublication as executePublisher,
   reconcileSelected,
+  verifyPublishedMember,
 } from "../scripts/release-publisher.mjs";
 import {
   assertCompleteCandidateAttemptHistory,
@@ -33,6 +35,7 @@ import {
 } from "../scripts/release-artifact.mjs";
 import { run } from "../scripts/process.mjs";
 import { releaseSummary } from "../scripts/release-summary.mjs";
+import { signedPublishingProvenance } from "./helpers/signed-provenance.mjs";
 
 const commit = "a".repeat(40);
 const ref = {
@@ -174,48 +177,106 @@ test("actual GitHub execution identity is independent of candidate source", asyn
   );
 });
 
-test("committed selected version history resolves through actual git, not a shallow fixture", async () => {
+test("selected version history uses a disposable repository and rejects incomplete production history", async () => {
   const contract = await loadReleaseContract(
     "release/proposed-release-contract.json",
   );
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-version-history-"));
   try {
+    const source = path.join(root, "source");
+    const producer = path.join(source, "libs", "frontend");
+    const changelog = path.join(producer, "iframe-sdk", "CHANGELOG.md");
+    await mkdir(path.dirname(changelog), { recursive: true });
+    await run("git", ["init", "-q", "-b", "swift", source]);
+    const version = contract.packages.iframeSdk.version;
+    await writeFile(
+      changelog,
+      `## ${version}\nReview: approved\nChanges: fixture\n`,
+    );
+    await run("git", ["add", "libs/frontend/iframe-sdk/CHANGELOG.md"], {
+      cwd: source,
+    });
+    await run(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "-qm",
+        "reviewed version",
+      ],
+      { cwd: source },
+    );
+    const { stdout: sourceCommit } = await run("git", ["rev-parse", "HEAD"], {
+      cwd: source,
+    });
     const { candidate } = await syntheticCandidate(
       ["iframeSdk"],
       contract,
       root,
     );
-    const { stdout } = await run("git", ["rev-parse", "HEAD"], {
-      cwd: process.cwd(),
-    });
     const reviewed = validateReleaseRecord({
       ...candidate,
-      sourceCommit: stdout.trim(),
+      sourceCommit: sourceCommit.trim(),
     });
+    const observed = new Date(Date.now() - 60_000).toISOString();
     const mergeEvidence = {
       token: "controlled",
       fetchImpl: async () =>
         Response.json([
           {
             base: { ref: "swift" },
-            merged_at: "2026-09-15T15:04:28Z",
-            merge_commit_sha: "c77e7a0e52b019ee7ee6dfb22ad1b2ab78c1468d",
+            merged_at: observed,
+            merge_commit_sha: sourceCommit.trim(),
           },
         ]),
     };
     const start = await reviewedCoordinateHistoryStart(
       reviewed,
       contract,
-      run,
+      (command, args, options) =>
+        run(command, args, { ...options, cwd: producer }),
       mergeEvidence,
     );
-    assert.equal(start, "2026-09-15T14:30:00.000Z");
+    assert.equal(start, observed);
+    const shallow = path.join(root, "shallow");
+    await run("git", [
+      "clone",
+      "-q",
+      "--depth",
+      "1",
+      `file://${source}`,
+      shallow,
+    ]);
+    const { stdout: shallowState } = await run(
+      "git",
+      ["rev-parse", "--is-shallow-repository"],
+      { cwd: shallow },
+    );
+    assert.equal(shallowState.trim(), "true");
+    await assert.rejects(
+      reviewedCoordinateHistoryStart(
+        reviewed,
+        contract,
+        (command, args, options) =>
+          run(command, args, {
+            ...options,
+            cwd: path.join(shallow, "libs", "frontend"),
+          }),
+        mergeEvidence,
+      ),
+      /complete Git history/,
+    );
     await assert.rejects(
       reviewedCoordinateHistoryStart(
         reviewed,
         contract,
         async (command, args, options) =>
-          args[0] === "log" ? { stdout: "" } : run(command, args, options),
+          args[0] === "log"
+            ? { stdout: "" }
+            : run(command, args, { ...options, cwd: producer }),
         mergeEvidence,
       ),
       /no exact reviewed changelog introduction commit/,
@@ -230,10 +291,65 @@ test("committed selected version history resolves through actual git, not a shal
           })),
         }),
         contract,
-        run,
+        (command, args, options) =>
+          run(command, args, { ...options, cwd: producer }),
         mergeEvidence,
       ),
       /differs from reviewed manifest/,
+    );
+    const futureContract = structuredClone(contract);
+    futureContract.packages.iframeSdk.version = "0.1.0-alpha.2";
+    await writeFile(
+      changelog,
+      `## ${futureContract.packages.iframeSdk.version}\nReview: approved\nChanges: changed fixture\n\n## ${version}\nReview: approved\nChanges: fixture\n`,
+    );
+    await run("git", ["add", "libs/frontend/iframe-sdk/CHANGELOG.md"], {
+      cwd: source,
+    });
+    await run(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "-qm",
+        "next reviewed version",
+      ],
+      { cwd: source },
+    );
+    const { stdout: futureCommit } = await run("git", ["rev-parse", "HEAD"], {
+      cwd: source,
+    });
+    const { candidate: futureCandidate } = await syntheticCandidate(
+      ["iframeSdk"],
+      futureContract,
+      root,
+    );
+    const futureObserved = new Date(Date.now() - 30_000).toISOString();
+    assert.equal(
+      await reviewedCoordinateHistoryStart(
+        validateReleaseRecord({
+          ...futureCandidate,
+          sourceCommit: futureCommit.trim(),
+        }),
+        futureContract,
+        (command, args, options) =>
+          run(command, args, { ...options, cwd: producer }),
+        {
+          token: "controlled",
+          fetchImpl: async () =>
+            Response.json([
+              {
+                base: { ref: "swift" },
+                merged_at: futureObserved,
+                merge_commit_sha: futureCommit.trim(),
+              },
+            ]),
+        },
+      ),
+      futureObserved,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -248,11 +364,13 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
   try {
     const producer = path.join(root, "libs", "frontend");
     const changelog = path.join(producer, "iframe-sdk", "CHANGELOG.md");
+    const version = contract.packages.iframeSdk.version;
+    const collisionVersion = `${version}0`;
     await mkdir(path.dirname(changelog), { recursive: true });
     await run("git", ["init", "-q"], { cwd: root });
     await writeFile(
       changelog,
-      "## 0.1.0-alpha.10\nReview: approved\nChanges: earlier fixture\n",
+      `## ${collisionVersion}\nReview: approved\nChanges: earlier fixture\n`,
     );
     await run("git", ["add", "libs/frontend/iframe-sdk/CHANGELOG.md"], {
       cwd: root,
@@ -272,7 +390,7 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
     );
     await writeFile(
       changelog,
-      "## 0.1.0-alpha.1\nReview: approved\nChanges: exact fixture\n\n## 0.1.0-alpha.10\nReview: approved\nChanges: earlier fixture\n",
+      `## ${version}\nReview: approved\nChanges: exact fixture\n\n## ${collisionVersion}\nReview: approved\nChanges: earlier fixture\n`,
     );
     await run("git", ["add", "libs/frontend/iframe-sdk/CHANGELOG.md"], {
       cwd: root,
@@ -292,8 +410,8 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
         cwd: root,
         env: {
           ...process.env,
-          GIT_AUTHOR_DATE: "2030-01-01T00:00:00Z",
-          GIT_COMMITTER_DATE: "2030-01-01T00:00:00Z",
+          GIT_AUTHOR_DATE: new Date(Date.now() + 3_600_000).toISOString(),
+          GIT_COMMITTER_DATE: new Date(Date.now() + 3_600_000).toISOString(),
         },
       },
     );
@@ -305,6 +423,7 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
       contract,
       root,
     );
+    const observed = new Date(Date.now() - 30_000).toISOString();
     const history = await reviewedCoordinateHistoryStart(
       validateReleaseRecord({
         ...candidate,
@@ -319,12 +438,12 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
           Response.json([
             {
               base: { ref: "swift" },
-              merged_at: "2026-09-15T12:00:00Z",
+              merged_at: new Date(Date.now() - 60_000).toISOString(),
               merge_commit_sha: "f".repeat(40),
             },
             {
               base: { ref: "swift" },
-              merged_at: "2026-09-15T12:30:00Z",
+              merged_at: observed,
               merge_commit_sha: sourceCommit.trim(),
             },
           ]),
@@ -332,7 +451,7 @@ test("reviewed version history ignores an earlier substring-colliding changelog 
     );
     assert.equal(
       history,
-      "2026-09-15T12:30:00.000Z",
+      observed,
       "independently observed merge time must beat skewed future Git commit dates",
     );
   } finally {
@@ -944,10 +1063,27 @@ test("npm acceptance with lost outcome reconstructs tokens and continues only un
       archivePaths,
       readExact,
       wait: async () => {},
-      verifyExisting: async ({ attempts }) => ({
-        cryptographicallyVerified: true,
-        identity: { sourceCommit: attempts[0].record.execution.sourceCommit },
-      }),
+      verifyExisting: ({ member, expected, attempts }) =>
+        verifyPublishedMember({
+          member,
+          expected,
+          contract,
+          attempts,
+          resolvePackage: async () => ({
+            archivePath: archivePaths[member.id],
+            integrity: await sha512Integrity(archivePaths[member.id]),
+          }),
+          verifySignature: async () =>
+            signedPublishingProvenance({
+              artifactDigest: expected.integrity,
+              repository: contract.expectedProvenance.repository,
+              sourceCommit: attempts[0].record.execution.sourceCommit,
+              workflow: contract.expectedProvenance.workflow,
+              runId: attempts[0].record.execution.runId,
+              runAttempt: attempts[0].record.execution.runAttempt,
+              certificateIssuer: contract.expectedProvenance.certificateIssuer,
+            }),
+        }),
       verifyIntent: async ({ member }) => assert.equal(member.id, "ui"),
       publishCommand: async (_npm, args) => {
         commands.push(args[1]);
@@ -961,6 +1097,72 @@ test("npm acceptance with lost outcome reconstructs tokens and continues only un
     assert.deepEqual(
       commands.map((value) => path.basename(value)),
       ["designTokens.tgz", "ui.tgz"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("publisher reconciliation distinguishes signed attempts at the same commit", async () => {
+  const contract = await loadReleaseContract(
+    "release/proposed-release-contract.json",
+  );
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-signed-publisher-"));
+  try {
+    const { candidate, archivePaths } = await syntheticCandidate(
+      ["iframeSdk"],
+      contract,
+      root,
+    );
+    const first = attemptFor(candidate, contract, "b".repeat(40), "301");
+    const second = attemptFor(candidate, contract, "b".repeat(40), "302");
+    const member = candidate.selected[0];
+    const expected = {
+      coordinate: member.coordinate,
+      integrity: candidate.archives[member.id].integrity,
+    };
+    const resolvePackage = async () => ({
+      archivePath: archivePaths[member.id],
+      integrity: await sha512Integrity(archivePaths[member.id]),
+    });
+    const verifySignature = (runId) =>
+      signedPublishingProvenance({
+        artifactDigest: expected.integrity,
+        repository: contract.expectedProvenance.repository,
+        sourceCommit: first.execution.sourceCommit,
+        workflow: contract.expectedProvenance.workflow,
+        runId,
+        runAttempt: "1",
+        certificateIssuer: contract.expectedProvenance.certificateIssuer,
+      });
+    const input = {
+      member,
+      expected,
+      contract,
+      attempts: [{ record: first }, { record: second }],
+      resolvePackage,
+      verifySignature: () => verifySignature("302"),
+    };
+    const matched = await verifyPublishedMember(input);
+    assert.equal(matched.attempt.record.execution.runId, "302");
+    await assert.rejects(
+      verifyPublishedMember({
+        ...input,
+        verifySignature: () => verifySignature("303"),
+      }),
+      /does not match any retained actual publishing execution/,
+    );
+    await assert.rejects(
+      verifyPublishedMember({
+        ...input,
+        attempts: [{ record: second }, { record: second }],
+      }),
+      /attribution is ambiguous/,
+    );
+    await writeFile(archivePaths[member.id], "altered packed bytes");
+    await assert.rejects(
+      verifyPublishedMember(input),
+      /downloaded registry archive integrity differs/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1434,8 +1636,29 @@ test("SDK-only publication remains independent and registry 404 reads are bounde
             }
           : null;
       },
-      publishCommand: async (_command, args) => {
+      publishCommand: async (_command, args, options) => {
         assert(args[1].endsWith("iframeSdk.tgz"));
+        const { stdout: userConfig } = await run(
+          "npm",
+          ["config", "get", "userconfig"],
+          {
+            cwd: root,
+            env: options.env,
+          },
+        );
+        const { stdout: globalConfig } = await run(
+          "npm",
+          ["config", "get", "globalconfig"],
+          {
+            cwd: root,
+            env: options.env,
+          },
+        );
+        assert.equal(userConfig.trim(), options.env.NPM_CONFIG_USERCONFIG);
+        assert.equal(globalConfig.trim(), options.env.NPM_CONFIG_GLOBALCONFIG);
+        assert.notEqual(userConfig.trim(), globalConfig.trim());
+        assert.equal(await readFile(userConfig.trim(), "utf8"), "");
+        assert.equal(await readFile(globalConfig.trim(), "utf8"), "");
         published = true;
       },
       verifyExisting: async () => ({

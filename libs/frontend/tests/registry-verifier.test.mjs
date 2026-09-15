@@ -30,6 +30,7 @@ import {
   verificationEvidenceKind,
 } from "../scripts/registry-verifier.mjs";
 import { run } from "../scripts/process.mjs";
+import { signedPublishingProvenance } from "./helpers/signed-provenance.mjs";
 
 const fixtureContract = await loadReleaseContract();
 const selectedContract = await loadReleaseContract(
@@ -208,6 +209,8 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   const identity = expected("ui", integrity);
   const [workflowLocation, workflowRef] = identity.workflow.split("@");
   const statement = {
+    _type: "https://in-toto.io/Statement/v1",
+    predicateType: "https://slsa.dev/provenance/v1",
     subject: [{ digest: { sha512: integrity.slice("sha512-".length) } }],
     predicate: {
       buildDefinition: {
@@ -561,6 +564,106 @@ test("extracts identity from an in-toto SLSA statement", () => {
   );
 });
 
+test("cryptographically covered ordinary invocation identifies its exact run and attempt", () => {
+  const identity = expected("iframeSdk", "sha512-fixture", selectedContract);
+  const statement = {
+    subject: [{ digest: { sha512: "fixture" } }],
+    predicate: {
+      buildDefinition: {
+        externalParameters: {
+          workflow: {
+            repository: identity.repository,
+            path: ".github/workflows/Publish-frontend-packages.yml",
+            ref: "refs/heads/swift",
+          },
+        },
+        resolvedDependencies: [
+          {
+            uri: `git+${identity.repository}@refs/heads/swift`,
+            digest: { gitCommit: identity.sourceCommit },
+          },
+        ],
+      },
+      runDetails: {
+        metadata: {
+          invocationId: `${identity.repository}/actions/runs/71/attempts/2`,
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    provenanceIdentityFromStatement(statement, identity.repository),
+    {
+      ...identity,
+      invocationRepository: identity.repository,
+      runId: "71",
+      runAttempt: "2",
+    },
+  );
+  for (const invocationId of [
+    `${identity.repository}/actions/runs/71/attempts/2?other=1`,
+    "https://github.com/OtherOrg/fred/actions/runs/71/attempts/2",
+    [`${identity.repository}/actions/runs/71/attempts/2`],
+  ]) {
+    statement.predicate.runDetails.metadata.invocationId = invocationId;
+    assert.throws(
+      () => provenanceIdentityFromStatement(statement, identity.repository),
+      /invocation (ID is malformed|repository differs)/,
+    );
+  }
+});
+
+test("multiple SLSA provenance entries cannot provide ambiguous invocation attribution", async () => {
+  const entry = {
+    predicateType: "https://slsa.dev/provenance/v1",
+    bundle: {
+      dsseEnvelope: {
+        payloadType: "application/vnd.in-toto+json",
+        payload: Buffer.from("{}").toString("base64"),
+      },
+    },
+  };
+  await assert.rejects(
+    verifyProvenanceAttestation(
+      { attestations: [entry, entry] },
+      {
+        expectedWorkflow: selectedContract.expectedProvenance.workflow,
+        expectedRepository: selectedContract.expectedProvenance.repository,
+        certificateIssuer:
+          selectedContract.expectedProvenance.certificateIssuer,
+        verifyBundle: async () => {},
+      },
+    ),
+    /exactly one SLSA provenance/,
+  );
+});
+
+test("a signed non-SLSA statement cannot be relabeled as SLSA outside the signed bytes", async () => {
+  const options = {
+    artifactDigest: "sha512-fixture",
+    repository: selectedContract.expectedProvenance.repository,
+    sourceCommit: "fixture-source-commit",
+    workflow: selectedContract.expectedProvenance.workflow,
+    runId: "71",
+    runAttempt: "2",
+    certificateIssuer: selectedContract.expectedProvenance.certificateIssuer,
+  };
+  await assert.rejects(
+    signedPublishingProvenance({
+      ...options,
+      signedPredicateType: "https://example.invalid/not-slsa",
+    }),
+    /signed SLSA predicate differs/,
+  );
+  await assert.rejects(
+    signedPublishingProvenance({
+      ...options,
+      signedStatementType: "https://example.invalid/NotStatement",
+    }),
+    /signed in-toto statement type differs/,
+  );
+});
+
 test("selects the source commit only from the expected repository dependency", () => {
   const identity = expected();
   const statement = {
@@ -612,6 +715,8 @@ test("validly signed provenance still fails every wrong expected identity", asyn
     );
     const digest = identity.artifactDigest.slice("sha512-".length);
     const statement = {
+      _type: "https://in-toto.io/Statement/v1",
+      predicateType: "https://slsa.dev/provenance/v1",
       subject: [{ digest: { sha512: digest } }],
       predicate: {
         buildDefinition: {
@@ -966,31 +1071,39 @@ test("retained attempts bind a later actual publishing commit without rewriting 
       signerIssuer: contract.expectedProvenance.certificateIssuer,
     },
   });
+  const laterAttempt = publishingAttemptModel({
+    candidate,
+    candidateArtifact: attempt.candidateArtifact,
+    execution: { ...attempt.execution, runId: "72", runAttempt: "1" },
+  });
   const coordinates = { iframeSdk: evidence.packages.iframeSdk.coordinate };
   const options = {
     contract,
     evidence,
     coordinates,
     selectedIds: ["iframeSdk"],
-    publicationAttempts: [{ record: attempt }],
+    publicationAttempts: [{ record: attempt }, { record: laterAttempt }],
     resolvePackage: async ({ candidate: expected }) => ({
       role: "iframeSdk",
       integrity: expected.integrity,
       archivePath,
     }),
-    verifyPackageSignature: async () => ({
-      cryptographicallyVerified: true,
-      identity: {
-        ...evidence.packages.iframeSdk.expectedProvenance,
-        sourceCommit: "a".repeat(40),
-      },
-    }),
+    verifyPackageSignature: async () =>
+      signedPublishingProvenance({
+        artifactDigest: evidence.packages.iframeSdk.integrity,
+        repository: contract.expectedProvenance.repository,
+        sourceCommit: laterAttempt.execution.sourceCommit,
+        workflow: contract.expectedProvenance.workflow,
+        runId: laterAttempt.execution.runId,
+        runAttempt: laterAttempt.execution.runAttempt,
+        certificateIssuer: contract.expectedProvenance.certificateIssuer,
+      }),
     installConsumers: async () => {},
   };
   const result = await verifyRegistryTooling(options);
   assert.equal(
     result.packages.iframeSdk.attemptDigest,
-    releaseRecordDigest(attempt),
+    releaseRecordDigest(laterAttempt),
   );
   assert.equal(
     result.packages.iframeSdk.provenance.sourceCommit,
@@ -1000,17 +1113,47 @@ test("retained attempts bind a later actual publishing commit without rewriting 
   await assert.rejects(
     verifyRegistryTooling({
       ...options,
-      verifyPackageSignature: async () => ({
-        cryptographicallyVerified: true,
-        identity: {
-          ...evidence.packages.iframeSdk.expectedProvenance,
+      verifyPackageSignature: async () =>
+        signedPublishingProvenance({
+          artifactDigest: evidence.packages.iframeSdk.integrity,
+          repository: contract.expectedProvenance.repository,
           sourceCommit: "b".repeat(40),
-        },
-      }),
+          workflow: contract.expectedProvenance.workflow,
+          runId: laterAttempt.execution.runId,
+          runAttempt: laterAttempt.execution.runAttempt,
+          certificateIssuer: contract.expectedProvenance.certificateIssuer,
+        }),
       installConsumers: async () =>
         assert.fail("wrong provenance cannot reach consumers"),
     }),
     /does not match any retained actual publishing execution/,
+  );
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      verifyPackageSignature: async () =>
+        signedPublishingProvenance({
+          artifactDigest: evidence.packages.iframeSdk.integrity,
+          repository: contract.expectedProvenance.repository,
+          sourceCommit: laterAttempt.execution.sourceCommit,
+          workflow: contract.expectedProvenance.workflow,
+          runId: "73",
+          runAttempt: laterAttempt.execution.runAttempt,
+          certificateIssuer: contract.expectedProvenance.certificateIssuer,
+        }),
+      installConsumers: async () =>
+        assert.fail("wrong invocation cannot reach consumers"),
+    }),
+    /does not match any retained actual publishing execution/,
+  );
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      publicationAttempts: [{ record: laterAttempt }, { record: laterAttempt }],
+      installConsumers: async () =>
+        assert.fail("ambiguous attribution cannot reach consumers"),
+    }),
+    /attribution is ambiguous/,
   );
 });
 

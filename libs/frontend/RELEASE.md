@@ -72,6 +72,10 @@ and package-specific ordered command intents into a separate pre-command attempt
 Upload and independent GitHub API/ZIP/record readback must complete before any `npm publish`
 command; the selected member's intent is read back again at its own command boundary. A
 retained intent means publication may have been attempted, not that a command ran or succeeded.
+`actions/upload-artifact@v4` emits a plain 64-character hexadecimal `artifact-digest`;
+the uploaded-ref command records that value as ZIP SHA-256. GitHub REST metadata must
+independently report the strict `sha256:<same-hex>` form. The publisher gives npm distinct
+empty user and global configuration files and does not pass bootstrap credentials.
 On a handled failure leaving a serialized untouched suffix, the publisher writes an aborted
 terminal record and immediately stops. Its artifact is usable only after independent checks
 of the exact completed failed run/attempt, failed publishing step, successful later terminal
@@ -316,6 +320,14 @@ exact versions read-only, and uses `npm publish <retained tarball> --tag next --
 UI. An OIDC rejection stops without token/login fallback. A publish command is never
 automatically repeated. A matching version can be skipped only after exact bytes and
 cryptographic provenance match a retained attempt; wrong or ambiguous evidence stops.
+For an ordinary attempt, that match also checks the signed SLSA invocation repository,
+run ID, and run attempt, not just its source commit. npm 11.19.0 records the invocation
+as `<repository>/actions/runs/<runId>/attempts/<runAttempt>`; multiple attempts at the
+same commit remain distinct. The signed statement's in-toto type and SLSA predicate
+must also match the approved npm GitHub format and outer registry metadata; a relabeled
+signed non-SLSA payload is not release provenance. Missing or ambiguous invocation attribution stops before
+continuation or final registry success. The historical alpha.1 baseline remains separately
+bound to its previously reviewed publication identity.
 
 `verify` retrieves pinned retained candidate and attempt artifacts, then provisions its own
 dependencies and Chromium before exact registry-only installation, npm installed-tree

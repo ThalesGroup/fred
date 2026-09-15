@@ -24,7 +24,7 @@ test("a retained ZIP is checked against independently pinned API and byte identi
     const digest = createHash("sha256").update(zip).digest("hex");
     const ref = uploadedArtifactRef({
       artifactId: "17",
-      artifactDigest: `sha256:${digest}`,
+      artifactDigest: digest,
       recordDigest: `sha256-${"A".repeat(43)}=`,
       runId: "61",
       runAttempt: "2",
@@ -113,6 +113,27 @@ test("a retained ZIP is checked against independently pinned API and byte identi
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("uploaded-ref CLI accepts upload-artifact's hexadecimal digest output in a fresh process", async () => {
+  const digest = "a".repeat(64);
+  const { stdout } = await run(
+    "node",
+    ["scripts/release-artifact.mjs", "uploaded-ref"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        RELEASE_UPLOADED_ID: "17",
+        RELEASE_UPLOADED_DIGEST: digest,
+        RELEASE_RECORD_DIGEST: `sha256-${"A".repeat(43)}=`,
+        GITHUB_RUN_ID: "61",
+        GITHUB_RUN_ATTEMPT: "2",
+        GITHUB_SHA: "b".repeat(40),
+      },
+    },
+  );
+  assert.equal(JSON.parse(stdout).zipSha256, digest);
 });
 
 test("candidate transfer evidence and record bind the actual metadata bytes and execution", () => {

@@ -96,6 +96,11 @@ export function assertProvenanceIdentity({
     "repository",
     "sourceCommit",
     "workflow",
+    ...(["invocationRepository", "runId", "runAttempt"].some((field) =>
+      Object.hasOwn(expected ?? {}, field),
+    )
+      ? ["invocationRepository", "runId", "runAttempt"]
+      : []),
   ]) {
     assert(expected?.[field], `expected provenance ${field} is unconfirmed`);
     assert.equal(
@@ -105,6 +110,46 @@ export function assertProvenanceIdentity({
     );
   }
   return true;
+}
+
+export function matchVerifiedPublishingAttempt({
+  signature,
+  expectedProvenance,
+  publicationAttempts,
+  memberId,
+}) {
+  const eligible = publicationAttempts.filter(({ record }) =>
+    record.selected.some(({ id }) => id === memberId),
+  );
+  const matches = [];
+  for (const attempt of eligible) {
+    try {
+      assertProvenanceIdentity({
+        cryptographicallyVerified: signature.cryptographicallyVerified,
+        actual: signature.identity,
+        expected: {
+          ...expectedProvenance,
+          sourceCommit: attempt.record.execution.sourceCommit,
+          invocationRepository: expectedProvenance.repository,
+          runId: attempt.record.execution.runId,
+          runAttempt: attempt.record.execution.runAttempt,
+        },
+      });
+      matches.push(attempt);
+    } catch {
+      /* Another actual execution may have published this version. */
+    }
+  }
+  assert(
+    matches.length,
+    "provenance does not match any retained actual publishing execution",
+  );
+  assert.equal(
+    matches.length,
+    1,
+    "provenance attribution is ambiguous across retained attempts",
+  );
+  return matches[0];
 }
 
 function canonicalRepository(value) {
@@ -138,6 +183,46 @@ export function provenanceIdentityFromStatement(statement, expectedRepository) {
     "provenance must identify exactly one source dependency for the expected repository",
   );
   const [dependency] = dependencies;
+  const invocationId = predicate.runDetails?.metadata?.invocationId;
+  let invocation = {};
+  if (invocationId !== undefined) {
+    assert.equal(
+      typeof invocationId,
+      "string",
+      "provenance invocation ID is malformed",
+    );
+    const url = new URL(invocationId);
+    const match =
+      /^\/([^/]+)\/([^/]+)\/actions\/runs\/([1-9][0-9]*)\/attempts\/([1-9][0-9]*)$/.exec(
+        url.pathname,
+      );
+    assert(
+      url.protocol === "https:" &&
+        url.hostname === "github.com" &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        match,
+      "provenance invocation ID is malformed",
+    );
+    const invocationRepository = `${url.origin}/${match[1]}/${match[2]}`;
+    assert.equal(
+      invocationId,
+      `${invocationRepository}/actions/runs/${match[3]}/attempts/${match[4]}`,
+      "provenance invocation ID is not canonical",
+    );
+    assert.equal(
+      invocationRepository,
+      expected,
+      "provenance invocation repository differs",
+    );
+    invocation = {
+      invocationRepository,
+      runId: match[3],
+      runAttempt: match[4],
+    };
+  }
   return {
     artifactDigest: subjectSha512
       ? `sha512-${
@@ -152,6 +237,7 @@ export function provenanceIdentityFromStatement(statement, expectedRepository) {
       workflow.repository && workflow.path && workflow.ref
         ? `${workflow.repository}/${workflow.path}@${workflow.ref}`
         : undefined,
+    ...invocation,
   };
 }
 
@@ -182,15 +268,36 @@ export async function verifyProvenanceAttestation(
   );
   const attestations = document?.attestations;
   assert(Array.isArray(attestations), "provenance attestations are missing");
-  const provenance = attestations.find(({ predicateType }) =>
+  const provenanceEntries = attestations.filter(({ predicateType }) =>
     /^https:\/\/slsa\.dev\/provenance\//.test(predicateType),
   );
+  assert.equal(
+    provenanceEntries.length,
+    1,
+    "provenance must contain exactly one SLSA provenance entry",
+  );
+  const [provenance] = provenanceEntries;
   assert(provenance?.bundle, "SLSA provenance bundle is missing");
   await verifyBundle(provenance.bundle, {
     certificateIssuer,
     certificateIdentityURI: expectedWorkflow,
   });
   const statement = statementFromDsseEnvelope(provenance.bundle.dsseEnvelope);
+  assert.equal(
+    statement?._type,
+    "https://in-toto.io/Statement/v1",
+    "signed in-toto statement type differs",
+  );
+  assert.equal(
+    statement?.predicateType,
+    "https://slsa.dev/provenance/v1",
+    "signed SLSA predicate differs",
+  );
+  assert.equal(
+    statement.predicateType,
+    provenance.predicateType,
+    "signed SLSA predicate differs from registry metadata",
+  );
   return {
     cryptographicallyVerified: true,
     identity: provenanceIdentityFromStatement(statement, expectedRepository),
@@ -276,29 +383,12 @@ export async function verifyRegistryTooling({
     });
     let matchedAttempt;
     if (publicationAttempts?.length) {
-      for (const attempt of publicationAttempts.filter(({ record }) =>
-        record.selected.some(({ id }) => id === role),
-      )) {
-        try {
-          assertProvenanceIdentity({
-            cryptographicallyVerified:
-              signatureResult.cryptographicallyVerified,
-            actual: signatureResult.identity,
-            expected: {
-              ...expectedProvenance,
-              sourceCommit: attempt.record.execution.sourceCommit,
-            },
-          });
-          matchedAttempt = attempt;
-          break;
-        } catch {
-          /* A different retained attempt may have published this exact version. */
-        }
-      }
-      assert(
-        matchedAttempt,
-        `${coordinates[role]} provenance does not match any retained actual publishing execution`,
-      );
+      matchedAttempt = matchVerifiedPublishingAttempt({
+        signature: signatureResult,
+        expectedProvenance,
+        publicationAttempts,
+        memberId: role,
+      });
     } else
       assertProvenanceIdentity({
         cryptographicallyVerified: signatureResult.cryptographicallyVerified,

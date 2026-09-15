@@ -28,7 +28,7 @@ import {
   publicationOutcomeModel,
 } from "./release-record.mjs";
 import {
-  assertProvenanceIdentity,
+  matchVerifiedPublishingAttempt,
   resolveNpmRegistryPackage,
   verifyNpmPackageProvenance,
 } from "./registry-verifier.mjs";
@@ -91,6 +91,16 @@ export async function reviewedCoordinateHistoryStart(
   assert(
     token,
     "GITHUB_TOKEN is required for independently observed changelog merge history",
+  );
+  const { stdout: shallowState } = await runCommand(
+    "git",
+    ["rev-parse", "--is-shallow-repository"],
+    { cwd: workspaceRoot },
+  );
+  assert.equal(
+    shallowState.trim(),
+    "false",
+    "publication requires complete Git history for reviewed coordinates",
   );
   const dates = [];
   for (const selected of candidate.selected) {
@@ -346,11 +356,13 @@ export async function verifyPublishedMember({
   expected,
   contract,
   attempts,
+  resolvePackage = resolveNpmRegistryPackage,
+  verifySignature = verifyNpmPackageProvenance,
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-published-release-"));
   try {
     const evidence = { packages: { [member.id]: expected } };
-    const registryPackage = await resolveNpmRegistryPackage({
+    const registryPackage = await resolvePackage({
       coordinate: expected.coordinate,
       registry: contract.registry,
       root,
@@ -360,6 +372,11 @@ export async function verifyPublishedMember({
       expectedPackage: contract.packages[member.id],
       candidate: expected,
     });
+    assert.equal(
+      registryPackage.integrity,
+      expected.integrity,
+      `${expected.coordinate} downloaded registry archive integrity differs`,
+    );
     const expectationList = attempts.filter(({ record }) =>
       record.selected.some(({ id }) => id === member.id),
     );
@@ -367,7 +384,7 @@ export async function verifyPublishedMember({
       expectationList.length,
       `${expected.coordinate} has no retained publishing attempt`,
     );
-    const signature = await verifyNpmPackageProvenance(registryPackage, {
+    const signature = await verifySignature(registryPackage, {
       registry: contract.registry,
       expectedProvenance: {
         repository: contract.expectedProvenance.repository,
@@ -375,31 +392,16 @@ export async function verifyPublishedMember({
       },
       certificateIssuer: contract.expectedProvenance.certificateIssuer,
     });
-    let matchingAttempt;
-    for (const attempt of expectationList) {
-      const expectedProvenance = {
+    const matchingAttempt = matchVerifiedPublishingAttempt({
+      signature,
+      expectedProvenance: {
         artifactDigest: expected.integrity,
         repository: contract.expectedProvenance.repository,
-        sourceCommit: attempt.record.execution.sourceCommit,
         workflow: contract.expectedProvenance.workflow,
-        certificateIssuer: contract.expectedProvenance.certificateIssuer,
-      };
-      try {
-        assertProvenanceIdentity({
-          cryptographicallyVerified: signature.cryptographicallyVerified,
-          actual: signature.identity,
-          expected: expectedProvenance,
-        });
-        matchingAttempt = attempt;
-        break;
-      } catch {
-        /* Check the next independently retained expected publishing execution. */
-      }
-    }
-    assert(
-      matchingAttempt,
-      `${expected.coordinate} provenance does not match any retained publishing attempt`,
-    );
+      },
+      publicationAttempts: expectationList,
+      memberId: member.id,
+    });
     return {
       cryptographicallyVerified: true,
       identity: signature.identity,
@@ -522,12 +524,14 @@ export async function executeOrdinaryPublication({
         path.join(os.tmpdir(), "fred-oidc-config-"),
       );
       try {
-        const userConfig = path.join(configRoot, "empty.npmrc");
+        const userConfig = path.join(configRoot, "user.npmrc");
+        const globalConfig = path.join(configRoot, "global.npmrc");
         await writeFile(userConfig, "", { flag: "wx" });
+        await writeFile(globalConfig, "", { flag: "wx" });
         const publishEnvironment = {
           ...process.env,
           NPM_CONFIG_USERCONFIG: userConfig,
-          NPM_CONFIG_GLOBALCONFIG: userConfig,
+          NPM_CONFIG_GLOBALCONFIG: globalConfig,
         };
         for (const key of [
           "NODE_AUTH_TOKEN",
