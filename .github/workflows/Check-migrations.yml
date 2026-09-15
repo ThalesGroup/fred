@@ -11,6 +11,14 @@ on:
       - main
       - swift
       - develop
+    # Pull requests only: a base-branch push still checks every Alembic tree.
+    paths:
+      - 'apps/control-plane-backend/**'
+      - 'apps/knowledge-flow-backend/**'
+      - 'libs/fred-*/**'
+      - 'Makefile'
+      - 'scripts/**'
+      - '.github/workflows/Check-migrations.yml'
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own

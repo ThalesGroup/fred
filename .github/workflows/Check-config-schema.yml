@@ -9,6 +9,16 @@ on:
     branches:
       - main
       - swift
+    # Pull requests only: a base-branch push still checks every schema.
+    paths:
+      - 'apps/control-plane-backend/**'
+      - 'apps/knowledge-flow-backend/**'
+      - 'apps/fred-agents/**'
+      - 'libs/fred-*/**'
+      - 'deploy/charts/**'
+      - 'Makefile'
+      - 'scripts/**'
+      - '.github/workflows/Check-config-schema.yml'
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own
