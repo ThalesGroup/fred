@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""add team_admin_charter_acceptances table
+"""add team admin charter tables
 
-One row per user and accepted team administrator charter version. A team
-admin's admin-only permissions stay inactive until the configured version
-has a row.
+team_admin_charter_acceptances holds one row per user and accepted charter
+version. team_admin_charter_state holds the single version team admin
+relations were last reconciled against, so startup only rewrites them when it
+changes.
 
-Revision ID: 5d2a8c7e1f43
+Revision ID: a3f7c9e2d514
 Revises: b6e2f9a04c31
-Create Date: 2026-09-14 16:00:00.000000
+Create Date: 2026-09-15 15:30:00.000000
 
 """
 
@@ -30,7 +31,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "5d2a8c7e1f43"  # pragma: allowlist secret
+revision: str = "a3f7c9e2d514"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
     "b6e2f9a04c31"  # pragma: allowlist secret
 )
@@ -61,8 +62,21 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("user_id", "version"),
     )
+    op.create_table(
+        "team_admin_charter_state",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("applied_version", sa.String(), nullable=False),
+        sa.Column(
+            "applied_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_table("team_admin_charter_state")
     op.drop_table("team_admin_charter_acceptances")
