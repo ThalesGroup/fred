@@ -223,6 +223,9 @@ test("a proposed contract cannot create an archive transfer", async (context) =>
   const contract = await loadReleaseContract(
     path.join(workspaceRoot, "release/proposed-release-contract.json"),
   );
+  contract.state = "proposed";
+  contract.maintainerApproval.owners.packageApi = null;
+  contract.maintainerApproval.publishingPolicy = null;
   await assert.rejects(
     createReleaseCandidateTransfer({
       outputRoot: paths.producer,

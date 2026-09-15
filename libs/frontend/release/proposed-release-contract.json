@@ -1,7 +1,7 @@
 {
   "$schema": "./release-contract.schema.json",
   "schemaVersion": 1,
-  "state": "proposed",
+  "state": "maintainer-confirmed",
   "registry": "https://registry.npmjs.org/",
   "distTag": "next",
   "releaseToolchain": {
@@ -11,15 +11,15 @@
   "maintainerApproval": {
     "scopeOwner": "fred-oss",
     "owners": {
-      "packageApi": null,
-      "sdkProtocol": null,
-      "release": null,
-      "npmPublishing": null
+      "packageApi": "marc.fawaz",
+      "sdkProtocol": "marc.fawaz",
+      "release": "marc.fawaz",
+      "npmPublishing": "marc.fawaz"
     },
     "bootstrapIdentity": "marc.fawaz",
     "bootstrapAuthorityVerified": true,
     "registryAccess": "public",
-    "publishingPolicy": null
+    "publishingPolicy": "direct"
   },
   "expectedProvenance": {
     "repository": "https://github.com/ThalesGroup/fred",

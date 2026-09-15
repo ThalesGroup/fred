@@ -60,6 +60,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RetentionFieldView,
@@ -333,6 +334,83 @@ async def rescue_team_admin(
         "Rescued one orphaned team via platform-admin registry action: "
         "granted team_admin to one account"
     )
+
+
+async def _resolve_default_teams(
+    deps: TeamServiceDependencies,
+) -> list[TeamMetadata]:
+    team_ids = [
+        TeamId(team_id)
+        for team_id in await deps.get_default_team_store().list_team_ids()
+    ]
+    if not team_ids:
+        return []
+    # A deleted team leaves its id behind: it is simply not found here.
+    by_id = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
+    return sorted(by_id.values(), key=lambda metadata: metadata.name.casefold())
+
+
+async def get_default_teams_for_new_users(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> list[DefaultTeamForNewUsers]:
+    """Return the teams every new user joins on first GCU acceptance."""
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    return [
+        DefaultTeamForNewUsers(team_id=metadata.id, name=metadata.name)
+        for metadata in await _resolve_default_teams(deps)
+    ]
+
+
+async def set_default_teams_for_new_users(
+    user: KeycloakUser,
+    team_ids: list[TeamId],
+    deps: TeamServiceDependencies,
+) -> None:
+    """Replace the teams every new user joins on first GCU acceptance; `[]` clears them.
+
+    Personal spaces have no registry row, so they are refused as unknown teams.
+    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §52.
+    """
+    await deps.rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+    unique_ids = list(dict.fromkeys(team_ids))
+    found = await deps.get_team_metadata_store().get_by_team_ids(unique_ids)
+    missing = next((team_id for team_id in unique_ids if team_id not in found), None)
+    if missing is not None:
+        raise TeamNotFoundError(missing)
+    await deps.get_default_team_store().replace(
+        [str(team_id) for team_id in unique_ids], updated_by=user.uid
+    )
+    logger.info("Default teams for new users set to %s", unique_ids)
+
+
+async def join_default_teams_for_new_user(
+    user_id: str,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Grant `team_member` on every default team for new users.
+
+    A user already holding any role on one of them is left untouched there.
+    """
+    teams = await _resolve_default_teams(deps)
+    await asyncio.gather(
+        *(_join_unless_already_in_team(deps.rebac, team.id, user_id) for team in teams)
+    )
+
+
+async def _join_unless_already_in_team(
+    rebac: RebacEngine, team_id: TeamId, user_id: str
+) -> None:
+    if await _get_user_roles_in_team(rebac, team_id, user_id):
+        return
+    await _add_team_member_relation(
+        rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+    )
+    logger.info("A new user joined the default team %s", team_id)
 
 
 async def _list_teams(

@@ -44,10 +44,21 @@ release production, not as an implicit migration of application-owned tooling:
 - [official Node 24 archive](https://nodejs.org/en/download/archive/v24)
 
 The maintainer supplied authenticated evidence that bootstrap account `marc.fawaz` has the
-owner role in npm organization `fred-oss`. The temporary granular token remains outside the
-repository and is neither an input to builds/tests nor inspected by this change. Package API,
-SDK protocol, release, and enduring npm-publishing owners and the later direct-versus-staged
-policy remain unresolved. No publication or registry configuration exists in this checkout.
+owner role in npm organization `fred-oss`, confirmed `marc.fawaz` for all four package API, SDK
+protocol, release, and enduring npm-publishing owner roles, and selected direct Trusted
+Publishing for subsequent releases. The GitHub release-reviewer identity is the distinct account
+`marcfawaz`. The temporary granular token remains outside the repository and is neither an input
+to builds/tests nor inspected by this change. Separately authorized bootstrap and recovery runs
+have now published all three selected coordinates; genuine all-package registry verification
+remains incomplete.
+
+A repository administrator reports that the `npm-publish` environment is configured. A supplied
+screenshot supports required reviewer `marcfawaz`, **Prevent self-review** disabled,
+administrator bypass disabled, branch `swift` only with zero tags, and the existence of an
+environment secret named `NPM_BOOTSTRAP_TOKEN`; the screenshot crops the environment name. This
+is not independent API verification, token-content validation, environment approval, workflow
+execution, or publication evidence. The maintainer will both initiate and approve releases;
+allowing that self-review preserves rather than removes the required environment approval gate.
 
 ## Goals / Non-Goals
 
@@ -61,13 +72,13 @@ policy remain unresolved. No publication or registry configuration exists in thi
   registry verification deliberately online, exact, and incapable of local fallback.
 - Retain the current application compatibility baseline without forcing FRED application
   tests onto the release-production toolchain.
-- Make repository work testable before registry ownership decisions while keeping
-  approval-dependent tasks visibly gated.
+- Keep repository work testable while keeping external execution and publication tasks visibly
+  gated.
 
 **Non-Goals:**
 
 - Creating npm organizations/packages, changing registry access, authenticating locally,
-  triggering the prepared workflow, or publishing any version.
+  triggering another workflow, or publishing another version.
 - Migrating FRED to registry dependencies, transferring canonical SDK protocol ownership,
   removing temporary re-exports, or changing protocol `"1"`.
 - Changing public package exports, expanding UI components, changing canonical assets,
@@ -96,11 +107,11 @@ from the archive being judged.
 Maintainers selected `@fred-oss/design-tokens`, `@fred-oss/ui`, and
 `@fred-oss/iframe-sdk` at independent version `0.1.0-alpha.1`, public
 `https://registry.npmjs.org/` access, and `next`. They also confirmed bootstrap account
-`marc.fawaz` has organization-owner authority in `fred-oss`. These decisions authorize manifest
-and lockfile synchronization but do not name the package API, SDK protocol, release, or enduring
-npm-publishing owners and do not select later direct versus staged publication. The contract
-therefore remains `proposed`; approved evidence and publication require those remaining fields
-and an explicit `maintainer-confirmed` transition.
+`marc.fawaz` has organization-owner authority in `fred-oss`, named `marc.fawaz` as the package
+API, SDK protocol, release, and enduring npm-publishing owner, and selected direct Trusted
+Publishing for subsequent releases. The contract is therefore `maintainer-confirmed`. This
+authorizes approved-candidate preparation only when every existing clean-source, exact-toolchain,
+immutable-byte, dual-toolchain, and workflow gate passes; it does not authorize publication.
 
 Alternatives rejected:
 
@@ -130,10 +141,11 @@ checkout target, or other link is rejected. This preserves npm's legitimate work
 model without permitting it to leak into a packed manifest.
 
 The confirmed registry, public access, scope, and `next` policy are recorded in each member's
-`publishConfig`; no credential is stored. npm-organization ownership does not imply ownership of
-the package API or SDK protocol. Missing named owners and the later publishing-policy choice keep
-the contract non-approved. Verified organization ownership is also a namespace boundary: every
-selected member name must belong to the recorded `@fred-oss/` scope.
+`publishConfig`; no credential is stored. npm-organization ownership did not imply ownership of
+the package API or SDK protocol; those roles are now separately and explicitly assigned to
+`marc.fawaz`. The confirmed direct policy applies to subsequent Trusted Publishing and does not
+replace the guarded bootstrap path. Verified organization ownership is also a namespace boundary:
+every selected member name must belong to the recorded `@fred-oss/` scope.
 
 Alternative rejected: making the root publishable, because it is orchestration-only and
 would create an accidental fourth package.
@@ -263,9 +275,9 @@ provenance emission, npm package creation, or registry success.
 
 The bootstrap workflow uses token authentication only because these package coordinates do not
 yet exist. After creation, maintainers configure the exact workflow and `npm-publish` environment
-as Trusted Publishers, choose direct or staged allowed actions, update the workflow to remove the
-bootstrap secret, validate a new version, and revoke the temporary token. Staged publishing is
-not used for initial creation.
+for direct Trusted Publishing, update the workflow to remove the bootstrap secret, validate a new
+version, and revoke the temporary token. Selecting direct publishing does not implement this OIDC
+transition. Staged publishing is not used for initial creation.
 
 ### 5. Parameterize the existing consumers; do not create release-only product fixtures
 
@@ -386,10 +398,12 @@ The compact runbook records four maintainer gates before the guarded publish pat
    repository data. Package-scoped credentials for nonexistent packages are not assumed to work.
 3. Create each initial package through the separately approved bootstrap process. npm's
    staged publishing cannot create a brand-new package.
-4. Separately confirm and configure the exact trusted publisher repository and workflow identity
-   for each existing package, bind it to future candidate evidence, then choose direct or staged
-   publishing as maintainer policy. Staging is recommended for review but remains a policy choice
-   and requires its documented Node/npm/access/2FA prerequisites.
+4. Configure the exact trusted publisher repository and workflow identity for each existing
+   package, bind it to future candidate evidence, and apply the confirmed direct-publishing policy
+   with GitHub environment approval. This future OIDC workflow transition remains separate from
+   initial bootstrap creation and publication authorization. The unselected staged alternative
+   remains documented with its npm `11.15.0`+, Node `22.14.0`+, existing-package, publish-access,
+   and approving-maintainer 2FA prerequisites.
 
 The guarded workflow is prepared in this phase, but its token value is never read or stored and
 no GitHub environment or registry state is created. The runbook sequences design tokens before
@@ -428,11 +442,112 @@ transfer, FRED/RAGS adoption, theme/live-locale work, and stable release as open
 package behavior remains in the existing package READMEs; the new runbook covers release
 operation only.
 
+### 11. Reconcile delayed visibility and preserve truthful partial-release identity
+
+The first bootstrap run (`34853407387`, attempt `1`) published
+`@fred-oss/design-tokens@0.1.0-alpha.1` from commit
+`f49f2439d54b44f7739c5bd7fca3f789e0e528d6`. Its immediate exact-version lookup returned
+404, and the workflow stopped before UI or SDK. Retained artifact `10352121632` has ZIP SHA-256
+`25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82`; its three archive
+SHA-512 values match the approved evidence. A subsequent independent registry check verified the
+design-token archive, npm signature, Sigstore certificate, repository, workflow, source commit,
+and digest. UI and SDK remain absent.
+
+Post-publication reconciliation uses one shared HTTP adapter for the configured registry's safely
+encoded exact package/version endpoint. It deliberately does not use `npm view`: npm `11.19.0`
+requests package-wide metadata before selecting an exact version, so a package-wide 404 can hide
+available exact-version metadata. The adapter bounds each request, follows no redirect, retains
+the selected registry origin, and retries only an actual exact-endpoint HTTP 404 for six attempts
+at five-second intervals. It never retries `npm publish`. Authentication/authorization errors,
+other HTTP failures, redirects, timeouts, malformed responses, wrong name/version, or integrity
+mismatches stop immediately, as does exhausted visibility. Bootstrap preflight, publication
+reconciliation, recovery state checks, and registry-verifier metadata resolution share this
+adapter. The next package cannot begin until the previous exact version is visible with the
+expected identity and bytes.
+
+Recovery is a third, explicit manual input in the existing `swift`-restricted workflow, separate
+from ordinary bootstrap and its all-versions-absent preflight. A reviewed recovery plan pins the
+original source commit, run/attempt, final artifact ID/name, and artifact ZIP digest. An
+unprotected preparation job retrieves and hash-checks that exact retained artifact without
+pre-extracting it. The recovery helper requires exactly the candidate evidence, candidate transfer
+metadata, and three expected tarballs as regular ZIP entries; rejects traversal, links, special
+entries, omissions, and additions before extraction; extracts into a fresh isolated directory;
+and validates the transfer metadata, evidence, filenames, byte lengths, and SHA-512 values. Only
+verified ZIP contents are materialized for transfer. Preparation then cryptographically verifies
+the existing design-token version against the original candidate provenance, requires UI and SDK
+to be absent, and records recovery evidence tied to the current GitHub run.
+
+The distinct `npm-publish` environment job independently rechecks the pinned ZIP after artifact
+download, extracts it freshly, rejects any mismatch between the ZIP and separately transferred
+candidate copies, and repeats the registry/provenance preflight. Only then may its step receive the
+bootstrap token. UI followed by SDK are published exclusively from paths in that verified fresh
+extraction, not from loose transferred archives. The helper cleans the extraction on success or
+failure and never regenerates original candidate evidence.
+
+npm provenance truthfully records the commit executing each publish. The original candidate
+evidence is not rewritten: design tokens continue to require source commit `f49f2439…`, while the
+recovery evidence requires UI and SDK attestations to name the recovery run's actual
+`GITHUB_SHA`. Repository, workflow path/ref, certificate issuer, archive digests, coordinates, and
+original candidate/artifact identity remain unchanged. Final registry verification validates
+these per-package expectations before consumers run. If the original artifact expires, any
+published role differs, a missing role appears unexpectedly, or provenance cannot be verified,
+the recovery stops; maintainers must prepare a newly versioned release rather than weakening or
+relabeling evidence.
+
+The first recovery attempt after the ZIP correction (run `34873471933`) downloaded and
+hash-checked the pinned ZIP, then exited `13` with an unsettled top-level await before producing
+recovery evidence. The recovery entry module was awaiting preparation, preparation dynamically
+imported the registry verifier for real existing-package provenance checks, and that verifier
+statically imported recovery-evidence validation back from the still-evaluating entry module.
+Function-level tests imported an already-evaluated recovery module and replaced the existing-
+package verifier, so they could not expose the evaluation deadlock.
+
+Reusable plan, artifact-identity, workflow-identity, original-evidence, provenance-expectation,
+and recovery-evidence validation now lives in an execution-independent module. Both CLI modules
+import that module directly; the recovery entry retains its prior validation exports for callers
+but is no longer a dependency of the registry verifier. The recovery CLI may therefore complete
+its dynamic verifier import without waiting on itself. Fresh-process tests launch the actual
+recovery and registry-verifier entry points with bounded timeouts, a controlled local TLS registry,
+an external npm command shim, and cryptographically signed controlled provenance. They exercise
+real existing-package verification and module evaluation while remaining incapable of reaching a
+writable registry or producing genuine public-registry evidence.
+
+### 12. Continue verification from retained publication evidence
+
+The completed recovery artifact is a second immutable trust boundary. A reviewed continuation
+contract pins artifact `10363547296`, its source commit/run/attempt/name and ZIP SHA-256, the
+nested original artifact identity, the historical recovery execution, and the per-package source
+commits. A `verify-existing` workflow choice retrieves that artifact by ID with read-only Actions
+permission, validates GitHub metadata and the outer ZIP, validates the nested original ZIP, and
+compares every copied archive and evidence file with both containers. It never rebuilds a
+candidate or rewrites original candidate/recovery evidence.
+
+Historical publication and current verification are independent identities. Recovery evidence is
+validated against the pinned historical execution: design tokens require `f49f2439…`, while UI
+and SDK require `a1fedc66…`. Separate preparation evidence records the current workflow's actual
+commit, run, and attempt, and final evidence retains both identities. GitHub environment values
+are read, never replaced to impersonate the publication run.
+
+npm's exact-version endpoint remains authoritative for coordinate and SHA-512 admission. Because
+`npm pack` also consults package-wide metadata, the verifier performs a bounded read-only
+package-wide readiness check before invoking npm. Only an actual package-wide HTTP 404 is retried;
+authentication, authorization, redirects, malformed data, or identity/integrity drift fail
+immediately. The subsequent npm install remains exact and registry-only, and signature audit,
+Sigstore verification, expected provenance matching, clean consumers, browser smoke, and host
+compatibility are unchanged.
+
+The new choice explicitly excludes candidate generation, candidate compatibility transfer, and
+both publication jobs. It uses neither the `npm-publish` environment, bootstrap secret, nor
+`id-token: write`. Preparation may install pinned tooling and verification separately provisions
+application dependencies and Chromium. Final evidence is created and uploaded only after the
+complete verifier returns successfully, making the same retained artifact independently
+rerunnable until it expires.
+
 ## Risks / Trade-offs
 
-- **[Release ownership and later policy remain incomplete]** → Record selected coordinates and
-  bootstrap authority while keeping the contract `proposed`; fail approved evidence and
-  publication until every named owner and the direct-versus-staged decision is reviewed.
+- **[A confirmed contract could be mistaken for publication authorization]** → Keep candidate
+  generation bound to committed clean source and exact dual-toolchain validation, and retain the
+  explicit manual publication choice plus protected-environment approval as separate gates.
 - **[A release-only toolchain can diverge from application CI]** → Retain both environments,
   pass hash-verified archives between them, and record both toolchains in evidence.
 - **[CI-retained artifacts can expire or be downloaded incorrectly]** → Retain tarballs and
@@ -456,7 +571,19 @@ operation only.
 - **[Independent versions add release coordination]** → Encode the selected UI/token pairing
   in one contract and publish dependencies before consumers.
 - **[A public package could be partially released]** → Stop the sequence before UI if its token
-  peer is unavailable; supersede published mistakes with new versions rather than overwrite.
+  peer is unavailable; supersede published mistakes with new versions rather than overwrite. If
+  an original candidate remains intact and a subset is already published with matching bytes and
+  provenance, the reviewed partial-recovery path may publish only the still-absent coordinates.
+- **[A package-wide registry lookup can lag behind an exact version]** → Admit identity only from
+  the bounded exact-version endpoint, then retry only package-wide 404 reads before npm transport;
+  reject authentication, malformed data, identity/integrity drift, and every other response
+  failure immediately.
+- **[Loose recovery files can diverge from a hash-pinned ZIP]** → Derive the candidate baseline
+  from a safe fresh extraction at preparation and publication, compare every transferred copy,
+  and publish only from the verified extraction.
+- **[Module tests can miss an entry-point evaluation cycle]** → Keep reusable recovery validation
+  independent of CLI execution and run bounded preparation, publication, and recovery-aware
+  registry-verifier subprocesses in fresh Node processes.
 
 ## Migration Plan
 
@@ -465,26 +592,34 @@ operation only.
    validation, registry-verifier fixture tests, and CI selection using non-authoritative test
    contracts.
 2. Record the selected `fred-oss` scope, exact `@fred-oss/*@0.1.0-alpha.1` coordinates, public
-   npm/`next` policy, bootstrap actor and authority, and guarded workflow identity. Keep the
-   contract proposed until named owners and later direct-versus-staged policy are confirmed.
+   npm/`next` policy, bootstrap actor and authority, named owners, confirmed direct policy, and
+   guarded workflow identity; transition the complete contract to `maintainer-confirmed`.
 3. Synchronize the three member manifests, UI token peer, and producer lockfile to those selected
    coordinates while keeping the root private; run the full archive regression suite.
 4. Prepare the manual, `swift`-restricted workflow and approved transfer/publication controls.
    Controlled fixture tests prove them without producing approved evidence or contacting npm.
-5. After remaining contract decisions are confirmed on committed `swift`, run preparation to
-   produce one immutable candidate, validate it under both toolchains, and retain its evidence.
+5. After the confirmed contract reaches committed `swift`, run preparation to produce one
+   immutable candidate, validate it under both toolchains, and retain its evidence.
    A separately approved manual run may then bootstrap the nonexistent packages from those exact
    bytes and perform genuine public-registry verification.
-6. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
+6. For the recorded partial first release only, merge the reconciliation correction, dispatch
+   `recover-bootstrap`, review the pinned original artifact and recovery evidence, and approve
+   the protected job only if existing design-token provenance and missing UI/SDK preflight pass.
+   The recovery publishes no design-token command and does not rebuild archives. Before another
+   dispatch, require the real preparation CLI and recovery-aware registry-verifier entry point to
+   pass the fresh-process module-evaluation regressions.
+7. After all three coordinates exist, merge the verification continuation, dispatch only
+   `verify-existing`, and retain genuine all-package registry evidence. Do not rerun either
+   bootstrap path or rebuild the original candidate.
+8. Only after registry evidence exists, plan FRED adoption and any SDK ownership transfer. If
    transfer changes SDK bytes, validate and publish that version before adoption. Plan RAGS
    separately.
 
-Rollback during this change is deletion of disposable candidate output or reversion of the
-repository changes; no registry state exists to roll back.
+Rollback of the continuation is deletion of disposable verification output or reversion of its
+repository changes. Published versions remain immutable and are not changed by this path.
 
 ## Open Questions
 
-- Who are the named package/public-API, SDK protocol compatibility, release, and enduring npm
-  publishing owners?
-- Will maintainers choose staged or direct publishing after bootstrap? Recommended default:
-  staged review for later releases, subject to the documented prerequisites.
+No release-contract ownership or publishing-policy decision remains open. Initial publication is
+complete. The later OIDC workflow transition and genuine all-package registry verification remain
+unexecuted operational gates rather than contract decisions.

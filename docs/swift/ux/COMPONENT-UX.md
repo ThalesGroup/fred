@@ -974,6 +974,10 @@ library:
   briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
   entry below.)
 
+  **Width (2026-09-14):** the chip sizes to its content (`width: fit-content`). In a column flex
+  parent it was stretched to its 18rem cap, leaving the remove button far from the label (the
+  user picked on `/admin/platform-roles`). Rows are unaffected.
+
 - **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
   scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
   disabled inherits the shared on-surface 12%/38% rule). Spec taken from the official M3 icon
@@ -4232,7 +4236,10 @@ root card above the table was tried on 2026-08-21 and removed the same day
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining
   the root-only rule — the restriction stays discoverable instead of the
-  option silently missing.
+  option silently missing. **Several users (2026-09-14):** the picker keeps a
+  wrapping row of removable `Chip`s, and one submit grants the chosen role to
+  each of them (one call per user, settled together). Users whose grant failed
+  stay picked and are named in the error toast; the others get one success toast.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
 
