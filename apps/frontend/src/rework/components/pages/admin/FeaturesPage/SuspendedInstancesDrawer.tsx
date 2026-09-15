@@ -23,6 +23,7 @@ import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { capabilityLabel } from "./capabilityEnablement";
 import styles from "./SuspendedInstancesDrawer.module.css";
 
 interface SuspendedInstancesDrawerProps {
@@ -70,7 +71,7 @@ export function SuspendedInstancesDrawer({ capability, teams, open, onClose }: S
 
   const title = capability
     ? t("rework.admin.capabilities.suspendedDrawer.title", {
-        name: t(capability.name, { defaultValue: capability.name }),
+        name: capabilityLabel(t, capability),
       })
     : "";
 

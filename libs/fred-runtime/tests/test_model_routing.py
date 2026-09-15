@@ -133,6 +133,53 @@ class TestModelRoutingPolicyValidation:
 
 
 # ---------------------------------------------------------------------------
+# contracts — ModelProfile model identity (model_id / capability_id)
+# ---------------------------------------------------------------------------
+
+
+class TestModelProfileIdentity:
+    def test_capability_id_defaults_to_the_wire_name(self) -> None:
+        assert _profile("p1", name="gpt-4o").capability_id == "model__openai__gpt-4o"
+
+    def test_model_id_replaces_the_wire_name_in_the_capability_id(self) -> None:
+        profile = ModelProfile(
+            profile_id="chat.gw.medium",
+            capability=ModelCapability.CHAT,
+            model=_model(name="mistral"),
+            model_id="mistral-medium",
+        )
+
+        assert profile.capability_id == "model__openai__mistral-medium"
+        # The wire value is untouched — that is the whole point of the field.
+        assert profile.model.name == "mistral"
+
+    def test_blank_model_id_rejected(self) -> None:
+        with pytest.raises(Exception, match="blank model_id"):
+            ModelProfile(
+                profile_id="chat.gw.medium",
+                capability=ModelCapability.CHAT,
+                model=_model(),
+                model_id="   ",
+            )
+
+    def test_resolved_selection_carries_the_profile_identity(self) -> None:
+        profile = ModelProfile(
+            profile_id="default.chat",
+            capability=ModelCapability.CHAT,
+            model=_model(name="mistral"),
+            model_id="mistral-medium",
+        )
+        resolver = ModelRoutingResolver(
+            ModelRoutingPolicy(
+                default_profile_by_capability={ModelCapability.CHAT: "default.chat"},
+                profiles=(profile,),
+            )
+        )
+
+        assert resolver.resolve(_request()).capability_id == profile.capability_id
+
+
+# ---------------------------------------------------------------------------
 # resolver — capability default and agent_profile_overrides matching
 # ---------------------------------------------------------------------------
 

@@ -31,7 +31,10 @@ const openRequest = vi.hoisted(() => ({ requestId: 0, key: null as string | null
 // The launcher rail's buttons, captured so a test can press one the way the
 // user does. They open the other push drawers, which share the capability
 // panel's one slot.
-const rail = vi.hoisted(() => ({ launchers: [] as Array<{ key: string; onOpen: () => void }> }));
+type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOpen: () => void };
+const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
+// The personal team's id: a chat in it counts as administered by its owner.
+const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // A fresh object per read, like a real selector over changing store state: the
@@ -81,7 +84,7 @@ vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
-  useFrontendBootstrap: () => ({ activeTeam: { id: "team-1" } }),
+  useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
@@ -120,6 +123,7 @@ vi.mock("../../../core/hooks/useUploadWarningAcknowledgement", () => ({
 
 vi.mock("@shared/molecules/SessionTitleEditor/SessionTitleEditor", () => ({ SessionTitleEditor: () => null }));
 vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
+vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
   SessionAttachmentsDrawer: () => null,
@@ -141,8 +145,15 @@ vi.mock("../../../features/capabilities/CapabilitySidePanelHost", () => ({
     activeKey ? <div data-testid="capability-panel" data-key={activeKey} /> : null,
 }));
 vi.mock("../../../features/capabilities/ChatLauncherRail", () => ({
-  ChatLauncherRail: ({ launchers }: { launchers: Array<{ key: string; onOpen: () => void }> }) => {
+  ChatLauncherRail: ({
+    launchers,
+    footerLaunchers,
+  }: {
+    launchers: CapturedLauncher[];
+    footerLaunchers: CapturedLauncher[];
+  }) => {
     rail.launchers = launchers;
+    rail.footerLaunchers = footerLaunchers;
     return null;
   },
 }));
@@ -446,6 +457,21 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
     rerender();
 
     expect(panelIsOpen()).toBe(false);
+  });
+
+  it.each([
+    ["an admin", "team-1", ["full-reasoning", "debug"]],
+    ["a member of a shared team", "personal-team", ["full-reasoning"]],
+  ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
+    bootstrap.activeTeamId = activeTeamId;
+    try {
+      mount();
+      expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
+      // The glyph a reasoning row carries in the chain of thought.
+      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "settings", iconFilled: true });
+    } finally {
+      bootstrap.activeTeamId = "team-1";
+    }
   });
 
   it("drops a held request when the user leaves for another conversation", () => {

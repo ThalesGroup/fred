@@ -420,6 +420,13 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "fullReasoning": {
+      "title": "Full reasoning",
+      "copy": "Copy the full reasoning",
+      "copied": "Copied",
+      "empty": "The agent has not reasoned in this conversation yet.",
+      "hideRestatements": "Hide restatements"
+    },
     "debugRaw": {
       "title": "Debug — raw messages",
       "scopeAria": "Message scope",
@@ -1426,11 +1433,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
-        "last15m": "Last 15 minutes",
-        "last1h": "Last 1 hour",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
-        "last6h": "Last 6 hours",
         "last7d": "Last 7 days",
         "thisMonth": "This month",
         "thisWeek": "This week",
@@ -1474,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Apply",
+        "months": "Months",
+        "next": "Next period",
+        "previous": "Previous period",
         "since": "From",
         "until": "To"
       },
@@ -1554,6 +1561,7 @@
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
+      "restatedReasoning": "Restates the earlier reasoning",
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
       "running": "running…",

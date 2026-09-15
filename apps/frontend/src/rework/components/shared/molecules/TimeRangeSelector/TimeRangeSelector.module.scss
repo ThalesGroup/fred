@@ -1,6 +1,8 @@
 .container {
   display: inline-flex;
   position: relative;
+  align-items: center;
+  gap: var(--spacing-2xs);
 }
 
 .trigger {
@@ -32,9 +34,11 @@
   font-size: 0.85rem;
 }
 
+/* Fixed width so the ‹ › arrows stay under the cursor while stepping through periods. */
 .label {
-  max-width: 28ch;
+  width: 28ch;
   overflow: hidden;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -44,14 +48,18 @@
   position: absolute;
   top: calc(100% + var(--spacing-xs));
   right: 0;
-  flex-direction: row;
-  align-items: stretch;
+  flex-direction: column;
   z-index: 200;
   box-shadow: var(--shadow-m);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
   overflow: hidden;
+}
+
+.dropdownTop {
+  display: flex;
+  align-items: stretch;
 }
 
 .presets {
@@ -92,4 +100,54 @@
   gap: var(--spacing-s);
   padding: var(--spacing-m);
   min-width: 240px;
+}
+
+/* `width: 0; min-width: 100%` fills the dropdown without stretching it to the whole scrollable
+   timeline. Positioned so each month's offsetLeft is measured from here. */
+.monthStrip {
+  display: flex;
+  position: relative;
+  border-top: 1px solid var(--outline-retreat);
+  padding: var(--spacing-xs) 0;
+  width: 0;
+  min-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.yearGroup {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: 0 var(--spacing-xs);
+
+  & + & {
+    border-left: 1px solid var(--outline);
+  }
+}
+
+/* Stays in view while any month of its year is visible. */
+.yearLabel {
+  position: sticky;
+  left: 0;
+  align-self: flex-start;
+  padding: 0 var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium-emphasized);
+}
+
+.yearMonths {
+  display: flex;
+  gap: var(--spacing-3xs);
+}
+
+/* Extends .presetItem; a month is a chip in a row rather than a full-width menu line. */
+.monthItem {
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+  }
 }

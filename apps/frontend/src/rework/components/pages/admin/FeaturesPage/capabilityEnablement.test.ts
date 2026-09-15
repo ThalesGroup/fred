@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { CapabilityEnablementItem, FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   PERSONAL_SCOPE_ROW_ID,
+  capabilityLabel,
   capabilityPersonalScopeChoice,
   enabledTeamCount,
   excludePersonalTeams,
@@ -397,6 +398,22 @@ describe("hasReasoningControl (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5.
 
   it("shows no control when the field is absent (pre-REASON-01 pod, or a tool row)", () => {
     expect(hasReasoningControl({})).toBe(false);
+  });
+});
+
+describe("capabilityLabel", () => {
+  const t = (key: string, options?: { defaultValue?: string }) =>
+    key === "cap.known" ? "Known" : (options?.defaultValue ?? key);
+
+  it("tells apart two gateway models that share one wire name", () => {
+    const small = capabilityLabel(t, { name: "mistral", model_display_name: "Mistral Small 4" });
+    const medium = capabilityLabel(t, { name: "mistral", model_display_name: "Mistral Medium 3.1" });
+    expect([small, medium]).toEqual(["Mistral Small 4", "Mistral Medium 3.1"]);
+  });
+
+  it("falls back to the translated name when no display name is authored", () => {
+    expect(capabilityLabel(t, { name: "cap.known" })).toBe("Known");
+    expect(capabilityLabel(t, { name: "mistral", model_display_name: "  " })).toBe("mistral");
   });
 });
 

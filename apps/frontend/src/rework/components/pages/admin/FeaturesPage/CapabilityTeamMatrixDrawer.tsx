@@ -497,9 +497,7 @@ export function CapabilityTeamMatrixDrawer({
     void submitOff(teamId, next === "disabled" ? "disable" : "default");
   };
 
-  const title = capability
-    ? t("rework.admin.capabilities.matrix.title", { name: t(capability.name, { defaultValue: capability.name }) })
-    : "";
+  const title = capability ? t("rework.admin.capabilities.matrix.title", { name: agentLabel }) : "";
 
   // Missing dependencies for whichever row the confirmation is open on —
   // re-derived on render, so the dialog's sentence tracks a catalog refetch
