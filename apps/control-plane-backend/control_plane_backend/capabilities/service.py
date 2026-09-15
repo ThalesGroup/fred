@@ -394,6 +394,7 @@ async def _build_enablement_item(
         reasoning_enabled=(
             not is_projected_product_object(entry) and entry.id in reasoning_enabled_ids
         ),
+        model_display_name=entry.model_display_name,
     )
 
 

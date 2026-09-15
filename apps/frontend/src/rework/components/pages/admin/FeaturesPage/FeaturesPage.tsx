@@ -77,10 +77,14 @@ export default function FeaturesPage() {
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
   const { data, isLoading, isError } = useAdminCapabilitiesQuery();
-  // The registry-governance view (`can_list_all_teams`), not the caller-scoped
-  // `/teams` list — a platform admin managing per-team enablement must see
-  // every team, including ones they don't personally belong to (#1981).
-  const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
+  // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
+  // must see teams they don't belong to. The drawer only needs ids and names, so the
+  // per-team membership reads are skipped.
+  const {
+    data: teams = [],
+    isLoading: isTeamsLoading,
+    isError: isTeamsError,
+  } = useListAllTeamsQuery({ includeMembership: false });
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
@@ -370,6 +374,7 @@ export default function FeaturesPage() {
         const blockedOn = !cap.default_on && requiresTeamSettings(cap);
         const control = (
           <Switch
+            size="small"
             checked={cap.default_on}
             disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
             onChange={() => onToggleDefault(cap)}
@@ -394,8 +399,8 @@ export default function FeaturesPage() {
         <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
-            <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
-              {t(cap.name, { defaultValue: cap.name })}
+            <span className={styles.capName} title={capabilityLabel(t, cap)}>
+              {capabilityLabel(t, cap)}
             </span>
             <span className={styles.capVersion}>v{cap.version}</span>
           </div>
@@ -424,6 +429,7 @@ export default function FeaturesPage() {
                 <div className={styles.centered}>
                   <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
                     <Switch
+                      size="small"
                       checked={cap.reasoning_enabled ?? false}
                       disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
@@ -532,9 +538,7 @@ export default function FeaturesPage() {
         ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths, but still a
-      // shrinkable fr so narrow viewports fall back to the wrapped label
-      // rather than forcing the table to overflow.
+      // Wide enough for the one-line button at desktop widths.
       size: "1.4fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
@@ -607,7 +611,9 @@ export default function FeaturesPage() {
         />
       )}
 
-      {!isLoading && !isError && capabilities.length > 0 && <DataTable columns={columns} data={capabilities} />}
+      {!isLoading && !isError && capabilities.length > 0 && (
+        <DataTable columns={columns} data={capabilities} size="medium" />
+      )}
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}

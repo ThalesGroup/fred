@@ -142,6 +142,9 @@ class _FakeMetadataStore:
     async def get_by_team_id(self, team_id, session=None):
         return self.teams.get(str(team_id))
 
+    async def list_all(self, session=None) -> list[TeamMetadata]:
+        return list(self.teams.values())
+
     async def get_by_name(self, name, session=None):
         return next((t for t in self.teams.values() if t.name == name), None)
 
@@ -697,6 +700,54 @@ async def test_list_all_teams_for_registry_excludes_the_caller_personal_space(
 
 
 @pytest.mark.asyncio
+async def test_list_all_teams_for_registry_without_membership_reads_no_relations() -> (
+    None
+):
+    """Pickers only need ids and names. `_FakeRebac` has no relation-read method,
+    so any per-team ReBAC read on this path raises instead of passing silently."""
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore(
+        {
+            "fredlab": TeamMetadata(id=TeamId("fredlab"), name="Fredlab"),
+            "northbridge": TeamMetadata(
+                id=TeamId("northbridge"),
+                name="Northbridge",
+                max_resources_storage_size=10,
+            ),
+        }
+    )
+    deps = _deps(rebac, store)
+    deps.configuration.app.default_team_max_resources_storage_size = 1024
+
+    result = await list_all_teams_for_registry(_user(), deps, include_membership=False)
+
+    assert rebac.permission_checks == [OrganizationPermission.CAN_LIST_ALL_TEAMS]
+    assert {
+        (str(team.id), team.name, team.max_resources_storage_size) for team in result
+    } == {("fredlab", "Fredlab", 1024), ("northbridge", "Northbridge", 10)}
+    for team in result:
+        assert team.member_count is None
+        assert team.admins == []
+        assert team.is_member is False
+        assert team.my_relations == []
+
+
+@pytest.mark.asyncio
+async def test_list_all_teams_for_registry_without_membership_still_checks_permission() -> (
+    None
+):
+    rebac = _FakeRebac(granted=set())
+    store = _FakeMetadataStore(
+        {"fredlab": TeamMetadata(id=TeamId("fredlab"), name="Fredlab")}
+    )
+
+    with pytest.raises(AuthorizationError):
+        await list_all_teams_for_registry(
+            _user(), _deps(rebac, store), include_membership=False
+        )
+
+
+@pytest.mark.asyncio
 async def test_list_team_members_unfiltered_skips_the_per_team_permission_check() -> (
     None
 ):
@@ -734,14 +785,14 @@ async def test_get_teams_all_route_is_not_swallowed_by_team_id_path_param(
 ) -> None:
     """`GET /teams/all` must be registered before `GET /teams/{team_id}` — otherwise
     the literal `all` segment is captured as a team id and routed to `get_team`
-    instead of the registry listing."""
+    instead of the registry listing. Also pins that `include_membership` reaches
+    the service, defaulting to the full listing."""
     monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
 
-    sentinel_call_count = 0
+    captured_include_membership: list[bool] = []
 
-    async def _fake_list_all_teams_for_registry(user, deps):
-        nonlocal sentinel_call_count
-        sentinel_call_count += 1
+    async def _fake_list_all_teams_for_registry(user, deps, *, include_membership):
+        captured_include_membership.append(include_membership)
         return []
 
     monkeypatch.setattr(
@@ -756,10 +807,12 @@ async def test_get_teams_all_route_is_not_swallowed_by_team_id_path_param(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get("/control-plane/v1/teams/all")
+        lean = await client.get("/control-plane/v1/teams/all?include_membership=false")
 
     assert resp.status_code == 200
     assert resp.json() == []
-    assert sentinel_call_count == 1
+    assert lean.status_code == 200
+    assert captured_include_membership == [True, False]
 
 
 # --------------------------- team_manager delegation ------------------------

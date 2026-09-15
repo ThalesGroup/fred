@@ -18,7 +18,8 @@ A managed-executable graph agent with one job: retrieve from the per-turn
 selected libraries through the real knowledge-search tool and return the
 retrieved chunks verbatim (no LLM). The admin self-test page invokes it through
 the real execution pipeline and asserts a marker phrase is present in the answer
-(library A) or absent (library B). See ADMIN-SELF-TEST-HARNESS-RFC §A.4.
+(library A) or absent (library B). An optional hold before retrieval lets that
+page run a turn whose work outlives the credential the turn was handed.
 """
 
 from __future__ import annotations
@@ -36,7 +37,13 @@ from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
 from .graph_state import SelfTestInput, SelfTestState
-from .graph_steps import finalize_step, retrieve_step
+from .graph_steps import (
+    MAX_HOLD_SECONDS,
+    baseline_step,
+    finalize_step,
+    hold_step,
+    retrieve_step,
+)
 
 
 class SelfTestGraphAgent(GraphAgent):
@@ -66,6 +73,14 @@ class SelfTestGraphAgent(GraphAgent):
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(
+            key="settings.check_access",
+            type="boolean",
+            title="Check authenticated access only",
+            description="Check library metadata access before and after the hold without reading documents.",
+            default=False,
+            ui=UIHints(group="Settings"),
+        ),
+        FieldSpec(
             key="prompts.system",
             type="prompt",
             title="System prompt",
@@ -87,6 +102,20 @@ class SelfTestGraphAgent(GraphAgent):
             max=50,
             ui=UIHints(group="Settings"),
         ),
+        FieldSpec(
+            key="settings.hold_seconds",
+            type="integer",
+            title="Hold before retrieval (seconds)",
+            description=(
+                "How long the turn waits before its retrieval call, so the "
+                "self-test harness can make a turn outlive the bearer it was "
+                "handed and still call knowledge search as the person."
+            ),
+            default=0,
+            min=0,
+            max=MAX_HOLD_SECONDS,
+            ui=UIHints(group="Settings"),
+        ),
     )
 
     input_schema = SelfTestInput
@@ -95,9 +124,14 @@ class SelfTestGraphAgent(GraphAgent):
     output_state_field = "final_text"
 
     workflow = GraphWorkflow(
-        entry="retrieve",
-        nodes={"retrieve": retrieve_step, "finalize": finalize_step},
-        edges={"retrieve": "finalize"},
+        entry="baseline",
+        nodes={
+            "baseline": baseline_step,
+            "hold": hold_step,
+            "retrieve": retrieve_step,
+            "finalize": finalize_step,
+        },
+        edges={"baseline": "hold", "hold": "retrieve", "retrieve": "finalize"},
     )
 
     def build_output(self, state: BaseModel) -> BaseModel:

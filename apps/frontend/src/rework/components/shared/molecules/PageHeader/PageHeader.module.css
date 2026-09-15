@@ -4,6 +4,18 @@
   gap: var(--spacing-s);
 }
 
+/* Covers the page gutter on three sides so content scrolling under it stays hidden; the negative
+   `top` lets most of the top gutter scroll away, keeping only a small margin once pinned. */
+.sticky {
+  position: sticky;
+  top: calc(var(--spacing-s) - var(--spacing-xl));
+  z-index: 10;
+  margin: calc(-1 * var(--spacing-xl)) calc(-1 * var(--spacing-xl)) calc(-1 * var(--spacing-s));
+  background: var(--surface-main);
+  padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-s);
+  color: var(--on-surface);
+}
+
 .breadcrumb {
   display: flex;
   align-items: center;
