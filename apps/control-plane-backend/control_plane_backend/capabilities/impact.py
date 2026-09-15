@@ -40,19 +40,35 @@ Unreachable pod = UNKNOWN, never "broken": the reconciliation sweep skips such
 instances (`skipped_unreachable`) rather than suspending them on a transient
 outage (#1975, RFC §3.9), and this read reports the same way. Telling an admin
 "12 agents broken" because a pod is restarting would be a lie with consequences.
+
+Where `can_use` comes from: the health column folds it from the cached
+per-capability tuple sets, the revoke preview from one fresh read of the single
+capability it is about. `resolve_availability_for_team` (the grant revive path)
+keeps the live `usable_capability_ids` - it feeds a write, not a display.
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
+from typing import Sequence
 
+from fred_core import RebacDisabledResult, RebacEngine
 from fred_core.common import TeamId
+from fred_core.security.rebac.capability_authz import (
+    CapabilityEnablementFacts,
+    can_team_use_from_facts,
+)
 
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
     AgentInstanceStore,
 )
 from control_plane_backend.capabilities.authz import usable_capability_ids
+from control_plane_backend.capabilities.enablement import (
+    cap_ref,
+    get_enablement_relations_cached,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 
@@ -76,22 +92,37 @@ class CapabilityImpact:
     skipped_unreachable: int = 0
 
 
-async def _usable_ids_by_team(
-    deps: ProductServiceDependencies,
-    team_ids: set[TeamId],
-) -> dict[TeamId, set[str] | None]:
-    """`can_use` capability ids per team — ONE `ListObjects` per team.
+async def _referenced_facts(
+    rebac: RebacEngine,
+    instances: Sequence[AgentInstanceRecord],
+) -> dict[str, CapabilityEnablementFacts] | None:
+    """Fold every capability the instances depend on, one cached tuple read each.
 
-    `can_use` is a TEAM-subject check (RFC §8.1), so authorization is a property
-    of (capability, space) and never fans out per agent instance: a team with 50
-    agents still costs one lookup. `None` means ReBAC is disabled — "no scoping",
-    every capability usable (matching `usable_capability_ids`).
+    A `ListObjects` per team cost OpenFGA a `Check` per catalog capability, and
+    every personal space is a team. `None` means ReBAC is disabled ("no
+    scoping", matching `usable_capability_ids`).
     """
 
-    rebac = deps.team_dependencies.rebac
-    return {
-        team_id: await usable_capability_ids(rebac, team_id) for team_id in team_ids
-    }
+    # Materialized once: `gather` and the `zip` below must walk the same order.
+    referenced_ids = list(
+        {
+            cap_id
+            for instance in instances
+            for cap_id in _instance_dependency_ids(instance)
+        }
+    )
+    relation_sets = await asyncio.gather(
+        *(
+            get_enablement_relations_cached(rebac, cap_ref(cap_id))
+            for cap_id in referenced_ids
+        )
+    )
+    facts_by_id: dict[str, CapabilityEnablementFacts] = {}
+    for cap_id, relations in zip(referenced_ids, relation_sets):
+        if isinstance(relations, RebacDisabledResult):
+            return None
+        facts_by_id[cap_id] = CapabilityEnablementFacts.from_relations(relations)
+    return facts_by_id
 
 
 def _instance_template_capability_id(instance: AgentInstanceRecord) -> str | None:
@@ -117,46 +148,59 @@ def _instance_template_capability_id(instance: AgentInstanceRecord) -> str | Non
     return template_capability_id(instance.source_runtime_id, instance.source_agent_id)
 
 
-def _broken_capability_ids(
+def _instance_dependency_ids(instance: AgentInstanceRecord) -> list[str]:
+    """Every capability the instance depends on: the tool capabilities it
+    selected, plus - unless gate-exempt - the `kind="agent"` template it is
+    itself an instance of."""
+
+    dependency_ids = list(instance.tuning.selected_capability_ids or [])
+    template_cap_id = _instance_template_capability_id(instance)
+    if template_cap_id is not None:
+        dependency_ids.append(template_cap_id)
+    return dependency_ids
+
+
+def _dependency_is_broken(
     instance: AgentInstanceRecord,
-    usable_ids: set[str] | None,
+    cap_id: str,
+    facts_by_id: dict[str, CapabilityEnablementFacts] | None,
     available_ids: frozenset[str] | None,
-) -> list[str]:
-    """The instance's dependencies that are NOT currently usable: its selected
-    tool capabilities, plus — unless gate-exempt — the `kind="agent"` template
-    capability the instance is itself an instance of.
+) -> bool:
+    """Is this ONE dependency currently unusable by the instance's space?
 
-    A selected TOOL capability is broken when the team lacks `can_use` on it
-    OR its pod no longer advertises it — the two independent failure modes
-    behind `capability_access_revoked` and `capability_unavailable`. The
-    instance's OWN template capability id is broken on the `can_use` axis
-    only: `available_ids` is the pod's advertised SELECTABLE tool/capability
-    set, which never contains an agent template's own id by construction
-    (see `_instance_template_capability_id`), so checking it there would
-    always read "missing" — matching `enablement.revive_dependent_instances`'s
-    template branch, which checks the same single axis.
+    A selected TOOL capability breaks when the team lacks `can_use` OR its pod
+    no longer advertises it - the two failure modes behind
+    `capability_access_revoked` and `capability_unavailable`. The instance's OWN
+    template id is checked on the `can_use` axis only: `available_ids` is the
+    pod's advertised SELECTABLE set, which never contains a template's own id,
+    so checking it there would always read "missing" - matching
+    `enablement.revive_dependent_instances`'s template branch.
 
-    `usable_ids=None` (ReBAC disabled) skips the authorization half;
+    `facts_by_id=None` (ReBAC disabled) skips the authorization half;
     `available_ids=None` (unreachable pod) must be handled by the CALLER, which
-    reports the instance as unknown rather than broken — this function is only
-    reached with a known pod set.
+    reports the instance as unknown rather than broken.
     """
 
-    broken: list[str] = []
-    for cap_id in instance.tuning.selected_capability_ids or []:
-        denied = usable_ids is not None and cap_id not in usable_ids
-        missing = available_ids is not None and cap_id not in available_ids
-        if denied or missing:
-            broken.append(cap_id)
+    denied = facts_by_id is not None and not can_team_use_from_facts(
+        str(instance.team_id), facts_by_id[cap_id]
+    )
+    selected = cap_id in (instance.tuning.selected_capability_ids or [])
+    missing = selected and available_ids is not None and cap_id not in available_ids
+    return denied or missing
 
-    template_cap_id = _instance_template_capability_id(instance)
-    if (
-        template_cap_id is not None
-        and usable_ids is not None
-        and template_cap_id not in usable_ids
-    ):
-        broken.append(template_cap_id)
-    return broken
+
+def _broken_capability_ids(
+    instance: AgentInstanceRecord,
+    facts_by_id: dict[str, CapabilityEnablementFacts] | None,
+    available_ids: frozenset[str] | None,
+) -> list[str]:
+    """The instance's dependencies that are NOT currently usable."""
+
+    return [
+        cap_id
+        for cap_id in _instance_dependency_ids(instance)
+        if _dependency_is_broken(instance, cap_id, facts_by_id, available_ids)
+    ]
 
 
 async def compute_capability_impact(
@@ -172,9 +216,8 @@ async def compute_capability_impact(
     `suspension_reason` — see the module docstring for why that column cannot
     answer this.
 
-    Cost is bounded by design: one `ListObjects` per team with instances (NOT
-    per instance) plus one template fetch per runtime pod. With the handful of
-    pods this platform runs, that is a few round-trips for an admin-only screen.
+    Cost is bounded by design: one cached tuple read per REFERENCED capability
+    (never one per team or per instance) plus one template fetch per runtime pod.
 
     `collect_instances=True` additionally names the impacted instances (the
     drill-down "which agents, in which space"); the count alone skips that work.
@@ -193,31 +236,20 @@ async def compute_capability_impact(
         return {}
 
     available_by_source = await _available_capability_ids_by_source(deps)
-    usable_by_team = await _usable_ids_by_team(
-        deps, {instance.team_id for instance in instances}
-    )
+    facts_by_id = await _referenced_facts(deps.team_dependencies.rebac, instances)
 
     impact: dict[str, CapabilityImpact] = {}
     for instance in instances:
         available_ids = available_by_source.get(instance.source_runtime_id)
         if available_ids is None:
             # Pod unreachable — the sweep would skip this instance rather than
-            # suspend it, so its impact is UNKNOWN. Attribute the skip to each
-            # selected capability, and to the instance's own template
-            # capability (if any), so the caller can say "unknown", not "fine"
-            # for either kind.
-            for cap_id in instance.tuning.selected_capability_ids or []:
+            # suspend it, so its impact is UNKNOWN. Attribute the skip to every
+            # dependency so the caller says "unknown", not "fine", for each.
+            for cap_id in _instance_dependency_ids(instance):
                 impact.setdefault(cap_id, CapabilityImpact()).skipped_unreachable += 1
-            template_cap_id = _instance_template_capability_id(instance)
-            if template_cap_id is not None:
-                impact.setdefault(
-                    template_cap_id, CapabilityImpact()
-                ).skipped_unreachable += 1
             continue
 
-        broken = _broken_capability_ids(
-            instance, usable_by_team.get(instance.team_id), available_ids
-        )
+        broken = _broken_capability_ids(instance, facts_by_id, available_ids)
         for cap_id in broken:
             entry = impact.setdefault(cap_id, CapabilityImpact())
             entry.suspended_instances += 1
@@ -286,10 +318,14 @@ async def preview_revoke_impact(
     their own tuple, not by inheritance), so this preview excludes them too —
     otherwise the confirmation dialog overstates impact by counting agents that
     will not actually be suspended.
+
+    An admin confirms a mutation against this number, so it reads the one
+    capability's tuples FRESH (never the 45s cache, which another replica's
+    write does not invalidate) and answers both questions it asks - who holds
+    an explicit grant, and who is already broken - from that single read.
     """
 
     from control_plane_backend.capabilities.enablement import (
-        explicitly_enabled_team_ids,
         is_template_capability_instance,
     )
     from control_plane_backend.product.service import (
@@ -314,22 +350,28 @@ async def preview_revoke_impact(
         if capability_id in (instance.tuning.selected_capability_ids or [])
         or is_template_capability_instance(instance, capability_id)
     ]
-    if team_id is None and instances:
-        enabled_team_ids = await explicitly_enabled_team_ids(
-            deps.team_dependencies.rebac, capability_id
-        )
+    if not instances:
+        return CapabilityImpact()
+
+    relations = await deps.team_dependencies.rebac.list_direct_relations(
+        cap_ref(capability_id)
+    )
+    facts = (
+        None
+        if isinstance(relations, RebacDisabledResult)
+        else CapabilityEnablementFacts.from_relations(relations)
+    )
+    if team_id is None and facts is not None:
         instances = [
             instance
             for instance in instances
-            if str(instance.team_id) not in enabled_team_ids
+            if str(instance.team_id) not in facts.enabled
         ]
     if not instances:
         return CapabilityImpact()
 
+    facts_by_id = None if facts is None else {capability_id: facts}
     available_by_source = await _available_capability_ids_by_source(deps)
-    usable_by_team = await _usable_ids_by_team(
-        deps, {instance.team_id for instance in instances}
-    )
 
     result = CapabilityImpact()
     for instance in instances:
@@ -337,10 +379,7 @@ async def preview_revoke_impact(
         if available_ids is None:
             result.skipped_unreachable += 1
             continue
-        already_broken = capability_id in _broken_capability_ids(
-            instance, usable_by_team.get(instance.team_id), available_ids
-        )
-        if already_broken:
+        if _dependency_is_broken(instance, capability_id, facts_by_id, available_ids):
             continue
         result.suspended_instances += 1
         result.instances.append(
