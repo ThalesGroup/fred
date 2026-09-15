@@ -1,7 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ThalesGroup/fred/libs/frontend/release/release-contract.schema.json",
-  "title": "FRED frontend package release contract",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,28 +9,30 @@
     "state",
     "registry",
     "distTag",
+    "sourceBranch",
+    "workflowFilename",
+    "publishingEnvironment",
+    "approvedBaselineDigest",
     "releaseToolchain",
+    "applicationToolchain",
     "maintainerApproval",
-    "expectedProvenance",
-    "packages"
+    "expectedProvenance"
   ],
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "state": {
-      "enum": ["proposed", "fixture", "maintainer-confirmed"]
-    },
+    "schemaVersion": { "const": 2 },
+    "state": { "enum": ["proposed", "fixture", "maintainer-confirmed"] },
     "registry": { "type": "string", "format": "uri" },
     "distTag": { "type": "string", "pattern": "^[a-z][a-z0-9._-]*$" },
-    "releaseToolchain": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["node", "npm"],
-      "properties": {
-        "node": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "npm": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
-      }
+    "sourceBranch": { "type": "string", "pattern": "^[a-z][a-z0-9._/-]*$" },
+    "workflowFilename": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+\\.yml$"
     },
+    "publishingEnvironment": { "type": "string", "minLength": 1 },
+    "approvedBaselineDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "releaseToolchain": { "$ref": "#/$defs/toolchain" },
+    "applicationToolchain": { "$ref": "#/$defs/toolchain" },
     "maintainerApproval": {
       "type": "object",
       "additionalProperties": false,
@@ -71,28 +72,16 @@
         "workflow": { "type": ["string", "null"] },
         "certificateIssuer": { "type": ["string", "null"] }
       }
-    },
-    "packages": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["designTokens", "ui", "iframeSdk"],
-      "properties": {
-        "designTokens": { "$ref": "#/$defs/package" },
-        "ui": { "$ref": "#/$defs/package" },
-        "iframeSdk": { "$ref": "#/$defs/package" }
-      }
     }
   },
   "$defs": {
-    "package": {
+    "toolchain": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workspace", "name", "version", "expectedManifest"],
+      "required": ["node", "npm"],
       "properties": {
-        "workspace": { "type": "string", "pattern": "^[a-z0-9-]+$" },
-        "name": { "type": "string" },
-        "version": { "type": "string" },
-        "expectedManifest": { "type": "object" }
+        "node": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "npm": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
       }
     }
   }

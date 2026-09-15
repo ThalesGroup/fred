@@ -97,6 +97,22 @@ test("every release-readiness input selects package validation", () => {
   );
 });
 
+test("inventory, policy, baseline, records, changelogs, and manifests select release validation", () => {
+  for (const sourcePath of [
+    "libs/frontend/release/package-inventory.json",
+    "libs/frontend/release/proposed-release-contract.json",
+    "libs/frontend/release/compatibility-baselines.json",
+    "libs/frontend/release/release-record.schema.json",
+    "libs/frontend/design-tokens/CHANGELOG.md",
+    "libs/frontend/ui/CHANGELOG.md",
+    "libs/frontend/iframe-sdk/CHANGELOG.md",
+    "libs/frontend/iframe-sdk/package.json",
+    "libs/frontend/package-lock.json",
+  ])
+    assert(selectsPackageJob([sourcePath]), sourcePath);
+  assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
+});
+
 test("the governing frontend packaging RFC selects release validation", () => {
   assert(selectsPackageJob(["docs/swift/FRED-FRONTEND-PACKAGING-RFC.md"]));
 });

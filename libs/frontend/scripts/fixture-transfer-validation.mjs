@@ -14,6 +14,11 @@ import { stageIsolatedConsumer } from "./isolated-consumer.mjs";
 import { stageIsolatedIframeSdkConsumer } from "./isolated-iframe-sdk-consumer.mjs";
 import { stageIsolatedReactConsumer } from "./isolated-react-consumer.mjs";
 import { run } from "./process.mjs";
+import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
+import {
+  candidateRecordFromEvidence,
+  validateReleaseRecord,
+} from "./release-record.mjs";
 import {
   loadReleaseContract,
   packageRoles,
@@ -75,6 +80,40 @@ async function runTransferredGates({
   };
 }
 
+export async function persistCandidatePair({
+  evidencePath,
+  recordPath,
+  evidence,
+  record,
+  renameFile = rename,
+}) {
+  const temporaryEvidencePath = `${evidencePath}.tmp`;
+  const temporaryRecordPath = `${recordPath}.tmp`;
+  try {
+    await writeFile(
+      temporaryRecordPath,
+      `${JSON.stringify(record, null, 2)}\n`,
+    );
+    await writeFile(
+      temporaryEvidencePath,
+      `${JSON.stringify(evidence, null, 2)}\n`,
+    );
+    await renameFile(temporaryRecordPath, recordPath);
+    await renameFile(temporaryEvidencePath, evidencePath);
+  } catch (error) {
+    // A complete record must never survive without its matching final evidence.
+    await Promise.allSettled(
+      [
+        recordPath,
+        evidencePath,
+        temporaryRecordPath,
+        temporaryEvidencePath,
+      ].map((file) => rm(file, { force: true })),
+    );
+    throw error;
+  }
+}
+
 export async function validateTransferredFixture({
   transferRoot,
   evidencePath,
@@ -88,8 +127,15 @@ export async function validateTransferredFixture({
 }) {
   const outputPath = path.resolve(evidencePath);
   const temporaryPath = `${outputPath}.tmp`;
+  const recordPath = path.join(
+    path.dirname(outputPath),
+    "candidate-record.json",
+  );
+  const temporaryRecordPath = `${recordPath}.tmp`;
   await rm(outputPath, { force: true });
   await rm(temporaryPath, { force: true });
+  await rm(recordPath, { force: true });
+  await rm(temporaryRecordPath, { force: true });
   assertApplicationToolchain(applicationToolchain);
   const verified = await verifyFixtureTransfer({
     transferRoot,
@@ -171,10 +217,29 @@ export async function validateTransferredFixture({
     execution,
   };
   await verifyCandidateEvidence(evidence, verified.archivePaths, { contract });
+  const record = await candidateRecordFromEvidence({
+    evidence,
+    contract,
+    ledger: await loadCompatibilityLedger(),
+    archivePaths: verified.archivePaths,
+  });
+  if (runGates !== runTransferredGates && record.readiness === "complete")
+    record.readiness = "incomplete"; // Controlled injected gates do not claim real browser/host evidence.
+  validateReleaseRecord(record);
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(temporaryPath, `${JSON.stringify(evidence, null, 2)}\n`);
-  await rename(temporaryPath, outputPath);
-  return { evidence, evidencePath: outputPath, ...verified };
+  await persistCandidatePair({
+    evidencePath: outputPath,
+    recordPath,
+    evidence,
+    record,
+  });
+  return {
+    evidence,
+    evidencePath: outputPath,
+    record,
+    recordPath,
+    ...verified,
+  };
 }
 
 function optionValue(name) {
@@ -237,6 +302,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     },
   });
   process.stdout.write(
-    `${JSON.stringify({ evidencePath: result.evidencePath, kind: result.evidence.kind }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        evidencePath: result.evidencePath,
+        recordPath: result.recordPath,
+        kind: result.evidence.kind,
+        recordReadiness: result.record.readiness,
+      },
+      null,
+      2,
+    )}\n`,
   );
 }
