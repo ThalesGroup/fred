@@ -75,7 +75,7 @@ A release SHALL accept a nonempty, duplicate-free selection of registered packag
 
 ### Requirement: A generated release record binds policy, source, archives, and identities
 
-Before publication, the release process SHALL generate a release record from the reviewed committed source and selected manifests. It MUST identify selected and compatibility-only packages; exact coordinates and dependency/peer ranges; the approved policy and its digest; source commit; observed producer and application Node/npm versions; actual archive filenames, byte lengths, and SHA-512 integrities; self-contained prior-release baseline digests; and expected registry, issuer, repository, workflow, and publication artifact digest. The record and exact selected candidate archives SHALL be retained together and independently rechecked before every downstream gate and publish command. Original candidate fields MUST remain immutable. Before any publication command, a separate approved publishing-attempt record MUST bind original candidate identity/digest, exact selected coordinates and archive integrities, and the independently expected *actual* current publishing commit/run/attempt, repository, authorized workflow, signer identity/issuer; it MUST be durably retained and read back with verified artifact identity/digest. Failure to retain or verify it MUST prevent publication. Actual verified per-package publication outcomes and a later verifier's distinct commit/run/attempt SHALL be recorded truthfully in bound records, without replacing the original candidate or attempt or deriving expected identity from a downloaded attestation. A retained attempt alone MUST NOT be reported as a successful publication.
+Before publication, the release process SHALL generate a release record from the reviewed committed source and selected manifests. It MUST identify selected and compatibility-only packages; exact coordinates and dependency/peer ranges; the approved policy and its digest; source commit; observed producer and application Node/npm versions; actual archive filenames, byte lengths, and SHA-512 integrities; self-contained prior-release baseline digests; and expected registry, issuer, repository, workflow, and publication artifact digest. The record and exact selected candidate archives SHALL be retained together and independently rechecked before every downstream gate and publish command. Original candidate fields MUST remain immutable. Before any publication command, a separate approved publishing-attempt record MUST bind original candidate identity/digest, exact selected coordinates and archive integrities, and the independently expected *actual* current publishing commit/run/attempt, repository, authorized workflow, signer identity/issuer; it MUST be durably retained and read back with verified artifact identity/digest. Its ordered package-specific intents MUST be read back again before each corresponding command; failure to retain or verify that intent MUST prevent that command. Retained intent means publication may have been attempted, not that a command ran or succeeded. Actual verified per-package publication outcomes and a later verifier's distinct commit/run/attempt SHALL be recorded truthfully in bound records, without replacing the original candidate or attempt or deriving expected identity from a downloaded attestation. A retained attempt alone MUST NOT be reported as a successful publication.
 
 #### Scenario: A selected candidate passes all applicable gates
 
@@ -97,6 +97,11 @@ Before publication, the release process SHALL generate a release record from the
 - **WHEN** the approved publishing execution cannot upload and independently read back a valid attempt record binding candidate digest, exact selected bytes, and actual execution/provenance identity
 - **THEN** no `npm publish` command starts and the failure is reported as missing durable prerequisite evidence
 
+#### Scenario: A package-specific intent readback fails
+
+- **WHEN** the selected member's retained command intent cannot be read back or differs from the candidate, archive, policy, or actual execution at its command boundary
+- **THEN** that member's `npm publish` command is never invoked and later members do not progress
+
 #### Scenario: Fixture evidence is presented as a release record
 
 - **WHEN** a fixture, proposed-policy, incomplete, or stale record is supplied to publication or genuine public-registry verification
@@ -104,7 +109,7 @@ Before publication, the release process SHALL generate a release record from the
 
 ### Requirement: Ordinary publication uses one protected direct OIDC boundary
 
-The retained workflow SHALL expose only `prepare-only`, `publish`, and `verify` ordinary operations on committed `swift`, with no push-triggered publication or retired incident mode. `publish` SHALL validate selected archives and release records, require one protected `npm-publish` environment approval for its publishing job, and use direct npm Trusted Publishing on GitHub-hosted runners. Only that job SHALL have `id-token: write`; preparation, compatibility, and verification jobs MUST NOT receive a publishing token, environment secret, publishing environment, or OIDC write permission. Maintainers MUST review each selected existing package's exact npm Trusted Publisher configuration for GitHub organization/repository, existing workflow filename, environment, and direct `npm publish` permission before approving publication. Credential-free CI MUST validate repository-controlled policy and actual execution context but MUST NOT claim to have inspected private npm settings. npm SHALL enforce actual OIDC authorization during the approved publish; authentication or direct-publish permission failure MUST stop without token, interactive-login, or custom-authentication fallback. Configuration review or an `npm whoami`/dry-run result MUST NOT be represented as successful OIDC authentication; only a real published version with matching provenance and archive bytes establishes it.
+The retained workflow SHALL expose only `prepare-only`, `publish`, and `verify` ordinary operations on committed `swift`, with no push-triggered publication or retired incident mode. `publish` SHALL validate selected archives and release records, require one protected `npm-publish` environment approval for its publishing job, and use direct npm Trusted Publishing on GitHub-hosted runners. Protected publishing jobs MUST serialize across dispatches without cancelling an in-progress job; read-only verification need not share that concurrency boundary. Only that job SHALL have `id-token: write`; preparation, compatibility, and verification jobs MUST NOT receive a publishing token, environment secret, publishing environment, or OIDC write permission. Maintainers MUST review each selected existing package's exact npm Trusted Publisher configuration for GitHub organization/repository, existing workflow filename, environment, and direct `npm publish` permission before approving publication. Credential-free CI MUST validate repository-controlled policy and actual execution context but MUST NOT claim to have inspected private npm settings. npm SHALL enforce actual OIDC authorization during the approved publish; authentication or direct-publish permission failure MUST stop without token, interactive-login, or custom-authentication fallback. Configuration review or an `npm whoami`/dry-run result MUST NOT be represented as successful OIDC authentication; only a real published version with matching provenance and archive bytes establishes it.
 
 #### Scenario: Preparation-only dispatch
 
@@ -138,7 +143,7 @@ The retained workflow SHALL expose only `prepare-only`, `publish`, and `verify` 
 
 ### Requirement: Partial publication and verification retries are evidence-bound
 
-An ordinary retry SHALL explicitly select the original release record and exact retained candidate and pre-publication attempt artifact identities, including originating runs/attempts, artifact IDs, and independently checked ZIP/record/archive digests. Neither a failed-job rerun nor a new dispatch may infer the source artifact from the verifier's current `run_attempt`. For each selected exact version, read-only reconciliation MUST distinguish absent, matching-published, and ambiguous/mismatched states. A matching published version MUST have the original recorded coordinate, archive SHA-512, cryptographically verified provenance, and truthful authorized publishing execution established by a verified outcome **or its durable pre-command attempt**. If npm accepted a version but no final outcome was saved, reconciliation MUST use that attempt's independent expectations plus registry evidence to establish success or fail closed; an attempt alone is never success. Only demonstrably absent versions MAY proceed after fresh approval and successful retention of a new actual-execution attempt record. Publication commands MUST NOT be retried automatically. Visibility retries MAY repeat bounded exact-version/package-wide reads only for temporary 404s; authentication, malformed metadata, unexpected provenance, or integrity drift MUST fail immediately. Missing, expired, unsafe, or ambiguous candidate/attempt evidence MUST produce an actionable failure rather than a rebuild, local fallback, overwrite, or false success. Expiry of an already imported historical dependency CI artifact MUST NOT invalidate a durable compatibility baseline.
+An ordinary retry SHALL explicitly select the original release record and exact retained candidate and pre-publication attempt artifact identities, including originating runs/attempts, artifact IDs, and independently checked ZIP/record/archive digests. Neither a failed-job rerun nor a new dispatch may infer the source artifact from the verifier's current `run_attempt`. The retry MUST check supplied prior attempts against the retained attempt history available from GitHub and reject omitted, expired, mismatched, or incomplete histories. A retained aborted terminal MAY identify a serialized untouched suffix only when its candidate/attempt/execution/digest binding, exact completed failed workflow run/attempt, failed sole publishing step, and successful later terminal-upload step are independently checked; the publisher MUST stop after writing it and MUST have no later publication path. Missing terminal artifacts, omitted references, absent outcomes, local flags, 404s, and unresolved running/cancelled executions alone MUST NOT establish non-execution. For each selected exact version, read-only reconciliation MUST distinguish absent, matching-published, and ambiguous/mismatched states. A matching published version MUST have the original recorded coordinate, archive SHA-512, cryptographically verified provenance, and truthful authorized publishing execution established by a verified outcome **or its durable pre-command attempt**. If npm accepted a version but no final outcome was saved, reconciliation MUST use that attempt's independent expectations plus registry evidence to establish success or fail closed; an attempt alone is never success. Only demonstrably absent versions MAY proceed after fresh approval and successful retention of a new actual-execution attempt record. Publication commands MUST NOT be retried automatically. Visibility retries MAY repeat bounded exact-version/package-wide reads only for temporary 404s; authentication, malformed metadata, unexpected provenance, or integrity drift MUST fail immediately. Missing, expired, unsafe, or ambiguous candidate/attempt/terminal evidence MUST produce an actionable failure rather than a rebuild, local fallback, overwrite, or false success. Expiry of an already imported historical dependency CI artifact MUST NOT invalidate a durable compatibility baseline.
 
 #### Scenario: A verify-only retry uses a prior artifact
 
@@ -154,6 +159,36 @@ An ordinary retry SHALL explicitly select the original release record and exact 
 
 - **WHEN** some selected exact versions already exist with approved archive bytes and verified publishing identities bound to outcomes or durable attempts, and others are absent
 - **THEN** the continuation records its current GitHub execution truthfully in a new retained attempt, obtains a new protected approval, skips matching versions, and may publish only missing validated archives without relabeling candidate source or spoofing GitHub variables
+
+#### Scenario: Tokens published but UI was demonstrably untouched
+
+- **WHEN** tokens match their retained intent and cryptographic registry evidence, UI is absent, and every relevant prior completed publishing attempt has an independently verified retained terminal placing UI in its untouched suffix
+- **THEN** a newly approved serialized continuation skips tokens and may invoke UI once from the original validated archive
+
+#### Scenario: A prior attempt may have invoked UI
+
+- **WHEN** UI remains invisible after bounded reads but a relevant attempt has no complete verified terminal proving UI untouched, or its job is pending/cancelled, or a prior attempt reference was omitted
+- **THEN** continuation stops without another UI publication command
+
+#### Scenario: A fresh candidate repeats an earlier attempted coordinate
+
+- **WHEN** a new candidate names a coordinate already present in an ordinary retained publishing attempt for another candidate, regardless of an exact-version 404 or a missing final outcome
+- **THEN** fresh publication stops and cannot bypass original-candidate evidence-bound continuation
+
+#### Scenario: Publishing history is incomplete
+
+- **WHEN** an attempt-specific workflow job crossed its durable-upload or execution step but its retained attempt artifact is deleted or unavailable, or the GitHub run search hits its result cap
+- **THEN** continuation and fresh publication stop rather than treating an empty artifact list as proof of no earlier attempt
+
+#### Scenario: A skewed source clock cannot shorten the history window
+
+- **WHEN** the first exact selected-version changelog introduction has an author or committer timestamp later than its independently observed merged `swift` pull-request time
+- **THEN** publication history inspection begins no later than the observed merge time and checks prior attempts before a command can run
+
+#### Scenario: Historical published identity remains reserved during registry lag
+
+- **WHEN** a selected coordinate is in the source-reviewed first-release known-published ledger but an exact-version registry read temporarily returns 404
+- **THEN** it is not treated as an absent new publication candidate or sent to `npm publish`; historical appendix identity is checked independently of that read
 
 #### Scenario: npm accepted publication before the outcome was saved
 

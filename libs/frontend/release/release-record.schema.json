@@ -5,6 +5,7 @@
   "oneOf": [
     { "$ref": "#/$defs/candidate" },
     { "$ref": "#/$defs/attempt" },
+    { "$ref": "#/$defs/terminal" },
     { "$ref": "#/$defs/outcome" },
     { "$ref": "#/$defs/verification" }
   ],
@@ -58,7 +59,8 @@
         "baselineDigest",
         "candidateArtifact",
         "execution",
-        "selected"
+        "selected",
+        "commands"
       ],
       "properties": {
         "schemaVersion": { "const": 1 },
@@ -70,7 +72,8 @@
         "baselineDigest": { "type": "string" },
         "candidateArtifact": { "type": ["object", "null"] },
         "execution": { "type": "object" },
-        "selected": { "type": "array" }
+        "selected": { "type": "array" },
+        "commands": { "type": "array" }
       }
     },
     "outcome": {
@@ -95,6 +98,34 @@
         "coordinate": { "type": "string" },
         "integrity": { "type": "string" },
         "provenance": { "type": "object" }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "attemptDigest",
+        "candidateDigest",
+        "candidateArtifact",
+        "execution",
+        "passedBoundaries",
+        "possiblyInvoked",
+        "neverInvoked"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "publishing-terminal" },
+        "readiness": { "const": "aborted" },
+        "attemptDigest": { "type": "string" },
+        "candidateDigest": { "type": "string" },
+        "candidateArtifact": { "type": "object" },
+        "execution": { "type": "object" },
+        "passedBoundaries": { "type": "array" },
+        "possiblyInvoked": { "type": "array" },
+        "neverInvoked": { "type": "array" }
       }
     },
     "verification": {

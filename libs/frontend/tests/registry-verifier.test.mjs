@@ -17,6 +17,7 @@ import {
 } from "../scripts/release-evidence.mjs";
 import {
   assertInstalledRegistryPackage,
+  applicableHostGate,
   assertProvenanceIdentity,
   buildRegistryConsumers,
   provenanceIdentityFromStatement,
@@ -26,6 +27,7 @@ import {
   verifyNpmPackageProvenance,
   verifyProvenanceAttestation,
   verifyRegistryTooling,
+  verificationEvidenceKind,
 } from "../scripts/registry-verifier.mjs";
 import { run } from "../scripts/process.mjs";
 
@@ -36,6 +38,16 @@ const selectedContract = await loadReleaseContract(
 const verifierCli = fileURLToPath(
   new URL("../scripts/registry-verifier.mjs", import.meta.url),
 );
+
+test("unbound generic checks remain tooling evidence and host gate reflects applicability", () => {
+  assert.equal(
+    verificationEvidenceKind(false),
+    "controlled-selected-registry-tooling",
+  );
+  assert.equal(verificationEvidenceKind(true), "public-registry-verification");
+  assert.equal(applicableHostGate(["designTokens", "ui"]), "not-applicable");
+  assert.equal(applicableHostGate(["iframeSdk"]), true);
+});
 
 test("generic verifier loads in a fresh process and rejects retired CLI options", () => {
   const load = spawnSync(
@@ -900,6 +912,106 @@ test("selected registry tooling verifies SDK alone and UI with an independently 
       selectedIds.includes("ui") ? true : undefined,
     );
   }
+});
+
+test("retained attempts bind a later actual publishing commit without rewriting candidate identity", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const {
+    candidateRecordFromEvidence,
+    publishingAttemptModel,
+    releaseRecordDigest,
+  } = await import("../scripts/release-record.mjs");
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-actual-publisher-registry-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "iframeSdk.tgz");
+  await writeFile(archivePath, "controlled SDK bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "iframeSdk", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const candidate = await candidateRecordFromEvidence({
+    evidence,
+    contract,
+    ledger: await loadCompatibilityLedger(),
+    selectedIds: ["iframeSdk"],
+    archivePaths: { iframeSdk: archivePath },
+  });
+  const attempt = publishingAttemptModel({
+    candidate,
+    candidateArtifact: {
+      artifactId: 51,
+      runId: "61",
+      runAttempt: "1",
+      sourceCommit: "f".repeat(40),
+      zipSha256: "a".repeat(64),
+      recordDigest: releaseRecordDigest(candidate),
+    },
+    execution: {
+      repository: "ThalesGroup/fred",
+      workflow: contract.workflowFilename,
+      sourceCommit: "a".repeat(40),
+      runId: "71",
+      runAttempt: "2",
+      signerIssuer: contract.expectedProvenance.certificateIssuer,
+    },
+  });
+  const coordinates = { iframeSdk: evidence.packages.iframeSdk.coordinate };
+  const options = {
+    contract,
+    evidence,
+    coordinates,
+    selectedIds: ["iframeSdk"],
+    publicationAttempts: [{ record: attempt }],
+    resolvePackage: async ({ candidate: expected }) => ({
+      role: "iframeSdk",
+      integrity: expected.integrity,
+      archivePath,
+    }),
+    verifyPackageSignature: async () => ({
+      cryptographicallyVerified: true,
+      identity: {
+        ...evidence.packages.iframeSdk.expectedProvenance,
+        sourceCommit: "a".repeat(40),
+      },
+    }),
+    installConsumers: async () => {},
+  };
+  const result = await verifyRegistryTooling(options);
+  assert.equal(
+    result.packages.iframeSdk.attemptDigest,
+    releaseRecordDigest(attempt),
+  );
+  assert.equal(
+    result.packages.iframeSdk.provenance.sourceCommit,
+    "a".repeat(40),
+  );
+  assert.equal(evidence.sourceCommit, "f".repeat(40));
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      verifyPackageSignature: async () => ({
+        cryptographicallyVerified: true,
+        identity: {
+          ...evidence.packages.iframeSdk.expectedProvenance,
+          sourceCommit: "b".repeat(40),
+        },
+      }),
+      installConsumers: async () =>
+        assert.fail("wrong provenance cannot reach consumers"),
+    }),
+    /does not match any retained actual publishing execution/,
+  );
 });
 
 test("UI-only registry tooling rejects missing baseline and wrong validly signed baseline identity", async (context) => {
