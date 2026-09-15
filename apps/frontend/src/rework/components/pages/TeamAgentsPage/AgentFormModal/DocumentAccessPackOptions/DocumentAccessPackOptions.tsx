@@ -40,6 +40,7 @@ export function DocumentAccessPackOptions({ configValues, onConfigChange, teamId
   return (
     <div className={styles.root}>
       <SwitchRow
+        size="small"
         label={t("capability.document_access.fields.bind_libraries.title")}
         description={t("capability.document_access.fields.bind_libraries.description")}
         checked={bindLibraries}

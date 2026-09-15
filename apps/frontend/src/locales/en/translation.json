@@ -1111,7 +1111,7 @@
         "loading": "Loading features…",
         "loadError": "Could not load the feature catalog.",
         "empty": "No features are advertised by any runtime pod yet.",
-        "manageTeams": "Manage teams",
+        "manageTeams": "Manage by team",
         "kindFilter": {
           "tool": "Capabilities",
           "agent": "Agents",
@@ -1149,7 +1149,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — suspended agents",
-          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage teams to revive them.",
+          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage by team to revive them.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
