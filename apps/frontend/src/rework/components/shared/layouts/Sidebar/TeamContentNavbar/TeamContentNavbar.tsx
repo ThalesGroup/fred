@@ -34,7 +34,11 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
-import { useWikiAvailabilityQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+import {
+  useKnowledgeBaseDefinitionsQuery,
+  useWikiAvailabilityQuery,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -104,6 +108,12 @@ export default function TeamContentNavbar() {
   // refuses the wiki routes anyway.
   const { data: wikiAvailability } = useWikiAvailabilityQuery({ teamId: teamId ?? "" }, { skip: !teamId });
   const showWiki = wikiAvailability?.enabled === true;
+  const { currentData: knowledgeBaseDefinitions, isError: knowledgeBasesError } = useKnowledgeBaseDefinitionsQuery(
+    { teamId: teamId ?? "" },
+    { skip: !teamId || !capabilities.canUseTeamKnowledgeBases },
+  );
+  const showKnowledgeBases =
+    capabilities.canUseTeamKnowledgeBases && !knowledgeBasesError && (knowledgeBaseDefinitions?.length ?? 0) > 0;
 
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
@@ -176,10 +186,11 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
-  if (capabilities.canUseTeamKnowledgeBases) {
+  if (showKnowledgeBases) {
     navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.knowledgeBases"),
+      trailingBadge: <BetaBadge />,
       icon: { category: "outlined", type: "database", filled: true },
       linkProps: { to: `/team/${teamId}/knowledge-bases` },
     });
@@ -188,6 +199,7 @@ export default function TeamContentNavbar() {
     navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.wiki"),
+      trailingBadge: <BetaBadge label={t("rework.wiki.betaBadge.label")} />,
       icon: { category: "outlined", type: "book_2", filled: true },
       linkProps: { to: `/team/${teamId}/wiki` },
     });
