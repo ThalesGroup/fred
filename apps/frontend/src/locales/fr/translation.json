@@ -1433,11 +1433,8 @@
         "valueLabel": "Tours"
       },
       "presets": {
-        "last15m": "15 dernières minutes",
-        "last1h": "Dernière heure",
         "last24h": "24 dernières heures",
         "last30d": "30 derniers jours",
-        "last6h": "6 dernières heures",
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
@@ -1481,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Appliquer",
+        "months": "Mois",
+        "next": "Période suivante",
+        "previous": "Période précédente",
         "since": "Depuis",
         "until": "Jusqu'à"
       },

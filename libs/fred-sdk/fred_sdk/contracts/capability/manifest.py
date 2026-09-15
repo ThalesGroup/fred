@@ -66,11 +66,14 @@ APPLICATION_CAPABILITY_NAMESPACE_PREFIX = _CORE_APPLICATION_CAPABILITY_NAMESPACE
 
 
 def model_capability_id(provider: str, name: str) -> str:
-    """Stable, namespaced capability id for one (provider, model name) pair.
+    """Stable, namespaced capability id for one model identity.
 
-    One entry per distinct (provider, name), not per `models_catalog.yaml`
-    profile — administrative model enablement is independent from the typed
-    consumer (`chat` today, potentially `embedding` later). Non-id-safe characters
+    One entry per distinct identity, not per `models_catalog.yaml` profile —
+    administrative model enablement is independent from the typed consumer
+    (`chat` today, potentially `embedding` later). The runtime passes the
+    profile's `model_id` here when it declares one, so a gateway serving
+    several models under one wire name still yields distinct ids
+    (`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Non-id-safe characters
     (anything outside `CAPABILITY_ID_PATTERN`'s charset) are normalized to
     `-` so a provider/model name containing e.g. `:` or `/` never produces
     an id OpenFGA would reject.
@@ -355,7 +358,7 @@ class CapabilityCatalogEntry(BaseModel):
     # "tool" (pod-advertised capability), "agent" (control-plane-side
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
     # or "model" (pod-advertised projection of one models_catalog.yaml
-    # (provider, name) pair, OBSERV-02 v3, RFC §8.7) — see
+    # model identity, OBSERV-02 v3, RFC §8.7) — see
     # `CapabilityManifest.kind`. "app" is a control-plane-side projection of
     # a registered product application; no CapabilityManifest of kind "app"
     # is authorable.
@@ -378,9 +381,9 @@ class CapabilityCatalogEntry(BaseModel):
     # 2026-07-19 `depends_on` fast-follow, GitHub #2004 item 5). Always empty
     # for `kind="tool"` entries.
     default_capability_ids: tuple[str, ...] = Field(default_factory=tuple)
-    # Every `models_catalog.yaml` profile_id sharing this entry's (provider,
-    # name) — TEAM-ROUTING-POLICY-RFC.md §7.1: a team routing policy picks by
-    # profile_id, finer-grained than this entry's (provider, name)-keyed
+    # Every `models_catalog.yaml` profile_id sharing this entry's model
+    # identity — TEAM-ROUTING-POLICY-RFC.md §7.1: a team routing policy picks
+    # by profile_id, finer-grained than this entry's identity-keyed
     # capability id. This complete inventory supports model enablement; typed
     # policy consumers use the explicit subset below. Always empty for
     # kind="tool"/"agent" entries — only `kind="model"` populates it.
@@ -396,7 +399,7 @@ class CapabilityCatalogEntry(BaseModel):
     # declared per profile, where the behaviour actually differs; the admin
     # reasoning toggle is keyed per model, because that is what this entry's
     # id is. This field is the derived projection between the two — never
-    # authored, computed by the pod inside the same (provider, name) grouping
+    # authored, computed by the pod inside the same model-identity grouping
     # that produces `model_profile_ids`. Empty = no reasoning-capable profile,
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".

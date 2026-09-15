@@ -200,9 +200,9 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             binding=binding,
             capability=ModelCapability.CHAT,
         )
-        capability_id = model_capability_id(
-            selection.model.provider or "", selection.model.name or ""
-        )
+        # The winning profile's own identity, never re-derived from
+        # `model.name`: siblings on one gateway share that wire name.
+        capability_id = selection.capability_id
         if (
             selection.source != ModelSelectionSource.PLATFORM_BINDING
             and binding.usable_model_ids is not None
@@ -342,6 +342,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                         mode="json", exclude_none=True
                     ),
                 ),
+                # No profile behind an operator binding, so the identity is the
+                # wire name — the same derivation control-plane uses for it.
+                capability_id=model_capability_id(
+                    platform_binding.provider, platform_binding.name
+                ),
             )
         if capability != ModelCapability.CHAT:
             return self._resolver.resolve(
@@ -394,6 +399,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability=capability,
             profile_id=profile.profile_id,
             model=profile.model.model_copy(deep=True),
+            capability_id=profile.capability_id,
         )
 
 

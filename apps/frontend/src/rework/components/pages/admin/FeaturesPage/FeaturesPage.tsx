@@ -73,10 +73,14 @@ export default function FeaturesPage() {
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
   const { data, isLoading, isError } = useAdminCapabilitiesQuery();
-  // The registry-governance view (`can_list_all_teams`), not the caller-scoped
-  // `/teams` list — a platform admin managing per-team enablement must see
-  // every team, including ones they don't personally belong to (#1981).
-  const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
+  // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
+  // must see teams they don't belong to. The drawer only needs ids and names, so the
+  // per-team membership reads are skipped.
+  const {
+    data: teams = [],
+    isLoading: isTeamsLoading,
+    isError: isTeamsError,
+  } = useListAllTeamsQuery({ includeMembership: false });
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
@@ -382,8 +386,8 @@ export default function FeaturesPage() {
         <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
-            <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
-              {t(cap.name, { defaultValue: cap.name })}
+            <span className={styles.capName} title={capabilityLabel(t, cap)}>
+              {capabilityLabel(t, cap)}
             </span>
             <span className={styles.capVersion}>v{cap.version}</span>
           </div>

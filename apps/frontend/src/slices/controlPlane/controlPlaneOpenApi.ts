@@ -120,7 +120,12 @@ const injectedRtkApi = api.injectEndpoints({
       ListAllTeamsControlPlaneV1TeamsAllGetApiResponse,
       ListAllTeamsControlPlaneV1TeamsAllGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/teams/all` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/all`,
+        params: {
+          include_membership: queryArg.includeMembership,
+        },
+      }),
     }),
     searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
       SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
@@ -1459,7 +1464,10 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
   createTeamRequest: CreateTeamRequest;
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
-export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = {
+  /** false skips the per-team ReBAC reads: admins, membership and member_count are left unset. For pickers that only need ids and names. */
+  includeMembership?: boolean;
+};
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
   /** status 200 Successful Response */ UserSummary[];
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
@@ -3322,6 +3330,8 @@ export type CapabilityEnablementItem = {
   thinking_profile_ids?: string[];
   /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
   reasoning_enabled?: boolean;
+  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  model_display_name?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
