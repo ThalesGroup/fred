@@ -52,7 +52,7 @@ The last-admin guard and the rescue check keep counting `team_admin` only. Count
 
 ### Frontend: a gate around the team pages
 
-`TeamAdminCharterGate` wraps the `MainLayout` outlet. When `useSelectedTeam` returns a team whose `my_relations` holds `pending_team_admin`, it renders `TeamAdminCharterPage` (charter, Accept enabled once the end is visible) instead of the page. The home page and the personal space have no such relation. Accept invalidates `ControlPlaneTeam`, so `my_relations` refreshes and the gate opens. There is no Later: the team's pages are the only thing withheld. Team settings keep a read-only Responsibilities section for `team_admin`s; the role chips show "Admin (pending)" and toggling it cancels the nomination.
+`TeamAdminCharterGate` wraps the `MainLayout` outlet. When `useSelectedTeam` returns a team whose `my_relations` holds `pending_team_admin`, it renders `TeamAdminCharterPage` (charter and Accept) instead of the page, but only while the team's `admins` (`team_admin` only) is empty: nobody has vouched for the user's other roles yet. When the team has an accepted admin, the gate renders the page under a notice leading to the Responsibilities section, so a pending admin who is also an editor keeps working and is never locked out for declining. The backend is unchanged either way: `pending_team_admin` never carries an admin permission. The home page and the personal space have no such relation. Accept invalidates `ControlPlaneTeam`, so `my_relations` refreshes and the gate opens. Team settings show the Responsibilities section to `team_admin`s and pending admins, with Accept for the latter; the role chips show "Admin (pending)" and toggling it cancels the nomination.
 
 ### Markdown hook extracted from the GCU and GDPR pages
 

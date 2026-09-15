@@ -13,16 +13,45 @@
 // limitations under the License.
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { Link, useMatch } from "react-router-dom";
+import Button from "@shared/atoms/Button/Button.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import TeamAdminCharterPage from "@components/pages/TeamAdminCharterPage/TeamAdminCharterPage.tsx";
 import { useSelectedTeam } from "../../../../../hooks/useSelectedTeam.ts";
+import styles from "./TeamAdminCharterGate.module.css";
 
-/** Shows the team administrator charter instead of a team's pages while the user is a
- *  pending admin of that team. The home page and the personal space never are. */
+/** Leads a pending admin of the selected team to the charter. It replaces the team's pages only
+ *  while no accepted admin vouches for the user's other roles; otherwise a notice points to it. */
 export default function TeamAdminCharterGate({ children }: { children: ReactNode }) {
-  const { selectedTeam } = useSelectedTeam();
+  const { t } = useTranslation();
+  const { teamId, selectedTeam } = useSelectedTeam();
+  const onResponsibilities = useMatch("/team/:teamId/settings/responsibilities") !== null;
   const pending =
     !!selectedTeam &&
     "my_relations" in selectedTeam &&
     (selectedTeam.my_relations ?? []).includes("pending_team_admin");
-  return pending ? <TeamAdminCharterPage /> : <>{children}</>;
+
+  if (!pending) return <>{children}</>;
+  if ((selectedTeam?.admins ?? []).length === 0) return <TeamAdminCharterPage />;
+  return (
+    <>
+      {!onResponsibilities && (
+        <div className={styles.notice}>
+          <ServiceNotice
+            icon="admin_panel_settings"
+            title={t("rework.teamAdminCharter.pendingNotice")}
+            action={
+              <Link to={`/team/${teamId}/settings/responsibilities`}>
+                <Button color="primary" variant="outlined" size="small">
+                  {t("rework.teamAdminCharter.review")}
+                </Button>
+              </Link>
+            }
+          />
+        </div>
+      )}
+      <div className={styles.pages}>{children}</div>
+    </>
+  );
 }

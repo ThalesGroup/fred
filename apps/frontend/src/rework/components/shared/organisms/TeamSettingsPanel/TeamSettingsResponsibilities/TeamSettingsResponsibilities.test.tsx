@@ -1,0 +1,73 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const h = vi.hoisted(() => ({ accept: vi.fn(() => Promise.resolve()) }));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useAcceptTeamAdminCharterMutation: () => [h.accept, { isLoading: false }],
+}));
+
+vi.mock("@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx", () => ({
+  default: () => "charter",
+}));
+
+import TeamSettingsResponsibilities from "./TeamSettingsResponsibilities.tsx";
+
+let container: HTMLDivElement;
+let root: Root;
+
+function render(canAccept?: boolean) {
+  container = document.createElement("div");
+  root = createRoot(container);
+  act(() => {
+    root.render(<TeamSettingsResponsibilities canAccept={canAccept} />);
+  });
+}
+
+afterEach(() => {
+  act(() => root.unmount());
+  h.accept.mockClear();
+});
+
+describe("TeamSettingsResponsibilities", () => {
+  it("shows the charter read-only to an admin", () => {
+    render();
+
+    expect(container.textContent).toBe("charter");
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("lets a pending admin accept the charter", () => {
+    render(true);
+    const accept = container.querySelector("button") as HTMLButtonElement;
+
+    act(() => accept.click());
+    expect(h.accept).toHaveBeenCalledTimes(1);
+  });
+});

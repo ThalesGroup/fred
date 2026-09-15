@@ -2372,6 +2372,8 @@
     },
     "teamAdminCharter": {
       "accept": "Accepter",
+      "pendingNotice": "Acceptez la charte de l'administrateur d'équipe pour activer vos droits d'admin sur cette équipe.",
+      "review": "Lire la charte",
       "title": "Charte de l'administrateur d'équipe"
     },
     "teamSettings": {

@@ -12,14 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button.tsx";
 import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx";
+import { useAcceptTeamAdminCharterMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import styles from "./TeamSettingsResponsibilities.module.scss";
 
-/** The team administrator charter every active admin has accepted, readable at any time. */
-export default function TeamSettingsResponsibilities() {
+interface TeamSettingsResponsibilitiesProps {
+  /** A pending admin accepts the charter here without leaving the team. */
+  canAccept?: boolean;
+}
+
+/** The team administrator charter, readable at any time by admins and accepted here by pending ones. */
+export default function TeamSettingsResponsibilities({ canAccept = false }: TeamSettingsResponsibilitiesProps) {
+  const { t } = useTranslation();
+  const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
+
   return (
     <div className={styles.responsibilities}>
       <TeamAdminCharterContent />
+      {canAccept && (
+        <div className={styles.actions}>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            disabled={isLoading}
+            onClick={() => void acceptCharter()}
+          >
+            {t("rework.teamAdminCharter.accept")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

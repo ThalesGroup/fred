@@ -1,0 +1,12 @@
+.notice {
+  flex-shrink: 0;
+  padding: var(--spacing-s) var(--spacing-l) 0;
+}
+
+/* Routed pages size with height: 100%, so they need a definite box under the notice. */
+.pages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}

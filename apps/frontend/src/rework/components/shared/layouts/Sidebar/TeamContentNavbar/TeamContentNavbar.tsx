@@ -229,9 +229,13 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/parameters` },
     });
   }
-  // From the relations, not the permissions: accepting the charter is what turns
-  // an admin's admin-only permissions on, so it must be reachable before that.
-  if ((selectedTeam?.my_relations ?? []).includes("team_admin")) {
+  // From the relations, not the permissions: a pending admin accepts the charter
+  // here, before holding any admin permission.
+  if (
+    (selectedTeam?.my_relations ?? []).some(
+      (relation) => relation === "team_admin" || relation === "pending_team_admin",
+    )
+  ) {
     settingsItems.push({
       type: "link",
       label: t("rework.teamSettings.navigation.responsibilities"),

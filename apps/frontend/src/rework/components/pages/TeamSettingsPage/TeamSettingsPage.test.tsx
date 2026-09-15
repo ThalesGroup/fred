@@ -58,7 +58,7 @@ vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRou
 }));
 vi.mock("@shared/organisms/TaskActivity/TaskActivity.tsx", () => ({ default: () => "activity-section" }));
 vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx", () => ({
-  default: () => "responsibilities-section",
+  default: ({ canAccept }: { canAccept: boolean }) => `responsibilities-section:${canAccept}`,
 }));
 
 import TeamSettingsPage from "./TeamSettingsPage.tsx";
@@ -88,7 +88,13 @@ describe("TeamSettingsPage responsibilities", () => {
   it("shows the Responsibilities section to a team admin", () => {
     render("responsibilities", ["team_admin"]);
 
-    expect(container.textContent).toBe("responsibilities-section");
+    expect(container.textContent).toBe("responsibilities-section:false");
+  });
+
+  it("lets a pending admin accept the charter from the Responsibilities section", () => {
+    render("responsibilities", ["pending_team_admin", "team_editor"]);
+
+    expect(container.textContent).toBe("responsibilities-section:true");
   });
 
   it("redirects a plain member away from the Responsibilities section", () => {

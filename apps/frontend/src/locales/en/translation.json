@@ -2372,6 +2372,8 @@
     },
     "teamAdminCharter": {
       "accept": "Accept",
+      "pendingNotice": "Accept the team administrator charter to turn on your admin rights on this team.",
+      "review": "Read the charter",
       "title": "Team administrator charter"
     },
     "teamSettings": {

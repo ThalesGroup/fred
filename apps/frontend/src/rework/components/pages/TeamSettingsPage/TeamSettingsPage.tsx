@@ -36,9 +36,10 @@ export default function TeamSettingsPage() {
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
-  // The relation itself: no permission belongs to team_admin alone.
-  const isTeamAdmin =
-    !!selectedTeam && "my_relations" in selectedTeam && (selectedTeam.my_relations ?? []).includes("team_admin");
+  // The relations themselves: no permission belongs to team_admin alone.
+  const myRelations = selectedTeam && "my_relations" in selectedTeam ? (selectedTeam.my_relations ?? []) : [];
+  const isTeamAdmin = myRelations.includes("team_admin");
+  const isPendingTeamAdmin = myRelations.includes("pending_team_admin");
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —
@@ -57,7 +58,7 @@ export default function TeamSettingsPage() {
   // sections the sidebar hides for them via a direct/refreshed URL.
   const sectionAllowed =
     section === "members" ||
-    (section === "responsibilities" && isTeamAdmin) ||
+    (section === "responsibilities" && (isTeamAdmin || isPendingTeamAdmin)) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
     (section === "evaluations" && canUpdateAgents) ||
     ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
@@ -84,7 +85,7 @@ export default function TeamSettingsPage() {
         // cross-write rule) — canUpdateResources is team_editor-only.
         return <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateResources} />;
       case "responsibilities":
-        return <TeamSettingsResponsibilities />;
+        return <TeamSettingsResponsibilities canAccept={isPendingTeamAdmin} />;
       default:
         return <Navigate to={`/team/${teamId}/settings/members`} replace />;
     }

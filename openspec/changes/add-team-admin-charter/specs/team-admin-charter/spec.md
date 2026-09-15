@@ -86,11 +86,15 @@ At startup, when the configured version differs from the last version applied, t
 
 ### Requirement: A team's pages show the charter to its pending administrators
 
-When a user opens a page of a team on which they hold `pending_team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show it. After Accept, the team's pages MUST become available without reloading the app.
+When a user opens a page of a team on which they hold `pending_team_admin` and the team has no `team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action. When the team already has a `team_admin`, the frontend MUST leave the page to the user's other roles and SHALL show a notice leading to the charter instead. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show either. After Accept, the team's pages MUST become available without reloading the app.
 
-#### Scenario: Pending administrator opens their team
-- **WHEN** a user holding `pending_team_admin` on a team opens one of its pages
-- **THEN** the charter is shown with an Accept action
+#### Scenario: Pending administrator opens a team with no administrator
+- **WHEN** a user holding `pending_team_admin` opens a page of a team that has no `team_admin`
+- **THEN** the charter is shown in place of the page, with an Accept action
+
+#### Scenario: Pending administrator opens a team that has an administrator
+- **WHEN** a user holding `pending_team_admin` and `team_editor` opens a page of a team that has a `team_admin`
+- **THEN** the page is shown, with a notice leading to the charter
 
 #### Scenario: Home page
 - **WHEN** the same user is on the home page or in their personal space
@@ -100,13 +104,17 @@ When a user opens a page of a team on which they hold `pending_team_admin`, the 
 - **WHEN** the user chooses Accept
 - **THEN** the acceptance is recorded and the team's page is shown without a reload
 
-### Requirement: Team settings show the charter to administrators and the pending state to everyone
+### Requirement: Team settings show the charter to administrators and pending administrators
 
-Team settings SHALL show a read-only Responsibilities section with the charter to users who hold `team_admin` on that team, and to no one else. The member list MUST show a pending nomination on the administrator role.
+Team settings SHALL show a Responsibilities section with the charter to users who hold `team_admin` or `pending_team_admin` on that team, and to no one else, with an Accept action for pending administrators only. The member list MUST show a pending nomination on the administrator role.
 
 #### Scenario: Administrator opens Responsibilities
 - **WHEN** a `team_admin` opens the Responsibilities section
 - **THEN** the charter is shown, with no Accept action
+
+#### Scenario: Pending administrator opens Responsibilities
+- **WHEN** a `pending_team_admin` opens the Responsibilities section of a team that has a `team_admin`
+- **THEN** the charter is shown with an Accept action
 
 #### Scenario: Member opens Responsibilities
 - **WHEN** a user who is only `team_member` navigates to the Responsibilities section URL

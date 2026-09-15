@@ -5,3 +5,9 @@
   padding: var(--spacing-m);
   max-width: 760px;
 }
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-m);
+}

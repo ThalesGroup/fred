@@ -13,8 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 declare global {
@@ -23,7 +25,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ team: undefined as { id: string; my_relations: string[] } | undefined }));
+type SelectedTeam = { id: string; my_relations: string[]; admins: Array<{ id: string }> };
+
+const h = vi.hoisted(() => ({ team: undefined as SelectedTeam | undefined }));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 vi.mock("../../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
@@ -38,17 +46,30 @@ vi.mock("@components/pages/TeamAdminCharterPage/TeamAdminCharterPage.tsx", () =>
   default: () => "charter-page",
 }));
 
+vi.mock("@shared/molecules/ServiceNotice/ServiceNotice.tsx", () => ({
+  default: ({ title, action }: { title: string; action: ReactNode }) => (
+    <div>
+      {title}
+      {action}
+    </div>
+  ),
+}));
+
 import TeamAdminCharterGate from "./TeamAdminCharterGate.tsx";
 
 let container: HTMLDivElement;
 let root: Root;
 
-function render() {
+function render(path = "/team/team-1/agents") {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<TeamAdminCharterGate>team-pages</TeamAdminCharterGate>);
+    root.render(
+      <MemoryRouter initialEntries={[path]}>
+        <TeamAdminCharterGate>team-pages</TeamAdminCharterGate>
+      </MemoryRouter>,
+    );
   });
 }
 
@@ -61,22 +82,38 @@ afterEach(() => {
 });
 
 describe("TeamAdminCharterGate", () => {
-  it("shows the charter instead of the pages of a team the user is a pending admin of", () => {
-    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"] };
+  it("shows the charter instead of the pages of a team with no accepted admin", () => {
+    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [] };
     render();
 
     expect(container.textContent).toBe("charter-page");
   });
 
+  it("leaves the pages to a pending admin's other roles once the team has an accepted admin", () => {
+    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    render();
+
+    expect(container.textContent).toContain("rework.teamAdminCharter.pendingNotice");
+    expect(container.textContent).toContain("team-pages");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/team/team-1/settings/responsibilities");
+  });
+
+  it("drops the notice on the Responsibilities section, which holds the Accept action", () => {
+    h.team = { id: "team-1", my_relations: ["pending_team_admin"], admins: [{ id: "alice" }] };
+    render("/team/team-1/settings/responsibilities");
+
+    expect(container.textContent).toBe("team-pages");
+  });
+
   it("leaves a team's pages to its admins and members", () => {
-    h.team = { id: "team-1", my_relations: ["team_admin"] };
+    h.team = { id: "team-1", my_relations: ["team_admin"], admins: [{ id: "alice" }] };
     render();
 
     expect(container.textContent).toBe("team-pages");
   });
 
   it("never blocks the home page, where no team is selected", () => {
-    render();
+    render("/");
 
     expect(container.textContent).toBe("team-pages");
   });
