@@ -65,21 +65,35 @@ test("omitted selection sorts a dependent registered before its prerequisite", (
 
 test("Make preserves an explicitly empty selection and provisioned browser path", () => {
   const cwd = path.resolve(import.meta.dirname, "..");
+  const omittedEnv = { ...process.env };
+  delete omittedEnv.RELEASE_SELECTION;
+  const selectedEnv = {
+    ...omittedEnv,
+    RELEASE_SELECTION: "designTokens,ui,iframeSdk",
+  };
   const omitted = execFileSync("make", ["-n", "release-transfer-create"], {
     cwd,
     encoding: "utf8",
+    env: omittedEnv,
   });
   const empty = execFileSync(
     "make",
     ["-n", "RELEASE_SELECTION=", "release-transfer-create"],
-    { cwd, encoding: "utf8" },
+    { cwd, encoding: "utf8", env: selectedEnv },
   );
+  const selected = execFileSync("make", ["-n", "release-transfer-create"], {
+    cwd,
+    encoding: "utf8",
+    env: selectedEnv,
+  });
   const candidate = execFileSync("make", ["-n", "release-candidate"], {
     cwd,
     encoding: "utf8",
+    env: omittedEnv,
   });
   assert(!omitted.includes("--select"));
   assert.match(empty, /--select ""/);
+  assert.match(selected, /--select "designTokens,ui,iframeSdk"/);
   assert.match(candidate, /PLAYWRIGHT_BROWSERS_PATH=target\/playwright/);
 });
 
