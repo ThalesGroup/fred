@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Team administrator charter: admin-only team permissions apply only once the
-team admin accepted the configured charter version."""
+"""Team administrator charter: a nominated admin holds `pending_team_admin`
+until they accept the configured charter version, then `team_admin`."""
 
 from __future__ import annotations
 
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,123 +29,144 @@ import pytest
 from control_plane_backend.models.base import Base
 from control_plane_backend.models.team_admin_charter_models import (
     TeamAdminCharterAcceptanceRow,
+    TeamAdminCharterStateRow,
 )
 from control_plane_backend.teams import service as team_service
 from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStore
 from control_plane_backend.teams.api import register_exception_handlers
 from control_plane_backend.teams.schemas import (
+    AddTeamMemberRequest,
+    GrantTeamMemberRoleRequest,
     TeamAdminCharterDisabledError,
-    TeamAdminCharterNotAcceptedError,
+    UserTeamRelation,
 )
 from control_plane_backend.teams.service import (
-    ADMIN_ONLY_TEAM_PERMISSIONS,
-    SHARED_WITH_ANALYST_TEAM_PERMISSIONS,
-    _get_team_permissions_for_user,
-    _validate_team_and_check_permission,
+    _fold_team_role_relations,
+    _get_administer_permission_for_team_role_relation,
+    _remove_all_team_member_relations,
     accept_team_admin_charter,
-    get_team_admin_charter_status,
+    add_team_member,
+    grant_team_member_role,
+    reconcile_team_admin_charter_roles,
 )
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
     KeycloakUser,
-    RebacDisabledResult,
     RebacReference,
+    Relation,
+    RelationType,
     Resource,
     TeamPermission,
 )
 from fred_core.common import TeamId
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-_TEAM = TeamId("team-a")
 _VERSION = "2026-09"
-
-
-class _Denied(PermissionError):
-    pass
+_ADMIN = RelationType.TEAM_ADMIN.value
+_PENDING = RelationType.PENDING_TEAM_ADMIN.value
 
 
 class _FakeRebac:
-    """Grants a fixed set of team permissions per user on every team."""
+    """Direct tuples only: (user_id, relation, team_id). The acting user is
+    authorized for every administer permission."""
 
-    def __init__(
-        self,
-        granted: dict[str, set[TeamPermission]],
-        *,
-        administered: dict[str, list[str]] | None = None,
-        disabled: bool = False,
-    ) -> None:
-        self._granted = granted
-        self._administered = administered or {}
-        self._disabled = disabled
-        self.lookups = 0
+    enabled = True
 
-    async def check_user_team_permissions_or_raise(
-        self, user: KeycloakUser, team_id: TeamId, permissions: list[TeamPermission]
-    ) -> str:
-        if not set(permissions) <= self._granted.get(user.uid, set()):
-            raise _Denied("rebac denied")
+    def __init__(self, tuples: set[tuple[str, str, str]] | None = None) -> None:
+        self.tuples = set(tuples or set())
+
+    @staticmethod
+    def _key(rel: Relation) -> tuple[str, str, str]:
+        return (rel.subject.id, rel.relation.value, rel.resource.id)
+
+    async def add_relation(self, relation: Relation, **_kwargs: object) -> None:
+        self.tuples.add(self._key(relation))
+
+    async def delete_relation(self, relation: Relation) -> None:
+        self.tuples.discard(self._key(relation))
+
+    async def delete_relations(self, relations) -> None:
+        for relation in relations:
+            self.tuples.discard(self._key(relation))
+
+    async def check_user_team_permissions_or_raise(self, **_kwargs: object) -> str:
         return "token"
 
-    async def has_permissions(
-        self, subject: RebacReference, permissions, resource, consistency_token=None
-    ) -> list[bool]:
-        held = self._granted.get(subject.id, set())
-        return [permission in held for permission in permissions]
-
-    async def lookup_user_resources(self, user: KeycloakUser, permission):
-        self.lookups += 1
-        assert permission == TeamPermission.CAN_ADMINISTER_ADMINS
-        if self._disabled:
-            return RebacDisabledResult()
+    async def lookup_resources(self, subject, permission, resource_type, **_kwargs):
         return [
-            RebacReference(Resource.TEAM, team_id)
-            for team_id in self._administered.get(user.uid, [])
+            RebacReference(Resource.TEAM, team)
+            for user, relation, team in sorted(self.tuples)
+            if user == subject.id and relation == permission.value
+        ]
+
+    async def list_direct_relations(self, resource, **_kwargs):
+        return [
+            Relation(
+                subject=RebacReference(Resource.USER, user),
+                relation=RelationType(relation),
+                resource=RebacReference(Resource.TEAM, team),
+            )
+            for user, relation, team in sorted(self.tuples)
+            if team == resource.id
         ]
 
 
 class _FakeCharterStore:
-    def __init__(self, accepted: dict[tuple[str, str], datetime] | None = None):
-        self.accepted = dict(accepted or {})
-        self.reads = 0
+    def __init__(
+        self,
+        accepted: set[tuple[str, str]] | None = None,
+        applied: str | None = None,
+    ) -> None:
+        self.accepted = {key: datetime.now(timezone.utc) for key in accepted or set()}
+        self.applied = applied
 
     async def get_accepted_at(self, user_id: str, version: str) -> datetime | None:
-        self.reads += 1
         return self.accepted.get((user_id, version))
+
+    async def list_accepting_user_ids(self, version: str) -> set[str]:
+        return {user for user, accepted in self.accepted if accepted == version}
 
     async def accept(self, user_id: str, version: str) -> tuple[datetime, bool]:
         existing = self.accepted.get((user_id, version))
         if existing is not None:
             return existing, False
-        now = datetime.now(timezone.utc)
-        self.accepted[(user_id, version)] = now
-        return now, True
+        self.accepted[(user_id, version)] = datetime.now(timezone.utc)
+        return self.accepted[(user_id, version)], True
+
+    async def get_applied_version(self) -> str | None:
+        return self.applied
+
+    async def set_applied_version(self, version: str) -> None:
+        self.applied = version
 
 
-_ADMIN = {
-    TeamPermission.CAN_READ,
-    TeamPermission.CAN_READ_MEMEBERS,
-    TeamPermission.CAN_RUN_EVALUATIONS,
-    TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
-    *ADMIN_ONLY_TEAM_PERMISSIONS,
-}
-_EDITOR = {
-    TeamPermission.CAN_READ,
-    TeamPermission.CAN_READ_MEMEBERS,
-    TeamPermission.CAN_UPDATE_RESOURCES,
-}
+class _FakeMetadataStore:
+    def __init__(self, team_ids: list[str]) -> None:
+        self.team_ids = team_ids
+        self.listed = 0
 
+    async def get_by_team_id(self, team_id):
+        return SimpleNamespace(id=team_id)
 
-def _user(uid: str) -> KeycloakUser:
-    return KeycloakUser(uid=uid, username=uid, roles=[], email=None)
+    async def list_all(self):
+        self.listed += 1
+        return [SimpleNamespace(id=TeamId(team_id)) for team_id in self.team_ids]
+
+    @asynccontextmanager
+    async def advisory_lock(self, _key: str):
+        yield
 
 
 def _deps(
-    rebac: _FakeRebac, store: _FakeCharterStore, version: str | None = _VERSION
+    rebac: _FakeRebac,
+    store: _FakeCharterStore,
+    *,
+    version: str | None = _VERSION,
+    teams: list[str] | None = None,
 ) -> Any:
-    metadata_store = SimpleNamespace(
-        get_by_team_id=lambda team_id: _async(SimpleNamespace(id=team_id))
-    )
+    metadata_store = _FakeMetadataStore(teams or ["team-a", "team-b"])
     return cast(
         Any,
         SimpleNamespace(
@@ -158,177 +180,125 @@ def _deps(
     )
 
 
-async def _async(value: object) -> object:
-    return value
+def _user(uid: str) -> KeycloakUser:
+    return KeycloakUser(uid=uid, username=uid, roles=[], email=None)
 
 
-async def _check(deps: Any, uid: str, permission: TeamPermission) -> None:
-    await _validate_team_and_check_permission(
-        _user(uid), _TEAM, deps.rebac, [permission], deps
+# --------------------------- nomination ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_nominating_an_admin_who_has_not_accepted_writes_pending() -> None:
+    rebac = _FakeRebac()
+    deps = _deps(rebac, _FakeCharterStore())
+
+    await add_team_member(
+        _user("owner"),
+        TeamId("team-a"),
+        AddTeamMemberRequest(user_id="nominee", relation=UserTeamRelation.TEAM_ADMIN),
+        deps,
+    )
+
+    assert rebac.tuples == {("nominee", _PENDING, "team-a")}
+
+
+@pytest.mark.asyncio
+async def test_nominating_an_admin_who_accepted_writes_team_admin() -> None:
+    rebac = _FakeRebac()
+    deps = _deps(rebac, _FakeCharterStore({("nominee", _VERSION)}))
+
+    await grant_team_member_role(
+        _user("owner"),
+        TeamId("team-a"),
+        "nominee",
+        GrantTeamMemberRoleRequest(relation=UserTeamRelation.TEAM_ADMIN),
+        deps,
+    )
+
+    assert rebac.tuples == {("nominee", _ADMIN, "team-a")}
+
+
+@pytest.mark.asyncio
+async def test_without_a_charter_nominations_write_team_admin() -> None:
+    rebac = _FakeRebac()
+    deps = _deps(rebac, _FakeCharterStore(), version=None)
+
+    await grant_team_member_role(
+        _user("owner"),
+        TeamId("team-a"),
+        "nominee",
+        GrantTeamMemberRoleRequest(relation=UserTeamRelation.TEAM_ADMIN),
+        deps,
+    )
+
+    assert rebac.tuples == {("nominee", _ADMIN, "team-a")}
+
+
+@pytest.mark.asyncio
+async def test_other_roles_are_written_as_requested() -> None:
+    rebac = _FakeRebac()
+    deps = _deps(rebac, _FakeCharterStore())
+
+    await grant_team_member_role(
+        _user("owner"),
+        TeamId("team-a"),
+        "editor",
+        GrantTeamMemberRoleRequest(relation=UserTeamRelation.TEAM_EDITOR),
+        deps,
+    )
+
+    assert rebac.tuples == {("editor", RelationType.TEAM_EDITOR.value, "team-a")}
+
+
+def test_pending_team_admin_cannot_be_granted_directly() -> None:
+    with pytest.raises(ValidationError):
+        GrantTeamMemberRoleRequest(relation=UserTeamRelation.PENDING_TEAM_ADMIN)
+    with pytest.raises(ValidationError):
+        AddTeamMemberRequest(
+            user_id="nominee", relation=UserTeamRelation.PENDING_TEAM_ADMIN
+        )
+
+
+def test_cancelling_a_nomination_needs_can_administer_admins() -> None:
+    assert (
+        _get_administer_permission_for_team_role_relation(
+            UserTeamRelation.PENDING_TEAM_ADMIN
+        )
+        == TeamPermission.CAN_ADMINISTER_ADMINS
     )
 
 
-# --------------------------- permission gate ---------------------------
+@pytest.mark.asyncio
+async def test_removing_a_member_also_removes_a_pending_nomination() -> None:
+    rebac = _FakeRebac(
+        {("nominee", _PENDING, "team-a"), ("nominee", "team_member", "team-a")}
+    )
+
+    await _remove_all_team_member_relations(
+        cast(Any, rebac), TeamId("team-a"), "nominee"
+    )
+
+    assert rebac.tuples == set()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "permission",
-    [TeamPermission.CAN_UPDATE_INFO, TeamPermission.CAN_ADMINISTER_MEMBERS],
-)
-async def test_admin_who_has_not_accepted_is_denied(
-    permission: TeamPermission,
-) -> None:
-    deps = _deps(_FakeRebac({"admin": _ADMIN}), _FakeCharterStore())
+async def test_pending_nominations_are_part_of_the_folded_roles() -> None:
+    rebac = _FakeRebac({("nominee", _PENDING, "team-a")})
 
-    with pytest.raises(TeamAdminCharterNotAcceptedError):
-        await _check(deps, "admin", permission)
+    relations = await rebac.list_direct_relations(
+        RebacReference(Resource.TEAM, "team-a")
+    )
 
-
-@pytest.mark.asyncio
-async def test_admin_who_accepted_is_allowed() -> None:
-    store = _FakeCharterStore({("admin", _VERSION): datetime.now(timezone.utc)})
-    deps = _deps(_FakeRebac({"admin": _ADMIN}), store)
-
-    await _check(deps, "admin", TeamPermission.CAN_UPDATE_INFO)
-
-
-@pytest.mark.asyncio
-async def test_new_version_denies_an_admin_who_accepted_an_older_one() -> None:
-    store = _FakeCharterStore({("admin", "2026-01"): datetime.now(timezone.utc)})
-    deps = _deps(_FakeRebac({"admin": _ADMIN}), store)
-
-    with pytest.raises(TeamAdminCharterNotAcceptedError):
-        await _check(deps, "admin", TeamPermission.CAN_ADMINISTER_ADMINS)
-
-
-@pytest.mark.asyncio
-async def test_no_configured_version_never_reads_acceptances() -> None:
-    store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({"admin": _ADMIN}), store, version=None)
-
-    await _check(deps, "admin", TeamPermission.CAN_UPDATE_INFO)
-    assert store.reads == 0
-
-
-@pytest.mark.asyncio
-async def test_non_admin_gets_the_rebac_denial_without_reading_acceptances() -> None:
-    store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({"editor": _EDITOR}), store)
-
-    with pytest.raises(_Denied):
-        await _check(deps, "editor", TeamPermission.CAN_UPDATE_INFO)
-    await _check(deps, "editor", TeamPermission.CAN_UPDATE_RESOURCES)
-    assert store.reads == 0
-
-
-# --------------------------- permission projection ---------------------------
-
-
-@pytest.mark.asyncio
-async def test_projection_drops_admin_only_permissions_until_accepted() -> None:
-    store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({"admin": _ADMIN}), store)
-
-    before = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
-    assert before.isdisjoint(ADMIN_ONLY_TEAM_PERMISSIONS)
-    assert before.isdisjoint(SHARED_WITH_ANALYST_TEAM_PERMISSIONS)
-    assert TeamPermission.CAN_READ_MEMEBERS in before
-
-    await accept_team_admin_charter(_user("admin"), deps)
-    after = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
-    assert ADMIN_ONLY_TEAM_PERMISSIONS | SHARED_WITH_ANALYST_TEAM_PERMISSIONS <= after
-
-
-@pytest.mark.asyncio
-async def test_an_unaccepted_admin_who_is_also_analyst_keeps_evaluations() -> None:
-    analyst_admin = _ADMIN | {TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION}
-    deps = _deps(_FakeRebac({"admin": analyst_admin}), _FakeCharterStore())
-
-    permissions = set(await _get_team_permissions_for_user(_user("admin"), _TEAM, deps))
-
-    assert permissions.isdisjoint(ADMIN_ONLY_TEAM_PERMISSIONS)
-    assert SHARED_WITH_ANALYST_TEAM_PERMISSIONS <= permissions
-
-
-@pytest.mark.asyncio
-async def test_projection_for_a_non_admin_reads_no_acceptance() -> None:
-    store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({"editor": _EDITOR}), store)
-
-    permissions = await _get_team_permissions_for_user(_user("editor"), _TEAM, deps)
-
-    assert set(permissions) == _EDITOR
-    assert store.reads == 0
-
-
-def test_admin_only_permissions_match_the_schema() -> None:
-    schema = (
-        Path(fred_core.__file__).parent / "security" / "rebac" / "schema.fga"
-    ).read_text()
-    team_block = schema.split("type team", 1)[1].split("\ntype ", 1)[0]
-    team_admin_only = {
-        TeamPermission(name)
-        for name in re.findall(
-            r"^\s*define (can_\w+): team_admin\s*$", team_block, re.M
-        )
+    assert _fold_team_role_relations(relations) == {
+        "nominee": {UserTeamRelation.PENDING_TEAM_ADMIN}
     }
 
-    assert team_admin_only == ADMIN_ONLY_TEAM_PERMISSIONS
 
-
-# --------------------------- status and acceptance ---------------------------
-
-
-@pytest.mark.asyncio
-async def test_status_requires_acceptance_from_an_admin_who_has_not_accepted() -> None:
-    rebac = _FakeRebac({}, administered={"admin": [_TEAM]})
-    deps = _deps(rebac, _FakeCharterStore())
-
-    status = await get_team_admin_charter_status(_user("admin"), deps)
-
-    assert status.required is True
-    assert status.accepted_at is None
+# --------------------------- acceptance ---------------------------
 
 
 @pytest.mark.asyncio
-async def test_status_does_not_require_acceptance_from_a_user_without_teams() -> None:
-    deps = _deps(_FakeRebac({}), _FakeCharterStore())
-
-    status = await get_team_admin_charter_status(_user("member"), deps)
-
-    assert status.required is False
-
-
-@pytest.mark.asyncio
-async def test_status_after_acceptance_skips_the_team_lookup() -> None:
-    accepted_at = datetime(2026, 9, 14, tzinfo=timezone.utc)
-    rebac = _FakeRebac({}, administered={"admin": [_TEAM]})
-    deps = _deps(rebac, _FakeCharterStore({("admin", _VERSION): accepted_at}))
-
-    status = await get_team_admin_charter_status(_user("admin"), deps)
-
-    assert status.required is False
-    assert status.accepted_at == accepted_at
-    assert rebac.lookups == 0
-
-
-@pytest.mark.asyncio
-async def test_status_without_version_or_rebac_requires_nothing() -> None:
-    rebac = _FakeRebac({}, administered={"admin": [_TEAM]})
-    no_version = _deps(rebac, _FakeCharterStore(), version=None)
-    assert (
-        await get_team_admin_charter_status(_user("admin"), no_version)
-    ).required is False
-
-    disabled = _deps(_FakeRebac({}, disabled=True), _FakeCharterStore())
-    assert (
-        await get_team_admin_charter_status(_user("admin"), disabled)
-    ).required is False
-
-
-@pytest.mark.asyncio
-async def test_acceptance_is_recorded_once_and_audited_once(
+async def test_accepting_promotes_every_pending_team_and_audits_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     audited: list[tuple[str, dict[str, object]]] = []
@@ -337,82 +307,155 @@ async def test_acceptance_is_recorded_once_and_audited_once(
         "emit_audit_log",
         lambda event, **fields: audited.append((event, fields)),
     )
-    store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({}), store)
+    rebac = _FakeRebac(
+        {
+            ("nominee", _PENDING, "team-a"),
+            ("nominee", _PENDING, "team-b"),
+            ("other", _PENDING, "team-a"),
+        }
+    )
+    deps = _deps(rebac, _FakeCharterStore())
 
-    first = await accept_team_admin_charter(_user("admin"), deps)
-    second = await accept_team_admin_charter(_user("admin"), deps)
+    first = await accept_team_admin_charter(_user("nominee"), deps)
+    second = await accept_team_admin_charter(_user("nominee"), deps)
 
-    assert first.required is False and first.accepted_at is not None
+    assert rebac.tuples == {
+        ("nominee", _ADMIN, "team-a"),
+        ("nominee", _ADMIN, "team-b"),
+        ("other", _PENDING, "team-a"),
+    }
     assert second.accepted_at == first.accepted_at
     assert audited == [
         (
             "team_admin.charter.accepted",
-            {"actor_uid": "admin", "charter_version": _VERSION},
+            {"actor_uid": "nominee", "charter_version": _VERSION},
         )
     ]
 
 
 @pytest.mark.asyncio
-async def test_acceptance_without_version_is_refused() -> None:
+async def test_accepting_without_a_version_is_refused() -> None:
     store = _FakeCharterStore()
-    deps = _deps(_FakeRebac({}), store, version=None)
+    deps = _deps(_FakeRebac(), store, version=None)
 
     with pytest.raises(TeamAdminCharterDisabledError):
-        await accept_team_admin_charter(_user("admin"), deps)
+        await accept_team_admin_charter(_user("nominee"), deps)
     assert store.accepted == {}
 
 
-def test_charter_errors_map_to_their_http_status() -> None:
+def test_accepting_without_a_version_maps_to_409() -> None:
     app = FastAPI()
     register_exception_handlers(app)
-
-    @app.get("/not-accepted")
-    async def _not_accepted() -> None:
-        raise TeamAdminCharterNotAcceptedError()
 
     @app.get("/disabled")
     async def _disabled() -> None:
         raise TeamAdminCharterDisabledError()
 
-    client = TestClient(app)
-    not_accepted = client.get("/not-accepted")
-    disabled = client.get("/disabled")
+    response = TestClient(app).get("/disabled")
 
-    assert (not_accepted.status_code, not_accepted.json()) == (
-        403,
-        {"detail": "team_admin_charter_not_accepted"},
-    )
-    assert (disabled.status_code, disabled.json()) == (
+    assert (response.status_code, response.json()) == (
         409,
         {"detail": "team_admin_charter_disabled"},
     )
+
+
+# --------------------------- reconciliation ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_enabling_the_charter_demotes_admins_who_have_not_accepted() -> None:
+    rebac = _FakeRebac({("accepted", _ADMIN, "team-a"), ("unaware", _ADMIN, "team-a")})
+    store = _FakeCharterStore({("accepted", _VERSION)})
+
+    moved = await reconcile_team_admin_charter_roles(_deps(rebac, store))
+
+    assert moved == 1
+    assert rebac.tuples == {
+        ("accepted", _ADMIN, "team-a"),
+        ("unaware", _PENDING, "team-a"),
+    }
+    assert store.applied == _VERSION
+
+
+@pytest.mark.asyncio
+async def test_a_new_version_promotes_pending_admins_who_already_accepted_it() -> None:
+    rebac = _FakeRebac({("ready", _PENDING, "team-b")})
+    store = _FakeCharterStore({("ready", "2027-01")}, applied=_VERSION)
+
+    await reconcile_team_admin_charter_roles(_deps(rebac, store, version="2027-01"))
+
+    assert rebac.tuples == {("ready", _ADMIN, "team-b")}
+
+
+@pytest.mark.asyncio
+async def test_turning_the_charter_off_promotes_every_pending_admin() -> None:
+    rebac = _FakeRebac({("nominee", _PENDING, "team-a")})
+    store = _FakeCharterStore(applied=_VERSION)
+
+    await reconcile_team_admin_charter_roles(_deps(rebac, store, version=None))
+
+    assert rebac.tuples == {("nominee", _ADMIN, "team-a")}
+    assert store.applied == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("applied", "version"), [(_VERSION, _VERSION), (None, None), ("", None)]
+)
+async def test_reconciliation_does_nothing_when_the_version_is_unchanged(
+    applied: str | None, version: str | None
+) -> None:
+    rebac = _FakeRebac({("unaware", _ADMIN, "team-a")})
+    deps = _deps(rebac, _FakeCharterStore(applied=applied), version=version)
+
+    assert await reconcile_team_admin_charter_roles(deps) == 0
+    assert rebac.tuples == {("unaware", _ADMIN, "team-a")}
+    assert deps.get_team_metadata_store().listed == 0
+
+
+# --------------------------- model ---------------------------
+
+
+def test_a_pending_admin_is_a_member_and_nothing_more() -> None:
+    schema = (
+        Path(fred_core.__file__).parent / "security" / "rebac" / "schema.fga"
+    ).read_text()
+    team_block = schema.split("type team", 1)[1].split("\ntype ", 1)[0]
+    definitions = re.findall(r"^\s*define (\w+): (.+)$", team_block, re.M)
+
+    uses = [name for name, rule in definitions if "pending_team_admin" in rule]
+
+    assert uses == ["team_member"]
 
 
 # --------------------------- store ---------------------------
 
 
 @pytest.mark.asyncio
-async def test_store_keeps_the_first_acceptance_and_every_version(
+async def test_store_records_acceptances_and_the_applied_version(
     tmp_path: Path,
 ) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'charter.db'}")
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(
-                Base.metadata.tables[TeamAdminCharterAcceptanceRow.__tablename__].create
-            )
+            for row in (TeamAdminCharterAcceptanceRow, TeamAdminCharterStateRow):
+                await connection.run_sync(
+                    Base.metadata.tables[row.__tablename__].create
+                )
         store = TeamAdminCharterStore(engine)
-
-        assert await store.get_accepted_at("admin", _VERSION) is None
 
         first_at, first_inserted = await store.accept("admin", _VERSION)
         again_at, again_inserted = await store.accept("admin", _VERSION)
-        _, other_inserted = await store.accept("admin", "2027-01")
+        await store.accept("other", "2027-01")
 
-        assert (first_inserted, again_inserted, other_inserted) == (True, False, True)
+        assert (first_inserted, again_inserted) == (True, False)
         assert again_at == await store.get_accepted_at("admin", _VERSION)
-        assert await store.get_accepted_at("admin", "2027-01") is not None
+        assert await store.list_accepting_user_ids(_VERSION) == {"admin"}
         assert first_at is not None
+
+        assert await store.get_applied_version() is None
+        await store.set_applied_version(_VERSION)
+        await store.set_applied_version("")
+        assert await store.get_applied_version() == ""
     finally:
         await engine.dispose()

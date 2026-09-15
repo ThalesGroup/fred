@@ -20,9 +20,8 @@ from control_plane_backend.teams.schemas import (
     RetentionUpdateError,
     SetDefaultTeamsForNewUsersRequest,
     Team,
+    TeamAdminCharterAcceptance,
     TeamAdminCharterDisabledError,
-    TeamAdminCharterNotAcceptedError,
-    TeamAdminCharterStatus,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
@@ -45,9 +44,6 @@ from control_plane_backend.teams.service import create_team as create_team_from_
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
 from control_plane_backend.teams.service import (
     get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
-)
-from control_plane_backend.teams.service import (
-    get_team_admin_charter_status as get_team_admin_charter_status_from_service,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -126,13 +122,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: TeamAdminConstraintError,
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-    @app.exception_handler(TeamAdminCharterNotAcceptedError)
-    async def team_admin_charter_not_accepted_handler(
-        _request,
-        exc: TeamAdminCharterNotAcceptedError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
     @app.exception_handler(TeamAdminCharterDisabledError)
     async def team_admin_charter_disabled_handler(
@@ -336,27 +325,15 @@ async def set_default_teams_for_new_users(
     await set_default_teams_for_new_users_from_service(user, request.team_ids, deps)
 
 
-@router.get(
-    "/team-admin-charter",
-    response_model=TeamAdminCharterStatus,
-    summary="Tell the caller whether they must accept the team administrator charter",
-)
-async def get_team_admin_charter_status(
-    deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user),
-) -> TeamAdminCharterStatus:
-    return await get_team_admin_charter_status_from_service(user, deps)
-
-
 @router.post(
     "/team-admin-charter",
-    response_model=TeamAdminCharterStatus,
-    summary="Record the caller's acceptance of the current team administrator charter",
+    response_model=TeamAdminCharterAcceptance,
+    summary="Accept the current team administrator charter and activate pending admin roles",
 )
 async def accept_team_admin_charter(
     deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
-) -> TeamAdminCharterStatus:
+) -> TeamAdminCharterAcceptance:
     return await accept_team_admin_charter_from_service(user, deps)
 
 

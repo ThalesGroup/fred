@@ -187,12 +187,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setDefaultTeamsForNewUsersRequest,
       }),
     }),
-    getTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGet: build.query<
-      GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiResponse,
-      GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
-    }),
     acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
       AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
       AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
@@ -1507,11 +1501,8 @@ export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut
 export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
   setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
 };
-export type GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiResponse =
-  /** status 200 Successful Response */ TeamAdminCharterStatus;
-export type GetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetApiArg = void;
 export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
-  /** status 200 Successful Response */ TeamAdminCharterStatus;
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance;
 export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
@@ -2457,7 +2448,7 @@ export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
 export type GcuVersionsType = "v1";
-export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
+export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
@@ -2546,9 +2537,8 @@ export type DefaultTeamForNewUsers = {
 export type SetDefaultTeamsForNewUsersRequest = {
   team_ids: string[];
 };
-export type TeamAdminCharterStatus = {
-  required: boolean;
-  accepted_at?: string | null;
+export type TeamAdminCharterAcceptance = {
+  accepted_at: string;
 };
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
@@ -3954,8 +3944,6 @@ export const {
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
-  useGetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetQuery,
-  useLazyGetTeamAdminCharterStatusControlPlaneV1TeamAdminCharterGetQuery,
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

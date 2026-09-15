@@ -307,15 +307,10 @@ operations:
     review_status: approved
     required_permission: can_manage_platform # teams.service.set_default_teams_for_new_users. Replaces the list of teams every user joins as team_member on first GCU acceptance (POST /gcu); [] clears it. platform_admin only - it decides where every future account lands. Personal spaces have no registry row and are refused as unknown teams (404), and nothing is written.
   - service: control-plane
-    method: GET
-    path: /control-plane/v1/team-admin-charter
-    review_status: approved
-    required_permission: authenticated # teams.service.get_team_admin_charter_status. The caller's own status only: required when a charter version is configured, the caller holds team_admin on at least one team (one ListObjects on can_administer_admins) and has not accepted that version.
-  - service: control-plane
     method: POST
     path: /control-plane/v1/team-admin-charter
     review_status: approved
-    required_permission: authenticated # teams.service.accept_team_admin_charter. Records the caller's own acceptance of the configured version, idempotent, audited as team_admin.charter.accepted; 409 team_admin_charter_disabled when no version is set. Until then can_update_info and can_administer_* answer 403 team_admin_charter_not_accepted.
+    required_permission: authenticated # teams.service.accept_team_admin_charter. Records the caller's own acceptance of the configured version (idempotent, audited as team_admin.charter.accepted) and turns every pending_team_admin they hold into team_admin; 409 team_admin_charter_disabled when no version is set.
   - service: control-plane
     method: GET
     path: /control-plane/v1/teams/candidate-admins

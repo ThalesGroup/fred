@@ -67,9 +67,8 @@ from control_plane_backend.teams.schemas import (
     RetentionFieldView,
     RetentionUpdateError,
     Team,
+    TeamAdminCharterAcceptance,
     TeamAdminCharterDisabledError,
-    TeamAdminCharterNotAcceptedError,
-    TeamAdminCharterStatus,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
@@ -331,7 +330,12 @@ async def rescue_team_admin(
             raise TeamRescueNotOrphanedError(team_id, existing_admin_ids)
 
         await _add_team_member_relation(
-            rebac, team_id, user_id, UserTeamRelation.TEAM_ADMIN
+            rebac,
+            team_id,
+            user_id,
+            await resolve_granted_team_relation(
+                user_id, UserTeamRelation.TEAM_ADMIN, deps
+            ),
         )
 
     logger.info(
@@ -417,35 +421,16 @@ async def _join_unless_already_in_team(
     logger.info("A new user joined the default team %s", team_id)
 
 
-async def get_team_admin_charter_status(
-    user: KeycloakUser,
-    deps: TeamServiceDependencies,
-) -> TeamAdminCharterStatus:
-    """Tell the caller whether they must accept the team administrator charter.
-
-    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
-    """
-    version = deps.configuration.app.team_admin_charter_version
-    if version is None:
-        return TeamAdminCharterStatus(required=False)
-    accepted_at = await deps.get_team_admin_charter_store().get_accepted_at(
-        user.uid, version
-    )
-    if accepted_at is not None:
-        return TeamAdminCharterStatus(required=False, accepted_at=accepted_at)
-    # can_administer_admins is exactly team_admin in schema.fga.
-    administered = await deps.rebac.lookup_user_resources(
-        user, TeamPermission.CAN_ADMINISTER_ADMINS
-    )
-    required = not isinstance(administered, RebacDisabledResult) and bool(administered)
-    return TeamAdminCharterStatus(required=required)
-
-
 async def accept_team_admin_charter(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
-) -> TeamAdminCharterStatus:
-    """Record the caller's acceptance of the configured charter version; idempotent."""
+) -> TeamAdminCharterAcceptance:
+    """Record the caller's acceptance of the configured charter version and turn
+    every `pending_team_admin` they hold into `team_admin`.
+
+    Idempotent: a repeat also promotes a nomination that raced the first call.
+    Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
+    """
     version = deps.configuration.app.team_admin_charter_version
     if version is None:
         raise TeamAdminCharterDisabledError()
@@ -458,7 +443,91 @@ async def accept_team_admin_charter(
             actor_uid=user.uid,
             charter_version=version,
         )
-    return TeamAdminCharterStatus(required=False, accepted_at=accepted_at)
+    pending_teams = await deps.rebac.lookup_resources(
+        RebacReference(Resource.USER, user.uid),
+        RelationType.PENDING_TEAM_ADMIN,
+        Resource.TEAM,
+    )
+    if not isinstance(pending_teams, RebacDisabledResult):
+        await asyncio.gather(
+            *(
+                _swap_team_admin_relation(
+                    deps.rebac, TeamId(team.id), user.uid, promote=True
+                )
+                for team in pending_teams
+            )
+        )
+    return TeamAdminCharterAcceptance(accepted_at=accepted_at)
+
+
+_TEAM_ADMIN_CHARTER_RECONCILE_LOCK_KEY = "team_admin_charter_reconcile"
+
+
+async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> int:
+    """Align every team's admin relations with the configured charter version.
+
+    Only works when the version differs from the last one applied: a
+    `team_admin` who has not accepted it becomes `pending_team_admin`, and a
+    pending admin who has accepted it, or every one when the charter is off, is
+    promoted. Returns how many users moved.
+    """
+    if not deps.rebac.enabled:
+        return 0
+    version = deps.configuration.app.team_admin_charter_version
+    charter_store = deps.get_team_admin_charter_store()
+    metadata_store = deps.get_team_metadata_store()
+    async with metadata_store.advisory_lock(_TEAM_ADMIN_CHARTER_RECONCILE_LOCK_KEY):
+        last_applied = await charter_store.get_applied_version()
+        if last_applied == (version or "") or (
+            last_applied is None and version is None
+        ):
+            return 0
+        accepted = (
+            await charter_store.list_accepting_user_ids(version) if version else set()
+        )
+        moved = 0
+        for metadata in await metadata_store.list_all():
+            relations = await deps.rebac.list_direct_relations(
+                RebacReference(Resource.TEAM, metadata.id)
+            )
+            for user_id, held in _fold_team_role_relations(relations).items():
+                active = version is None or user_id in accepted
+                if UserTeamRelation.PENDING_TEAM_ADMIN in held and active:
+                    await _swap_team_admin_relation(
+                        deps.rebac, metadata.id, user_id, promote=True
+                    )
+                    moved += 1
+                elif UserTeamRelation.TEAM_ADMIN in held and not active:
+                    await _swap_team_admin_relation(
+                        deps.rebac, metadata.id, user_id, promote=False
+                    )
+                    moved += 1
+        await charter_store.set_applied_version(version or "")
+    return moved
+
+
+async def _swap_team_admin_relation(
+    rebac: RebacEngine, team_id: TeamId, user_id: str, *, promote: bool
+) -> None:
+    """Move one user between `pending_team_admin` and `team_admin` on one team.
+
+    The new relation is written before the old one is deleted, so a failure in
+    between leaves both rather than neither; the next call finishes the move.
+    """
+    granted, revoked = (
+        (RelationType.TEAM_ADMIN, RelationType.PENDING_TEAM_ADMIN)
+        if promote
+        else (RelationType.PENDING_TEAM_ADMIN, RelationType.TEAM_ADMIN)
+    )
+    user_ref = RebacReference(Resource.USER, user_id)
+    team_ref = RebacReference(Resource.TEAM, team_id)
+    await rebac.add_relation(
+        Relation(subject=user_ref, relation=granted, resource=team_ref)
+    )
+    await rebac.delete_relation(
+        Relation(subject=user_ref, relation=revoked, resource=team_ref)
+    )
+    invalidate_team_relations_cache(team_id)
 
 
 async def _list_teams(
@@ -640,6 +709,12 @@ async def create_team(
     if await store.get_by_name(request.name) is not None:
         raise TeamAlreadyExistsError(request.name)
 
+    admin_relations = [
+        await resolve_granted_team_relation(
+            admin_user_id, UserTeamRelation.TEAM_ADMIN, deps
+        )
+        for admin_user_id in request.initial_team_admin_ids
+    ]
     team_id = TeamId(uuid4().hex)
     try:
         metadata = await store.create(team_id, request.name)
@@ -662,10 +737,12 @@ async def create_team(
                 *(
                     Relation(
                         subject=RebacReference(Resource.USER, admin_user_id),
-                        relation=RelationType.TEAM_ADMIN,
+                        relation=admin_relation.to_relation(),
                         resource=RebacReference(Resource.TEAM, team_id),
                     )
-                    for admin_user_id in request.initial_team_admin_ids
+                    for admin_user_id, admin_relation in zip(
+                        request.initial_team_admin_ids, admin_relations, strict=True
+                    )
                 ),
             ],
             actor_uid=user.uid,
@@ -1112,8 +1189,15 @@ async def _list_team_members(
         if metadata is None:
             raise TeamNotFoundError(team_id)
 
-    admin_ids, editor_ids, analyst_ids, member_ids = await asyncio.gather(
+    (
+        admin_ids,
+        pending_admin_ids,
+        editor_ids,
+        analyst_ids,
+        member_ids,
+    ) = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ADMIN),
+        _get_team_users_by_relation(rebac, team_id, RelationType.PENDING_TEAM_ADMIN),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_EDITOR),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_ANALYST),
         _get_team_users_by_relation(rebac, team_id, RelationType.TEAM_MEMBER),
@@ -1129,6 +1213,7 @@ async def _list_team_members(
             relation
             for relation, ids in (
                 (UserTeamRelation.TEAM_ADMIN, admin_ids),
+                (UserTeamRelation.PENDING_TEAM_ADMIN, pending_admin_ids),
                 (UserTeamRelation.TEAM_EDITOR, editor_ids),
                 (UserTeamRelation.TEAM_ANALYST, analyst_ids),
             )
@@ -1173,7 +1258,10 @@ async def add_team_member(
         [permission_to_check],
         deps,
     )
-    await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
+    relation = await resolve_granted_team_relation(
+        request.user_id, request.relation, deps
+    )
+    await _add_team_member_relation(rebac, team_id, request.user_id, relation)
 
     logger.info(
         "Added user %s as %s to team %s",
@@ -1432,7 +1520,8 @@ async def grant_team_member_role(
         [permission_to_check],
         deps,
     )
-    await _add_team_member_relation(rebac, team_id, user_id, request.relation)
+    relation = await resolve_granted_team_relation(user_id, request.relation, deps)
+    await _add_team_member_relation(rebac, team_id, user_id, relation)
 
     logger.info(
         "Granted role %s to user %s on team %s",
@@ -1796,9 +1885,9 @@ def _dedupe_user_summaries_by_display_key(
 
 
 async def _get_team_permissions_for_user(
+    rebac: RebacEngine,
     user: KeycloakUser,
     team_id: TeamId,
-    deps: TeamServiceDependencies,
     consistency_token: str | None = None,
 ) -> list[TeamPermission]:
     """Project every `TeamPermission` the caller holds on one team.
@@ -1812,22 +1901,19 @@ async def _get_team_permissions_for_user(
     How to use it:
     - pass the already-authorized `team_id` and, when available, the
       consistency token from the caller's own access check
-    - permissions team_admin alone grants are left out until the caller
-      accepted the team administrator charter
     """
     permissions_to_check = list(TeamPermission)
-    allowed = await deps.rebac.has_permissions(
+    allowed = await rebac.has_permissions(
         RebacReference(Resource.USER, user.uid),
         permissions_to_check,
         RebacReference(Resource.TEAM, team_id),
         consistency_token=consistency_token,
     )
-    granted = [
+    return [
         permission
         for permission, has_permission in zip(permissions_to_check, allowed)
         if has_permission
     ]
-    return await drop_unaccepted_team_admin_permissions(user.uid, granted, deps)
 
 
 async def _build_team_with_permissions(
@@ -1877,7 +1963,7 @@ async def _build_team_with_permissions(
             RebacReference(Resource.TEAM, team_id),
             consistency_token=consistency_token,
         ),
-        _get_team_permissions_for_user(user, team_id, deps, consistency_token),
+        _get_team_permissions_for_user(rebac, user, team_id, consistency_token),
         _resolve_team_retention_view(team_id, deps),
     )
     roles_by_user = _fold_team_role_relations(direct_relations)
@@ -1978,29 +2064,6 @@ def _is_absolute_url(value: str) -> bool:
     return candidate.startswith("http://") or candidate.startswith("https://")
 
 
-# Exactly the `define can_*: team_admin` permissions of schema.fga, kept in sync
-# by a test. They apply only once the team admin accepted the configured charter
-# version. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
-ADMIN_ONLY_TEAM_PERMISSIONS: frozenset[TeamPermission] = frozenset(
-    {
-        TeamPermission.CAN_UPDATE_INFO,
-        TeamPermission.CAN_ADMINISTER_MEMBERS,
-        TeamPermission.CAN_ADMINISTER_EDITORS,
-        TeamPermission.CAN_ADMINISTER_ANALYSTS,
-        TeamPermission.CAN_ADMINISTER_ADMINS,
-    }
-)
-
-# Granted by team_admin and team_analyst alike; the analyst-only
-# can_read_conversations_for_evaluation tells the two apart.
-SHARED_WITH_ANALYST_TEAM_PERMISSIONS: frozenset[TeamPermission] = frozenset(
-    {
-        TeamPermission.CAN_RUN_EVALUATIONS,
-        TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
-    }
-)
-
-
 async def _has_accepted_team_admin_charter(
     user_id: str, deps: TeamServiceDependencies
 ) -> bool:
@@ -2013,24 +2076,17 @@ async def _has_accepted_team_admin_charter(
     return accepted_at is not None
 
 
-async def drop_unaccepted_team_admin_permissions(
-    user_id: str,
-    granted: list[TeamPermission],
-    deps: TeamServiceDependencies,
-) -> list[TeamPermission]:
-    """Remove what team_admin alone grants while its holder has not accepted the charter.
-
-    `granted` must include the analyst-only permission whenever it includes a
-    shared one, or an analyst who is also an unaccepted admin loses evaluations.
+async def resolve_granted_team_relation(
+    user_id: str, relation: UserTeamRelation, deps: TeamServiceDependencies
+) -> UserTeamRelation:
+    """`team_admin` is written as `pending_team_admin` until the user accepted
+    the configured charter version. Full rationale: CONTROL-PLANE-PRODUCT-CONTRACT.md §53.
     """
-    if not ADMIN_ONLY_TEAM_PERMISSIONS.intersection(granted):
-        return granted
+    if relation != UserTeamRelation.TEAM_ADMIN:
+        return relation
     if await _has_accepted_team_admin_charter(user_id, deps):
-        return granted
-    gated = set(ADMIN_ONLY_TEAM_PERMISSIONS)
-    if TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION not in granted:
-        gated |= SHARED_WITH_ANALYST_TEAM_PERMISSIONS
-    return [permission for permission in granted if permission not in gated]
+        return relation
+    return UserTeamRelation.PENDING_TEAM_ADMIN
 
 
 async def _validate_team_and_check_permission(
@@ -2084,11 +2140,6 @@ async def _validate_team_and_check_permission(
         team_id=team_id,
         permissions=permissions,
     )
-    if ADMIN_ONLY_TEAM_PERMISSIONS.intersection(
-        permissions
-    ) and not await _has_accepted_team_admin_charter(user.uid, deps):
-        raise TeamAdminCharterNotAcceptedError()
-
     return metadata, consistency_token
 
 
@@ -2116,13 +2167,14 @@ def _get_administer_permission_for_team_role_relation(
         return TeamPermission.CAN_ADMINISTER_EDITORS
     if target == UserTeamRelation.TEAM_ANALYST:
         return TeamPermission.CAN_ADMINISTER_ANALYSTS
-    if target == UserTeamRelation.TEAM_ADMIN:
+    if target in (UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN):
         return TeamPermission.CAN_ADMINISTER_ADMINS
     return TeamPermission.CAN_ADMINISTER_MEMBERS
 
 
 _TEAM_ROLE_RELATIONS = (
     RelationType.TEAM_ADMIN,
+    RelationType.PENDING_TEAM_ADMIN,
     RelationType.TEAM_EDITOR,
     RelationType.TEAM_ANALYST,
     RelationType.TEAM_MEMBER,
@@ -2233,6 +2285,11 @@ async def _remove_all_team_member_relations(
             Relation(
                 subject=RebacReference(Resource.USER, user_id),
                 relation=RelationType.TEAM_ADMIN,
+                resource=RebacReference(Resource.TEAM, team_id),
+            ),
+            Relation(
+                subject=RebacReference(Resource.USER, user_id),
+                relation=RelationType.PENDING_TEAM_ADMIN,
                 resource=RebacReference(Resource.TEAM, team_id),
             ),
             Relation(
