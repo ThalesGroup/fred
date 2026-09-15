@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""An instance's cadence, projected onto the workflow engine.
+"""An instance's schedule, projected onto the workflow engine.
 
 Fred owns recurrence because a pod that scheduled itself would have to stay up
 between runs, and the schedule starts exactly the workflow, on exactly the
@@ -21,43 +21,19 @@ queue, that a manual trigger starts — so the two cannot drift apart.
 
 from __future__ import annotations
 
-from datetime import timedelta
-from hashlib import sha256
-
 from fred_core.common import TemporalSchedulerConfig
-from fred_core.scheduler import delete_schedule_if_exists, ensure_schedule
+from fred_core.scheduler import (
+    Schedule,
+    delete_schedule_if_exists,
+    ensure_schedule,
+    to_temporal_spec,
+)
 from fred_sdk.knowledge_base.routing import (
     SYNCHRONIZE_WORKFLOW,
     SynchronizeInput,
     task_queue_for,
 )
-from fred_sdk.knowledge_base.schedule import RunCadence
-from temporalio.client import (
-    Client,
-    ScheduleIntervalSpec,
-    ScheduleSpec,
-    ScheduleState,
-)
-
-_EVERY: dict[RunCadence, timedelta] = {
-    RunCadence.hourly: timedelta(hours=1),
-    RunCadence.daily: timedelta(days=1),
-    RunCadence.weekly: timedelta(days=7),
-}
-
-
-def _interval(instance_id: str, cadence: RunCadence) -> ScheduleIntervalSpec:
-    """When inside its interval this instance runs.
-
-    An interval with no offset is measured from the epoch, so every hourly
-    Knowledge Base in the deployment would fire on the same second. The offset
-    is derived from the instance id, so each keeps its slot and nothing is stored.
-    """
-    every = _EVERY[cadence]
-    slot = int(sha256(instance_id.encode()).hexdigest(), 16)
-    return ScheduleIntervalSpec(
-        every=every, offset=timedelta(seconds=slot % int(every.total_seconds()))
-    )
+from temporalio.client import Client, ScheduleState
 
 
 def schedule_id(config: TemporalSchedulerConfig, instance_id: str) -> str:
@@ -72,7 +48,7 @@ async def register_cadence(
     instance_id: str,
     definition_id: str,
     team_id: str,
-    cadence: RunCadence,
+    schedule: Schedule,
     suspended: bool,
     max_attempts: int,
 ) -> str:
@@ -88,7 +64,9 @@ async def register_cadence(
         workflow=SYNCHRONIZE_WORKFLOW,
         workflow_id=identifier,
         task_queue=task_queue_for(definition_id),
-        spec=ScheduleSpec(intervals=[_interval(instance_id, cadence)]),
+        # Spread over the instance id: an interval is anchored on the epoch,
+        # so without it every instance of one period fires on the same second.
+        spec=to_temporal_spec(schedule, spread_over=instance_id),
         # Identifiers and the attempt budget, never a configuration value: the
         # engine keeps a workflow's input for as long as its retention policy
         # says, so only what is safe to keep for ever goes in. The pod fetches

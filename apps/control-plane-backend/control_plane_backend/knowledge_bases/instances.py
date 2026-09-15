@@ -16,7 +16,7 @@
 Creating a folder that fills itself, and undoing it.
 
 Four things happen, or none does: the library, the instance that records it,
-the grant that lets its pod write there, and the cadence Fred runs it on. A
+the grant that lets its pod write there, and the schedule Fred runs it on. A
 library its pod cannot write to is useless, and a grant over no library is a
 standing right with no purpose — so neither is allowed to exist alone.
 
@@ -44,7 +44,7 @@ from fred_core.security.rebac.knowledge_base_authz import (
     knowledge_base_library_grant,
 )
 from fred_sdk.contracts.models import TuningValue
-from fred_sdk.knowledge_base.schedule import RunCadence
+from fred_core.scheduler import Schedule
 
 from control_plane_backend.knowledge_bases.cadence import (
     drop_cadence,
@@ -110,12 +110,12 @@ async def create_instance(
     definition_id: str,
     team_id: str,
     folder_name: str,
-    cadence: RunCadence,
+    schedule: Schedule,
     suspended: bool,
     configuration: dict[str, Any],
     deps: Any,
 ) -> KnowledgeBaseInstance:
-    """Create the library, the instance, the grant and the cadence, or nothing."""
+    """Create the library, the instance, the grant and the schedule, or nothing."""
     definitions = deps.get_knowledge_base_definition_store()
     definition = await definitions.get(definition_id)
     if definition is None:
@@ -131,7 +131,7 @@ async def create_instance(
         definition.configuration_fields, configuration
     )
 
-    # Minted here rather than by the database: the grant and the cadence both
+    # Minted here rather than by the database: the grant and the schedule both
     # name the instance, and both are applied before any row exists.
     instance_id = uuid4().hex
     undo = _Undo()
@@ -164,12 +164,12 @@ async def create_instance(
             instance_id=instance_id,
             definition_id=definition_id,
             team_id=team_id,
-            cadence=cadence,
+            schedule=schedule,
             suspended=suspended,
             max_attempts=deps.configuration.knowledge_bases.run_max_attempts,
         )
         undo.after(
-            f"cadence for instance {instance_id}",
+            f"schedule for instance {instance_id}",
             lambda: drop_cadence(client, temporal_config, instance_id=instance_id),
         )
 
@@ -181,7 +181,7 @@ async def create_instance(
             team_id=team_id,
             library_id=library_id,
             library_name=folder_name,
-            cadence=cadence.value,
+            schedule_json=schedule.model_dump_json(),
             suspended=suspended,
             configuration=values,
             granted_subject=definition.subject,

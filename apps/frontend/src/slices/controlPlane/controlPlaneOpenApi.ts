@@ -3490,12 +3490,13 @@ export type KnowledgeBaseDefinitionChoice = {
   description?: string;
 };
 export type KnowledgeBaseInstanceFields = {
-  cadence_key: string;
-  suspended_key: string;
-  platform_fields?: FieldSpec[];
   configuration_fields?: FieldSpec[];
 };
-export type RunCadence = "hourly" | "daily" | "weekly";
+export type IntervalSchedule = {
+  type?: "interval";
+  /** Seconds between two occurrences. */
+  every_seconds: number;
+};
 export type KnowledgeBaseInstanceSummary = {
   id: string;
   definition_id: string;
@@ -3503,7 +3504,9 @@ export type KnowledgeBaseInstanceSummary = {
   team_id: string;
   library_id: string;
   library_name: string;
-  cadence: RunCadence;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
   suspended: boolean;
   configuration?: {
     [key: string]: any;
@@ -3515,7 +3518,9 @@ export type KnowledgeBaseInstanceCreate = {
   definition_id: string;
   team_id: string;
   folder_name: string;
-  cadence?: RunCadence;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
   suspended?: boolean;
   configuration?: {
     [key: string]: any;

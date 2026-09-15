@@ -29,19 +29,14 @@ import logging
 from typing import Any
 
 from fred_core import KeycloakUser, prefix_covers
+from fred_core.scheduler import Schedule
 from fred_core.security.rebac.knowledge_base_authz import (
     can_team_use_knowledge_base,
     usable_knowledge_base_ids,
 )
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 from fred_sdk.knowledge_base import KnowledgeBaseDeclaration
-from fred_sdk.knowledge_base.schedule import (
-    CADENCE_KEY,
-    SUSPENDED_KEY,
-    RunCadence,
-    platform_fields,
-)
-
+from pydantic import TypeAdapter
 from control_plane_backend.knowledge_bases.instances import (
     KnowledgeBaseNotEnabled,
     UnknownDefinition,
@@ -179,9 +174,6 @@ async def definition_fields(
     if definition is None:
         raise UnknownDefinition(f"No definition published as {definition_id!r}")
     return KnowledgeBaseInstanceFields(
-        cadence_key=CADENCE_KEY,
-        suspended_key=SUSPENDED_KEY,
-        platform_fields=platform_fields(),
         configuration_fields=definition.configuration_fields,
     )
 
@@ -200,7 +192,7 @@ async def create_instance_for_team(
         definition_id=body.definition_id,
         team_id=body.team_id,
         folder_name=body.folder_name,
-        cadence=body.cadence,
+        schedule=body.schedule,
         suspended=body.suspended,
         configuration=body.configuration,
         deps=deps,
@@ -261,7 +253,7 @@ def _summary_of(instance: Any, definition: Any) -> KnowledgeBaseInstanceSummary:
         team_id=instance.team_id,
         library_id=instance.library_id,
         library_name=instance.library_name,
-        cadence=RunCadence(instance.cadence),
+        schedule=TypeAdapter(Schedule).validate_json(instance.schedule_json),
         suspended=instance.suspended,
         configuration=displayable_configuration(instance, declared),
         created_at=instance.created_at,

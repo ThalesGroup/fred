@@ -18,12 +18,13 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import KnowledgeBaseCard from "@shared/organisms/KnowledgeBaseCard/KnowledgeBaseCard.tsx";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useDeleteKnowledgeBaseMutation,
+  useKnowledgeBaseDefinitionsQuery,
   useKnowledgeBasesQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { KnowledgeBaseInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -43,8 +44,21 @@ export default function TeamKnowledgeBasesPage() {
   const { showError, showSuccess } = useToast();
 
   const { data: instances, isLoading, isError } = useKnowledgeBasesQuery({ teamId: teamId ?? "" }, { skip: !teamId });
+  // One query for every card's description, never one per card: asking per row
+  // is the shape that makes a listing's latency grow with the list.
+  const { data: definitions } = useKnowledgeBaseDefinitionsQuery({ teamId: teamId ?? "" }, { skip: !teamId });
   const [deleteKnowledgeBase] = useDeleteKnowledgeBaseMutation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // The id, never the object: a refetch replaces the summaries, and an open
+  // panel holding the old one would keep showing settings the list has moved on
+  // from.
+  const [viewingId, setViewingId] = useState<string | undefined>(undefined);
+  const viewing = instances?.find((instance) => instance.id === viewingId);
+
+  const descriptionByDefinitionId = useMemo(
+    () => new Map((definitions ?? []).map((definition) => [definition.definition_id, definition.description])),
+    [definitions],
+  );
 
   const handleDelete = (instance: KnowledgeBaseInstanceSummary) => {
     showConfirmationDialog({
@@ -105,14 +119,27 @@ export default function TeamKnowledgeBasesPage() {
               key={instance.id}
               instance={instance}
               teamId={teamId ?? ""}
+              definitionDescription={descriptionByDefinitionId.get(instance.definition_id)}
               canManage
+              onEdit={() => setViewingId(instance.id)}
               onDelete={() => handleDelete(instance)}
             />
           ))}
         </div>
       )}
 
-      <KnowledgeBaseFormModal open={isCreateOpen} teamId={teamId ?? ""} onClose={() => setIsCreateOpen(false)} />
+      {/* One panel, two jobs: creating a base and reading an existing one's
+          settings are the same form, so mounting a second copy would only
+          duplicate its queries and its dialog id. */}
+      <KnowledgeBaseFormModal
+        open={isCreateOpen || viewing !== undefined}
+        teamId={teamId ?? ""}
+        instance={viewing}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setViewingId(undefined);
+        }}
+      />
     </div>
   );
 }

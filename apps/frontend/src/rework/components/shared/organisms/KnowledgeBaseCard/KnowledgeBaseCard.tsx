@@ -17,6 +17,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import { splitDuration } from "@shared/molecules/ScheduleField/ScheduleField.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { KnowledgeBaseInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -25,15 +26,18 @@ import { KnowledgeBaseInstanceSummary } from "../../../../../slices/controlPlane
 // in. Sharing the stylesheet is what keeps them identical — a copy would drift
 // the first time either is touched.
 import styles from "../AgentCard/AgentCard.module.scss";
-import KnowledgeBaseConfiguration from "./KnowledgeBaseConfiguration.tsx";
 
-type MoreMenuAction = "delete";
+type MoreMenuAction = "edit" | "delete";
 
 export interface KnowledgeBaseCardProps {
   instance: KnowledgeBaseInstanceSummary;
   teamId: string;
+  /** What its source declares it does, resolved once for the whole list by the
+   *  caller rather than one query per card. */
+  definitionDescription?: string;
   /** Withholds the row menu. Deleting a base takes its documents with it. */
   canManage: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }
 
@@ -44,9 +48,23 @@ function formatShortDate(dateStr: string | null | undefined): string | undefined
   return date.toLocaleDateString();
 }
 
-export default function KnowledgeBaseCard({ instance, teamId, canManage, onDelete }: KnowledgeBaseCardProps) {
+export default function KnowledgeBaseCard({
+  instance,
+  teamId,
+  definitionDescription,
+  canManage,
+  onEdit,
+  onDelete,
+}: KnowledgeBaseCardProps) {
   const { t } = useTranslation();
   const createdAt = formatShortDate(instance.created_at);
+  // Read back in the unit a user would have typed, not in seconds.
+  const { every, unit } = splitDuration(instance.schedule.every_seconds);
+
+  const handleMoreMenuSelect = (action: MoreMenuAction) => {
+    if (action === "edit") onEdit();
+    else if (action === "delete") onDelete();
+  };
 
   const infoTooltipContent = (
     <div className={styles.infoTooltip}>
@@ -56,7 +74,7 @@ export default function KnowledgeBaseCard({ instance, teamId, canManage, onDelet
       </div>
       <div className={styles.infoRow}>
         <span className={styles.infoLabel}>{t("rework.knowledgeBases.card.tooltip.cadence")}</span>
-        <span className={styles.infoValue}>{t(`rework.knowledgeBases.cadence.${instance.cadence}`)}</span>
+        <span className={styles.infoValue}>{`${every} ${t(`rework.schedule.unit.${unit}`)}`}</span>
       </div>
       {createdAt && (
         <div className={styles.infoRow}>
@@ -89,6 +107,12 @@ export default function KnowledgeBaseCard({ instance, teamId, canManage, onDelet
                 }}
                 options={[
                   {
+                    key: "edit",
+                    value: "edit",
+                    label: t("rework.knowledgeBases.card.edit"),
+                    icon: { category: "outlined", type: "edit" },
+                  },
+                  {
                     key: "delete",
                     value: "delete",
                     label: t("rework.knowledgeBases.card.delete"),
@@ -96,17 +120,13 @@ export default function KnowledgeBaseCard({ instance, teamId, canManage, onDelet
                     destructive: true,
                   },
                 ]}
-                onSelect={onDelete}
+                onSelect={handleMoreMenuSelect}
               />
             </div>
           )}
         </div>
         <div className={styles.agentDescription}>
-          <KnowledgeBaseConfiguration
-            definitionId={instance.definition_id}
-            teamId={teamId}
-            configuration={instance.configuration ?? {}}
-          />
+          {definitionDescription || t("rework.knowledgeBases.card.noDescription")}
         </div>
       </div>
 

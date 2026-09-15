@@ -843,18 +843,16 @@ def test_the_queue_is_derived_and_a_configured_one_is_not_read() -> None:
 
 
 # --------------------------------------------------------------------------
-# 3.7 the zone Fred declares, on every form
+# 3.7 the namespace Fred keeps for itself
 # --------------------------------------------------------------------------
 
 
-def test_an_author_who_declares_nothing_still_gets_the_platform_zone() -> None:
-    """Recurrence is Fred's to own, so it is not an author's to remember."""
-    from fred_sdk.knowledge_base.schedule import (
-        CADENCE_KEY,
-        SUSPENDED_KEY,
-        platform_fields,
-    )
+def test_an_author_declares_only_their_own_fields() -> None:
+    """Recurrence is Fred's to own, so it is not an author's to declare.
 
+    It is typed on Fred's own instance schemas rather than declared here as a
+    field somebody has to render generically and then fish back out by key.
+    """
     kb = KnowledgeBase(
         id="acme.kb.bare",
         version="1.0.0",
@@ -863,30 +861,15 @@ def test_an_author_who_declares_nothing_still_gets_the_platform_zone() -> None:
     )
 
     assert kb.configuration_fields == []
-    assert [field.key for field in platform_fields()] == [CADENCE_KEY, SUSPENDED_KEY]
 
 
-def test_every_knowledge_base_offers_the_same_cadence_vocabulary() -> None:
-    from fred_sdk.knowledge_base.schedule import (
-        CADENCE_KEY,
-        RunCadence,
-        platform_fields,
-    )
+def test_the_reserved_namespace_is_recognised_whole() -> None:
+    from fred_sdk.knowledge_base.schedule import is_platform_field
 
-    cadence = next(f for f in platform_fields() if f.key == CADENCE_KEY)
-
-    assert cadence.type == "select"
-    assert cadence.enum == [c.value for c in RunCadence]
-    assert cadence.required is True
-
-
-def test_the_platform_zone_is_returned_fresh_each_time() -> None:
-    """A caller annotating its copy must not edit the next caller's."""
-    from fred_sdk.knowledge_base.schedule import platform_fields
-
-    platform_fields()[0].title = "Mutated"
-
-    assert platform_fields()[0].title != "Mutated"
+    assert is_platform_field("fred")
+    assert is_platform_field("fred.anything")
+    assert not is_platform_field("fredonia")
+    assert not is_platform_field("url")
 
 
 @pytest.mark.parametrize(

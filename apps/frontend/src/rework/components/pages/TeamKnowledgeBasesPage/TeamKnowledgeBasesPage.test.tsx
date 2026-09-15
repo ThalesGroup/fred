@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What the screen owes a team: one card per base, what each was configured
-// with, and never a secret — the API strips those values, so a row for one
-// could only ever be an empty promise.
+// What the screen owes a team: one card per base, naming it, the kind it is
+// and what that kind does. The configuration itself is a settings surface of
+// its own — a card that listed it drowned the name it exists to show.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,6 +29,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
   instances: [] as Record<string, unknown>[],
+  definitions: [] as Record<string, unknown>[],
   isLoading: false,
   isError: false,
   fields: undefined as Record<string, unknown> | undefined,
@@ -53,8 +54,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => 
   }),
   useDeleteKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
   useKnowledgeBaseFieldsQuery: () => ({ data: probe.fields }),
-  // Reached through the creation modal this page mounts, closed here.
-  useKnowledgeBaseDefinitionsQuery: () => ({ data: [], isLoading: false, isError: false }),
+  useKnowledgeBaseDefinitionsQuery: () => ({ data: probe.definitions, isLoading: false, isError: false }),
   useCreateKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), { isLoading: false }],
 }));
 
@@ -76,7 +76,7 @@ function base(overrides: Record<string, unknown> = {}) {
     team_id: "team-1",
     library_id: "lib-1",
     library_name: "Local-2",
-    cadence: "daily",
+    schedule: { type: "interval" as const, every_seconds: 86400 },
     suspended: false,
     // What the API actually returns: it strips secret-declared values before
     // they leave the Control Plane, so no fixture here carries one by default.
@@ -97,6 +97,13 @@ function render() {
 
 beforeEach(() => {
   probe.instances = [];
+  probe.definitions = [
+    {
+      definition_id: "fred.samples.local-folder",
+      name: "Local folder",
+      description: "Synchronize documents from a folder on disk.",
+    },
+  ];
   probe.isLoading = false;
   probe.isError = false;
   probe.fields = undefined;
@@ -126,32 +133,30 @@ describe("TeamKnowledgeBasesPage", () => {
     expect(container.textContent).toContain("rework.knowledgeBases.empty");
   });
 
-  it("labels the configuration with the titles its author declared", () => {
+  it("says what the kind of base actually does", () => {
     probe.instances = [base()];
-    probe.fields = {
-      configuration_fields: [{ key: "path", type: "string", title: "Folder on disk" }],
-    };
     render();
 
-    expect(container.textContent).toContain("Folder on disk");
-    expect(container.textContent).toContain("/srv/docs");
+    expect(container.textContent).toContain("Synchronize documents from a folder on disk.");
   });
 
-  it("never renders a secret-declared field, even handed one", () => {
-    // Defence in depth: the API strips these, so this fixture is a Fred that
-    // stopped doing so. The screen must still not put it on a card.
-    probe.instances = [base({ configuration: { path: "/srv/docs", token: "should never reach the page" } })];
-    probe.fields = {
-      configuration_fields: [
-        { key: "path", type: "string", title: "Folder on disk" },
-        { key: "token", type: "secret", title: "Access token" },
-      ],
-    };
+  it("keeps the configuration off the card entirely", () => {
+    // The values are a settings surface of their own. A card listing them is
+    // what buried the one thing it exists to show — the base's name.
+    probe.instances = [base({ configuration: { path: "/srv/docs" } })];
     render();
 
-    expect(container.textContent).toContain("Folder on disk");
-    expect(container.textContent).not.toContain("Access token");
-    expect(container.textContent).not.toContain("should never reach the page");
+    expect(container.textContent).not.toContain("/srv/docs");
+  });
+
+  it("falls back rather than showing an empty line when the kind is gone", () => {
+    // A definition disabled for the team after a base was created: it drops
+    // out of the list the descriptions come from, the base does not.
+    probe.definitions = [];
+    probe.instances = [base()];
+    render();
+
+    expect(container.textContent).toContain("rework.knowledgeBases.card.noDescription");
   });
 
   it("leads into the base's own documents", () => {

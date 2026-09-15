@@ -21,7 +21,7 @@ from typing import Any
 
 from fred_core import PREFIX_PATTERN
 from fred_sdk.contracts.models import FieldSpec
-from fred_sdk.knowledge_base.schedule import DEFAULT_CADENCE, RunCadence
+from fred_core.scheduler import Schedule
 from pydantic import BaseModel, Field
 
 
@@ -58,7 +58,7 @@ class KnowledgeBaseInstanceCreate(BaseModel):
     definition_id: str = Field(min_length=1)
     team_id: str = Field(min_length=1)
     folder_name: str = Field(min_length=1, max_length=255)
-    cadence: RunCadence = DEFAULT_CADENCE
+    schedule: Schedule
     suspended: bool = False
     configuration: dict[str, Any] = Field(default_factory=dict)
 
@@ -77,7 +77,7 @@ class KnowledgeBaseInstanceSummary(BaseModel):
     team_id: str
     library_id: str
     library_name: str
-    cadence: RunCadence
+    schedule: Schedule
     suspended: bool
     configuration: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
@@ -97,18 +97,12 @@ class KnowledgeBaseDefinitionChoice(BaseModel):
 
 
 class KnowledgeBaseInstanceFields(BaseModel):
-    """The two zones an instance form renders.
+    """The fields an instance form renders for the author's own configuration.
 
-    `platform_fields` is Fred's own: it declares when the folder runs, and Fred
-    acts on it. `configuration_fields` is the author's: Fred stores those
-    values, hands them back at run time, and never reads them.
-
-    The two platform keys travel with the zones so a form can pick those values
-    back out of a generically rendered zone without holding a copy of a constant
-    this side owns.
+    Only the author's: Fred stores these values, hands them back at run time,
+    and never reads them. What Fred owns — the schedule, and whether the
+    instance is suspended — is typed on the instance schemas above, so nothing
+    generic renders it and no key has to travel beside these.
     """
 
-    cadence_key: str
-    suspended_key: str
-    platform_fields: list[FieldSpec] = Field(default_factory=list)
     configuration_fields: list[FieldSpec] = Field(default_factory=list)

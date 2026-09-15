@@ -13,73 +13,17 @@
  * limitations under the License.
  */
 
-/* Mirrors the ConfirmationDialog shell so every centred modal looks identical. */
-.overlay {
-  display: flex;
-  position: fixed;
-  justify-content: center;
-  align-items: center;
-  z-index: 1300;
-  inset: 0;
-  background-color: var(--scrim);
-}
-
-.dialog {
+/* The shell, its header and its actions belong to SettingsModal — what is left
+   here is the form itself, which an agent's does not have. */
+.form {
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-l);
-  border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
-  width: min(440px, 90vw);
-  color: var(--on-surface);
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
-  padding: var(--spacing-m);
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-}
-
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-medium);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-  border-top: 1px solid var(--outline-retreat);
-  padding: var(--spacing-s) var(--spacing-m);
-}
-
-/* The shell is as tall as the fields an author declared, which nothing here can
-   bound. Cap it and scroll the body so the actions stay reachable. */
-.dialog {
-  max-height: min(90vh, 100%);
-}
-
-.body {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.actions {
-  flex-shrink: 0;
+  gap: var(--spacing-m);
 }
 
 /* Two fieldsets so the settings Fred acts on stay visibly apart from the ones
-   it only carries to the source. The select is the shared molecule, so nothing
-   here restyles a control. */
+   it only carries to the source. The controls are the shared molecules, so
+   nothing here restyles one. */
 .zone {
   margin: 0;
   border: 1px solid var(--outline-retreat);
@@ -91,4 +35,13 @@
   padding: 0 var(--spacing-2xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
+}
+
+/* The switch and its text read as one control, so the label sits beside it
+   rather than above like every other field's. */
+.suspended {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 0.5rem);
+  cursor: pointer;
 }

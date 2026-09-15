@@ -6,7 +6,7 @@ Create Date: 2026-09-13
 
 An instance is a folder that fills itself: the library it fills lives in
 knowledge-flow, and this row is what binds it to the definition that fills it,
-the team that owns it and the cadence Fred runs it on.
+the team that owns it and the schedule Fred runs it on.
 """
 
 from typing import Sequence, Union
@@ -37,13 +37,12 @@ def upgrade() -> None:
         ),
         sa.Column("library_name", sa.String(length=255), nullable=False),
         sa.Column(
-            "cadence",
-            sa.String(length=32),
+            "schedule_json",
+            sa.Text(),
             nullable=False,
-            comment=(
-                "How often Fred dispatches a run. One of the SDK's declared "
-                "cadences — the vocabulary is the platform's, not each author's."
-            ),
+            comment="JSON-serialized schedule Fred dispatches runs on. A "
+            "duration, not a named cadence: it is handed to the workflow "
+            "engine unchanged.",
         ),
         sa.Column("suspended", sa.Boolean(), nullable=False),
         sa.Column(

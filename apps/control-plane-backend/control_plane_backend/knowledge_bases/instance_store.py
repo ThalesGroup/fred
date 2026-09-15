@@ -47,7 +47,7 @@ class KnowledgeBaseInstance:
         self.team_id = row.team_id
         self.library_id = row.library_id
         self.library_name = row.library_name
-        self.cadence = row.cadence
+        self.schedule_json = row.schedule_json
         self.suspended = row.suspended
         self.granted_subject = row.granted_subject
         self.created_at = row.created_at
@@ -71,7 +71,7 @@ class KnowledgeBaseInstanceStore:
         team_id: str,
         library_id: str,
         library_name: str,
-        cadence: str,
+        schedule_json: str,
         suspended: bool,
         configuration: dict[str, TuningValue],
         granted_subject: str,
@@ -85,7 +85,7 @@ class KnowledgeBaseInstanceStore:
                 team_id=team_id,
                 library_id=library_id,
                 library_name=library_name,
-                cadence=cadence,
+                schedule_json=schedule_json,
                 suspended=suspended,
                 configuration_json=json.dumps(configuration),
                 granted_subject=granted_subject,

@@ -3220,13 +3220,14 @@
         "open": "Documents",
         "delete": "Supprimer",
         "suspended": "Synchronisation suspendue",
-        "noConfiguration": "Aucune configuration",
         "tooltip": {
           "label": "Détails de la base de connaissance",
           "kind": "Type",
           "cadence": "Exécution",
           "created": "Créée le"
-        }
+        },
+        "edit": "Modifier",
+        "noDescription": "Aucune description"
       },
       "deleteDialog": {
         "title": "Supprimer cette base de connaissance ?",
@@ -3257,7 +3258,19 @@
         "zoneSource": "Provenance des documents",
         "submit": "Créer",
         "created": "{{name}} créée",
-        "createFailed": "Impossible de créer {{name}}"
+        "createFailed": "Impossible de créer {{name}}",
+        "titleEdit": "Modifier {{name}}",
+        "subtitleReadOnly": "Sa configuration est en lecture seule pour le moment."
+      }
+    },
+    "schedule": {
+      "label": "S'exécute toutes les",
+      "every": "Nombre",
+      "unit": {
+        "label": "Unité",
+        "minutes": "minutes",
+        "hours": "heures",
+        "days": "jours"
       }
     }
   },

@@ -3220,13 +3220,14 @@
         "open": "Documents",
         "delete": "Delete",
         "suspended": "Synchronization suspended",
-        "noConfiguration": "No configuration",
         "tooltip": {
           "label": "Knowledge base details",
           "kind": "Kind",
           "cadence": "Runs",
           "created": "Created"
-        }
+        },
+        "edit": "Edit",
+        "noDescription": "No description"
       },
       "deleteDialog": {
         "title": "Delete this knowledge base?",
@@ -3257,7 +3258,19 @@
         "zoneSource": "Where its documents come from",
         "submit": "Create",
         "created": "{{name}} created",
-        "createFailed": "Could not create {{name}}"
+        "createFailed": "Could not create {{name}}",
+        "titleEdit": "Edit {{name}}",
+        "subtitleReadOnly": "Its settings are read-only for now."
+      }
+    },
+    "schedule": {
+      "label": "Runs every",
+      "every": "Number",
+      "unit": {
+        "label": "Unit",
+        "minutes": "minutes",
+        "hours": "hours",
+        "days": "days"
       }
     }
   },

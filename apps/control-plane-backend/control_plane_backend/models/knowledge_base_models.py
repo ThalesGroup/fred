@@ -100,7 +100,7 @@ class KnowledgeBaseInstanceRow(Base):
     """ORM model for the ``knowledge_base_instances`` table.
 
     One synchronized folder: the library it fills, the definition that fills
-    it, the team that owns both, and the cadence Fred runs it on. The library
+    it, the team that owns both, and the schedule Fred runs it on. The library
     id is knowledge-flow's tag id — this row is what binds the two together,
     and deleting it is what ends the synchronization.
 
@@ -126,11 +126,11 @@ class KnowledgeBaseInstanceRow(Base):
         "sharing a library would each grant a different pod over it.",
     )
     library_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    cadence: Mapped[str] = mapped_column(
-        String(32),
+    schedule_json: Mapped[str] = mapped_column(
+        Text,
         nullable=False,
-        comment="How often Fred dispatches a run. One of the SDK's declared "
-        "cadences — the vocabulary is the platform's, not each author's.",
+        comment="JSON-serialized schedule Fred dispatches runs on. A duration, "
+        "not a named cadence: it is handed to the workflow engine unchanged.",
     )
     suspended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     configuration_json: Mapped[str] = mapped_column(

@@ -4,12 +4,14 @@
 """A folder that fills itself: creating one, and what that creates.
 
 The four effects of one gesture — the library, the instance, the pod's grant
-over that library, and the cadence — all happen or none does. Nothing here
+over that library, and the schedule — all happen or none does. Nothing here
 reaches a live OpenFGA, a live Temporal or a live knowledge-flow: each is faked
 at its own boundary, and what is asserted is the order, the undo and the scope.
 """
 
 from __future__ import annotations
+
+import json
 
 import inspect
 from collections.abc import Iterable
@@ -39,7 +41,7 @@ from fred_core import Resource
 from fred_core.security.models import AuthorizationError
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 from fred_sdk.contracts.models import FieldSpec
-from fred_sdk.knowledge_base.schedule import RunCadence
+from fred_core.scheduler import IntervalSchedule
 from temporalio.client import ScheduleAlreadyRunningError
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -162,7 +164,7 @@ class _FakeInstanceStore:
             team_id=kwargs["team_id"],
             library_id=kwargs["library_id"],
             library_name=kwargs["library_name"],
-            cadence=kwargs["cadence"],
+            schedule_json=kwargs["schedule_json"],
             suspended=kwargs["suspended"],
             configuration=kwargs["configuration"],
             granted_subject=kwargs["granted_subject"],
@@ -350,7 +352,7 @@ async def _create(deps: _Deps, **overrides: Any):
         "definition_id": DEFINITION,
         "team_id": TEAM,
         "folder_name": "Handbook",
-        "cadence": RunCadence.daily,
+        "schedule": IntervalSchedule(every_seconds=86_400),
         "suspended": False,
         "configuration": {"base_url": "https://example.test/docs"},
         "deps": deps,
@@ -378,13 +380,13 @@ async def test_creating_a_synchronized_folder_does_all_four_things():
 
 @pytest.mark.parametrize(
     "break_step",
-    ["library", "grant", "cadence", "instance"],
+    ["library", "grant", "schedule", "instance"],
 )
 @pytest.mark.asyncio
 async def test_a_partial_creation_leaves_nothing_behind(break_step: str):
     """Whichever step fails, the ones already applied are undone."""
     rebac = _FakeRebac(usable={(TEAM, DEFINITION)}, members={TEAM})
-    temporal = _FakeTemporal(fail_create=break_step == "cadence")
+    temporal = _FakeTemporal(fail_create=break_step == "schedule")
     store = _FakeInstanceStore(fail_create=break_step == "instance")
     deps = _deps(rebac=rebac, temporal=temporal, instance_store=store)
     if break_step == "library":
@@ -443,7 +445,7 @@ async def test_a_second_instance_of_one_definition_gets_its_own_everything():
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_folder_leaves_no_grant_and_no_cadence():
+async def test_deleting_a_folder_leaves_no_grant_and_no_schedule():
     deps = _deps()
     instance = await _create(deps)
 
@@ -476,16 +478,16 @@ async def test_creating_an_instance_is_refused_while_the_definition_is_not_enabl
 async def test_two_instances_coexist_independently():
     deps = _deps()
 
-    await _create(deps, folder_name="First", cadence=RunCadence.weekly, suspended=True)
+    await _create(deps, folder_name="First", schedule=IntervalSchedule(every_seconds=604_800), suspended=True)
     await _create(deps, folder_name="Second")
 
     listed = {
         row.library_name: row
         for row in await list_instances(user=_user(), team_id=TEAM, deps=deps)
     }
-    assert listed["First"].cadence == RunCadence.weekly.value
+    assert json.loads(listed["First"].schedule_json)["every_seconds"] == 604_800
     assert listed["First"].suspended is True
-    assert listed["Second"].cadence == RunCadence.daily.value
+    assert json.loads(listed["Second"].schedule_json)["every_seconds"] == 86_400
     assert listed["Second"].suspended is False
 
 
@@ -822,7 +824,7 @@ async def test_a_stale_stored_configuration_is_a_bad_request_not_a_server_fault(
 
 
 @pytest.mark.asyncio
-async def test_two_instances_of_one_cadence_do_not_fire_on_the_same_second():
+async def test_two_instances_of_one_period_do_not_fire_on_the_same_second():
     """An interval with no offset is measured from the epoch, for everyone."""
     deps = _deps()
 
