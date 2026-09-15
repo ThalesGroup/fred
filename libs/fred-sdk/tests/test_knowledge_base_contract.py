@@ -799,10 +799,12 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
     """
     from fred_sdk.knowledge_base.configuration import PodConfiguration
 
-    configuration = PodConfiguration.model_validate(_valid_configuration())
+    configured = _valid_configuration()
+    configuration = PodConfiguration.model_validate(configured)
 
-    expected_env = "ACME_KB_CLIENT_SECRET"  # pragma: allowlist secret
-    assert configuration.m2m.secret_env == expected_env
+    assert (
+        configuration.m2m.secret_env == configured["security"]["m2m"]["secret_env_var"]
+    )
     assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
 
 
