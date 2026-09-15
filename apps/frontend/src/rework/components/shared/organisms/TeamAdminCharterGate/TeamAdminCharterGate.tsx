@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useMatch } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button.tsx";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamAdminCharterPage from "@components/pages/TeamAdminCharterPage/TeamAdminCharterPage.tsx";
 import { useSelectedTeam } from "../../../../../hooks/useSelectedTeam.ts";
 import styles from "./TeamAdminCharterGate.module.css";
@@ -37,18 +37,16 @@ export default function TeamAdminCharterGate({ children }: { children: ReactNode
   return (
     <>
       {!onResponsibilities && (
-        <div className={styles.notice}>
-          <ServiceNotice
-            icon="admin_panel_settings"
-            title={t("rework.teamAdminCharter.pendingNotice")}
-            action={
-              <Link to={`/team/${teamId}/settings/responsibilities`}>
-                <Button color="primary" variant="outlined" size="small">
-                  {t("rework.teamAdminCharter.review")}
-                </Button>
-              </Link>
-            }
-          />
+        <div className={styles.notice} role="status">
+          <span className={styles.icon} aria-hidden>
+            <Icon category="outlined" type="admin_panel_settings" />
+          </span>
+          <span className={styles.message}>{t("rework.teamAdminCharter.pendingNotice")}</span>
+          <Link className={styles.action} to={`/team/${teamId}/settings/responsibilities`}>
+            <Button color="primary" variant="filled" size="small">
+              {t("rework.teamAdminCharter.review")}
+            </Button>
+          </Link>
         </div>
       )}
       <div className={styles.pages}>{children}</div>

@@ -46,6 +46,9 @@ from control_plane_backend.teams.service import (
     get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
 )
 from control_plane_backend.teams.service import (
+    get_team_admin_charter_acceptance as get_team_admin_charter_acceptance_from_service,
+)
+from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
 from control_plane_backend.teams.service import (
@@ -335,6 +338,18 @@ async def set_default_teams_for_new_users(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await set_default_teams_for_new_users_from_service(user, request.team_ids, deps)
+
+
+@router.get(
+    "/team-admin-charter",
+    response_model=TeamAdminCharterAcceptance | None,
+    summary="Read when the caller accepted the current team administrator charter",
+)
+async def get_team_admin_charter_acceptance(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamAdminCharterAcceptance | None:
+    return await get_team_admin_charter_acceptance_from_service(user, deps)
 
 
 @router.post(

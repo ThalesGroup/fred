@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ReactNode } from "react";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import styles from "./ServiceNotice.module.scss";
@@ -21,8 +20,6 @@ interface ServiceNoticeProps {
   icon?: IconType;
   title: string;
   description?: string;
-  /** Optional control rendered at the end of the notice, e.g. a link button. */
-  action?: ReactNode;
   /** Wraps the notice in a flex-1 centred container — use when the notice is
    *  the only content in the available area (e.g. service not running, nothing
    *  to show). Omit for inline banners rendered alongside other content. */
@@ -46,7 +43,7 @@ interface ServiceNoticeProps {
  * Example:
  * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
-export default function ServiceNotice({ icon = "info", title, description, action, centered }: ServiceNoticeProps) {
+export default function ServiceNotice({ icon = "info", title, description, centered }: ServiceNoticeProps) {
   const notice = (
     <div className={styles.serviceNotice}>
       <span className={styles.icon}>
@@ -56,7 +53,6 @@ export default function ServiceNotice({ icon = "info", title, description, actio
         <span className={styles.title}>{title}</span>
         {description && <span className={styles.description}>{description}</span>}
       </div>
-      {action && <div className={styles.action}>{action}</div>}
     </div>
   );
 

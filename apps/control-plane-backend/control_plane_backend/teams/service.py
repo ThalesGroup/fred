@@ -449,6 +449,23 @@ async def _join_unless_already_in_team(
     logger.info("A new user joined the default team %s", team_id)
 
 
+async def get_team_admin_charter_acceptance(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> TeamAdminCharterAcceptance | None:
+    """When the caller accepted the configured charter version, or `None` when
+    they have not or the charter is off."""
+    version = deps.configuration.app.team_admin_charter_version
+    if version is None:
+        return None
+    accepted_at = await deps.get_team_admin_charter_store().get_accepted_at(
+        user.uid, version
+    )
+    if accepted_at is None:
+        return None
+    return TeamAdminCharterAcceptance(accepted_at=accepted_at)
+
+
 async def accept_team_admin_charter(
     user: KeycloakUser,
     deps: TeamServiceDependencies,

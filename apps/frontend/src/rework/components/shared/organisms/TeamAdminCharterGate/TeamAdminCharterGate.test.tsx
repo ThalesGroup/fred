@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -44,15 +43,6 @@ vi.mock("../../../../../hooks/useSelectedTeam.ts", () => ({
 
 vi.mock("@components/pages/TeamAdminCharterPage/TeamAdminCharterPage.tsx", () => ({
   default: () => "charter-page",
-}));
-
-vi.mock("@shared/molecules/ServiceNotice/ServiceNotice.tsx", () => ({
-  default: ({ title, action }: { title: string; action: ReactNode }) => (
-    <div>
-      {title}
-      {action}
-    </div>
-  ),
 }));
 
 import TeamAdminCharterGate from "./TeamAdminCharterGate.tsx";
@@ -93,7 +83,7 @@ describe("TeamAdminCharterGate", () => {
     h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
     render();
 
-    expect(container.textContent).toContain("rework.teamAdminCharter.pendingNotice");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("rework.teamAdminCharter.pendingNotice");
     expect(container.textContent).toContain("team-pages");
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/team/team-1/settings/responsibilities");
   });

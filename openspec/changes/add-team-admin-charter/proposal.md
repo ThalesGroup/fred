@@ -7,7 +7,7 @@ Team administrators are part of the security chain: they decide who belongs to a
 - New legal markdown document, the team administrator charter (`team-admin-charter.md` and `team-admin-charter.fr.md`), served and overridable like the terms of use: a generic template ships in the frontend image, a deployment replaces it from its theme archive.
 - New control-plane setting `app.team_admin_charter_version`. Unset means the feature is off and nothing below applies.
 - New OpenFGA relation `team.pending_team_admin`, part of `team_member` and nothing else. A nominated admin who has not accepted the configured version gets it instead of `team_admin`, so they hold a member's rights only, in every service.
-- `POST /control-plane/v1/team-admin-charter` records the acceptance (audited) and turns every `pending_team_admin` of the caller into `team_admin`. One acceptance covers every team.
+- `POST /control-plane/v1/team-admin-charter` records the acceptance (audited) and turns every `pending_team_admin` of the caller into `team_admin`. One acceptance covers every team. `GET` on the same path returns when the caller accepted the configured version.
 - At startup, when the configured version changed, the control-plane moves admins between `team_admin` and `pending_team_admin` to match.
 - Frontend: the charter page replaces the pages of a team where the user is a pending admin while the team has no accepted admin, and a notice leads to it otherwise; a Responsibilities section in team settings, where pending admins accept; an "Admin (pending)" chip in the member list.
 - Refactor: `GcuPage` and `GdprPage` share one markdown loading hook, which the charter reuses.

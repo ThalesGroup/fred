@@ -13,7 +13,7 @@
 ## 3. Nomination, acceptance and reconciliation
 
 - [x] 3.1 Resolve `team_admin` to `pending_team_admin` at every write (add member, grant role, rescue, team creation, import), refuse `pending_team_admin` in the request schemas, map its revoke to `can_administer_admins`, delete it on member removal and expose it in the member list; verify the nomination tests
-- [x] 3.2 `POST /control-plane/v1/team-admin-charter` records the acceptance, audits the first one and promotes every pending team; verify the acceptance tests and the 409 mapping
+- [x] 3.2 `POST /control-plane/v1/team-admin-charter` records the acceptance, audits the first one and promotes every pending team, and `GET` returns the caller's acceptance time or null; verify the acceptance and read tests and the 409 mapping
 - [x] 3.3 Reconcile admin relations at startup when the configured version changed, fail-closed; verify the reconciliation tests for enabling, a new version, turning off and an unchanged version
 - [x] 3.4 Remove the first version's permission gate and restore the routing policy and projection code to `swift`; verify the routing policy and projection tests pass unchanged
 - [x] 3.5 Update `authz-endpoint-matrix.yaml` and regenerate `controlPlaneOpenApi.ts`; verify `test_authz_endpoint_matrix.py`
@@ -21,7 +21,7 @@
 ## 4. Frontend
 
 - [x] 4.1 Add `TeamAdminCharterGate` around the `MainLayout` outlet and `TeamAdminCharterPage`; verify tests: a pending admin sees the charter on a team with no `team_admin` and a notice otherwise, admins, members and the home page see neither, Accept calls the mutation
-- [x] 4.2 Open the Responsibilities section to `team_admin`s and pending admins, with Accept for pending ones; verify the TeamSettingsPage and section tests
+- [x] 4.2 Open the Responsibilities section to `team_admin`s, with their acceptance time, and to pending admins, with Accept; verify the TeamSettingsPage and section tests
 - [x] 4.3 Show "Admin (pending)" on the role chip, the team banner and the team lists, and gate its revoke on `canAdministerAdmins`; verify `tsc` and the affected tests
 - [x] 4.4 Add the en and fr i18n keys and drop the first version's pop-up keys; verify `tsc`
 

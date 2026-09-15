@@ -15,7 +15,10 @@
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TeamAdminCharterContent from "@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx";
-import { useAcceptTeamAdminCharterMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import {
+  useAcceptTeamAdminCharterMutation,
+  useGetTeamAdminCharterAcceptanceQuery,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import styles from "./TeamSettingsResponsibilities.module.scss";
 
 interface TeamSettingsResponsibilitiesProps {
@@ -23,25 +26,35 @@ interface TeamSettingsResponsibilitiesProps {
   canAccept?: boolean;
 }
 
-/** The team administrator charter, readable at any time by admins and accepted here by pending ones. */
+/** The team administrator charter: admins see when they accepted it, pending admins accept it here. */
 export default function TeamSettingsResponsibilities({ canAccept = false }: TeamSettingsResponsibilitiesProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
+  const { data: acceptance } = useGetTeamAdminCharterAcceptanceQuery(undefined, { skip: canAccept });
+  const acceptedAt =
+    !canAccept && acceptance?.accepted_at
+      ? new Date(acceptance.accepted_at).toLocaleString(i18n.language, { dateStyle: "long", timeStyle: "short" })
+      : null;
 
   return (
     <div className={styles.responsibilities}>
       <TeamAdminCharterContent />
-      {canAccept && (
-        <div className={styles.actions}>
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            disabled={isLoading}
-            onClick={() => void acceptCharter()}
-          >
-            {t("rework.teamAdminCharter.accept")}
-          </Button>
+      {(canAccept || acceptedAt) && (
+        <div className={styles.footer}>
+          {acceptedAt && (
+            <span className={styles.acceptedAt}>{t("rework.teamAdminCharter.acceptedOn", { date: acceptedAt })}</span>
+          )}
+          {canAccept && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              disabled={isLoading}
+              onClick={() => void acceptCharter()}
+            >
+              {t("rework.teamAdminCharter.accept")}
+            </Button>
+          )}
         </div>
       )}
     </div>

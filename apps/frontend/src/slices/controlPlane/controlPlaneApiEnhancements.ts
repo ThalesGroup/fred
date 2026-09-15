@@ -131,6 +131,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: {
       invalidatesTags: ["ControlPlaneTeam"],
     },
+    // Read again by the same acceptance, alongside the team projections.
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: {
+      providesTags: ["ControlPlaneTeam"],
+    },
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
     // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
@@ -656,4 +660,5 @@ export const {
   useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
 } = enhancedControlPlaneApi;

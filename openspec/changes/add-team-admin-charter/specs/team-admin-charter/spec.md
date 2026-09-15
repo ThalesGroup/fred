@@ -54,7 +54,7 @@ While a version is configured, every grant of `team_admin` to a user who has not
 
 ### Requirement: Accepting records the acceptance and activates pending administrator roles
 
-Recording an acceptance SHALL store the user's identifier, the configured charter version and the acceptance time, then turn every `pending_team_admin` the user holds into `team_admin`. One acceptance MUST cover every team. Recording the same version twice MUST keep the first acceptance time and MUST promote any pending relation left. Acceptances of earlier versions MUST be kept. The first acceptance of a version MUST emit a `team_admin.charter.accepted` audit event carrying the user identifier and the version.
+Recording an acceptance SHALL store the user's identifier, the configured charter version and the acceptance time, then turn every `pending_team_admin` the user holds into `team_admin`. One acceptance MUST cover every team. Recording the same version twice MUST keep the first acceptance time and MUST promote any pending relation left. Acceptances of earlier versions MUST be kept. The first acceptance of a version MUST emit a `team_admin.charter.accepted` audit event carrying the user identifier and the version. A user SHALL be able to read the time they accepted the configured version, and nothing when they have not.
 
 #### Scenario: First acceptance
 - **WHEN** a user pending on teams A and B accepts version `2026-09`
@@ -63,6 +63,10 @@ Recording an acceptance SHALL store the user's identifier, the configured charte
 #### Scenario: Repeated acceptance
 - **WHEN** the same user accepts `2026-09` again
 - **THEN** the request succeeds, the stored acceptance time is unchanged and no new audit event is emitted
+
+#### Scenario: Reading one's acceptance
+- **WHEN** a user who accepted `2026-09` reads their acceptance while `2026-09` is configured
+- **THEN** the stored acceptance time is returned, and nothing is returned for a user who only accepted an earlier version
 
 ### Requirement: A version change is reconciled at startup
 
@@ -110,7 +114,7 @@ Team settings SHALL show a Responsibilities section with the charter to users wh
 
 #### Scenario: Administrator opens Responsibilities
 - **WHEN** a `team_admin` opens the Responsibilities section
-- **THEN** the charter is shown, with no Accept action
+- **THEN** the charter is shown with the time they accepted it, and no Accept action
 
 #### Scenario: Pending administrator opens Responsibilities
 - **WHEN** a `pending_team_admin` opens the Responsibilities section of a team that has a `team_admin`

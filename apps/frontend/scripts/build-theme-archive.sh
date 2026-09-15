@@ -54,10 +54,13 @@ if [ -n "${ignored}" ]; then
 fi
 
 # The app tries <name>.<lang>.md before <name>.md, and the stock image ships
-# French variants: an English-only override never reaches a French browser.
+# both: an override missing either one leaves those users on the stock text.
 for document in gcu gdpr team-admin-charter; do
     if [ -f "${source_directory}/${document}.md" ] && [ ! -f "${source_directory}/${document}.fr.md" ]; then
         echo "Warning: ${document}.md without ${document}.fr.md - French users keep the stock text" >&2
+    fi
+    if [ -f "${source_directory}/${document}.fr.md" ] && [ ! -f "${source_directory}/${document}.md" ]; then
+        echo "Warning: ${document}.fr.md without ${document}.md - other languages keep the stock text" >&2
     fi
 done
 

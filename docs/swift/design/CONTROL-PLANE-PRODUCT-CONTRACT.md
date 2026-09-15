@@ -3998,9 +3998,14 @@ directly (422). Revoking it cancels the nomination and needs
 
 | Method | Path                                   | Permission    |
 | ------ | -------------------------------------- | ------------- |
+| GET    | `/control-plane/v1/team-admin-charter` | authenticated |
 | POST   | `/control-plane/v1/team-admin-charter` | authenticated |
 
-Records the caller's acceptance of the configured version, then turns every
+`GET` returns the caller's `TeamAdminCharterAcceptance {accepted_at}` for the
+configured version, or `null` when they have not accepted it or the charter is
+off.
+
+`POST` records the caller's acceptance of the configured version, then turns every
 `pending_team_admin` they hold into `team_admin`, writing the new tuple before
 deleting the old one. Idempotent: a repeat also promotes a nomination that raced
 the first call. Returns `TeamAdminCharterAcceptance {accepted_at}`. The first
@@ -4033,8 +4038,9 @@ still be rescued.
 while the team has no `team_admin`. Once the team has one, the pages stay
 available to the user's other roles under a notice leading to the charter. The
 home page, the personal space and other teams stay usable. Team settings show
-the Responsibilities section to `team_admin`s and pending admins, with Accept
-for the latter, and the member list shows "Admin (pending)" on the admin chip.
+the Responsibilities section to `team_admin`s, with the time they accepted it,
+and to pending admins, with Accept. The member list shows "Admin (pending)" on
+the admin chip.
 
 **Rollout.** Publish the theme archive with the charter first, then set the
 version: existing admins become pending at the next startup and see the charter

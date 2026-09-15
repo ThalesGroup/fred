@@ -192,6 +192,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setDefaultTeamsForNewUsersRequest,
       }),
     }),
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: build.query<
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse,
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
+    }),
     acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
       AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
       AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
@@ -1587,6 +1593,9 @@ export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut
 export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
   setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
 };
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance | null;
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg = void;
 export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
   /** status 200 Successful Response */ TeamAdminCharterAcceptance;
 export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
@@ -4150,6 +4159,8 @@ export const {
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useLazyGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

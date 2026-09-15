@@ -23,14 +23,25 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ accept: vi.fn(() => Promise.resolve()) }));
+const h = vi.hoisted(() => ({
+  accept: vi.fn(() => Promise.resolve()),
+  acceptance: undefined as { accepted_at: string } | undefined,
+  skipped: undefined as boolean | undefined,
+}));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { date?: string }) => (options?.date ? `${key}:${options.date}` : key),
+    i18n: { language: "en" },
+  }),
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useAcceptTeamAdminCharterMutation: () => [h.accept, { isLoading: false }],
+  useGetTeamAdminCharterAcceptanceQuery: (_arg: unknown, options: { skip: boolean }) => {
+    h.skipped = options.skip;
+    return { data: options.skip ? undefined : h.acceptance };
+  },
 }));
 
 vi.mock("@shared/molecules/TeamAdminCharterContent/TeamAdminCharterContent.tsx", () => ({
@@ -53,20 +64,25 @@ function render(canAccept?: boolean) {
 afterEach(() => {
   act(() => root.unmount());
   h.accept.mockClear();
+  h.acceptance = undefined;
+  h.skipped = undefined;
 });
 
 describe("TeamSettingsResponsibilities", () => {
-  it("shows the charter read-only to an admin", () => {
+  it("shows an admin when they accepted the charter, with nothing left to accept", () => {
+    h.acceptance = { accepted_at: "2026-09-15T14:10:25Z" };
     render();
 
-    expect(container.textContent).toBe("charter");
+    expect(container.textContent).toContain("charter");
+    expect(container.textContent).toContain("rework.teamAdminCharter.acceptedOn:");
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("lets a pending admin accept the charter", () => {
+  it("lets a pending admin accept the charter without reading an acceptance", () => {
     render(true);
     const accept = container.querySelector("button") as HTMLButtonElement;
 
+    expect(h.skipped).toBe(true);
     act(() => accept.click());
     expect(h.accept).toHaveBeenCalledTimes(1);
   });

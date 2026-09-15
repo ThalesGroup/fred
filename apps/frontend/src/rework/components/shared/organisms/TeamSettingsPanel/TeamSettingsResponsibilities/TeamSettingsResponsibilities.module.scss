@@ -6,8 +6,16 @@
   max-width: 760px;
 }
 
-.actions {
+.footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-m);
   margin-top: var(--spacing-m);
+}
+
+.acceptedAt {
+  margin-right: auto;
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
 }

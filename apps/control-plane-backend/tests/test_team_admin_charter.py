@@ -46,6 +46,7 @@ from control_plane_backend.teams.service import (
     _remove_all_team_member_relations,
     accept_team_admin_charter,
     add_team_member,
+    get_team_admin_charter_acceptance,
     grant_team_member_role,
     reconcile_team_admin_charter_roles,
     resolve_granted_team_relation,
@@ -355,6 +356,22 @@ async def test_accepting_promotes_every_pending_team_and_audits_once(
             {"actor_uid": "nominee", "charter_version": _VERSION},
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_reading_the_acceptance_returns_its_time_for_the_configured_version() -> (
+    None
+):
+    store = _FakeCharterStore({("admin", _VERSION), ("former", "2025-01")})
+    deps = _deps(_FakeRebac(), store)
+
+    accepted = await get_team_admin_charter_acceptance(_user("admin"), deps)
+
+    assert accepted is not None
+    assert accepted.accepted_at == store.accepted[("admin", _VERSION)]
+    assert await get_team_admin_charter_acceptance(_user("former"), deps) is None
+    charter_off = _deps(_FakeRebac(), store, version=None)
+    assert await get_team_admin_charter_acceptance(_user("admin"), charter_off) is None
 
 
 @pytest.mark.asyncio
