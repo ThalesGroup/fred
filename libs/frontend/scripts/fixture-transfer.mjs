@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { packDesignTokens } from "./pack-design-tokens.mjs";
 import { packIframeSdk } from "./pack-iframe-sdk.mjs";
 import { packUi } from "./pack-ui.mjs";
+import { assertMemberChangelog } from "./release-changelog.mjs";
 import { run } from "./process.mjs";
 import {
   assertReleaseToolchain,
@@ -472,7 +473,22 @@ export async function verifyFixtureTransfer({
   };
 }
 
-export async function createArchiveTransfer({
+async function assertTransferChangelogs(contract, producerRoot) {
+  if (contract.state !== "maintainer-confirmed") return;
+  for (const member of contract.inventory.members)
+    await assertMemberChangelog(
+      producerRoot,
+      member,
+      contract.packages[member.id].version,
+    );
+}
+
+export async function checkTransferChangelogs(contract, producerRoot) {
+  validateReleaseContract(contract);
+  return assertTransferChangelogs(contract, producerRoot);
+}
+
+async function createArchiveTransfer({
   outputRoot,
   contract,
   sourceCommit,
@@ -480,6 +496,7 @@ export async function createArchiveTransfer({
   producerToolchain,
   execution,
   createdAt = new Date().toISOString(),
+  producerRoot = workspaceRoot,
   packers = {
     designTokens: packDesignTokens,
     ui: packUi,
@@ -505,6 +522,7 @@ export async function createArchiveTransfer({
       true,
       "CI fixture transfer requires a clean checkout",
     );
+  await assertTransferChangelogs(contract, producerRoot);
   const root = await assertSafeFixtureTransferOutput(outputRoot);
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
@@ -595,6 +613,35 @@ export async function createReleaseCandidateTransfer(options) {
     "maintainer-confirmed",
     "release candidate transfer requires a maintainer-confirmed contract",
   );
+  assert.equal(
+    options.sourceTreeClean,
+    true,
+    "approved transfer requires a clean source tree",
+  );
+  assert.equal(
+    await realpath(options.producerRoot ?? workspaceRoot),
+    await realpath(workspaceRoot),
+    "approved transfer cannot use a disposable producer root",
+  );
+  assert.deepEqual(
+    options.contract,
+    await loadReleaseContract(
+      path.join(workspaceRoot, "release/proposed-release-contract.json"),
+    ),
+    "approved transfer requires the canonical reviewed policy and manifests",
+  );
+  if (options.packers)
+    exactKeys(options.packers, packageRoles, "approved transfer packers");
+  for (const [id, actualPacker] of Object.entries({
+    designTokens: packDesignTokens,
+    ui: packUi,
+    iframeSdk: packIframeSdk,
+  }))
+    assert.equal(
+      options.packers?.[id] ?? actualPacker,
+      actualPacker,
+      `approved transfer requires the actual ${id} packer`,
+    );
   return createArchiveTransfer(options);
 }
 

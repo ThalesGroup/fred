@@ -7,7 +7,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import {
+  loadReleaseContract,
+  workspaceRoot,
+} from "../scripts/release-contract.mjs";
 import {
   releaseContractDigest,
   sha512Integrity,
@@ -27,6 +30,9 @@ import {
 import { run } from "../scripts/process.mjs";
 
 const fixtureContract = await loadReleaseContract();
+const selectedContract = await loadReleaseContract(
+  path.join(workspaceRoot, "release/proposed-release-contract.json"),
+);
 const verifierCli = fileURLToPath(
   new URL("../scripts/registry-verifier.mjs", import.meta.url),
 );
@@ -84,34 +90,6 @@ function expected(
     sourceCommit: "fixture-commit",
     workflow: contract.expectedProvenance.workflow,
   };
-}
-
-function confirmContract(contract) {
-  contract.state = "maintainer-confirmed";
-  contract.distTag = "next";
-  contract.expectedProvenance.repository =
-    "https://github.com/example/release-test";
-  contract.expectedProvenance.workflow =
-    "https://github.com/example/release-test/.github/workflows/release.yml@refs/heads/main";
-  contract.maintainerApproval = {
-    scopeOwner: "fred-oss",
-    owners: {
-      packageApi: "test-package-api-owner",
-      sdkProtocol: "test-sdk-protocol-owner",
-      release: "test-release-owner",
-      npmPublishing: "test-npm-publishing-owner",
-    },
-    bootstrapIdentity: "test-bootstrap-identity",
-    bootstrapAuthorityVerified: true,
-    registryAccess: "public",
-    publishingPolicy: "staged",
-  };
-  for (const entry of Object.values(contract.packages))
-    entry.version = "0.1.0-alpha.1";
-  contract.packages.ui.expectedManifest.peerDependencies[
-    contract.packages.designTokens.name
-  ] = "^0.1.0-alpha.1";
-  return contract;
 }
 
 const gates = {
@@ -777,7 +755,7 @@ test("controlled registry orchestration cannot use fixture evidence as public pr
 });
 
 test("controlled registry orchestration verifies identity before consumers", async (context) => {
-  const contract = confirmContract(structuredClone(fixtureContract));
+  const contract = structuredClone(selectedContract);
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-registry-tooling-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const coordinates = {};
@@ -849,7 +827,7 @@ test("controlled registry orchestration verifies identity before consumers", asy
 });
 
 test("registry consumer tooling builds three clean exact-version fixtures", async () => {
-  const contract = confirmContract(structuredClone(fixtureContract));
+  const contract = structuredClone(selectedContract);
   const packages = Object.fromEntries(
     Object.entries(contract.packages).map(([role, value]) => [
       role,

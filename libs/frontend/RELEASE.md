@@ -10,16 +10,21 @@ workflow is preparation-only and has no publishing or incident-continuation oper
 Release expectations are external inputs, not values inferred from a built archive or a
 downloaded attestation:
 
-- `release/development-fixture-contract.json` exercises the selected coordinates while
-  retaining fixture identities and evidence classifications. It supports repository tests
-  but can never authorize publication.
+- `release/package-inventory.json` registers stable member IDs, contained producer workspaces,
+  and reviewed specialized archive/consumer profiles. Its schema and parser reject unknown,
+  duplicate, root, and escaping registrations. The private root's workspace list must agree.
+- The three committed member `package.json` files alone supply live names, versions, peers,
+  dependencies, exports, and publish metadata. The selected contract no longer copies them.
+- `release/development-fixture-contract.json` retains fixture identities and evidence
+  classifications. Tests may construct future independent coordinates only in disposable
+  manifests; fixture results never authorize publication or genuine registry verification.
 - `release/proposed-release-contract.json` retains its established filename and records the
-  confirmed `fred-oss` organization, three `@fred-oss` coordinates, public npm registry/access,
-  `next` tag, bootstrap account, verified organization-owner authority, all four named owners,
-  direct publishing policy, and expected workflow identity. Its state is
-  `maintainer-confirmed`.
-- A maintainer-confirmed contract must record the exact package names and versions, registry,
-  dist-tag policy, producer Node/npm versions, source repository, bootstrap publisher, named
+  confirmed central scope, public npm registry/access, `next` tag, source repository/branch,
+  workflow filename/environment, four named owners, direct policy, expected provenance issuer,
+  exact producer/application toolchains, and reviewed baseline digest. Its state is
+  `maintainer-confirmed`; package API or SDK protocol ownership is not derived from npm scope.
+- A maintainer-confirmed policy must record exact registry, producer and application Node/npm
+  versions, source repository, bootstrap publisher, named
   API/protocol/release/publishing owners, and
   later Trusted Publishing workflow certificate identity and GitHub Actions OIDC issuer before
   release evidence can be approved. Fixture identities, development versions, and the
@@ -29,6 +34,38 @@ The selected producer pins are [Node 24.21.0](https://nodejs.org/en/download/arc
 and [npm 11.19.0](https://github.com/npm/cli/releases/tag/v11.19.0). They satisfy npm's
 [Trusted Publishing requirements](https://docs.npmjs.com/trusted-publishers/) at the time of
 this change. They are deliberately separate from FRED application's existing Node/npm baseline.
+
+Each member has a `CHANGELOG.md` entry matching its committed manifest version. The factual
+`alpha.1` entries were added in this migration and point to the unchanged historical
+first-release evidence below; they do not assert that the original publication PR contained
+these changelog files. A future
+version requires one exact, nonempty `Review: approved` entry in the source-reviewed version PR;
+that machine check does not itself grant a new npm publication approval. No version is bumped
+automatically. `make release-check` validates the inventory, schemas, manifests, policy,
+private producer links, changelogs, and durable compatibility ledger offline.
+
+The source-reviewed `release/compatibility-baselines.json` retains the exact previously
+published design-token `alpha.1` coordinate, registry SHA-512, independently expected
+attested digest/repository/publication commit/workflow/issuer, and historical verification
+trace. It was imported after checking the retained verification artifact ZIP digest, its
+historical evidence, exact npm registry tarball bytes, and real Sigstore verification. The
+policy pins a digest of that ledger; altering its expectations requires reviewed policy
+change. Normal local checks read the ledger and no longer need the expiring CI ZIP. An
+independent UI release must still recheck the exact registry bytes and cryptographic
+provenance before using this compatibility-only dependency; that execution belongs to the
+next migration slice, not to a fixture test.
+
+`release/release-record.schema.json` and `scripts/release-record.mjs` define separate candidate,
+publishing-attempt, publication-outcome, and verification record models. Current all-member
+`release:candidate` preparation reuses its already validated evidence/bytes to emit a companion
+record with selection, policy/baseline digests, source identity, observed toolchains, archive
+metadata, peer ranges, and gates. Fixture/incomplete records, unpersisted attempt models, and
+controlled verification models cannot authorize publication or claim public registry success.
+The attempt model is provisional and carries no persisted candidate-artifact origin yet;
+task 3.4 will bind and read back that artifact and the actual OIDC execution before it can be
+used as a pre-command publication contract.
+Selected-only packing, durable attempt upload/readback, OIDC publishing, and workflow publish/
+verify paths are later work; the retained workflow remains preparation-only.
 
 The workspace root remains `private: true` and is never a release member. npm-generated
 workspace links are allowed only for the three explicitly declared producer members and must
@@ -92,7 +129,10 @@ generated names. Consumer-cache and browser provisioning remain separate network
 the transferred validation itself installs from the prepared caches and performs no browser
 bootstrap.
 
-Final `fixture-candidate-evidence` is written only after all receiver gates pass. It records the
+Final `fixture-candidate-evidence` and companion `candidate-record.json` are written only after
+all receiver gates pass. The companion record binds that same verified transfer, observed
+application toolchain, and gate results; it joins the retained preparation artifact without
+creating a publishing attempt or authorization. The evidence records the
 transfer metadata digest and artifact identity, the exact archive records, the independently
 observed application Node/npm versions, and downstream results. Failure removes any stale final
 record. A final post-gate verification recomputes the transferred lengths and SHA-512 values and
@@ -142,7 +182,8 @@ Using the confirmed contract requires its exact producer toolchain and a clean s
 ```sh
 npm run release:candidate -- --contract /absolute/path/to/confirmed-contract.json \
   --approved \
-  --evidence /absolute/path/to/candidate-evidence.json
+  --evidence /absolute/path/to/candidate-evidence.json \
+  --record /absolute/path/to/candidate-record.json
 ```
 
 The command packs each member once, validates those bytes, and records the source commit,
@@ -194,6 +235,9 @@ identity and candidate SHA-512 remain the authority, and no publication command 
 on committed `swift` only. Its sole `prepare-only` operation authorizes the source,
 builds and packs one candidate set under Node `24.21.0` / npm `11.19.0`, and transfers
 the exact archives to the separately provisioned application-toolchain validation job.
+The approved transfer constructor accepts only the canonical reviewed policy/manifests,
+canonical producer root, clean-source input, actual packers, and matching reviewed member
+changelogs; disposable roots or injected fixture packers cannot produce release-labeled transfers.
 The receiver rechecks transfer identity, source commit, package coordinates, lengths, and
 SHA-512 values before offline consumers, browser smoke, and production-host compatibility.
 Preparation cannot publish, use a publishing environment or token, or request OIDC write
@@ -209,12 +253,14 @@ reviewed as a separate change.
 
 ## Maintainer decisions and sequencing
 
-The existing confirmed release contract names organization `fred-oss`, scope `@fred-oss`,
-all three `0.1.0-alpha.1` coordinates, the public npm registry, `next` tag,
+The existing confirmed release policy names organization `fred-oss`, scope `@fred-oss`,
+the public npm registry, `next` tag, source branch/workflow/environment,
 bootstrap account `marc.fawaz`, named package API / SDK protocol / release / enduring
 publishing owners, and direct Trusted Publishing as the selected subsequent policy.
-The distinct required GitHub reviewer is `marcfawaz`. This cleanup changes none of those
-contract values and neither installs a Trusted Publisher nor establishes bootstrap-token
+The committed member manifests supply their current `0.1.0-alpha.1` coordinates;
+historical publication facts remain in the evidence appendix and compatibility ledger.
+The distinct required GitHub reviewer is `marcfawaz`. This slice changes no published
+coordinates and neither installs a Trusted Publisher nor establishes bootstrap-token
 revocation. Predecessor OpenSpec task 12.7 therefore remains open.
 
 Future releases must preserve dependency order (design tokens before UI), validate exact

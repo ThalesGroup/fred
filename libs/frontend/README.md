@@ -120,3 +120,12 @@ Release-contract checks, immutable evidence, the preparation workflow, and gener
 registry-verification tooling are documented in [RELEASE.md](RELEASE.md). Fixture evidence
 never authorizes publication. The first-release contract is maintainer-confirmed, but this
 interim workflow has no publishing path.
+
+For independent-release preparation, a schema-checked [package inventory](release/package-inventory.json)
+registers stable IDs and specialized profiles without copying member manifest coordinates.
+The [central release policy](release/proposed-release-contract.json), per-member changelogs,
+and durable [design-token compatibility ledger](release/compatibility-baselines.json) are
+reviewed separately. Run `make release-check` and `make release-test` under the exact release
+Node 24.21.0/npm 11.19.0 toolchain; application-host checks retain their separate Node
+22.13.0/npm 10.9.2 dependencies. The generated candidate record is preparation evidence,
+not a publication authorization.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { packDesignTokens } from "./pack-design-tokens.mjs";
@@ -23,6 +23,9 @@ import {
   sha512Integrity,
   verifyCandidateEvidence,
 } from "./release-evidence.mjs";
+import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
+import { candidateRecordFromEvidence } from "./release-record.mjs";
+import { assertMemberChangelog } from "./release-changelog.mjs";
 
 async function runCandidateGates({ contract, archivePaths, integrities }) {
   const tokens = await stageIsolatedConsumer({
@@ -69,6 +72,7 @@ export async function buildReleaseCandidate({
   producerToolchain,
   applicationToolchain,
   approved = false,
+  root = workspaceRoot,
   runGates = runCandidateGates,
   packers = {
     designTokens: packDesignTokens,
@@ -84,6 +88,34 @@ export async function buildReleaseCandidate({
       contract.state,
       "maintainer-confirmed",
       "approved candidate evidence requires a maintainer-confirmed contract",
+    );
+  if (approved) {
+    assert.equal(
+      await realpath(root),
+      await realpath(workspaceRoot),
+      "approved candidate cannot use a disposable producer root",
+    );
+    assert.equal(
+      runGates,
+      runCandidateGates,
+      "approved candidate requires the actual consumer/browser/host gates",
+    );
+    for (const [id, builder] of Object.entries({
+      designTokens: packDesignTokens,
+      ui: packUi,
+      iframeSdk: packIframeSdk,
+    }))
+      assert.equal(
+        packers[id],
+        builder,
+        `approved candidate requires the actual ${id} packer`,
+      );
+  }
+  for (const member of contract.inventory.members)
+    await assertMemberChangelog(
+      root,
+      member,
+      contract.packages[member.id].version,
     );
   const archives = [];
   for (const role of ["designTokens", "iframeSdk", "ui"]) {
@@ -118,7 +150,13 @@ export async function buildReleaseCandidate({
     approved,
   });
   await verifyCandidateEvidence(evidence, archivePaths, { contract });
-  return { archives, evidence };
+  const record = await candidateRecordFromEvidence({
+    evidence,
+    contract,
+    ledger: await loadCompatibilityLedger(),
+    archivePaths,
+  });
+  return { archives, evidence, record };
 }
 
 function optionValue(name) {
@@ -160,7 +198,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     evidencePath,
     `${JSON.stringify(result.evidence, null, 2)}\n`,
   );
+  const recordPath = path.resolve(
+    workspaceRoot,
+    optionValue("--record") ?? "target/release-evidence/record.json",
+  );
+  await mkdir(path.dirname(recordPath), { recursive: true });
+  await writeFile(recordPath, `${JSON.stringify(result.record, null, 2)}\n`);
   process.stdout.write(
-    `${JSON.stringify({ evidencePath, ...result }, null, 2)}\n`,
+    `${JSON.stringify({ evidencePath, recordPath, ...result }, null, 2)}\n`,
   );
 }

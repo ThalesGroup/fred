@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   stat,
   symlink,
@@ -25,7 +26,10 @@ import {
   fixtureTransferMetadataFilename,
   verifyFixtureTransfer,
 } from "../scripts/fixture-transfer.mjs";
-import { validateTransferredFixture } from "../scripts/fixture-transfer-validation.mjs";
+import {
+  persistCandidatePair,
+  validateTransferredFixture,
+} from "../scripts/fixture-transfer-validation.mjs";
 import {
   loadReleaseContract,
   packageRoles,
@@ -72,6 +76,34 @@ async function roots(context) {
   };
 }
 
+test("a failed second final rename removes a complete record and both temporary files", async (context) => {
+  const { root } = await roots(context);
+  const recordPath = path.join(root, "candidate-record.json");
+  const evidencePath = path.join(root, "candidate-evidence.json");
+  let renames = 0;
+  await assert.rejects(
+    persistCandidatePair({
+      recordPath,
+      evidencePath,
+      record: { readiness: "complete" },
+      evidence: { kind: "release-candidate-evidence" },
+      renameFile: async (...args) => {
+        if (++renames === 2) throw new Error("second rename failed");
+        return rename(...args);
+      },
+    }),
+    /second rename failed/,
+  );
+  assert.equal(renames, 2);
+  for (const file of [
+    recordPath,
+    evidencePath,
+    `${recordPath}.tmp`,
+    `${evidencePath}.tmp`,
+  ])
+    await assert.rejects(access(file), { code: "ENOENT" });
+});
+
 async function packerFixtures(root, contract, calls = []) {
   const packers = {};
   for (const role of packageRoles) {
@@ -107,31 +139,6 @@ async function createTransfer(context) {
   });
   await cp(paths.producer, paths.receiver, { recursive: true });
   return { paths, contract, calls };
-}
-
-function confirmedContract(contract) {
-  const confirmed = structuredClone(contract);
-  confirmed.state = "maintainer-confirmed";
-  confirmed.maintainerApproval = {
-    scopeOwner: "fred-oss",
-    owners: {
-      packageApi: "fixture-package-api-owner",
-      sdkProtocol: "fixture-sdk-protocol-owner",
-      release: "fixture-release-owner",
-      npmPublishing: "fixture-npm-publishing-owner",
-    },
-    bootstrapIdentity: "fixture-bootstrap-account",
-    bootstrapAuthorityVerified: true,
-    registryAccess: "public",
-    publishingPolicy: "direct",
-  };
-  confirmed.expectedProvenance = {
-    repository: "https://github.com/ThalesGroup/fred",
-    workflow:
-      "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
-    certificateIssuer: "https://token.actions.githubusercontent.com",
-  };
-  return confirmed;
 }
 
 async function mutateMetadata(root, mutate) {
@@ -173,13 +180,22 @@ test("a valid fixture transfer is consumed from separate exact bytes without reb
   assert.equal(result.evidence.sourceCommit, sourceCommit);
   assert.deepEqual(result.evidence.applicationToolchain, applicationToolchain);
   assert.equal((await stat(paths.evidence)).isFile(), true);
+  assert.equal(result.record.kind, "candidate");
+  assert.equal(result.record.readiness, "fixture");
+  assert.deepEqual(result.record.transferOrigin, {
+    artifactName: result.evidence.transfer.artifactName,
+    metadataDigest: result.metadataDigest,
+    execution,
+  });
+  assert.equal((await stat(result.recordPath)).isFile(), true);
   assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
 });
 
 test("a maintainer-confirmed transfer becomes approved evidence only after receiver gates", async (context) => {
   const paths = await roots(context);
-  const contract = confirmedContract(await loadReleaseContract());
-  const calls = [];
+  const contract = await loadReleaseContract(
+    path.join(workspaceRoot, "release/proposed-release-contract.json"),
+  );
   await createReleaseCandidateTransfer({
     outputRoot: paths.producer,
     contract,
@@ -188,7 +204,6 @@ test("a maintainer-confirmed transfer becomes approved evidence only after recei
     producerToolchain: contract.releaseToolchain,
     execution,
     createdAt: "2026-09-14T00:00:00.000Z",
-    packers: await packerFixtures(paths.root, contract, calls),
   });
   await cp(paths.producer, paths.receiver, { recursive: true });
   const result = await validateTransferredFixture({
@@ -202,7 +217,7 @@ test("a maintainer-confirmed transfer becomes approved evidence only after recei
     applicationToolchain,
     runGates: async () => successfulGates,
   });
-  assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+  assert.equal(result.record.readiness, "incomplete"); // Injected receiver gates remain controlled.
   assert.equal(result.evidence.kind, "release-candidate-evidence");
   assert.equal(
     result.evidence.transfer.kind,
@@ -473,6 +488,11 @@ test("a failed downstream gate removes stale and writes no final success evidenc
   const { paths, contract } = await createTransfer(context);
   await mkdir(path.dirname(paths.evidence), { recursive: true });
   await writeFile(paths.evidence, "stale success");
+  const recordPath = path.join(
+    path.dirname(paths.evidence),
+    "candidate-record.json",
+  );
+  await writeFile(recordPath, "stale record");
   await assert.rejects(
     validateTransferredFixture({
       transferRoot: paths.receiver,
@@ -491,6 +511,7 @@ test("a failed downstream gate removes stale and writes no final success evidenc
   );
   await assert.rejects(access(paths.evidence), { code: "ENOENT" });
   await assert.rejects(access(`${paths.evidence}.tmp`), { code: "ENOENT" });
+  await assert.rejects(access(recordPath), { code: "ENOENT" });
 });
 
 test("an archive changed by a downstream gate cannot be re-baselined into final evidence", async (context) => {
