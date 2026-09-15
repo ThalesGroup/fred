@@ -21,6 +21,7 @@ from temporalio.client import (
     ScheduleAlreadyRunningError,
     ScheduleIntervalSpec,
     ScheduleSpec,
+    ScheduleState,
 )
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -83,6 +84,44 @@ async def test_ensure_schedule_forwards_workflow_args() -> None:
 
     _, schedule = client.create_schedule.await_args.args
     assert schedule.action.args == [{"dry_run": True}]
+
+
+@pytest.mark.asyncio
+async def test_ensure_schedule_creates_paused_only_when_asked() -> None:
+    paused = _client()
+    await ensure_schedule(
+        paused,
+        "sched-1",
+        workflow="SomeWorkflow",
+        workflow_id="sched-1-run",
+        task_queue="queue",
+        spec=_SPEC,
+        state=ScheduleState(paused=True),
+    )
+    running = _client()
+    await _ensure(running)
+
+    assert paused.create_schedule.await_args.args[1].state.paused is True
+    assert running.create_schedule.await_args.args[1].state.paused is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_schedule_refreshes_the_paused_state_too() -> None:
+    """Resuming a suspended job is the same call with a different state."""
+    client = _client(create_side_effect=ScheduleAlreadyRunningError())
+
+    await ensure_schedule(
+        client,
+        "sched-1",
+        workflow="SomeWorkflow",
+        workflow_id="sched-1-run",
+        task_queue="queue",
+        spec=_SPEC,
+        state=ScheduleState(paused=False),
+    )
+
+    (updater,) = client.get_schedule_handle.return_value.update.await_args.args
+    assert updater(MagicMock()).schedule.state.paused is False
 
 
 @pytest.mark.parametrize(

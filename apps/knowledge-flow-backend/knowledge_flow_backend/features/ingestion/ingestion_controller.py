@@ -50,6 +50,7 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 from fred_core.kpi import KPIActor, KPIWriter
+from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -269,7 +270,7 @@ def upload_basename(raw_filename: str | None) -> str:
     return leaf if leaf not in ("", ".", "..") else "uploaded_file"
 
 
-def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
+def uploadfile_to_path(file: UploadFile, *, filename: str | None = None) -> pathlib.Path:
     """
     Persist one uploaded file into a single temporary work directory.
 
@@ -282,10 +283,14 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     How to use:
     - Pass the FastAPI `UploadFile`.
     - The returned path always points to `<temp>/input/<filename>`.
+    - `filename` overrides the multipart name for a caller that names the
+      document itself rather than letting the upload name it. It goes through
+      the same leaf-name reduction, so an override is no more trusted than a
+      browser's.
     """
     tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = tmp_dir / upload_basename(file.filename)
+    tmp_path = tmp_dir / upload_basename(filename if filename is not None else file.filename)
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
     return tmp_path
@@ -1098,7 +1103,7 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
-            kpi_actor = KPIActor(type="human", user_id=user.uid)
+            kpi_actor = to_kpi_actor(user)
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag

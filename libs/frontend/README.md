@@ -10,9 +10,9 @@ framework-independent `@fred-oss/iframe-sdk` archive foundations; the broader pa
 `private: true` applies to this workspace root and prevents treating its
 orchestration manifest as a package. It does not make workspace members private
 or configure their eventual registry, access policy, version, credentials, or
-publication workflow. The prepared manual workflow publishes only after an explicit bootstrap
-choice and a protected GitHub environment approval; no development or pull-request command
-publishes anything.
+publication workflow. The retained manual workflow is preparation-only and cannot publish;
+no development or pull-request command publishes anything. A future publishing redesign is
+separate work.
 
 The members generate disposable output from canonical files under
 `apps/frontend/src/styles/` and `apps/frontend/src/assets/fonts/`. Do not copy
@@ -116,7 +116,7 @@ iframe client contract and its deliberately buffered transport are documented in
 theme/live-locale protocol extensions, registry publication, FRED package consumption,
 and external adopter integration remain outside these archive foundations.
 
-Release-contract, immutable evidence, bootstrap workflow, and registry-verification tooling is
-documented in [RELEASE.md](RELEASE.md). Fixture evidence never authorizes publication, and the
-first-release contract is maintainer-confirmed; publication still requires the separately
-authorized, protected-environment workflow path described in the runbook.
+Release-contract checks, immutable evidence, the preparation workflow, and generic
+registry-verification tooling are documented in [RELEASE.md](RELEASE.md). Fixture evidence
+never authorizes publication. The first-release contract is maintainer-confirmed, but this
+interim workflow has no publishing path.

@@ -1,0 +1,45 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+}
+
+.back {
+  text-decoration: none;
+}
+
+.title {
+  font-weight: 600;
+  font-size: var(--font-size-l);
+}
+
+.kind {
+  color: var(--color-on-surface-retreat);
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-l);
+}
+
+.table {
+  flex: 1 1 auto;
+  padding: 0 var(--spacing-l) var(--spacing-l);
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Size and date: always on one line under a fixed-width column, as in a
+   team's resources. */
+.nowrapCell {
+  white-space: nowrap;
+}

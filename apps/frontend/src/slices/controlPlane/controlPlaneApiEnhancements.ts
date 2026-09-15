@@ -20,6 +20,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
+    "ControlPlaneKnowledgeBase",
   ],
   endpoints: {
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
@@ -371,6 +372,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
       ],
     },
+    // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
+    // route needs no team — so it invalidates the whole type rather than one
+    // team's list: the alternative is passing a team id the API never asked for.
+    listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneKnowledgeBase" as const, id: `LIST-${arg.teamId}` }],
+    },
+    createKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneKnowledgeBase", id: `LIST-${arg.knowledgeBaseInstanceCreate.team_id}` },
+      ],
+    },
+    deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: {
+      invalidatesTags: () => [{ type: "ControlPlaneKnowledgeBase" }],
+    },
     // Prompt library (PROMPT-09 follow-up, #2174): the single-prompt detail
     // query is shared by both the edit form and PromptViewDialog — without
     // tag invalidation, saving a prompt never refreshed that cached detail,
@@ -504,6 +519,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  // A team's Knowledge Bases: what fills a library, and how often.
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,
+  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation: useCreateKnowledgeBaseMutation,
+  useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation:
+    useDeleteKnowledgeBaseMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: useKnowledgeBaseDefinitionsQuery,
+  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,

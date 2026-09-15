@@ -1,0 +1,85 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 1rem auto;
+  border-radius: var(--radius-l);
+  background: var(--surface-main);
+  padding: var(--spacing-l);
+  width: min(52rem, calc(100vw - 2rem));
+}
+
+/* Focused programmatically only, to put a keyboard user inside the dialog —
+   ringing the whole card would read as if it were the control. */
+.card:focus {
+  outline: none;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-start;
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+
+@media (max-width: 720px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}

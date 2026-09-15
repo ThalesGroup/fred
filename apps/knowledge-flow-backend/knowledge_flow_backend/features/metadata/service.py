@@ -528,7 +528,7 @@ class MetadataService:
                 # separately and strand the bytes.
                 await self._delete_and_release(metadata, tag_ids=original_tag_ids, user_id=user.uid)
                 try:
-                    from fred_core.kpi import KPIActor
+                    from fred_core.kpi.kpi_writer import to_kpi_actor
 
                     tag_store = ApplicationContext.get_instance().get_tag_store()
                     removed_tag = await tag_store.get_tag_by_id(tag_id_to_remove)
@@ -542,7 +542,7 @@ class MetadataService:
                             "file_type": metadata.file.file_type.value if metadata.file else "other",
                             "team_id": team_id,
                         },
-                        actor=KPIActor(type="human", user_id=user.uid),
+                        actor=to_kpi_actor(user),
                     )
                 except Exception as kpi_exc:  # noqa: BLE001
                     logger.warning("[METADATA][KPI] Failed to emit document.deleted_total: %s", kpi_exc)
@@ -1140,7 +1140,7 @@ class MetadataService:
                 await self.metadata_store.save_metadata(metadata)
             if prev_metadata is None:
                 try:
-                    from fred_core.kpi import KPIActor
+                    from fred_core.kpi.kpi_writer import to_kpi_actor
 
                     tag_store = ApplicationContext.get_instance().get_tag_store()
                     first_tag_id = metadata.tags.tag_ids[0] if metadata.tags and metadata.tags.tag_ids else None
@@ -1155,7 +1155,7 @@ class MetadataService:
                             "file_type": metadata.file.file_type.value if metadata.file else "other",
                             "team_id": team_id,
                         },
-                        actor=KPIActor(type="human", user_id=user.uid),
+                        actor=to_kpi_actor(user),
                     )
                 except Exception as kpi_exc:  # noqa: BLE001
                     logger.warning("[METADATA][KPI] Failed to emit document.created_total: %s", kpi_exc)

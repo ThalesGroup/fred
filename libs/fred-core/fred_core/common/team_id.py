@@ -17,6 +17,10 @@ from typing import NewType
 # TeamId is a distinct type from str for static type checking.
 TeamId = NewType("TeamId", str)
 
+# Route placeholder standing for the caller's own personal space. Not a team id:
+# it must be resolved before anything is written or checked against it.
+PERSONAL_TEAM_ALIAS = "personal"
+
 
 def personal_team_id(user_uid: str) -> TeamId:
     """Return the personal team ID for one user."""
@@ -34,4 +38,4 @@ def is_personal_team_ref(team_id: str | None) -> bool:
     Routes accept the alias in place of the caller's own personal team id, so
     anything refusing personal spaces must refuse both spellings.
     """
-    return team_id == "personal" or is_personal_team_id(team_id)
+    return team_id == PERSONAL_TEAM_ALIAS or is_personal_team_id(team_id)

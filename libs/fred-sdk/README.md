@@ -287,6 +287,38 @@ for a working reference pod.
 
 ---
 
+## Knowledge Bases — beta
+
+`fred_sdk.knowledge_base` tells Fred where a team's documents come from and how to
+keep them current: declare an identity and configuration fields, write one async
+handler, call `knowledge_base_main(kb)`. Fred supplies the destination library, a
+workload identity and a cadence; the handler owns discovery, replay-safe writes and
+explicit retractions — Fred never infers a deletion from absence. Install
+`fred-sdk[knowledge-base]`. Working declarations live in the `fred-samples`
+repository under `knowledge-bases/`.
+
+A Knowledge Base acts as a workload, so it needs a deployment that authenticates
+and a confidential client of its own. A pod started without its client secret and
+realm fails immediately, naming what it lacks. A stack running with authentication
+off cannot host one — including for local development.
+
+**This surface is beta: pin your `fred-sdk` version, as it may change between beta
+releases.** Known limits today:
+
+- Configuration fields are fixed once instances exist — there is no schema
+  migration. Deleting a synchronized folder deletes its documents.
+- A run's fate is visible in the workflow engine only. Counters, summaries and
+  issues a handler returns are not stored or displayed, and Fred offers no run
+  history, manual trigger or worker-health check yet.
+- There is no inventory or checkpoint API, so a handler cannot ask Fred what it
+  already holds; a connector that loses its own state cannot reconcile deletions.
+- A relative path is the document key, so a rename reads as a delete plus an add.
+- Cadences are hourly, daily or weekly, with no immediate first run.
+
+The label applies to Knowledge Bases only, not to this SDK's agent APIs.
+
+---
+
 ## Related packages
 
 | Package        | PyPI                                           | Role                                                                          |

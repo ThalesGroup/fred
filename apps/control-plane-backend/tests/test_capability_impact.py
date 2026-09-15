@@ -36,6 +36,7 @@ from types import SimpleNamespace
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
+from conftest import no_knowledge_base_store
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capabilities import enablement as enablement_mod
 from control_plane_backend.capabilities import impact as impact_mod
@@ -849,6 +850,7 @@ async def test_revoke_preview_tolerates_a_model_the_catalog_dropped() -> None:
     gate on the same id, so it must tolerate the same absence."""
 
     deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
         configuration=SimpleNamespace(
             platform=SimpleNamespace(
                 frontend=SimpleNamespace(

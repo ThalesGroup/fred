@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-ppt-filler"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fred agent capability: fill an uploaded PowerPoint template from chat (ppt_filler)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

@@ -14,7 +14,6 @@ import os from "node:os";
 import path from "node:path";
 import { verify as verifySigstoreBundle } from "sigstore";
 
-import { validateBootstrapRecoveryEvidence } from "./bootstrap-recovery-contract.mjs";
 import { assertRegistryConsumer } from "./dependency-boundaries.mjs";
 import {
   assertProvisionedChromium,
@@ -37,10 +36,6 @@ import {
   fetchExactPackageMetadata,
   waitForPackageMetadata,
 } from "./registry-metadata.mjs";
-import {
-  githubExecution,
-  verifyRegistryVerificationContinuation,
-} from "./registry-verification-continuation.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const consumerFixtures = {
@@ -187,7 +182,6 @@ export async function verifyRegistryTooling({
   resolvePackage,
   verifyPackageSignature,
   installConsumers,
-  provenanceExpectations,
 }) {
   assert.equal(
     contract.state,
@@ -225,8 +219,7 @@ export async function verifyRegistryTooling({
       candidate.integrity,
       `${role} registry integrity differs`,
     );
-    const expectedProvenance =
-      provenanceExpectations?.[role] ?? candidate.expectedProvenance;
+    const expectedProvenance = candidate.expectedProvenance;
     const signatureResult = await verifyPackageSignature(registryPackage, {
       expectedProvenance,
       certificateIssuer: contract.expectedProvenance.certificateIssuer,
@@ -602,6 +595,13 @@ function optionValue(name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const retiredOption = process.argv
+    .slice(2)
+    .find((option) => /^--(?:recovery|verification)-/.test(option));
+  assert(
+    !retiredOption,
+    `${retiredOption} is retired; use --contract, --evidence, and exact package coordinates for generic verification`,
+  );
   const contractPath = optionValue("--contract");
   const evidencePath = optionValue("--evidence");
   assert(contractPath, "--contract is required");
@@ -610,80 +610,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const evidence = JSON.parse(
     await readFile(path.resolve(evidencePath), "utf8"),
   );
-  const recoveryEvidencePath = optionValue("--recovery-evidence");
-  const recoveryPlanPath = optionValue("--recovery-plan");
-  const verificationPlanPath = optionValue("--verification-plan");
-  const verificationInputsPath = optionValue("--verification-inputs");
-  const recoveryArtifactZipPath = optionValue("--recovery-artifact-zip");
-  const recoveryArtifactMetadataPath = optionValue(
-    "--recovery-artifact-metadata",
-  );
-  let provenanceExpectations;
-  let historicalPublication;
-  let verificationExecution;
-  if (verificationPlanPath || verificationInputsPath) {
-    for (const [name, value] of Object.entries({
-      "--recovery-plan": recoveryPlanPath,
-      "--recovery-evidence": recoveryEvidencePath,
-      "--verification-plan": verificationPlanPath,
-      "--verification-inputs": verificationInputsPath,
-      "--recovery-artifact-zip": recoveryArtifactZipPath,
-      "--recovery-artifact-metadata": recoveryArtifactMetadataPath,
-    }))
-      assert(value, `${name} is required for verification continuation`);
-    const continuation = await verifyRegistryVerificationContinuation({
-      contract,
-      recoveryPlan: JSON.parse(
-        await readFile(path.resolve(recoveryPlanPath), "utf8"),
-      ),
-      plan: JSON.parse(
-        await readFile(path.resolve(verificationPlanPath), "utf8"),
-      ),
-      inputs: JSON.parse(
-        await readFile(path.resolve(verificationInputsPath), "utf8"),
-      ),
-      artifactZipPath: recoveryArtifactZipPath,
-      artifactMetadata: JSON.parse(
-        await readFile(path.resolve(recoveryArtifactMetadataPath), "utf8"),
-      ),
-      transferredRoot: path.dirname(path.resolve(evidencePath)),
-      github: githubExecution(),
-    });
-    assert.deepEqual(
-      evidence,
-      continuation.evidence,
-      "candidate evidence differs from the pinned recovery artifact",
-    );
-    provenanceExpectations = continuation.provenanceExpectations;
-    historicalPublication = continuation.historicalPublication;
-    verificationExecution = continuation.verificationExecution;
-  } else if (recoveryEvidencePath || recoveryPlanPath) {
-    assert(recoveryEvidencePath, "--recovery-evidence is required");
-    assert(recoveryPlanPath, "--recovery-plan is required");
-    const recoveryEvidence = JSON.parse(
-      await readFile(path.resolve(recoveryEvidencePath), "utf8"),
-    );
-    const plan = JSON.parse(
-      await readFile(path.resolve(recoveryPlanPath), "utf8"),
-    );
-    validateBootstrapRecoveryEvidence({
-      contract,
-      plan,
-      evidence,
-      recoveryEvidence,
-      github: {
-        actions: process.env.GITHUB_ACTIONS,
-        repository: process.env.GITHUB_REPOSITORY,
-        ref: process.env.GITHUB_REF,
-        sha: process.env.GITHUB_SHA,
-        workflowRef: process.env.GITHUB_WORKFLOW_REF,
-        workflow: process.env.GITHUB_WORKFLOW,
-        runId: process.env.GITHUB_RUN_ID,
-        runAttempt: process.env.GITHUB_RUN_ATTEMPT,
-      },
-    });
-    provenanceExpectations = recoveryEvidence.expectedProvenance;
-  }
   const coordinates = {
     designTokens: optionValue("--design-tokens"),
     ui: optionValue("--ui"),
@@ -757,13 +683,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           ),
         });
       },
-      provenanceExpectations,
     });
     const finalEvidence = {
       ...result,
       kind: "public-registry-verification",
-      ...(historicalPublication ? { historicalPublication } : {}),
-      ...(verificationExecution ? { verificationExecution } : {}),
     };
     const outputPath = optionValue("--output");
     if (outputPath)

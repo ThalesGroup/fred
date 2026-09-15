@@ -176,6 +176,14 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
+  if (capabilities.canUseTeamKnowledgeBases) {
+    navigationItems.push({
+      type: "link",
+      label: t("rework.sidebar.team.menu.knowledgeBases"),
+      icon: { category: "outlined", type: "database", filled: true },
+      linkProps: { to: `/team/${teamId}/knowledge-bases` },
+    });
+  }
   if (showWiki) {
     navigationItems.push({
       type: "link",
