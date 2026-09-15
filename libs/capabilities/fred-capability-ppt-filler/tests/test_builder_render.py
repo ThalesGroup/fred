@@ -26,7 +26,13 @@ from builder_decks import FOOTER, build_showcase_template
 from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
-from fred_capability_ppt_filler.builder.models import PatternOverride, TemplateInventory
+from fred_capability_ppt_filler.builder.models import (
+    Box,
+    Pattern,
+    PatternOverride,
+    TemplateInventory,
+    Zone,
+)
 from fred_capability_ppt_filler.builder.overrides import apply_overrides
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
@@ -35,7 +41,12 @@ from fred_capability_ppt_filler.builder.plan import (
     SlidePlan,
     best_for_intent,
 )
-from fred_capability_ppt_filler.builder.render import RenderError, render_deck
+from fred_capability_ppt_filler.builder.render import (
+    RenderError,
+    _assign_text,
+    _unused_item_fields,
+    render_deck,
+)
 from fred_capability_ppt_filler.builder.tools import catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
@@ -465,6 +476,110 @@ def test_one_line_heading_shrinks_then_asks_to_be_shortened():
     )
     long_heading = [w for w in result.warnings if "does not fit on one line" in w]
     assert len(long_heading) == 1 and "A heading far too long" in long_heading[0]
+
+    # A label with nothing under it may take a second line.
+    figures, _ = _render(
+        SlidePlan(
+            pattern=_pattern("Key figures").id,
+            title="Figures",
+            items=[
+                PlanItem(number="12", label="A label far too long for its one line")
+            ],
+        )
+    )
+    assert not [w for w in figures.warnings if "one line" in w]
+
+
+def test_long_item_text_in_a_one_line_box_wraps_without_a_warning():
+    # Only headings and labels are held to one line; a description may wrap.
+    process = _pattern("Process")
+    one_line = process.model_copy(deep=True)
+    for item in one_line.groups[0].items:
+        for zone in item:
+            if zone.role == "body":
+                zone.max_lines = 1
+    inventory = INVENTORY.model_copy(
+        update={
+            "patterns": [
+                one_line if p.id == process.id else p for p in INVENTORY.patterns
+            ]
+        }
+    )
+    result = render_deck(
+        TEMPLATE,
+        inventory,
+        DeckPlan(
+            slides=[
+                SlidePlan(
+                    pattern=process.id,
+                    title="Plan",
+                    items=[
+                        PlanItem(
+                            heading="Start",
+                            text="A description written in full sentences, " * 2,
+                        )
+                    ],
+                )
+            ]
+        ),
+    )
+    assert not [w for w in result.warnings if "one line" in w]
+
+
+def _zone(key: str, role: str, y: int) -> Zone:
+    return Zone(key=key, role=role, box=Box(x=50, y=y, w=900, h=60))  # type: ignore[arg-type]
+
+
+def test_contact_bullets_skip_zones_already_filled():
+    contact = Pattern(
+        id="layout:0",
+        source="layout",
+        source_index=0,
+        name="Contact",
+        label="Contact",
+        intent="contact",
+        zones=[
+            _zone("ph:0", "title", 50),
+            _zone("ph:1", "subtitle", 150),
+            _zone("ph:2", "body", 250),
+            _zone("ph:3", "body", 350),
+        ],
+    )
+    lost: list[str] = []
+    out = _assign_text(
+        contact,
+        SlidePlan(title="Jane", subtitle="CEO", bullets=["jane@x.io", "+33 1"]),
+        lost,
+    )
+    assert lost == []
+    assert [out[k][0].text for k in ("ph:1", "ph:2", "ph:3")] == [
+        "CEO",
+        "jane@x.io",
+        "+33 1",
+    ]
+
+
+def test_a_lost_subtitle_is_reported_as_the_subtitle():
+    lost: list[str] = []
+    _assign_text(
+        _pattern("Two columns"),
+        SlidePlan(
+            title="T",
+            subtitle="S",
+            columns=[PlanColumn(bullets=["a"]), PlanColumn(bullets=["b"])],
+        ),
+        lost,
+    )
+    assert lost == ["subtitle"]
+
+
+def test_items_shown_by_another_group_of_the_slide_are_not_reported():
+    figures = _pattern("Key figures").groups[0]  # number, label
+    steps = _pattern("Process").groups[0]  # number, heading, body
+    item = PlanItem(number="1", label="People", heading="Start", text="Kick-off")
+    plan = SlidePlan(items=[item])
+    assert _unused_item_fields([figures, steps], plan) == []
+    assert _unused_item_fields([figures], plan) == ["items' heading", "items' text"]
 
 
 def test_catalogue_names_plan_fields_and_offers_nothing_on_fixed_slides():

@@ -78,6 +78,23 @@ class RenderResult:
     preview_pptx: bytes = b""
 
 
+_FILLS = ("a:solidFill", "a:gradFill", "a:pattFill", "a:blipFill")
+
+
+def _is_bare_text_box(sp) -> bool:
+    """A text box drawing nothing but its text: widening it moves no visible edge."""
+    non_visual = sp.find(f"{qn('p:nvSpPr')}/{qn('p:cNvSpPr')}")
+    props = sp.find(qn("p:spPr"))
+    if non_visual is None or non_visual.get("txBox") != "1" or props is None:
+        return False
+    if sp.find(qn("p:style")) is not None:
+        return False
+    if any(props.find(qn(tag)) is not None for tag in _FILLS):
+        return False
+    line = props.find(qn("a:ln"))
+    return line is None or line.find(qn("a:noFill")) is not None
+
+
 def _widen_no_wrap_text(presentation) -> int:
     """Give every one-line text box the room it would take in PowerPoint.
 
@@ -103,6 +120,7 @@ def _widen_no_wrap_text(presentation) -> int:
                 or xfrm is None
                 or xfrm.get("rot") not in (None, "0")
                 or sp.find(f"{qn('p:nvSpPr')}/{qn('p:nvPr')}/{qn('p:ph')}") is not None
+                or not _is_bare_text_box(sp)
                 or not "".join(t.text or "" for t in sp.iter(qn("a:t"))).strip()
             ):
                 continue
@@ -485,7 +503,7 @@ def _assign_text(
 
     if zmap.subtitles:
         put(zmap.subtitles[0], subtitle, "subtitle")
-    elif subtitle and not bullets and zmap.bodies:
+    elif subtitle and not bullets and zmap.bodies and not plan.columns:
         bullets = subtitle
     elif subtitle:
         lost.append("subtitle")
@@ -509,7 +527,7 @@ def _assign_text(
         return out
 
     if pattern.intent == "contact" and bullets:
-        zones = zmap.stacked()
+        zones = [z for z in zmap.stacked() if z.key not in out]
         for zone, line in zip(zones, bullets):
             put(zone, [line], "bullets")
         if len(bullets) > len(zones):
@@ -530,11 +548,12 @@ def _assign_text(
     return out
 
 
-def _unused_item_fields(group: RepeatGroup, plan: SlidePlan) -> List[str]:
-    """Item fields the plan fills that this group has no zone for."""
-    roles = set(group.item_zones)
+def _unused_item_fields(groups: Sequence[RepeatGroup], plan: SlidePlan) -> List[str]:
+    """Item fields the plan fills that none of the slide's groups has a zone for
+    (every group is fed the same items)."""
+    roles = {role for group in groups for role in group.item_zones}
     lost: Dict[str, None] = {}
-    for item in plan.items[: group.count]:
+    for item in plan.items[: max((g.count for g in groups), default=0)]:
         heading_shown = bool(roles & {"heading", "title", "subtitle"}) or (
             "label" in roles and not item.label
         )
@@ -583,16 +602,33 @@ def _assign_group(
 # --- rendering ------------------------------------------------------------------------------
 
 
+def _has_text_below(zone: Zone, siblings: Sequence[Zone]) -> bool:
+    """Whether another text zone of the same item starts under this one: only
+    then does a second line run into something."""
+    bottom = zone.box.y + zone.box.h
+    return any(
+        other.key != zone.key
+        and other.role not in ("image", "keep")
+        and other.box.y >= zone.box.y + zone.box.h / 2
+        and other.box.y <= bottom + zone.box.h
+        and other.box.x < zone.box.x + zone.box.w
+        and zone.box.x < other.box.x + other.box.w
+        for other in siblings
+    )
+
+
 def _only_names_the_slide(plan: SlidePlan, pattern: Pattern) -> bool:
-    """A closing slide given its own title ("Merci" on "Merci") lost nothing."""
-    alone = plan.model_copy(update={"title": None})
-    return (
-        bool(plan.title)
-        and not has_content(alone)
-        and (
-            lexicon.normalize(plan.title or "")
-            in {lexicon.normalize(pattern.label), lexicon.normalize(pattern.name)}
-        )
+    """A fixed slide given only the title it already shows ("Merci" on "Merci",
+    or any closing word on a closing slide) lost nothing."""
+    title = plan.title or ""
+    if not title or has_content(plan.model_copy(update={"title": None})):
+        return False
+    names = {lexicon.normalize(pattern.label), lexicon.normalize(pattern.name)}
+    closing = lexicon.name_matches(
+        pattern.label, lexicon.CLOSING_NAMES
+    ) or lexicon.name_matches(pattern.name, lexicon.CLOSING_NAMES)
+    return lexicon.normalize(title) in names or (
+        closing and lexicon.name_matches(title, lexicon.CLOSING_NAMES)
     )
 
 
@@ -651,7 +687,11 @@ class _Renderer:
         buffer = io.BytesIO()
         self.prs.save(buffer)
         preview = buffer
-        if _widen_no_wrap_text(self.prs):
+        try:
+            widened = _widen_no_wrap_text(self.prs)
+        except (ValueError, TypeError):  # unexpected geometry: preview as delivered
+            widened = 0
+        if widened:
             preview = io.BytesIO()
             self.prs.save(preview)
         return RenderResult(
@@ -687,12 +727,12 @@ class _Renderer:
             lost.append(f"{len(plan_images) - len(zmap.images)} image(s)")
         if plan.items and not pattern.groups:
             lost.append("items")
+        lost.extend(_unused_item_fields(pattern.groups, plan))
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(group, plan)
             text.update(group_text)
             image_ids.update(group_images)
-            lost.extend(f for f in _unused_item_fields(group, plan) if f not in lost)
             if len(plan.items) > group.count:
                 self.warnings.append(
                     f"Slide {position}: '{pattern.label}' holds {group.count} items, "
@@ -730,6 +770,12 @@ class _Renderer:
             for key, item in zip(g.item_keys, g.items)
             for z in item
         }
+        siblings: Dict[str, Sequence[Zone]] = {
+            z.key: pattern.zones for z in pattern.zones
+        }
+        siblings.update(
+            {z.key: item for g in pattern.groups for item in g.items for z in item}
+        )
         for zone in self._fillable_text_zones(pattern):
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
@@ -751,7 +797,11 @@ class _Renderer:
             one_line_room: Optional[int] = None
             if _grows_with_text(shape):
                 scale, one_line_room = self._no_wrap_scale(
-                    zone, lines, placed, containers.get(zone.key)
+                    zone,
+                    lines,
+                    placed,
+                    containers.get(zone.key),
+                    _has_text_below(zone, siblings.get(zone.key, ())),
                 )
                 truncated = False
             else:
@@ -870,15 +920,16 @@ class _Renderer:
         lines: List[_Line],
         placed: PlacedShape,
         container: Optional[PlacedShape],
+        text_below: bool = False,
     ) -> Tuple[Optional[float], Optional[int]]:
         """Keep a box that grows with its text (a KPI figure, its caption)
         inside its card, identically in PowerPoint and in the PDF preview.
 
         The room runs to the card's right edge (or the slide's). A box too
         narrow for its text is widened to that room. A figure stays on one line
-        and shrinks as needed; a one-line heading or label shrinks down to the
-        overflow floor, then wraps and returns how many characters would fit, so
-        the agent shortens it; other text wraps between words and only shrinks
+        and shrinks as needed; a one-line heading or label with text right below
+        it shrinks down to the overflow floor, then wraps and returns how many
+        characters would fit, so the agent shortens it; other text wraps between words and only shrinks
         for a word longer than the room. Returns ``(font scale, one-line room)``.
         """
         if not zone.font_pt or placed.width <= 0:
@@ -903,7 +954,12 @@ class _Renderer:
             return (round(max(0.4, room / needed), 2) if needed > room else None), None
         if needed <= room:
             return None, None
-        if (zone.max_lines or 1) <= 1 and len(texts) == 1:
+        if (
+            zone.role in ("heading", "label")
+            and text_below
+            and (zone.max_lines or 1) <= 1
+            and len(texts) == 1
+        ):
             if room / needed >= MIN_FONT_SCALE:
                 return round(room / needed, 2), None
             shrunk = MIN_FONT_SCALE
