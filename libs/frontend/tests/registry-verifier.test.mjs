@@ -826,6 +826,134 @@ test("controlled registry orchestration verifies identity before consumers", asy
   assert.equal(result.kind, "registry-verifier-tooling");
 });
 
+test("selected registry tooling verifies SDK alone and UI with an independently reviewed token", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-selected-registry-tooling-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  for (const selectedIds of [["iframeSdk"], ["ui"]]) {
+    const archives = [];
+    const coordinates = {};
+    const paths = {};
+    for (const role of selectedIds) {
+      const archivePath = path.join(root, `${role}-selected.tgz`);
+      await writeFile(archivePath, `${role} controlled selected archive`);
+      archives.push({ role, path: archivePath });
+      paths[role] = archivePath;
+      coordinates[role] =
+        `${contract.packages[role].name}@${contract.packages[role].version}`;
+    }
+    const evidence = await createCandidateEvidence({
+      contract,
+      archives,
+      sourceCommit: "f".repeat(40),
+      producerToolchain: contract.releaseToolchain,
+      applicationToolchain,
+      gates,
+      approved: true,
+    });
+    const resolvedRoles = [];
+    const result = await verifyRegistryTooling({
+      contract,
+      evidence,
+      coordinates,
+      selectedIds,
+      ledger,
+      resolvePackage: async ({ role, candidate }) => {
+        resolvedRoles.push(role);
+        return {
+          role,
+          integrity: candidate.integrity,
+          archivePath: paths[role] ?? paths.ui,
+        };
+      },
+      verifyPackageSignature: async ({ role }, { expectedProvenance }) => ({
+        cryptographicallyVerified: true,
+        identity: {
+          ...expectedProvenance,
+          ...(role === "designTokens"
+            ? { sourceCommit: ledger.baselines[0].expected.sourceCommit }
+            : {}),
+        },
+      }),
+      installConsumers: async ({ selectedIds: members, compatibilityOnly }) => {
+        assert.deepEqual(members, selectedIds);
+        assert.deepEqual(
+          compatibilityOnly,
+          selectedIds.includes("ui") ? ["designTokens"] : [],
+        );
+      },
+    });
+    assert.deepEqual(
+      resolvedRoles,
+      selectedIds.includes("ui") ? ["ui", "designTokens"] : ["iframeSdk"],
+    );
+    assert.deepEqual(result.selectedIds, selectedIds);
+    assert.equal(
+      result.packages.designTokens?.compatibilityOnly,
+      selectedIds.includes("ui") ? true : undefined,
+    );
+  }
+});
+
+test("UI-only registry tooling rejects missing baseline and wrong validly signed baseline identity", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-wrong-baseline-registry-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "ui.tgz");
+  await writeFile(archivePath, "controlled UI bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "ui", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const coordinates = {
+    ui: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
+  };
+  const options = {
+    contract,
+    evidence,
+    coordinates,
+    selectedIds: ["ui"],
+    resolvePackage: async ({ role, candidate }) => ({
+      role,
+      integrity: candidate.integrity,
+      archivePath,
+    }),
+    verifyPackageSignature: async ({ role }, { expectedProvenance }) => ({
+      cryptographicallyVerified: true,
+      identity:
+        role === "designTokens"
+          ? { ...expectedProvenance, sourceCommit: "0".repeat(40) }
+          : expectedProvenance,
+    }),
+    installConsumers: async () =>
+      assert.fail("wrong baseline must fail before consumers"),
+  };
+  await assert.rejects(verifyRegistryTooling(options), /compatibility ledger/);
+  await assert.rejects(
+    verifyRegistryTooling({ ...options, ledger }),
+    /provenance sourceCommit differs/,
+  );
+});
+
 test("registry consumer tooling builds three clean exact-version fixtures", async () => {
   const contract = structuredClone(selectedContract);
   const packages = Object.fromEntries(

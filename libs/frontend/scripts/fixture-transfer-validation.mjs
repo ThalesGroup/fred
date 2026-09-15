@@ -3,82 +3,26 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runBrowserSmoke } from "./browser-smoke.mjs";
+import { runCandidateGates } from "./release-candidate.mjs";
 import {
   archiveTransferArtifactName,
   fixtureExecution,
   verifyFixtureTransfer,
 } from "./fixture-transfer.mjs";
-import { runIframeSdkHostIntegration } from "./iframe-sdk-host-integration.mjs";
-import { stageIsolatedConsumer } from "./isolated-consumer.mjs";
-import { stageIsolatedIframeSdkConsumer } from "./isolated-iframe-sdk-consumer.mjs";
-import { stageIsolatedReactConsumer } from "./isolated-react-consumer.mjs";
 import { run } from "./process.mjs";
 import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
 import {
   candidateRecordFromEvidence,
   validateReleaseRecord,
 } from "./release-record.mjs";
-import {
-  loadReleaseContract,
-  packageRoles,
-  workspaceRoot,
-} from "./release-contract.mjs";
+import { loadReleaseContract, workspaceRoot } from "./release-contract.mjs";
+import { selectReleaseMembers, selectionOption } from "./release-selection.mjs";
+import { resolveUiTokenDependency } from "./compatibility-baselines.mjs";
 import {
   assertApplicationToolchain,
   createCandidateEvidence,
   verifyCandidateEvidence,
 } from "./release-evidence.mjs";
-
-async function runTransferredGates({
-  contract,
-  archivePaths,
-  integrities,
-  stageRoot,
-}) {
-  const tokenOutput = path.join(stageRoot, "tokens");
-  const reactOutput = path.join(stageRoot, "react");
-  const iframeSdkOutput = path.join(stageRoot, "iframe-sdk");
-  const tokens = await stageIsolatedConsumer({
-    contract,
-    archivePath: archivePaths.designTokens,
-    expectedIntegrity: integrities.designTokens,
-    stagedOutputPath: tokenOutput,
-  });
-  const ui = await stageIsolatedReactConsumer({
-    contract,
-    tokenArchivePath: archivePaths.designTokens,
-    uiArchivePath: archivePaths.ui,
-    expectedIntegrities: integrities,
-    stagedOutputPath: reactOutput,
-  });
-  const iframeSdk = await stageIsolatedIframeSdkConsumer({
-    contract,
-    archivePath: archivePaths.iframeSdk,
-    expectedIntegrity: integrities.iframeSdk,
-    stagedOutputPath: iframeSdkOutput,
-  });
-  const host = await runIframeSdkHostIntegration({
-    contract,
-    archivePath: archivePaths.iframeSdk,
-    expectedIntegrity: integrities.iframeSdk,
-  });
-  const browser = await runBrowserSmoke({
-    tokenOutput,
-    reactOutput,
-    iframeSdkOutput,
-  });
-  return {
-    archives: { validated: true, reusedPackedBytes: true },
-    consumers: {
-      designTokens: tokens.evidence,
-      ui: ui.evidence,
-      iframeSdk,
-    },
-    browser,
-    host,
-  };
-}
 
 export async function persistCandidatePair({
   evidencePath,
@@ -123,8 +67,10 @@ export async function validateTransferredFixture({
   sourceTreeClean,
   execution,
   applicationToolchain,
-  runGates = runTransferredGates,
+  runGates = runCandidateGates,
+  selection,
 }) {
+  const selectedIds = selectReleaseMembers(contract, selection);
   const outputPath = path.resolve(evidencePath);
   const temporaryPath = `${outputPath}.tmp`;
   const recordPath = path.join(
@@ -144,11 +90,22 @@ export async function validateTransferredFixture({
     sourceTreeClean,
     execution,
   });
+  assert.deepEqual(
+    verified.metadata.selectedIds ??
+      contract.inventory.members.map(({ id }) => id),
+    selectedIds,
+    "transferred selection differs from requested packages",
+  );
+  const ledger = await loadCompatibilityLedger();
+  if (selectedIds.includes("ui"))
+    resolveUiTokenDependency({ contract, ledger, selectedIds });
   const gates = await runGates({
     contract,
     archivePaths: verified.archivePaths,
     integrities: verified.integrities,
     stageRoot: path.resolve(stageRoot),
+    selectedIds,
+    ledger,
   });
   const afterGates = await verifyFixtureTransfer({
     transferRoot,
@@ -167,7 +124,7 @@ export async function validateTransferredFixture({
     verified.integrities,
     "fixture transfer archives changed during downstream validation",
   );
-  const archives = packageRoles.map((role) => ({
+  const archives = selectedIds.map((role) => ({
     role,
     path: verified.archivePaths[role],
   }));
@@ -186,7 +143,7 @@ export async function validateTransferredFixture({
       ? "release-candidate-evidence"
       : "fixture-candidate-evidence",
   );
-  for (const role of packageRoles) {
+  for (const role of selectedIds) {
     const transferRecord = verified.metadata.packages[role];
     assert.deepEqual(
       {
@@ -220,10 +177,15 @@ export async function validateTransferredFixture({
   const record = await candidateRecordFromEvidence({
     evidence,
     contract,
-    ledger: await loadCompatibilityLedger(),
+    ledger,
+    selectedIds,
+    compatibilityOnly:
+      selectedIds.includes("ui") && !selectedIds.includes("designTokens")
+        ? ["designTokens"]
+        : [],
     archivePaths: verified.archivePaths,
   });
-  if (runGates !== runTransferredGates && record.readiness === "complete")
+  if (runGates !== runCandidateGates && record.readiness === "complete")
     record.readiness = "incomplete"; // Controlled injected gates do not claim real browser/host evidence.
   validateReleaseRecord(record);
   await mkdir(path.dirname(outputPath), { recursive: true });
@@ -300,6 +262,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       node: process.versions.node,
       npm: npmVersion.trim(),
     },
+    selection: selectionOption(),
   });
   process.stdout.write(
     `${JSON.stringify(

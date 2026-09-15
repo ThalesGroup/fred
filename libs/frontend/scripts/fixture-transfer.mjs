@@ -27,6 +27,11 @@ import {
   workspaceRoot,
 } from "./release-contract.mjs";
 import { releaseContractDigest, sha512Integrity } from "./release-evidence.mjs";
+import {
+  orderReleaseMembers,
+  selectReleaseMembers,
+  selectionOption,
+} from "./release-selection.mjs";
 
 export const fixtureTransferMetadataFilename = "fixture-transfer.json";
 export const releaseCandidateTransferMetadataFilename =
@@ -200,6 +205,7 @@ export function validateFixtureTransferMetadata(
       "execution",
       "producerValidation",
       "packages",
+      ...(metadata.selectedIds === undefined ? [] : ["selectedIds"]),
     ],
     "fixture transfer metadata",
   );
@@ -283,8 +289,16 @@ export function validateFixtureTransferMetadata(
     browser: false,
     host: false,
   });
-  exactKeys(metadata.packages, packageRoles, "fixture transfer packages");
-  for (const role of packageRoles)
+  const selectedIds = metadata.selectedIds ?? packageRoles;
+  orderReleaseMembers(contract, selectedIds);
+  if (metadata.selectedIds !== undefined)
+    assert.deepEqual(
+      metadata.selectedIds,
+      orderReleaseMembers(contract, selectedIds),
+      "transfer selection order differs",
+    );
+  exactKeys(metadata.packages, selectedIds, "fixture transfer packages");
+  for (const role of selectedIds)
     assertPackageRecord(metadata.packages[role], role, contract);
   return metadata;
 }
@@ -434,7 +448,9 @@ export async function verifyFixtureTransfer({
   );
   const expectedFiles = [
     profile.metadataFilename,
-    ...packageRoles.map((role) => metadata.packages[role].filename),
+    ...(metadata.selectedIds ?? packageRoles).map(
+      (role) => metadata.packages[role].filename,
+    ),
   ].sort();
   const entries = await readdir(root, { withFileTypes: true });
   assert.deepEqual(
@@ -443,7 +459,7 @@ export async function verifyFixtureTransfer({
     "fixture transfer file set differs",
   );
   const archivePaths = {};
-  for (const role of packageRoles) {
+  for (const role of metadata.selectedIds ?? packageRoles) {
     const record = metadata.packages[role];
     const archivePath = path.join(root, record.filename);
     const stats = await assertRegularFile(
@@ -468,14 +484,23 @@ export async function verifyFixtureTransfer({
     metadataDigest: await fileSha256(metadataPath),
     archivePaths,
     integrities: Object.fromEntries(
-      packageRoles.map((role) => [role, metadata.packages[role].integrity]),
+      (metadata.selectedIds ?? packageRoles).map((role) => [
+        role,
+        metadata.packages[role].integrity,
+      ]),
     ),
   };
 }
 
-async function assertTransferChangelogs(contract, producerRoot) {
+async function assertTransferChangelogs(
+  contract,
+  producerRoot,
+  selectedIds = packageRoles,
+) {
   if (contract.state !== "maintainer-confirmed") return;
-  for (const member of contract.inventory.members)
+  for (const member of contract.inventory.members.filter(({ id }) =>
+    selectedIds.includes(id),
+  ))
     await assertMemberChangelog(
       producerRoot,
       member,
@@ -483,9 +508,13 @@ async function assertTransferChangelogs(contract, producerRoot) {
     );
 }
 
-export async function checkTransferChangelogs(contract, producerRoot) {
+export async function checkTransferChangelogs(
+  contract,
+  producerRoot,
+  selectedIds = packageRoles,
+) {
   validateReleaseContract(contract);
-  return assertTransferChangelogs(contract, producerRoot);
+  return assertTransferChangelogs(contract, producerRoot, selectedIds);
 }
 
 async function createArchiveTransfer({
@@ -497,6 +526,7 @@ async function createArchiveTransfer({
   execution,
   createdAt = new Date().toISOString(),
   producerRoot = workspaceRoot,
+  selection,
   packers = {
     designTokens: packDesignTokens,
     ui: packUi,
@@ -504,6 +534,7 @@ async function createArchiveTransfer({
   },
 }) {
   validateReleaseContract(contract);
+  const selectedIds = selectReleaseMembers(contract, selection);
   const profile = transferProfile(contract);
   assertReleaseToolchain(contract, producerToolchain);
   assertFixtureExecution(execution);
@@ -522,12 +553,12 @@ async function createArchiveTransfer({
       true,
       "CI fixture transfer requires a clean checkout",
     );
-  await assertTransferChangelogs(contract, producerRoot);
+  await assertTransferChangelogs(contract, producerRoot, selectedIds);
   const root = await assertSafeFixtureTransferOutput(outputRoot);
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
   const packages = {};
-  for (const role of ["designTokens", "iframeSdk", "ui"]) {
+  for (const role of selectedIds) {
     const result = await packers[role]({ contract, validate: true });
     const expected = contract.packages[role];
     const filename = fixtureArchiveFilename(expected.name, expected.version);
@@ -577,6 +608,7 @@ async function createArchiveTransfer({
       host: false,
     },
     packages,
+    selectedIds,
   };
   validateFixtureTransferMetadata(metadata, {
     contract,
@@ -688,6 +720,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     sourceTreeClean: status.trim() === "",
     producerToolchain: { node: process.versions.node, npm: npmVersion.trim() },
     execution: cliExecution(),
+    selection: selectionOption(),
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

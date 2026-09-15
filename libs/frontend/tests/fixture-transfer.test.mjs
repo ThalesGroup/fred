@@ -150,7 +150,7 @@ async function mutateMetadata(root, mutate) {
 
 test("a valid fixture transfer is consumed from separate exact bytes without rebuilding", async (context) => {
   const { paths, contract, calls } = await createTransfer(context);
-  assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+  assert.deepEqual(calls, ["designTokens", "ui", "iframeSdk"]);
   let downstreamCalls = 0;
   const result = await validateTransferredFixture({
     transferRoot: paths.receiver,
@@ -188,7 +188,77 @@ test("a valid fixture transfer is consumed from separate exact bytes without reb
     execution,
   });
   assert.equal((await stat(result.recordPath)).isFile(), true);
-  assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+  assert.deepEqual(calls, ["designTokens", "ui", "iframeSdk"]);
+});
+
+test("selected SDK/UI archives transfer to a separate application environment without rebuilding", async (context) => {
+  for (const [selection, expected] of [
+    ["iframeSdk", ["iframeSdk"]],
+    ["ui", ["ui"]],
+  ]) {
+    const paths = await roots(context);
+    const contract = await loadReleaseContract();
+    const calls = [];
+    await createFixtureTransfer({
+      outputRoot: paths.producer,
+      contract,
+      selection,
+      sourceCommit,
+      sourceTreeClean: true,
+      producerToolchain: contract.releaseToolchain,
+      execution,
+      packers: await packerFixtures(paths.root, contract, calls),
+    });
+    assert.deepEqual(calls, expected);
+    await cp(paths.producer, paths.receiver, { recursive: true });
+    const result = await validateTransferredFixture({
+      transferRoot: paths.receiver,
+      evidencePath: paths.evidence,
+      stageRoot: paths.stage,
+      contract,
+      selection,
+      sourceCommit,
+      sourceTreeClean: true,
+      execution,
+      applicationToolchain,
+      runGates: async ({ archivePaths, integrities, selectedIds }) => {
+        assert.deepEqual(selectedIds, expected);
+        assert.deepEqual(Object.keys(archivePaths), expected);
+        for (const id of expected)
+          assert.equal(
+            integrities[id],
+            await sha512Integrity(archivePaths[id]),
+          );
+        return successfulGates;
+      },
+    });
+    assert.deepEqual(Object.keys(result.evidence.packages), expected);
+    assert.deepEqual(
+      result.record.selected.map(({ id }) => id),
+      expected,
+    );
+    assert.deepEqual(
+      result.record.compatibilityOnly.map(({ id }) => id),
+      selection === "ui" ? ["designTokens"] : [],
+    );
+    await assert.rejects(
+      validateTransferredFixture({
+        transferRoot: paths.receiver,
+        evidencePath: paths.evidence,
+        stageRoot: paths.stage,
+        contract,
+        selection: selection === "ui" ? "iframeSdk" : "ui",
+        sourceCommit,
+        sourceTreeClean: true,
+        execution,
+        applicationToolchain,
+        runGates: async () =>
+          assert.fail("mismatched selection must fail before gates"),
+      }),
+      /selection differs/,
+    );
+    assert.deepEqual(calls, expected);
+  }
 });
 
 test("a maintainer-confirmed transfer becomes approved evidence only after receiver gates", async (context) => {

@@ -11,6 +11,7 @@ import {
 } from "./release-contract.mjs";
 import { verifyCandidateEvidence } from "./release-evidence.mjs";
 import { assertDocumentSchema } from "./schema-validation.mjs";
+import { orderReleaseMembers } from "./release-selection.mjs";
 import path from "node:path";
 
 const commitPattern = /^[a-f0-9]{40}$/;
@@ -391,11 +392,35 @@ export async function candidateRecordFromEvidence({
   evidence,
   contract,
   ledger,
-  selectedIds = Object.keys(evidence.packages),
+  selectedIds = evidence.selectedIds ?? Object.keys(evidence.packages),
   compatibilityOnly = [],
   archivePaths,
 }) {
   validateReleaseContract(contract);
+  assert.deepEqual(
+    selectedIds,
+    orderReleaseMembers(contract, selectedIds),
+    "candidate record selection order differs from dependencies",
+  );
+  assert.deepEqual(
+    selectedIds,
+    evidence.selectedIds ?? Object.keys(evidence.packages),
+    "candidate record selection differs from packed evidence",
+  );
+  assert.deepEqual(
+    Object.keys(evidence.packages).sort(),
+    [...selectedIds].sort(),
+    "candidate record package set differs from packed evidence",
+  );
+  const requiredCompatibility =
+    selectedIds.includes("ui") && !selectedIds.includes("designTokens")
+      ? ["designTokens"]
+      : [];
+  assert.deepEqual(
+    compatibilityOnly,
+    requiredCompatibility,
+    "candidate record compatibility selection differs from UI peer requirement",
+  );
   validateCompatibilityLedger(ledger);
   assert.equal(
     baselineDigest(ledger),

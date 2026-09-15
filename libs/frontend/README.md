@@ -129,3 +129,10 @@ reviewed separately. Run `make release-check` and `make release-test` under the 
 Node 24.21.0/npm 11.19.0 toolchain; application-host checks retain their separate Node
 22.13.0/npm 10.9.2 dependencies. The generated candidate record is preparation evidence,
 not a publication authorization.
+The current CLI can prepare selected inventory IDs with `--select` (or
+`RELEASE_SELECTION=<ids>` for transfer Makefile targets). Omission retains the existing
+all-member development and preparation commands. SDK-only validation needs only its neutral
+consumer cache; UI-only validation separately provisions and provenance-checks the reviewed
+exact token baseline before its offline React consumer runs. The preparation workflow itself
+remains all-member and preparation-only; see [RELEASE.md](RELEASE.md) for the selected-command
+matrix and evidence limitations.

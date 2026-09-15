@@ -51,12 +51,14 @@ trace. It was imported after checking the retained verification artifact ZIP dig
 historical evidence, exact npm registry tarball bytes, and real Sigstore verification. The
 policy pins a digest of that ledger; altering its expectations requires reviewed policy
 change. Normal local checks read the ledger and no longer need the expiring CI ZIP. An
-independent UI release must still recheck the exact registry bytes and cryptographic
-provenance before using this compatibility-only dependency; that execution belongs to the
-next migration slice, not to a fixture test.
+UI-only provisioning now separately rechecks exact registry metadata/downloaded SHA-512,
+the installed nonlinked dependency graph and npm signatures, and cryptographically verified
+Sigstore provenance against the ledger's independent expectations. It warms the dedicated
+React cache and retains the verified token archive plus a receipt. Offline validation rechecks
+the receipt and bytes; it never needs the historical CI ZIP or a network fetch.
 
 `release/release-record.schema.json` and `scripts/release-record.mjs` define separate candidate,
-publishing-attempt, publication-outcome, and verification record models. Current all-member
+publishing-attempt, publication-outcome, and verification record models. Selected or all-member
 `release:candidate` preparation reuses its already validated evidence/bytes to emit a companion
 record with selection, policy/baseline digests, source identity, observed toolchains, archive
 metadata, peer ranges, and gates. Fixture/incomplete records, unpersisted attempt models, and
@@ -64,8 +66,9 @@ controlled verification models cannot authorize publication or claim public regi
 The attempt model is provisional and carries no persisted candidate-artifact origin yet;
 task 3.4 will bind and read back that artifact and the actual OIDC execution before it can be
 used as a pre-command publication contract.
-Selected-only packing, durable attempt upload/readback, OIDC publishing, and workflow publish/
-verify paths are later work; the retained workflow remains preparation-only.
+Selected packing and immutable transfer are implemented. Durable attempt upload/readback,
+OIDC publishing, and workflow publish/verify paths remain later work; the retained workflow
+remains all-member preparation-only.
 
 The workspace root remains `private: true` and is never a release member. npm-generated
 workspace links are allowed only for the three explicitly declared producer members and must
@@ -82,7 +85,10 @@ contain valid SRI SHA-512 integrity exactly matching the approved record. A matc
 alone is insufficient. Tilde, whitespace/control-character, dot-segment, encoded, query,
 fragment, backslash, absolute, and escaping alternatives are noncanonical. Directory
 dependencies, local Git checkout references, additional local archives, workspace links,
-checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry consumer has
+checkout fallback, and reuse of FRED's dependency tree remain invalid. UI-only offline
+consumption keeps the selected UI `file:` archive distinct from the exact published token
+version in its prepared registry cache. The latter's lock entry must carry the ledger SHA-512,
+approved registry URL, exact version, and no link or local fallback. A registry consumer has
 a stricter boundary: every FRED dependency must resolve to the exact expected registry coordinate
 and integrity without a local fallback.
 
@@ -177,23 +183,66 @@ Never rebuild an archive in the receiver or repair an artifact in place.
 
 ## Candidate and registry commands
 
+`--select` accepts comma-separated stable inventory IDs; omission retains all-member
+commands, while an explicit empty, duplicate, unknown, or private-root selection fails.
+Ordering follows committed dependency/peer edges, so selected design tokens precede UI.
+`iframeSdk` requires no token/UI candidate, React cache, or UI browser output. `designTokens`
+creates only the token candidate. `ui` creates only the UI candidate and consumes the
+separately provisioned exact prior token baseline. `designTokens,ui` validates both candidate
+archives and the committed UI peer range together. The fourth-package fixture in
+`fixtures/release-fourth-package.json` exercises generic selection, record, and registry
+identity checks without registering a real producer member or granting a specialized archive
+validator, consumer, or publication authority.
+
+Network-capable provisioning remains separate from offline validation and browser execution:
+
+```sh
+# SDK-only: no React cache or token/UI prerequisite
+make consumer-provision-iframe-sdk
+make browser-install
+make RELEASE_SELECTION=iframeSdk release-transfer-create
+PLAYWRIGHT_BROWSERS_PATH=target/playwright make RELEASE_SELECTION=iframeSdk release-transfer-validate
+
+# UI-only: prepare the pinned React cache, then independently recheck exact
+# published token bytes and provenance. Neither step runs during validation.
+make consumer-provision-react
+make compatibility-provision
+make browser-install
+make RELEASE_SELECTION=ui release-transfer-create
+PLAYWRIGHT_BROWSERS_PATH=target/playwright make RELEASE_SELECTION=ui release-transfer-validate
+```
+
+Provision the React cache before the compatible-token baseline. Re-running
+`consumer-provision-react` replaces that cache and requires another
+`compatibility-provision` before UI-only offline installation; otherwise the
+missing exact registry response fails with an actionable cache-prerequisite error.
+
+Approved evidence still requires the confirmed contract, clean source, actual packers, and
+real application-toolchain gates. Controlled fixture tests demonstrate selection and transfer
+but are not approved candidate evidence. The retained workflow has no selection dispatch yet;
+it continues to prepare all members by default.
+
 Using the confirmed contract requires its exact producer toolchain and a clean source commit:
 
 ```sh
-npm run release:candidate -- --contract /absolute/path/to/confirmed-contract.json \
+PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:candidate -- \
+  --contract /absolute/path/to/confirmed-contract.json \
   --approved \
   --evidence /absolute/path/to/candidate-evidence.json \
   --record /absolute/path/to/candidate-record.json
 ```
 
-The command packs each member once, validates those bytes, and records the source commit,
-exact Node/npm versions, package coordinates, filenames, sizes, and SHA-512 integrities. Later
+With `--select designTokens`, `--select ui`, `--select iframeSdk`, or a comma-separated
+combination, the command packs only those members once. Omission packs all members. It
+validates those bytes and records the source commit, exact Node/npm versions, package
+coordinates, filenames, sizes, and SHA-512 integrities. Later
 publication must use those same bytes. Rebuilding or modifying an archive invalidates the
 evidence and requires the complete candidate validation again.
 
 Before reusing retained artifacts, run `npm run release:verify-evidence --` with the same
-`--contract`, `--evidence`, `--design-tokens`, `--ui`, and `--iframe-sdk` paths. It recomputes
-every archive integrity and rejects a changed contract, filename, or byte sequence.
+`--contract`, `--evidence`, selected `--design-tokens`/`--ui`/`--iframe-sdk` paths, and
+`--select` when evidence is selected. It recomputes every archive integrity and rejects a
+changed contract, filename, or byte sequence.
 
 After genuine publication, registry verification accepts only exact coordinates and previously
 recorded integrity:
@@ -213,7 +262,11 @@ and authorized workflow identity must independently match the confirmed contract
 evidence. Provenance discovery reads npm's `dist.attestations.url`, validates its npm endpoint
 and exact coordinate, and re-roots only its pathname onto the approved registry before fetching;
 missing, malformed, or disallowed endpoint metadata fails closed. Controlled local tests of this
-behavior are not a successful public-registry run.
+behavior are not a successful public-registry run. Selected verifier helpers distinguish
+selected candidates from the reviewed compatibility-only token dependency and reject wrong
+bytes or provenance. Selected CLI mode reports controlled tooling until durable
+publishing-attempt/outcome execution binding exists; the historical all-member generic command
+remains available.
 
 For each exact coordinate, the verifier checks registry metadata and downloaded archive SHA-512
 against the approved candidate before installation. It then creates and validates a registry-only

@@ -20,6 +20,8 @@ import { packDesignTokens } from "./pack-design-tokens.mjs";
 import { packUi } from "./pack-ui.mjs";
 import { run } from "./process.mjs";
 import { consumerCache } from "./provision-react-consumer.mjs";
+import { loadCompatibilityLedger } from "./compatibility-baselines.mjs";
+import { assertCompatibleTokenProvision } from "./provision-compatible-token.mjs";
 import { loadReleaseContract } from "./release-contract.mjs";
 import { sha512Integrity } from "./release-evidence.mjs";
 import { validateArchive } from "./validate-archive.mjs";
@@ -131,18 +133,47 @@ export async function stageIsolatedReactConsumer({
   contract: selectedContract,
   tokenArchivePath: suppliedTokenArchive,
   uiArchivePath: suppliedUiArchive,
+  compatibleToken,
   expectedIntegrities = {},
 } = {}) {
   const contract = selectedContract ?? (await loadReleaseContract());
+  if (compatibleToken) {
+    const prepared = await assertCompatibleTokenProvision({
+      contract,
+      ledger: await loadCompatibilityLedger(),
+      outputRoot: compatibleToken.outputRoot,
+    });
+    assert.equal(
+      prepared.archivePath,
+      compatibleToken.archivePath,
+      "offline token archive differs from prepared registry bytes",
+    );
+    assert.equal(
+      prepared.receipt.coordinate,
+      compatibleToken.coordinate,
+      "offline token coordinate differs from prepared baseline",
+    );
+    assert.equal(
+      prepared.receipt.integrity,
+      compatibleToken.integrity,
+      "offline token integrity differs from prepared baseline",
+    );
+  }
   await assertReactConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
     throw new Error(
       `React consumer cache is missing at ${cachePath}; run npm run consumer:provision first`,
     );
   });
+  assert(
+    !(compatibleToken && suppliedTokenArchive),
+    "token candidate and compatibility baseline cannot be combined",
+  );
   const tokenArchive =
-    suppliedTokenArchive ?? (await packDesignTokens({ contract })).archivePath;
-  await validateArchive(tokenArchive, { contract });
+    compatibleToken?.archivePath ??
+    suppliedTokenArchive ??
+    (await packDesignTokens({ contract })).archivePath;
+  if (!compatibleToken) await validateArchive(tokenArchive, { contract });
   const uiArchive =
     suppliedUiArchive ?? (await packUi({ contract })).archivePath;
   await validateUiArchive(uiArchive, { contract });
@@ -179,14 +210,19 @@ export async function stageIsolatedReactConsumer({
     );
     const tokenTarget = path.join(consumerRoot, "design-tokens.tgz");
     const uiTarget = path.join(consumerRoot, "ui.tgz");
-    await Promise.all([cp(tokenArchive, tokenTarget), cp(uiArchive, uiTarget)]);
+    if (!compatibleToken) await cp(tokenArchive, tokenTarget);
+    await cp(uiArchive, uiTarget);
     const candidateEvidence = {
       packages: {
-        designTokens: {
-          coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
-          filename: path.basename(tokenTarget),
-          integrity: await sha512Integrity(tokenTarget),
-        },
+        ...(!compatibleToken
+          ? {
+              designTokens: {
+                coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+                filename: path.basename(tokenTarget),
+                integrity: await sha512Integrity(tokenTarget),
+              },
+            }
+          : {}),
         ui: {
           coordinate: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
           filename: path.basename(uiTarget),
@@ -207,8 +243,9 @@ export async function stageIsolatedReactConsumer({
           "--no-audit",
           "--no-fund",
           "--legacy-peer-deps",
+          "--save-exact",
           "--package-lock-only",
-          "./design-tokens.tgz",
+          compatibleToken?.coordinate ?? "./design-tokens.tgz",
           "./ui.tgz",
         ],
         { cwd: consumerRoot, env },
@@ -222,6 +259,18 @@ export async function stageIsolatedReactConsumer({
         ),
         consumerRoot,
         evidence: candidateEvidence,
+        compatibilityOnly: compatibleToken
+          ? [
+              {
+                name: contract.packages.designTokens.name,
+                version: compatibleToken.coordinate.slice(
+                  compatibleToken.coordinate.lastIndexOf("@") + 1,
+                ),
+                integrity: compatibleToken.integrity,
+                registry: contract.registry,
+              },
+            ]
+          : [],
         installDependencies: () =>
           run(
             "npm",
@@ -238,7 +287,7 @@ export async function stageIsolatedReactConsumer({
       });
     } catch (error) {
       throw new Error(
-        `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. Run npm run consumer:provision with network access, then retry offline validation.\n${error.message}`,
+        `Offline React consumer installation failed using ${cachePath}; the lockfile-pinned cache may be incomplete. ${compatibleToken ? "Run make consumer-provision-react and then make compatibility-provision" : "Run npm run consumer:provision"} with network access, then retry offline validation.\n${error.message}`,
         { cause: error },
       );
     }
@@ -249,7 +298,9 @@ export async function stageIsolatedReactConsumer({
     const parsedGraph = JSON.parse(resolvedGraph.stdout);
     for (const [dependency, version] of Object.entries({
       [contract.packages.designTokens.name]:
-        contract.packages.designTokens.version,
+        compatibleToken?.coordinate.slice(
+          compatibleToken.coordinate.lastIndexOf("@") + 1,
+        ) ?? contract.packages.designTokens.version,
       [contract.packages.ui.name]: contract.packages.ui.version,
       react: "19.2.4",
       "react-dom": "19.2.4",
@@ -326,6 +377,15 @@ export async function stageIsolatedReactConsumer({
       resolvedGraph: parsedGraph,
       runtimeInstallations,
       archiveResolution: archiveResolution.stdout.trim(),
+      ...(compatibleToken
+        ? {
+            compatibleToken: {
+              coordinate: compatibleToken.coordinate,
+              integrity: compatibleToken.integrity,
+              mode: "exact registry cache, provisioned and provenance-checked separately",
+            },
+          }
+        : {}),
       typecheck: typecheck.stdout.trim(),
       build: build.stdout.trim(),
       outputFiles,
@@ -362,11 +422,25 @@ export async function stageIsolatedReactConsumer({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const contract = await loadReleaseContract(optionValue("--contract"));
+  const prepared = process.argv.includes("--compatible-token")
+    ? await assertCompatibleTokenProvision({
+        contract,
+        ledger: await loadCompatibilityLedger(),
+      })
+    : undefined;
   const result = await stageIsolatedReactConsumer({
     keep: process.argv.includes("--keep"),
     evidencePath: optionValue("--evidence"),
     stagedOutputPath: "target/staged-consumers/react",
-    contract: await loadReleaseContract(optionValue("--contract")),
+    contract,
+    compatibleToken: prepared
+      ? {
+          archivePath: prepared.archivePath,
+          coordinate: prepared.receipt.coordinate,
+          integrity: prepared.receipt.integrity,
+        }
+      : undefined,
   });
   process.stdout.write(`${JSON.stringify(result.evidence, null, 2)}\n`);
 }

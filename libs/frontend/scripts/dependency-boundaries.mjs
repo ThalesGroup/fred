@@ -120,6 +120,7 @@ export async function assertOfflineConsumerReferences({
   lockfile,
   consumerRoot,
   evidence,
+  compatibilityOnly = [],
 }) {
   const allowed = new Map();
   for (const record of Object.values(evidence.packages ?? {})) {
@@ -175,6 +176,53 @@ export async function assertOfflineConsumerReferences({
   }
 
   const rootLock = lockfile.packages?.[""] ?? {};
+  for (const dependency of compatibilityOnly) {
+    assert(
+      !allowed.has(dependency.name),
+      `${dependency.name} cannot be both candidate and compatibility-only`,
+    );
+    assert.equal(
+      manifest.dependencies?.[dependency.name],
+      dependency.version,
+      `${dependency.name} must use an exact cached registry version`,
+    );
+    assert.equal(
+      rootLock.dependencies?.[dependency.name],
+      dependency.version,
+      `${dependency.name} cached manifest/lock version differs`,
+    );
+    const installed = lockfile.packages?.[`node_modules/${dependency.name}`];
+    assert(installed, `${dependency.name} cached registry lock entry missing`);
+    assert.equal(
+      installed.version,
+      dependency.version,
+      `${dependency.name} cached registry version differs`,
+    );
+    assert.equal(
+      installed.integrity,
+      dependency.integrity,
+      `${dependency.name} cached registry integrity differs`,
+    );
+    assert.notEqual(
+      installed.link,
+      true,
+      `${dependency.name} cached registry package must not be linked`,
+    );
+    assert.equal(
+      typeof installed.resolved,
+      "string",
+      `${dependency.name} cached registry URL missing`,
+    );
+    assert(
+      !isLocalReference(installed.resolved),
+      `${dependency.name} cached registry cannot use local fallback`,
+    );
+    assert.equal(
+      new URL(installed.resolved).origin,
+      new URL(dependency.registry).origin,
+      `${dependency.name} cached registry differs`,
+    );
+  }
   for (const name of allowed.keys()) {
     const manifestReference = manifest.dependencies?.[name];
     const lockReference = rootLock.dependencies?.[name];
@@ -273,6 +321,7 @@ export async function installAfterOfflineReferenceValidation({
   lockfile,
   consumerRoot,
   evidence,
+  compatibilityOnly,
   installDependencies,
 }) {
   assert.equal(
@@ -285,6 +334,7 @@ export async function installAfterOfflineReferenceValidation({
     lockfile,
     consumerRoot,
     evidence,
+    compatibilityOnly,
   });
   return installDependencies();
 }

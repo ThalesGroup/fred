@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import semver from "semver";
 
 import { sha512Integrity } from "./release-evidence.mjs";
 import { verifyProvenanceAttestation } from "./registry-verifier.mjs";
@@ -224,6 +225,49 @@ export async function loadCompatibilityLedger(filePath = ledgerFile) {
   return validateCompatibilityLedger(
     JSON.parse(await readFile(filePath, "utf8")),
   );
+}
+
+export function resolveUiTokenDependency({ contract, ledger, selectedIds }) {
+  validateCompatibilityLedger(ledger);
+  assert.equal(
+    baselineDigest(ledger),
+    contract.approvedBaselineDigest,
+    "compatibility baseline differs from release policy",
+  );
+  const token = contract.packages.designTokens;
+  const range =
+    contract.packages.ui.expectedManifest.peerDependencies?.[token.name];
+  assert(range, "UI token peer range is missing from the committed manifest");
+  if (selectedIds.includes("designTokens")) {
+    assert(
+      semver.satisfies(token.version, range),
+      `selected tokens ${token.version} do not satisfy UI peer ${range}`,
+    );
+    return { kind: "selected", coordinate: `${token.name}@${token.version}` };
+  }
+  const baseline = ledger.baselines.find(
+    ({ memberId }) => memberId === "designTokens",
+  );
+  assert(baseline, "approved design-token baseline is missing");
+  assert.equal(baseline.sourceReviewed, true, "unreviewed token baseline");
+  assert.equal(
+    baseline.registry,
+    contract.registry,
+    "token baseline registry differs from release policy",
+  );
+  const version = baseline.coordinate.slice(
+    baseline.coordinate.lastIndexOf("@") + 1,
+  );
+  assert.equal(
+    baseline.coordinate,
+    `${token.name}@${version}`,
+    "token baseline identity differs from committed manifest",
+  );
+  assert(
+    semver.satisfies(version, range),
+    `baseline tokens ${version} do not satisfy UI peer ${range}`,
+  );
+  return { kind: "compatibility", coordinate: baseline.coordinate, baseline };
 }
 
 // Historical ZIP is an import input only. Once committed, normal validation reads this ledger.
