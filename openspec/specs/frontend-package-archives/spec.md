@@ -1273,7 +1273,6 @@ deployment ownership.
 - **THEN** the same packed client operates without package or host changes specific to
   that consumer
 
-+
 ### Requirement: Release coordinates and metadata are explicit
 
 The release-readiness process SHALL consume an explicitly selected contract for the
