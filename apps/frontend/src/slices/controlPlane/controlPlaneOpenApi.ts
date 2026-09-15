@@ -120,7 +120,12 @@ const injectedRtkApi = api.injectEndpoints({
       ListAllTeamsControlPlaneV1TeamsAllGetApiResponse,
       ListAllTeamsControlPlaneV1TeamsAllGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/teams/all` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/all`,
+        params: {
+          include_membership: queryArg.includeMembership,
+        },
+      }),
     }),
     searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
       SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
@@ -1458,7 +1463,10 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
   createTeamRequest: CreateTeamRequest;
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
-export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = {
+  /** false skips the per-team ReBAC reads: admins, membership and member_count are left unset. For pickers that only need ids and names. */
+  includeMembership?: boolean;
+};
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
   /** status 200 Successful Response */ UserSummary[];
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {

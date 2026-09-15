@@ -212,6 +212,8 @@ async def list_all_teams_unfiltered(
 async def list_all_teams_for_registry(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
+    *,
+    include_membership: bool = True,
 ) -> list[Team]:
     """List every team in the registry (RFC §32, `GET /teams/all`).
 
@@ -226,6 +228,9 @@ async def list_all_teams_for_registry(
     - the response is the full `Team` DTO (admins roster, storage usage,
       description), not bare names and ids — read-only registry metadata that
       still grants nothing over a team's agents, prompts or files
+    - `include_membership=False` skips the per-team ReBAC reads, for pickers
+      that only need ids and names: membership fields keep their defaults and
+      `member_count` is `None`
 
     Example:
     - `teams = await list_all_teams_for_registry(user, deps)`
@@ -233,12 +238,35 @@ async def list_all_teams_for_registry(
     await deps.rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_LIST_ALL_TEAMS, ORGANIZATION_ID
     )
+    if not include_membership:
+        return await _list_registry_teams_without_membership(deps)
     teams = await list_all_teams_unfiltered(user, deps)
     # `list_all_teams_unfiltered` mixes in the caller's own personal space
     # (see `_list_teams` below — `stats.py` filters the same way for the same
     # reason). The registry is `team_metadata_store` rows only (RFC §32);
     # a personal space never had a row there, so it isn't "in the registry".
     return [team for team in teams if not is_personal_team_id(str(team.id))]
+
+
+async def _list_registry_teams_without_membership(
+    deps: TeamServiceDependencies,
+) -> list[Team]:
+    # Registry rows only: no ReBAC read, so the cost no longer grows with the team count.
+    content_store = deps.get_content_store()
+    default_max_storage = deps.configuration.app.default_team_max_resources_storage_size
+    return [
+        _build_team_dto(
+            metadata,
+            admin_ids=set(),
+            member_ids=set(),
+            is_member=False,
+            my_relations=set(),
+            admin_summaries={},
+            content_store=content_store,
+            default_max_resources_storage_size=default_max_storage,
+        ).model_copy(update={"member_count": None})
+        for metadata in await deps.get_team_metadata_store().list_all()
+    ]
 
 
 async def delete_team(
