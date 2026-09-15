@@ -27,8 +27,12 @@ export default function TeamAdminCharterGate({ children }: { children: ReactNode
   const { t } = useTranslation();
   const { teamId, selectedTeam } = useSelectedTeam();
   const onResponsibilities = useMatch("/team/:teamId/settings/responsibilities") !== null;
+  // Keyed to the team in the URL: off team pages the team query is skipped but still returns
+  // the last team it loaded, which would show the notice on the home page.
   const pending =
+    !!teamId &&
     !!selectedTeam &&
+    selectedTeam.id === teamId &&
     "my_relations" in selectedTeam &&
     (selectedTeam.my_relations ?? []).includes("pending_team_admin");
 

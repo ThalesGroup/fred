@@ -26,7 +26,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 type SelectedTeam = { id: string; my_relations: string[]; admins: Array<{ id: string }> };
 
-const h = vi.hoisted(() => ({ team: undefined as SelectedTeam | undefined }));
+const h = vi.hoisted(() => ({ team: undefined as SelectedTeam | undefined, offTeamPages: false }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -34,7 +34,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
-    teamId: h.team?.id,
+    teamId: h.offTeamPages ? undefined : h.team?.id,
     isPersonalTeam: false,
     selectedTeam: h.team,
     canOpenTeamSettings: true,
@@ -69,6 +69,7 @@ afterEach(() => {
   });
   container.remove();
   h.team = undefined;
+  h.offTeamPages = false;
 });
 
 describe("TeamAdminCharterGate", () => {
@@ -104,6 +105,14 @@ describe("TeamAdminCharterGate", () => {
 
   it("never blocks the home page, where no team is selected", () => {
     render("/");
+
+    expect(container.textContent).toBe("team-pages");
+  });
+
+  it("ignores the last team still loaded once the user is back on the home page", () => {
+    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    h.offTeamPages = true;
+    render("/home");
 
     expect(container.textContent).toBe("team-pages");
   });
