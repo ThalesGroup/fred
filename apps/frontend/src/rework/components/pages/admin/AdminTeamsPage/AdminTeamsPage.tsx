@@ -61,7 +61,8 @@ export default function AdminTeamsPage() {
     { query: trimmedAdminQuery },
     { skip: trimmedAdminQuery.length < 2 },
   );
-  const { data: allTeams } = useListAllTeamsQuery();
+  // The admins column needs each team's roster.
+  const { data: allTeams } = useListAllTeamsQuery({ includeMembership: true });
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
 
   // Choosing where new users land is platform_admin-only, unlike the rest of this page.

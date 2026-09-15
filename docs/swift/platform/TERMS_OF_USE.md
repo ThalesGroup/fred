@@ -164,7 +164,7 @@ The charter text is deployment-owned: ship `team-admin-charter.md` and
 "Theme overlay" in [the frontend README](../../../apps/frontend/README.md)).
 Publish the archive before setting the version, and change the version when the
 text changes materially. Contract:
-[CONTROL-PLANE-PRODUCT-CONTRACT.md §53](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md).
+[CONTROL-PLANE-PRODUCT-CONTRACT.md §54](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md).
 
 ## Related Components
 

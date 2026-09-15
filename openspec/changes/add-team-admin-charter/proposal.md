@@ -32,4 +32,4 @@ None.
 - Control-plane backend: configuration model, two tables and their migrations, nomination writes in `teams/service.py` and the importer, the acceptance endpoint, the startup reconciliation.
 - Frontend: charter gate and page, Responsibilities section, role chips and labels, markdown hook refactor, regenerated `controlPlaneOpenApi.ts`, i18n.
 - Theme tooling: `build-theme-archive.sh` and the frontend README list the new document.
-- Docs: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §53, `authz-endpoint-matrix.yaml`, `REBAC.md`, `TERMS_OF_USE.md`.
+- Docs: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54, `authz-endpoint-matrix.yaml`, `REBAC.md`, `TERMS_OF_USE.md`.

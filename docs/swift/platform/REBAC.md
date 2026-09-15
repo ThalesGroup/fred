@@ -106,7 +106,7 @@ a `team_member` with no admin authority. Accepting the charter
 (`POST /team-admin-charter`) turns it into `team_admin`, and a version change
 moves admins back to pending at the next startup. The last-admin guard and the
 rescue check count `team_admin` only. Contract:
-`CONTROL-PLANE-PRODUCT-CONTRACT.md` §53.
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
 above):
@@ -320,6 +320,9 @@ the read-only listing is delegable:
   member count, storage usage and `admins` roster (`UserSummary`, email
   included). That is registry metadata, not the agents, prompts,
   conversations or files those relations still gate exclusively.
+  `?include_membership=false` returns the same rows without member count,
+  `admins` or membership, and reads no relation: pickers such as
+  `/admin/features` use it.
 - **`can_delete_team`** → `DELETE /teams/{team_id}`: deletes the registry row
   and every relation referencing that team.
 - **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants

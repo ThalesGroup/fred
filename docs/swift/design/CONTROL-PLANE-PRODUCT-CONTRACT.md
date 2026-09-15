@@ -3940,7 +3940,25 @@ the setting is inert there and the admin page says so. Two admins saving
 overlapping lists at the same instant can collide on the primary key (500 for
 one of them). The setting is not part of the platform export bundle.
 
-## 53. Contract Notes - team administrator charter (2026-09-14, reworked 2026-09-15, issue #2658)
+---
+
+## 53. Contract Notes - registry listing without membership (2026-09-15, issue #2631)
+
+**Extends §51.** `GET /control-plane/v1/teams/all` takes an optional
+`include_membership` query parameter, default `true`: the response is unchanged
+when it is omitted.
+
+With `include_membership=false` the route returns the same `list[Team]` built
+from the registry rows alone, with no per-team OpenFGA `Read`, so its cost no
+longer grows with the number of teams. `member_count` is omitted, `admins` and
+`my_relations` are `[]` and `is_member` is `false`: read them as unknown, not as
+empty. Name, description, visibility, joining mode, avatar and storage fields
+are unchanged, and the `can_list_all_teams` gate still runs first.
+
+`/admin/features` uses it for the per-team enablement picker, which only needs
+ids and names. `/admin/teams` keeps the full listing for its admins column.
+
+## 54. Contract Notes - team administrator charter (2026-09-14, reworked 2026-09-15, issue #2658)
 
 **What it is.** A deployment can require every team administrator to accept a
 charter of responsibilities before they hold `team_admin`. The text is frontend

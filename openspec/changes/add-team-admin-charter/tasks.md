@@ -27,6 +27,6 @@
 
 ## 5. Docs and handoff
 
-- [x] 5.1 Rewrite `CONTROL-PLANE-PRODUCT-CONTRACT.md` §53, the `REBAC.md` paragraph and the `TERMS_OF_USE.md` section for the pending relation
+- [x] 5.1 Rewrite `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54, the `REBAC.md` paragraph and the `TERMS_OF_USE.md` section for the pending relation
 - [ ] 5.2 Run `make code-quality` and `make test` in the touched modules, `/code-review` on the diff, rebase on `swift` and update draft PR #2669
 - [ ] 5.3 After merge, `openspec archive add-team-admin-charter` and close #2658

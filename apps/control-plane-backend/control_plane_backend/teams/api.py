@@ -203,10 +203,22 @@ async def create_team(
 async def list_all_teams(
     deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    include_membership: Annotated[
+        bool,
+        Query(
+            description=(
+                "false skips the per-team ReBAC reads: admins, membership and "
+                "member_count are left unset. For pickers that only need ids "
+                "and names."
+            )
+        ),
+    ] = True,
 ) -> list[Team]:
     """Registered before `/teams/{team_id}` so the literal `all` path segment
     is not swallowed by the team-id path parameter."""
-    return await list_all_teams_from_service(user, deps)
+    return await list_all_teams_from_service(
+        user, deps, include_membership=include_membership
+    )
 
 
 @router.get(
