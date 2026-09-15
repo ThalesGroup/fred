@@ -19,7 +19,7 @@ admin's admin-only permissions stay inactive until the configured version
 has a row.
 
 Revision ID: 5d2a8c7e1f43
-Revises: 7b3f5e1a9c20
+Revises: b6e2f9a04c31
 Create Date: 2026-09-14 16:00:00.000000
 
 """
@@ -32,7 +32,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "5d2a8c7e1f43"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "7b3f5e1a9c20"  # pragma: allowlist secret
+    "b6e2f9a04c31"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
