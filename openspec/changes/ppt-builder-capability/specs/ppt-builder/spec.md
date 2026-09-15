@@ -175,7 +175,7 @@ The system SHALL write the generated deck to the agent workspace of the conversa
 #### Scenario: Deck regenerated within one answer
 
 - **WHEN** the agent builds the same deck several times before answering (for example to fix the adjustments the tool reported)
-- **THEN** the answer shows a single preview card, for the last build
+- **THEN** the answer shows a single preview card, for the last build, as the other chat cards do for an object updated several times in one answer
 
 #### Scenario: Preview unavailable
 
