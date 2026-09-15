@@ -70,7 +70,7 @@
     "@typescript-eslint/eslint-plugin": "8.65.0",
     "@typescript-eslint/parser": "8.65.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/coverage-v8": "^5.0.0",
     "dayjs": "^1.11.13",
     "eslint": "^10.0.1",
     "eslint-plugin-react-hooks": "7.1.1",
