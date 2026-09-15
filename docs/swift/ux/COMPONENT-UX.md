@@ -428,6 +428,35 @@ agents) so the decision is informed at the point it is made.
 
 #### Resolved
 
+- **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
+  only trimmed sentences identical character for character to the _previous_ block. Models
+  rarely restate verbatim ("L'utilisateur demande…" → "L'utilisateur a demandé…"), so on six
+  local multi-round conversations almost no row was trimmed. `traceRows()` now splits each
+  block into lines and whole sentences and drops the leading run already said in _any_ earlier
+  block of the turn, matched by word overlap (Jaccard ≥ 0.8, case- and accent-insensitive;
+  0.75 confused sentences differing by one noun). Numbers and negation must match exactly —
+  "3 pages left" / "no results" share nearly all their words with what they contradict — and
+  soft-wrapped lines rejoin their paragraph first. A block with nothing new renders
+  `rework.chatTrace.restatedReasoning` instead of its text, unless it is still streaming.
+
+  The lead is not cut at the first unmatched sentence: agents re-listing the user's
+  instructions retouch one item or reword the intro, which shielded the verbatim rest. The
+  lead may carry near repeats (a list item ≥ 60% said, prose with every word said) and an
+  intro (":") that resembles an earlier sentence and opens a list, as long as ≥ 40% of its
+  characters are real repeats — below that it is a recap in new words, kept. It never ends on
+  an intro, and never opens the row mid-list.
+
+  Overlap alone hides a fact in a long sentence: past eight meaningful words, one swapped word
+  ("production" → "staging") stays ≥ 0.8. So a sentence carrying a word the turn has never used
+  is new, and a list item carrying one only drops to a near repeat. Function words (an explicit
+  French/English list, not a length rule, so "EU" or "dev" still count) are ignored, and words
+  match on their first five letters ("résume" / "résumant"). An intro is exempt from that rule
+  unless it is ≥ 0.8 alike an earlier one ("staging deploy:" → "production deploy:"): the
+  rephrased intros of the local sessions share 55–70% of their words and bring words of their
+  own. Replayed on the 75 local blocks, the trim is unchanged. Headings and code blocks are
+  their own blocks (a line never wraps into them), code is compared like a sentence, and a row
+  whose only new part is code previews its first line.
+
 - **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
   "reasoning preview length" open issue above. Reasoning models restate the task from scratch
   at every round: in session `fausse-situation-thales-espagne`, two model-native blocks of one
@@ -925,6 +954,33 @@ digit after the name.
 
 ---
 
+### `Switch` sizes and pill shape (2026-09-14)
+
+**Location:** `src/rework/components/shared/atoms/Switch/`
+
+**Status:** `Functional`
+
+The track and handle opt out of the global `corner-shape: superellipse(1.4)`
+with `corner-shape: round`. A switch is a true pill, not a squircle.
+
+`size` is `medium` (default, 32px track) or `small` (24px track). Only the
+track height changes per size. Everything else derives from it, so both sizes
+keep the same proportions:
+
+| Size | Track | Handle off | Handle on |
+| --- | --- | --- | --- |
+| `medium` | 52×32 | 22px | 24px |
+| `small` | 39×24 | 16.5px | 18px |
+
+The handle is smaller when off on purpose. At equal size, the handle looks
+smaller on the filled "on" track than on the pale "off" one. It stays centered
+in a square slot at each end of the track, and grows while it slides.
+
+The name `small` is scoped to this component. On the shared scale, 24px is
+`2xs`.
+
+---
+
 ### Package-foundation component corrections (2026-09-09)
 
 **Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
@@ -973,6 +1029,10 @@ library:
   it keeps only its own scroll row and its muted leading icon. (`ContextPromptChips` also used it
   briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
   entry below.)
+
+  **Width (2026-09-14):** the chip sizes to its content (`width: fit-content`). In a column flex
+  parent it was stretched to its 18rem cap, leaving the remove button far from the label (the
+  user picked on `/admin/platform-roles`). Rows are unaffected.
 
 - **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
   scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
@@ -1081,6 +1141,45 @@ never that same surface token — painting it makes hover disappear.
 A new chat panel should mount `ChatSidePanel`, not `InlineDrawer` directly, and
 take a `kind` in `ManagedChatPage`'s `activePushDrawer` union so it shares the
 single push-drawer slot.
+
+---
+
+### `FullReasoningPanel` (2026-09-14, #2672)
+
+**Location:** `src/rework/components/shared/molecules/FullReasoningPanel/`
+
+**Status:** `Functional`
+
+Expert view of the agent's whole reasoning across the conversation, in one
+block. The chain of thought stays the condensed view: each `ReasoningRow` is
+clamped to three lines and trimmed of what earlier rows said. This panel is the
+opposite, every reasoning block (`thought`, `plan`, `observation`) untrimmed and
+markdown-rendered, grouped by turn under the user's question, with the block's
+duration. The tools run _between_ two blocks collapse into one marker (`build`
+glyph, humanized labels): they are why the reasoning resumed. Tools before the
+first block or after the last are left out. Each part has its own look so they
+tell apart at a glance: a block sits in a `surface-main` container (`--radius-s`),
+the tool marker is `primary` text, and the user's message is a
+`secondary-container` / `on-secondary-container` container (`--radius-m`). The header's copy action
+exports the same content as markdown (`## question`, blocks, `_→ tools_`).
+
+**Launcher.** At the rail's foot (expert tooling), above the admin-only raw
+message dump, with the glyph a reasoning row carries (`settings`, **filled**:
+`ChatLauncher.iconFilled`) and the rail's usual tooltip. **Every user** gets
+it, not only admins: each block is already readable one at a time in
+`TraceDetailDrawer`, so restricting the panel would protect nothing.
+
+**Hide restatements.** A switch pinned above the turns (off by default) trims
+each block the way the chain of thought does (`traceRows`, same detection), but
+keeps its markdown: `TraceRow.reasoningMarkdown` cuts the original text at the
+dropped paragraph or item, so the lists and code after the cut still render.
+Only the rest of a paragraph cut mid-way comes back flattened. A block with
+nothing new shows `rework.chatTrace.restatedReasoning`. Copy follows the switch.
+
+**Streaming.** `fullReasoning()` runs only while the panel is open, since
+`messages` changes on every token. Each block is a memoized component, so a
+token re-renders the block it lands in, not the markdown of the whole
+conversation.
 
 ---
 
@@ -4198,7 +4297,10 @@ root card above the table was tried on 2026-08-21 and removed the same day
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining
   the root-only rule — the restriction stays discoverable instead of the
-  option silently missing.
+  option silently missing. **Several users (2026-09-14):** the picker keeps a
+  wrapping row of removable `Chip`s, and one submit grants the chosen role to
+  each of them (one call per user, settled together). Users whose grant failed
+  stay picked and are named in the error toast; the others get one success toast.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
 

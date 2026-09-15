@@ -13,10 +13,12 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
     RetentionUpdateError,
+    SetDefaultTeamsForNewUsersRequest,
     Team,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
@@ -35,6 +37,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import create_team as create_team_from_service
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
+from control_plane_backend.teams.service import (
+    get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
+)
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
@@ -63,6 +68,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import (
     search_candidate_team_members as search_candidate_team_members_from_service,
+)
+from control_plane_backend.teams.service import (
+    set_default_teams_for_new_users as set_default_teams_for_new_users_from_service,
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
@@ -278,6 +286,31 @@ async def rescue_team_admin(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rescue_team_admin_from_service(user, team_id, request.user_id, deps)
+
+
+@router.get(
+    "/admin/platform/default-teams",
+    response_model=list[DefaultTeamForNewUsers],
+    summary="List the teams every new user joins on first GCU acceptance (platform admin only)",
+)
+async def get_default_teams_for_new_users(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[DefaultTeamForNewUsers]:
+    return await get_default_teams_for_new_users_from_service(user, deps)
+
+
+@router.put(
+    "/admin/platform/default-teams",
+    status_code=204,
+    summary="Replace the teams every new user joins on first GCU acceptance (platform admin only)",
+)
+async def set_default_teams_for_new_users(
+    request: SetDefaultTeamsForNewUsersRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await set_default_teams_for_new_users_from_service(user, request.team_ids, deps)
 
 
 @router.post(

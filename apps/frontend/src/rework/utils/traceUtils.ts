@@ -638,45 +638,330 @@ export type ToolEntry = Extract<TraceEntry, { kind: "combo" }>;
 
 /** One row of the trace. `index` is the 1-based tool step number — null for
  *  reasoning, notes and errors, which are sequenced but are not steps.
- *  `reasoningText` is the row's display text, null on a step row. */
+ *  `reasoningText` is the row's display text, null on a step row. `restated`
+ *  marks a reasoning row with nothing new: every sentence was said earlier. */
 export type TraceRow = {
   entry: TraceEntry;
   lane: "reasoning" | "step";
   index: number | null;
   reasoningText: string | null;
+  /** `reasoningText` with the block's markdown kept, for a view that renders it. */
+  reasoningMarkdown: string | null;
+  restated: boolean;
 };
 
+/** Word overlap from which a sentence counts as already said. 0.75 confused
+ *  sentences differing by a single noun ("…page Italie" / "…page Espagne"). */
+const RESTATEMENT_OVERLAP = 0.8;
+/** Share of a list item's words already said for it to count as a near repeat
+ *  (a retouched item). Prose needs all its words said — a reordered sentence —
+ *  since one unsaid word may be the new fact ("…page Espagne"). */
+const NEAR_OVERLAP = 0.6;
+/** Share of an intro's (":") words already said for it to be carried along with
+ *  the list it opens. */
+const INTRO_OVERLAP = 0.4;
+/** Share of a dropped lead, in characters, that must be real repeats. Keeps a
+ *  run of mere near repeats — a recap in new words — on the row. */
+const MIN_SAID_SHARE = 0.4;
+
+/** Negation words ("n" and "t" are what "n'existe" and "don't" split into).
+ *  A negated sentence shares nearly all its words with the claim it reverses. */
+const NEGATIONS = new Set([
+  "no",
+  "not",
+  "never",
+  "none",
+  "nothing",
+  "cannot",
+  "without",
+  "t",
+  "ne",
+  "n",
+  "pas",
+  "aucun",
+  "aucune",
+  "jamais",
+  "rien",
+  "sans",
+]);
+
+/** `facts` (negation, numbers) must match exactly: overlap alone would call
+ *  "3 pages left" and "2 pages left" the same sentence. */
+type ReasoningSegment = {
+  text: string;
+  words: ReadonlySet<string>;
+  facts: string;
+  listItem: boolean;
+  /** A code block, compared like a sentence but never part of a flattened preview. */
+  code: boolean;
+  /** Last line, in the block's markdown, of the paragraph, item or code block this came from. */
+  blockEnd: number;
+};
+
+// A line opening its own block; any other line is a soft wrap of its paragraph.
+const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
+const LIST_MARKER = /^\s*([-*+]|\d+[.)])\s+/;
+const HEADING = /^\s{0,3}#{1,6}\s/;
+
 /**
- * `text` with the leading run of whole sentences `previousText` already carried
- * removed — the repeated preamble, not a prefix of it.
- *
- * Reasoning models restate the task from scratch at every round: two blocks of
- * one turn commonly share hundreds of identical leading characters and differ
- * only at the end, so consecutive rows read as the same row twice.
- *
- * Only COMPLETE sentences are dropped, which is what keeps this safe. Two blocks
- * that merely open on the same few words ("The user asked ") share no whole
- * sentence, so nothing is removed and no line is ever cut mid-thought. Compared
- * against the previous block's FULL text, not its trimmed display text, so the
- * rows still tile the whole reasoning between them with nothing lost.
- *
- * Errs towards keeping text: a missed boundary repeats a preamble, a wrong one
- * opens a row mid-sentence — which is the failure this whole function exists to
- * avoid. See {@link isSentenceEnd}.
+ * A reasoning block cut into paragraphs, list items, headings and whole
+ * sentences, each flattened to plain text. Whole sentences only — see
+ * {@link isSentenceEnd} — so dropping a segment never opens a row mid-sentence.
  */
-export function stripRepeatedPreamble(text: string, previousText: string | null): string {
-  if (!previousText) return text;
+const canWrapInto = (block: { text: string; code: boolean }) => !block.code && !HEADING.test(block.text);
 
-  let shared = 0;
-  while (shared < text.length && shared < previousText.length && text[shared] === previousText[shared]) shared++;
+function reasoningSegments(markdown: string): ReasoningSegment[] {
+  // Blocks keep the line they end on, so a cut can be mapped back onto the
+  // original markdown (see `restatedMarkdown`). A code fence is one block.
+  const blocks: { text: string; endLine: number; code: boolean }[] = [];
+  let fence: string[] | null = null;
+  markdown.split("\n").forEach((line, index) => {
+    const isFence = /^\s*```/.test(line);
+    if (fence) {
+      if (isFence) {
+        blocks.push({ text: fence.join("\n"), endLine: index, code: true });
+        fence = null;
+      } else fence.push(line);
+      return;
+    }
+    if (isFence) fence = [];
+    // A heading or code block ends at its own line; the next one never wraps into it.
+    else if (!line.trim() || BLOCK_START.test(line) || blocks.length === 0 || !canWrapInto(blocks[blocks.length - 1])) {
+      blocks.push({ text: line, endLine: index, code: false });
+    } else {
+      const previous = blocks[blocks.length - 1];
+      blocks[blocks.length - 1] = { ...previous, text: `${previous.text} ${line.trim()}`, endLine: index };
+    }
+  });
+  // A fence still open is a code block still streaming.
+  if (fence)
+    blocks.push({ text: (fence as string[]).join("\n"), endLine: markdown.split("\n").length - 1, code: true });
 
-  let cut = 0;
-  for (let i = 0; i < shared; i++) if (isSentenceEnd(text, i)) cut = i + 1;
-  // A block wholly contained in its predecessor keeps its text: an empty row
-  // would read as a rendering bug, and dropping it would lose the block itself.
-  if (cut === 0 || cut >= text.length) return text;
+  const segments: ReasoningSegment[] = [];
+  const push = (text: string, listItem: boolean, blockEnd: number, code = false) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    // An item's own number is not a fact: a renumbered item is still a repeat.
+    const raw = rawWords(trimmed.replace(LIST_MARKER, ""));
+    const numbers = raw.filter((word) => /\d/.test(word)).sort();
+    const facts = `${raw.some((word) => NEGATIONS.has(word)) ? "!" : ""}${numbers.join(",")}`;
+    segments.push({ text: trimmed, words: new Set(meaningfulWords(raw)), facts, listItem, code, blockEnd });
+  };
+  for (const block of blocks) {
+    if (block.code) {
+      push(block.text, false, block.endLine, true);
+      continue;
+    }
+    const listItem = LIST_MARKER.test(block.text);
+    const text = plainPreviewText(block.text);
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (!isSentenceEnd(text, i)) continue;
+      push(text.slice(start, i + 1), listItem, block.endLine);
+      start = i + 1;
+    }
+    push(text.slice(start), listItem, block.endLine);
+  }
+  return segments;
+}
 
-  return text.slice(cut).trimStart();
+/**
+ * The markdown left once the first `lead` segments are dropped. Whole blocks
+ * after the cut keep their original markdown (lists, emphasis, code); only the
+ * rest of a paragraph cut mid-way comes back as flattened sentences.
+ */
+function restatedMarkdown(markdown: string, segments: ReasoningSegment[], lead: number): string {
+  if (lead === 0) return markdown;
+  if (lead >= segments.length) return "";
+  const cutBlock = segments[lead - 1].blockEnd;
+  const rest = segments.slice(lead);
+  const sameBlock = rest
+    .filter((segment) => segment.blockEnd === cutBlock && !segment.code)
+    .map((segment) => segment.text);
+  const after = markdown
+    .split("\n")
+    .slice(cutBlock + 1)
+    .join("\n");
+  return [sameBlock.join(" "), after]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// Case- and accent-insensitive, so "demande" and "a demandé" compare equal.
+function rawWords(text: string): string[] {
+  return (
+    text
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
+}
+
+/** Function words a rephrasing adds or drops freely ("sur" → "autour de"). Listed
+ *  rather than inferred from length: "EU", "dev" or "CSV" are short facts. */
+const FUNCTION_WORDS = new Set([
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "has",
+  "have",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "so",
+  "the",
+  "to",
+  "was",
+  "will",
+  "au",
+  "aux",
+  "ce",
+  "ces",
+  "de",
+  "des",
+  "du",
+  "en",
+  "est",
+  "et",
+  "il",
+  "je",
+  "la",
+  "le",
+  "les",
+  "ma",
+  "me",
+  "mes",
+  "mon",
+  "ne",
+  "ont",
+  "ou",
+  "par",
+  "qu",
+  "que",
+  "qui",
+  "sa",
+  "se",
+  "ses",
+  "son",
+  "sont",
+  "sur",
+  "un",
+  "une",
+  "about",
+  "after",
+  "also",
+  "around",
+  "because",
+  "before",
+  "from",
+  "into",
+  "that",
+  "their",
+  "then",
+  "there",
+  "these",
+  "this",
+  "those",
+  "very",
+  "which",
+  "while",
+  "with",
+  "ainsi",
+  "alors",
+  "aussi",
+  "autour",
+  "avec",
+  "cela",
+  "cette",
+  "comme",
+  "dans",
+  "depuis",
+  "donc",
+  "dont",
+  "elle",
+  "elles",
+  "entre",
+  "leur",
+  "leurs",
+  "mais",
+  "nous",
+  "pour",
+  "puis",
+  "selon",
+  "tres",
+  "vers",
+  "vous",
+]);
+
+// A crude stem: "résume" and "résumant" are the same word to a reader, "staging"
+// and "production" are not. Five letters keep short distinct words apart.
+function stemOf(word: string): string {
+  return word.slice(0, 5);
+}
+
+// One-letter words ("a", "l'") carry nothing a rephrasing would keep; digits do.
+function meaningfulWords(raw: string[]): string[] {
+  return raw.filter((word) => word.length > 1 || /\d/.test(word));
+}
+
+/**
+ * How far `segment` restates the sentences `said` earlier in the turn.
+ *
+ * Reasoning models restate their context at every round, and rarely verbatim —
+ * "L'utilisateur demande…" comes back as "L'utilisateur a demandé…" — so
+ * sentences are compared by word overlap, not character by character. "said" is
+ * a repeat (Jaccard, same facts); "near" and "related" only resemble one, and
+ * are dropped solely inside a lead of real repeats — see {@link restatedLead}.
+ * `unfinished` is the sentence still streaming, cut mid-word: it is judged on the
+ * words it has finished, or a restatement flashes into the row before it matches.
+ *
+ * A word the turn has never used — not even inflected, see {@link stemOf} — is
+ * new information, whatever the overlap: in a long sentence one swapped word
+ * ("production" → "staging") stays above the threshold. Prose carrying one is new;
+ * a list item only drops to "near", since retouched items routinely add words.
+ * Intros (":") are exempt — they introduce, they carry no fact.
+ */
+function restatementOf(
+  segment: ReasoningSegment,
+  said: readonly ReasoningSegment[],
+  saidStems: ReadonlySet<string>,
+  unfinished: boolean,
+): "said" | "near" | "related" | "new" {
+  if (segment.words.size === 0) return "said";
+  if (unfinished) {
+    const finished = meaningfulWords(rawWords(segment.text.replace(LIST_MARKER, ""))).slice(0, -1);
+    return said.some((earlier) => finished.every((word) => earlier.words.has(word))) ? "said" : "new";
+  }
+  const intro = segment.text.endsWith(":");
+  const novel = [...segment.words].some((word) => !FUNCTION_WORDS.has(word) && !saidStems.has(stemOf(word)));
+  if (novel && !segment.listItem && !intro) return "new";
+  let coverage = 0;
+  for (const earlier of said) {
+    if (earlier.facts !== segment.facts) continue;
+    let shared = 0;
+    for (const word of segment.words) if (earlier.words.has(word)) shared++;
+    coverage = Math.max(coverage, shared / segment.words.size);
+    if (shared / (segment.words.size + earlier.words.size - shared) >= RESTATEMENT_OVERLAP && !novel) return "said";
+  }
+  // A new word in a sentence or intro nearly identical to an earlier one is a swap
+  // ("staging deploy:" → "production deploy:"); in a loosely reworded intro it is
+  // just the rewording.
+  if (novel && coverage >= RESTATEMENT_OVERLAP) return intro ? "new" : "near";
+  const near = segment.listItem ? coverage >= NEAR_OVERLAP : coverage === 1;
+  if (near && segment.words.size > 1) return "near";
+  return coverage >= INTRO_OVERLAP ? "related" : "new";
 }
 
 /**
@@ -719,8 +1004,8 @@ const SENTENCE_ABBREVIATIONS = new Set([
  * - a list marker is all digits, which rejects "1. Read the file";
  * - the rest are named in {@link SENTENCE_ABBREVIATIONS}.
  *
- * Deliberately asymmetric: a missed boundary only repeats a preamble, a wrong
- * one mutilates a line.
+ * Deliberately asymmetric: a missed boundary only keeps a restated sentence, a
+ * wrong one mutilates a line.
  */
 function isSentenceEnd(text: string, i: number): boolean {
   const ch = text[i];
@@ -753,47 +1038,113 @@ function isReasoningEntry(entry: TraceEntry): boolean {
   return channel === "thought" || channel === "plan" || channel === "observation";
 }
 
-// Flattened preview text, keyed on the message object itself.
+// Flattened preview and segments, keyed on the message object itself.
 //
 // `toThreadMessages` rebuilds every exchange's `traceMessages` array on each SSE
 // frame, so this fold re-runs for every OPEN trace in the conversation on every
 // token — and a turn that streamed in this session stays open. The message
 // objects inside those arrays are the same ones, though: only the block still
 // streaming is rebuilt, and it is the only one that misses.
-const previewTextCache = new WeakMap<ChatMessage, string>();
+type ReasoningText = { markdown: string; preview: string; segments: ReasoningSegment[] };
+const reasoningTextCache = new WeakMap<ChatMessage, ReasoningText>();
 
-function previewTextForEntry(entry: TraceEntry): string {
-  if (entry.kind !== "solo") return "";
-  const cached = previewTextCache.get(entry.message);
-  if (cached !== undefined) return cached;
-  const text = plainPreviewText(detailTextForEntry(entry));
-  previewTextCache.set(entry.message, text);
-  return text;
+function reasoningTextFor(message: ChatMessage): ReasoningText {
+  const cached = reasoningTextCache.get(message);
+  if (cached) return cached;
+  const markdown = textOf(message);
+  const computed = { markdown, preview: plainPreviewText(markdown), segments: reasoningSegments(markdown) };
+  reasoningTextCache.set(message, computed);
+  return computed;
+}
+
+// How many leading segments of a block were already said, valid while the blocks
+// before it are the same objects. Matching is quadratic in the turn's sentences,
+// so on each streamed frame only the block still streaming pays for it.
+const restatedLeadCache = new WeakMap<ChatMessage, { earlier: ChatMessage[]; lead: number }>();
+
+function restatedLead(
+  message: ChatMessage,
+  segments: ReasoningSegment[],
+  earlier: ChatMessage[],
+  said: readonly ReasoningSegment[],
+  streaming: boolean,
+): number {
+  const cached = restatedLeadCache.get(message);
+  if (cached && cached.earlier.length === earlier.length && cached.earlier.every((m, i) => m === earlier[i])) {
+    return cached.lead;
+  }
+  // The longest lead of repeats and near repeats, mostly real repeats, so a
+  // retouched item or a reordered sentence no longer shields the verbatim ones
+  // after it. An intro (":") is carried along if said, or if it resembles an
+  // earlier sentence and opens a list — a rephrased "the user asked me to:" — but
+  // never ends the lead: that would open the row on the list it introduces.
+  const saidStems = new Set(said.flatMap((segment) => [...segment.words].map(stemOf)));
+  let lead = 0;
+  let saidLength = 0;
+  let nearLength = 0;
+  for (let i = 0; said.length > 0 && i < segments.length; i++) {
+    const { text } = segments[i];
+    const unfinished = streaming && i === segments.length - 1 && !/[.!?]$/.test(text);
+    const kind = restatementOf(segments[i], said, saidStems, unfinished);
+    if (text.endsWith(":")) {
+      if (kind === "new" || (kind !== "said" && !segments[i + 1]?.listItem)) break;
+      continue;
+    }
+    if (kind === "new" || kind === "related") break;
+    if (kind === "said") saidLength += text.length;
+    else nearLength += text.length;
+    if (saidLength >= MIN_SAID_SHARE * (saidLength + nearLength)) lead = i + 1;
+  }
+  // Never open the row mid-list: a list with a new item keeps its earlier items and intro.
+  const inList = (i: number) => segments[i].listItem || segments[i].text.endsWith(":");
+  while (lead > 0 && lead < segments.length && segments[lead].listItem && inList(lead - 1)) lead--;
+  // A streaming block arrives as a new object each delta, so it never hits the cache.
+  if (!streaming) restatedLeadCache.set(message, { earlier: [...earlier], lead });
+  return lead;
 }
 
 /** The trace as one chronological list, each row tagged with how it renders. */
 export function traceRows(entries: TraceEntry[]): TraceRow[] {
   let toolIndex = 0;
-  // Each reasoning row is trimmed against the previous one's FULL text — see
-  // stripRepeatedPreamble. Only this function sees the sequence, so it is the
-  // only place that can do it.
-  let previousReasoning: string | null = null;
+  // Every sentence of the turn so far: a row drops the restatement of ANY earlier
+  // block, not only the previous one. Only the leading run goes, never a sentence
+  // in the middle, and the full markdown stays in the detail drawer.
+  const said: ReasoningSegment[] = [];
+  const earlier: ChatMessage[] = [];
 
   return entries.map((entry) => {
-    if (isReasoningEntry(entry)) {
-      const text = previewTextForEntry(entry);
-      const row = {
+    if (isReasoningEntry(entry) && entry.kind === "solo") {
+      const { markdown, preview, segments } = reasoningTextFor(entry.message);
+      const streaming = statusForEntry(entry) === "streaming";
+      const lead = restatedLead(entry.message, segments, earlier, said, streaming);
+      said.push(...segments);
+      earlier.push(entry.message);
+
+      const nothingNew = segments.length > 0 && lead === segments.length;
+      const rest = segments.slice(lead);
+      const prose =
+        lead === 0
+          ? preview
+          : rest
+              .filter((segment) => !segment.code)
+              .map((segment) => segment.text)
+              .join(" ");
+      // A block whose only new part is code previews the code's first line, not an empty row.
+      const reasoningText = prose || (rest.find((segment) => segment.code)?.text.split("\n")[0] ?? "");
+      // A block still streaming may yet add something, so it is not called a restatement.
+      return {
         entry,
         lane: "reasoning" as const,
         index: null,
-        reasoningText: stripRepeatedPreamble(text, previousReasoning),
+        reasoningText,
+        reasoningMarkdown: restatedMarkdown(markdown, segments, lead),
+        restated: nothingNew && !streaming,
       };
-      previousReasoning = text;
-      return row;
     }
-    if (isStepEntry(entry)) return { entry, lane: "step" as const, index: ++toolIndex, reasoningText: null };
+    const step = { entry, lane: "step" as const, reasoningText: null, reasoningMarkdown: null, restated: false };
+    if (isStepEntry(entry)) return { ...step, index: ++toolIndex };
     // system_note / error — sequenced with the steps, but unnumbered.
-    return { entry, lane: "step" as const, index: null, reasoningText: null };
+    return { ...step, index: null };
   });
 }
 

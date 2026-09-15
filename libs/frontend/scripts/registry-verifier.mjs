@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { verify as verifySigstoreBundle } from "sigstore";
 
+import { validateBootstrapRecoveryEvidence } from "./bootstrap-recovery-contract.mjs";
 import { assertRegistryConsumer } from "./dependency-boundaries.mjs";
 import {
   assertProvisionedChromium,
@@ -32,6 +33,14 @@ import {
   sha512Integrity,
   verifyCandidateEvidence,
 } from "./release-evidence.mjs";
+import {
+  fetchExactPackageMetadata,
+  waitForPackageMetadata,
+} from "./registry-metadata.mjs";
+import {
+  githubExecution,
+  verifyRegistryVerificationContinuation,
+} from "./registry-verification-continuation.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const consumerFixtures = {
@@ -178,6 +187,7 @@ export async function verifyRegistryTooling({
   resolvePackage,
   verifyPackageSignature,
   installConsumers,
+  provenanceExpectations,
 }) {
   assert.equal(
     contract.state,
@@ -195,6 +205,7 @@ export async function verifyRegistryTooling({
     "release contract differs from approved candidate evidence",
   );
   const resolved = {};
+  const verifiedPackages = {};
   for (const role of packageRoles) {
     const expectedPackage = contract.packages[role];
     assertExactRegistryCoordinate(coordinates[role], expectedPackage);
@@ -214,16 +225,23 @@ export async function verifyRegistryTooling({
       candidate.integrity,
       `${role} registry integrity differs`,
     );
+    const expectedProvenance =
+      provenanceExpectations?.[role] ?? candidate.expectedProvenance;
     const signatureResult = await verifyPackageSignature(registryPackage, {
-      expectedProvenance: candidate.expectedProvenance,
+      expectedProvenance,
       certificateIssuer: contract.expectedProvenance.certificateIssuer,
     });
     assertProvenanceIdentity({
       cryptographicallyVerified: signatureResult.cryptographicallyVerified,
       actual: signatureResult.identity,
-      expected: candidate.expectedProvenance,
+      expected: expectedProvenance,
     });
     resolved[role] = registryPackage;
+    verifiedPackages[role] = {
+      coordinate: coordinates[role],
+      integrity: registryPackage.integrity,
+      provenance: signatureResult.identity,
+    };
   }
   await verifyCandidateEvidence(
     evidence,
@@ -236,9 +254,15 @@ export async function verifyRegistryTooling({
   return {
     kind: "registry-verifier-tooling",
     registry: contract.registry,
-    packages: Object.fromEntries(
-      packageRoles.map((role) => [role, coordinates[role]]),
-    ),
+    packages: verifiedPackages,
+    gates: {
+      exactRegistryArchives: true,
+      npmSignatures: true,
+      sigstoreProvenance: true,
+      cleanRegistryConsumers: true,
+      browserSmoke: true,
+      productionHostCompatibility: true,
+    },
   };
 }
 
@@ -305,6 +329,8 @@ export async function resolveNpmRegistryPackage({
   expectedPackage,
   candidate,
   runCommand = run,
+  fetchMetadata = fetchExactPackageMetadata,
+  waitForPackageVisibility = waitForPackageMetadata,
 }) {
   assert.equal(
     new URL(registry).href,
@@ -332,24 +358,9 @@ export async function resolveNpmRegistryPackage({
     /^sha512-[A-Za-z0-9+/]+={0,2}$/,
     `${role} candidate integrity is missing or malformed`,
   );
-  const { stdout: metadataJson } = await runCommand(
-    "npm",
-    ["view", coordinate, "--json", "--registry", registry],
-    { cwd: root },
-  );
-  const metadata = JSON.parse(metadataJson);
-  const coordinateSeparator = coordinate.lastIndexOf("@");
-  assert(coordinateSeparator > 0, `invalid registry coordinate ${coordinate}`);
-  assert.equal(
-    metadata.name,
-    coordinate.slice(0, coordinateSeparator),
-    `${coordinate} metadata name differs`,
-  );
-  assert.equal(
-    metadata.version,
-    coordinate.slice(coordinateSeparator + 1),
-    `${coordinate} metadata version differs`,
-  );
+  const metadata = await fetchMetadata({ coordinate, registry, candidate });
+  assert(metadata, `${coordinate} exact version is absent from the registry`);
+  await waitForPackageVisibility({ coordinate, registry, candidate });
   const { stdout: packJson } = await runCommand(
     "npm",
     [
@@ -599,6 +610,80 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const evidence = JSON.parse(
     await readFile(path.resolve(evidencePath), "utf8"),
   );
+  const recoveryEvidencePath = optionValue("--recovery-evidence");
+  const recoveryPlanPath = optionValue("--recovery-plan");
+  const verificationPlanPath = optionValue("--verification-plan");
+  const verificationInputsPath = optionValue("--verification-inputs");
+  const recoveryArtifactZipPath = optionValue("--recovery-artifact-zip");
+  const recoveryArtifactMetadataPath = optionValue(
+    "--recovery-artifact-metadata",
+  );
+  let provenanceExpectations;
+  let historicalPublication;
+  let verificationExecution;
+  if (verificationPlanPath || verificationInputsPath) {
+    for (const [name, value] of Object.entries({
+      "--recovery-plan": recoveryPlanPath,
+      "--recovery-evidence": recoveryEvidencePath,
+      "--verification-plan": verificationPlanPath,
+      "--verification-inputs": verificationInputsPath,
+      "--recovery-artifact-zip": recoveryArtifactZipPath,
+      "--recovery-artifact-metadata": recoveryArtifactMetadataPath,
+    }))
+      assert(value, `${name} is required for verification continuation`);
+    const continuation = await verifyRegistryVerificationContinuation({
+      contract,
+      recoveryPlan: JSON.parse(
+        await readFile(path.resolve(recoveryPlanPath), "utf8"),
+      ),
+      plan: JSON.parse(
+        await readFile(path.resolve(verificationPlanPath), "utf8"),
+      ),
+      inputs: JSON.parse(
+        await readFile(path.resolve(verificationInputsPath), "utf8"),
+      ),
+      artifactZipPath: recoveryArtifactZipPath,
+      artifactMetadata: JSON.parse(
+        await readFile(path.resolve(recoveryArtifactMetadataPath), "utf8"),
+      ),
+      transferredRoot: path.dirname(path.resolve(evidencePath)),
+      github: githubExecution(),
+    });
+    assert.deepEqual(
+      evidence,
+      continuation.evidence,
+      "candidate evidence differs from the pinned recovery artifact",
+    );
+    provenanceExpectations = continuation.provenanceExpectations;
+    historicalPublication = continuation.historicalPublication;
+    verificationExecution = continuation.verificationExecution;
+  } else if (recoveryEvidencePath || recoveryPlanPath) {
+    assert(recoveryEvidencePath, "--recovery-evidence is required");
+    assert(recoveryPlanPath, "--recovery-plan is required");
+    const recoveryEvidence = JSON.parse(
+      await readFile(path.resolve(recoveryEvidencePath), "utf8"),
+    );
+    const plan = JSON.parse(
+      await readFile(path.resolve(recoveryPlanPath), "utf8"),
+    );
+    validateBootstrapRecoveryEvidence({
+      contract,
+      plan,
+      evidence,
+      recoveryEvidence,
+      github: {
+        actions: process.env.GITHUB_ACTIONS,
+        repository: process.env.GITHUB_REPOSITORY,
+        ref: process.env.GITHUB_REF,
+        sha: process.env.GITHUB_SHA,
+        workflowRef: process.env.GITHUB_WORKFLOW_REF,
+        workflow: process.env.GITHUB_WORKFLOW,
+        runId: process.env.GITHUB_RUN_ID,
+        runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      },
+    });
+    provenanceExpectations = recoveryEvidence.expectedProvenance;
+  }
   const coordinates = {
     designTokens: optionValue("--design-tokens"),
     ui: optionValue("--ui"),
@@ -672,10 +757,22 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           ),
         });
       },
+      provenanceExpectations,
     });
-    process.stdout.write(
-      `${JSON.stringify({ ...result, kind: "public-registry-verification" }, null, 2)}\n`,
-    );
+    const finalEvidence = {
+      ...result,
+      kind: "public-registry-verification",
+      ...(historicalPublication ? { historicalPublication } : {}),
+      ...(verificationExecution ? { verificationExecution } : {}),
+    };
+    const outputPath = optionValue("--output");
+    if (outputPath)
+      await writeFile(
+        path.resolve(outputPath),
+        `${JSON.stringify(finalEvidence, null, 2)}\n`,
+        { flag: "wx" },
+      );
+    process.stdout.write(`${JSON.stringify(finalEvidence, null, 2)}\n`);
   } finally {
     await Promise.all(
       roots.map((root) => rm(root, { recursive: true, force: true })),

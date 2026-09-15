@@ -62,12 +62,32 @@ that publish only exact reviewed bytes after explicit approval.
   releases. GitHub reviewer `marcfawaz` remains a distinct operational identity.
 - Add a `workflow_dispatch`-only, `swift`-restricted publication workflow that defaults to
   preparation only, transfers immutable candidates across the release and application
-  toolchains, uses the protected `npm-publish` environment and its bootstrap token only in the
-  explicitly selected initial publishing step, and performs genuine registry verification
+  toolchains, uses the protected `npm-publish` environment and its bootstrap token only in an
+  explicitly selected initial or partial-recovery publishing step, and performs genuine registry verification
   after publication.
+- Correct exact-version post-publication reconciliation to tolerate bounded npm visibility lag
+  through a shared, bounded exact-version HTTP adapter that does not depend on npm's package-wide
+  metadata lookup, without ever retrying publication, and add an explicit protected recovery operation for the
+  partial first release from run `34853407387`. The recovery preserves the original candidate
+  artifact and evidence, derives all candidate inputs from the hash-pinned ZIP at both trust
+  boundaries, rejects inconsistent transferred copies and unsafe ZIP entries, verifies the
+  already-published design-token bytes and provenance, and publishes only the still-absent UI and
+  SDK archives from the verified extraction while binding their provenance to the recovery
+  workflow's actual `GITHUB_SHA`.
+- Remove the recovery CLI's evaluation cycle by placing reusable recovery plan/evidence
+  validation in an execution-independent module shared by recovery and public-registry entry
+  points; add bounded fresh-process tests for preparation, controlled publication, provenance,
+  invalid inputs, failure propagation, and recovery-aware registry verification.
+- Record the completed partial-bootstrap publication and add a read-only `verify-existing`
+  continuation that retrieves the exact retained recovery artifact, re-verifies its outer and
+  nested ZIP identities and unchanged evidence, keeps historical per-package publication commits
+  separate from the current verifier execution, tolerates only bounded package-wide 404
+  visibility lag, and retains final evidence only after every registry, provenance, consumer,
+  browser, and production-host gate passes.
 
-This change prepares but does not trigger the publishing workflow. It does not create GitHub/npm
-settings, publish or stage packages, claim public-registry success, or migrate FRED or RAGS.
+The initial versions were published by separately authorized workflow runs. This continuation
+does not trigger a workflow, mutate npm or GitHub settings, publish or stage packages, claim
+public-registry success before verification completes, or migrate FRED or RAGS.
 
 ## Capabilities
 

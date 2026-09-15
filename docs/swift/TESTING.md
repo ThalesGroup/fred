@@ -283,9 +283,20 @@ Everything above proves the API. It says nothing about whether the browser
 actually hides a button it should, or shows a sane error. That layer is:
 
 - **`/admin/self-test`**, as a real `platform_admin` in the browser — a
-  functional self-test (real documents, real agent turns) and an
+  functional self-test (real documents, real agent turns), an
   authorization self-test (proves the API/UI honor the model for your own
-  session, or for any other account you have the password for). See
+  session, or for any other account you have the password for), and a
+  credential-expiry check (one real agent turn whose work outlives the
+  credential it was handed; passes only when the authenticated call made
+  as the person *after* that credential expired succeeds, so it stays red
+  until in-turn renewal exists). The check runs on your own session's
+  token — no password, no realm change — so it takes about that token's
+  remaining lifetime plus a short margin, and skips with the reason when
+  that would exceed fifteen minutes. It creates and deletes one temporary
+  agent instance, and touches no library or document; a run interrupted by
+  closing the tab leaves that agent behind, to delete by hand from your
+  personal agents, which is why the action first asks you to accept the
+  wait and to keep the page open. See
   [`platform/FRONTEND-AUTHZ-PATTERN.md`](platform/FRONTEND-AUTHZ-PATTERN.md)'s
   testing pyramid for exactly which layer proves what.
 - The manual, multi-persona checklist for anything neither of the above
