@@ -77,6 +77,21 @@
     background: var(--state-on-surface-disabled);
     color: var(--state-text-disabled);
   }
+
+  // A nomination waiting for the charter: light orange, whoever reads it, so it
+  // never passes for a granted admin role.
+  &[data-pending="true"],
+  &[data-pending="true"][aria-disabled="true"] {
+    gap: var(--spacing-2xs);
+    border-color: transparent;
+    background: var(--warning-container);
+    color: var(--on-warning-container);
+  }
+}
+
+.pendingIcon {
+  display: flex;
+  font-size: 1rem;
 }
 
 // `.tooltip-content-rich` zeroes the atom's own padding and hands spacing to

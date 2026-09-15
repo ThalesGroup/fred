@@ -214,6 +214,7 @@ acme-theme-1.0.zip
 ├── images/icons/customAgent.svg     # agent icon silhouette (rendered as a CSS mask)
 ├── images/default-team-avatar.png   # same name as a stock file: shadows it
 ├── gcu.md  gcu.fr.md  gdpr.md  gdpr.fr.md
+├── team-admin-charter.md  team-admin-charter.fr.md   # shown to team admins, see TERMS_OF_USE.md
 ├── release.md
 └── contrib/<brand>/...              # optional, the releaseBrand cascade still applies
 ```

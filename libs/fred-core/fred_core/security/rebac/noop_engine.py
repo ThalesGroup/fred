@@ -67,7 +67,7 @@ class NoopRebacEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,

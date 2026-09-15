@@ -64,32 +64,41 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister }: Te
         )}
       </span>
     );
-    return Object.fromEntries(
-      [BASELINE_TEAM_ROLE, ...ELEVATED_TEAM_ROLES].map((role) => [role, describe(role)]),
-    ) as Record<UserTeamRelation, ReactNode>;
+    const described: UserTeamRelation[] = [BASELINE_TEAM_ROLE, ...ELEVATED_TEAM_ROLES, "pending_team_admin"];
+    return Object.fromEntries(described.map((role) => [role, describe(role)])) as Record<UserTeamRelation, ReactNode>;
   }, [t]);
 
   return (
     <div className={styles.roleChips} role="group">
       {ELEVATED_TEAM_ROLES.map((role) => {
-        const held = heldRoles.includes(role);
+        // A pending nomination keeps the short "Admin" label, marked by colour and a clock icon;
+        // toggling it cancels the nomination.
+        const pending = role === "team_admin" && heldRoles.includes("pending_team_admin");
+        const held = pending || heldRoles.includes(role);
         // `aria-disabled` rather than `disabled`: a disabled button leaves the
         // tab order and stops firing pointer events, so it would silently lose
         // the very description that tells the reader what the role they cannot
         // grant actually is. The click guard below is what makes it inert.
         const readOnly = canAdminister ? !canAdminister(role) : false;
         return (
-          <Tooltip key={role} content={panels[role]}>
+          <Tooltip key={role} content={panels[pending ? "pending_team_admin" : role]}>
             <button
               type="button"
               className={styles.roleChip}
               data-active={held}
+              data-pending={pending || undefined}
               aria-pressed={held}
               aria-disabled={readOnly}
+              aria-label={pending ? t("rework.teamRoles.pending_team_admin") : undefined}
               onClick={() => {
-                if (!readOnly) onToggle(role, held);
+                if (!readOnly) onToggle(pending ? "pending_team_admin" : role, held);
               }}
             >
+              {pending && (
+                <span className={styles.pendingIcon}>
+                  <Icon category="outlined" type="schedule" />
+                </span>
+              )}
               {t(`rework.teamRoles.${role}`)}
             </button>
           </Tooltip>

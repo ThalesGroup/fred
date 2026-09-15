@@ -98,6 +98,7 @@ class RelationType(str, Enum):
     # during the second implementation pass). team_admin and team_editor are
     # orthogonal, not hierarchical (REBAC.md "hard cross-write rule").
     TEAM_ADMIN = "team_admin"
+    PENDING_TEAM_ADMIN = "pending_team_admin"
     TEAM_EDITOR = "team_editor"
     TEAM_ANALYST = "team_analyst"
     TEAM_MEMBER = "team_member"
@@ -931,7 +932,7 @@ class RebacEngine(ABC):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,

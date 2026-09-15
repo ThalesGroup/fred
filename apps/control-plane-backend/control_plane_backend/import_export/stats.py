@@ -126,7 +126,13 @@ async def compute_platform_stats(
         # set of roles a member holds remains visible in the team's own
         # member-management table, not diluted here.
         primary_roles = [m.relations[0] for m in members]
-        admins = sum(1 for role in primary_roles if role == UserTeamRelation.TEAM_ADMIN)
+        # A pending nomination counts as an admin, so the columns still sum to total_members.
+        admins = sum(
+            1
+            for role in primary_roles
+            if role
+            in (UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN)
+        )
         editors = sum(
             1 for role in primary_roles if role == UserTeamRelation.TEAM_EDITOR
         )
