@@ -112,6 +112,13 @@ describe("ThoughtTrace", () => {
     expect(render([empty], false)).toContain('aria-label="rework.chatTrace.openReasoning"');
   });
 
+  it("shows a compact label for a reasoning round with nothing new", () => {
+    const again = msg({ ...REASONING, rank: 3, metadata: { extras: { thought_id: "t2", source: "model_native" } } });
+    const html = render([REASONING, again], false);
+    expect(html.match(/I should list the tabular documents first/g)).toHaveLength(2); // row 1: preview + aria-label
+    expect(html).toContain('aria-label="rework.chatTrace.restatedReasoning"');
+  });
+
   // The thread is an aria-live region, so the name is read out — and re-read on
   // every delta while the block streams. Bounded to roughly the three lines the
   // row actually shows; the rest is one click away in the drawer.

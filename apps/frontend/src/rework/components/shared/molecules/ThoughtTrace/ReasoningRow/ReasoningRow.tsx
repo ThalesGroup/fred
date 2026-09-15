@@ -37,10 +37,10 @@ function truncateForLabel(text: string): string {
  * though — the icon is its marker on the rail, the way the status dot is a tool
  * row's — so the two read as one sequence rather than two stacked lists.
  *
- * `text` is supplied rather than derived here: it is trimmed of whatever the
- * previous reasoning row already showed, which only `traceRows` can know.
+ * `text` and `restated` are supplied rather than derived here: the row is trimmed
+ * of what earlier reasoning rows already said, which only `traceRows` can know.
  */
-export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string }) {
+export function ReasoningRow({ entry, text, restated }: { entry: TraceEntry; text: string; restated: boolean }) {
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
 
@@ -62,7 +62,10 @@ export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string 
   // visible label, and the thread is an aria-live region, so an unbounded one
   // would have a screen reader read a whole reasoning block aloud — growing, and
   // re-announced, on every streamed delta. The full text is in the drawer.
-  const spokenLabel = [title, truncateForLabel(text), extras.conclusion].filter(Boolean).join(". ");
+  // A block with nothing new keeps its row — it is still a round, with a duration
+  // and a drawer — but says so instead of repeating what the rows above showed.
+  const previewText = restated ? t("rework.chatTrace.restatedReasoning") : text;
+  const spokenLabel = [title, truncateForLabel(previewText), extras.conclusion].filter(Boolean).join(". ");
 
   return (
     <button
@@ -78,10 +81,10 @@ export function ReasoningRow({ entry, text }: { entry: TraceEntry; text: string 
       <span className={styles.content}>
         {title && <span className={styles.title}>{title}</span>}
 
-        {/* Clamped to three lines of the block's OWN content — the repeated
-            preamble is already gone. Markdown is flattened; the rendered version
+        {/* Clamped to three lines of the block's OWN content — the restated
+            sentences are already gone. Markdown is flattened; the rendered version
             lives in the detail drawer. */}
-        {text && <span className={styles.preview}>{text}</span>}
+        {previewText && <span className={styles.preview}>{previewText}</span>}
 
         {extras.conclusion && <span className={styles.conclusion}>{extras.conclusion}</span>}
       </span>

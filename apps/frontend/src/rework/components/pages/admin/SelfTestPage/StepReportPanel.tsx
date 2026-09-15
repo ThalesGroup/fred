@@ -35,9 +35,13 @@ const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
 function overallState(steps: StepReport[], isRunning: boolean): TaskState {
   if (isRunning || steps.length === 0) return "running";
   if (steps.some((s) => s.status === "failed")) return "failed";
-  // A skipped REQUIRED step means a validation never ran (e.g. a precondition
-  // was missing), so the run did not succeed — only teardown/optional steps
-  // may skip freely.
+  // A run that skipped out before validating anything reports as cancelled, the
+  // same verdict its own steps carry: there is nothing to call a failure.
+  const validated = steps.some((s) => s.status === "passed" || s.status === "running");
+  if (!validated && steps.some((s) => s.status === "skipped")) return "cancelled";
+  // Past that point a skipped REQUIRED step means one validation of a run that
+  // did start never ran, so the run did not succeed — only teardown/optional
+  // steps may skip freely.
   if (steps.some((s) => s.status === "skipped" && !s.optional)) return "failed";
   return "succeeded";
 }

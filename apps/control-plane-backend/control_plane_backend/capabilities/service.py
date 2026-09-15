@@ -359,6 +359,7 @@ async def _build_enablement_item(
         # §5.6 — no stored row means off. One pre-fetched set for the whole
         # list, not a per-row query.
         reasoning_enabled=(entry.kind != "app" and entry.id in reasoning_enabled_ids),
+        model_display_name=entry.model_display_name,
     )
 
 
