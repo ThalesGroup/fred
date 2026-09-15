@@ -32,7 +32,7 @@ export const recoveryArtifactZipFilename = "original-release-artifact.zip";
 export const recoveryArtifactMetadataFilename =
   "original-artifact-metadata.json";
 
-function sha256Hex(bytes) {
+export function sha256Hex(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
@@ -76,6 +76,66 @@ function assertZipEntryModes(listing, expectedFiles) {
       "-",
       `recovery ZIP entry must not be a link or special file: ${entry.name}`,
     );
+}
+
+export async function verifyPinnedArtifactZip({
+  artifactZipPath,
+  artifactZipSha256,
+  expectedFiles,
+  label,
+  runCommand = run,
+}) {
+  assert(artifactZipPath, `${label} ZIP is required`);
+  assert.match(
+    artifactZipSha256 ?? "",
+    /^[0-9a-f]{64}$/,
+    `${label} ZIP digest is invalid`,
+  );
+  const zipPath = path.resolve(artifactZipPath);
+  await assertRegularFile(zipPath, `${label} ZIP`);
+  assert.equal(
+    sha256Hex(await readFile(zipPath)),
+    artifactZipSha256,
+    `${label} ZIP digest differs`,
+  );
+  const selectedFiles = [...expectedFiles].sort();
+  const [{ stdout: names }, { stdout: details }] = await Promise.all([
+    runCommand("unzip", ["-Z1", zipPath]),
+    runCommand("unzip", ["-Z", "-l", zipPath]),
+  ]);
+  assert.deepEqual(
+    names.split("\n").filter(Boolean).sort(),
+    selectedFiles,
+    `${label} ZIP file set differs`,
+  );
+  assertZipEntryModes(details, selectedFiles);
+
+  const extractedRoot = await mkdtemp(
+    path.join(os.tmpdir(), "fred-pinned-artifact-"),
+  );
+  try {
+    await runCommand("unzip", ["-qq", zipPath, "-d", extractedRoot]);
+    const extractedFiles = await listArchiveFiles(extractedRoot);
+    assert.deepEqual(
+      extractedFiles,
+      selectedFiles,
+      `${label} ZIP extracted file set differs`,
+    );
+    await assertNoArchiveLinks(extractedRoot, extractedFiles);
+    for (const filename of extractedFiles)
+      await assertRegularFile(
+        path.join(extractedRoot, filename),
+        `${label} ${filename}`,
+      );
+    return {
+      root: extractedRoot,
+      expectedFiles: selectedFiles,
+      dispose: () => rm(extractedRoot, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await rm(extractedRoot, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function originalTransferExecution(plan, transfer) {
@@ -147,45 +207,16 @@ export async function verifyOriginalRecoveryArtifact({
   transferredEvidence,
   runCommand = run,
 }) {
-  assert(artifactZipPath, "original recovery artifact ZIP is required");
-  const zipPath = path.resolve(artifactZipPath);
-  await assertRegularFile(zipPath, "original recovery artifact ZIP");
-  const zipBytes = await readFile(zipPath);
-  assert.equal(
-    sha256Hex(zipBytes),
-    plan.incident.artifactZipSha256,
-    "original recovery artifact ZIP digest differs",
-  );
   const expectedFiles = expectedCandidateFiles(contract);
-  const [{ stdout: names }, { stdout: details }] = await Promise.all([
-    runCommand("unzip", ["-Z1", zipPath]),
-    runCommand("unzip", ["-Z", "-l", zipPath]),
-  ]);
-  assert.deepEqual(
-    names.split("\n").filter(Boolean).sort(),
+  const extracted = await verifyPinnedArtifactZip({
+    artifactZipPath,
+    artifactZipSha256: plan.incident.artifactZipSha256,
     expectedFiles,
-    "recovery ZIP candidate file set differs",
-  );
-  assertZipEntryModes(details, expectedFiles);
-
-  const extractedRoot = await mkdtemp(
-    path.join(os.tmpdir(), "fred-bootstrap-recovery-artifact-"),
-  );
+    label: "original recovery artifact",
+    runCommand,
+  });
+  const extractedRoot = extracted.root;
   try {
-    await runCommand("unzip", ["-qq", zipPath, "-d", extractedRoot]);
-    const extractedFiles = await listArchiveFiles(extractedRoot);
-    assert.deepEqual(
-      extractedFiles,
-      expectedFiles,
-      "recovery ZIP extracted file set differs",
-    );
-    await assertNoArchiveLinks(extractedRoot, extractedFiles);
-    for (const filename of extractedFiles)
-      await assertRegularFile(
-        path.join(extractedRoot, filename),
-        `recovery artifact ${filename}`,
-      );
-
     const [evidence, transfer] = await Promise.all([
       readFile(
         path.join(extractedRoot, recoveryCandidateEvidenceFilename),
@@ -263,10 +294,10 @@ export async function verifyOriginalRecoveryArtifact({
       transfer,
       archivePaths,
       expectedFiles,
-      dispose: () => rm(extractedRoot, { recursive: true, force: true }),
+      dispose: extracted.dispose,
     };
   } catch (error) {
-    await rm(extractedRoot, { recursive: true, force: true });
+    await extracted.dispose();
     throw error;
   }
 }

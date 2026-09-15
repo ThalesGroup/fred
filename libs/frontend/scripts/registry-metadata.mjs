@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 
 const defaultRequestTimeoutMilliseconds = 10_000;
+const defaultVisibilityAttempts = 6;
+const defaultVisibilityDelayMilliseconds = 5_000;
 
 export function exactCoordinateIdentity(coordinate) {
   assert.equal(typeof coordinate, "string", "registry coordinate is required");
@@ -68,6 +70,21 @@ export function exactVersionMetadataUrl({ coordinate, registry }) {
     endpoint.origin,
     selected.origin,
     "registry metadata endpoint escaped the approved registry",
+  );
+  return endpoint;
+}
+
+export function packageMetadataUrl({ coordinate, registry }) {
+  const selected = approvedRegistryRoot(registry);
+  const { name } = exactCoordinateIdentity(coordinate);
+  const encodedName = encodeURIComponent(name)
+    .replace(/^%40/, "@")
+    .replaceAll("%2F", "%2f");
+  const endpoint = new URL(encodedName, selected);
+  assert.equal(
+    endpoint.origin,
+    selected.origin,
+    "registry package metadata endpoint escaped the approved registry",
   );
   return endpoint;
 }
@@ -158,4 +175,113 @@ export async function fetchExactPackageMetadata({
     });
   }
   return assertExactPublishedMetadata(metadata, candidate);
+}
+
+export async function fetchPackageMetadata({
+  coordinate,
+  registry,
+  candidate,
+  fetchMetadata = fetch,
+  requestTimeoutMilliseconds = defaultRequestTimeoutMilliseconds,
+}) {
+  assert.equal(
+    candidate?.coordinate,
+    coordinate,
+    "candidate coordinate differs",
+  );
+  assert.match(
+    candidate?.integrity ?? "",
+    /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+    `${coordinate} candidate integrity is missing or malformed`,
+  );
+  assert(
+    Number.isSafeInteger(requestTimeoutMilliseconds) &&
+      requestTimeoutMilliseconds > 0,
+    "registry metadata request timeout must be a positive integer",
+  );
+  const endpoint = packageMetadataUrl({ coordinate, registry });
+  let response;
+  try {
+    response = await fetchMetadata(endpoint, {
+      headers: { accept: "application/json" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(requestTimeoutMilliseconds),
+    });
+  } catch (error) {
+    throw new Error(`${coordinate} package metadata request failed`, {
+      cause: error,
+    });
+  }
+  if (response.url)
+    assert.equal(
+      new URL(response.url).href,
+      endpoint.href,
+      `${coordinate} package metadata response URL differs`,
+    );
+  if (response.status === 404) return null;
+  assert(
+    response.status < 300 || response.status >= 400,
+    `${coordinate} package metadata redirect is disallowed`,
+  );
+  assert.equal(
+    response.ok,
+    true,
+    `${coordinate} package metadata request failed with HTTP ${response.status}`,
+  );
+  let metadata;
+  try {
+    metadata = await response.json();
+  } catch (error) {
+    throw new Error(`${coordinate} package metadata is malformed JSON`, {
+      cause: error,
+    });
+  }
+  const { name, version } = exactCoordinateIdentity(coordinate);
+  assert(
+    metadata && typeof metadata === "object" && !Array.isArray(metadata),
+    `${coordinate} package metadata is malformed`,
+  );
+  assert.equal(
+    metadata.name,
+    name,
+    `${coordinate} package metadata name differs`,
+  );
+  assert(
+    metadata.versions &&
+      typeof metadata.versions === "object" &&
+      !Array.isArray(metadata.versions),
+    `${coordinate} package metadata versions are malformed`,
+  );
+  assertExactPublishedMetadata(metadata.versions[version], candidate);
+  return metadata;
+}
+
+export async function waitForPackageMetadata({
+  coordinate,
+  registry,
+  candidate,
+  inspectRegistry = fetchPackageMetadata,
+  visibilityAttempts = defaultVisibilityAttempts,
+  visibilityDelayMilliseconds = defaultVisibilityDelayMilliseconds,
+  waitForVisibility = (delay) =>
+    new Promise((resolve) => setTimeout(resolve, delay)),
+}) {
+  assert(
+    Number.isSafeInteger(visibilityAttempts) && visibilityAttempts > 0,
+    "package metadata visibility attempts must be a positive integer",
+  );
+  assert(
+    Number.isSafeInteger(visibilityDelayMilliseconds) &&
+      visibilityDelayMilliseconds >= 0,
+    "package metadata visibility delay must be a non-negative integer",
+  );
+  for (let attempt = 1; attempt <= visibilityAttempts; attempt += 1) {
+    const metadata = await inspectRegistry({ coordinate, registry, candidate });
+    if (metadata) return metadata;
+    if (attempt < visibilityAttempts)
+      await waitForVisibility(visibilityDelayMilliseconds);
+  }
+  throw new Error(
+    `${coordinate} package-wide metadata visibility retries exhausted after ${visibilityAttempts} reads`,
+  );
 }

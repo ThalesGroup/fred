@@ -140,6 +140,7 @@ test("manual publication workflow is branch-guarded and disabled by default", ()
     "prepare-only",
     "publish-bootstrap",
     "recover-bootstrap",
+    "verify-existing",
   ]);
   assert.equal(
     publishWorkflow.jobs["authorize-source"].steps[0].run,
@@ -153,6 +154,67 @@ test("manual publication workflow is branch-guarded and disabled by default", ()
   assert.equal(recovery.if, "inputs.publication == 'recover-bootstrap'");
   assert.equal(recovery.environment, "npm-publish");
   assert.equal(recovery.permissions["id-token"], "write");
+});
+
+test("verification continuation schedules no candidate or publication work", () => {
+  const prepare = publishWorkflow.jobs["prepare-registry-verification"];
+  const verify = publishWorkflow.jobs["verify-public-registry"];
+  assert.equal(prepare.needs, "authorize-source");
+  assert.equal(prepare.if, "inputs.publication == 'verify-existing'");
+  assert.deepEqual(prepare.permissions, { actions: "read", contents: "read" });
+  assert.equal(prepare.environment, undefined);
+  assert.equal(prepare.permissions["id-token"], undefined);
+  assert.match(verify.if, /inputs\.publication == 'verify-existing'/);
+  assert.match(
+    verify.if,
+    /needs\.prepare-registry-verification\.result == 'success'/,
+  );
+  assert.deepEqual(verify.permissions, { contents: "read" });
+  assert.equal(verify.environment, undefined);
+  assert.equal(verify.permissions["id-token"], undefined);
+  assert.equal(
+    publishWorkflow.jobs["prepare-candidate"].if,
+    "inputs.publication == 'prepare-only' || inputs.publication == 'publish-bootstrap'",
+  );
+  assert.equal(
+    publishWorkflow.jobs["validate-application-compatibility"].if,
+    "inputs.publication == 'prepare-only' || inputs.publication == 'publish-bootstrap'",
+  );
+  for (const name of ["publish-bootstrap", "publish-bootstrap-recovery"])
+    assert.doesNotMatch(
+      publishWorkflow.jobs[name].if,
+      /verify-existing/,
+      `${name} must not run for verification continuation`,
+    );
+  assert.equal(
+    publishWorkflowSource.includes(
+      "frontend-packages-registry-verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}",
+    ),
+    true,
+  );
+  const retrieve = prepare.steps.find(
+    (step) => step.name === "Retrieve the exact recovery artifact",
+  );
+  assert.match(retrieve.run, /actions\/artifacts\/10363547296\/zip/);
+  assert.match(
+    retrieve.run,
+    /fe008c951be747cc496e9c82adf4f54f8ecd4d5c8c8bdbbf9dbda1d2a34e86b8/,
+  );
+  assert.equal(
+    JSON.stringify([...prepare.steps, ...verify.steps]).includes(
+      "NPM_BOOTSTRAP_TOKEN",
+    ),
+    false,
+  );
+  assert.equal(
+    [...prepare.steps, ...verify.steps].some((step) =>
+      [
+        "make release-transfer-create",
+        "make release-transfer-validate",
+      ].includes(step.run),
+    ),
+    false,
+  );
 });
 
 test("bootstrap token is referenced only by the mutually exclusive publication steps", () => {
@@ -329,6 +391,13 @@ test("public-registry verification reuses the explicitly provisioned Chromium pa
   assert.notEqual(provisionIndex, -1);
   assert.notEqual(verifyIndex, -1);
   assert(provisionIndex < verifyIndex);
+  const continuationVerifyIndex = registryVerifier.steps.findIndex(
+    (step) =>
+      step.name === "Verify existing public registry packages and provenance" &&
+      step.run?.includes("npm run registry:verify"),
+  );
+  assert.notEqual(continuationVerifyIndex, -1);
+  assert(provisionIndex < continuationVerifyIndex);
 });
 
 test("CI transfers one same-run fixture set from release to application tooling", () => {

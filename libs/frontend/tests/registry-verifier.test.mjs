@@ -163,6 +163,7 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
     expectedPackage: selected,
     candidate,
     fetchMetadata: async () => metadata,
+    waitForPackageVisibility: async () => metadata,
     runCommand,
   });
   assert.equal(registryPackage.provenanceUrl, provenanceUrl);
@@ -317,6 +318,7 @@ test("registry archive identity and candidate integrity fail before dependency i
         version: selected.version,
         dist: { integrity },
       }),
+      waitForPackageVisibility: async () => {},
       runCommand: async (_command, args) => {
         commands.push(args);
         if (args[0] === "pack")
@@ -363,6 +365,7 @@ test("registry lock fallback fails before npm ci", async (context) => {
           },
         },
       }),
+      waitForPackageVisibility: async () => {},
       runCommand: async (_command, args) => {
         if (args[0] === "pack")
           return { stdout: JSON.stringify([{ filename }]) };
@@ -459,6 +462,7 @@ test("rejects missing, malformed, and disallowed npm attestation URLs", async (c
         expectedPackage: selected,
         candidate,
         fetchMetadata: async () => metadata,
+        waitForPackageVisibility: async () => metadata,
         runCommand: async (_command, args) => {
           if (args[0] === "pack")
             return { stdout: JSON.stringify([{ filename }]) };

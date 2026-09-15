@@ -407,6 +407,13 @@ MUST confirm that Playwright resolves Chromium from that directory and that the 
 exists. Missing, default-cache, or differently resolved Chromium MUST fail actionably; registry
 verification MUST NOT install or download a browser.
 
+After exact-version metadata establishes the expected name, version, and candidate SHA-512, the
+verifier MAY perform bounded read-only package-wide metadata readiness checks required by npm
+transport. It MUST retry only an actual package-wide HTTP 404 and MUST fail immediately on
+authentication or authorization errors, redirects, malformed metadata, or identity/integrity
+mismatches. It MUST NOT interpret readiness as release identity, repeat publication, or use a
+local archive when npm transport remains unavailable.
+
 #### Scenario: Published candidates match recorded evidence
 
 - **WHEN** the command is given the three exact published coordinates and their recorded
@@ -497,6 +504,20 @@ verification MUST NOT install or download a browser.
 - **WHEN** registry metadata, downloaded bytes, or provenance is missing or differs from
   the expected coordinate and integrity
 - **THEN** verification fails and does not substitute a local archive or source tree
+
+#### Scenario: Package-wide metadata becomes visible after the exact version
+
+- **WHEN** exact-version metadata already matches approved identity and SHA-512 while npm's
+  package-wide metadata initially returns 404 and then returns the same exact version
+- **THEN** the verifier performs bounded read-only readiness retries and continues once without
+  changing the release identity or invoking publication
+
+#### Scenario: Package-wide readiness cannot establish matching metadata
+
+- **WHEN** package-wide 404 retries are exhausted or a read is unauthorized, redirected,
+  malformed, or inconsistent with the exact expected version and integrity
+- **THEN** verification fails before npm transport, consumers, or evidence completion and does
+  not fall back to local bytes
 
 #### Scenario: A registry consumer attempts local fallback
 
@@ -596,6 +617,34 @@ MUST reject any separately transferred candidate copy that differs from the ZIP 
 only archive paths derived from its fresh verified extraction. It MUST clean that extraction and
 MUST NOT regenerate or re-baseline the original evidence.
 
+Reusable recovery plan, identity, provenance-expectation, and evidence validation MUST be
+independent of either executable CLI module. Recovery preparation MUST be able to dynamically load
+the real registry verifier for existing-package provenance without a circular module-evaluation
+wait, while the registry-verifier CLI MUST continue to load and enforce recovery evidence. CLI
+errors MUST propagate as nonzero exits. Controlled acceptance tests MUST execute the actual entry
+points in fresh processes with bounded timeouts and MUST NOT replace or bypass the existing-package
+verification path.
+
+After the three versions exist, the workflow SHALL provide a separate `verify-existing` choice
+that schedules only source authorization, pinned publication-evidence retrieval, dependency and
+browser provisioning, and public-registry verification. It MUST NOT schedule candidate creation,
+candidate compatibility transfer, bootstrap publication, or recovery publication. It MUST use
+only read access needed for artifact retrieval and MUST NOT use the `npm-publish` environment,
+`NPM_BOOTSTRAP_TOKEN`, publishing credentials, or `id-token: write`.
+
+Verification continuation MUST pin and validate the retained recovery artifact's ID, name,
+source commit, run/attempt, API digest, and downloaded ZIP SHA-256. It MUST validate the outer ZIP
+and its exact regular-file set, the nested original candidate ZIP and metadata, every unchanged
+candidate/recovery evidence record, and every archive copy before registry access. Historical
+publication expectations MUST remain bound to each package's actual publication commit and
+workflow; the current verification commit, run, and attempt MUST be recorded separately from
+GitHub's actual execution without overwriting, relabelling, or spoofing historical evidence.
+
+The same unexpired retained artifact MAY be verified by more than one later workflow execution.
+Final public-registry evidence MUST be written and retained only after all three exact registry
+archives and lock graphs, npm signatures, Sigstore bundles, expected provenance identities,
+clean registry consumers, browser smoke, and production-host compatibility succeed.
+
 #### Scenario: Maintainers bootstrap a new public package
 
 - **WHEN** one of the selected package names does not yet exist in the approved npm scope
@@ -670,6 +719,59 @@ MUST NOT regenerate or re-baseline the original evidence.
 - **WHEN** the recovery ZIP contains traversal, a link or special file, an omitted expected file,
   or an additional candidate file
 - **THEN** recovery rejects it before extracting or resolving any registry state
+
+#### Scenario: Recovery preparation loads the real verifier in a fresh process
+
+- **WHEN** the recovery preparation CLI verifies the published design-token package and
+  dynamically loads the registry verifier from a fresh Node process
+- **THEN** module evaluation completes, cryptographic provenance is enforced, recovery evidence is
+  written only on success, and the process does not exit with an unsettled top-level await
+
+#### Scenario: Recovery-aware registry verification loads the shared evidence contract
+
+- **WHEN** the public-registry verifier CLI receives a recovery plan and evidence
+- **THEN** it imports the independent validation contract, rejects invalid recovery evidence, and
+  continues past valid evidence without importing the executable recovery entry module
+
+#### Scenario: Maintainers continue verification without publication
+
+- **WHEN** all three coordinates already exist and a maintainer dispatches `verify-existing` on
+  `swift` against the pinned retained recovery artifact
+- **THEN** only authorization, artifact retrieval/verification, provisioning, and registry
+  verification run, with no protected environment, credential, candidate build, or publication
+
+#### Scenario: Historical publication and current verification differ
+
+- **WHEN** a later workflow verifies packages published by the original and recovery commits
+- **THEN** provenance is checked against each historical publication commit while final evidence
+  separately records the verifier's actual current commit, run ID, and attempt
+
+#### Scenario: A retained verification artifact or copy differs
+
+- **WHEN** the recovery artifact metadata or ZIP, nested original ZIP, evidence, or archive copy
+  differs from its reviewed identity and digest
+- **THEN** verification stops before registry consumption and does not rebuild, re-baseline, or
+  substitute the candidate
+
+#### Scenario: The same retained publication is verified again
+
+- **WHEN** another `verify-existing` execution receives the same unexpired pinned artifact and all
+  immutable checks pass
+- **THEN** it may repeat the complete read-only verification and records its own execution
+  identity without requiring any package to be absent
+
+#### Scenario: A continuation gate fails before completion
+
+- **WHEN** any archive, registry, signature, provenance, consumer, browser, or host gate fails
+- **THEN** no completed public-registry verification evidence is retained and no publication path
+  is scheduled
+
+#### Scenario: A recovery subprocess encounters a validation or publication failure
+
+- **WHEN** the original artifact, transferred copies, existing-package provenance, or publication
+  operation fails in a fresh recovery CLI process
+- **THEN** it returns a nonzero exit, performs no forbidden or subsequent publication, and cannot
+  hang beyond the bounded test deadline
 
 #### Scenario: Recovery and original provenance have different source commits
 

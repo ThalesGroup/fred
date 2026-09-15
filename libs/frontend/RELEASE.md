@@ -1,11 +1,10 @@
 # Frontend package release readiness
 
-The producer prepares `@fred-oss/design-tokens`, `@fred-oss/ui`, and
-`@fred-oss/iframe-sdk` version `0.1.0-alpha.1` for public npm publication under the
-`next` tag. Repository commands and pull-request jobs do not publish. The manual
-publication workflow remains disabled by default. The release contract is now
-maintainer-confirmed, but publication still requires a committed `swift` source, an explicit
-manual publication choice, and approval through the protected environment.
+The first `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk`
+`0.1.0-alpha.1` versions are published on public npm under the `next` tag. Repository commands
+and pull-request jobs do not publish, and the manual publication workflow remains disabled by
+default. Genuine all-package registry verification is still pending after a temporary npm
+package-wide metadata failure; the verification-only continuation below does not publish.
 
 ## Release contracts
 
@@ -184,12 +183,20 @@ manifest/real-path checks prove that the exact package is a non-linked dependenc
 root. A package-lock alone is insufficient, and a missing install or local/workspace/checkout
 fallback fails closed.
 
+`npm pack` requires package-wide metadata even after the verifier has accepted exact-version
+metadata. The verifier therefore performs a separate bounded package-wide readiness check before
+invoking npm. Only a package-wide HTTP 404 is retried; authentication, authorization, redirect,
+malformed metadata, name/version drift, and integrity drift fail immediately. The exact-version
+identity and candidate SHA-512 remain the authority, and no publication command is involved.
+
 ## Prepared first-release workflow
 
 `.github/workflows/Publish-frontend-packages.yml` is manual-only. It rejects every ref except
 `swift`, defaults to `prepare-only`, and requires the explicit `publish-bootstrap` choice before
 the ordinary publication job exists. The separate `recover-bootstrap` choice is restricted to the
-reviewed partial-release incident described below. The workflow uses Node `24.21.0` and npm `11.19.0` to validate and
+reviewed partial-release incident described below. `verify-existing` is read-only and schedules
+only source authorization, retained-evidence retrieval, dependency/browser provisioning, and
+registry verification. The workflow uses Node `24.21.0` and npm `11.19.0` to validate and
 pack one designated candidate set, transfers those exact bytes to the separately pinned
 application Node `22.13.0` / npm `10.9.2` job, and writes approved evidence only after offline
 consumers, browser smoke, and production-host compatibility pass. The final 30-day artifact keeps
@@ -229,6 +236,16 @@ exact-version endpoint means absent or temporarily invisible; redirects, authent
 HTTP failures, timeouts, malformed JSON, and identity/integrity drift fail immediately. The
 adapter follows no redirect and requires the response to remain on the selected registry request.
 
+Recovery workflow run `34873471933` subsequently downloaded and hash-verified the pinned original
+ZIP but failed during preparation with exit `13` and an unsettled top-level await. The recovery
+entry module was awaiting its dynamic registry-verifier import while the verifier imported
+recovery-evidence validation back from that still-evaluating entry module. Recovery plan and
+evidence validation now resides in an execution-independent module imported by both entry points;
+the registry verifier no longer imports the executable recovery module. Bounded fresh-process
+tests execute the real preparation, controlled publication, and recovery-aware verifier CLIs,
+including real existing-package resolution and cryptographically signed controlled provenance.
+Those local fixtures cannot contact a writable registry and remain tooling evidence only.
+
 The final original artifact is ID `10352121632`, named
 `frontend-packages-release-f49f2439d54b44f7739c5bd7fca3f789e0e528d6-34853407387-1`, with
 ZIP SHA-256 `25fe6a65498d7109b8ec5a2b6d43de24fa9b9d161376ab80f2416c82ac328b82`.
@@ -265,7 +282,7 @@ issuer, coordinates, and archive digests. Final registry verification consumes t
 performs signature, Sigstore, exact-identity, clean-consumer, browser, and host checks for all
 three packages.
 
-Manual recovery procedure (not executed by repository tests):
+Historical recovery procedure (completed by run `34882883783`; do not rerun):
 
 1. Merge the reviewed correction to `swift` before the retained artifact expires. Confirm artifact
    `10352121632` is still available and its reported and downloaded ZIP digests match the value
@@ -275,8 +292,8 @@ Manual recovery procedure (not executed by repository tests):
    versioned candidate.
 2. Recheck exact registry state: design tokens must match the recorded name/version/SHA-512 and
    provenance; UI and SDK must be absent. Any other state stops this recovery.
-3. In **Actions → Publish frontend packages → Run workflow**, select `swift` and
-   `recover-bootstrap`. Do not select `publish-bootstrap`, which intentionally rejects the partial
+3. The completed run selected `swift` and `recover-bootstrap`. Do not dispatch that operation
+   again now that all three exact versions exist; ordinary recovery intentionally rejects this
    state.
 4. Review the preparation job's recovery evidence. Confirm it names the original artifact/run and
    original candidate commit, the current workflow run and real `GITHUB_SHA`, design tokens as the
@@ -292,8 +309,50 @@ Manual recovery procedure (not executed by repository tests):
    state. A package confirmed with the expected bytes is immutable; an indeterminate or drifted
    state requires explicit review and normally a new version.
 
-The workflow and controlled tests only prepare this recovery. They do not constitute protected
-environment approval, publication of UI/SDK, or genuine all-package registry verification.
+Recovery run `34882883783`, attempt `1`, from `a1fedc661c9ec1846b5333aa4e546af0f0810033`
+completed protected publication of UI and iframe SDK. Its final registry-verification job then
+failed when `npm pack @fred-oss/ui@0.1.0-alpha.1` received a temporary package-wide E404 even
+though exact-version metadata was already visible. Later read-only checks found both endpoints
+available for all three packages. Do not rerun that failed job: retained artifact names and
+evidence are bound to its original `github.run_attempt`.
+
+### Verification-only continuation
+
+`release/registry-verification-continuation.json` pins recovery artifact `10363547296`, ZIP
+SHA-256 `fe008c951be747cc496e9c82adf4f54f8ecd4d5c8c8bdbbf9dbda1d2a34e86b8`, the nested
+original artifact and digest, the historical publication run, and the per-package publication
+commits. The workflow retrieves that artifact with read-only Actions permission, verifies its
+GitHub metadata and ZIP, verifies the nested original candidate ZIP, and requires every loose
+archive/evidence copy to match those pinned containers. Original candidate and recovery evidence
+are copied unchanged.
+
+Historical publication identity is not the verification execution identity. Design-token
+provenance remains bound to `f49f2439d54b44f7739c5bd7fca3f789e0e528d6`; UI and SDK
+provenance remain bound to `a1fedc661c9ec1846b5333aa4e546af0f0810033`. Separate
+verification-input evidence records the new workflow's actual commit, run ID, and run attempt
+from GitHub without rewriting or spoofing either publication record. Final
+`public-registry-verification` evidence is written and retained only after exact archive and
+lock-graph checks, npm signature audit, Sigstore and release-identity verification, all three
+clean registry consumers, browser smoke, and production-host compatibility succeed.
+
+Manual continuation procedure (not executed by repository tests):
+
+1. Merge this correction to `swift` while recovery artifact `10363547296` and original artifact
+   `10352121632` remain available. Confirm their API and downloaded ZIP SHA-256 values match the
+   continuation contract.
+2. In **Actions → Publish frontend packages → Run workflow**, select branch `swift`, choose
+   `verify-existing`, and leave every publication option unselected. No environment approval or
+   npm credential is required.
+3. Confirm only `authorize-source`, `prepare-registry-verification`, and
+   `verify-public-registry` run. Candidate creation, compatibility-candidate transfer, bootstrap,
+   and recovery publication jobs must be skipped.
+4. Retain
+   `frontend-packages-public-registry-verification-<verification-sha>-<run-id>-<run-attempt>` only
+   if the final job passes. Confirm its historical publication identity remains the values above
+   and its verification execution matches that new run exactly.
+5. A later verification may repeat `verify-existing` against the same unexpired pinned recovery
+   artifact. Any artifact, evidence, registry, signature, provenance, consumer, browser, or host
+   mismatch fails closed and does not authorize publication or local fallback.
 
 The initial token is used only for creation. Later releases require a separately reviewed workflow
 change that removes the bootstrap secret and uses direct npm Trusted Publishing with GitHub

@@ -18,6 +18,14 @@
 // conversations to demo the evaluation dataset builder is another — both
 // compose the same PipelineDeps actions.
 
+/** The longest hold the harness agent runs, mirroring the clamp it applies itself. */
+import type { CapturedCredential } from "./sessionCredential";
+
+export const MAX_HOLD_SECONDS = 900;
+
+/** The same bound in whole minutes, for the text that quotes the limit. */
+export const MAX_HOLD_MINUTES = Math.floor(MAX_HOLD_SECONDS / 60);
+
 export type StepStatus = "pending" | "running" | "passed" | "failed" | "skipped";
 
 export interface StepReport {
@@ -39,6 +47,8 @@ export interface AgentTurnResult {
   answer: string;
   sources: unknown[];
   sessionId: string | null;
+  /** Local arrival times, not server execution timestamps. */
+  statusSeenAt?: Record<string, number>;
 }
 
 /**
@@ -58,6 +68,7 @@ export interface PipelineDeps {
   provisionAgentInstance(
     sourceAgentId: string,
     tuningFieldValues?: Record<string, string | number | boolean>,
+    signal?: AbortSignal,
   ): Promise<string | null>;
   /** Delete a managed agent instance (teardown). */
   deleteAgentInstance(agentInstanceId: string): Promise<void>;
@@ -78,6 +89,15 @@ export interface PipelineDeps {
     question: string;
     libraryIds: string[];
     sessionId?: string | null;
+    /** Pin this captured credential to the turn while browser SSO refresh
+     *  continues. Branded, so only a credential taken from the live session can
+     *  be pinned — never an arbitrary string. */
+    bearer?: CapturedCredential;
+    signal?: AbortSignal;
+    onProgress?: (detail: string) => void;
+    /** Called as each named status arrives, so a long turn can report
+     *  what it has already proven instead of only at the end. */
+    onStatus?: (status: string) => void;
   }): Promise<AgentTurnResult>;
 }
 
