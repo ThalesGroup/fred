@@ -6,7 +6,7 @@ RELEASE_CONTRACT ?= release/proposed-release-contract.json
 RELEASE_TRANSFER_ROOT ?= target/release-transfer
 RELEASE_VALIDATION_ROOT ?= target/release-validation
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence bootstrap-recovery registry-prepare-existing registry-verify clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,6 +90,12 @@ release-candidate: ## Build evidence under an explicitly selected contract
 
 release-verify-evidence: ## Recompute integrity for an existing candidate set
 	npm run release:verify-evidence --
+
+bootstrap-recovery: ## Prepare or execute the reviewed partial-bootstrap recovery
+	npm run release:bootstrap-recovery --
+
+registry-prepare-existing: ## Verify and materialize the retained publication evidence
+	npm run registry:prepare-existing --
 
 registry-verify: ## Verify exact published coordinates (network; never local fallback)
 	npm run registry:verify --

@@ -1,6 +1,17 @@
+// Every dimension derives from the track height so each size keeps the same proportions.
 .switch-container {
+  --switch-height: 2rem;
+  --switch-width: calc(var(--switch-height) * 1.625);
+  // Slightly smaller when off: at equal size the handle reads smaller on the filled "on" track.
+  --switch-handle-size-off: calc(var(--switch-height) * 0.6875);
+  --switch-handle-size-on: calc(var(--switch-height) * 0.75);
+  --switch-border-width: 1px;
   display: inline-block;
   vertical-align: middle;
+
+  &[data-size="small"] {
+    --switch-height: 1.5rem;
+  }
 }
 
 .native-input {
@@ -30,8 +41,8 @@
 
     .switch-handle {
       --switch-handle-background-color: var(--on-primary);
-      left: 0;
-      transform: translateY(-50%) translateX(100%);
+      --switch-handle-size: var(--switch-handle-size-on);
+      transform: translate(-50%, -50%) translateX(calc(var(--switch-width) - var(--switch-height)));
     }
 
     .state-layer:hover {
@@ -51,12 +62,13 @@
   --switch-background-color: var(--surface-container-high);
   position: relative;
   cursor: pointer;
-  border: 1px solid var(--switch-border-color);
+  border: var(--switch-border-width) solid var(--switch-border-color);
   border-radius: var(--radius-full);
+  // Opt out of the global superellipse: a switch is a true pill.
+  corner-shape: round;
   background-color: var(--switch-background-color);
-  width: 52px;
-  height: 2rem;
-  --switch-padding: var(--spacing-2xs);
+  width: var(--switch-width);
+  height: var(--switch-height);
   overflow: hidden;
 }
 
@@ -66,15 +78,22 @@
   height: 100%;
 }
 
+// Centered on a square slot at the track's end, so resizing keeps the handle centered
+// and the travel between slots does not depend on the handle size.
 .switch-handle {
   --switch-handle-background-color: var(--on-surface-retreat);
+  --switch-handle-size: var(--switch-handle-size-off);
   position: absolute;
   top: 50%;
-  left: var(--switch-padding);
-  transform: translateY(-50%);
-  transition: transform 0.2s;
+  left: calc(var(--switch-height) / 2 - var(--switch-border-width));
+  transform: translate(-50%, -50%);
+  transition:
+    transform 0.2s,
+    width 0.2s,
+    height 0.2s;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background-color: var(--switch-handle-background-color);
-  width: 1.5rem;
-  height: 1.5rem;
+  width: var(--switch-handle-size);
+  height: var(--switch-handle-size);
 }

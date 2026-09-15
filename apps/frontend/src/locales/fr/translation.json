@@ -1118,7 +1118,7 @@
         "loading": "Chargement des fonctionnalités…",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
-        "manageTeams": "Gérer les équipes",
+        "manageTeams": "Gérer par équipe",
         "kindFilter": {
           "tool": "Capacités",
           "agent": "Agents",
@@ -1156,7 +1156,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — agents suspendus",
-          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
@@ -2122,6 +2122,17 @@
         "title": "Auto-test d'autorisation",
         "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",
+        "expiry": {
+          "title": "Auto-test de renouvellement des identifiants",
+          "run": "Lancer l'expiration des identifiants",
+          "warning": {
+            "title": "Gardez cette page ouverte jusqu'à la fin du test",
+            "message": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc environ {{minutes}} minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "messageUnknownWait": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc plusieurs minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "confirm": "Lancer et garder la page ouverte"
+          },
+          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
+        },
         "testProfile": {
           "title": "Tester un autre profil",
           "usernameLabel": "Compte",
