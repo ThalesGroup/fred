@@ -191,7 +191,9 @@ export default function TeamSettingsMembersTable({ team, search, size = "medium"
       },
       {
         label: t("rework.teamSettings.members.table.role"),
-        size: "1.5fr",
+        // Fixed, sized to the widest row (a pending admin's clock chip plus the three others), so the
+        // chips stay on one line and the identity columns truncate instead (DataTable advises against "auto").
+        size: "23rem",
         cellRenderer: (teamMember) => (
           <TeamRoleChips
             heldRoles={teamMember.relations}
