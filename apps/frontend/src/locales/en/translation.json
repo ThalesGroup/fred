@@ -1433,11 +1433,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
-        "last15m": "Last 15 minutes",
-        "last1h": "Last 1 hour",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
-        "last6h": "Last 6 hours",
         "last7d": "Last 7 days",
         "thisMonth": "This month",
         "thisWeek": "This week",
@@ -1481,6 +1478,9 @@
       },
       "timeRange": {
         "apply": "Apply",
+        "months": "Months",
+        "next": "Next period",
+        "previous": "Previous period",
         "since": "From",
         "until": "To"
       },

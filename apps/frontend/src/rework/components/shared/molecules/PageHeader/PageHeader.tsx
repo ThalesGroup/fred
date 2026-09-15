@@ -28,6 +28,10 @@ interface PageHeaderProps {
   breadcrumb?: ReactNode;
   /** Optional tab strip or filter control rendered below the title row, full width. */
   tabs?: ReactNode;
+  /** Keeps the header pinned to the top of the scrolling content — for dashboards whose `actions`
+   *  (e.g. a time range) must stay reachable next to the charts far down the page. Assumes the
+   *  page's `--spacing-xl` gutter, which the header bleeds over to hide what scrolls under it. */
+  sticky?: boolean;
 }
 
 /**
@@ -40,9 +44,17 @@ interface PageHeaderProps {
  * aligns to the top when there is one, so `actions` sits at the title's
  * baseline instead of drifting down toward the two-line block's middle.
  */
-export default function PageHeader({ title, subtitle, titleAction, actions, breadcrumb, tabs }: PageHeaderProps) {
+export default function PageHeader({
+  title,
+  subtitle,
+  titleAction,
+  actions,
+  breadcrumb,
+  tabs,
+  sticky = false,
+}: PageHeaderProps) {
   return (
-    <div className={styles.wrapper}>
+    <div className={sticky ? `${styles.wrapper} ${styles.sticky}` : styles.wrapper}>
       {breadcrumb && <div className={styles.breadcrumb}>{breadcrumb}</div>}
       <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
         <div className={styles.titleBlock}>
