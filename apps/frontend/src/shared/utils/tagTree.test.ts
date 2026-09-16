@@ -110,9 +110,7 @@ describe("withoutMachineWritten", () => {
   });
 
   it("returns a corpus with no machine-written library untouched", () => {
-    const humanOnly = [
-      { id: "t-reports", name: "Reports", path: "", type: "document", item_ids: [] },
-    ] as never;
+    const humanOnly = [{ id: "t-reports", name: "Reports", path: "", type: "document", item_ids: [] }] as never;
     expect(withoutMachineWritten(humanOnly)).toBe(humanOnly);
   });
 
