@@ -142,6 +142,9 @@ test("UI-only provisioning verifies exact bytes and provenance without historica
           repository: expected.repository,
           sourceCommit: expected.sourceCommit,
           workflow: expected.workflow,
+          invocationRepository: expected.repository,
+          runId: "12345",
+          runAttempt: "1",
         },
       };
     },

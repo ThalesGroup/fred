@@ -26,6 +26,22 @@ export const UI_COMPONENT_SOURCE_PATHS = [
   "apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.module.scss",
   "apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.tsx",
   "apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.module.scss",
+  "apps/frontend/src/rework/components/shared/atoms/Checkbox/Checkbox.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/Checkbox/Checkbox.module.scss",
+  "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.module.css",
+  "apps/frontend/src/rework/components/shared/atoms/Tooltip/Tooltip.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/Tooltip/Tooltip.module.scss",
+  "apps/frontend/src/rework/components/shared/atoms/MenuItem/MenuItem.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/MenuItem/MenuItem.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/Menu/Menu.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Menu/Menu.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/Select/Select.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Select/Select.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css",
+  "apps/frontend/src/rework/components/shared/utils/Portal.tsx",
+  "apps/frontend/src/rework/components/shared/utils/viewport.ts",
 ];
 
 export const UI_STYLE_SUPPORT_PATHS = [

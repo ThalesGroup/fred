@@ -61,6 +61,14 @@ function pressKey(key: string) {
   });
 }
 
+function captureOptionScroll() {
+  const scrolled: Element[] = [];
+  const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+    scrolled.push(this);
+  });
+  return { scrolled, restore: () => spy.mockRestore() };
+}
+
 function activeDescendantLabel(options: OptionModel<string>[]): string | undefined {
   const id = trigger().getAttribute("aria-activedescendant");
   if (!id) return undefined;
@@ -88,6 +96,78 @@ describe("Select accessible name", () => {
 
     expect(trigger().hasAttribute("aria-label")).toBe(false);
     expect(container.querySelector("label")?.getAttribute("for")).toBe(trigger().id);
+  });
+});
+
+describe("Select option keys remain opaque DOM IDs", () => {
+  it("opens and scrolls to a colon-bearing key, then navigates and selects the period-bearing key", () => {
+    const onChange = vi.fn();
+    const options: OptionModel<string>[] = [
+      { key: "team:alpha", value: "alpha", label: "Alpha" },
+      { key: "team.alpha", value: "beta", label: "Beta" },
+    ];
+    const scroll = captureOptionScroll();
+    try {
+      render(<Select options={options} onChange={onChange} size="medium" />);
+      expect(() => pressKey("ArrowDown")).not.toThrow();
+      const firstId = trigger().getAttribute("aria-activedescendant");
+      expect(firstId).toContain("team:alpha");
+      expect(scroll.scrolled).toEqual([document.getElementById(firstId!)]);
+
+      pressKey("ArrowDown");
+      const secondId = trigger().getAttribute("aria-activedescendant");
+      expect(secondId).toContain("team.alpha");
+      expect(scroll.scrolled[scroll.scrolled.length - 1]).toBe(document.getElementById(secondId!));
+      pressKey("Enter");
+      expect(onChange).toHaveBeenCalledExactlyOnceWith("beta");
+    } finally {
+      scroll.restore();
+    }
+  });
+
+  it("opens and scrolls to a period-bearing key before Enter selects its generic value", () => {
+    const value = { team: "alpha" };
+    const onChange = vi.fn();
+    const scroll = captureOptionScroll();
+    try {
+      render(<Select options={[{ key: "team.alpha", value, label: "Alpha" }]} onChange={onChange} size="small" />);
+      expect(() => pressKey("ArrowDown")).not.toThrow();
+      const activeId = trigger().getAttribute("aria-activedescendant");
+      expect(scroll.scrolled).toEqual([document.getElementById(activeId!)]);
+      pressKey("Enter");
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(value);
+    } finally {
+      scroll.restore();
+    }
+  });
+
+  it("scrolls only the active option in each owning menu when two menus are mounted", () => {
+    const scroll = captureOptionScroll();
+    try {
+      render(
+        <>
+          <Select options={[{ key: "team.alpha", value: "first", label: "First" }]} onChange={() => {}} size="small" />
+          <Select
+            options={[{ key: "team.alpha", value: "second", label: "Second" }]}
+            onChange={() => {}}
+            size="small"
+          />
+        </>,
+      );
+      const triggers = [...container.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]')];
+      for (const button of triggers) {
+        act(() =>
+          button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })),
+        );
+      }
+      const lists = [...document.querySelectorAll<HTMLUListElement>('ul[role="listbox"]')];
+      expect(lists).toHaveLength(2);
+      expect(scroll.scrolled).toEqual([lists[0].children[0], lists[1].children[0]]);
+      expect(lists[0].contains(document.getElementById(triggers[0].getAttribute("aria-activedescendant")!))).toBe(true);
+      expect(lists[1].contains(document.getElementById(triggers[1].getAttribute("aria-activedescendant")!))).toBe(true);
+    } finally {
+      scroll.restore();
+    }
   });
 });
 
@@ -251,6 +331,7 @@ describe("Select does not leak the keys it handles to its host", () => {
 
   it("keeps Escape from reaching the host while the menu is open", () => {
     render(<Select options={OPTS} value="a" onChange={() => {}} size="medium" />);
+    trigger().focus();
     pressKey("ArrowDown"); // open
     const host = countingHost();
 

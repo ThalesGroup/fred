@@ -47,7 +47,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@shared/utils/Portal.tsx", () => ({
+vi.mock("@shared/utils/Portal.tsx", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/utils/Portal.tsx")>()),
   Portal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
