@@ -150,10 +150,15 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** several zones playing the same part on a slide are fitted, and one of them needs a smaller font than its siblings
 - **THEN** they all take the smallest of their sizes, a single unbreakable token such as an address never takes a zone below the font floor, and a column heading written into a body for want of a heading zone drops its bullet so it still reads as a heading
 
-#### Scenario: Two decks of one conversation do not overwrite each other
+#### Scenario: One answer delivers one presentation
 
-- **WHEN** a second presentation is built in the same conversation
-- **THEN** it is stored under its own key, so the preview of the earlier answer still shows the deck it was built with, and the file the user downloads keeps the name the plan gave it
+- **WHEN** an agent splits a deck across several build calls, or repeats one after a busy answer
+- **THEN** the tool states that a single call builds the whole deck and that calling again replaces it, and the decks of one conversation that share a name share a key, so the reader is never shown a card per fragment each holding a truncated presentation
+
+#### Scenario: A busy server does not invite parallel retries
+
+- **WHEN** a build is refused because the server's heavy-job slots are taken
+- **THEN** the refusal tells the agent to wait and then make a single call with the whole deck, rather than to retry immediately or in parallel
 
 #### Scenario: Unused item slots leave the slide clean
 

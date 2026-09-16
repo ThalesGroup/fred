@@ -18,7 +18,6 @@ offline on the in-memory port fakes."""
 from __future__ import annotations
 
 import io
-import re
 from typing import Any, cast
 
 import pytest
@@ -281,14 +280,13 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     # The card opens this capability's pane: an agent may not have ppt_filler.
     assert part.capability_id == "ppt_builder"
     assert "2 slides" in text
-    # The stored key carries a digest of the deck, so a second build in the same
-    # conversation cannot overwrite the first; the download keeps the model's name.
+    # Keyed by the deck's name: a model that splits one deck across calls, or
+    # retries one, lands on the same key and the reader sees one presentation.
     paths = [w["path"] for w in workspace.writes]
-    assert [re.sub(r"-[0-9a-f]{8}\.", ".", path) for path in paths] == [
+    assert paths == [
         "outputs/sess-9/Kick off 2026.pptx",
         "outputs/sess-9/Kick off 2026.pdf",
     ]
-    assert paths[0] != "outputs/sess-9/Kick off 2026.pptx"
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
     assert [cast(Any, s.shapes.title).text for s in deck.slides] == ["Kick-off", "Plan"]
 
@@ -517,3 +515,31 @@ def test_theme_route_lists_every_intent():
         "contact",
         "fixed",
     } <= intents
+
+
+@pytest.mark.asyncio
+async def test_several_builds_of_one_answer_land_on_one_preview(
+    monkeypatch, preview_union
+):
+    """A model that splits a deck across calls used to deliver one preview card
+    per fragment, each holding a truncated presentation. They share a key, so
+    the reader is shown one deck."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    config, assets = _configured()
+    workspace = FakeWorkspace()
+    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
+    previews = []
+    for title in ("Part one", "Part two", "Part three"):
+        _, result = await tools[BUILD_TOOL_NAME].coroutine(
+            slides=[{"pattern": "title", "title": title}]
+        )
+        previews.append(cast(Any, result.ui_parts[0]).preview_id)
+    assert len(set(previews)) == 1, previews
+
+
+def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
+    """Splitting is what produced several truncated decks in one answer."""
+    config, assets = _configured()
+    description = _tools(_ctx(config, assets=assets))[BUILD_TOOL_NAME].description
+    assert "ONE call builds the WHOLE deck" in description
+    assert "Never split a deck across several calls" in description

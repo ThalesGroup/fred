@@ -30,7 +30,6 @@ so the user sees it instead of an opaque failure.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import time
@@ -103,7 +102,11 @@ _IMAGE_SUFFIXES = (
     ".svg",
 )
 
-_BUSY_MESSAGE = "The server is busy building other presentations right now. Please try again in a moment."
+_BUSY_MESSAGE = (
+    "The server is busy building other presentations right now. Wait for the other calls to "
+    "finish, then make ONE call with the whole deck. Do not send several build calls at once: "
+    "each builds a separate presentation and they compete for the same slot."
+)
 
 
 # --- catalogue --------------------------------------------------------------------------
@@ -406,15 +409,15 @@ def build_builder_tools(
             else _DEFAULT_FILE_NAME
         )
         session_id = identity.session_id
-        # Two decks built in one conversation both defaulted to the same name,
-        # so the second overwrote the first: scrolling back to the earlier
-        # preview then showed the later deck. The stored path carries a digest
-        # of the file; the name the user sees is still the model's.
-        stamp = hashlib.sha1(result.pptx, usedforsecurity=False).hexdigest()[:8]
-        stem, _, extension = file_name.rpartition(".")
-        stored = f"{stem or file_name}-{stamp}{'.' + extension if stem else ''}"
+        # Keyed by the deck's name, deliberately. A model that splits one deck
+        # across several calls, or retries after a busy answer, then lands on
+        # one key and the reader sees one presentation instead of a card per
+        # fragment. A genuinely different deck gets a different name from the
+        # model, and with it its own key.
         output_path = (
-            f"outputs/{session_id}/{stored}" if session_id else f"outputs/{stored}"
+            f"outputs/{session_id}/{file_name}"
+            if session_id
+            else f"outputs/{file_name}"
         )
         try:
             pptx_artifact = await workspace.write(
@@ -492,7 +495,11 @@ def build_builder_tools(
         )
 
     description = (
-        "Build a PowerPoint presentation from a plan of slides, on the agent's template. Each slide names a "
+        "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
+        "ONE call builds the WHOLE deck: put every slide of the presentation in `slides`, in order, in a "
+        "single call. Never split a deck across several calls and never call this tool twice at once - each "
+        "call produces a complete presentation of its own, so splitting delivers several truncated decks "
+        "instead of one. Each slide names a "
         "pattern and gives its content. The simplest reliable pattern value is an intent name (title, section, "
         "agenda, content, two_columns, comparison, image_text, cards, steps, statement, contact, fixed): the "
         "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "
@@ -501,7 +508,8 @@ def build_builder_tools(
         "heading, text, label, image}] for patterns with items, image/images (document_ids from "
         "list_images_in_folder), notes. Respect the character limits: a slide is not a document. Start with a "
         "'title' slide and end with a 'fixed' closing slide when one exists. The result is shown to the user "
-        "automatically; never write a download link. To correct a deck, call again with the amended plan.\n"
+        "automatically; never write a download link. To correct a deck, call again once with the whole "
+        "amended plan; the new deck replaces the previous one.\n"
         "Patterns of this template:\n" + catalogue(inventory)
     )
     build_tool = StructuredTool.from_function(
