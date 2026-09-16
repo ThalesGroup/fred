@@ -34,7 +34,12 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
-import { useWikiAvailabilityQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@hooks/crossSessionRefresh.ts";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+import {
+  useKnowledgeBaseDefinitionsQuery,
+  useWikiAvailabilityQuery,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -104,6 +109,18 @@ export default function TeamContentNavbar() {
   // refuses the wiki routes anyway.
   const { data: wikiAvailability } = useWikiAvailabilityQuery({ teamId: teamId ?? "" }, { skip: !teamId });
   const showWiki = wikiAvailability?.enabled === true;
+  // Enablement is an administration decision taken elsewhere, so this
+  // always-mounted subscription refreshes like the application catalog does.
+  // A failed refresh keeps the last known answer: an entry that vanishes on one
+  // bad poll and returns a minute later reads worse than a stale one, and the
+  // control-plane refuses the routes anyway.
+  const skipKnowledgeBases = !teamId || !capabilities.canUseTeamKnowledgeBases;
+  const { currentData: knowledgeBaseDefinitions, refetch: refetchKnowledgeBases } = useKnowledgeBaseDefinitionsQuery(
+    { teamId: teamId ?? "" },
+    crossSessionRefreshOptions(skipKnowledgeBases),
+  );
+  useRefetchOnWindowFocus(refetchKnowledgeBases, skipKnowledgeBases);
+  const showKnowledgeBases = capabilities.canUseTeamKnowledgeBases && (knowledgeBaseDefinitions?.length ?? 0) > 0;
 
   // #2100: which roles the current user holds on this team, "Admin · Analyst"
   // style — `permissions` alone cannot answer this (can_run_evaluations/
@@ -176,10 +193,11 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
-  if (capabilities.canUseTeamKnowledgeBases) {
+  if (showKnowledgeBases) {
     navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.knowledgeBases"),
+      trailingBadge: <BetaBadge />,
       icon: { category: "outlined", type: "database", filled: true },
       linkProps: { to: `/team/${teamId}/knowledge-bases` },
     });
@@ -188,6 +206,7 @@ export default function TeamContentNavbar() {
     navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.wiki"),
+      trailingBadge: <BetaBadge label={t("rework.wiki.betaBadge.label")} />,
       icon: { category: "outlined", type: "book_2", filled: true },
       linkProps: { to: `/team/${teamId}/wiki` },
     });

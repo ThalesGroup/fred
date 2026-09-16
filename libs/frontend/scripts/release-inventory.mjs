@@ -13,7 +13,7 @@ const memberId = /^[a-z][A-Za-z0-9]*$/;
 const workspaceName = /^[a-z0-9-]+$/;
 // Profiles are reviewed as whole tuples. A package cannot borrow another member's gate.
 // Registering a fourth member requires adding its specialized builder/validator/consumer here.
-const reviewedProfiles = {
+export const reviewedProfiles = {
   "design-tokens": {
     id: "designTokens",
     builder: "pack-design-tokens",
@@ -47,11 +47,17 @@ function exactKeys(value, keys, label) {
 }
 
 // The reviewed inventory describes identities and specialized gates, never manifest metadata.
-export async function loadPackageInventory(filePath) {
-  return validatePackageInventory(JSON.parse(await readFile(filePath, "utf8")));
+export async function loadPackageInventory(filePath, options) {
+  return validatePackageInventory(
+    JSON.parse(await readFile(filePath, "utf8")),
+    options,
+  );
 }
 
-export function validatePackageInventory(inventory) {
+export function validatePackageInventory(
+  inventory,
+  { profiles = reviewedProfiles } = {},
+) {
   assertDocumentSchema(inventory, schemaPath, "package inventory");
   exactKeys(inventory, ["$schema", "schemaVersion", "members"], "inventory");
   assert.equal(
@@ -77,7 +83,7 @@ export function validatePackageInventory(inventory) {
       workspaceName.test(member.workspace),
       `invalid inventory workspace ${member.workspace}`,
     );
-    const profile = reviewedProfiles[member.workspace];
+    const profile = profiles[member.workspace];
     assert(profile, `unreviewed inventory workspace ${member.workspace}`);
     for (const field of ["id", "builder", "validator", "consumer"])
       assert.equal(

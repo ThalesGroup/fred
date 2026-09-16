@@ -2964,7 +2964,7 @@ _(none yet)_
 **Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
 **Status:** `Functional`
 
-Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; availability that is not yet known stays hidden. An enabled definition is sufficient even before an instance is created. Navigation follows definition enablement even when older instances remain; this does not delete them or change their API access. Availability refreshes every 60 seconds and on window focus, in addition to same-session admin cache invalidation; a failed refresh keeps the last known answer rather than making the entry flap. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
 #### Open UX issues
 

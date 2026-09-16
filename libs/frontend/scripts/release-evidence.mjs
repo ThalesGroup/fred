@@ -6,9 +6,13 @@ import { fileURLToPath } from "node:url";
 
 import {
   loadReleaseContract,
-  packageRoles,
   validateReleaseContract,
 } from "./release-contract.mjs";
+import {
+  orderReleaseMembers,
+  selectReleaseMembers,
+  selectionOption,
+} from "./release-selection.mjs";
 
 const exactToolVersionPattern = /^\d+\.\d+\.\d+$/;
 
@@ -32,7 +36,7 @@ export function assertApplicationToolchain(toolchain) {
     );
 }
 
-function assertCandidateGates(gates) {
+function assertCandidateGates(gates, selectedIds) {
   assert(
     gates && typeof gates === "object",
     "candidate gate evidence is required",
@@ -47,7 +51,7 @@ function assertCandidateGates(gates) {
     true,
     "same-byte archive evidence is required",
   );
-  for (const role of packageRoles)
+  for (const role of selectedIds)
     assert(
       gates.consumers?.[role] && typeof gates.consumers[role] === "object",
       `${role} consumer evidence is required`,
@@ -55,12 +59,14 @@ function assertCandidateGates(gates) {
   assert.equal(gates.browser?.dependencyInstallations, 0);
   assert.equal(gates.browser?.browserProvisioning, 0);
   assert.equal(gates.browser?.externalRequests, 0);
-  assert.equal(
-    typeof gates.host?.test,
-    "string",
-    "host gate evidence is required",
-  );
-  assert(gates.host.test.length > 0, "host gate test is required");
+  if (selectedIds.includes("iframeSdk")) {
+    assert.equal(
+      typeof gates.host?.test,
+      "string",
+      "host gate evidence is required",
+    );
+    assert(gates.host.test.length > 0, "host gate test is required");
+  }
 }
 
 export async function sha512Integrity(filePath) {
@@ -94,14 +100,18 @@ export async function createCandidateEvidence({
       "approved candidate evidence requires a maintainer-confirmed contract",
     );
   }
-  assertCandidateGates(gates);
+  const selectedIds = orderReleaseMembers(
+    contract,
+    archives.map(({ role }) => role),
+  );
+  assertCandidateGates(gates, selectedIds);
   assert.equal(
     archives.length,
-    packageRoles.length,
-    "all three archives are required",
+    selectedIds.length,
+    "duplicate candidate archives",
   );
   const packages = {};
-  for (const role of packageRoles) {
+  for (const role of selectedIds) {
     const archive = archives.find((entry) => entry.role === role);
     assert(archive, `missing ${role} archive`);
     const expected = contract.packages[role];
@@ -133,6 +143,7 @@ export async function createCandidateEvidence({
     applicationToolchain,
     gates,
     registry: contract.registry,
+    selectedIds,
     packages,
   };
 }
@@ -154,8 +165,25 @@ export async function verifyCandidateEvidence(
     "unsupported candidate evidence kind",
   );
   assertApplicationToolchain(evidence.applicationToolchain);
-  assertCandidateGates(evidence.gates);
+  const selectedIds =
+    evidence.selectedIds ?? Object.keys(evidence.packages ?? {});
+  assert(
+    Array.isArray(selectedIds) && selectedIds.length > 0,
+    "candidate selection is missing",
+  );
+  assert.equal(
+    new Set(selectedIds).size,
+    selectedIds.length,
+    "duplicate candidate selection",
+  );
+  assert.deepEqual(
+    Object.keys(evidence.packages ?? {}).sort(),
+    [...selectedIds].sort(),
+    "candidate package set differs from selection",
+  );
+  assertCandidateGates(evidence.gates, selectedIds);
   if (contract) {
+    orderReleaseMembers(contract, selectedIds);
     assert.equal(
       evidence.contractDigest,
       releaseContractDigest(contract),
@@ -172,7 +200,12 @@ export async function verifyCandidateEvidence(
       "candidate evidence classification differs from release contract state",
     );
   }
-  for (const role of packageRoles) {
+  assert.deepEqual(
+    Object.keys(archivePaths).sort(),
+    [...selectedIds].sort(),
+    "candidate archive path set differs from selection",
+  );
+  for (const role of selectedIds) {
     const recorded = evidence.packages?.[role];
     assert(recorded, `candidate evidence missing ${role}`);
     assert.equal(
@@ -242,15 +275,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const evidence = JSON.parse(
     await readFile(path.resolve(evidencePath), "utf8"),
   );
-  const archivePaths = {
+  const suppliedPaths = {
     designTokens: optionValue("--design-tokens"),
     ui: optionValue("--ui"),
     iframeSdk: optionValue("--iframe-sdk"),
   };
+  const contract = await loadReleaseContract(contractPath);
+  const selectedIds = selectReleaseMembers(contract, selectionOption());
+  const archivePaths = Object.fromEntries(
+    selectedIds.map((role) => [role, suppliedPaths[role]]),
+  );
   for (const [role, archivePath] of Object.entries(archivePaths))
     assert(archivePath, `--${role} archive is required`);
   await verifyCandidateEvidence(evidence, archivePaths, {
-    contract: await loadReleaseContract(contractPath),
+    contract,
   });
   process.stdout.write(
     `${JSON.stringify({ kind: "candidate-evidence-verification", archivePaths }, null, 2)}\n`,

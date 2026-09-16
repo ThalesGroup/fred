@@ -36,6 +36,28 @@ import {
   fetchExactPackageMetadata,
   waitForPackageMetadata,
 } from "./registry-metadata.mjs";
+import {
+  loadCompatibilityLedger,
+  resolveUiTokenDependency,
+} from "./compatibility-baselines.mjs";
+import {
+  orderInventoryMembers,
+  selectReleaseMembers,
+  selectionOption,
+} from "./release-selection.mjs";
+import {
+  retrieveReleaseArtifact,
+  verifyRetainedCandidate,
+  verifyRetainedAttempt,
+} from "./release-artifact.mjs";
+import { validateArtifactRef } from "./release-dispatch.mjs";
+import {
+  assertRecordAuthorizesRegistrySuccess,
+  publicationOutcomeModel,
+  releaseRecordDigest,
+  validateReleaseRecord,
+  verificationModel,
+} from "./release-record.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const consumerFixtures = {
@@ -74,6 +96,11 @@ export function assertProvenanceIdentity({
     "repository",
     "sourceCommit",
     "workflow",
+    ...(["invocationRepository", "runId", "runAttempt"].some((field) =>
+      Object.hasOwn(expected ?? {}, field),
+    )
+      ? ["invocationRepository", "runId", "runAttempt"]
+      : []),
   ]) {
     assert(expected?.[field], `expected provenance ${field} is unconfirmed`);
     assert.equal(
@@ -83,6 +110,46 @@ export function assertProvenanceIdentity({
     );
   }
   return true;
+}
+
+export function matchVerifiedPublishingAttempt({
+  signature,
+  expectedProvenance,
+  publicationAttempts,
+  memberId,
+}) {
+  const eligible = publicationAttempts.filter(({ record }) =>
+    record.selected.some(({ id }) => id === memberId),
+  );
+  const matches = [];
+  for (const attempt of eligible) {
+    try {
+      assertProvenanceIdentity({
+        cryptographicallyVerified: signature.cryptographicallyVerified,
+        actual: signature.identity,
+        expected: {
+          ...expectedProvenance,
+          sourceCommit: attempt.record.execution.sourceCommit,
+          invocationRepository: expectedProvenance.repository,
+          runId: attempt.record.execution.runId,
+          runAttempt: attempt.record.execution.runAttempt,
+        },
+      });
+      matches.push(attempt);
+    } catch {
+      /* Another actual execution may have published this version. */
+    }
+  }
+  assert(
+    matches.length,
+    "provenance does not match any retained actual publishing execution",
+  );
+  assert.equal(
+    matches.length,
+    1,
+    "provenance attribution is ambiguous across retained attempts",
+  );
+  return matches[0];
 }
 
 function canonicalRepository(value) {
@@ -116,6 +183,46 @@ export function provenanceIdentityFromStatement(statement, expectedRepository) {
     "provenance must identify exactly one source dependency for the expected repository",
   );
   const [dependency] = dependencies;
+  const invocationId = predicate.runDetails?.metadata?.invocationId;
+  let invocation = {};
+  if (invocationId !== undefined) {
+    assert.equal(
+      typeof invocationId,
+      "string",
+      "provenance invocation ID is malformed",
+    );
+    const url = new URL(invocationId);
+    const match =
+      /^\/([^/]+)\/([^/]+)\/actions\/runs\/([1-9][0-9]*)\/attempts\/([1-9][0-9]*)$/.exec(
+        url.pathname,
+      );
+    assert(
+      url.protocol === "https:" &&
+        url.hostname === "github.com" &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        match,
+      "provenance invocation ID is malformed",
+    );
+    const invocationRepository = `${url.origin}/${match[1]}/${match[2]}`;
+    assert.equal(
+      invocationId,
+      `${invocationRepository}/actions/runs/${match[3]}/attempts/${match[4]}`,
+      "provenance invocation ID is not canonical",
+    );
+    assert.equal(
+      invocationRepository,
+      expected,
+      "provenance invocation repository differs",
+    );
+    invocation = {
+      invocationRepository,
+      runId: match[3],
+      runAttempt: match[4],
+    };
+  }
   return {
     artifactDigest: subjectSha512
       ? `sha512-${
@@ -130,6 +237,7 @@ export function provenanceIdentityFromStatement(statement, expectedRepository) {
       workflow.repository && workflow.path && workflow.ref
         ? `${workflow.repository}/${workflow.path}@${workflow.ref}`
         : undefined,
+    ...invocation,
   };
 }
 
@@ -160,15 +268,36 @@ export async function verifyProvenanceAttestation(
   );
   const attestations = document?.attestations;
   assert(Array.isArray(attestations), "provenance attestations are missing");
-  const provenance = attestations.find(({ predicateType }) =>
+  const provenanceEntries = attestations.filter(({ predicateType }) =>
     /^https:\/\/slsa\.dev\/provenance\//.test(predicateType),
   );
+  assert.equal(
+    provenanceEntries.length,
+    1,
+    "provenance must contain exactly one SLSA provenance entry",
+  );
+  const [provenance] = provenanceEntries;
   assert(provenance?.bundle, "SLSA provenance bundle is missing");
   await verifyBundle(provenance.bundle, {
     certificateIssuer,
     certificateIdentityURI: expectedWorkflow,
   });
   const statement = statementFromDsseEnvelope(provenance.bundle.dsseEnvelope);
+  assert.equal(
+    statement?._type,
+    "https://in-toto.io/Statement/v1",
+    "signed in-toto statement type differs",
+  );
+  assert.equal(
+    statement?.predicateType,
+    "https://slsa.dev/provenance/v1",
+    "signed SLSA predicate differs",
+  );
+  assert.equal(
+    statement.predicateType,
+    provenance.predicateType,
+    "signed SLSA predicate differs from registry metadata",
+  );
   return {
     cryptographicallyVerified: true,
     identity: provenanceIdentityFromStatement(statement, expectedRepository),
@@ -182,7 +311,11 @@ export async function verifyRegistryTooling({
   resolvePackage,
   verifyPackageSignature,
   installConsumers,
+  selectedIds = evidence.selectedIds ?? packageRoles,
+  ledger,
+  publicationAttempts,
 }) {
+  selectedIds = selectReleaseMembers(contract, selectedIds.join(","));
   assert.equal(
     contract.state,
     "maintainer-confirmed",
@@ -198,11 +331,30 @@ export async function verifyRegistryTooling({
     releaseContractDigest(contract),
     "release contract differs from approved candidate evidence",
   );
+  assertSelectedRegistryInputs({
+    inventory: contract.inventory,
+    packages: contract.packages,
+    selectedIds,
+    coordinates,
+    evidence,
+  });
   const resolved = {};
   const verifiedPackages = {};
-  for (const role of packageRoles) {
+  let compatibilityOnly = [];
+  if (selectedIds.includes("ui") && !selectedIds.includes("designTokens")) {
+    assert(
+      ledger,
+      "UI-only registry verification requires the approved compatibility ledger",
+    );
+    const { baseline } = resolveUiTokenDependency({
+      contract,
+      ledger,
+      selectedIds,
+    });
+    compatibilityOnly = [baseline];
+  }
+  for (const role of selectedIds) {
     const expectedPackage = contract.packages[role];
-    assertExactRegistryCoordinate(coordinates[role], expectedPackage);
     const candidate = evidence.packages[role];
     assert(candidate, `candidate evidence missing ${role}`);
     const registryPackage = await resolvePackage({
@@ -221,32 +373,104 @@ export async function verifyRegistryTooling({
     );
     const expectedProvenance = candidate.expectedProvenance;
     const signatureResult = await verifyPackageSignature(registryPackage, {
-      expectedProvenance,
+      expectedProvenance: publicationAttempts?.length
+        ? {
+            repository: expectedProvenance.repository,
+            workflow: expectedProvenance.workflow,
+          }
+        : expectedProvenance,
       certificateIssuer: contract.expectedProvenance.certificateIssuer,
     });
-    assertProvenanceIdentity({
-      cryptographicallyVerified: signatureResult.cryptographicallyVerified,
-      actual: signatureResult.identity,
-      expected: expectedProvenance,
-    });
+    let matchedAttempt;
+    if (publicationAttempts?.length) {
+      matchedAttempt = matchVerifiedPublishingAttempt({
+        signature: signatureResult,
+        expectedProvenance,
+        publicationAttempts,
+        memberId: role,
+      });
+    } else
+      assertProvenanceIdentity({
+        cryptographicallyVerified: signatureResult.cryptographicallyVerified,
+        actual: signatureResult.identity,
+        expected: expectedProvenance,
+      });
     resolved[role] = registryPackage;
     verifiedPackages[role] = {
       coordinate: coordinates[role],
       integrity: registryPackage.integrity,
       provenance: signatureResult.identity,
+      ...(matchedAttempt
+        ? { attemptDigest: releaseRecordDigest(matchedAttempt.record) }
+        : {}),
+    };
+  }
+  const consumerContract = structuredClone(contract);
+  const verificationEvidence = {
+    ...evidence,
+    packages: { ...evidence.packages },
+  };
+  for (const baseline of compatibilityOnly) {
+    const role = baseline.memberId;
+    const version = baseline.coordinate.slice(
+      baseline.coordinate.lastIndexOf("@") + 1,
+    );
+    consumerContract.packages[role].version = version;
+    const expectedPackage = consumerContract.packages[role];
+    const candidate = {
+      coordinate: baseline.coordinate,
+      integrity: baseline.expected.integrity,
+    };
+    const registryPackage = await resolvePackage({
+      coordinate: baseline.coordinate,
+      registry: baseline.registry,
+      role,
+      contract: consumerContract,
+      evidence: { packages: { [role]: candidate } },
+      expectedPackage,
+      candidate,
+    });
+    assert.equal(
+      registryPackage.integrity,
+      baseline.expected.integrity,
+      `${role} compatibility registry integrity differs`,
+    );
+    const signature = await verifyPackageSignature(registryPackage, {
+      expectedProvenance: baseline.expected,
+      certificateIssuer: baseline.expected.certificateIssuer,
+    });
+    assertProvenanceIdentity({
+      cryptographicallyVerified: signature.cryptographicallyVerified,
+      actual: signature.identity,
+      expected: baseline.expected,
+    });
+    resolved[role] = registryPackage;
+    verificationEvidence.packages[role] = candidate;
+    verifiedPackages[role] = {
+      coordinate: baseline.coordinate,
+      integrity: registryPackage.integrity,
+      provenance: signature.identity,
+      compatibilityOnly: true,
     };
   }
   await verifyCandidateEvidence(
     evidence,
     Object.fromEntries(
-      packageRoles.map((role) => [role, resolved[role].archivePath]),
+      selectedIds.map((role) => [role, resolved[role].archivePath]),
     ),
     { contract },
   );
-  await installConsumers({ contract, evidence, resolved });
+  await installConsumers({
+    contract: consumerContract,
+    evidence: verificationEvidence,
+    resolved,
+    selectedIds,
+    compatibilityOnly: compatibilityOnly.map(({ memberId }) => memberId),
+  });
   return {
     kind: "registry-verifier-tooling",
     registry: contract.registry,
+    selectedIds,
     packages: verifiedPackages,
     gates: {
       exactRegistryArchives: true,
@@ -254,9 +478,52 @@ export async function verifyRegistryTooling({
       sigstoreProvenance: true,
       cleanRegistryConsumers: true,
       browserSmoke: true,
-      productionHostCompatibility: true,
+      productionHostCompatibility: applicableHostGate(selectedIds),
     },
   };
+}
+
+export function applicableHostGate(selectedIds) {
+  return selectedIds.includes("iframeSdk") ? true : "not-applicable";
+}
+
+export function verificationEvidenceKind(retained) {
+  return retained
+    ? "public-registry-verification"
+    : "controlled-selected-registry-tooling";
+}
+
+// Generic identity/selection boundary; a disposable profile can exercise this
+// without bypassing the confirmed-contract and specialized archive gates.
+export function assertSelectedRegistryInputs({
+  inventory,
+  packages,
+  selectedIds,
+  coordinates,
+  evidence,
+}) {
+  orderInventoryMembers({ inventory, packages, selectedIds });
+  assert.deepEqual(
+    Object.keys(evidence.packages ?? {}).sort(),
+    [...selectedIds].sort(),
+    "registry candidate set differs from selection",
+  );
+  for (const id of selectedIds) {
+    const expectedPackage = packages[id];
+    assert(expectedPackage, `registry package ${id} is not registered`);
+    assertExactRegistryCoordinate(coordinates[id], expectedPackage);
+    assert.equal(
+      evidence.packages[id]?.coordinate,
+      coordinates[id],
+      `${id} candidate coordinate differs`,
+    );
+    assert.match(
+      evidence.packages[id]?.integrity ?? "",
+      /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+      `${id} candidate integrity missing`,
+    );
+  }
+  return true;
 }
 
 export async function buildRegistryConsumers({
@@ -264,12 +531,15 @@ export async function buildRegistryConsumers({
   evidence,
   createRoot = () => mkdtemp(path.join(os.tmpdir(), "fred-registry-consumer-")),
   runCommand = run,
+  selectedIds = packageRoles,
+  compatibilityOnly = [],
 }) {
   const results = {};
-  for (const role of packageRoles) {
+  const consumerIds = [...new Set([...selectedIds, ...compatibilityOnly])];
+  for (const role of consumerIds) {
     const root = await createRoot(role);
     await cp(consumerFixtures[role], root, { recursive: true });
-    await parameterizeConsumerSources(root, contract, packageRoles);
+    await parameterizeConsumerSources(root, contract, consumerIds);
     const manifestPath = path.join(root, "package.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.dependencies ??= {};
@@ -605,23 +875,99 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const contractPath = optionValue("--contract");
   const evidencePath = optionValue("--evidence");
   assert(contractPath, "--contract is required");
-  assert(evidencePath, "--evidence is required");
+  const retained = process.argv.includes("--retained");
+  if (!retained) assert(evidencePath, "--evidence is required");
   const contract = await loadReleaseContract(contractPath);
-  const evidence = JSON.parse(
-    await readFile(path.resolve(evidencePath), "utf8"),
-  );
-  const coordinates = {
-    designTokens: optionValue("--design-tokens"),
-    ui: optionValue("--ui"),
-    iframeSdk: optionValue("--iframe-sdk"),
-  };
+  const selection = selectionOption();
+  const selectedIds = selectReleaseMembers(contract, selection);
+  let candidateArtifact;
+  let publicationAttempts = [];
+  if (retained) {
+    assert(
+      process.env.GITHUB_TOKEN,
+      "GITHUB_TOKEN is required for retained read-only verification",
+    );
+    const candidateRef = validateArtifactRef(
+      JSON.parse(process.env.RELEASE_CANDIDATE_REF ?? "null"),
+    );
+    candidateArtifact = await verifyRetainedCandidate({
+      ref: candidateRef,
+      artifact: await retrieveReleaseArtifact({
+        ref: candidateRef,
+        repository: "ThalesGroup/fred",
+        token: process.env.GITHUB_TOKEN,
+      }),
+      contract,
+    });
+    assert.deepEqual(
+      candidateArtifact.selectedIds,
+      selectedIds,
+      "retained candidate selection differs from dispatch",
+    );
+    const attemptRefs = JSON.parse(
+      process.env.RELEASE_PRIOR_ATTEMPT_REFS ?? "[]",
+    );
+    assert(
+      Array.isArray(attemptRefs),
+      "retained attempts must be a JSON array",
+    );
+    if (process.env.RELEASE_CURRENT_ATTEMPT_REF)
+      attemptRefs.push(JSON.parse(process.env.RELEASE_CURRENT_ATTEMPT_REF));
+    assert(
+      attemptRefs.length > 0,
+      "retained verification requires at least one persisted publishing attempt",
+    );
+    assert.equal(
+      new Set(attemptRefs.map(({ artifactId }) => artifactId)).size,
+      attemptRefs.length,
+      "duplicate retained attempt reference",
+    );
+    for (const ref of attemptRefs) {
+      validateArtifactRef(ref);
+      publicationAttempts.push(
+        await verifyRetainedAttempt({
+          ref,
+          artifact: await retrieveReleaseArtifact({
+            ref,
+            repository: "ThalesGroup/fred",
+            token: process.env.GITHUB_TOKEN,
+          }),
+          candidate: candidateArtifact.record,
+          candidateRef,
+          contract,
+        }),
+      );
+    }
+  }
+  const evidence = retained
+    ? candidateArtifact.evidence
+    : JSON.parse(await readFile(path.resolve(evidencePath), "utf8"));
+  const coordinates = retained
+    ? Object.fromEntries(
+        candidateArtifact.record.selected.map(({ id, coordinate }) => [
+          id,
+          coordinate,
+        ]),
+      )
+    : {
+        designTokens: optionValue("--design-tokens"),
+        ui: optionValue("--ui"),
+        iframeSdk: optionValue("--iframe-sdk"),
+      };
   const roots = [];
+  const ledger =
+    selectedIds.includes("ui") && !selectedIds.includes("designTokens")
+      ? await loadCompatibilityLedger()
+      : undefined;
   try {
     await assertProvisionedChromium();
     const result = await verifyRegistryTooling({
       contract,
       evidence,
       coordinates,
+      selectedIds,
+      ledger,
+      publicationAttempts: retained ? publicationAttempts : undefined,
       resolvePackage: async ({
         coordinate,
         registry,
@@ -655,10 +1001,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           expectedProvenance,
           certificateIssuer,
         }),
-      installConsumers: async ({ contract: selected, evidence: candidate }) => {
+      installConsumers: async ({
+        contract: selected,
+        evidence: candidate,
+        selectedIds: members,
+        compatibilityOnly,
+      }) => {
         const consumers = await buildRegistryConsumers({
           contract: selected,
           evidence: candidate,
+          selectedIds: members,
+          compatibilityOnly,
           createRoot: async () => {
             const root = await mkdtemp(
               path.join(os.tmpdir(), "fred-registry-consumer-"),
@@ -668,26 +1021,99 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           },
         });
         await runBrowserSmoke({
-          tokenOutput: path.join(consumers.designTokens.root, "dist"),
-          reactOutput: path.join(consumers.ui.root, "dist"),
-          iframeSdkOutput: path.join(consumers.iframeSdk.root, "dist"),
+          tokenOutput: consumers.designTokens
+            ? path.join(consumers.designTokens.root, "dist")
+            : undefined,
+          reactOutput: consumers.ui
+            ? path.join(consumers.ui.root, "dist")
+            : undefined,
+          iframeSdkOutput: consumers.iframeSdk
+            ? path.join(consumers.iframeSdk.root, "dist")
+            : undefined,
+          checks: [
+            ...(consumers.designTokens ? ["tokens", "fonts"] : []),
+            ...(consumers.ui ? ["ui"] : []),
+            ...(consumers.iframeSdk ? ["iframeSdk"] : []),
+          ],
         });
-        const sdk = selected.packages.iframeSdk;
-        await runIframeSdkHostIntegration({
-          contract: selected,
-          sdkEntry: path.join(
-            consumers.iframeSdk.root,
-            "node_modules",
-            ...sdk.name.split("/"),
-            "dist/index.js",
-          ),
-        });
+        if (consumers.iframeSdk) {
+          const sdk = selected.packages.iframeSdk;
+          await runIframeSdkHostIntegration({
+            contract: selected,
+            sdkEntry: path.join(
+              consumers.iframeSdk.root,
+              "node_modules",
+              ...sdk.name.split("/"),
+              "dist/index.js",
+            ),
+          });
+        }
       },
     });
     const finalEvidence = {
       ...result,
-      kind: "public-registry-verification",
+      kind: verificationEvidenceKind(retained),
     };
+    if (retained) {
+      const execution = {
+        repository: process.env.GITHUB_REPOSITORY,
+        workflow: contract.workflowFilename,
+        sourceCommit: process.env.GITHUB_SHA,
+        runId: process.env.GITHUB_RUN_ID,
+        runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+        signerIssuer: contract.expectedProvenance.certificateIssuer,
+      };
+      assert.equal(
+        process.env.GITHUB_REF,
+        `refs/heads/${contract.sourceBranch}`,
+        "verifier branch differs from release policy",
+      );
+      assert.equal(
+        process.env.GITHUB_WORKFLOW_REF,
+        `ThalesGroup/fred/.github/workflows/${contract.workflowFilename}@${process.env.GITHUB_REF}`,
+        "verifier workflow differs from release policy",
+      );
+      const outcomes = selectedIds.map((id) => {
+        const published = result.packages[id];
+        const attempt = publicationAttempts.find(
+          ({ record }) =>
+            releaseRecordDigest(record) === published.attemptDigest,
+        );
+        assert(attempt, `${id} verified publishing attempt not found`);
+        const outcome = publicationOutcomeModel({
+          attempt: attempt.record,
+          memberId: id,
+          coordinate: published.coordinate,
+          integrity: published.integrity,
+          provenance: {
+            ...published.provenance,
+            cryptographicallyVerified: true,
+          },
+        });
+        outcome.readiness = "verified";
+        return validateReleaseRecord(outcome);
+      });
+      const record = verificationModel({
+        candidate: candidateArtifact.record,
+        execution,
+        outcomes,
+        gates: result.gates,
+      });
+      record.readiness = "registry-verified";
+      validateReleaseRecord(record);
+      Object.assign(finalEvidence, {
+        candidateRef: validateArtifactRef(
+          JSON.parse(process.env.RELEASE_CANDIDATE_REF),
+        ),
+        attemptRefs: publicationAttempts.map(({ ref }) => ref),
+        verifierExecution: execution,
+        record,
+      });
+      assertRecordAuthorizesRegistrySuccess(record, {
+        candidate: candidateArtifact.record,
+        verifiedResult: finalEvidence,
+      });
+    }
     const outputPath = optionValue("--output");
     if (outputPath)
       await writeFile(
@@ -700,5 +1126,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await Promise.all(
       roots.map((root) => rm(root, { recursive: true, force: true })),
     );
+    await candidateArtifact?.cleanup();
+    await Promise.all(publicationAttempts.map(({ cleanup }) => cleanup()));
   }
 }

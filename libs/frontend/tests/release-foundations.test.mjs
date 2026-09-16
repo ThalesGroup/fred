@@ -305,6 +305,8 @@ test("approved preparation rejects an unreviewed changelog from a disposable pro
 
 function syntheticAttestation(expected, mutate = () => {}) {
   const statement = {
+    _type: "https://in-toto.io/Statement/v1",
+    predicateType: "https://slsa.dev/provenance/v1",
     subject: [{ digest: { sha512: expected.integrity.slice(7) } }],
     predicate: {
       buildDefinition: {
@@ -516,6 +518,54 @@ test("records support SDK-only fixture selection but never authorize publish or 
   );
   assert.deepEqual(candidate.compatibilityOnly, []);
   assert.equal(candidate.readiness, "fixture");
+  await assert.rejects(
+    candidateRecordFromEvidence({
+      evidence,
+      contract,
+      ledger,
+      selectedIds: ["designTokens"],
+    }),
+    /selection differs from packed evidence/,
+  );
+  const forgedUiEvidence = structuredClone(evidence);
+  forgedUiEvidence.packages = {
+    ui: {
+      ...evidence.packages.iframeSdk,
+      coordinate: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
+      filename: "ui-fixture.tgz",
+    },
+  };
+  forgedUiEvidence.selectedIds = ["ui"];
+  await assert.rejects(
+    candidateRecordFromEvidence({
+      evidence: forgedUiEvidence,
+      contract,
+      ledger,
+      selectedIds: ["ui"],
+    }),
+    /compatibility selection differs/,
+  );
+  const uiOnly = await candidateRecordFromEvidence({
+    evidence: forgedUiEvidence,
+    contract,
+    ledger,
+    selectedIds: ["ui"],
+    compatibilityOnly: ["designTokens"],
+  });
+  assert.deepEqual(
+    uiOnly.compatibilityOnly.map(({ id }) => id),
+    ["designTokens"],
+  );
+  await assert.rejects(
+    candidateRecordFromEvidence({
+      evidence: forgedUiEvidence,
+      contract,
+      ledger,
+      selectedIds: ["iframeSdk"],
+      compatibilityOnly: ["designTokens"],
+    }),
+    /selection differs/,
+  );
   const selectedContract = await loadReleaseContract(selectedPolicy);
   const forgedSdkEvidence = structuredClone(evidence);
   forgedSdkEvidence.kind = "release-candidate-evidence";

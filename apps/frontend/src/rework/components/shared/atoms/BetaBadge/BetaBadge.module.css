@@ -1,20 +1,12 @@
 .badge {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-2xs);
-  border-radius: var(--radius-xs);
-  background: var(--surface-container-high);
-  padding: 2px var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
+  border-radius: var(--radius-full);
+  background: var(--tertiary-container);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-tertiary-container);
+  font: var(--font-label-small-emphasized);
   user-select: none;
   white-space: nowrap;
-}
-
-.badge .material-symbols-outlined {
-  font-size: 14px;
-}
-
-.label {
-  line-height: 1;
 }
