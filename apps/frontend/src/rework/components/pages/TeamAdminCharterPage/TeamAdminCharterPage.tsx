@@ -25,7 +25,6 @@ export default function TeamAdminCharterPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.title}>{t("rework.teamAdminCharter.title")}</div>
       <div className={styles.content}>
         <TeamAdminCharterContent />
       </div>

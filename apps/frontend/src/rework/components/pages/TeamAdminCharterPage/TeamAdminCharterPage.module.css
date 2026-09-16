@@ -10,13 +10,6 @@
   color: var(--on-surface);
 }
 
-.title {
-  display: flex;
-  align-items: center;
-  min-height: var(--spacing-3xl);
-  font: var(--font-title-large);
-}
-
 .content {
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m) var(--radius-m) 0 0;
