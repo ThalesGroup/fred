@@ -26,8 +26,9 @@ Do not implement changes until the required workflow checks from `CLAUDE.md` hav
 
 ## Branch and draft PR workflow
 
-When the user asks to prepare an implementation for review, create a dedicated
-topic branch before committing, keep unrelated local changes out of the commit,
-push that branch, and open a draft pull request. If the user explicitly asks to
-skip planning artifacts such as OpenSpec for a small issue fix, honor that scope
-and record the skipped workflow step in the close-out.
+Before any implementation, create or identify the GitHub issue that tracks the
+work, then create a dedicated topic branch for that issue. Keep unrelated local
+changes out of commits. At the end of the implementation, push the branch and
+open a draft pull request for review. If the user explicitly asks to skip
+planning artifacts such as OpenSpec for a small issue fix, honor that scope and
+record the skipped workflow step in the close-out.
