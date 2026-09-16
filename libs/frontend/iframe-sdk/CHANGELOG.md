@@ -1,5 +1,10 @@
 # Iframe SDK changelog
 
+## 0.1.0-alpha.3
+
+Review: approved
+Changes: Carry the accepted live application-context functionality unchanged under a new recovery release coordinate after the alpha.2 publication attempt failed with npm `ENEEDAUTH`. This entry records source preparation, not publication or registry verification.
+
 ## 0.1.0-alpha.2
 
 Review: approved
