@@ -110,6 +110,11 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** a text value is too long for its zone at the zone's font size
 - **THEN** the font size is reduced within the zone's autofit rule down to a floor, and the tool result tells the agent which zones were still truncated so it can shorten them; a one-line heading or label that still does not fit is reported with the number of characters that would fit
 
+#### Scenario: Text width is measured, not guessed
+
+- **WHEN** the analysis states a zone's character limit, or the generation decides that a text overflows
+- **THEN** the width is measured with the font the zone is drawn in, resolved to the substitute the server actually renders with, so the same ruler serves the limits shown to the agent, the shrinking and the box sizing; without a usable font a conservative per-character estimate stands in
+
 #### Scenario: Missing intent degrades gracefully
 
 - **WHEN** the plan asks for an intent the inventory does not offer

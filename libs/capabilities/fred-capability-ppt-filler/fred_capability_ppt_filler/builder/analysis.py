@@ -42,10 +42,12 @@ from typing import (
     cast,
 )
 
+from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
+from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
@@ -111,6 +113,8 @@ class _Rec:
     area: float
     text: str
     font_pt: Optional[float]
+    font_name: Optional[str]
+    bold: bool
     lines: int
     name: str
     shape: "BaseShape" = field(repr=False)
@@ -134,6 +138,58 @@ def _font_pt_of(shape) -> Optional[float]:
                 if best is None or pt > best:
                     best = pt
     return best
+
+
+_THEME_FONTS = {"+mj-lt": 0, "+mn-lt": 1}
+# Placeholders drawn with the theme's heading font ("SUBTITLE" is not one).
+_TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
+
+
+def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
+    """The theme's (heading, body) latin typefaces, or ``(None, None)``."""
+    try:
+        master_part = presentation.slide_masters[0].part
+        theme_part = next(
+            rel.target_part
+            for rel in master_part.rels.values()
+            if not rel.is_external and rel.reltype.endswith("/theme")
+        )
+        scheme = etree.fromstring(theme_part.blob).find(f".//{qn('a:fontScheme')}")
+    except Exception:  # noqa: BLE001 - a theme-less deck just measures by default
+        return None, None
+    if scheme is None:
+        return None, None
+
+    def typeface(kind: str) -> Optional[str]:
+        node = scheme.find(f"{qn(kind)}/{qn('a:latin')}")
+        return node.get("typeface") if node is not None else None
+
+    return typeface("a:majorFont"), typeface("a:minorFont")
+
+
+def _font_name_of(
+    shape, theme: Tuple[Optional[str], Optional[str]], is_title: bool
+) -> Tuple[Optional[str], bool]:
+    """The font a shape's text is drawn with, and whether it is bold. Runs
+    first, then any declared typeface, then the theme's heading/body font."""
+    name: Optional[str] = None
+    bold = False
+    for paragraph in shape.text_frame.paragraphs:
+        for run in paragraph.runs:
+            name = name or run.font.name
+            bold = bold or bool(run.font.bold)
+    if name is None:
+        latin = shape._element.find(f".//{qn('a:latin')}")
+        name = latin.get("typeface") if latin is not None else None
+    if not bold:
+        bold = any(
+            node.get("b") in ("1", "true", "on")
+            for node in shape._element.iter(qn("a:rPr"))
+        )
+    major, minor = theme
+    if name in _THEME_FONTS:
+        name = (major, minor)[_THEME_FONTS[name]]
+    return (name or (major if is_title else minor)), bold
 
 
 def _lst_style_pt(element) -> Optional[float]:
@@ -185,7 +241,14 @@ def _shape_key(path: Tuple[int, ...]) -> str:
     return "sp:" + "/".join(str(part) for part in path)
 
 
-def _records(shapes, width: int, height: int, layout=None, master=None) -> List[_Rec]:
+def _records(
+    shapes,
+    width: int,
+    height: int,
+    layout=None,
+    master=None,
+    theme: Tuple[Optional[str], Optional[str]] = (None, None),
+) -> List[_Rec]:
     """Flatten ``shapes`` (groups included) into records with per-mille boxes.
 
     ``layout``/``master`` let a placeholder without explicit run sizes report
@@ -210,6 +273,8 @@ def _records(shapes, width: int, height: int, layout=None, master=None) -> List[
         shape_type = shape.shape_type
         text = ""
         font_pt = None
+        font_name = None
+        bold = False
         lines = 0
         if shape_type == MSO_SHAPE_TYPE.GROUP:
             kind = "group"
@@ -225,6 +290,9 @@ def _records(shapes, width: int, height: int, layout=None, master=None) -> List[
             font_pt = _font_pt_of(shape)
             if font_pt is None and ph_idx is not None:
                 font_pt = _placeholder_pt(shape, layout, master)
+            font_name, bold = _font_name_of(
+                shape, theme, is_title=ph_type in _TITLE_PLACEHOLDERS
+            )
             lines = text.count("\n") + 1 if text else 0
         else:
             kind = "other"
@@ -240,6 +308,8 @@ def _records(shapes, width: int, height: int, layout=None, master=None) -> List[
                 area=area,
                 text=text,
                 font_pt=font_pt,
+                font_name=font_name,
+                bold=bold,
                 lines=lines,
                 name=shape.name or "",
                 shape=shape,
@@ -249,26 +319,32 @@ def _records(shapes, width: int, height: int, layout=None, master=None) -> List[
 
 
 def estimate_capacity(
-    box: Box, font_pt: Optional[float], role: str, width_emu: int, height_emu: int
+    box: Box,
+    font_pt: Optional[float],
+    role: str,
+    width_emu: int,
+    height_emu: int,
+    font_name: Optional[str] = None,
+    bold: bool = False,
 ) -> Tuple[int, int]:
-    """Rough (max_chars, max_lines) from the box and the font size.
+    """(max_chars, max_lines) of a box, measured with the font it is drawn in.
 
-    Average glyph width 0.5em, line height 1.2em; 10 % safety margin. No font
-    metrics are available server-side, so this is deliberately conservative.
+    Line height 1.2em and a 10 % safety margin on the characters; the average
+    character width comes from the real font (see ``text_metrics``).
     """
     pt = font_pt or _DEFAULT_PT.get(role, 16.0)
-    width_in = box.w / 1000 * width_emu / 914400
+    width_pt = box.w / 1000 * width_emu / 914400 * 72
     height_in = box.h / 1000 * height_emu / 914400
-    chars_per_line = max(1, int(width_in * 72 / (pt * 0.5)))
+    per_line = text_metrics.chars_per_line(width_pt, pt, font_name, bold)
     lines = max(1, int(height_in * 72 / (pt * 1.2)))
-    return int(chars_per_line * lines * 0.9), lines
+    return int(per_line * lines * 0.9), lines
 
 
 def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
     max_chars = max_lines = None
     if role != "image" and role != "keep":
         max_chars, max_lines = estimate_capacity(
-            rec.box, rec.font_pt, role, width, height
+            rec.box, rec.font_pt, role, width, height, rec.font_name, rec.bold
         )
     return Zone(
         key=rec.key,
@@ -334,6 +410,7 @@ class _Analyzer:
         self.width = presentation.slide_width
         self.height = presentation.slide_height
         self.shared_texts: set[str] = set()
+        self.theme = theme_fonts(presentation)
 
     # -- entry -----------------------------------------------------------------
 
@@ -346,6 +423,7 @@ class _Analyzer:
                 self.height,
                 slide.slide_layout,
                 slide.slide_layout.slide_master,
+                self.theme,
             )
             for slide in slides
         ]
@@ -430,7 +508,12 @@ class _Analyzer:
 
     def _layout_pattern(self, layout, index: int) -> Pattern:
         records = _records(
-            layout.placeholders, self.width, self.height, None, layout.slide_master
+            layout.placeholders,
+            self.width,
+            self.height,
+            None,
+            layout.slide_master,
+            self.theme,
         )
         zones: List[Zone] = []
         for rec in records:

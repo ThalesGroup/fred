@@ -55,7 +55,7 @@ One `SlidePlan` shape for every pattern: `pattern` (enum of inventory ids), `tit
 
 - Work on a copy of the template: layouts are instantiated with `slides.add_slide(layout)`; example slides are duplicated by deep-copying the `spTree` and re-creating the slide's image and media relationships (the known python-pptx pattern, wrapped in one helper with a round-trip test); every original example slide is removed at the end, and the resulting slide order is the plan's.
 - Fill by zone role through the existing run-merging traversal so the first run's style is inherited; bullets become paragraphs with `level` from indentation. Unfilled fillable zones are emptied; unfilled image placeholders and unused repeat-group items are deleted.
-- Overflow: estimate lines from box width, font size and an average glyph width, shrink through `normAutofit fontScale` down to 70 %, then truncate at a word boundary and report the zone in the tool result.
+- Overflow: measure the text with the font the zone is drawn in (`text_metrics`, fontconfig + Pillow, cached per process and per thread; a conservative per-character estimate when no font can be read), shrink through `normAutofit fontScale` down to 70 %, then truncate at a word boundary and report the zone in the tool result. The same measurement backs the analysis' character limits and the widening of boxes that must not wrap, so one ruler judges the deck everywhere.
 - The built-in theme is a `.pptx` shipped in the package with one layout per intent, analysed through the same pipeline at import time (cached), so "no template" is not a special code path.
 
 ### D6. Author review surface

@@ -36,8 +36,13 @@ from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
+from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import lexicon
-from fred_capability_ppt_filler.builder.analysis import estimate_capacity
+from fred_capability_ppt_filler.builder.analysis import (
+    _font_name_of,
+    estimate_capacity,
+    theme_fonts,
+)
 from fred_capability_ppt_filler.builder.models import (
     Pattern,
     RepeatGroup,
@@ -58,9 +63,9 @@ from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 MIN_FONT_SCALE = 0.7
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
 _LEVEL_WIDTH_FACTOR = 0.85
-# Average glyph width in em for a width estimate without font metrics; bold
-# display figures run wide, so this errs large.
-_GLYPH_EM = 0.62
+# Slack over the measured width when sizing a box that must not wrap: the
+# renderer's font is not always the one measured here (see `text_metrics`).
+_NO_WRAP_MARGIN = 1.06
 
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _SKIPPED_RELS = ("/slideLayout", "/notesSlide")
@@ -360,6 +365,18 @@ def _set_font_scale(shape, scale: float, base_pt: Optional[float] = None) -> Non
     bodyPr.append(autofit)
 
 
+# PowerPoint's default text inset, used when a box declares none.
+_DEFAULT_INSET_EMU = 91440
+
+
+def _text_insets(shape) -> int:
+    """Left plus right padding of a text box: the text is laid inside them."""
+    body = shape.text_frame._txBody.find(qn("a:bodyPr"))
+    if body is None:
+        return 2 * _DEFAULT_INSET_EMU
+    return sum(int(body.get(side, _DEFAULT_INSET_EMU)) for side in ("lIns", "rIns"))
+
+
 def _grows_with_text(shape) -> bool:
     """A box that does not wrap, or auto-sizes to its text, has no capacity to enforce."""
     bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
@@ -369,24 +386,45 @@ def _grows_with_text(shape) -> bool:
 
 
 def _fit(
-    zone: Zone, lines: List[_Line], width: int, height: int
+    zone: Zone,
+    lines: List[_Line],
+    width: int,
+    height: int,
+    font_name: Optional[str] = None,
+    bold: bool = False,
 ) -> Tuple[List[_Line], Optional[float], bool]:
     """Fit ``lines`` into ``zone``: returns ``(lines, font scale or None, truncated)``."""
     max_chars, max_lines = estimate_capacity(
-        zone.box, zone.font_pt, zone.role, width, height
+        zone.box, zone.font_pt, zone.role, width, height, font_name, bold
     )
     chars_per_line = max(1, max_chars // max(1, max_lines))
+    # How many em of text one line holds: each line is measured in the real
+    # font, so a line of capitals counts for what it draws.
+    line_em = chars_per_line * text_metrics.char_em(font_name, bold)
 
     def needed(scale: float) -> int:
-        cpl = chars_per_line / scale
+        room = line_em / scale
         return sum(
-            max(1, math.ceil(len(line.text) / (cpl * _LEVEL_WIDTH_FACTOR**line.level)))
+            max(
+                1,
+                math.ceil(
+                    text_metrics.width_em(line.text, font_name, bold)
+                    / (room * _LEVEL_WIDTH_FACTOR**line.level)
+                ),
+            )
             for line in lines
         )
 
     # A word longer than a line breaks in the middle: shrink until it fits.
-    longest = max((len(w) for line in lines for w in line.text.split()), default=0)
-    word_scale = min(1.0, chars_per_line / longest) if longest else 1.0
+    longest = max(
+        (
+            text_metrics.width_em(word, font_name, bold)
+            for line in lines
+            for word in line.text.split()
+        ),
+        default=0.0,
+    )
+    word_scale = min(1.0, line_em / longest) if longest else 1.0
     if needed(1.0) <= max_lines and word_scale >= 1.0:
         return lines, None, False
     scale = min(max_lines / needed(1.0), word_scale)
@@ -394,15 +432,20 @@ def _fit(
         return lines, round(max(scale, MIN_FONT_SCALE * 0.8), 2), False
 
     capacity = max_lines / MIN_FONT_SCALE
-    cpl = chars_per_line / MIN_FONT_SCALE
+    room_em = line_em / MIN_FONT_SCALE
+    per_char = text_metrics.char_em(font_name, bold) or text_metrics.FALLBACK_CHAR_EM
     kept: List[_Line] = []
     used = 0.0
     for line in lines:
         cost = max(
-            1, math.ceil(len(line.text) / (cpl * _LEVEL_WIDTH_FACTOR**line.level))
+            1,
+            math.ceil(
+                text_metrics.width_em(line.text, font_name, bold)
+                / (room_em * _LEVEL_WIDTH_FACTOR**line.level)
+            ),
         )
         if used + cost > capacity:
-            room = int((capacity - used) * cpl) - 1
+            room = int((capacity - used) * room_em / per_char) - 1
             if room > 12 and not kept:
                 kept.append(_Line(_cut(line.text, room), line.level))
             break
@@ -646,6 +689,7 @@ class _Renderer:
         self.height = presentation.slide_height
         self.warnings: List[str] = []
         self.layouts = _all_layouts(presentation)
+        self.theme = theme_fonts(presentation)
         self.slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
 
     def render(self, plan: DeckPlan) -> RenderResult:
@@ -794,6 +838,9 @@ class _Renderer:
                 lines = [
                     _Line(line.text.replace(" ", " "), line.level) for line in lines
                 ]
+            font_name, bold = _font_name_of(
+                shape, self.theme, is_title=zone.role == "title"
+            )
             one_line_room: Optional[int] = None
             if _grows_with_text(shape):
                 scale, one_line_room = self._no_wrap_scale(
@@ -802,10 +849,14 @@ class _Renderer:
                     placed,
                     containers.get(zone.key),
                     _has_text_below(zone, siblings.get(zone.key, ())),
+                    font_name,
+                    bold,
                 )
                 truncated = False
             else:
-                lines, scale, truncated = _fit(zone, lines, self.width, self.height)
+                lines, scale, truncated = _fit(
+                    zone, lines, self.width, self.height, font_name, bold
+                )
             _write_lines(shape, lines)
             if scale is not None:
                 _set_font_scale(shape, scale, zone.font_pt)
@@ -921,6 +972,8 @@ class _Renderer:
         placed: PlacedShape,
         container: Optional[PlacedShape],
         text_below: bool = False,
+        font_name: Optional[str] = None,
+        bold: bool = False,
     ) -> Tuple[Optional[float], Optional[int]]:
         """Keep a box that grows with its text (a KPI figure, its caption)
         inside its card, identically in PowerPoint and in the PDF preview.
@@ -942,17 +995,35 @@ class _Renderer:
         room = int((right - placed.left) * 0.95)
         if room <= 0:
             return None, None
-        per_char = zone.font_pt * _GLYPH_EM / 72 * 914400
+        inner = placed.width - _text_insets(cast(Any, placed.shape))
+        emu_per_em = zone.font_pt / 72 * 914400
         texts = [line.text for line in lines]
-        needed = max((len(t) for t in texts), default=0) * per_char
-        longest_word = max((len(w) for t in texts for w in t.split()), default=0)
-        if needed <= placed.width:
+        needed = (
+            max((text_metrics.width_em(t, font_name, bold) for t in texts), default=0.0)
+            * emu_per_em
+        )
+        longest_word = (
+            max(
+                (
+                    text_metrics.width_em(w, font_name, bold)
+                    for t in texts
+                    for w in t.split()
+                ),
+                default=0.0,
+            )
+            * emu_per_em
+        )
+        if needed * _NO_WRAP_MARGIN <= inner:
             return None, None
         shape = cast(Any, placed.shape)
-        shape.width = Emu(round(min(needed, room) * shape.width / placed.width))
+        # The margin absorbs the difference between these metrics and the
+        # renderer's own: without it a box sized to the exact text wraps anyway.
+        target = min(needed * _NO_WRAP_MARGIN + (placed.width - inner), room)
+        shape.width = Emu(round(target * shape.width / placed.width))
+        fitted = needed * _NO_WRAP_MARGIN
         if zone.role == "number":
-            return (round(max(0.4, room / needed), 2) if needed > room else None), None
-        if needed <= room:
+            return (round(max(0.4, room / fitted), 2) if fitted > room else None), None
+        if fitted <= room:
             return None, None
         if (
             zone.role in ("heading", "label")
@@ -960,16 +1031,19 @@ class _Renderer:
             and (zone.max_lines or 1) <= 1
             and len(texts) == 1
         ):
-            if room / needed >= MIN_FONT_SCALE:
-                return round(room / needed, 2), None
+            if room / fitted >= MIN_FONT_SCALE:
+                return round(room / fitted, 2), None
             shrunk = MIN_FONT_SCALE
-            fits = int(room / (per_char * shrunk))
+            per_char = (
+                text_metrics.char_em(font_name, bold) or text_metrics.FALLBACK_CHAR_EM
+            ) * emu_per_em
+            fits = int(room / (per_char * shrunk * _NO_WRAP_MARGIN))
         else:
             shrunk, fits = None, None
         bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
         if bodyPr is not None:
             bodyPr.set("wrap", "square")
-        word_scale = room / (longest_word * per_char) if longest_word else 1.0
+        word_scale = room / (longest_word * _NO_WRAP_MARGIN) if longest_word else 1.0
         if word_scale < (shrunk or 1.0):
             shrunk = round(max(0.4, word_scale), 2)
         return shrunk, fits

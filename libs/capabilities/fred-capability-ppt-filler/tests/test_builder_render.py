@@ -18,12 +18,14 @@ corporate template when `PPT_BUILDER_REFERENCE_TEMPLATE` points at it)."""
 from __future__ import annotations
 
 import io
+import math
 import os
 from typing import Any, cast
 
 import pytest
 from builder_decks import FOOTER, build_showcase_template
 from deck_builders import png_bytes
+from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
 from fred_capability_ppt_filler.builder.models import (
@@ -42,6 +44,7 @@ from fred_capability_ppt_filler.builder.plan import (
     best_for_intent,
 )
 from fred_capability_ppt_filler.builder.render import (
+    MIN_FONT_SCALE,
     RenderError,
     _assign_text,
     _unused_item_fields,
@@ -488,6 +491,30 @@ def test_one_line_heading_shrinks_then_asks_to_be_shortened():
         )
     )
     assert not [w for w in figures.warnings if "one line" in w]
+
+
+def test_truncation_drops_the_lines_the_measured_capacity_cannot_hold():
+    # Capitals run ~20 % wider than the average character: costing the kept
+    # lines in characters shipped a slide with twice its text in it.
+    shouting = ["MODERNISATION DES SYSTEMES DE COMMANDEMENT"] * 12
+    result, deck = _render(
+        SlidePlan(
+            pattern=_pattern("Title and Content").id, title="Overflow", bullets=shouting
+        )
+    )
+    assert any("truncated" in w for w in result.warnings)
+    body = cast(Any, deck.slides[0].placeholders[1]).text_frame
+    kept = [p.text for p in body.paragraphs if p.text.strip()]
+    assert 0 < len(kept) < len(shouting)
+
+    # What is left must fit the box at the smallest font the renderer uses,
+    # measured here rather than counted in characters.
+    zone = next(z for z in _pattern("Title and Content").zones if z.role == "body")
+    assert zone.font_pt and zone.max_lines
+    line_pt = zone.box.w / 1000 * INVENTORY.slide_width / 914400 * 72
+    em_per_line = line_pt / (zone.font_pt * MIN_FONT_SCALE)
+    rows = sum(math.ceil(text_metrics.width_em(text) / em_per_line) for text in kept)
+    assert rows <= zone.max_lines / MIN_FONT_SCALE
 
 
 def test_long_item_text_in_a_one_line_box_wraps_without_a_warning():
