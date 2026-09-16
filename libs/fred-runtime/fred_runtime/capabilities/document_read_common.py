@@ -196,7 +196,9 @@ def _pagination_footer(result: DocumentMarkdownResult, *, exhaustive: bool) -> s
                 f"the end is reached.]"
             )
         return (
-            f"\n\n[{seen}. More text remains — call again with "
+            f"\n\n[More text remains — {seen} read. You have NOT seen the "
+            f"whole document yet; do not present this page as the complete "
+            f"document. You may call this tool again with "
             f"offset={result.next_offset} to continue reading.]"
         )
     if result.offset == 0 and result.total_chars == 0:
