@@ -32,7 +32,7 @@ Constraints that shape the approach:
 
 ### D2. Inventory model persisted in the config; overrides separate
 
-`PptBuilderConfig = { template_key, inventory: TemplateInventory | None, overrides: list[PatternOverride] }`. The inventory is recomputed from the real bytes at every upload (same doctrine as `ppt_filler.schema_slides`) and is small (tens of patterns, tens of zones each). Overrides are keyed by pattern id + zone key. Pattern ids are stable across re-uploads of the same file: `layout:<index>` and `slide:<xml slide id>`; zone keys are `ph:<idx>` for placeholders and `sp:<shape id path>` for free shapes (group path joined by `/`). Alternative — persist only overrides and re-analyse per turn — rejected: analysis of a 4 MB deck is CPU work that should not run on every turn.
+`PptBuilderConfig = { template_key, inventory: TemplateInventory | None, overrides: list[PatternOverride] }`. The inventory carries the `analysis_version` it was produced with, and an ordinary save recomputes an older one from the stored template (best effort, thumbnails untouched), so analysis improvements reach existing agents without a re-upload. The inventory is recomputed from the real bytes at every upload (same doctrine as `ppt_filler.schema_slides`) and is small (tens of patterns, tens of zones each). Overrides are keyed by pattern id + zone key. Pattern ids are stable across re-uploads of the same file: `layout:<index>` and `slide:<xml slide id>`; zone keys are `ph:<idx>` for placeholders and `sp:<shape id path>` for free shapes (group path joined by `/`). Alternative — persist only overrides and re-analyse per turn — rejected: analysis of a 4 MB deck is CPU work that should not run on every turn.
 
 ### D3. Analysis pipeline (deterministic, ordered by confidence)
 

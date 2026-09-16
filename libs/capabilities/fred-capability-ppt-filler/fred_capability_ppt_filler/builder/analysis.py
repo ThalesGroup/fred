@@ -145,6 +145,11 @@ _THEME_FONTS = {"+mj-lt": 0, "+mn-lt": 1}
 _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 
+# Bumped whenever the rules below change what an inventory holds, so agents
+# saved with an older analysis are recomputed from their stored template.
+ANALYSIS_VERSION = 1
+
+
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
     """The theme's (heading, body) latin typefaces, or ``(None, None)``."""
     try:
@@ -482,6 +487,7 @@ class _Analyzer:
                 pattern.preferred = True
 
         return TemplateInventory(
+            analysis_version=ANALYSIS_VERSION,
             slide_width=self.width,
             slide_height=self.height,
             patterns=patterns,
@@ -935,6 +941,7 @@ def analyze_template(pptx_source: Union[bytes, str]) -> AnalyzeResult:
 __all__ = [
     "CODE_INVALID_UPLOAD",
     "COPYABLE_REL_SUFFIXES",
+    "ANALYSIS_VERSION",
     "analyze_presentation",
     "analyze_template",
     "estimate_capacity",

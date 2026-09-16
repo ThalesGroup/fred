@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder import tools as tools_mod
+from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.capability import (
     PPT_BUILDER_PATTERNS_KEY,
     PPT_BUILDER_TEMPLATE_KEY,
@@ -171,6 +172,43 @@ async def test_no_upload_is_an_ordinary_edit_or_the_built_in_theme():
         PptBuilderConfig(), {}, _save_ctx()
     )
     assert themed.inventory is None
+
+
+@pytest.mark.asyncio
+async def test_an_older_analysis_is_recomputed_from_the_stored_template():
+    from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
+
+    fresh = analyze_template(TEMPLATE).inventory
+    assert fresh is not None and fresh.analysis_version == ANALYSIS_VERSION
+    stale = fresh.model_copy(update={"analysis_version": 0, "patterns": []})
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
+
+    stored = await PptBuilderCapability().validate_config(
+        PptBuilderConfig(inventory=stale), {}, _save_ctx(assets)
+    )
+
+    assert stored.inventory is not None
+    assert stored.inventory.analysis_version == ANALYSIS_VERSION
+    assert [p.id for p in stored.inventory.patterns] == [p.id for p in fresh.patterns]
+    assert assets.store_calls == []  # the template and its thumbnails are untouched
+
+
+@pytest.mark.asyncio
+async def test_a_current_analysis_is_not_recomputed_and_a_failure_keeps_it():
+    fresh = analyze_template(TEMPLATE).inventory
+    assert fresh is not None
+    assets = FakeAssets()  # fetching the template would raise
+
+    stored = await PptBuilderCapability().validate_config(
+        PptBuilderConfig(inventory=fresh), {}, _save_ctx(assets)
+    )
+    assert stored.inventory == fresh
+
+    stale = fresh.model_copy(update={"analysis_version": 0})
+    kept = await PptBuilderCapability().validate_config(
+        PptBuilderConfig(inventory=stale), {}, _save_ctx(assets)
+    )
+    assert kept.inventory == stale
 
 
 # --- tools --------------------------------------------------------------------------------

@@ -23,7 +23,9 @@ Save-time states of ``validate_config``:
  upload in the `template` slot    analyse → on errors raise (→ 422) → store
                                   the bytes and a patterns PDF (thumbnails)
                                   → keep the overrides that still match
- no upload, inventory present     ordinary edit: prune the overrides, pass
+ no upload, inventory present     ordinary edit: prune the overrides; an
+                                  inventory older than the analysis rules is
+                                  recomputed from the stored template
  no upload, no inventory          built-in theme: prune the overrides
 ================================ ============================================
 
@@ -58,7 +60,10 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
-from fred_capability_ppt_filler.builder.analysis import analyze_template
+from fred_capability_ppt_filler.builder.analysis import (
+    ANALYSIS_VERSION,
+    analyze_template,
+)
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
@@ -348,11 +353,21 @@ class PptBuilderCapability(
     ) -> PptBuilderConfig:
         template_uploads = list(uploads.get(TEMPLATE_SLOT, ()))
         if not template_uploads:
-            base = (
-                config.inventory if config.inventory is not None else default_theme()[1]
-            )
+            refreshed = await self._reanalysed_stored_template(config, ctx)
+            base = refreshed or config.inventory or default_theme()[1]
             kept, _ = prune_overrides(config.overrides, base)
-            return config.model_copy(update={"overrides": kept})
+            update: dict[str, object] = {"overrides": kept}
+            if refreshed is not None:
+                update["inventory"] = refreshed
+                if config.inventory is not None and [
+                    p.id for p in refreshed.patterns
+                ] != [p.id for p in config.inventory.patterns]:
+                    # The stored thumbnails index the previous pattern list;
+                    # showing the wrong slide is worse than showing none until
+                    # the author uploads the template again.
+                    logger.info("[PPTBUILD] pattern list changed, thumbnails dropped")
+                    update["patterns_path"] = None
+            return config.model_copy(update=update)
 
         pptx_bytes = template_uploads[0].content
         early = _bounded_analysis(pptx_bytes)
@@ -408,6 +423,53 @@ class PptBuilderCapability(
                 "patterns_path": patterns_path,
             }
         )
+
+    @staticmethod
+    async def _reanalysed_stored_template(
+        config: PptBuilderConfig, ctx: SaveContext
+    ) -> Optional[TemplateInventory]:
+        """Recompute an inventory produced by older analysis rules, from the
+        template already stored. An ordinary save then carries every later
+        improvement without asking the author to upload the file again.
+
+        Best effort: the thumbnails are not rebuilt (the patterns and their
+        order do not change), and any failure leaves the stored inventory as is.
+        """
+        inventory = config.inventory
+        assets = ctx.services.agent_assets
+        if (
+            inventory is None
+            or assets is None
+            or inventory.analysis_version >= ANALYSIS_VERSION
+        ):
+            return None
+        try:
+            # Fetched before the slot is taken: holding one over object storage
+            # would starve the pod's builds and analyses for the whole download.
+            pptx_bytes = await assets.fetch(config.template_key)
+        except Exception as exc:  # noqa: BLE001 - the stored inventory still works
+            logger.warning("[PPTBUILD] stored template unavailable: %s", exc)
+            return None
+        if not acquire_heavy_job_slot():
+            return None
+        try:
+            result = await asyncio.to_thread(analyze_template, pptx_bytes)
+        except Exception as exc:  # noqa: BLE001 - the stored inventory still works
+            logger.warning(
+                "[PPTBUILD] re-analysis of the stored template failed: %s", exc
+            )
+            return None
+        finally:
+            release_heavy_job_slot()
+        if result.inventory is None:
+            return None
+
+        logger.info(
+            "[PPTBUILD] inventory recomputed with analysis v%s (was v%s)",
+            ANALYSIS_VERSION,
+            inventory.analysis_version,
+        )
+        return result.inventory
 
     def middleware(
         self, ctx: CapabilityContext[PptBuilderConfig, EmptyModel]

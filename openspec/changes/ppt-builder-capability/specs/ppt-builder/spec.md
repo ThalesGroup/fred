@@ -57,6 +57,11 @@ The system SHALL expose a stateless analysis of an uploaded template so the agen
 - **WHEN** an author picks a `.pptx` in the agent form
 - **THEN** the form shows within the analysis round-trip a summary (patterns detected, fixed slides, excluded slides) and can show a thumbnail of every pattern, without anything being persisted
 
+#### Scenario: Stored analysis follows the rules
+
+- **WHEN** an agent whose inventory was computed by older analysis rules is saved without a new upload
+- **THEN** the inventory is recomputed from the stored template, the author's corrections are re-applied, and a failure to recompute keeps the stored inventory
+
 #### Scenario: Save recomputes and stores
 
 - **WHEN** the agent is saved with a staged template

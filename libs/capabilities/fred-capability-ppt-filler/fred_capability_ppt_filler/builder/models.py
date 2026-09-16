@@ -158,6 +158,9 @@ class TemplateInventory(BaseModel):
 
     slide_width: int
     slide_height: int
+    # Rules the patterns were computed with (`analysis.ANALYSIS_VERSION`);
+    # an older inventory is recomputed from the stored template on the next save.
+    analysis_version: int = 0
     patterns: List[Pattern] = []
     # Free text repeated on several slides (footers, confidentiality lines):
     # kept so a later review can explain why a box is not a zone.
