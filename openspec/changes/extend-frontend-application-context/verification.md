@@ -132,9 +132,10 @@ npm view @fred-oss/iframe-sdk@0.1.0-alpha.2 name version dist.integrity --json -
 
 This registry observation reserves nothing. Recheck the exact coordinate after
 the source PR merges and immediately before approved candidate preparation.
-This uncommitted source branch cannot satisfy the clean committed-`swift`
-candidate boundary; task 6.2 remains unchecked until immutable candidate
-evidence exists. Task 6.3 remains a separately authorized publication and
+This source-preparation branch cannot satisfy the committed-`swift`
+candidate boundary; task 6.2 remains unchecked until the changes are merged
+and immutable approved candidate evidence is prepared from clean committed
+`swift`. Task 6.3 remains a separately authorized publication and
 genuine registry-verification operation.
 
 ### Source-reviewable validation
