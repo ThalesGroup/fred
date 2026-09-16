@@ -168,9 +168,81 @@ local validation bytes; it is not approved immutable candidate evidence.
 | `make code-quality`, Node 24.21.0/npm 11.19.0                         | Passed ESLint and Prettier.                                                                                                                                                                                   |
 
 The approved `release:candidate` path rejects a dirty checkout, and the
-manual `prepare-only` workflow authorizes committed `swift` only. No approved
-candidate, registry-success record, workflow run, or publication was created
-here. After this source PR merges: fetch committed `swift`, recheck that
-alpha.2 remains unused, dispatch `operation=prepare-only` with
-`packages=iframeSdk` and blank candidate reference, then retain and
-independently inspect the exact immutable candidate artifact and evidence.
+manual `prepare-only` workflow authorizes committed `swift` only. At this
+earlier source-preparation point, no approved candidate, registry-success
+record, workflow run, or publication had been created. The later alpha.2
+candidate and attempted publication are recorded below; the former alpha.2
+dispatch guidance is no longer applicable.
+
+## Alpha.2 publication failure and alpha.3 source recovery (2026-09-16)
+
+The preceding alpha.2 source-preparation guidance is historical, not a current
+instruction to dispatch an alpha.2 release. Approved alpha.2 candidate
+preparation subsequently succeeded from committed source
+`ec6a356e9f7bc462848d9bd1886507b73f08598f`: run `35141553419`, attempt
+`1`, artifact `10465890332`, ZIP SHA-256
+`be20a244a10420fdbc26f7a1424c860113da4339b6c15936eb62f10239c7ce70`,
+record digest `sha256-9zdyAUosx7VvL0b3o0zo7f1xqxdp9qlqgHX1mjJhDbw=`, and
+`@fred-oss/iframe-sdk@0.1.0-alpha.2` archive SHA-512
+`sha512-c2v0kFOCDtxecXONgWLqX3PqNQmXgw4Whd06QJU1tudSUSIRUeTwB6XTZdPZlpzUBVoFxx6Qeu4LPENAvmUhZw==`.
+This supplied immutable candidate evidence establishes the candidate-preparation
+portion of task 6.2 for alpha.2, not publication or completion of the alpha.3 task.
+
+The protected publication run `35142891059`, attempt `1`, retained attempt
+artifact `10466181656` (ZIP SHA-256
+`19ee51faf0b79c31b9c14e6583401844c47102e385019ca402d48d05bc1ed555`,
+record digest `sha256-Vv0pZn2uBu9b8LvpMoFOu5DmQWJU93ZWg36C4coQH5g=`).
+It reached the actual `npm publish` command for the alpha.2 archive, which
+failed with `ENEEDAUTH`. No publication outcome or `publishing-terminal.json`
+was retained, and public-registry verification was skipped. A missing terminal
+cannot prove non-invocation: alpha.2 must not be retried as though untouched,
+treated as published, or added to `known-published-coordinates.json`. The
+operator subsequently recreated the iframe SDK Trusted Publisher connection;
+this is external configuration context, not a setting changed or verified here.
+
+At `2026-09-16 20:07 UTC`, with this branch at
+`ec6a356e9f7bc462848d9bd1886507b73f08598f`, read-only public npm checks
+under Node `24.21.0` / npm `11.19.0` used these exact commands:
+
+```sh
+npm view @fred-oss/iframe-sdk versions dist-tags --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+npm view @fred-oss/iframe-sdk@0.1.0-alpha.2 name version dist.integrity --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+npm view @fred-oss/iframe-sdk@0.1.0-alpha.3 name version dist.integrity --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+```
+
+The complete version set contained only `0.1.0-alpha.1`, with `next` and
+`latest` pointing to alpha.1. Both exact alpha.2 and alpha.3 lookups returned
+npm `E404` / “No match found for version”. The sandbox's first attempt could
+not resolve the registry (`ENOTFOUND`); the recorded results are from the
+authorized network-enabled retry. These observations reserve no version. The
+source-recovery coordinate is `@fred-oss/iframe-sdk@0.1.0-alpha.3`; alpha.2
+changelog and incident evidence remain intact.
+
+The pinned npm lockfile regeneration changed only the `iframe-sdk` workspace
+version from `0.1.0-alpha.2` to `0.1.0-alpha.3`. Design tokens remain
+`0.1.0-alpha.1`, UI remains `0.1.0-alpha.2`; public SDK exports, dependencies,
+canonical protocol source SHA-256
+`0681eadf8db2631094f9ba08b05fbbb50b5c47599a7ba2631ebd7b6295356a67`,
+and protocol `"1"` are unchanged. The local validated archive is
+`fred-oss-iframe-sdk-0.1.0-alpha.3.tgz`, SHA-512
+`sha512-RtGsASmlDCPw9i6QOzejU65c8baC+AM8Yi3kUuQ99fevhbXa3xIjyOhUiesraDpV2gPY4g1FobnJOEagSHEdkQ==`.
+It contains the same `.` and `./protocol` runtime and declaration exports,
+eight validated packed files, and no bundled dependencies. These are local
+pack-check bytes, not approved immutable candidate evidence.
+
+| Command in `libs/frontend` | Toolchain | Source-reviewable result |
+| --- | --- | --- |
+| `make release-check` | Node 24.21.0 / npm 11.19.0 | Passed. |
+| `make release-test` | Node 24.21.0 / npm 11.19.0 | 153/153 passed with loopback fixture access; the initial sandbox run failed only on `listen EPERM 127.0.0.1`. |
+| `make test` | Node 24.21.0 / npm 11.19.0 | 376/376 passed with loopback fixture access. |
+| `make pack-check` | Node 24.21.0 / npm 11.19.0 | Design-token alpha.1, UI alpha.2, and SDK alpha.3 archives validated. |
+| `npm run test:consumer:iframe-sdk` | Node 22.13.0 / npm 10.9.2 | Alpha.3 actual tarball installed from the prepared cache in npm offline mode, type-checked, and built outside FRED. |
+| `make host-integration` | Node 22.13.0 / npm 10.9.2 | 7/7 passed against the production host and actual alpha.3 archive. |
+| `PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run test:browser -- --select iframeSdk` | Node 22.13.0 / npm 10.9.2 | Passed with pre-provisioned Chromium and distinct loopback origins; no dependency/browser provisioning during validation. |
+| `make code-quality` | Node 24.21.0 / npm 11.19.0 | ESLint and Prettier passed. |
+
+No release workflow was dispatched, no package was published, and no npm or
+GitHub setting was changed in this source-preparation pass. Task 6.2 remains
+unchecked until a fresh alpha.3 registry check and approved immutable candidate
+evidence from clean committed `swift`; task 6.3 remains unchecked until separate
+publication authority and genuine public-registry verification.
