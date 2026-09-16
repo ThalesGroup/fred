@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Record the pre-extension host baseline at `4a69a0229163cd354cdf36f62ca7e213aeaeebaf` and provision the exact published `@fred-oss/iframe-sdk@0.1.0-alpha.1` archive with independently checked integrity/provenance; verify a disposable baseline host/SDK test can run without substituting current source or a mock.
 - [ ] 1.2 Add optional readonly `theme?: "light" | "dark"` to `FredApplicationContext` and its canonical `parseContext` in `applicationProtocol.ts`; verify `applicationProtocol.test.ts` accepts missing/light/dark, preserves valid theme, rejects `"system"`, null and other invalid present values, and retains protocol `"1"` golden wire shapes and request limits.
-- [ ] 1.3 Rebuild the SDK protocol export from the canonical allowlist and verify `build-iframe-sdk.test.mjs` reports the same source hash/build graph, with no manually maintained second protocol type or version bump.
+- [ ] 1.3 Rebuild the SDK protocol export from the canonical allowlist and verify `build-iframe-sdk.test.mjs` demonstrates deterministic output hashes/evidence across repeated builds of the updated canonical inputs and preserves the expected closed source/module graph, with no manually maintained second protocol type or version bump.
 
 ## 2. Host resolved context and lifecycle
 
