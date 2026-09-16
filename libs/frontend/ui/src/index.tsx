@@ -15,6 +15,24 @@ import {
 import CanonicalTextInput, {
   type TextInputProps as CanonicalTextInputProps,
 } from "../.generated/src/rework/components/shared/atoms/TextInput/TextInput.tsx";
+import CanonicalCheckbox, {
+  type CheckboxProps,
+} from "../.generated/src/rework/components/shared/atoms/Checkbox/Checkbox.tsx";
+import CanonicalChip, {
+  type ChipProps,
+} from "../.generated/src/rework/components/shared/atoms/Chip/Chip.tsx";
+import {
+  Tooltip,
+  type TooltipProps,
+} from "../.generated/src/rework/components/shared/atoms/Tooltip/Tooltip.tsx";
+import {
+  DialogPrimitive,
+  type DialogProps,
+} from "../.generated/src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx";
+import CanonicalSelect, {
+  type SelectOption,
+  type SelectProps,
+} from "../.generated/src/rework/components/shared/molecules/Select/Select.tsx";
 import type {
   ButtonSize,
   ButtonVariant,
@@ -58,6 +76,13 @@ export function TextInput({ icon, ...props }: TextInputProps) {
 }
 
 export { Spinner };
+export {
+  CanonicalCheckbox as Checkbox,
+  CanonicalChip as Chip,
+  DialogPrimitive as Dialog,
+  CanonicalSelect as Select,
+  Tooltip,
+};
 export type {
   ButtonSize,
   ButtonVariant,
@@ -65,4 +90,10 @@ export type {
   IconButtonVariant,
   MaterialIconType,
   SpinnerProps,
+  CheckboxProps,
+  ChipProps,
+  DialogProps,
+  SelectOption,
+  SelectProps,
+  TooltipProps,
 };

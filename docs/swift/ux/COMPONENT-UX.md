@@ -84,7 +84,10 @@ _(none)_
 **Status:** `Functional`
 
 Portaled listbox with virtual focus (DOM focus stays on the trigger,
-`aria-activedescendant` tracks the highlighted option).
+`aria-activedescendant` tracks the highlighted option). Options use a generic
+value type and unique key; `emptyMessage` overrides the default empty wording.
+The menu portals into the nearest consumer-owned `.fred-ui` root when present,
+or retains the legacy FRED body portal.
 
 **Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
 the same token `TextInput` uses, so a `Select` and a text field placed in one
@@ -94,11 +97,38 @@ theme (both resolve to `cold-grey-80`) but dimmer in the dark one
 dark-theme users. `--outline-muted` remains correct for containers and
 dividers; form controls take `--outline-retreat`.
 
-**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+**Naming the trigger.** A visible `label` names it through `aria-labelledby`. Where a
 toolbar has no room for one, pass `ariaLabel` instead — without either, the
 button falls back to its own content and a screen reader announces the current
 value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
 over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `Dialog`, `Chip`, `Tooltip`, and `Checkbox` shared atoms (UI Extension 1)
+
+**Locations:** `src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx`,
+`src/rework/components/shared/atoms/Chip/Chip.tsx`,
+`src/rework/components/shared/atoms/Tooltip/Tooltip.tsx`, and
+`src/rework/components/shared/atoms/Checkbox/Checkbox.tsx`.
+**Status:** `Functional`
+
+The action-oriented Dialog primitive now owns initial focus, Tab containment,
+Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
+wrapper supplying its translated Cancel default; neutral callers supply their
+own labels. Consumer-root portals inherit light/dark theme; the application
+without `.fred-ui` retains its body portal. An open Select gets the first Escape
+inside Dialog, and option selection does not confirm the Dialog.
+
+Removable Chip controls are named `Remove <label>` unless a caller supplies
+`removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
+placement but dismisses on Escape; the panel portals to the themed root where
+available. Checkbox preserves native input props, refs, checked and disabled
+behavior, and exposes indeterminate as a mixed state.
 
 #### Open UX issues
 

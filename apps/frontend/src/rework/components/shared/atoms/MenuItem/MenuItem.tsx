@@ -14,7 +14,7 @@
 
 import { ComponentPropsWithRef, memo, ReactNode, useId } from "react";
 import styles from "./MenuItem.module.scss";
-import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import Icon, { type IconProps } from "../Icon/Icon.tsx";
 
 export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
   label?: string;

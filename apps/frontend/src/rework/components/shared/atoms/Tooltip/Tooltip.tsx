@@ -26,10 +26,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
+import { viewportHeight, viewportWidth } from "../../utils/viewport.ts";
+import { uiPortalRoot } from "../../utils/Portal.tsx";
 import styles from "./Tooltip.module.scss";
 
-interface TooltipProps {
+export interface TooltipProps {
   text?: string;
   /**
    * Let the pointer travel INTO the panel and act on it — select the text,
@@ -173,6 +174,24 @@ export const Tooltip = ({
     }
   }, [visible, updateTriggerRect]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // An open Select owns the first Escape, including when nested in a Dialog.
+      if (
+        document.activeElement instanceof Element &&
+        document.activeElement.matches('[aria-haspopup="listbox"][aria-expanded="true"]')
+      )
+        return;
+      event.stopPropagation();
+      setIsHovering(false);
+      setIsKeyboardFocused(false);
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [visible]);
+
   // Leaving the window does not produce a mouseleave: alt-tab away while
   // hovering a trigger and the pointer is simply gone, with `isHovering` stuck
   // true. The tooltip is then still open on return, and — since its own leave
@@ -284,7 +303,14 @@ export const Tooltip = ({
   }, [triggerRect, placement, gapPx]);
 
   const child = isValidElement(children)
-    ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, { "aria-describedby": tooltipId })
+    ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, {
+        "aria-describedby": [
+          (children as ReactElement<{ "aria-describedby"?: string }>).props["aria-describedby"],
+          tooltipId,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      })
     : children;
 
   const contentClasses = [styles["tooltip-content"]];
@@ -314,7 +340,7 @@ export const Tooltip = ({
           >
             {content ?? text}
           </span>,
-          document.body,
+          uiPortalRoot(wrapperRef.current),
         )}
     </span>
   );
