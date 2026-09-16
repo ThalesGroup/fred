@@ -1807,6 +1807,9 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
 DEFAULT_MARKDOWN_PAGE_CHARS = 8000
 
 
+_MARKDOWN_SMALL_TAIL_FRACTION = 0.10
+
+
 def _slice_window(
     text: str, *, offset: int, max_chars: int
 ) -> tuple[str, int, int | None, int]:
@@ -1825,6 +1828,8 @@ def _slice_window(
     total = len(text)
     start = min(offset, total)
     end = min(start + max_chars, total)
+    if end < total and total - end <= int(max_chars * _MARKDOWN_SMALL_TAIL_FRACTION):
+        end = total
     return text[start:end], start, (end if end < total else None), total
 
 

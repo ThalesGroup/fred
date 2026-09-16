@@ -23,3 +23,11 @@ Conflict resolution order:
 If there is a conflict that cannot be resolved safely, stop and ask for clarification before changing files.
 
 Do not implement changes until the required workflow checks from `CLAUDE.md` have been completed.
+
+## Branch and draft PR workflow
+
+When the user asks to prepare an implementation for review, create a dedicated
+topic branch before committing, keep unrelated local changes out of the commit,
+push that branch, and open a draft pull request. If the user explicitly asks to
+skip planning artifacts such as OpenSpec for a small issue fix, honor that scope
+and record the skipped workflow step in the close-out.
