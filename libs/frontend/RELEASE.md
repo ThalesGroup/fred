@@ -1,25 +1,33 @@
-# Frontend package release readiness
+# Frontend package releases
 
 The first `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk`
 `0.1.0-alpha.1` versions are published on public npm under the `next` tag. Genuine
 all-package registry verification completed in a separate read-only run. The retained manual
-workflow is preparation-only and has no publishing or incident-continuation operation.
+workflow now has manual `prepare-only`, protected `publish`, and read-only `verify`
+operations for subsequent independently selected versions. This ordinary path has not
+been dispatched or used to publish a new version; the completed first-release evidence
+below remains historical and unchanged.
 
 ## Release contracts
 
 Release expectations are external inputs, not values inferred from a built archive or a
 downloaded attestation:
 
-- `release/development-fixture-contract.json` exercises the selected coordinates while
-  retaining fixture identities and evidence classifications. It supports repository tests
-  but can never authorize publication.
+- `release/package-inventory.json` registers stable member IDs, contained producer workspaces,
+  and reviewed specialized archive/consumer profiles. Its schema and parser reject unknown,
+  duplicate, root, and escaping registrations. The private root's workspace list must agree.
+- The three committed member `package.json` files alone supply live names, versions, peers,
+  dependencies, exports, and publish metadata. The selected contract no longer copies them.
+- `release/development-fixture-contract.json` retains fixture identities and evidence
+  classifications. Tests may construct future independent coordinates only in disposable
+  manifests; fixture results never authorize publication or genuine registry verification.
 - `release/proposed-release-contract.json` retains its established filename and records the
-  confirmed `fred-oss` organization, three `@fred-oss` coordinates, public npm registry/access,
-  `next` tag, bootstrap account, verified organization-owner authority, all four named owners,
-  direct publishing policy, and expected workflow identity. Its state is
-  `maintainer-confirmed`.
-- A maintainer-confirmed contract must record the exact package names and versions, registry,
-  dist-tag policy, producer Node/npm versions, source repository, bootstrap publisher, named
+  confirmed central scope, public npm registry/access, `next` tag, source repository/branch,
+  workflow filename/environment, four named owners, direct policy, expected provenance issuer,
+  exact producer/application toolchains, and reviewed baseline digest. Its state is
+  `maintainer-confirmed`; package API or SDK protocol ownership is not derived from npm scope.
+- A maintainer-confirmed policy must record exact registry, producer and application Node/npm
+  versions, source repository, bootstrap publisher, named
   API/protocol/release/publishing owners, and
   later Trusted Publishing workflow certificate identity and GitHub Actions OIDC issuer before
   release evidence can be approved. Fixture identities, development versions, and the
@@ -29,6 +37,52 @@ The selected producer pins are [Node 24.21.0](https://nodejs.org/en/download/arc
 and [npm 11.19.0](https://github.com/npm/cli/releases/tag/v11.19.0). They satisfy npm's
 [Trusted Publishing requirements](https://docs.npmjs.com/trusted-publishers/) at the time of
 this change. They are deliberately separate from FRED application's existing Node/npm baseline.
+
+Each member has a `CHANGELOG.md` entry matching its committed manifest version. The factual
+`alpha.1` entries were added in this migration and point to the unchanged historical
+first-release evidence below; they do not assert that the original publication PR contained
+these changelog files. A future
+version requires one exact, nonempty `Review: approved` entry in the source-reviewed version PR;
+that machine check does not itself grant a new npm publication approval. No version is bumped
+automatically. `make release-check` validates the inventory, schemas, manifests, policy,
+private producer links, changelogs, and durable compatibility ledger offline.
+
+The source-reviewed `release/compatibility-baselines.json` retains the exact previously
+published design-token `alpha.1` coordinate, registry SHA-512, independently expected
+attested digest/repository/publication commit/workflow/issuer, and historical verification
+trace. It was imported after checking the retained verification artifact ZIP digest, its
+historical evidence, exact npm registry tarball bytes, and real Sigstore verification. The
+policy pins a digest of that ledger; altering its expectations requires reviewed policy
+change. Normal local checks read the ledger and no longer need the expiring CI ZIP. An
+UI-only provisioning now separately rechecks exact registry metadata/downloaded SHA-512,
+the installed nonlinked dependency graph and npm signatures, and cryptographically verified
+Sigstore provenance against the ledger's independent expectations. It warms the dedicated
+React cache and retains the verified token archive plus a receipt. Offline validation rechecks
+the receipt and bytes; it never needs the historical CI ZIP or a network fetch.
+
+`release/release-record.schema.json` and `scripts/release-record.mjs` define separate candidate,
+publishing-attempt, aborted-terminal, publication-outcome, and verification record models. Selected or all-member
+`release:candidate` preparation reuses its already validated evidence/bytes to emit a companion
+record with selection, policy/baseline digests, source identity, observed toolchains, archive
+metadata, peer ranges, and gates. Fixture/incomplete records, unpersisted attempt models, and
+controlled verification models cannot authorize publication or claim public registry success.
+The ordinary publisher binds candidate artifact ID, originating run/attempt, ZIP SHA-256,
+record digest, exact selected coordinates, actual publishing commit/run/attempt, policy digest,
+and package-specific ordered command intents into a separate pre-command attempt artifact.
+Upload and independent GitHub API/ZIP/record readback must complete before any `npm publish`
+command; the selected member's intent is read back again at its own command boundary. A
+retained intent means publication may have been attempted, not that a command ran or succeeded.
+`actions/upload-artifact@v4` emits a plain 64-character hexadecimal `artifact-digest`;
+the uploaded-ref command records that value as ZIP SHA-256. GitHub REST metadata must
+independently report the strict `sha256:<same-hex>` form. The publisher gives npm distinct
+empty user and global configuration files and does not pass bootstrap credentials.
+On a handled failure leaving a serialized untouched suffix, the publisher writes an aborted
+terminal record and immediately stops. Its artifact is usable only after independent checks
+of the exact completed failed run/attempt, failed publishing step, successful later terminal
+upload, record digest, and candidate/attempt binding. A crash without this terminal may remain
+unrecoverable. A later verifier records its own execution without changing the
+candidate source or each package's actual publishing identity. Controlled tests of these
+operations are not genuine OIDC or public-registry release evidence.
 
 The workspace root remains `private: true` and is never a release member. npm-generated
 workspace links are allowed only for the three explicitly declared producer members and must
@@ -45,7 +99,10 @@ contain valid SRI SHA-512 integrity exactly matching the approved record. A matc
 alone is insufficient. Tilde, whitespace/control-character, dot-segment, encoded, query,
 fragment, backslash, absolute, and escaping alternatives are noncanonical. Directory
 dependencies, local Git checkout references, additional local archives, workspace links,
-checkout fallback, and reuse of FRED's dependency tree remain invalid. A registry consumer has
+checkout fallback, and reuse of FRED's dependency tree remain invalid. UI-only offline
+consumption keeps the selected UI `file:` archive distinct from the exact published token
+version in its prepared registry cache. The latter's lock entry must carry the ledger SHA-512,
+approved registry URL, exact version, and no link or local fallback. A registry consumer has
 a stricter boundary: every FRED dependency must resolve to the exact expected registry coordinate
 and integrity without a local fallback.
 
@@ -92,7 +149,10 @@ generated names. Consumer-cache and browser provisioning remain separate network
 the transferred validation itself installs from the prepared caches and performs no browser
 bootstrap.
 
-Final `fixture-candidate-evidence` is written only after all receiver gates pass. It records the
+Final `fixture-candidate-evidence` and companion `candidate-record.json` are written only after
+all receiver gates pass. The companion record binds that same verified transfer, observed
+application toolchain, and gate results; it joins the retained preparation artifact without
+creating a publishing attempt or authorization. The evidence records the
 transfer metadata digest and artifact identity, the exact archive records, the independently
 observed application Node/npm versions, and downstream results. Failure removes any stale final
 record. A final post-gate verification recomputes the transferred lengths and SHA-512 values and
@@ -137,22 +197,66 @@ Never rebuild an archive in the receiver or repair an artifact in place.
 
 ## Candidate and registry commands
 
+`--select` accepts comma-separated stable inventory IDs; omission retains all-member
+commands, while an explicit empty, duplicate, unknown, or private-root selection fails.
+Ordering follows committed dependency/peer edges, so selected design tokens precede UI.
+`iframeSdk` requires no token/UI candidate, React cache, or UI browser output. `designTokens`
+creates only the token candidate. `ui` creates only the UI candidate and consumes the
+separately provisioned exact prior token baseline. `designTokens,ui` validates both candidate
+archives and the committed UI peer range together. The fourth-package fixture in
+`fixtures/release-fourth-package.json` exercises generic selection, record, and registry
+identity checks without registering a real producer member or granting a specialized archive
+validator, consumer, or publication authority.
+
+Network-capable provisioning remains separate from offline validation and browser execution:
+
+```sh
+# SDK-only: no React cache or token/UI prerequisite
+make consumer-provision-iframe-sdk
+make browser-install
+make RELEASE_SELECTION=iframeSdk release-transfer-create
+PLAYWRIGHT_BROWSERS_PATH=target/playwright make RELEASE_SELECTION=iframeSdk release-transfer-validate
+
+# UI-only: prepare the pinned React cache, then independently recheck exact
+# published token bytes and provenance. Neither step runs during validation.
+make consumer-provision-react
+make compatibility-provision
+make browser-install
+make RELEASE_SELECTION=ui release-transfer-create
+PLAYWRIGHT_BROWSERS_PATH=target/playwright make RELEASE_SELECTION=ui release-transfer-validate
+```
+
+Provision the React cache before the compatible-token baseline. Re-running
+`consumer-provision-react` replaces that cache and requires another
+`compatibility-provision` before UI-only offline installation; otherwise the
+missing exact registry response fails with an actionable cache-prerequisite error.
+
+Approved evidence still requires the confirmed contract, clean source, actual packers, and
+real application-toolchain gates. Controlled fixture tests demonstrate selection and transfer
+but are not approved candidate evidence. The retained workflow now accepts explicit selected
+package IDs; its default remains all-member preparation without publication.
+
 Using the confirmed contract requires its exact producer toolchain and a clean source commit:
 
 ```sh
-npm run release:candidate -- --contract /absolute/path/to/confirmed-contract.json \
+PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:candidate -- \
+  --contract /absolute/path/to/confirmed-contract.json \
   --approved \
-  --evidence /absolute/path/to/candidate-evidence.json
+  --evidence /absolute/path/to/candidate-evidence.json \
+  --record /absolute/path/to/candidate-record.json
 ```
 
-The command packs each member once, validates those bytes, and records the source commit,
-exact Node/npm versions, package coordinates, filenames, sizes, and SHA-512 integrities. Later
+With `--select designTokens`, `--select ui`, `--select iframeSdk`, or a comma-separated
+combination, the command packs only those members once. Omission packs all members. It
+validates those bytes and records the source commit, exact Node/npm versions, package
+coordinates, filenames, sizes, and SHA-512 integrities. Later
 publication must use those same bytes. Rebuilding or modifying an archive invalidates the
 evidence and requires the complete candidate validation again.
 
 Before reusing retained artifacts, run `npm run release:verify-evidence --` with the same
-`--contract`, `--evidence`, `--design-tokens`, `--ui`, and `--iframe-sdk` paths. It recomputes
-every archive integrity and rejects a changed contract, filename, or byte sequence.
+`--contract`, `--evidence`, selected `--design-tokens`/`--ui`/`--iframe-sdk` paths, and
+`--select` when evidence is selected. It recomputes every archive integrity and rejects a
+changed contract, filename, or byte sequence.
 
 After genuine publication, registry verification accepts only exact coordinates and previously
 recorded integrity:
@@ -172,7 +276,12 @@ and authorized workflow identity must independently match the confirmed contract
 evidence. Provenance discovery reads npm's `dist.attestations.url`, validates its npm endpoint
 and exact coordinate, and re-roots only its pathname onto the approved registry before fetching;
 missing, malformed, or disallowed endpoint metadata fails closed. Controlled local tests of this
-behavior are not a successful public-registry run.
+behavior are not a successful public-registry run. Selected verifier helpers distinguish
+selected candidates from the reviewed compatibility-only token dependency and reject wrong
+bytes or provenance. Ordinary retained verification now binds selected public results to
+the exact prior candidate and publishing attempts while recording the verifier's own
+execution. A selected fixture-only command still reports controlled tooling; the historical
+all-member generic command remains available.
 
 For each exact coordinate, the verifier checks registry metadata and downloaded archive SHA-512
 against the approved candidate before installation. It then creates and validates a registry-only
@@ -188,33 +297,129 @@ invoking npm. Only a package-wide HTTP 404 is retried; authentication, authoriza
 malformed metadata, name/version drift, and integrity drift fail immediately. The exact-version
 identity and candidate SHA-512 remain the authority, and no publication command is involved.
 
-## Retained preparation workflow
+## Manual independent-release workflow
 
 `.github/workflows/Publish-frontend-packages.yml` remains a manual `workflow_dispatch`
-on committed `swift` only. Its sole `prepare-only` operation authorizes the source,
-builds and packs one candidate set under Node `24.21.0` / npm `11.19.0`, and transfers
-the exact archives to the separately provisioned application-toolchain validation job.
+on committed `swift` only. `prepare-only` is the default: it authorizes the source and
+selected IDs, builds and packs exactly that candidate set under Node `24.21.0` / npm
+`11.19.0`, and transfers the archives to separately provisioned Node `22.13.0` / npm
+`10.9.2` application-toolchain validation. Producer-wide unit and archive regressions remain
+separate from the selected candidate file set.
+The approved transfer constructor accepts only the canonical reviewed policy/manifests,
+canonical producer root, clean-source input, actual packers, and matching reviewed member
+changelogs; disposable roots or injected fixture packers cannot produce release-labeled transfers.
 The receiver rechecks transfer identity, source commit, package coordinates, lengths, and
 SHA-512 values before offline consumers, browser smoke, and production-host compatibility.
 Preparation cannot publish, use a publishing environment or token, or request OIDC write
-permission. No workflow input can activate the retired bootstrap, recovery, or retained-artifact
-verification paths.
+permission. `publish` creates fresh candidates or requires an explicit original candidate
+reference for continuation, then waits for one protected `npm-publish` approval. Only that
+job receives `id-token: write`; no bootstrap secret is referenced. It checks original
+candidate bytes and reviewed source, uploads and reads back a bound attempt, reconciles
+exact versions read-only, and uses `npm publish <retained tarball> --tag next --access public
+--provenance` only for demonstrably absent versions. Selected tokens are verified before
+UI. An OIDC rejection stops without token/login fallback. A publish command is never
+automatically repeated. A matching version can be skipped only after exact bytes and
+cryptographic provenance match a retained attempt; wrong or ambiguous evidence stops.
+For an ordinary attempt, that match also checks the signed SLSA invocation repository,
+run ID, and run attempt, not just its source commit. npm 11.19.0 records the invocation
+as `<repository>/actions/runs/<runId>/attempts/<runAttempt>`; multiple attempts at the
+same commit remain distinct. The signed statement's in-toto type and SLSA predicate
+must also match the approved npm GitHub format and outer registry metadata; a relabeled
+signed non-SLSA payload is not release provenance. Missing or ambiguous invocation attribution stops before
+continuation or final registry success. The historical alpha.1 baseline remains separately
+bound to its previously reviewed publication identity.
+
+`verify` retrieves pinned retained candidate and attempt artifacts, then provisions its own
+dependencies and Chromium before exact registry-only installation, npm installed-tree
+signature auditing, Sigstore provenance, clean consumers, browser smoke, and SDK host
+compatibility where applicable. It packs nothing, requests no OIDC write authority, and
+does not enter `npm-publish`. The verifier's `GITHUB_SHA`, run, and attempt remain its own;
+each package is checked against its actual prior publishing execution. It can run again
+after candidate preparation from a different source commit: the current committed `swift`
+controller and policy authorize the operation, while retained artifact metadata binds the
+candidate's historical source and each attempt's actual publishing commit. No older policy
+checkout can override a changed current policy. The reviewed token baseline remains
+independent of its old CI ZIP; expiry of a selected candidate or attempt artifact blocks
+continuation.
+
+The five manual inputs are `operation` (`prepare-only`, `publish`, `verify`), `packages`
+(comma-separated stable IDs; default `designTokens,ui,iframeSdk`), `candidate-ref` (blank
+for fresh preparation/publication), `attempt-refs` (JSON array, default `[]`), and
+`terminal-refs` (JSON array of aborted terminal references, default `[]`). A retained
+reference is JSON with exactly `artifactId`, `runId`, `runAttempt`, `sourceCommit`, `zipSha256`
+(64 lowercase hex characters), and `recordDigest` (`sha256-` SRI). Copy the exact candidate
+reference from the successful preparation job's summary; do not substitute the current run
+attempt or a mutable latest-run artifact. For a partial continuation, first wait for the
+original publishing run to complete, inspect its actual failed `publish` job, and obtain the
+exact attempt and terminal references from retained GitHub artifact IDs, ZIP SHA-256, record
+digests, run/attempt, and source commit. Use `operation=publish`, the original `candidate-ref`,
+the candidate's exact `packages` selection, **all** prior `attempt-refs`, and their matching
+`terminal-refs`; a fresh protected approval is required. The publisher requires full committed
+Git history to find each selected version's first exact reviewed changelog heading and
+GitHub's independently observed merge time for its merged `swift` pull request. It uses
+the earliest of that time and the introduction commit's author/committer times as the
+history lower bound, so a skewed commit clock cannot hide an earlier publication. The
+protected job needs `pull-requests: read` for that lookup. From this reviewed boundary it
+enumerates retained attempts **and** attempt-specific workflow
+jobs, rejects omitted/deleted/expired/mismatched history, and refuses a fresh candidate that
+reuses any earlier attempted coordinate. An older unrelated release outside the selected
+version's reviewed window does not block a new version; a history query at GitHub's result
+cap fails closed. It validates each terminal against the exact completed failed run and
+job step boundary. The source-reviewed known-published ledger also reserves the three
+historical alpha.1 coordinates, cross-checked against this runbook's immutable first-release
+appendix; a temporary 404 cannot turn them into new publication candidates. A package's exact registry bytes and provenance must match its historical
+retained intent before it is skipped. A missing later package may continue only when **every**
+relevant prior attempt has a verified terminal proving it was untouched. A 404, missing
+terminal, pending/cancelled run, failed upload, or absent outcome alone never proves
+non-execution. If npm accepted a command but its outcome was lost, matching cryptographic
+registry evidence can reconstruct success without a second publish. If reads remain
+inconclusive, stop; never retry a possibly invoked command. A process crash before terminal
+persistence/upload may require a new reviewed version. For independent verification, use
+`operation=verify`, the original candidate reference, and the
+publishing-attempt references; verification never creates a new candidate. A changed ZIP,
+expired candidate/attempt/terminal, or unresolved partial outcome requires review, not archive rebuild
+or npm version overwrite.
+
+The workflow requests `retention-days: 30` on candidate, attempt, terminal, outcome, and final
+verification artifacts. GitHub's read-only API reported a 30-day expiry on the completed
+historical verification artifact (created `2026-09-14T20:03:00Z`, expires
+`2026-10-14T20:02:59Z`). Repository/organization retention settings and future artifact
+API expiries are not a committed guarantee: check each selected artifact's actual
+`expires_at` before relying on it. The durable prior-token compatibility ledger is
+source-reviewed and independent of its historical CI ZIP; a selected publication retry is not.
 
 The generic `npm run registry:verify --` command remains available for an independently
 approved evidence set. It requires explicit exact registry coordinates, the confirmed contract,
 candidate evidence, installed-tree signature auditing, Sigstore verification, and clean registry
-consumers. It is not a continuation of the completed incident and accepts no recovery or
-verification-plan options. A later workflow for independent releases or OIDC publishing must be
-reviewed as a separate change.
+consumers, but produces tooling evidence rather than a genuine publication success record
+without retained actual publishing attempts. It is not a continuation of the completed incident
+and accepts no recovery or verification-plan options. Ordinary direct OIDC publication
+code is prepared but not proof of package trust settings. Before a real new-version
+dispatch, maintainers review the
+version/changelog PR and each selected package's npm Trusted Publisher binding to
+`ThalesGroup/fred`, the exact workflow filename, `npm-publish` environment, and permission
+for direct `npm publish` (not merely staged publication). This must be reviewed in npm
+settings; credential-free CI cannot inspect it. `npm whoami`, a dry run, or policy validation
+is not OIDC authorization evidence. Initial creation of a future fourth package still
+requires separate authority before its trust binding exists. After a partial failure,
+retain original candidate/attempt/terminal references, reconcile exact versions read-only,
+obtain fresh protected approval, and publish only missing versions whose non-execution is
+demonstrable from a verified completed terminal boundary. A 404 after an attempt is ambiguous,
+not proof of absence. If those bytes or attempts expire, require a new reviewed version and
+fresh validation. Rollback of
+an adopted application uses its prior image/lockfile; published npm versions are not
+overwritten or silently unpublished.
 
 ## Maintainer decisions and sequencing
 
-The existing confirmed release contract names organization `fred-oss`, scope `@fred-oss`,
-all three `0.1.0-alpha.1` coordinates, the public npm registry, `next` tag,
+The existing confirmed release policy names organization `fred-oss`, scope `@fred-oss`,
+the public npm registry, `next` tag, source branch/workflow/environment,
 bootstrap account `marc.fawaz`, named package API / SDK protocol / release / enduring
 publishing owners, and direct Trusted Publishing as the selected subsequent policy.
-The distinct required GitHub reviewer is `marcfawaz`. This cleanup changes none of those
-contract values and neither installs a Trusted Publisher nor establishes bootstrap-token
+The committed member manifests supply their current `0.1.0-alpha.1` coordinates;
+historical publication facts remain in the evidence appendix and compatibility ledger.
+The distinct required GitHub reviewer is `marcfawaz`. This slice changes no published
+coordinates and neither installs a Trusted Publisher nor establishes bootstrap-token
 revocation. Predecessor OpenSpec task 12.7 therefore remains open.
 
 Future releases must preserve dependency order (design tokens before UI), validate exact

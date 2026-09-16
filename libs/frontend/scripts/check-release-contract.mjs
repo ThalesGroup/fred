@@ -7,9 +7,13 @@ import {
   assertExpectedManifest,
   assertProducerLockfile,
   loadReleaseContract,
-  validateReleaseContract,
   workspaceRoot,
 } from "./release-contract.mjs";
+import { assertMemberChangelog } from "./release-changelog.mjs";
+import {
+  baselineDigest,
+  loadCompatibilityLedger,
+} from "./compatibility-baselines.mjs";
 
 export function assertSelectedContractState(contract) {
   assert(
@@ -22,13 +26,8 @@ export function assertSelectedContractState(contract) {
 export async function checkReleaseContracts() {
   const fixture = await loadReleaseContract();
   const selected = assertSelectedContractState(
-    validateReleaseContract(
-      JSON.parse(
-        await readFile(
-          path.join(workspaceRoot, "release/proposed-release-contract.json"),
-          "utf8",
-        ),
-      ),
+    await loadReleaseContract(
+      path.join(workspaceRoot, "release/proposed-release-contract.json"),
     ),
   );
   assert.equal(fixture.state, "fixture");
@@ -47,6 +46,17 @@ export async function checkReleaseContracts() {
     );
     assertExpectedManifest(manifest, expected);
   }
+  for (const member of selected.inventory.members)
+    await assertMemberChangelog(
+      workspaceRoot,
+      member,
+      selected.packages[member.id].version,
+    );
+  assert.equal(
+    baselineDigest(await loadCompatibilityLedger()),
+    selected.approvedBaselineDigest,
+    "reviewed baseline differs from release policy",
+  );
   await assertProducerLockfile({
     contract: selected,
     rootManifest,

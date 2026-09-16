@@ -1,0 +1,47 @@
+{
+  "inventory": {
+    "$schema": "./package-inventory.schema.json",
+    "schemaVersion": 1,
+    "members": [
+      {
+        "id": "designTokens",
+        "workspace": "design-tokens",
+        "builder": "pack-design-tokens",
+        "validator": "design-tokens",
+        "consumer": "tokens"
+      },
+      {
+        "id": "ui",
+        "workspace": "ui",
+        "builder": "pack-ui",
+        "validator": "ui",
+        "consumer": "react-browser"
+      },
+      {
+        "id": "iframeSdk",
+        "workspace": "iframe-sdk",
+        "builder": "pack-iframe-sdk",
+        "validator": "iframe-sdk",
+        "consumer": "iframe-browser-host"
+      },
+      {
+        "id": "futureTool",
+        "workspace": "future-tool",
+        "builder": "fixture-pack-future-tool",
+        "validator": "fixture-future-tool",
+        "consumer": "fixture-neutral"
+      }
+    ]
+  },
+  "profile": {
+    "id": "futureTool",
+    "builder": "fixture-pack-future-tool",
+    "validator": "fixture-future-tool",
+    "consumer": "fixture-neutral"
+  },
+  "package": {
+    "name": "@fred-oss/future-tool",
+    "version": "0.0.0-fixture.1",
+    "expectedManifest": { "dependencies": {}, "peerDependencies": {} }
+  }
+}

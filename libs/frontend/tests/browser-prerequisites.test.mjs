@@ -37,6 +37,30 @@ test("accepts fully provisioned browser smoke prerequisites", async (context) =>
   await assert.doesNotReject(assertBrowserPrerequisites(prerequisites));
 });
 
+test("SDK-only browser checks require no token or React output and reject unknown checks", async (context) => {
+  const prerequisites = await prerequisiteFixture(context);
+  await rm(prerequisites.tokenOutput, { recursive: true });
+  await rm(prerequisites.reactOutput, { recursive: true });
+  await assert.doesNotReject(
+    assertBrowserPrerequisites({ ...prerequisites, checks: ["iframeSdk"] }),
+  );
+  await assert.rejects(
+    assertBrowserPrerequisites({ ...prerequisites, checks: ["not-a-gate"] }),
+    /unknown browser check/,
+  );
+  await assert.rejects(
+    assertBrowserPrerequisites({
+      ...prerequisites,
+      checks: ["iframeSdk", "iframeSdk"],
+    }),
+    /duplicate browser check/,
+  );
+  await assert.rejects(
+    assertBrowserPrerequisites({ ...prerequisites, checks: ["ui"] }),
+    /staged React consumer is missing/,
+  );
+});
+
 test("registry verification requires Chromium inside the explicit provisioned path", async (context) => {
   const prerequisites = await prerequisiteFixture(context);
   await assert.doesNotReject(

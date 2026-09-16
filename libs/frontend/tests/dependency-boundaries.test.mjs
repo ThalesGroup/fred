@@ -84,6 +84,62 @@ test("accepts npm file references to the integrity-verified candidate tarball", 
   );
 });
 
+test("UI candidate and exact cached token registry dependency remain distinct offline", async (context) => {
+  const value = await fixture(context);
+  const token = contract.packages.designTokens;
+  const compatibilityOnly = [
+    {
+      name: token.name,
+      version: token.version,
+      integrity:
+        "sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==",
+      registry: contract.registry,
+    },
+  ];
+  value.manifest.dependencies[token.name] = token.version;
+  value.lockfile.packages[""].dependencies[token.name] = token.version;
+  value.lockfile.packages[`node_modules/${token.name}`] = {
+    version: token.version,
+    integrity: compatibilityOnly[0].integrity,
+    resolved:
+      "https://registry.npmjs.org/@fred-oss/design-tokens/-/design-tokens-0.1.0-alpha.1.tgz",
+  };
+  let installs = 0;
+  const check = () =>
+    installAfterOfflineReferenceValidation({
+      manifest: value.manifest,
+      lockfile: value.lockfile,
+      consumerRoot: value.root,
+      evidence: value.evidence,
+      compatibilityOnly,
+      installDependencies: async () => {
+        installs += 1;
+      },
+    });
+  await check();
+  assert.equal(installs, 1);
+  for (const [field, replacement, error] of [
+    ["integrity", value.integrity, /cached registry integrity differs/],
+    [
+      "resolved",
+      `file:${value.filename}`,
+      /cached registry cannot use local fallback/,
+    ],
+    ["resolved", "https://other.example/token.tgz", /cached registry differs/],
+    ["link", true, /must not be linked/],
+  ]) {
+    const entry = value.lockfile.packages[`node_modules/${token.name}`];
+    const previous = entry[field];
+    entry[field] = replacement;
+    await assert.rejects(check(), error);
+    entry[field] = previous;
+    assert.equal(installs, 1);
+  }
+  value.manifest.dependencies[token.name] = "file:source-directory";
+  await assert.rejects(check(), /exact cached registry version/);
+  assert.equal(installs, 1);
+});
+
 test("rejects a tilde file reference before dependency installation", async (context) => {
   const value = await fixture(context);
   await mkdir(path.join(value.root, "~"));

@@ -7,6 +7,8 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 
 import { workspaceRoot } from "./pack-design-tokens.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { selectReleaseMembers, selectionOption } from "./release-selection.mjs";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -133,25 +135,47 @@ export async function assertBrowserPrerequisites({
     workspaceRoot,
     "target/staged-consumers/iframe-sdk",
   ),
+  checks = ["tokens", "fonts", "ui", "iframeSdk"],
 } = {}) {
+  assert(
+    Array.isArray(checks) && checks.length > 0,
+    "browser checks are required",
+  );
+  assert.equal(new Set(checks).size, checks.length, "duplicate browser check");
+  for (const check of checks)
+    assert(
+      ["tokens", "fonts", "ui", "iframeSdk"].includes(check),
+      `unknown browser check ${check}`,
+    );
+  const selected = new Set(checks);
   await Promise.all([
-    stat(path.join(tokenOutput, "tokens-only.html")).catch(() => {
-      throw new Error(
-        "staged token consumer is missing; run npm run test:consumer first",
-      );
-    }),
-    stat(path.join(reactOutput, "index.html")).catch(() => {
-      throw new Error(
-        "staged React consumer is missing; run npm run test:consumer first",
-      );
-    }),
-    ...["index.html", "child.html", "attacker.html"].map((file) =>
-      stat(path.join(iframeSdkOutput, file)).catch(() => {
-        throw new Error(
-          "staged iframe SDK consumer is missing; run npm run test:consumer first",
-        );
-      }),
-    ),
+    ...(selected.has("tokens") || selected.has("fonts")
+      ? [
+          stat(path.join(tokenOutput, "tokens-only.html")).catch(() => {
+            throw new Error(
+              "staged token consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        ]
+      : []),
+    ...(selected.has("ui")
+      ? [
+          stat(path.join(reactOutput, "index.html")).catch(() => {
+            throw new Error(
+              "staged React consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        ]
+      : []),
+    ...(selected.has("iframeSdk")
+      ? ["index.html", "child.html", "attacker.html"].map((file) =>
+          stat(path.join(iframeSdkOutput, file)).catch(() => {
+            throw new Error(
+              "staged iframe SDK consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        )
+      : []),
     stat(browserPath).catch(() => {
       throw new Error(
         "Playwright Chromium is missing; run npm run browser:install during provisioning",
@@ -946,12 +970,15 @@ export async function runBrowserSmoke({
     workspaceRoot,
     "target/staged-consumers/iframe-sdk",
   ),
+  checks = ["tokens", "fonts", "ui", "iframeSdk"],
 } = {}) {
   await assertBrowserPrerequisites({
     tokenOutput,
     reactOutput,
     iframeSdkOutput,
+    checks,
   });
+  const selected = new Set(checks);
   let tokenServer;
   let reactServer;
   let iframeHostServer;
@@ -959,55 +986,75 @@ export async function runBrowserSmoke({
   let iframeAttackerServer;
   let browser;
   try {
-    tokenServer = await startServer(tokenOutput);
-    reactServer = await startServer(reactOutput, "index.html");
-    iframeHostServer = await startServer(iframeSdkOutput, "index.html");
-    iframeChildServer = await startServer(iframeSdkOutput, "child.html");
-    iframeAttackerServer = await startServer(iframeSdkOutput, "attacker.html");
+    if (selected.has("tokens") || selected.has("fonts"))
+      tokenServer = await startServer(tokenOutput);
+    if (selected.has("ui"))
+      reactServer = await startServer(reactOutput, "index.html");
+    if (selected.has("iframeSdk")) {
+      iframeHostServer = await startServer(iframeSdkOutput, "index.html");
+      iframeChildServer = await startServer(iframeSdkOutput, "child.html");
+      iframeAttackerServer = await startServer(
+        iframeSdkOutput,
+        "attacker.html",
+      );
+    }
     browser = await chromium.launch({ headless: true });
     const [tokens, fonts, ui, rejectedFixtureOrigins, iframeSdk] =
       await Promise.all([
-        verifyTokens(browser, tokenServer.origin),
-        verifyFonts(browser, tokenServer.origin),
-        verifyUi(browser, reactServer.origin),
-        verifyRejectedFixtureOrigins(
-          browser,
-          iframeHostServer.origin,
-          iframeChildServer.origin,
-          iframeAttackerServer.origin,
-        ),
-        verifyIframeSdk(
-          browser,
-          iframeHostServer.origin,
-          iframeChildServer.origin,
-          iframeAttackerServer.origin,
-        ),
+        selected.has("tokens")
+          ? verifyTokens(browser, tokenServer.origin)
+          : undefined,
+        selected.has("fonts")
+          ? verifyFonts(browser, tokenServer.origin)
+          : undefined,
+        selected.has("ui") ? verifyUi(browser, reactServer.origin) : undefined,
+        selected.has("iframeSdk")
+          ? verifyRejectedFixtureOrigins(
+              browser,
+              iframeHostServer.origin,
+              iframeChildServer.origin,
+              iframeAttackerServer.origin,
+            )
+          : undefined,
+        selected.has("iframeSdk")
+          ? verifyIframeSdk(
+              browser,
+              iframeHostServer.origin,
+              iframeChildServer.origin,
+              iframeAttackerServer.origin,
+            )
+          : undefined,
       ]);
-    for (const property of [
-      "documentOverflow",
-      "bodyOverflow",
-      "bodyUserSelect",
-      "outsideBoxSizing",
-    ])
-      assert.equal(
-        ui.shellOwnership[property],
-        tokens.shellOwnershipBeforeUiStyles[property],
-        `UI style import changed consumer-owned ${property}`,
-      );
+    if (tokens && ui)
+      for (const property of [
+        "documentOverflow",
+        "bodyOverflow",
+        "bodyUserSelect",
+        "outsideBoxSizing",
+      ])
+        assert.equal(
+          ui.shellOwnership[property],
+          tokens.shellOwnershipBeforeUiStyles[property],
+          `UI style import changed consumer-owned ${property}`,
+        );
     const evidence = {
       browser: "Playwright Chromium (pre-provisioned)",
       dependencyInstallations: 0,
       browserProvisioning: 0,
       externalRequests: 0,
-      tokensOnly: tokens,
-      fontsOptIn: fonts,
-      ui,
-      rejectedFixtureOrigins,
-      iframeSdk,
-      shellOwnershipComparison: {
-        beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,
-        afterUiStyles: ui.shellOwnership,
-      },
+      ...(tokens ? { tokensOnly: tokens } : {}),
+      ...(fonts ? { fontsOptIn: fonts } : {}),
+      ...(ui ? { ui } : {}),
+      ...(rejectedFixtureOrigins ? { rejectedFixtureOrigins } : {}),
+      ...(iframeSdk ? { iframeSdk } : {}),
+      ...(tokens && ui
+        ? {
+            shellOwnershipComparison: {
+              beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,
+              afterUiStyles: ui.shellOwnership,
+            },
+          }
+        : {}),
     };
     if (evidencePath) {
       const resolvedEvidence = path.resolve(workspaceRoot, evidencePath);
@@ -1029,7 +1076,18 @@ export async function runBrowserSmoke({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const selectedIds = selectReleaseMembers(
+    await loadReleaseContract(),
+    selectionOption(),
+  );
+  const checks = [
+    ...(selectedIds.includes("designTokens") || selectedIds.includes("ui")
+      ? ["tokens", "fonts"]
+      : []),
+    ...(selectedIds.includes("ui") ? ["ui"] : []),
+    ...(selectedIds.includes("iframeSdk") ? ["iframeSdk"] : []),
+  ];
   process.stdout.write(
-    `${JSON.stringify(await runBrowserSmoke({ evidencePath: optionValue("--evidence") }), null, 2)}\n`,
+    `${JSON.stringify(await runBrowserSmoke({ evidencePath: optionValue("--evidence"), checks }), null, 2)}\n`,
   );
 }

@@ -1,0 +1,27 @@
+{
+  "$schema": "./package-inventory.schema.json",
+  "schemaVersion": 1,
+  "members": [
+    {
+      "id": "designTokens",
+      "workspace": "design-tokens",
+      "builder": "pack-design-tokens",
+      "validator": "design-tokens",
+      "consumer": "tokens"
+    },
+    {
+      "id": "ui",
+      "workspace": "ui",
+      "builder": "pack-ui",
+      "validator": "ui",
+      "consumer": "react-browser"
+    },
+    {
+      "id": "iframeSdk",
+      "workspace": "iframe-sdk",
+      "builder": "pack-iframe-sdk",
+      "validator": "iframe-sdk",
+      "consumer": "iframe-browser-host"
+    }
+  ]
+}

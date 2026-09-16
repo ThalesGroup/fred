@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ThalesGroup/fred/libs/frontend/release/release-record.schema.json",
+  "title": "FRED independently selected frontend release records",
+  "oneOf": [
+    { "$ref": "#/$defs/candidate" },
+    { "$ref": "#/$defs/attempt" },
+    { "$ref": "#/$defs/terminal" },
+    { "$ref": "#/$defs/outcome" },
+    { "$ref": "#/$defs/verification" }
+  ],
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "sourceCommit",
+        "transferOrigin",
+        "selected",
+        "compatibilityOnly",
+        "policyDigest",
+        "baselineDigest",
+        "expectedProvenance",
+        "observedToolchains",
+        "gates",
+        "archives",
+        "manifestRanges"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "candidate" },
+        "readiness": { "enum": ["fixture", "incomplete", "complete"] },
+        "sourceCommit": { "type": "string" },
+        "transferOrigin": { "type": ["object", "null"] },
+        "selected": { "type": "array", "minItems": 1 },
+        "compatibilityOnly": { "type": "array" },
+        "policyDigest": { "type": "string" },
+        "baselineDigest": { "type": "string" },
+        "expectedProvenance": { "type": "object" },
+        "observedToolchains": { "type": "object" },
+        "gates": { "type": "object" },
+        "archives": { "type": "object" },
+        "manifestRanges": { "type": "object" }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "candidateDigest",
+        "sourceCommit",
+        "policyDigest",
+        "baselineDigest",
+        "candidateArtifact",
+        "execution",
+        "selected",
+        "commands"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "publishing-attempt" },
+        "readiness": { "enum": ["unpersisted", "persisted"] },
+        "candidateDigest": { "type": "string" },
+        "sourceCommit": { "type": "string" },
+        "policyDigest": { "type": "string" },
+        "baselineDigest": { "type": "string" },
+        "candidateArtifact": { "type": ["object", "null"] },
+        "execution": { "type": "object" },
+        "selected": { "type": "array" },
+        "commands": { "type": "array" }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "attemptDigest",
+        "memberId",
+        "coordinate",
+        "integrity",
+        "provenance"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "publication-outcome" },
+        "readiness": { "enum": ["unverified", "verified"] },
+        "attemptDigest": { "type": "string" },
+        "memberId": { "type": "string" },
+        "coordinate": { "type": "string" },
+        "integrity": { "type": "string" },
+        "provenance": { "type": "object" }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "attemptDigest",
+        "candidateDigest",
+        "candidateArtifact",
+        "execution",
+        "passedBoundaries",
+        "possiblyInvoked",
+        "neverInvoked"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "publishing-terminal" },
+        "readiness": { "const": "aborted" },
+        "attemptDigest": { "type": "string" },
+        "candidateDigest": { "type": "string" },
+        "candidateArtifact": { "type": "object" },
+        "execution": { "type": "object" },
+        "passedBoundaries": { "type": "array" },
+        "possiblyInvoked": { "type": "array" },
+        "neverInvoked": { "type": "array" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "readiness",
+        "candidateDigest",
+        "execution",
+        "outcomes",
+        "gates"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "verification" },
+        "readiness": { "enum": ["controlled", "registry-verified"] },
+        "candidateDigest": { "type": "string" },
+        "execution": { "type": "object" },
+        "outcomes": { "type": "array" },
+        "gates": { "type": "object" }
+      }
+    }
+  }
+}

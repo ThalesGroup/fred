@@ -6,7 +6,8 @@
       "Write",
       "Read",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Bash(acli jira workitem transition:*)"
     ],
     "additionalDirectories": [
       "/tmp"
