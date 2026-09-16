@@ -21,6 +21,6 @@ None.
 
 ## Impact
 
-Canonical shared components and internal Menu/MenuItem/Portal/viewport helpers under `apps/frontend/src/rework/components/shared`; `libs/frontend/ui` package generation and metadata; producer/archive/consumer/browser/CI tests; UI and component documentation. No RAGS, iframe SDK, token-package, registry, or application-host changes. The governing [frontend packaging RFC](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md) remains open for later work.
+Canonical shared components and internal Menu/MenuItem/Portal/viewport helpers under `apps/frontend/src/rework/components/shared`; `libs/frontend/ui` package generation and metadata; producer/archive/consumer/browser/CI tests; UI and component documentation. No RAGS, iframe SDK, token-package, registry, or application-host changes. The governing [frontend packaging RFC](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md) remains open for later work.
 
 Tracking: [ThalesGroup/fred#2695](https://github.com/ThalesGroup/fred/issues/2695).

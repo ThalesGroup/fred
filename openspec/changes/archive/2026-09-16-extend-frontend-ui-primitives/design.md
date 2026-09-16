@@ -1,6 +1,6 @@
 ## Context
 
-See [proposal.md](proposal.md). The existing UI generator copies an exact canonical allowlist, applies bounded Icon adapters, builds ESM/CSS, and emits closed declarations. The canonical Dialog currently imports FRED translations; Select/Menu import an application OptionModel; Dialog, Select, and Tooltip portal to body. The existing archive contract intentionally excluded these exports until those dependencies and focus behavior were reviewed. The [RFC](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md) requires a consumer-owned themed `.fred-ui` root and local assets; its remaining work stays open.
+See [proposal.md](proposal.md). The existing UI generator copies an exact canonical allowlist, applies bounded Icon adapters, builds ESM/CSS, and emits closed declarations. The canonical Dialog currently imports FRED translations; Select/Menu import an application OptionModel; Dialog, Select, and Tooltip portal to body. The existing archive contract intentionally excluded these exports until those dependencies and focus behavior were reviewed. The [RFC](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md) requires a consumer-owned themed `.fred-ui` root and local assets; its remaining work stays open.
 
 ## Goals / Non-Goals
 
