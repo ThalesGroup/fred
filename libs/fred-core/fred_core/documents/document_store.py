@@ -100,26 +100,17 @@ class BaseDocumentMetadataStore:
     ) -> List[DocumentMetadata]:
         """Return all metadata entries that are tagged with a specific tag ID."""
 
-    async def browse_metadata_in_tags(
+    async def browse_metadata_in_tag(
         self,
-        tag_ids: List[str],
+        tag_id: str,
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
     ) -> tuple[List[DocumentMetadata], int]:
-        """Return a paginated list of the documents held in any of these folders.
-
-        A set rather than one folder, because a library's documents sit in the
-        folders below it and not in the library itself. A document belongs to
-        exactly one folder, so a set can never return it twice and the total
-        counts the same documents the pages walk through.
-        """
-        seen: dict[str, DocumentMetadata] = {}
-        for tag_id in tag_ids:
-            for document in await self.get_metadata_in_tag(tag_id, session=session):
-                seen.setdefault(document.identity.document_uid, document)
-        all_docs = list(seen.values())
-        return all_docs[offset : offset + limit], len(all_docs)
+        """Return a paginated list of metadata entries tagged with a specific tag ID."""
+        all_docs = await self.get_metadata_in_tag(tag_id, session=session)
+        total = len(all_docs)
+        return all_docs[offset : offset + limit], total
 
     async def document_uids_by_tags(
         self, tag_ids: List[str], session: AsyncSession | None = None

@@ -2026,8 +2026,6 @@ export type BrowseDocumentsByTagRequest = {
   tag_id: string;
   offset?: number;
   limit?: number;
-  /** Also return the documents held in folders nested under this one, at any depth. Off by default because a folder browser shows one folder at a time, and because summing per-folder totals over a tree would count the same document once per ancestor. On for a caller that wants everything a library holds. */
-  include_descendants?: boolean;
 };
 export type TagSizesResponse = {
   /** Total document bytes per requested tag id (0 when unknown/empty) */

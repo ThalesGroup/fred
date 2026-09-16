@@ -321,35 +321,13 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
         return []
 
-    async def browse_documents_in_tag(
-        self,
-        user: KeycloakUser,
-        tag_id: str,
-        offset: int = 0,
-        limit: int = 50,
-        include_descendants: bool = False,
-    ) -> tuple[list[DocumentMetadata], int]:
-        """Paginated fetch of the documents one folder holds.
-
-        With `include_descendants`, the folders nested under it too — which is
-        what a library needs, since its documents carry the folder they sit in
-        and never the library above them. Two indexed reads: the subtree, then
-        the documents across it.
+    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """
+        Paginated fetch of documents in a given tag.
         """
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
-        tag_ids = [tag_id]
-        if include_descendants:
-            tag_store = ApplicationContext.get_instance().get_tag_store()
-            folder = await tag_store.get_tag_by_id(tag_id)
-            descendants = await tag_store.list_descendants(
-                owner_id=folder.owner_id,
-                tag_type=folder.type,
-                full_path=folder.full_path,
-            )
-            tag_ids.extend(descendant.id for descendant in descendants)
-
-        docs, total = await self.metadata_store.browse_metadata_in_tags(tag_ids, offset=offset, limit=limit)
+        docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
         logger.debug(
             "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
             tag_id,
