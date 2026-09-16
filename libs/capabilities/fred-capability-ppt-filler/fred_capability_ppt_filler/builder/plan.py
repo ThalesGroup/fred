@@ -91,7 +91,13 @@ def _as_text(value: Any) -> Optional[str]:
     if isinstance(value, (list, tuple)):
         return "\n".join(t for t in (_as_text(v) for v in value) if t)
     if isinstance(value, dict):
-        return _as_text(value.get("text") or value.get("heading") or value.get("title"))
+        named = value.get("text") or value.get("heading") or value.get("title")
+        if named is not None:
+            return _as_text(named)
+        # A model that wrapped a bullet under a key of its own invention still
+        # meant the text inside; dropping it loses content without a word.
+        texts = [t for t in (_as_text(v) for v in value.values()) if t and t.strip()]
+        return "\n".join(texts) or None
     return str(value)
 
 
@@ -113,11 +119,19 @@ def _as_text_list(value: Any) -> List[str]:
 
 def _with_aliases(value: Dict[str, Any], aliases: Dict[str, str]) -> Dict[str, Any]:
     """Rename the field names a model guesses from zone roles to the plan's
-    own; a field given under its own name wins over an alias."""
+    own; a field given under its own name wins over an alias.
+
+    Two aliases of the same field (``text`` and ``content`` both meaning
+    ``bullets``) are kept in order rather than first-wins, which used to drop
+    one of them silently.
+    """
     out = {k: v for k, v in value.items() if k not in aliases}
+    extra: Dict[str, List[Any]] = {}
     for alias, field in aliases.items():
         if alias in value and not out.get(field):
-            out[field] = value[alias]
+            extra.setdefault(field, []).append(value[alias])
+    for field, values in extra.items():
+        out[field] = values[0] if len(values) == 1 else values
     return out
 
 
@@ -206,13 +220,23 @@ class SlidePlan(BaseModel):
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
     # Set when the model sent something that is not a slide object at all.
     invalid_entry: SkipJsonSchema[Optional[str]] = None
+    # Keys of the call that match no field and no alias: their content is not in
+    # the deck, and the agent can only fix that if it is told.
+    ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
     def _coerce(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return {"invalid_entry": str(value)[:80]}
-        return _with_aliases(value, _SLIDE_ALIASES)
+        renamed = _with_aliases(value, _SLIDE_ALIASES)
+        known = set(cls.model_fields) | set(_SLIDE_ALIASES)
+        ignored = [
+            key
+            for key, content in value.items()
+            if key not in known and content not in (None, "", [], {})
+        ]
+        return {**renamed, "ignored_fields": ignored}
 
     @field_validator("title", "subtitle", "image", "notes", mode="before")
     @classmethod

@@ -135,6 +135,26 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** a text only had to be shrunk to the font floor to fit, or a box auto-sizes to its text through the rule it inherits from its layout
 - **THEN** no content is dropped and the result does not report a truncation; a zone that genuinely overflows keeps a cut first line rather than rendering empty
 
+#### Scenario: A replaced picture keeps its place in the drawing order
+
+- **WHEN** an image zone that is not a placeholder is filled
+- **THEN** the new picture takes the position the one it replaces held, so a cover photo does not come to the front and hide the title written over it
+
+#### Scenario: Nothing the plan carries is dropped in silence
+
+- **WHEN** the plan names a field that is not a slide field, wraps a bullet under a key of its own, gives the same field under two aliases, or fills both `image` and `images`
+- **THEN** the content is kept where it can be read, and anything that could not be placed is named in the result so the agent can correct it on the next turn
+
+#### Scenario: Comparable zones of one slide are read as a set
+
+- **WHEN** several zones playing the same part on a slide are fitted, and one of them needs a smaller font than its siblings
+- **THEN** they all take the smallest of their sizes, a single unbreakable token such as an address never takes a zone below the font floor, and a column heading written into a body for want of a heading zone drops its bullet so it still reads as a heading
+
+#### Scenario: Two decks of one conversation do not overwrite each other
+
+- **WHEN** a second presentation is built in the same conversation
+- **THEN** it is stored under its own key, so the preview of the earlier answer still shows the deck it was built with, and the file the user downloads keeps the name the plan gave it
+
 #### Scenario: Unused item slots leave the slide clean
 
 - **WHEN** a repeated group is filled with fewer items than the template shows

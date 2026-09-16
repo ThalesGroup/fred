@@ -30,6 +30,7 @@ so the user sees it instead of an opaque failure.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -405,10 +406,15 @@ def build_builder_tools(
             else _DEFAULT_FILE_NAME
         )
         session_id = identity.session_id
+        # Two decks built in one conversation both defaulted to the same name,
+        # so the second overwrote the first: scrolling back to the earlier
+        # preview then showed the later deck. The stored path carries a digest
+        # of the file; the name the user sees is still the model's.
+        stamp = hashlib.sha1(result.pptx, usedforsecurity=False).hexdigest()[:8]
+        stem, _, extension = file_name.rpartition(".")
+        stored = f"{stem or file_name}-{stamp}{'.' + extension if stem else ''}"
         output_path = (
-            f"outputs/{session_id}/{file_name}"
-            if session_id
-            else f"outputs/{file_name}"
+            f"outputs/{session_id}/{stored}" if session_id else f"outputs/{stored}"
         )
         try:
             pptx_artifact = await workspace.write(
@@ -457,7 +463,9 @@ def build_builder_tools(
                 pdf_download_url=pdf_url,
                 version=_preview_version(pdf_bytes),
                 pptx_download_url=pptx_artifact.href,
-                file_name=pptx_artifact.file_name,
+                # The stored key is unique per deck; the user downloads the name
+                # the model chose.
+                file_name=file_name,
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
             )
             return (

@@ -23,7 +23,13 @@ import os
 from typing import Any, cast
 
 import pytest
-from builder_decks import FOOTER, build_showcase_template, build_spaced_template
+from builder_decks import (
+    FOOTER,
+    add_cover_photo_slide,
+    build_showcase_template,
+    build_slides,
+    build_spaced_template,
+)
 from deck_builders import png_bytes
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder.analysis import analyze_template
@@ -1063,3 +1069,145 @@ def test_an_unfilled_placeholder_is_removed_not_left_prompting():
         if not cast(Any, shape).text_frame.text.strip()
     ]
     assert not empty
+
+
+# --- the remaining ways content or design was quietly lost ---
+
+
+def test_a_replaced_picture_keeps_its_place_in_the_drawing_order():
+    """Appending the new picture put it in front of everything, so a replaced
+    cover photo hid the title drawn over it."""
+    template = build_slides([add_cover_photo_slide])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    plan = DeckPlan(
+        slides=[SlidePlan(pattern=pattern.id, title="Cover", image="doc-1")]
+    )
+    result = render_deck(
+        template, inventory, plan, {"doc-1": prepare_picture(png_bytes(400, 300))}
+    )
+    tree = list(Presentation(io.BytesIO(result.pptx)).slides[0].shapes._spTree)
+    pictures = [i for i, el in enumerate(tree) if el.tag == qn("p:pic")]
+    texts = [
+        i
+        for i, el in enumerate(tree)
+        if el.tag == qn("p:sp")
+        and "".join(t.text or "" for t in el.iter(qn("a:t"))).strip()
+    ]
+    assert pictures and texts
+    assert max(pictures) < min(texts), "the replaced photo is in front of the title"
+
+
+def test_the_hero_image_is_not_dropped_when_images_is_also_given():
+    pattern = _pattern("Photo")
+    result, deck = _render(
+        SlidePlan(pattern=pattern.id, title="Cover", image="doc-1", images=["doc-2"]),
+        images={
+            "doc-1": prepare_picture(png_bytes(400, 300)),
+            "doc-2": prepare_picture(png_bytes(300, 400)),
+        },
+    )
+    assert _pictures(deck.slides[0]) >= 1
+    assert not [w for w in result.warnings if "not a usable image" in w]
+
+
+def test_a_field_the_model_invented_is_reported_not_swallowed():
+    plan = DeckPlan.model_validate(
+        {
+            "slides": [
+                {
+                    "pattern": _pattern("Title and Content").id,
+                    "title": "Results",
+                    "bullets": ["Up"],
+                    "footnote": "Source: internal",
+                }
+            ]
+        }
+    )
+    result = render_deck(TEMPLATE, INVENTORY, plan)
+    assert any("footnote" in w for w in result.warnings)
+
+
+def test_a_bullet_wrapped_under_an_unknown_key_keeps_its_text():
+    plan = DeckPlan.model_validate(
+        {
+            "slides": [
+                {
+                    "pattern": _pattern("Title and Content").id,
+                    "title": "Results",
+                    "bullets": [{"point": "Revenue up"}, "Costs flat"],
+                }
+            ]
+        }
+    )
+    assert plan.slides[0].bullets == ["Revenue up", "Costs flat"]
+
+
+def test_sibling_zones_of_one_slide_share_a_font_size():
+    """Two headings of the same row at 24 pt and 13 pt read as a mistake, even
+    when each was right on its own."""
+    steps = _pattern("Process")
+    _, deck = _render(
+        SlidePlan(
+            pattern=steps.id,
+            title="How",
+            items=[
+                PlanItem(heading="Go", text="Start"),
+                PlanItem(heading="A heading far longer than its siblings", text="Work"),
+                PlanItem(heading="End", text="Close"),
+            ],
+        )
+    )
+    headings = ("Go", "A heading far longer than its siblings", "End")
+    sizes = {}
+    for placed in walk_shapes(deck.slides[0].shapes):
+        shape = cast(Any, placed.shape)
+        if not getattr(shape, "has_text_frame", False):
+            continue
+        text = shape.text_frame.text.strip()
+        if text in headings:
+            sizes[text] = {
+                int(rPr.get("sz"))
+                for rPr in shape.text_frame._txBody.iter(qn("a:rPr"))
+                if rPr.get("sz")
+            }
+    assert set(sizes) == set(headings), sizes
+    assert all(sizes.values()), "the shrunk sibling should carry an explicit size"
+    assert len({frozenset(v) for v in sizes.values()}) == 1, sizes
+
+
+def test_a_column_heading_written_into_the_body_drops_the_bullet():
+    """Rendered as a bullet it is indistinguishable from the content below it."""
+    content = _pattern("Title and Content")
+    _, deck = _render(
+        SlidePlan(
+            pattern=content.id,
+            title="Compare",
+            columns=[PlanColumn(heading="Left", bullets=["a", "b"])],
+        )
+    )
+    body = cast(Any, deck.slides[0].placeholders[1]).text_frame
+    first = body.paragraphs[0]._p
+    pPr = first.find(qn("a:pPr"))
+    assert pPr is not None and pPr.find(qn("a:buNone")) is not None
+
+
+def test_one_unbreakable_token_does_not_shrink_its_whole_zone_below_the_floor():
+    """An e-mail address is one word: it used to set the size for the zone and
+    took it down to 7 pt."""
+    zone = Zone(
+        key="ph:1",
+        role="body",
+        box=Box(x=0, y=0, w=200, h=300),
+        font_pt=18.0,
+        max_chars=60,
+        max_lines=4,
+    )
+    _, scale, _ = _fit(
+        zone,
+        [_Line("marie.dupont@entreprise-exemple-tres-longue.fr")],
+        Inches(13.333).emu,
+        Inches(7.5).emu,
+    )
+    assert scale is None or scale >= MIN_FONT_SCALE

@@ -328,6 +328,21 @@ def build_showcase_template() -> bytes:
     return _save(presentation)
 
 
+def add_cover_photo_slide(presentation):
+    """A full-bleed photo with the title written over it: the picture is drawn
+    first, so replacing it must not bring it in front of the text."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+    slide.shapes.add_picture(
+        io.BytesIO(png_bytes(64, 36)),
+        Inches(0),
+        Inches(0),
+        Inches(10),
+        Inches(7.5),
+    )
+    _textbox(slide.shapes, 0.8, 2.5, 6.0, 1.2, "Changez ce titre", Pt(36))
+    return slide
+
+
 def build_layouts_only_template() -> bytes:
     return _save(Presentation())
 

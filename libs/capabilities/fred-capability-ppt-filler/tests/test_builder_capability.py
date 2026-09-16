@@ -18,6 +18,7 @@ offline on the in-memory port fakes."""
 from __future__ import annotations
 
 import io
+import re
 from typing import Any, cast
 
 import pytest
@@ -280,11 +281,14 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     # The card opens this capability's pane: an agent may not have ppt_filler.
     assert part.capability_id == "ppt_builder"
     assert "2 slides" in text
+    # The stored key carries a digest of the deck, so a second build in the same
+    # conversation cannot overwrite the first; the download keeps the model's name.
     paths = [w["path"] for w in workspace.writes]
-    assert paths == [
+    assert [re.sub(r"-[0-9a-f]{8}\.", ".", path) for path in paths] == [
         "outputs/sess-9/Kick off 2026.pptx",
         "outputs/sess-9/Kick off 2026.pdf",
     ]
+    assert paths[0] != "outputs/sess-9/Kick off 2026.pptx"
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
     assert [cast(Any, s.shapes.title).text for s in deck.slides] == ["Kick-off", "Plan"]
 

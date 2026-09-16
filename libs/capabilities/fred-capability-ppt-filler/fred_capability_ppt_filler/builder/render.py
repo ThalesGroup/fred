@@ -167,6 +167,9 @@ def _widen_no_wrap_text(presentation) -> int:
 class _Line:
     text: str
     level: int = 0
+    # A column heading written into the body for want of a heading zone. It
+    # drops the bullet glyph, so the reader can still tell it from the content.
+    heading: bool = False
 
 
 class RenderError(ValueError):
@@ -347,6 +350,13 @@ def _write_lines(shape, lines: Sequence[_Line]) -> None:
             p.insert(0, copy.deepcopy(base_pPr))
         if line.level:
             p.get_or_add_pPr().set("lvl", str(line.level))
+        if line.heading:
+            pPr = p.get_or_add_pPr()
+            for existing in pPr.findall(qn("a:buChar")) + pPr.findall(
+                qn("a:buAutoNum")
+            ):
+                pPr.remove(existing)
+            pPr.append(pPr.makeelement(qn("a:buNone"), {}))
         for span in parse_inline_markdown(line.text):
             r = p.add_r()
             if base_rPr is not None:
@@ -422,6 +432,17 @@ def _grows_with_text(shape, inherited=None) -> bool:
     return False
 
 
+def _sibling_key(zone: Zone, pattern: Pattern) -> str:
+    """Zones that play the same part on one slide: the same role, and for a
+    repeated group the same position inside each item."""
+    for group in pattern.groups:
+        for item in group.items:
+            for position, member in enumerate(item):
+                if member.key == zone.key:
+                    return f"{group.key}/{position}/{zone.role}"
+    return f"slide/{zone.role}"
+
+
 def _layout_body_props(slide) -> Dict[str, Any]:
     """``bodyPr`` of each layout placeholder, by the zone key it answers to."""
     props: Dict[str, Any] = {}
@@ -487,8 +508,13 @@ def _fit(
     if needed(1.0) <= max_lines and word_scale >= 1.0:
         return lines, None, False
     scale = min(max_lines / needed(1.0), word_scale)
-    if scale >= MIN_FONT_SCALE or needed(MIN_FONT_SCALE) <= max_lines:
-        return lines, round(max(scale, MIN_FONT_SCALE * 0.8), 2), False
+    if scale >= MIN_FONT_SCALE:
+        return lines, round(scale, 2), False
+    if needed(MIN_FONT_SCALE) <= max_lines:
+        # A word longer than the line (a URL, an address) would drag the whole
+        # zone below the floor on its own. It breaks instead: illegible text
+        # helps nobody, and the break shows the agent what to shorten.
+        return lines, MIN_FONT_SCALE, False
 
     capacity = max_lines / MIN_FONT_SCALE
     room_em = line_em / MIN_FONT_SCALE
@@ -629,7 +655,7 @@ def _assign_text(
                     f"column {index + 1}",
                 )
             elif column.heading:
-                lines = [_Line(f"**{column.heading}**")] + lines
+                lines = [_Line(f"**{column.heading}**", heading=True)] + lines
             put(body, lines, f"column {index + 1}")
         if bullets:
             lost.append("bullets")
@@ -768,6 +794,11 @@ class _Renderer:
                     f"({slide_plan.invalid_entry!r})."
                 )
                 continue
+            if slide_plan.ignored_fields:
+                self.warnings.append(
+                    f"Slide {position}: {', '.join(sorted(slide_plan.ignored_fields))} "
+                    "is not a field of a slide, and its content is not in the deck."
+                )
             resolution = resolve(self.inventory, slide_plan)
             pattern = resolution.pattern
             if resolution.substitution:
@@ -830,7 +861,11 @@ class _Renderer:
         text = _assign_text(pattern, plan, lost)
         image_ids: Dict[str, Optional[str]] = {}
         zmap = _ZoneMap(pattern)
-        plan_images = list(plan.images) or ([plan.image] if plan.image else [])
+        # Both fields are offered, so a model names the hero picture in `image`
+        # and the rest in `images`; taking one or the other dropped the hero.
+        plan_images = list(
+            dict.fromkeys(([plan.image] if plan.image else []) + list(plan.images))
+        )
         for zone, image_id in zip(zmap.images, plan_images + [None] * len(zmap.images)):
             image_ids[zone.key] = image_id
         if len(plan_images) > len(zmap.images):
@@ -886,6 +921,7 @@ class _Renderer:
             {z.key: item for g in pattern.groups for item in g.items for z in item}
         )
         layout_body = _layout_body_props(slide)
+        scaled: Dict[str, List[Tuple[Any, Zone, float]]] = {}
         for zone in self._fillable_text_zones(pattern):
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
@@ -931,8 +967,11 @@ class _Renderer:
                     zone, lines, self.width, self.height, font_name, bold
                 )
             _write_lines(shape, lines)
-            if scale is not None:
-                _set_font_scale(shape, scale, zone.font_pt)
+            # Registered even when it needs no shrinking: a sibling that does is
+            # what decides the size of the set.
+            scaled.setdefault(_sibling_key(zone, pattern), []).append(
+                (shape, zone, 1.0 if scale is None else scale)
+            )
             if one_line_room is not None:
                 self.warnings.append(
                     f"Slide {position}: the {zone.role} '{lines[0].text}' of '{pattern.label}' does not fit "
@@ -943,6 +982,16 @@ class _Renderer:
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
                     f"and got truncated (about {zone.max_chars} characters fit)."
                 )
+
+        # Zones that play the same part on one slide are read as a set: two
+        # column headings at 24 pt and 13 pt look like a mistake, even when each
+        # was right on its own. They all take the smallest of their scales.
+        for group_scales in scaled.values():
+            smallest = min(scale for _, _, scale in group_scales)
+            if smallest >= 1.0:
+                continue
+            for shape, zone, _ in group_scales:
+                _set_font_scale(shape, smallest, zone.font_pt)
 
         for zone in [z for z in pattern.zones if z.role == "image"] + [
             z
@@ -1117,7 +1166,11 @@ class _Renderer:
         room = int((right - placed.left) * 0.95)
         if room <= 0:
             return None, None
-        inner = placed.width - _text_insets(cast(Any, placed.shape))
+        shape_width = getattr(cast(Any, placed.shape), "width", 0) or placed.width
+        # `placed.width` is absolute, the insets are in the shape's own units:
+        # inside a scaled group the two are not the same ruler.
+        insets = _text_insets(cast(Any, placed.shape)) * placed.width / shape_width
+        inner = placed.width - insets
         emu_per_em = zone.font_pt / 72 * 914400
         texts = [line.text for line in lines]
         needed = (
@@ -1140,8 +1193,12 @@ class _Renderer:
         shape = cast(Any, placed.shape)
         # The margin absorbs the difference between these metrics and the
         # renderer's own: without it a box sized to the exact text wraps anyway.
-        target = min(needed * _NO_WRAP_MARGIN + (placed.width - inner), room)
-        shape.width = Emu(round(target * shape.width / placed.width))
+        target = min(needed * _NO_WRAP_MARGIN + insets, room)
+        # Only ever widen. The room is capped below the container, so a box the
+        # designer drew wider than that cap used to be cut back — the opposite
+        # of what a text too wide for its box needs.
+        if target > placed.width and shape.width:
+            shape.width = Emu(round(target * shape.width / placed.width))
         fitted = needed * _NO_WRAP_MARGIN
         if zone.role == "number":
             return (round(max(0.4, room / fitted), 2) if fitted > room else None), None
@@ -1167,7 +1224,12 @@ class _Renderer:
             bodyPr.set("wrap", "square")
         word_scale = room / (longest_word * _NO_WRAP_MARGIN) if longest_word else 1.0
         if word_scale < (shrunk or 1.0):
-            shrunk = round(max(0.4, word_scale), 2)
+            # A single unbreakable token - an e-mail address, a URL - set the
+            # size for its whole zone and took it down to 7 pt. Below the floor
+            # the token overflows its measured box instead; it still fits the
+            # card, and the text around it stays readable.
+            floor = 0.4 if zone.role == "number" else MIN_FONT_SCALE
+            shrunk = round(max(floor, word_scale), 2)
         return shrunk, fits
 
     @staticmethod
@@ -1187,9 +1249,23 @@ class _Renderer:
         left, top, width, height = fit_inside_box(
             img_w, img_h, placed.left, placed.top, placed.width, placed.height
         )
-        slide.shapes.add_picture(
+        picture = slide.shapes.add_picture(
             io.BytesIO(image_bytes), Emu(left), Emu(top), Emu(width), Emu(height)
         )
+        # `add_picture` appends, which puts the new picture in front of
+        # everything: a replaced cover photo then hides the title drawn over it.
+        # Put it back where the one it replaces sat in the drawing order.
+        element = cast(Any, placed.shape)._element
+        anchor = element
+        while anchor.getparent() is not None and anchor.getparent().tag != qn(
+            "p:spTree"
+        ):
+            anchor = anchor.getparent()
+        tree = anchor.getparent()
+        if tree is not None:
+            new_element = picture._element
+            new_element.getparent().remove(new_element)
+            tree.insert(list(tree).index(anchor), new_element)
         _remove(placed)
 
 
