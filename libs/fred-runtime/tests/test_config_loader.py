@@ -28,6 +28,7 @@ def _write_configuration_yaml(
     *,
     limit_concurrency: int | None | object = None,
     max_chat_input_chars: int | object = _MISSING,
+    runtime_id: str | object = "test-pod",
 ) -> None:
     """
     Write one minimal pod `configuration.yaml` fixture.
@@ -41,6 +42,7 @@ def _write_configuration_yaml(
       truth comes only from the external catalog file
     - pass `limit_concurrency=<int>` to exercise the optional Uvicorn cap
     - pass `limit_concurrency=_MISSING` to omit the field entirely
+    - pass `runtime_id=_MISSING` to omit the pod's mandatory identity slug
 
     Example:
     - `_write_configuration_yaml(config_dir)`
@@ -55,11 +57,14 @@ def _write_configuration_yaml(
         max_chat_input_chars_block = (
             f"\n              max_chat_input_chars: {max_chat_input_chars}"
         )
+    runtime_id_block = ""
+    if runtime_id is not _MISSING:
+        runtime_id_block = f'\n              runtime_id: "{runtime_id}"'
 
     (config_dir / "configuration.yaml").write_text(
         dedent(
             f"""
-            app:
+            app:{runtime_id_block}
               name: "Test Pod"
               base_url: "/pod/v1"
               port: 8000
@@ -422,6 +427,80 @@ def test_load_agent_pod_config_rejects_non_positive_chat_input_limit(
     _write_models_catalog(config_dir / "models_catalog.yaml")
     _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
     (config_dir / ".env").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        load_agent_pod_config()
+    assert exc_info.value.code == 1
+
+
+def _write_pod_bootstrap(config_dir: Path, **kwargs) -> None:
+    """Write the full config/ layout `load_agent_pod_config()` expects."""
+
+    _write_configuration_yaml(config_dir, **kwargs)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
+    (config_dir / ".env").write_text("", encoding="utf-8")
+
+
+def test_load_agent_pod_config_loads_runtime_id(tmp_path, monkeypatch) -> None:
+    """The pod's identity slug survives config load verbatim."""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_pod_bootstrap(config_dir, runtime_id="rags-agents")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    config = load_agent_pod_config()
+
+    assert config.app.runtime_id == "rags-agents"
+
+
+def test_load_agent_pod_config_requires_runtime_id(tmp_path, monkeypatch) -> None:
+    """A pod that does not declare who it is must refuse to start.
+
+    No default is offered on purpose: one shared default is exactly what made
+    every pod report the same `service` label.
+    """
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_pod_bootstrap(config_dir, runtime_id=_MISSING)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        load_agent_pod_config()
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.parametrize(
+    "invalid_runtime_id",
+    [
+        "Fred default agents",  # the display name — spaces and capitals
+        "Fred-Agents",  # capitals alone
+        "fred_agents",  # underscore is not the platform's slug separator
+        "-fred-agents",  # leading separator
+        "fred-agents-",  # trailing separator
+        "",  # empty
+    ],
+)
+def test_load_agent_pod_config_rejects_non_slug_runtime_id(
+    tmp_path, monkeypatch, invalid_runtime_id: str
+) -> None:
+    """Prose can never reach the Prometheus label set through this field."""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_pod_bootstrap(config_dir, runtime_id=invalid_runtime_id)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))

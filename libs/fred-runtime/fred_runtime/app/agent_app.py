@@ -5030,7 +5030,7 @@ def create_agent_app(
         # 10. start_kpi_tasks  — asyncio tasks, after SQL engine is known
         # 11. set_runtime_context — wires all built parts into the global config
         log_setup(
-            service_name=config.app.name,
+            service_name=config.app.runtime_id,
             log_level=config.app.log_level,
             store=build_log_store(
                 log_store_config=config.storage.log_store,
@@ -5078,7 +5078,7 @@ def create_agent_app(
             FredRuntimeContext(
                 RuntimeConfig(
                     knowledge_flow_url=config.ai.knowledge_flow_url,
-                    service_name=config.app.name,
+                    service_name=config.app.runtime_id,
                     timeouts=config.ai.timeout,
                     chat_model_factory=chat_factory,
                     checkpointer=checkpointer,

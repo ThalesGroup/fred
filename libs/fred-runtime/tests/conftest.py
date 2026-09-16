@@ -91,6 +91,7 @@ def minimal_config() -> AgentPodConfig:
     """Minimal offline AgentPodConfig with security disabled."""
     return AgentPodConfig.model_validate(
         {
+            "app": {"runtime_id": "test-pod"},
             "security": {
                 "m2m": {
                     "enabled": False,

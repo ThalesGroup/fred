@@ -288,6 +288,7 @@ def _build_test_config(
     config = AgentPodConfig.model_validate(
         {
             "app": {
+                "runtime_id": "test-pod",
                 "name": "Test Pod",
                 "base_url": "/pod/v1",
                 "port": 8000,
@@ -334,6 +335,42 @@ def _build_test_config(
     # The pod refuses to start against an unmigrated database (#2290) —
     # create the Alembic-owned schema first, as the deploy migration job does.
     return migrate_test_config(config)
+
+
+def test_lifespan_identifies_this_pod_by_slug_in_logs_and_runtime_config(
+    monkeypatch, tmp_path
+) -> None:
+    """Both telemetry streams must name the pod by `app.runtime_id`.
+
+    `app.name` is a display string ("Test Pod"): sourcing an identifier from
+    it puts spaces and capitals in a Prometheus label, and makes the log
+    stream's `service` disagree with the KPI one so the two cannot be joined.
+    """
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    log_setup_calls: list[str] = []
+    real_log_setup = agent_app_module.log_setup
+
+    def _record_log_setup(*, service_name: str, **kwargs):
+        log_setup_calls.append(service_name)
+        return real_log_setup(service_name=service_name, **kwargs)
+
+    monkeypatch.setattr(agent_app_module, "log_setup", _record_log_setup)
+
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app):
+        assert get_runtime_context().config.service_name == "test-pod"
+
+    assert log_setup_calls == ["test-pod"]
 
 
 def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
