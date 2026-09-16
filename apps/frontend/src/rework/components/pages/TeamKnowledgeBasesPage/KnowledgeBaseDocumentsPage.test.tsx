@@ -13,8 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A base's documents are shown and nothing is offered over them: they belong
-// to a source it mirrors, so a removal here would last only until the next run.
+// This page browses a base's library with the Resources explorer itself, rooted
+// at that library and offering no way to write. What it owes its own tests is
+// therefore small: that it delegates, that it roots and locks the explorer
+// correctly, and that it says something useful when the base cannot be read.
+// How the explorer lists, paginates and previews is covered by its own tests —
+// asserting it again here is what let the two views drift apart in the first
+// place.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,28 +33,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
   instance: undefined as Record<string, unknown> | undefined,
-  /** Every browse request the page made, in order. */
-  browsed: [] as Record<string, unknown>[],
-  page: { documents: [] as Record<string, unknown>[], total: 0 },
-  browseRejects: false,
-  uploaders: [] as { id: string; [key: string]: unknown }[],
-  /** Every batched uid lookup the page made — one per page, never per row. */
-  uploaderLookups: [] as string[][],
-  previewed: [] as Record<string, unknown>[],
-  preview: (doc: Record<string, unknown>) => {
-    probe.previewed.push(doc);
-  },
+  isLoading: false,
+  /** Every set of props the shared explorer was rendered with. */
+  workspaceProps: [] as Record<string, unknown>[],
 }));
-
-// One trigger for the life of the module, as RTK Query guarantees. A fresh
-// function each render would re-run the page's load effect for ever — that is
-// a property of the double, not of the page, and the real client is stable.
-const browseTrigger = vi.hoisted(() => (args: Record<string, unknown>) => {
-  probe.browsed.push(args);
-  return {
-    unwrap: () => (probe.browseRejects ? Promise.reject(new Error("listing failed")) : Promise.resolve(probe.page)),
-  };
-});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -61,32 +48,21 @@ vi.mock("react-router-dom", () => ({
 }));
 
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
-  useKnowledgeBaseQuery: () => ({ data: probe.instance, isLoading: false, isError: !probe.instance }),
-  useUsersByIdsQuery: (args: { ids: string[] }) => {
-    probe.uploaderLookups.push(args.ids);
-    return { data: probe.uploaders, isFetching: false };
+  useKnowledgeBaseQuery: () => ({
+    data: probe.instance,
+    isLoading: probe.isLoading,
+    isError: !probe.isLoading && !probe.instance,
+  }),
+}));
+
+vi.mock("../TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx", () => ({
+  default: (props: Record<string, unknown>) => {
+    probe.workspaceProps.push(props);
+    return <div data-testid="document-workspace" />;
   },
 }));
 
-vi.mock("../../../../components/documents/common/useDocumentCommands", () => ({
-  useDocumentCommands: () => ({ preview: probe.preview, previewTarget: null, closePreview: () => {} }),
-}));
-
-vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts", () => ({
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [browseTrigger],
-}));
-
 import KnowledgeBaseDocumentsPage from "./KnowledgeBaseDocumentsPage.tsx";
-
-function doc(name: string, uid: string, overrides: Record<string, unknown> = {}) {
-  return {
-    identity: { document_name: name, document_uid: uid, title: null, uploaded_by: null },
-    source: { source_type: "pull", date_added_to_kb: "2026-09-14T08:00:00Z" },
-    file: { file_size_bytes: 2048 },
-    processing: { stages: { vector: "done" } },
-    ...overrides,
-  };
-}
 
 let container: HTMLDivElement;
 let root: Root;
@@ -104,12 +80,8 @@ beforeEach(() => {
     library_name: "Local-2",
     definition_name: "Local folder",
   };
-  probe.browsed = [];
-  probe.page = { documents: [], total: 0 };
-  probe.browseRejects = false;
-  probe.uploaders = [];
-  probe.uploaderLookups = [];
-  probe.previewed = [];
+  probe.isLoading = false;
+  probe.workspaceProps = [];
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -121,96 +93,53 @@ afterEach(() => {
 });
 
 describe("KnowledgeBaseDocumentsPage", () => {
-  it("browses the base's own library and nothing else", async () => {
-    probe.page = { documents: [doc("report.pdf", "uid-1")], total: 1 };
+  it("browses the library with the Resources explorer, not a table of its own", async () => {
     await render();
 
-    expect(probe.browsed).toHaveLength(1);
-    expect(probe.browsed[0]).toMatchObject({
-      browseDocumentsByTagRequest: { tag_id: "lib-1", offset: 0 },
-    });
-    expect(container.textContent).toContain("report.pdf");
+    expect(container.querySelector("[data-testid=document-workspace]")).not.toBeNull();
+    // No second table: the whole point is that both views are one component.
+    expect(container.querySelector("table")).toBeNull();
   });
 
-  it("asks for the whole library, not just its top folder", async () => {
-    // A base mirrors its source's shape, so asking for the library tag alone
-    // returned only the files at the root of that source — most bases looked empty.
-    probe.page = { documents: [doc("specs/api/openapi.md", "uid-1")], total: 1 };
+  it("roots the explorer at this base's library", async () => {
+    // Rooted by tag id rather than by name: a library can be renamed, and two
+    // teams' libraries can share a name.
     await render();
 
-    expect(probe.browsed[0].browseDocumentsByTagRequest.include_descendants).toBe(true);
-    expect(container.textContent).not.toContain("rework.knowledgeBases.documents.empty");
+    expect(probe.workspaceProps).toHaveLength(1);
+    expect(probe.workspaceProps[0]).toMatchObject({ teamId: "team-1", rootTagId: "lib-1" });
+  });
+
+  it("offers no way to write into it", async () => {
+    // A base fills its own library; a person's write is refused by the backend,
+    // so the affordance is withheld rather than shown and then rejected.
+    await render();
+
+    expect(probe.workspaceProps[0].readOnly).toBe(true);
   });
 
   it("names the base and the kind it is", async () => {
-    probe.page = { documents: [doc("a.md", "uid-1")], total: 1 };
     await render();
 
     expect(container.textContent).toContain("Local-2");
     expect(container.textContent).toContain("Local folder");
   });
 
-  it("offers no action that changes a document", async () => {
-    probe.page = { documents: [doc("report.pdf", "uid-1")], total: 1 };
+  it("says so when the base cannot be read, instead of an empty explorer", async () => {
+    probe.instance = undefined;
     await render();
 
-    expect(container.querySelectorAll("input[type=checkbox]")).toHaveLength(0);
-    const labels = [...container.querySelectorAll("button")].flatMap((button) => [
-      button.textContent ?? "",
-      button.getAttribute("aria-label") ?? "",
-    ]);
-    expect(labels.some((label) => /delete|rename|download|supprim/i.test(label))).toBe(false);
+    expect(container.textContent).toContain("rework.knowledgeBases.documents.unavailable.title");
+    expect(container.querySelector("[data-testid=document-workspace]")).toBeNull();
   });
 
-  it("still lets a reader open a document", async () => {
-    probe.page = { documents: [doc("report.pdf", "uid-1")], total: 1 };
+  it("waits for the base before rooting anything", async () => {
+    // Rendering the explorer with no root would show the whole team corpus —
+    // exactly what this page must never do.
+    probe.instance = undefined;
+    probe.isLoading = true;
     await render();
 
-    const open = [...container.querySelectorAll("button")].find(
-      (button) => button.getAttribute("aria-label") === "rework.resources.action.preview",
-    );
-    expect(open).toBeDefined();
-    act(() => open!.click());
-    expect(probe.previewed).toHaveLength(1);
-  });
-
-  it("says so when the base holds nothing yet", async () => {
-    await render();
-    expect(container.textContent).toContain("rework.knowledgeBases.documents.empty");
-  });
-
-  it("reports a failed listing instead of an empty base", async () => {
-    probe.browseRejects = true;
-    await render();
-
-    expect(container.textContent).toContain("rework.knowledgeBases.documents.loadFailed");
-    expect(container.textContent).not.toContain("rework.knowledgeBases.documents.empty");
-  });
-
-  it("resolves every uploader in one lookup, not one per row", async () => {
-    probe.uploaders = [{ id: "u-1", first_name: "Priya", last_name: "N" }];
-    probe.page = {
-      documents: [
-        doc("a.md", "uid-1", { identity: { document_name: "a.md", document_uid: "uid-1", uploaded_by: "u-1" } }),
-        doc("b.md", "uid-2", { identity: { document_name: "b.md", document_uid: "uid-2", uploaded_by: "u-1" } }),
-      ],
-      total: 2,
-    };
-    await render();
-
-    const asked = probe.uploaderLookups.filter((ids) => ids.length > 0);
-    expect(asked.every((ids) => ids.length === 1)).toBe(true);
-    expect(asked[asked.length - 1]).toEqual(["u-1"]);
-  });
-
-  it("shows what a document settled at", async () => {
-    probe.page = {
-      documents: [doc("failed.pdf", "uid-1", { processing: { stages: { vector: "failed" } } })],
-      total: 1,
-    };
-    await render();
-
-    // The chip renders; its own tests cover which stage means which status.
-    expect(container.querySelector("[class*='statusChip'], [class*='chip']")).not.toBeNull();
+    expect(probe.workspaceProps).toHaveLength(0);
   });
 });
