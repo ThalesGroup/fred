@@ -288,16 +288,21 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         docs = await self.get_all_metadata(filters={}, session=session)
         return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
 
-    async def browse_metadata_in_tag(
+    async def browse_metadata_in_tags(
         self,
-        tag_id: str,
+        tag_ids: list[str],
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
     ) -> tuple[list[DocumentMetadata], int]:
+        if not tag_ids:
+            return [], 0
+
         if self._is_postgres:
+            # Overlap rather than containment: a document is in any one of these
+            # folders, never in all of them. Served by the same GIN index.
             cond: ColumnElement[bool] = cast(
-                ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
+                ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(tag_ids)
             )
             async with use_session(self._sessions, session) as s:
                 total_result = await s.execute(
@@ -309,6 +314,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                         await s.execute(
                             select(DocumentMetadataRow)
                             .where(cond)
+                            .order_by(DocumentMetadataRow.document_uid)
                             .limit(limit)
                             .offset(offset)
                         )
@@ -321,8 +327,9 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             return docs, int(total)
 
         # SQLite: filter in Python (get_all_metadata already hydrates)
+        wanted = set(tag_ids)
         docs = await self.get_all_metadata(filters={}, session=session)
-        filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
+        filtered = [md for md in docs if wanted & set(md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
 
     async def document_uids_by_tags(

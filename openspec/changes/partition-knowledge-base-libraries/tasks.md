@@ -31,10 +31,10 @@ inside an authorization change.
 
 ## 5. Listing nested documents (fred-core, knowledge-flow, frontend)
 
-- [ ] 5.1 Extend the document store's folder listing to take a set of folders rather than one, keeping paging and total behaviour; verify the total counts the same set that can be paged through, and that a document in exactly one folder is never counted twice
-- [ ] 5.2 Resolve a library's descendant folders with one prefix read on the tag store; verify against a tree several levels deep
-- [ ] 5.3 Serve the library document listing from those two reads; verify a library whose documents all sit in nested folders is no longer reported as holding none
-- [ ] 5.4 Regenerate the knowledge-flow client (`make update-knowledge-flow-api` in `apps/frontend`) and commit it alongside; verify the generated types carry the new field and the listing shape
+- [x] 5.1 Extend the document store's folder listing to take a set of folders rather than one, keeping paging and total behaviour; verify the total counts the same set that can be paged through, and that a document in exactly one folder is never counted twice
+- [x] 5.2 Resolve a library's descendant folders with one prefix read on the tag store; verify against a tree several levels deep
+- [x] 5.3 Serve the library document listing from those two reads; verify a library whose documents all sit in nested folders is no longer reported as holding none
+- [x] 5.4 Regenerate the knowledge-flow client (`make update-knowledge-flow-api` in `apps/frontend`) and commit it alongside; verify the generated types carry the new field and the listing shape
 - [ ] 5.5 Point the Knowledge Base Documents page at the full listing; verify its tests cover a library with nested documents and assert the empty state is not shown
 
 ## 6. Resources reflects the partition (frontend)

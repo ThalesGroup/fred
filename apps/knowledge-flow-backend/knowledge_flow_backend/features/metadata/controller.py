@@ -48,6 +48,15 @@ class BrowseDocumentsByTagRequest(BaseModel):
     tag_id: str = Field(..., description="Library tag identifier")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
+    include_descendants: bool = Field(
+        False,
+        description=(
+            "Also return the documents held in folders nested under this one, at any depth. "
+            "Off by default because a folder browser shows one folder at a time, and because "
+            "summing per-folder totals over a tree would count the same document once per "
+            "ancestor. On for a caller that wants everything a library holds."
+        ),
+    )
 
 
 class TagSizesRequest(BaseModel):
@@ -259,7 +268,13 @@ class MetadataController:
             description="Returns documents for a library tag with pagination support.",
         )
         async def browse_documents_by_tag(req: BrowseDocumentsByTagRequest, user: KeycloakUser = Depends(get_current_user)):
-            docs, total = await self.service.browse_documents_in_tag(user, tag_id=req.tag_id, offset=req.offset, limit=req.limit)
+            docs, total = await self.service.browse_documents_in_tag(
+                user,
+                tag_id=req.tag_id,
+                offset=req.offset,
+                limit=req.limit,
+                include_descendants=req.include_descendants,
+            )
             logger.info(
                 "[PAGINATION] browse_documents_by_tag tag=%s offset=%s limit=%s returned=%s total=%s",
                 req.tag_id,

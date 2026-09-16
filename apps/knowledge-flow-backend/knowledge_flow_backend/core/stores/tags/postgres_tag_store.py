@@ -19,7 +19,7 @@ from typing import List
 
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
@@ -166,6 +166,31 @@ class PostgresTagStore(BaseTagStore):
     async def list_all(self, session: AsyncSession | None = None) -> List[Tag]:
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(TagRow))).scalars().all()
+        return [self._row_to_tag(row) for row in rows]
+
+    async def list_descendants(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> List[Tag]:
+        """Every folder nested under this path, at any depth, for one owner.
+
+        Answered from the indexed path column: a library mirroring a source tree
+        can hold hundreds of folders, and reading the owner's whole tree to find
+        them would cost a table scan on every listing of that library.
+        """
+        # A folder's own name may contain LIKE's wildcards, so the prefix is
+        # escaped and the escape character declared rather than assumed.
+        escaped = full_path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(TagRow).where(
+                        TagRow.owner_id == owner_id,
+                        TagRow.type == tag_type.value,
+                        or_(
+                            TagRow.path == full_path,
+                            TagRow.path.like(f"{escaped}/%", escape="\\"),
+                        ),
+                    )
+                )
+            ).scalars().all()
         return [self._row_to_tag(row) for row in rows]
 
     async def list_by_type(self, tag_type: str, session: AsyncSession | None = None) -> List[Tag]:

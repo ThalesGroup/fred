@@ -60,6 +60,22 @@ class BaseTagStore(ABC):
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
         pass
 
+    async def list_descendants(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> List[Tag]:
+        """Every folder nested under this path, at any depth, for one owner.
+
+        What a library's documents are actually found through: they carry the
+        folder they sit in, never the library above it.
+
+        Correct but unindexed here, so a store that can ask its own engine for a
+        path prefix overrides it — this walks everything the owner has.
+        """
+        prefix = f"{full_path}/"
+        return [
+            tag
+            for tag in await self.list_all_tags(session=session)
+            if tag.owner_id == owner_id and tag.type == tag_type and (tag.path == full_path or (tag.path or "").startswith(prefix))
+        ]
+
     @abstractmethod
     async def create_tag(self, tag: Tag, session: AsyncSession | None = None) -> Tag:
         pass

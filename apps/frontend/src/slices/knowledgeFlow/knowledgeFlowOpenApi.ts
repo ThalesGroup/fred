@@ -349,6 +349,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.librarySourceVersion,
       }),
     }),
+    recordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPut: build.mutation<
+      RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiResponse,
+      RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/synchronized-by`,
+        method: "PUT",
+        body: queryArg.librarySynchronizedBy,
+      }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -1256,6 +1266,12 @@ export type RecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPut
   libraryId: string;
   librarySourceVersion: LibrarySourceVersion;
 };
+export type RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiResponse =
+  /** status 200 Successful Response */ LibrarySynchronizedBy;
+export type RecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutApiArg = {
+  libraryId: string;
+  librarySynchronizedBy: LibrarySynchronizedBy;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -2010,6 +2026,8 @@ export type BrowseDocumentsByTagRequest = {
   tag_id: string;
   offset?: number;
   limit?: number;
+  /** Also return the documents held in folders nested under this one, at any depth. Off by default because a folder browser shows one folder at a time, and because summing per-folder totals over a tree would count the same document once per ancestor. On for a caller that wants everything a library holds. */
+  include_descendants?: boolean;
 };
 export type TagSizesResponse = {
   /** Total document bytes per requested tag id (0 when unknown/empty) */
@@ -2158,6 +2176,10 @@ export type DocumentRemoved = {
 export type LibrarySourceVersion = {
   source_version?: string | null;
 };
+export type LibrarySynchronizedBy = {
+  /** Qualified reference to the machine that fills this library, e.g. "knowledge_base:ab12". Opaque to Fred: only its presence is acted on. */
+  synchronized_by: string;
+};
 export type TagType = "document" | "prompt" | "template" | "chat-context";
 export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
 export type TagWithPermissions = {
@@ -2170,6 +2192,7 @@ export type TagWithPermissions = {
   description?: string | null;
   type: TagType;
   source_version?: string | null;
+  synchronized_by?: string | null;
   item_ids: string[];
   permissions?: TagPermission[];
 };
@@ -2184,6 +2207,7 @@ export type TagWithItemsId = {
   description?: string | null;
   type: TagType;
   source_version?: string | null;
+  synchronized_by?: string | null;
   item_ids: string[];
 };
 export type TagCreate = {
@@ -2773,6 +2797,7 @@ export const {
   useReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
   useLazyReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
   useRecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutMutation,
+  useRecordSynchronizedByKnowledgeFlowV1LibrariesLibraryIdSynchronizedByPutMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
