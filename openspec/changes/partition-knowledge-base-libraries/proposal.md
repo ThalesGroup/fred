@@ -28,7 +28,9 @@ Two consequences, both read off the code rather than reported:
 - **A corpus folder can declare that a machine writes it.** A nullable,
   qualified owner reference on the library root, written by a service identity
   and never by a person. Everything nested under it derives its state from that
-  root rather than carrying a copy.
+  root rather than carrying a copy. The pod that fills the library is what
+  records it, once per run — it is the only party holding the right to write
+  there, and the control-plane has no business writing into the corpus.
 - **Human identities may not mutate such a folder's content.** No upload, no
   document added or removed, no subfolder created, no rename or move. Service
   identities keep exactly the ReBAC rights they hold today — the guard is added
@@ -63,8 +65,9 @@ not true yet".
   metadata service, the ingestion upload path, and the library synchronization
   controller. No Alembic revision: a folder is stored as a JSON document beside
   its indexed columns, so the mark adds no table shape (see `design.md`).
-- **`apps/control-plane-backend`** — instance creation marks the library it
-  just created, through a service identity, in the existing undo chain.
+- **`libs/fred-sdk`** — the pod's runtime declares its library once per run,
+  between fetching the run context and invoking the handler, so no author
+  writes it. Nothing in `apps/control-plane-backend` changes.
 - **`libs/fred-core`** — the document store gains the descendants read the
   Documents page needs.
 - **`apps/frontend`** — the Knowledge Base Documents page, the Resources

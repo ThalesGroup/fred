@@ -92,20 +92,42 @@ second one arrives, and it costs one string today.
 
 knowledge-flow does not parse it. It tests for presence.
 
-### 4. Only a service identity may write the mark, and it is written after the grant
+### 4. The pod marks its own library, at the start of each run
 
-This is what makes the guard airtight by construction rather than by convention:
-no person can mark a folder, so no person can lock themselves out of one, and no
-person can dress an ordinary folder as a synchronized one.
+Only a service identity may write the mark. That is what makes the guard airtight
+by construction rather than by convention: no person can mark a folder, so no
+person can lock themselves out of one, and no person can dress an ordinary folder
+as a synchronized one.
 
-The control-plane already authenticates as a service identity for other calls, so
-marking is a step in the existing creation sequence with its own undo entry.
+**The control-plane cannot be the one to write it.** Marking requires the right
+to write in that library, and the only grant creating an instance produces is the
+*pod's*. The control-plane's own service account holds nothing over the folder,
+and the permission check has no administrative branch to waive that. It has no
+business there either: on Knowledge Bases the control-plane carries enablement,
+instances and dispatch to the UI, and nothing that writes into the corpus.
 
-**Ordering matters and is easy to get wrong.** The mark must be written *after*
-the pod's grant over the library, not immediately after the library is created:
-before the grant exists, the service identity holds no right over that folder and
-its own write would be refused. This is covered by a task and a test rather than
-left to be rediscovered.
+So the entity that fills the folder is the entity that declares it filled. The
+pod already holds the grant, is already a service identity, and already knows its
+own instance — and it can only ever mark a library it was granted, a constraint
+the existing permission check enforces without a rule being added for it.
+
+This is why the recording endpoint is idempotent: it is sent once per run, and
+every run after the first finds the library already marked and changes nothing. A
+run that cannot record it logs and proceeds — a base that stopped synchronizing
+because it could not write a marker would be a worse failure than a library that
+stays open a little longer, and the next run repairs it.
+
+The cost is a window: between an instance being created and its first successful
+run, the folder is an ordinary one. What that exposes is a stray upload into an
+empty folder, or a rename — both by the person who just created it. Deleting it
+is *not* window-specific, being permitted throughout by Decision 6. Closing the
+window would cost either a standing grant for the control-plane, a transient one
+around every creation, or deployment configuration naming a client trusted to
+mark anything — a ReBAC cost, a ReBAC cost, and a new trust model respectively.
+
+A pod that keeps its own store never reaches this: the declaration is sent only
+when the pod is configured with a Knowledge Flow URL, which is the same condition
+that decides whether it writes documents into Fred at all.
 
 ### 5. The guard adds no authorization-engine call
 

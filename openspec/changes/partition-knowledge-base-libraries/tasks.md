@@ -19,16 +19,15 @@ inside an authorization change.
 - [x] 2.6 Assert the guard runs after the existing authorization check: verify a caller with no right is refused for lacking the right, not for the folder being marked
 - [x] 2.7 Assert deletion is deliberately not guarded, and that its cascade — which reaches documents through the item service rather than through `update_tag_for_user` — is unaffected; verify a person holding the delete right still deletes a marked folder with its documents
 
-## 3. Marking a library at creation (control-plane)
+## 3. The pod declares its own library (fred-sdk)
 
-- [ ] 3.1 Record the mark as a service identity during instance creation, placed after the pod's grant, with its own undo entry; verify a created instance's library reads back marked
-- [ ] 3.2 Add a test asserting the order — marking attempted before the grant is refused — so the sequence is enforced rather than remembered
-- [ ] 3.3 Verify a failure at any later step leaves no marked library behind, by exercising the existing undo chain
+- [x] 3.1 Send the declaration once per run, from the SDK runtime between fetching the run context and invoking the handler, so no author writes it; verify the call carries the instance and the library from that context
+- [x] 3.2 Send it only when the pod is configured to write documents into Fred; verify a pod keeping its own store declares nothing
+- [x] 3.3 Let a failed declaration log and the run proceed; verify a refused or unreachable call does not fail synchronization, and that a conflicting machine is reported loudly enough to be noticed
 
-## 4. Backfilling libraries created before this change
+## 4. Libraries created before this change
 
-- [ ] 4.1 Provide a one-shot pass marking every library an existing instance names; verify on a database seeded with instances that all their libraries end marked and nothing else is touched
-- [ ] 4.2 Verify the pass is repeatable: running it twice leaves the same state and reports nothing new
+- [x] 4.1 Verify no backfill is needed: an unmarked library is marked by its own next run, and the declaration is idempotent from the second run onwards
 
 ## 5. Listing nested documents (fred-core, knowledge-flow, frontend)
 
