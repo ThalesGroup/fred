@@ -160,6 +160,11 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** an agent splits a deck across several build calls, or repeats one after a busy answer
 - **THEN** the tool states that a single call builds the whole deck and that calling again replaces it, and the decks of one conversation that share a name share a key, so the reader is never shown a card per fragment each holding a truncated presentation
 
+#### Scenario: A deck shorter than the agent planned is caught
+
+- **WHEN** the plan holds far fewer slides than the agent intended, for example an agenda announcing several topics that no slide follows
+- **THEN** the result states the number of slides delivered, says the deck holds what was sent rather than what was planned, and invites one further call with the complete list — a deck is always rebuilt whole, never extended
+
 #### Scenario: A busy server does not invite parallel retries
 
 - **WHEN** a build is refused because the server's heavy-job slots are taken

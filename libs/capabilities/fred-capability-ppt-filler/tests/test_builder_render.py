@@ -1252,3 +1252,32 @@ def test_a_title_that_auto_sizes_in_height_is_fitted_not_widened():
         "the box was widened"
     )
     assert [w for w in result.warnings if "truncated" in w]
+
+
+def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
+    """A model can plan ten slides and write out two: the deck holds what was
+    sent, and without this nothing says so."""
+    result, _ = _render(
+        SlidePlan(pattern=_pattern("Title and Content").id, title="Cover"),
+        SlidePlan(
+            pattern=_pattern("Agenda").id,
+            title="Agenda",
+            items=[PlanItem(heading=f"Topic {i}") for i in range(4)],
+        ),
+    )
+    assert [w for w in result.warnings if "announces 4 topics" in w]
+
+
+def test_an_agenda_matched_by_the_deck_is_not_reported():
+    slides = [
+        SlidePlan(
+            pattern=_pattern("Agenda").id,
+            title="Agenda",
+            items=[PlanItem(heading="One"), PlanItem(heading="Two")],
+        )
+    ] + [
+        SlidePlan(pattern=_pattern("Title and Content").id, title=t, bullets=["x"])
+        for t in ("One", "Two")
+    ]
+    result, _ = _render(*slides)
+    assert not [w for w in result.warnings if "announces" in w]

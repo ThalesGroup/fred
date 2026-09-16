@@ -472,10 +472,13 @@ def build_builder_tools(
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
             )
             return (
-                f"The presentation '{file_name}' ({result.slide_count} slides) is delivered and replaces any "
-                "deck built earlier in this answer. A preview opens beside the chat and a download button is "
-                "shown automatically; do not write a download link. Do not call this tool again in this "
-                "answer: say what the deck contains and stop." + notes,
+                f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
+                "in this answer. A preview opens beside the chat and a download button is shown "
+                f"automatically; do not write a download link.\nCheck that count: if the deck you planned has "
+                f"more than {result.slide_count} slides, call once more with the COMPLETE list of slides - "
+                "every call rebuilds the whole deck, so sending only the missing ones would throw the rest "
+                f"away. If {result.slide_count} is the deck you meant, do not call again: describe it to the "
+                "user, and describe only the slides it actually holds." + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),
@@ -497,10 +500,11 @@ def build_builder_tools(
 
     description = (
         "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
-        "ONE call builds the WHOLE deck: put every slide of the presentation in `slides`, in order, in a "
-        "single call. Never split a deck across several calls and never call this tool twice at once - each "
-        "call produces a complete presentation of its own, so splitting delivers several truncated decks "
-        "instead of one. Each slide names a "
+        "ONE call builds the WHOLE deck: write out every slide of the presentation in `slides`, in order, in "
+        "a single call - an eight-slide deck means eight entries, and the deck holds exactly what you send, "
+        "not what you planned. Never split a deck across several calls and never call this tool twice at "
+        "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
+        "decks instead of one. Each slide names a "
         "pattern and gives its content. The simplest reliable pattern value is an intent name (title, section, "
         "agenda, content, two_columns, comparison, image_text, cards, steps, statement, contact, fixed): the "
         "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "

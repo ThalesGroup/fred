@@ -790,6 +790,9 @@ class _Renderer:
     def render(self, plan: DeckPlan) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
+        # (position, topics) of each agenda: a deck that announces more topics
+        # than it has slides left is one the agent meant to write and did not.
+        announced: List[Tuple[int, int]] = []
         for position, slide_plan in enumerate(plan.slides, start=1):
             if slide_plan.invalid_entry is not None:
                 self.warnings.append(
@@ -807,6 +810,8 @@ class _Renderer:
             if resolution.substitution:
                 self.warnings.append(f"Slide {position}: {resolution.substitution}.")
             rendered += 1
+            if pattern.intent == "agenda" and slide_plan.items:
+                announced.append((rendered, len(slide_plan.items)))
             slide = self._create(pattern)
             if pattern.intent != "fixed":
                 self._fill(slide, pattern, slide_plan, position)
@@ -827,6 +832,16 @@ class _Renderer:
                 frame.text = slide_plan.notes or ""
         if rendered == 0:
             raise RenderError("The plan holds no usable slide.")
+        for position, topics in announced:
+            remaining = rendered - position
+            # Only a wide gap: a deck may well cover five topics in three
+            # slides, but not in none.
+            if topics >= 3 and remaining * 2 < topics:
+                self.warnings.append(
+                    f"Slide {position} announces {topics} topics but only {remaining} slide(s) follow it. "
+                    "The deck holds what was sent, not what was planned: if slides are missing, call again "
+                    "with the complete list."
+                )
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()
         self.prs.save(buffer)
