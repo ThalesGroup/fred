@@ -2,10 +2,9 @@
 
 Framework-independent browser client for applications hosted by FRED in an iframe. The package
 uses the existing protocol `"1"`; it does not receive FRED credentials or authorization state.
-The live-context API below is implemented in this source tree but is not part of the published
-`0.1.0-alpha.1` archive. The four-way compatibility matrix passed locally; release still requires
-a new SDK-only coordinate and separate publication/registry verification. Do not adopt the local
-workspace package as a substitute for a release.
+This package version includes the live-context API below. The published `0.1.0-alpha.1` archive
+does not include it. The four-way compatibility matrix passed locally; inclusion in this package
+version does not claim that the new coordinate has been published or registry-verified.
 
 ```ts
 import { createFredApplicationClient } from "@fred-oss/iframe-sdk";
@@ -105,6 +104,6 @@ represent. The direct host-integration command extracts the actual tarball and e
 production host-page handler. It complements rather than replaces the legacy raw-client host tests
 and the simulated cross-origin browser harness.
 
-The checked-in manifest remains a development coordinate. Release candidates and registry
-verification use the externally approved expectations described in
-[../RELEASE.md](../RELEASE.md).
+The checked-in manifest identifies this package version, but a locally packed archive is not
+approved release evidence. Release candidates and registry verification use the expectations in
+the [repository release runbook](https://github.com/ThalesGroup/fred/blob/swift/libs/frontend/RELEASE.md).

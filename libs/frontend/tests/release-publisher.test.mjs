@@ -486,14 +486,21 @@ test("historically published alpha.1 versions never become absent candidates aft
       "@fred-oss/iframe-sdk@0.1.0-alpha.1",
     ],
   );
+  const historicalContract = structuredClone(contract);
+  historicalContract.packages.iframeSdk.version = "0.1.0-alpha.1";
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-known-published-"));
   try {
     const { candidate, archivePaths } = await syntheticCandidate(
       ["iframeSdk"],
-      contract,
+      historicalContract,
       root,
     );
-    const attempt = attemptFor(candidate, contract, "b".repeat(40), "301");
+    const attempt = attemptFor(
+      candidate,
+      historicalContract,
+      "b".repeat(40),
+      "301",
+    );
     let commands = 0;
     await assert.rejects(
       executeOrdinaryPublication({
@@ -502,7 +509,7 @@ test("historically published alpha.1 versions never become absent candidates aft
         attempt,
         attemptRef: { ...ref, recordDigest: releaseRecordDigest(attempt) },
         priorAttempts: [],
-        contract,
+        contract: historicalContract,
         archivePaths,
         knownPublished: ledger,
         readExact: async () => null,
@@ -516,7 +523,13 @@ test("historically published alpha.1 versions never become absent candidates aft
     assert.equal(commands, 0);
     assert.doesNotThrow(() =>
       assertNoKnownPublishedSelection(
-        { selected: [{ coordinate: "@fred-oss/iframe-sdk@0.1.0-alpha.2" }] },
+        {
+          selected: [
+            {
+              coordinate: `${contract.packages.iframeSdk.name}@${contract.packages.iframeSdk.version}`,
+            },
+          ],
+        },
         ledger,
       ),
     );
@@ -1245,7 +1258,7 @@ test("repository artifact enumeration rejects omitted, expired, and altered publ
         sourceCommit: "d".repeat(40),
         selected: candidate.selected.map((member) => ({
           ...member,
-          coordinate: "@fred-oss/iframe-sdk@0.1.0-alpha.2",
+          coordinate: `${contract.packages.iframeSdk.name}@${semver.inc(contract.packages.iframeSdk.version, "prerelease", "alpha")}`,
         })),
       }),
       contract,

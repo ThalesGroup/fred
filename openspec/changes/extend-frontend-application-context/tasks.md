@@ -43,5 +43,9 @@
 - [x] 6.5 Obtain the repository-required independent implementation review, resolve in-scope findings, run `openspec validate extend-frontend-application-context --strict` and `git diff --check`, and keep this change active until its implementation and release-dependent evidence are complete.
 
 Local evidence for completed compatibility and gate tasks is in [verification.md](verification.md).
-Tasks 6.2 and 6.3 remain release-dependent and are not satisfied by the local archive or published
-alpha.1 baseline. The independent review's two findings were resolved and re-reviewed.
+Task 6.2 has source-preparation progress: public npm and the known-published ledger showed
+`0.1.0-alpha.2` unused on 2026-09-16, so the SDK manifest, changelog, documentation, and
+producer lockfile were advanced for review. It remains unchecked pending a fresh registry
+check and approved immutable candidate evidence from clean committed `swift`. Task 6.3 remains
+unchecked pending separately authorized publication and genuine registry verification. See
+[verification.md](verification.md) for the exact coordinate check and local results.
