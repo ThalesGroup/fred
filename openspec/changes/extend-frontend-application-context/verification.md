@@ -1,10 +1,11 @@
 # Local implementation verification (2026-09-16)
 
 This is local compatibility and package evidence for issue #2712, not a release
-candidate or public-registry verification of the context extension. The working
-tree is uncommitted. The generated new SDK archive still carries the development
-manifest's `0.1.0-alpha.1` version, but its bytes differ from the immutable
-published `0.1.0-alpha.1`; it must never be published under that coordinate.
+candidate or public-registry verification of the context extension. At that
+verification, the working tree was uncommitted and the generated SDK archive
+still carried the development manifest's `0.1.0-alpha.1` version. Its bytes
+differed from the immutable published `0.1.0-alpha.1`; it must never be
+published under that coordinate.
 
 ## Exact inputs and provenance
 
@@ -110,3 +111,65 @@ issue. The archive validator now follows the exported factory to its returned
 client class and structurally checks declaration members, with three
 comment-decoy negative tests. Strict OpenSpec validation and final diff checks
 passed. The existing RFC remains open for release and adoption work.
+
+## SDK-only source preparation (2026-09-16)
+
+At `2026-09-16T18:46:53Z`, from source commit
+`54814439292119a78132087bd74b35387a53deff`, the public
+`https://registry.npmjs.org/` version set for `@fred-oss/iframe-sdk` contained
+only `0.1.0-alpha.1` (`next` and `latest` both pointed to it). An exact
+`0.1.0-alpha.1` lookup returned its expected name, version, and SHA-512; an
+exact `0.1.0-alpha.2` lookup returned npm `E404` / “No match found for version”.
+The source-reviewed `known-published-coordinates.json` also records only SDK
+alpha.1. The source-preparation coordinate is therefore `0.1.0-alpha.2`.
+These checks used the pinned Node 24.21.0/npm 11.19.0 and explicit registry:
+
+```sh
+npm view @fred-oss/iframe-sdk versions dist-tags --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+npm view @fred-oss/iframe-sdk@0.1.0-alpha.1 name version dist.integrity --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+npm view @fred-oss/iframe-sdk@0.1.0-alpha.2 name version dist.integrity --json --registry=https://registry.npmjs.org/ --prefer-online --fetch-retries=0 --fetch-timeout=15000
+```
+
+This registry observation reserves nothing. Recheck the exact coordinate after
+the source PR merges and immediately before approved candidate preparation.
+This uncommitted source branch cannot satisfy the clean committed-`swift`
+candidate boundary; task 6.2 remains unchecked until immutable candidate
+evidence exists. Task 6.3 remains a separately authorized publication and
+genuine registry-verification operation.
+
+### Source-reviewable validation
+
+The SDK-only manifest and npm-generated producer lockfile now name
+`@fred-oss/iframe-sdk@0.1.0-alpha.2`. The lockfile diff changes only the
+`iframe-sdk` workspace version. Design tokens remain `0.1.0-alpha.1` and UI
+remains `0.1.0-alpha.2`; their manifests, changelogs, and exports were not
+changed. The SDK changelog has one reviewed alpha.2 entry. The packed README
+describes `onContext` as included in this package version without claiming
+publication, workspace adoption, or registry verification.
+
+The final local `make pack-check` archive is
+`fred-oss-iframe-sdk-0.1.0-alpha.2.tgz`, SHA-512
+`sha512-c2v0kFOCDtxecXONgWLqX3PqNQmXgw4Whd06QJU1tudSUSIRUeTwB6XTZdPZlpzUBVoFxx6Qeu4LPENAvmUhZw==`.
+Archive inspection confirmed the unchanged `.` and `./protocol` export paths,
+`onContext` in the public declaration, optional resolved `theme`, protocol
+`"1"`, and no runtime or peer dependency added. This digest identifies only
+local validation bytes; it is not approved immutable candidate evidence.
+
+| Command and toolchain                                                 | Local result                                                                                                                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make release-check`, Node 24.21.0/npm 11.19.0                        | Passed; confirmed policy, manifests, changelog, private workspace, and dependency boundaries.                                                                                                                 |
+| `make release-test`, Node 24.21.0/npm 11.19.0                         | 153/153 passed; loopback metadata tests required authorized local-network execution. Version-sensitive controlled fixtures now derive their expected coordinate rather than assuming the live SDK is alpha.1. |
+| `make test`, Node 24.21.0/npm 11.19.0                                 | 376/376 passed after updating current-archive and consumer assertions to read the manifest.                                                                                                                   |
+| `make pack-check`, Node 24.21.0/npm 11.19.0                           | Token alpha.1, UI alpha.2, and SDK alpha.2 archives passed package-specific checks.                                                                                                                           |
+| `npm run test:consumer:iframe-sdk`, Node 22.13.0/npm 10.9.2           | Passed: actual alpha.2 tarball installed from the prepared cache in npm offline mode, type-checked, and built outside FRED.                                                                                   |
+| `make host-integration`, Node 22.13.0/npm 10.9.2                      | 7/7 passed against the production host and actual alpha.2 tarball.                                                                                                                                            |
+| `npm run test:browser -- --select iframeSdk`, Node 22.13.0/npm 10.9.2 | Passed with pre-provisioned Chromium, three distinct loopback origins, no dependency installation, no browser provisioning, and zero external requests.                                                       |
+| `make code-quality`, Node 24.21.0/npm 11.19.0                         | Passed ESLint and Prettier.                                                                                                                                                                                   |
+
+The approved `release:candidate` path rejects a dirty checkout, and the
+manual `prepare-only` workflow authorizes committed `swift` only. No approved
+candidate, registry-success record, workflow run, or publication was created
+here. After this source PR merges: fetch committed `swift`, recheck that
+alpha.2 remains unused, dispatch `operation=prepare-only` with
+`packages=iframeSdk` and blank candidate reference, then retain and
+independently inspect the exact immutable candidate artifact and evidence.
