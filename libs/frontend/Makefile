@@ -8,7 +8,7 @@ RELEASE_VALIDATION_ROOT ?= target/release-validation
 RELEASE_SELECTION ?=
 SELECTION_ARGS = $(if $(filter command line,$(origin RELEASE_SELECTION)),--select "$(RELEASE_SELECTION)",$(if $(RELEASE_SELECTION),--select "$(RELEASE_SELECTION)",))
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean clean-all
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -105,5 +105,8 @@ release-verify-evidence: ## Recompute integrity for an existing candidate set
 registry-verify: ## Verify exact published coordinates (network; never local fallback)
 	npm run registry:verify -- $(SELECTION_ARGS)
 
-clean: ## Remove disposable producer output and review evidence
+clean: ## Remove disposable producer output, keeping the provisioned caches
 	node scripts/clean.mjs
+
+clean-all: ## Also drop the provisioned caches, forcing a cold re-provision
+	node scripts/clean.mjs --caches

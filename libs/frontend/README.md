@@ -46,6 +46,10 @@ fixture's lockfile-pinned dependencies into separate dedicated caches. The brows
 target separately provisions Playwright's pinned Chromium and system dependencies.
 These setup operations may contact their package sources.
 
+`make clean` removes producer output and review evidence but keeps these provisioned
+caches, so offline validation still runs afterwards without network access. Use
+`make clean-all` to drop them as well and force a cold re-provision.
+
 ## Offline validation
 
 After provisioning, run:
