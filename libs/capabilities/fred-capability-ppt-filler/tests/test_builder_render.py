@@ -1281,3 +1281,53 @@ def test_an_agenda_matched_by_the_deck_is_not_reported():
     ]
     result, _ = _render(*slides)
     assert not [w for w in result.warnings if "announces" in w]
+
+
+# --- advice an agent can act on when columns have nowhere to go ---
+
+
+def _columns(count: int) -> list:
+    return [
+        PlanColumn(heading=f"C{i}", bullets=[f"Some text for column {i}"])
+        for i in range(count)
+    ]
+
+
+def test_lost_columns_name_the_pattern_that_would_have_held_them():
+    """ "Put it on a pattern that shows it" leaves the agent guessing which."""
+    wide = _pattern("Title and Content").model_copy(deep=True)
+    wide.id, wide.label, wide.intent = "layout:99", "Four columns", "two_columns"
+    body = next(z for z in wide.zones if z.role == "body")
+    wide.zones = [z for z in wide.zones if z.role != "body"] + [
+        body.model_copy(update={"key": f"ph:{10 + i}"}) for i in range(4)
+    ]
+    inventory = TemplateInventory(
+        slide_width=INVENTORY.slide_width,
+        slide_height=INVENTORY.slide_height,
+        patterns=[p for p in INVENTORY.patterns if p.included] + [wide],
+    )
+    narrow = next(
+        p for p in inventory.patterns if p.intent == "two_columns" and p is not wide
+    )
+    result = render_deck(
+        TEMPLATE,
+        inventory,
+        DeckPlan(slides=[SlidePlan(pattern=narrow.id, title="T", columns=_columns(4))]),
+    )
+    lost = [w for w in result.warnings if "no place for column" in w]
+    assert lost and "layout:99" in lost[0], lost
+
+
+def test_columns_beyond_every_pattern_say_so_instead_of_advising_a_rewrite():
+    """The agent rewrites the same slide and loses the same columns again."""
+    result = render_deck(
+        TEMPLATE,
+        INVENTORY,
+        DeckPlan(
+            slides=[SlidePlan(pattern="two_columns", title="T", columns=_columns(9))]
+        ),
+    )
+    lost = [w for w in result.warnings if "no place for column" in w]
+    assert lost, result.warnings
+    assert "No pattern of this template shows more than" in lost[0]
+    assert "Put it on a pattern that shows it" not in lost[0]

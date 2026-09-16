@@ -160,6 +160,11 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** an agent splits a deck across several build calls, or repeats one after a busy answer
 - **THEN** the tool states that a single call builds the whole deck and that calling again replaces it, and the decks of one conversation that share a name share a key, so the reader is never shown a card per fragment each holding a truncated presentation
 
+#### Scenario: Lost columns come with advice the agent can act on
+
+- **WHEN** a slide carries more columns than the chosen pattern can show
+- **THEN** the result names a pattern of this template that would hold them, or, when the template has none, says how many columns it does hold and that no rewrite of that slide can carry more — rather than telling the agent to move it to a pattern that does not exist
+
 #### Scenario: A deck shorter than the agent planned is caught
 
 - **WHEN** the plan holds far fewer slides than the agent intended, for example an agenda announcing several topics that no slide follows

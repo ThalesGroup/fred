@@ -50,10 +50,12 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    SLIDE_FIELDS,
     DeckPlan,
     SlidePlan,
     has_content,
     resolve,
+    score_pattern,
 )
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
@@ -918,9 +920,12 @@ class _Renderer:
                 self._recentre_items(kept, dropped, index, pattern)
             self._even_out_item_widths(group, index)
         if lost:
+            advice = "Put it on a pattern that shows it, or drop it."
+            if plan.columns and any(item.startswith("column ") for item in lost):
+                advice = self._column_advice(plan)
             self.warnings.append(
                 f"Slide {position}: '{pattern.label}' has no place for {', '.join(lost)}; "
-                "that content is not in the deck. Put it on a pattern that shows it, or drop it."
+                f"that content is not in the deck. {advice}"
             )
         if pattern.groups:
             # Widths and removals changed the slide: re-read absolute geometry.
@@ -1036,6 +1041,40 @@ class _Renderer:
                     _remove(placed)
                 continue
             self._place_image(slide, placed, prepared)
+
+    def _column_advice(self, plan: SlidePlan) -> str:
+        """What to answer an agent whose slide has more columns than it could
+        show: the pattern that would have held them, or, when the template has
+        none, how many it does hold.
+
+        "Put it on a pattern that shows it" is useless advice when no such
+        pattern exists - the agent rewrites the same slide and loses the same
+        columns again.
+        """
+        wanted = len(plan.columns)
+        candidates = [
+            (
+                sum(1 for z in p.zones if SLIDE_FIELDS.get(z.role) == "bullets"),
+                p,
+            )
+            for p in self.inventory.patterns
+            if p.included and p.intent != "fixed"
+        ]
+        if not candidates:
+            return "Drop the extra columns."
+        widest = max(count for count, _ in candidates)
+        fitting = [p for count, p in candidates if count >= wanted]
+        if fitting:
+            best = max(fitting, key=lambda p: score_pattern(p, plan))
+            return (
+                f"'{best.id}' (\"{best.label}\") shows {wanted} columns: use it, "
+                "or merge the extra ones."
+            )
+        return (
+            f"No pattern of this template shows more than {widest} columns, so no "
+            f"rewrite of this slide can hold {wanted}: give {widest} or fewer, or "
+            "split the content over several slides."
+        )
 
     @staticmethod
     def _loose_decoration(
