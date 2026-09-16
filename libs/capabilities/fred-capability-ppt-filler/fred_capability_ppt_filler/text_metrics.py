@@ -45,6 +45,20 @@ logger = logging.getLogger(__name__)
 # a title that would have fitted is cheaper than clipping one that does not.
 FALLBACK_CHAR_EM = 0.62
 
+# PowerPoint's default text padding, in EMU. A box lays its text inside them, so
+# they come off the usable width and height before anything is measured.
+DEFAULT_INSET_EMU = 91440
+DEFAULT_V_INSET_EMU = 45720
+# A line advances this much more than the font size, before the paragraph's own
+# line spacing multiplies it.
+LINE_HEIGHT = 1.2
+# Greedy wrapping leaves about half a word unused at the end of every line but
+# the last, which a "characters × lines" product would otherwise hand out.
+WRAP_WASTE_CHARS = 3.0
+# Covers the difference between the substitute font measured here and the one
+# PowerPoint draws with on the author's machine.
+SAFETY = 0.95
+
 # Measuring at a large size keeps hinting and integer rounding out of the ratio.
 _REF_SIZE = 1000
 _FC_TIMEOUT_S = 5.0

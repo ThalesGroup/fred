@@ -254,7 +254,7 @@ def test_tools_and_catalogue_follow_the_effective_inventory():
     description = tools[BUILD_TOOL_NAME].description
     assert "layout:1 [content]" in description
     assert "Hidden cover" not in description
-    assert "items×4 [number, heading]" in description
+    assert "items up to 4 [number, heading]" in description
     schema = tools[BUILD_TOOL_NAME].args_schema.model_json_schema()
     choices = schema["$defs"]["BuildSlide"]["properties"]["pattern"]["enum"]
     assert "layout:1" in choices and "layout:0" not in choices and "content" in choices

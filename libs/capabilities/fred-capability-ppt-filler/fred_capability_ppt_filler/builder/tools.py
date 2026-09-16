@@ -33,7 +33,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, cast
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -51,6 +51,7 @@ from fred_capability_ppt_filler.builder.models import (
     INTENTS,
     Pattern,
     TemplateInventory,
+    Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
@@ -127,6 +128,24 @@ _ITEM_FIELDS = {
 }
 
 
+def _limit(zones: Sequence[Zone]) -> str:
+    """The room the agent can count on across zones filled from one field: the
+    tightest one, since that is the zone that truncates.
+
+    A zone that grows with its text has no limit to quote — its box is sized to
+    the designer's sample, and a figure twice as long simply widens it.
+    """
+    bounded = [z for z in zones if not z.grows]
+    if not bounded:
+        return ""
+    chars = [z.max_chars for z in bounded if z.max_chars]
+    lines = [z.max_lines for z in bounded if z.max_lines]
+    text = f" ≤{min(chars)} chars" if chars else ""
+    if lines and min(lines) > 1:
+        text += f" ≤{min(lines)} lines"
+    return text
+
+
 def _zone_summary(pattern: Pattern) -> str:
     if pattern.intent == "fixed":
         return "used as is, no editable zone (content given for it is ignored)"
@@ -137,20 +156,31 @@ def _zone_summary(pattern: Pattern) -> str:
         if field is None or field in seen:
             continue
         seen.add(field)
-        limit = f" ≤{zone.max_chars} chars" if zone.max_chars else ""
-        lines = (
-            f" ≤{zone.max_lines} lines" if zone.max_lines and zone.max_lines > 1 else ""
-        )
-        count = sum(1 for z in pattern.zones if _SLIDE_FIELDS.get(z.role) == field)
-        parts.append(f"{field}{'×' + str(count) if count > 1 else ''}{limit}{lines}")
+        same = [z for z in pattern.zones if _SLIDE_FIELDS.get(z.role) == field]
+        # Several body zones are columns, and only `columns` reaches them: named
+        # `bullets×3`, the field the agent then sends fills the first and the
+        # other two stay empty.
+        if field == "bullets" and len(same) > 1:
+            field = "columns.bullets"
+        count = f"×{len(same)}" if len(same) > 1 else ""
+        parts.append(f"{field}{count}{_limit(same)}")
     images = sum(1 for z in pattern.zones if z.role == "image")
     if images:
         parts.append(f"images×{images}")
     for group in pattern.groups:
-        fields = dict.fromkeys(
-            _ITEM_FIELDS[r] for r in group.item_zones if r in _ITEM_FIELDS
+        fields: Dict[str, List[Zone]] = {}
+        for item in group.items:
+            for zone in item:
+                field = _ITEM_FIELDS.get(zone.role)
+                if field:
+                    fields.setdefault(field, []).append(zone)
+        shown = ", ".join(
+            name + ("" if name == "image" else _limit(zones))
+            for name, zones in fields.items()
         )
-        parts.append(f"items×{group.count} [{', '.join(fields)}]")
+        # "up to", not "×N": told `items×8`, an agent pads a five-point agenda
+        # to eight.
+        parts.append(f"items up to {group.count} [{shown}]")
     return "; ".join(parts) or "no editable zone"
 
 

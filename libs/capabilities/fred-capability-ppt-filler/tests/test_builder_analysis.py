@@ -27,13 +27,19 @@ from builder_decks import (
     build_layouts_only_template,
     build_showcase_template,
     build_slides,
+    build_spaced_template,
 )
-from fred_capability_ppt_filler.builder.analysis import analyze_template
+from fred_capability_ppt_filler.builder.analysis import (
+    FrameMetrics,
+    analyze_template,
+    estimate_capacity,
+)
 from fred_capability_ppt_filler.builder.lexicon import (
     is_sample_text,
     role_from_shape_name,
 )
-from fred_capability_ppt_filler.builder.models import TemplateInventory
+from fred_capability_ppt_filler.builder.models import Box, TemplateInventory
+from pptx.util import Inches
 
 
 @pytest.fixture(scope="module")
@@ -321,3 +327,77 @@ def test_reference_template_free_form_slides():
     assert layouts["Merci"] == "fixed"
     excluded = {p.exclusion_reason for p in inventory.patterns if not p.included}
     assert excluded == {"chart", "table", "icon_bank"}
+
+
+# --- capacity: the room the agent is promised is the room the renderer has ---
+
+
+def _capacity(**frame) -> tuple[int, int]:
+    return estimate_capacity(
+        Box(x=0, y=0, w=400, h=300),
+        18.0,
+        "body",
+        Inches(13.333).emu,
+        Inches(7.5).emu,
+        frame=FrameMetrics(**frame),
+    )
+
+
+def test_capacity_pays_the_paragraph_spacing_the_template_declares():
+    """A body style with 114 % line spacing and 16 pt before each bullet holds
+    barely half the bullets a bare line height would promise."""
+    bare = _capacity(line_spacing=1.0, space_before_pt=0.0)
+    spaced = _capacity(line_spacing=1.14, space_before_pt=16.0)
+    assert spaced[1] * 2 <= bare[1]
+    assert spaced[0] < bare[0]
+
+
+def test_capacity_takes_the_padding_off_the_box():
+    flush = _capacity(lr_inset=0, tb_inset=0)
+    padded = _capacity(lr_inset=Inches(1).emu, tb_inset=Inches(1).emu)
+    assert padded[0] < flush[0]
+    assert padded[1] < flush[1]
+
+
+def test_capacity_does_not_hand_out_the_room_wrapping_wastes():
+    """Characters × lines is not reachable: every line break loses part of a word."""
+    per_line, _ = _capacity(lr_inset=0, tb_inset=0, line_spacing=1.0)
+    one_line = estimate_capacity(
+        Box(x=0, y=0, w=400, h=40),
+        18.0,
+        "title",
+        Inches(13.333).emu,
+        Inches(7.5).emu,
+        frame=FrameMetrics(lr_inset=0, tb_inset=0),
+    )
+    chars, lines = _capacity(lr_inset=0, tb_inset=0)
+    assert lines > 1
+    assert chars < one_line[0] * lines
+
+
+def test_analysis_reads_the_line_spacing_a_layout_declares():
+    """The spacing lives on the layout's placeholder, not on the slide's text."""
+    plain = analyze_template(build_spaced_template(space_before_pt=0)).inventory
+    spaced = analyze_template(build_spaced_template(space_before_pt=24)).inventory
+    assert plain is not None and spaced is not None
+
+    def body_lines(inventory) -> int:
+        lines = [
+            z.max_lines
+            for p in inventory.patterns
+            for z in p.zones
+            if z.role == "body" and z.max_lines
+        ]
+        assert lines
+        return sum(lines)
+
+    assert body_lines(spaced) < body_lines(plain)
+
+
+def test_a_box_that_does_not_wrap_is_marked_as_growing():
+    """Its width follows its text, so no character limit can be quoted for it."""
+    inventory = analyze_template(build_spaced_template(space_before_pt=0)).inventory
+    assert inventory is not None
+    zones = [z for p in inventory.patterns for z in p.zones]
+    assert [z for z in zones if z.grows], "the no-wrap heading should be marked"
+    assert all(z.max_chars for z in zones if not z.grows and z.role != "image")

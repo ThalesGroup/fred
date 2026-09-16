@@ -377,12 +377,36 @@ def _text_insets(shape) -> int:
     return sum(int(body.get(side, _DEFAULT_INSET_EMU)) for side in ("lIns", "rIns"))
 
 
-def _grows_with_text(shape) -> bool:
-    """A box that does not wrap, or auto-sizes to its text, has no capacity to enforce."""
-    bodyPr = shape.text_frame._txBody.find(qn("a:bodyPr"))
-    if bodyPr is None:
-        return False
-    return bodyPr.get("wrap") == "none" or bodyPr.find(qn("a:spAutoFit")) is not None
+def _grows_with_text(shape, inherited=None) -> bool:
+    """A box that does not wrap, or auto-sizes to its text, has no capacity to enforce.
+
+    A placeholder cloned from a layout carries a bare ``bodyPr``: it draws with
+    the layout's autofit but does not declare it, so the layout's own is what
+    decides. Reading only the slide's would truncate text the box in fact grows
+    to hold.
+    """
+    for bodyPr in (shape.text_frame._txBody.find(qn("a:bodyPr")), inherited):
+        if bodyPr is None:
+            continue
+        if bodyPr.get("wrap") == "none" or bodyPr.find(qn("a:spAutoFit")) is not None:
+            return True
+    return False
+
+
+def _layout_body_props(slide) -> Dict[str, Any]:
+    """``bodyPr`` of each layout placeholder, by the zone key it answers to."""
+    props: Dict[str, Any] = {}
+    try:
+        placeholders = slide.slide_layout.placeholders
+    except (AttributeError, KeyError):
+        return props
+    for shape in placeholders:
+        if not shape.has_text_frame:
+            continue
+        body = shape.text_frame._txBody.find(qn("a:bodyPr"))
+        if body is not None:
+            props[f"ph:{shape.placeholder_format.idx}"] = body
+    return props
 
 
 def _fit(
@@ -394,9 +418,15 @@ def _fit(
     bold: bool = False,
 ) -> Tuple[List[_Line], Optional[float], bool]:
     """Fit ``lines`` into ``zone``: returns ``(lines, font scale or None, truncated)``."""
-    max_chars, max_lines = estimate_capacity(
-        zone.box, zone.font_pt, zone.role, width, height, font_name, bold
-    )
+    # The analysis already measured this zone through its box formatting, and
+    # that is the number the agent was given: re-deriving it here is how the
+    # two ended up disagreeing. Only an inventory saved without one is computed.
+    if zone.max_chars and zone.max_lines:
+        max_chars, max_lines = zone.max_chars, zone.max_lines
+    else:
+        max_chars, max_lines = estimate_capacity(
+            zone.box, zone.font_pt, zone.role, width, height, font_name, bold
+        )
     chars_per_line = max(1, max_chars // max(1, max_lines))
     # How many em of text one line holds: each line is measured in the real
     # font, so a line of capitals counts for what it draws.
@@ -436,6 +466,7 @@ def _fit(
     per_char = text_metrics.char_em(font_name, bold) or text_metrics.FALLBACK_CHAR_EM
     kept: List[_Line] = []
     used = 0.0
+    dropped = False
     for line in lines:
         cost = max(
             1,
@@ -446,15 +477,21 @@ def _fit(
         )
         if used + cost > capacity:
             room = int((capacity - used) * room_em / per_char) - 1
-            if room > 12 and not kept:
-                kept.append(_Line(_cut(line.text, room), line.level))
+            # Never leave the zone blank: a cut first line beats an empty box.
+            if not kept:
+                kept.append(_Line(_cut(line.text, max(room, 1)), line.level))
+            dropped = True
             break
         kept.append(line)
         used += cost
-    return kept, MIN_FONT_SCALE, True
+    # Everything fitted once shrunk to the floor: shrinking is not truncating,
+    # and saying it is sends the agent rewriting text that was never cut.
+    return kept, MIN_FONT_SCALE, dropped
 
 
 def _cut(text: str, room: int) -> str:
+    if room >= len(text):
+        return text
     cut = text[:room]
     if " " in cut:
         cut = cut[: cut.rfind(" ")]
@@ -820,6 +857,7 @@ class _Renderer:
         siblings.update(
             {z.key: item for g in pattern.groups for item in g.items for z in item}
         )
+        layout_body = _layout_body_props(slide)
         for zone in self._fillable_text_zones(pattern):
             placed = index.get(zone.key)
             shape = cast(Any, placed.shape) if placed is not None else None
@@ -842,7 +880,7 @@ class _Renderer:
                 shape, self.theme, is_title=zone.role == "title"
             )
             one_line_room: Optional[int] = None
-            if _grows_with_text(shape):
+            if _grows_with_text(shape, layout_body.get(zone.key)):
                 scale, one_line_room = self._no_wrap_scale(
                     zone,
                     lines,

@@ -30,6 +30,7 @@ from deck_builders import png_bytes
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 # python-pptx default template layout indices.
@@ -329,6 +330,41 @@ def build_showcase_template() -> bytes:
 
 def build_layouts_only_template() -> bytes:
     return _save(Presentation())
+
+
+def build_spaced_template(space_before_pt: int = 24) -> bytes:
+    """A deck whose layout declares body line spacing and space before each
+    paragraph — the shape of a corporate master — plus a figure that does not
+    wrap. Both are read off the layout, never off the slide's own text.
+    """
+    presentation = Presentation()
+    layout = presentation.slide_layouts[L_CONTENT]
+    for placeholder in layout.placeholders:
+        if placeholder.placeholder_format.idx == 0:
+            # The heading is sized to its text, the way a designer sets a figure.
+            placeholder.text_frame._txBody.find(qn("a:bodyPr")).set("wrap", "none")
+            continue
+        body = placeholder.text_frame._txBody
+        lst = body.makeelement(qn("a:lstStyle"), {})
+        lvl = body.makeelement(qn("a:lvl1pPr"), {})
+        spacing = body.makeelement(qn("a:lnSpc"), {})
+        spacing.append(body.makeelement(qn("a:spcPct"), {"val": "114000"}))
+        before = body.makeelement(qn("a:spcBef"), {})
+        before.append(
+            body.makeelement(qn("a:spcPts"), {"val": str(space_before_pt * 100)})
+        )
+        lvl.append(spacing)
+        lvl.append(before)
+        lst.append(lvl)
+        body.insert(1, lst)
+
+    slide = presentation.slides.add_slide(layout)
+    _set_title(slide, "Changez ce titre")
+    for placeholder in slide.placeholders:
+        if placeholder.placeholder_format.idx != 0:
+            cast(Any, placeholder).text_frame.text = "Changez ce texte"
+    _footer(slide)
+    return _save(presentation)
 
 
 def build_slides(builders: List) -> bytes:

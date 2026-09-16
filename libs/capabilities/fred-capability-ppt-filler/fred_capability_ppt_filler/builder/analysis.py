@@ -118,6 +118,7 @@ class _Rec:
     lines: int
     name: str
     shape: "BaseShape" = field(repr=False)
+    frame: "FrameMetrics" = field(default_factory=lambda: FrameMetrics(), repr=False)
 
     @property
     def words(self) -> int:
@@ -147,7 +148,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 1
+ANALYSIS_VERSION = 2
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -238,6 +239,145 @@ def _placeholder_pt(shape, layout, master) -> Optional[float]:
     return _lst_style_pt(styles.find(qn("p:titleStyle" if is_title else "p:bodyStyle")))
 
 
+@dataclass(frozen=True)
+class FrameMetrics:
+    """What a text box costs in room before a single glyph is drawn.
+
+    PowerPoint lays text inside the box's padding, and advances each paragraph
+    by its own line spacing plus the space declared around it. A template that
+    sets ``lnSpc 114%`` and ``spcBef 16pt`` on its body style fits barely half
+    the bullets a bare "height / (size × 1.2)" would promise.
+    """
+
+    lr_inset: int = 2 * text_metrics.DEFAULT_INSET_EMU
+    tb_inset: int = 2 * text_metrics.DEFAULT_V_INSET_EMU
+    line_spacing: float = 1.0
+    space_before_pt: float = 0.0
+    space_after_pt: float = 0.0
+    # Does not wrap: the box widens with its text instead of breaking a line.
+    # Auto-sizing the *height* does not count — such a box still wraps, and the
+    # width limit that follows from it is the one that matters.
+    grows: bool = False
+
+
+def _pPr_chain(shape, layout, master) -> List[Any]:
+    """Paragraph-property elements that apply to a shape's first level, most
+    specific first: its own text, its list style, then the ones it inherits."""
+    chain: List[Any] = []
+    element = shape._element
+    own = element.find(f".//{qn('a:p')}/{qn('a:pPr')}")
+    if own is not None:
+        chain.append(own)
+    lvl = element.find(f".//{qn('a:lstStyle')}/{qn('a:lvl1pPr')}")
+    if lvl is not None:
+        chain.append(lvl)
+    fmt = shape.placeholder_format if shape.is_placeholder else None
+    if fmt is not None:
+        for holder in (layout, master):
+            if holder is None:
+                continue
+            for candidate in holder.placeholders:
+                cfmt = candidate.placeholder_format
+                if cfmt.idx == fmt.idx or (
+                    cfmt.type == fmt.type and fmt.type is not None
+                ):
+                    node = candidate._element.find(
+                        f".//{qn('a:lstStyle')}/{qn('a:lvl1pPr')}"
+                    )
+                    if node is not None:
+                        chain.append(node)
+                    break
+    if master is not None:
+        styles = master._element.find(qn("p:txStyles"))
+        if styles is not None:
+            is_title = (
+                fmt is not None
+                and fmt.type is not None
+                and fmt.type.name
+                in (
+                    "TITLE",
+                    "CENTER_TITLE",
+                )
+            )
+            if fmt is None:
+                names = ("p:otherStyle", "p:bodyStyle")
+            elif is_title:
+                names = ("p:titleStyle",)
+            else:
+                names = ("p:bodyStyle",)
+            for name in names:
+                style = styles.find(qn(name))
+                node = None if style is None else style.find(qn("a:lvl1pPr"))
+                if node is not None:
+                    chain.append(node)
+    return chain
+
+
+def _spc_pt(pPr, tag: str, font_pt: Optional[float]) -> Optional[float]:
+    """``spcBef``/``spcAft`` of a paragraph, in points."""
+    element = pPr.find(qn(tag))
+    if element is None:
+        return None
+    points = element.find(qn("a:spcPts"))
+    if points is not None and points.get("val"):
+        return int(points.get("val")) / 100
+    percent = element.find(qn("a:spcPct"))
+    if percent is not None and percent.get("val") and font_pt:
+        return int(percent.get("val")) / 100000 * font_pt * text_metrics.LINE_HEIGHT
+    return None
+
+
+def _line_ratio(pPr, font_pt: Optional[float]) -> Optional[float]:
+    """``lnSpc`` as a multiple of the font's own line height."""
+    element = pPr.find(qn("a:lnSpc"))
+    if element is None:
+        return None
+    percent = element.find(qn("a:spcPct"))
+    if percent is not None and percent.get("val"):
+        return int(percent.get("val")) / 100000
+    points = element.find(qn("a:spcPts"))
+    if points is not None and points.get("val") and font_pt:
+        return int(points.get("val")) / 100 / (font_pt * text_metrics.LINE_HEIGHT)
+    return None
+
+
+def _frame_metrics(shape, layout, master, font_pt: Optional[float]) -> FrameMetrics:
+    """Padding and paragraph spacing a text box applies, inherited included."""
+    body = shape.text_frame._txBody.find(qn("a:bodyPr"))
+    if body is None:
+        lr = 2 * text_metrics.DEFAULT_INSET_EMU
+        tb = 2 * text_metrics.DEFAULT_V_INSET_EMU
+    else:
+        lr = sum(
+            int(body.get(side, text_metrics.DEFAULT_INSET_EMU))
+            for side in ("lIns", "rIns")
+        )
+        tb = sum(
+            int(body.get(side, text_metrics.DEFAULT_V_INSET_EMU))
+            for side in ("tIns", "bIns")
+        )
+    spacing: Optional[float] = None
+    before: Optional[float] = None
+    after: Optional[float] = None
+    for pPr in _pPr_chain(shape, layout, master):
+        if spacing is None:
+            spacing = _line_ratio(pPr, font_pt)
+        if before is None:
+            before = _spc_pt(pPr, "a:spcBef", font_pt)
+        if after is None:
+            after = _spc_pt(pPr, "a:spcAft", font_pt)
+        if spacing is not None and before is not None and after is not None:
+            break
+    return FrameMetrics(
+        lr_inset=max(0, lr),
+        tb_inset=max(0, tb),
+        line_spacing=spacing or 1.0,
+        space_before_pt=max(0.0, before or 0.0),
+        space_after_pt=max(0.0, after or 0.0),
+        grows=body is not None and body.get("wrap") == "none",
+    )
+
+
 def _placeholder_key(shape) -> str:
     return f"ph:{shape.placeholder_format.idx}"
 
@@ -281,6 +421,7 @@ def _records(
         font_name = None
         bold = False
         lines = 0
+        frame = FrameMetrics()
         if shape_type == MSO_SHAPE_TYPE.GROUP:
             kind = "group"
         elif getattr(shape, "has_chart", False):
@@ -298,6 +439,7 @@ def _records(
             font_name, bold = _font_name_of(
                 shape, theme, is_title=ph_type in _TITLE_PLACEHOLDERS
             )
+            frame = _frame_metrics(shape, layout, master, font_pt)
             lines = text.count("\n") + 1 if text else 0
         else:
             kind = "other"
@@ -318,9 +460,15 @@ def _records(
                 lines=lines,
                 name=shape.name or "",
                 shape=shape,
+                frame=frame,
             )
         )
     return records
+
+
+# Roles whose text is a list: every line is its own paragraph, so it pays the
+# paragraph spacing again. A title wraps within one paragraph and pays it once.
+_BULLET_ROLES = frozenset({"body", "caption"})
 
 
 def estimate_capacity(
@@ -331,25 +479,49 @@ def estimate_capacity(
     height_emu: int,
     font_name: Optional[str] = None,
     bold: bool = False,
+    frame: Optional[FrameMetrics] = None,
 ) -> Tuple[int, int]:
-    """(max_chars, max_lines) of a box, measured with the font it is drawn in.
+    """(max_chars, max_lines) of a box, as the renderer will really fill it.
 
-    Line height 1.2em and a 10 % safety margin on the characters; the average
-    character width comes from the real font (see ``text_metrics``).
+    Both dimensions go through the box's own formatting: the padding comes off
+    the usable width and height, and a line advances by the paragraph's line
+    spacing plus the space declared around it. Widths are measured with the
+    real font (see ``text_metrics``); greedy wrapping wastes about half a word
+    at every line break, so the product of characters and lines is not free.
     """
     pt = font_pt or _DEFAULT_PT.get(role, 16.0)
-    width_pt = box.w / 1000 * width_emu / 914400 * 72
-    height_in = box.h / 1000 * height_emu / 914400
+    metrics = frame or FrameMetrics()
+    width_emu_box = box.w / 1000 * width_emu - metrics.lr_inset
+    height_emu_box = box.h / 1000 * height_emu - metrics.tb_inset
+    width_pt = max(0.0, width_emu_box) / 914400 * 72
+    height_pt = max(0.0, height_emu_box) / 914400 * 72
+
+    pitch = pt * text_metrics.LINE_HEIGHT * metrics.line_spacing
+    around = metrics.space_before_pt + metrics.space_after_pt
+    if role in _BULLET_ROLES:
+        lines = int(height_pt / (pitch + around)) if pitch + around > 0 else 1
+    else:
+        lines = int((height_pt - around) / pitch) if pitch > 0 else 1
+    lines = max(1, lines)
+
     per_line = text_metrics.chars_per_line(width_pt, pt, font_name, bold)
-    lines = max(1, int(height_in * 72 / (pt * 1.2)))
-    return int(per_line * lines * 0.9), lines
+    waste = text_metrics.WRAP_WASTE_CHARS * (lines - 1)
+    chars = (per_line * lines - waste) * text_metrics.SAFETY
+    return max(1, int(chars)), lines
 
 
 def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
     max_chars = max_lines = None
     if role != "image" and role != "keep":
         max_chars, max_lines = estimate_capacity(
-            rec.box, rec.font_pt, role, width, height, rec.font_name, rec.bold
+            rec.box,
+            rec.font_pt,
+            role,
+            width,
+            height,
+            rec.font_name,
+            rec.bold,
+            rec.frame,
         )
     return Zone(
         key=rec.key,
@@ -359,6 +531,7 @@ def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
         font_pt=rec.font_pt,
         max_chars=max_chars,
         max_lines=max_lines,
+        grows=rec.frame.grows,
     )
 
 

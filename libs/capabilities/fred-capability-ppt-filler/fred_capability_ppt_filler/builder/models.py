@@ -104,6 +104,9 @@ class Zone(BaseModel):
     font_pt: Optional[float] = None
     max_chars: Optional[int] = None
     max_lines: Optional[int] = None
+    # The box grows with its text instead of wrapping inside its outline (a KPI
+    # figure sized to "62"): its capacity is what the designer typed, not a limit.
+    grows: bool = False
 
 
 class RepeatGroup(BaseModel):

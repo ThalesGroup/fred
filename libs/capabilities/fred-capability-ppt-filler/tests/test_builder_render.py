@@ -23,7 +23,7 @@ import os
 from typing import Any, cast
 
 import pytest
-from builder_decks import FOOTER, build_showcase_template
+from builder_decks import FOOTER, build_showcase_template, build_spaced_template
 from deck_builders import png_bytes
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder.analysis import analyze_template
@@ -47,6 +47,8 @@ from fred_capability_ppt_filler.builder.render import (
     MIN_FONT_SCALE,
     RenderError,
     _assign_text,
+    _fit,
+    _Line,
     _unused_item_fields,
     render_deck,
 )
@@ -611,7 +613,7 @@ def test_items_shown_by_another_group_of_the_slide_are_not_reported():
 
 def test_catalogue_names_plan_fields_and_offers_nothing_on_fixed_slides():
     lines = {line.split(" ")[1]: line for line in catalogue(INVENTORY).splitlines()}
-    assert "items×3 [number, heading, text]" in lines[_pattern("Process").id]
+    assert "items up to 3 [number, heading, text]" in lines[_pattern("Process").id]
     assert "bullets" in lines[_pattern("Title and Content").id]
     assert "no editable zone" in lines[_pattern("Motif").id]
     assert "(preferred)" not in catalogue(
@@ -759,3 +761,115 @@ def test_reference_template_renders_a_full_deck():
         for text in _texts(slide):
             assert not is_sample_text(text), text
     assert len(result.pptx) < len(template) * 1.1
+
+
+# --- the room quoted to the agent is the room the renderer enforces ---
+
+
+def _two_body_pattern(first: int, second: int) -> Pattern:
+    return Pattern(
+        id="layout:9",
+        source="layout",
+        source_index=9,
+        name="Contact",
+        label="Contact",
+        intent="contact",
+        zones=[
+            Zone(
+                key=f"ph:{index}",
+                role="body",
+                box=Box(x=index * 300, y=400, w=280, h=100),
+                font_pt=14.0,
+                max_chars=chars,
+                max_lines=2,
+            )
+            for index, chars in enumerate((first, second))
+        ],
+    )
+
+
+def test_catalogue_quotes_the_tightest_zone_not_the_first():
+    """Told the roomiest zone's limit, an agent writes text the narrow ones cut."""
+    pattern = _two_body_pattern(36, 22)
+    line = catalogue(
+        TemplateInventory(slide_width=1, slide_height=1, patterns=[pattern])
+    )
+    assert "≤22 chars" in line
+    assert "≤36 chars" not in line
+
+
+def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
+    """`bullets` fills only the first: naming it that way loses the rest."""
+    line = catalogue(
+        TemplateInventory(
+            slide_width=1, slide_height=1, patterns=[_two_body_pattern(40, 40)]
+        )
+    )
+    assert "columns.bullets×2" in line
+
+
+def test_catalogue_quotes_no_limit_for_a_box_that_grows_with_its_text():
+    pattern = _two_body_pattern(2, 2)
+    for zone in pattern.zones:
+        zone.grows = True
+    line = catalogue(
+        TemplateInventory(slide_width=1, slide_height=1, patterns=[pattern])
+    )
+    assert "chars" not in line
+
+
+def test_shrinking_text_to_the_floor_is_not_reported_as_truncated():
+    """A zone that had to shrink still holds every word: telling the agent it
+    was cut sends it rewriting content the reader can see in full."""
+    zone = Zone(
+        key="ph:1",
+        role="body",
+        box=Box(x=0, y=0, w=400, h=300),
+        font_pt=18.0,
+        max_chars=180,
+        max_lines=9,
+    )
+    lines = [
+        _Line(
+            "Une ligne de texte nettement plus longue que ce que la zone affiche "
+            "sans rétrécir la police au plancher"
+        )
+    ] * 3
+    kept, scale, truncated = _fit(zone, lines, Inches(13.333).emu, Inches(7.5).emu)
+    assert [line.text for line in kept] == [line.text for line in lines]
+    assert not truncated
+    assert scale == MIN_FONT_SCALE
+
+
+def test_a_truncated_zone_is_never_left_empty():
+    """A narrow zone used to blank itself rather than keep a cut first line."""
+    zone = Zone(
+        key="ph:1",
+        role="body",
+        box=Box(x=0, y=0, w=30, h=20),
+        font_pt=18.0,
+        max_chars=4,
+        max_lines=1,
+    )
+    kept, _, truncated = _fit(
+        zone, [_Line("Innovation durable")], Inches(13.333).emu, Inches(7.5).emu
+    )
+    assert truncated
+    assert kept and kept[0].text.strip()
+
+
+def test_a_placeholder_that_auto_sizes_on_its_layout_is_not_truncated():
+    """A cloned placeholder carries a bare bodyPr but still draws with the
+    layout's autofit: reading only the slide's cut text the box grows to hold."""
+    inventory = analyze_template(build_spaced_template(space_before_pt=0)).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if any(z.grows for z in p.zones))
+    long_title = "Plan de transformation numérique du groupe à l'horizon 2030"
+    result = render_deck(
+        build_spaced_template(space_before_pt=0),
+        inventory,
+        DeckPlan(slides=[SlidePlan(pattern=pattern.id, title=long_title)]),
+    )
+    deck = Presentation(io.BytesIO(result.pptx))
+    assert long_title in _texts(deck.slides[0])
+    assert not [w for w in result.warnings if "truncated" in w]

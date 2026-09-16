@@ -120,6 +120,21 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** the analysis states a zone's character limit, or the generation decides that a text overflows
 - **THEN** the width is measured with the font the zone is drawn in, resolved to the substitute the server actually renders with, so the same ruler serves the limits shown to the agent, the shrinking and the box sizing; without a usable font a conservative per-character estimate stands in
 
+#### Scenario: A zone's capacity is what the box really holds
+
+- **WHEN** the analysis states a zone's character and line limits
+- **THEN** the box's own padding comes off both dimensions, a line advances by the paragraph spacing the template declares (inherited from the layout and the master, not only what the slide's own text carries), and the character count allows for the room greedy wrapping wastes at each line break, so text written to the stated limit does not overflow the slide
+
+#### Scenario: One capacity, quoted and enforced
+
+- **WHEN** the catalogue quotes a limit for a plan field several zones are filled from
+- **THEN** it quotes the tightest of those zones, item zones carry their own limits, a box that grows with its text instead of wrapping carries none, and the generation enforces exactly the number the catalogue quoted
+
+#### Scenario: Shrinking is not truncating
+
+- **WHEN** a text only had to be shrunk to the font floor to fit, or a box auto-sizes to its text through the rule it inherits from its layout
+- **THEN** no content is dropped and the result does not report a truncation; a zone that genuinely overflows keeps a cut first line rather than rendering empty
+
 #### Scenario: Missing intent degrades gracefully
 
 - **WHEN** the plan asks for an intent the inventory does not offer
