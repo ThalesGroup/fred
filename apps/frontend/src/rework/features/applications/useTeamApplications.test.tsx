@@ -27,7 +27,8 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useTeamApplicationsQuery: (args: unknown, options: unknown) => h.query(args, options),
 }));
 
-import { TEAM_APPLICATIONS_REFRESH_INTERVAL_MS, useTeamApplications } from "./useTeamApplications.ts";
+import { CROSS_SESSION_REFRESH_INTERVAL_MS } from "@hooks/crossSessionRefresh.ts";
+import { useTeamApplications } from "./useTeamApplications.ts";
 
 function Host({ skip = false }: { skip?: boolean }) {
   useTeamApplications("team-1", skip);
@@ -51,7 +52,7 @@ describe("useTeamApplications", () => {
       {
         skip: true,
         pollingInterval: 0,
-        refetchOnMountOrArgChange: TEAM_APPLICATIONS_REFRESH_INTERVAL_MS / 1000,
+        refetchOnMountOrArgChange: CROSS_SESSION_REFRESH_INTERVAL_MS / 1000,
       },
     );
   });
@@ -63,8 +64,8 @@ describe("useTeamApplications", () => {
       { teamId: "team-1" },
       {
         skip: false,
-        pollingInterval: TEAM_APPLICATIONS_REFRESH_INTERVAL_MS,
-        refetchOnMountOrArgChange: TEAM_APPLICATIONS_REFRESH_INTERVAL_MS / 1000,
+        pollingInterval: CROSS_SESSION_REFRESH_INTERVAL_MS,
+        refetchOnMountOrArgChange: CROSS_SESSION_REFRESH_INTERVAL_MS / 1000,
       },
     );
   });
