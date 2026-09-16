@@ -246,3 +246,55 @@ GitHub setting was changed in this source-preparation pass. Task 6.2 remains
 unchecked until a fresh alpha.3 registry check and approved immutable candidate
 evidence from clean committed `swift`; task 6.3 remains unchecked until separate
 publication authority and genuine public-registry verification.
+
+## Published alpha.3 close-out (2026-09-16)
+
+The preceding unchecked-task and no-publication statements describe the earlier
+source-preparation pass, not the final state. The SDK-only alpha.3 candidate was
+subsequently prepared from clean committed `swift` source
+`56b498c0e338606b00b50f33bfcdd6e02ee61693` in run `35147048936`, attempt
+`1`. Candidate artifact `10466938820` has ZIP SHA-256
+`1e1c8b8e03f32d76e187835e0a7db2be52cb80ee33fb380ed54ab97f7d5fb7bc`
+and record digest `sha256-PmrhhDt8IHBXAr2hf8z3YQRZEx//oZYFzKyZz21z0Og=`.
+Its `@fred-oss/iframe-sdk@0.1.0-alpha.3` tarball has SHA-512
+`sha512-RtGsASmlDCPw9i6QOzejU65c8baC+AM8Yi3kUuQ99fevhbXa3xIjyOhUiesraDpV2gPY4g1FobnJOEagSHEdkQ==`.
+The candidate record reports archive, offline neutral consumer, distinct-origin
+browser, and production-host gates passed under the pinned separate toolchains.
+This is approved immutable candidate evidence for task 6.2, not a local fixture.
+
+Protected publication used a separate run `35147742170`, attempt `1`, with
+retained attempt artifact `10466824522`, ZIP SHA-256
+`0836b12d5b1709914f087586facc78ed3f54997adb0c74d0a4528a4aaba013a8`
+and attempt digest `sha256-gmlkcY4Pjy0baONTa0AVM9wAr2ATxvA37FJzsHupP4A=`.
+npm accepted the alpha.3 publish command into automated validation. The GitHub
+publish job later failed after its six bounded exact-version visibility reads;
+this was delayed registry metadata, not evidence of failed package publication.
+It did not trigger a republish. The older alpha.2 `ENEEDAUTH` attempt remains
+failed-at-authentication history and was never claimed as published.
+
+Independent read-only verify-only run `35148411102`, attempt `1`, retained
+artifact `10467986853`, ZIP SHA-256
+`764d602a7b24eadbb5936dc91de82c0e8cf45b017d9de1f6ae79e75198cc493b`,
+outcome digest `sha256-5sI1oUJNA8N+c/f27rVmldR8MdH1CAs+TjQcKyKH4Js=`.
+The retained record reports readiness `registry-verified` and all six final
+public gates true: exact registry archives, npm signatures, Sigstore
+provenance, clean registry consumers, browser smoke, and production-host
+compatibility. The verified public archive SHA-512 equals the candidate's.
+Cryptographically verified provenance binds the artifact digest to repository
+`https://github.com/ThalesGroup/fred`, source commit
+`56b498c0e338606b00b50f33bfcdd6e02ee61693`, workflow
+`https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift`,
+invocation repository `https://github.com/ThalesGroup/fred`, publishing run
+`35147742170` attempt `1`, and issuer `https://token.actions.githubusercontent.com`.
+The verifier's execution identity is separately run `35148411102` attempt `1`.
+
+At close-out, read-only `npm view` under Node 24.21.0/npm 11.19.0 returned
+exact alpha.3 name, version, and matching SHA-512 from
+`https://registry.npmjs.org/`; the package version set was alpha.1 and
+alpha.3, `next` was alpha.3, and `latest` was alpha.1. GitHub's read-only API
+confirmed the three completed run/attempt/source identities and artifact
+metadata; streaming the three ZIPs independently reproduced their SHA-256
+digests. The downloaded candidate tarball independently reproduced the
+recorded SHA-512. The final verification ZIP contained the retained
+`registry-verification.json` with the above identities and gate results.
+Tasks 6.2 and 6.3 are now evidenced; all 26 change tasks are complete.

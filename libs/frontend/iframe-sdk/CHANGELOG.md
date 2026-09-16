@@ -3,7 +3,7 @@
 ## 0.1.0-alpha.3
 
 Review: approved
-Changes: Carry the accepted live application-context functionality unchanged under a new recovery release coordinate after the alpha.2 publication attempt failed with npm `ENEEDAUTH`. This entry records source preparation, not publication or registry verification.
+Changes: Carry the accepted live application-context functionality unchanged under a new recovery release coordinate after the alpha.2 publication attempt failed with npm `ENEEDAUTH`. Published on 2026-09-16 and subsequently genuinely verified by the public-registry workflow; see [RELEASE.md](../RELEASE.md#published-iframe-sdk-alpha3-evidence-2026-09-16).
 
 ## 0.1.0-alpha.2
 

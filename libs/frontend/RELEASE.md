@@ -5,8 +5,9 @@ The first `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk`
 all-package registry verification completed in a separate read-only run. The retained manual
 workflow now has manual `prepare-only`, protected `publish`, and read-only `verify`
 operations for subsequent independently selected versions. It published
-`@fred-oss/ui@0.1.0-alpha.2`, which was subsequently verified in a separate
-read-only run. The completed first-release evidence below remains historical and unchanged.
+`@fred-oss/ui@0.1.0-alpha.2` and `@fred-oss/iframe-sdk@0.1.0-alpha.3`, each
+subsequently verified in a separate read-only run. The completed first-release
+evidence below remains historical and unchanged.
 
 ## Release contracts
 
@@ -489,3 +490,35 @@ Retained GitHub artifacts have finite lifetimes. The source-reviewed token compa
 baseline, not its historical CI ZIP, supplies the independent expectation for the
 UI-only consumer; the selected UI candidate and attempt remain bound to their own
 original source and execution identities.
+
+## Published iframe SDK alpha.3 evidence (2026-09-16)
+
+`@fred-oss/iframe-sdk@0.1.0-alpha.3` carries the accepted live application-context
+extension on protocol `"1"`. Its approved SDK-only candidate, protected publishing
+attempt, and independent public-registry verification are three distinct executions
+from source commit `56b498c0e338606b00b50f33bfcdd6e02ee61693`. The earlier
+alpha.2 candidate and its `ENEEDAUTH` publication attempt remain historical evidence;
+alpha.2 was not published or silently retried.
+
+| Boundary                        | Retained identity and result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved immutable candidate    | [Prepare-only run `35147048936`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35147048936); [artifact `10466938820`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10466938820), ZIP SHA-256 `1e1c8b8e03f32d76e187835e0a7db2be52cb80ee33fb380ed54ab97f7d5fb7bc`, candidate record digest `sha256-PmrhhDt8IHBXAr2hf8z3YQRZEx//oZYFzKyZz21z0Og=`. Selected `fred-oss-iframe-sdk-0.1.0-alpha.3.tgz` SHA-512: `sha512-RtGsASmlDCPw9i6QOzejU65c8baC+AM8Yi3kUuQ99fevhbXa3xIjyOhUiesraDpV2gPY4g1FobnJOEagSHEdkQ==`.                                                                                                   |
+| Protected publication attempt   | [Publish run `35147742170`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35147742170); [attempt artifact `10466824522`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10466824522), ZIP SHA-256 `0836b12d5b1709914f087586facc78ed3f54997adb0c74d0a4528a4aaba013a8`, attempt record digest `sha256-gmlkcY4Pjy0baONTa0AVM9wAr2ATxvA37FJzsHupP4A=`. npm accepted the publish command into automated validation. The GitHub job later failed because exact-version metadata remained invisible through its six bounded reads; that job failure does not mean package publication failed or authorize republishing. |
+| Independent public verification | [Verify-only run `35148411102`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35148411102); [artifact `10467986853`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10467986853), ZIP SHA-256 `764d602a7b24eadbb5936dc91de82c0e8cf45b017d9de1f6ae79e75198cc493b`, outcome digest `sha256-5sI1oUJNA8N+c/f27rVmldR8MdH1CAs+TjQcKyKH4Js=`. Readiness `registry-verified`; the exact public archive, npm signatures, Sigstore provenance, clean registry consumer, cross-origin browser smoke, and production-host compatibility all passed.                                                                         |
+
+The verification record binds the exact public archive digest to repository
+`https://github.com/ThalesGroup/fred`, source commit
+`56b498c0e338606b00b50f33bfcdd6e02ee61693`, workflow
+`https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift`,
+invocation repository `https://github.com/ThalesGroup/fred`, actual publishing run
+`35147742170` attempt `1`, and issuer `https://token.actions.githubusercontent.com`.
+The verifier's own run `35148411102` attempt `1` is recorded separately; it does
+not relabel the publication. At close-out, read-only public npm metadata returned
+the exact alpha.3 name, version, and candidate SHA-512, and `next` pointed to
+alpha.3 (`latest` still pointed to alpha.1).
+
+GitHub's read-only artifact API returned the three expected ZIP digests, which
+were also independently checked against the downloaded ZIP bytes. The extracted
+candidate archive's SHA-512 matched the public coordinate and retained final
+record. The artifacts are retention-limited; their recorded identities and
+results do not authorize rebuilding or replacing the published bytes.

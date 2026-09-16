@@ -1,6 +1,6 @@
 ## Why
 
-External applications cannot follow FRED's resolved light/dark theme or a locale change while their iframe remains mounted. Protocol `"1"` currently sends team, route, and locale only at connection; the published SDK treats that context as a one-time handshake. The existing [frontend packaging RFC](../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md#72-theme-and-locale-synchronization) already identifies a live context extension, and [issue #2712](https://github.com/ThalesGroup/fred/issues/2712) tracks this bounded implementation.
+External applications cannot follow FRED's resolved light/dark theme or a locale change while their iframe remains mounted. Protocol `"1"` currently sends team, route, and locale only at connection; the published SDK treats that context as a one-time handshake. The existing [frontend packaging RFC](../../../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md#72-theme-and-locale-synchronization) already identifies a live context extension, and [issue #2712](https://github.com/ThalesGroup/fred/issues/2712) tracks this bounded implementation.
 
 ## What Changes
 
