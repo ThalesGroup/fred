@@ -24,6 +24,9 @@ Otherwise skip it.
    must never mistake it for a human teammate's conclusion.
 2. **Never post a public comment without the developer approving the exact text.** Public
    means the reporter gets an email. Show them the draft, wait for a yes, then post.
+4. **Open every draft the developer must review in VS Code.** Write it to a Markdown file
+   in your scratchpad, run `code <file>` so they can edit it in place, then post with
+   `-F <file>` — re-read the file first, since their edits are the text they approved.
 3. Do not transition, close or assign a ticket unless the developer asks — except the
    status moves in "Ticket status" and the PO handoff in the feature workflow below.
 
