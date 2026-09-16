@@ -92,7 +92,9 @@ export default function KnowledgeBaseDocumentsPage() {
       setDocumentsError(false);
       try {
         const page = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset: from, limit: PAGE_SIZE },
+          // The whole library, not its top folder: a base mirrors its source's
+          // shape, so most of what it holds sits in folders below the library.
+          browseDocumentsByTagRequest: { tag_id: tagId, offset: from, limit: PAGE_SIZE, include_descendants: true },
         }).unwrap();
         setDocuments(page.documents ?? []);
         setTotal(page.total ?? 0);

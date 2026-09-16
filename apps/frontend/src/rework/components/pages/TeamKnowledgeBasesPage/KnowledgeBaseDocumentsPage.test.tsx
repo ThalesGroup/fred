@@ -132,6 +132,16 @@ describe("KnowledgeBaseDocumentsPage", () => {
     expect(container.textContent).toContain("report.pdf");
   });
 
+  it("asks for the whole library, not just its top folder", async () => {
+    // A base mirrors its source's shape, so asking for the library tag alone
+    // returned only the files at the root of that source — most bases looked empty.
+    probe.page = { documents: [doc("specs/api/openapi.md", "uid-1")], total: 1 };
+    await render();
+
+    expect(probe.browsed[0].browseDocumentsByTagRequest.include_descendants).toBe(true);
+    expect(container.textContent).not.toContain("rework.knowledgeBases.documents.empty");
+  });
+
   it("names the base and the kind it is", async () => {
     probe.page = { documents: [doc("a.md", "uid-1")], total: 1 };
     await render();

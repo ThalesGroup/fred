@@ -35,7 +35,7 @@ inside an authorization change.
 - [x] 5.2 Resolve a library's descendant folders with one prefix read on the tag store; verify against a tree several levels deep
 - [x] 5.3 Serve the library document listing from those two reads; verify a library whose documents all sit in nested folders is no longer reported as holding none
 - [x] 5.4 Regenerate the knowledge-flow client (`make update-knowledge-flow-api` in `apps/frontend`) and commit it alongside; verify the generated types carry the new field and the listing shape
-- [ ] 5.5 Point the Knowledge Base Documents page at the full listing; verify its tests cover a library with nested documents and assert the empty state is not shown
+- [x] 5.5 Point the Knowledge Base Documents page at the full listing; verify its tests cover a library with nested documents and assert the empty state is not shown
 
 ## 6. Resources reflects the partition (frontend)
 
