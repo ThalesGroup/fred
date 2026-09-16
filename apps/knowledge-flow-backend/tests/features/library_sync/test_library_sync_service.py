@@ -616,6 +616,69 @@ async def test_reading_a_source_version_needs_permission_over_that_library(tag_s
 
 
 # --------------------------------------------------------------------------
+# Which machine fills the library
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recording_the_machine_marks_the_library(tag_store):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+
+    await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
+
+    assert tag_store.tags[lib.id].synchronized_by == "knowledge_base:ab12"
+    assert tag_store.tags[lib.id].is_synchronized
+
+
+@pytest.mark.asyncio
+async def test_recording_the_same_machine_again_is_not_a_change(tag_store):
+    """Creation can be retried after a failure further along, so this must be safe."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
+
+    assert await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12") == "knowledge_base:ab12"
+
+
+@pytest.mark.asyncio
+async def test_moving_a_library_to_another_machine_is_refused(tag_store):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
+
+    with pytest.raises(InvalidSourceRequest) as refused:
+        await service.record_synchronized_by(pod(), lib.id, "knowledge_base:cd34")
+
+    assert refused.value.code == "synchronized_by_conflict"
+    assert tag_store.tags[lib.id].synchronized_by == "knowledge_base:ab12"
+
+
+@pytest.mark.asyncio
+async def test_recording_the_machine_needs_permission_over_that_library(tag_store):
+    """The grant comes first, so marking before it exists is refused rather than applied."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable=set(), readable=set()))
+
+    with pytest.raises(AuthorizationError):
+        await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
+
+    assert tag_store.tags[lib.id].synchronized_by is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blank", ["", "   "])
+async def test_a_blank_machine_reference_is_refused(tag_store, blank):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+
+    with pytest.raises(InvalidSourceRequest):
+        await service.record_synchronized_by(pod(), lib.id, blank)
+
+    assert tag_store.tags[lib.id].synchronized_by is None
+
+
+# --------------------------------------------------------------------------
 # Attribution
 # --------------------------------------------------------------------------
 

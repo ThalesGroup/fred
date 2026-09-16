@@ -131,8 +131,7 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   const archivePath = path.join(root, filename);
   await writeFile(archivePath, "npm metadata fixture archive");
   const integrity = await sha512Integrity(archivePath);
-  const provenanceUrl =
-    "https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@0.1.0-alpha.1";
+  const provenanceUrl = `https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@${selected.version}`;
   const metadata = {
     name: selected.name,
     version: selected.version,

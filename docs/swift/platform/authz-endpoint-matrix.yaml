@@ -1112,6 +1112,11 @@ operations:
     review_status: approved
     required_permission: tag.update
   - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/libraries/{library_id}/synchronized-by
+    review_status: approved
+    required_permission: tag.update
+  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/markdown/{document_uid}
     review_status: pending_review

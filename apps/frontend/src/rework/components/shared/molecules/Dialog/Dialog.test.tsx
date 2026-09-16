@@ -22,7 +22,7 @@
 // leave native button/link/select activation alone and to respect
 // `defaultPrevented` and `isComposing`.
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Dialog } from "./Dialog.tsx";
@@ -60,6 +60,147 @@ afterEach(() => {
   // it; across tests that both open a Dialog, the second reuses the first's
   // leftover node unless cleaned up here.
   document.getElementById("modal-portal")?.remove();
+});
+
+describe("Dialog focus and consumer-root portal", () => {
+  it("programmatic opening uses its originating root even when focus is outside", () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    render(
+      <div className="fred-ui" data-theme="light">
+        <Dialog open title="Notice" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+          Message
+        </Dialog>
+      </div>,
+    );
+    expect(container.querySelector(".fred-ui")?.contains(portal())).toBe(true);
+    outside.remove();
+  });
+
+  it("rejects a caller portal that escapes its originating consumer root", () => {
+    expect(() =>
+      render(
+        <div className="fred-ui">
+          <Dialog
+            open
+            title="Edit"
+            confirmLabel="Save"
+            portalContainer={document.body}
+            onConfirm={() => {}}
+            onCancel={() => {}}
+          >
+            Message
+          </Dialog>
+        </div>,
+      ),
+    ).toThrow(/inside its originating .fred-ui root/);
+  });
+
+  it("skips hidden or negative-tabindex controls when choosing initial focus", () => {
+    render(
+      <Dialog open title="Edit" confirmLabel="Save" onConfirm={() => {}} onCancel={() => {}}>
+        <button hidden>Hidden</button>
+        <button tabIndex={-2}>Not tabbable</button>
+        <input aria-label="Visible field" />
+      </Dialog>,
+    );
+    expect(document.activeElement).toBe(portal().querySelector("input"));
+  });
+
+  it("focuses the first control, contains Tab, and restores the trigger after Escape", () => {
+    const onCancel = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div className="fred-ui" data-theme="dark">
+          <button type="button" onClick={() => setOpen(true)}>
+            Open dialog
+          </button>
+          <Dialog
+            open={open}
+            title="Edit"
+            confirmLabel="Save"
+            cancelLabel="Cancel"
+            onConfirm={() => setOpen(false)}
+            onCancel={() => {
+              onCancel();
+              setOpen(false);
+            }}
+          >
+            <input aria-label="Field" />
+          </Dialog>
+        </div>
+      );
+    }
+    render(<Harness />);
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => {
+      trigger.focus();
+      trigger.click();
+    });
+    expect(container.querySelector(".fred-ui")?.contains(portal())).toBe(true);
+    const field = portal().querySelector("input") as HTMLInputElement;
+    const save = buttonNamed("Save");
+    expect(document.activeElement).toBe(field);
+    act(() => {
+      save.focus();
+      save.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement).toBe(field);
+    act(() => {
+      field.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+    expect(document.activeElement).toBe(save);
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("an open Select consumes the first Escape without dismissing its Dialog", () => {
+    const onCancel = vi.fn();
+    render(
+      <Dialog open title="Edit" confirmLabel="Save" onConfirm={() => {}} onCancel={onCancel}>
+        <Select options={[{ key: "a", value: "a", label: "A" }]} onChange={() => {}} size="medium" label="Choice" />
+      </Dialog>,
+    );
+    const select = portal().querySelector('button[aria-haspopup="listbox"]') as HTMLButtonElement;
+    act(() =>
+      select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })),
+    );
+    expect(select.getAttribute("aria-expanded")).toBe("true");
+    act(() => select.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(select.getAttribute("aria-expanded")).toBe("false");
+    expect(onCancel).not.toHaveBeenCalled();
+    act(() => select.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes Select on focus leaving it before Dialog handles Escape", () => {
+    const onCancel = vi.fn();
+    render(
+      <Dialog open title="Edit" confirmLabel="Save" onConfirm={() => {}} onCancel={onCancel}>
+        <Select options={[{ key: "a", value: "a", label: "A" }]} onChange={() => {}} size="medium" label="Choice" />
+      </Dialog>,
+    );
+    const select = portal().querySelector('button[aria-haspopup="listbox"]') as HTMLButtonElement;
+    act(() =>
+      select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })),
+    );
+    expect(select.getAttribute("aria-expanded")).toBe("true");
+    act(() => buttonNamed("Save").focus());
+    expect(select.getAttribute("aria-expanded")).toBe("false");
+    act(() =>
+      buttonNamed("Save").dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
 });
 
 function portal(): HTMLElement {

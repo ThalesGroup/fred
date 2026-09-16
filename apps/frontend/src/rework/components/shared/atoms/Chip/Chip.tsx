@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { ReactNode } from "react";
-import Icon from "@shared/atoms/Icon/Icon";
+import Icon from "../Icon/Icon";
 import styles from "./Chip.module.css";
 
 export interface ChipProps {
@@ -68,7 +68,12 @@ export default function Chip({
       </span>
       {trailing}
       {onRemove && (
-        <button type="button" className={styles.remove} onClick={onRemove} aria-label={removeAriaLabel}>
+        <button
+          type="button"
+          className={styles.remove}
+          onClick={onRemove}
+          aria-label={removeAriaLabel ?? `Remove ${label}`}
+        >
           <Icon category="outlined" type="close" />
         </button>
       )}

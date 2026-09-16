@@ -60,10 +60,15 @@ test("UI output is deterministic, scoped, closed, and externalized", async () =>
   );
   assert.deepEqual(Object.keys(runtime).sort(), [
     "Button",
+    "Checkbox",
+    "Chip",
+    "Dialog",
     "Icon",
     "IconButton",
+    "Select",
     "Spinner",
     "TextInput",
+    "Tooltip",
   ]);
   const declarations = await readFile(
     path.join(packageRoot, "dist/types/src/index.d.ts"),
@@ -73,13 +78,19 @@ test("UI output is deterministic, scoped, closed, and externalized", async () =>
     "ButtonProps",
     "ButtonSize",
     "ButtonVariant",
+    "CheckboxProps",
+    "ChipProps",
     "ColorTheme",
     "IconButtonProps",
     "IconButtonVariant",
     "IconProps",
+    "DialogProps",
     "MaterialIconType",
+    "SelectOption",
+    "SelectProps",
     "SpinnerProps",
     "TextInputProps",
+    "TooltipProps",
   ])
     assert.match(declarations, new RegExp(`\\b${publicType}\\b`), publicType);
   const manifest = JSON.parse(

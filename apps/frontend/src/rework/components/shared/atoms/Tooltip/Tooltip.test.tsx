@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage: the tooltip content portals onto document.body instead of
+// Coverage: the tooltip content portals to the originating .fred-ui root, or
+// retains document.body for legacy application callers without that root, instead of
 // rendering as a descendant of its trigger, so an ancestor's
 // `overflow: hidden`/`scroll` (e.g. DataTable's scroll body) can never clip
 // it — this is the regression a trigger near the top of such a container hit
@@ -493,5 +494,25 @@ describe("Tooltip", () => {
 
     // 400 - 4 - 200: the 4px default every other tooltip in the app relies on.
     expect(parseFloat(panel.style.left)).toBe(196);
+  });
+
+  it("preserves an existing description, portals to a themed root, and dismisses on Escape", () => {
+    act(() =>
+      root.render(
+        <div className="fred-ui" data-theme="dark">
+          <Tooltip text="Preview">
+            <button aria-describedby="existing-help">Trigger</button>
+          </Tooltip>
+        </div>,
+      ),
+    );
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    expect(trigger.getAttribute("aria-describedby")?.split(" ")).toContain("existing-help");
+    act(() => trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    expect(container.querySelector(".fred-ui")?.contains(panel)).toBe(true);
+    expect(trigger.getAttribute("aria-describedby")?.split(" ")).toContain(panel.id);
+    act(() => trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
 });

@@ -36,11 +36,20 @@ export const expectedUiArchiveFiles = [
   "dist/index.js",
   "dist/styles.css",
   "dist/types/.generated/src/rework/components/shared/atoms/Button/Button.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Checkbox/Checkbox.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Chip/Chip.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/Icon/Icon.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/IconButton/IconButton.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/MenuItem/MenuItem.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/Spinner/Spinner.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/TextInput/TextInput.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Tooltip/Tooltip.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Dialog/DialogPrimitive.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Menu/Menu.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Select/Select.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/Portal.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Type.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/viewport.d.ts",
   "dist/types/src/index.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",
   "package.json",
@@ -118,11 +127,9 @@ async function assertRelativeReferences(
       );
     } else {
       const candidates = [
-        resolved,
         resolved.replace(/\.(?:tsx?|jsx?|mjs|cjs)$/, ".d.ts"),
         `${resolved}.d.ts`,
-        `${resolved}.js`,
-      ];
+      ].filter((candidate) => candidate.endsWith(".d.ts"));
       const present = await Promise.all(candidates.map(isRegularFile));
       assert(
         present.some(Boolean),
@@ -131,7 +138,7 @@ async function assertRelativeReferences(
     }
   }
   for (const forbidden of [
-    /@(?:shared|rework)\b/,
+    /@(?:shared|rework|models)\b/,
     /(?:workspace|file|link):/,
     /\/Users\//,
     /apps\/frontend/,
@@ -348,6 +355,9 @@ export async function validateUiArchive(
     );
     for (const forbidden of [
       "customAgent",
+      "react-i18next",
+      "OptionModel",
+      "Aucune option disponible",
       "material-symbols-rounded",
       "material-symbols-sharp",
       "/images/icons/",
@@ -364,10 +374,10 @@ export async function validateUiArchive(
         "declaration",
       );
       assert(
-        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType)\b|customAgent|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
+        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType|OptionModel)\b|customAgent|react-i18next|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
           declaration,
         ),
-        `${file} contains application-only icon declarations`,
+        `${file} contains application-only declarations`,
       );
     }
     const { assets } = await validateCss(packageRoot);

@@ -14,34 +14,20 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import DocumentNameCell from "@shared/molecules/DocumentNameCell/DocumentNameCell.tsx";
-import DocumentPreviewDrawer from "@shared/molecules/DocumentPreviewDrawer/DocumentPreviewDrawer.tsx";
-import { StatusChip } from "@shared/molecules/StatusChip/StatusChip.tsx";
-import { deriveDocStatus } from "@shared/molecules/StatusChip/deriveDocStatus.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import { formatBytes } from "@shared/utils/formatBytes.ts";
-import { useDocumentCommands } from "../../../../components/documents/common/useDocumentCommands";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import {
-  useKnowledgeBaseQuery,
-  useUsersByIdsQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
-import {
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
-  type DocumentMetadata,
-} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { formatDateTime } from "../../../utils/formatDateTime.ts";
+import { useKnowledgeBaseQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import DocumentWorkspace from "../TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx";
 import styles from "./KnowledgeBaseDocumentsPage.module.css";
 
-const PAGE_SIZE = 25;
-
 /** What one Knowledge Base has put in its library, and nothing else.
+ *
+ * This is the Resources explorer, rooted at the library and offering no way to
+ * write — deliberately the same component rather than a second table that
+ * happens to look like it. A library mirrors the shape of the source it
+ * follows, so it is browsed as a tree, folder by folder, exactly as a corpus
+ * folder is.
  *
  * Read only by design, not by omission: these documents belong to a source the
  * base mirrors, so removing one here would only last until the next run. The
@@ -57,119 +43,6 @@ export default function KnowledgeBaseDocumentsPage() {
     isLoading: isLoadingInstance,
     isError: instanceError,
   } = useKnowledgeBaseQuery({ instanceId: instanceId ?? "" }, { skip: !instanceId });
-
-  const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
-  const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
-  const [documentsError, setDocumentsError] = useState(false);
-
-  const libraryId = instance?.library_id;
-
-  // No refreshers: nothing on this page changes a document, so there is
-  // nothing to refetch after. Only reading is offered.
-  const commands = useDocumentCommands();
-
-  // One lookup for the page, not one per row — the same batching a team's
-  // resources use, so a library of 25 documents costs a single request.
-  const uploaderUids = useMemo(
-    () =>
-      Array.from(
-        new Set(documents.map((doc) => doc.identity.uploaded_by).filter((uid): uid is string => Boolean(uid))),
-      ),
-    [documents],
-  );
-  const { data: uploaders = [], isFetching: isFetchingUploaders } = useUsersByIdsQuery(
-    { ids: uploaderUids },
-    { skip: uploaderUids.length === 0 },
-  );
-  const uploaderById = useMemo(() => new Map(uploaders.map((summary) => [summary.id, summary])), [uploaders]);
-
-  const loadPage = useCallback(
-    async (tagId: string, from: number) => {
-      setIsLoadingDocuments(true);
-      setDocumentsError(false);
-      try {
-        const page = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset: from, limit: PAGE_SIZE },
-        }).unwrap();
-        setDocuments(page.documents ?? []);
-        setTotal(page.total ?? 0);
-      } catch {
-        setDocumentsError(true);
-        setDocuments([]);
-        setTotal(0);
-      } finally {
-        setIsLoadingDocuments(false);
-      }
-    },
-    [browseDocumentsByTag],
-  );
-
-  useEffect(() => {
-    if (libraryId) void loadPage(libraryId, offset);
-  }, [libraryId, offset, loadPage]);
-
-  // The same columns a team's resources show, minus the ones that act: this is
-  // the same object, so it is read the same way.
-  const columns: DataTableColumn<DocumentMetadata>[] = [
-    {
-      label: t("rework.resources.columns.name"),
-      size: "2fr",
-      cellRenderer: (doc) => <DocumentNameCell doc={doc} />,
-    },
-    {
-      label: t("rework.resources.columns.size"),
-      size: "6.5rem",
-      cellRenderer: (doc) => <span className={styles.nowrapCell}>{formatBytes(doc.file?.file_size_bytes ?? 0)}</span>,
-    },
-    {
-      label: t("rework.resources.columns.created"),
-      size: "9rem",
-      cellRenderer: (doc) => <span className={styles.nowrapCell}>{formatDateTime(doc.source.date_added_to_kb)}</span>,
-    },
-    {
-      label: t("rework.resources.columns.author"),
-      size: "9rem",
-      cellRenderer: (doc) => {
-        const uid = doc.identity.uploaded_by;
-        // Absent-yet and absent-entirely both render "—": flashing a raw uid
-        // while the batched lookup resolves reads worse than a dash that
-        // corrects itself on the next render.
-        if (!uid || (!uploaderById.get(uid) && isFetchingUploaders)) {
-          return <span className={styles.nowrapCell}>—</span>;
-        }
-        return <span className={styles.nowrapCell}>{userDisplayName(uid, uploaderById.get(uid))}</span>;
-      },
-    },
-    {
-      // No live task feed here: a run's own progress is Temporal's to tell.
-      // What a document settled at is still worth showing — a base whose
-      // documents never became searchable looks identical to one that worked.
-      label: "",
-      size: "8rem",
-      cellRenderer: (doc) => <StatusChip status={deriveDocStatus(doc).status} errors={doc.processing?.errors} />,
-    },
-    {
-      // Reading is not acting: a page that withholds every change still owes
-      // its reader a way to open what it lists.
-      label: "",
-      size: "3rem",
-      cellRenderer: (doc) => (
-        <Tooltip text={t("rework.resources.action.preview")}>
-          <IconButton
-            color="on-surface-retreat"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "visibility" }}
-            aria-label={t("rework.resources.action.preview")}
-            onClick={() => commands.preview(doc)}
-          />
-        </Tooltip>
-      ),
-    },
-  ];
 
   return (
     <div className={styles.page}>
@@ -199,26 +72,16 @@ export default function KnowledgeBaseDocumentsPage() {
           description={t("rework.knowledgeBases.documents.unavailable.description")}
           centered
         />
-      ) : documentsError ? (
-        <ServiceNotice icon="cloud_off" title={t("rework.knowledgeBases.documents.loadFailed")} centered />
-      ) : isLoadingDocuments && !documents.length ? (
-        <div className={styles.loadingState}>
-          <Spinner size={20} />
-        </div>
-      ) : !total ? (
-        <ServiceNotice icon="database" title={t("rework.knowledgeBases.documents.empty")} centered />
       ) : (
-        <div className={styles.table}>
-          <DataTable<DocumentMetadata>
-            columns={columns}
-            data={documents}
-            rowKey={(doc) => doc.identity.document_uid}
-            serverPagination={{ totalCount: total, offset, limit: PAGE_SIZE, onOffsetChange: setOffset }}
-          />
-        </div>
+        <DocumentWorkspace
+          teamId={teamId ?? ""}
+          // A Knowledge Base is always a team's: an instance is created from a
+          // team's screen and its library is owned by that team.
+          isPersonalTeam={false}
+          rootTagId={instance.library_id}
+          readOnly
+        />
       )}
-
-      <DocumentPreviewDrawer target={commands.previewTarget} onClose={commands.closePreview} />
     </div>
   );
 }

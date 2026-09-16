@@ -44,6 +44,7 @@ from knowledge_flow_backend.features.library_sync.structures import (
     InvalidSourceRequest,
     split_document_path,
     validate_source_key,
+    validate_synchronized_by,
     validate_version,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
@@ -221,6 +222,33 @@ class LibrarySyncService:
         # runs that changed nothing in it.
         await self._tag_store.update_tag_by_id(library_id, library)
         return source_version
+
+    # ---------- the machine that fills the library ----------
+
+    async def record_synchronized_by(self, user: KeycloakUser, library_id: str, synchronized_by: str) -> str:
+        """Record which machine fills this library, which is what closes it to people.
+
+        Moving a library from one machine to another is refused rather than
+        applied: two of them filling one folder is a fault upstream, and taking
+        the second silently would leave the first writing into a folder it no
+        longer owns. Re-recording the same one is not a move, so a retry is safe.
+        """
+        await self._rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_id)
+        synchronized_by = validate_synchronized_by(synchronized_by)
+
+        library = await self._tag_store.get_tag_by_id(library_id)
+        if library.synchronized_by == synchronized_by:
+            return synchronized_by
+        if library.synchronized_by is not None:
+            raise InvalidSourceRequest(
+                "synchronized_by_conflict",
+                f"This library is already filled by {library.synchronized_by}.",
+            )
+
+        library.synchronized_by = synchronized_by
+        await self._tag_store.update_tag_by_id(library_id, library)
+        logger.info("[LIBRARY SYNC] library=%s is filled by %s", library_id, synchronized_by)
+        return synchronized_by
 
     # ---------- internals ----------
 

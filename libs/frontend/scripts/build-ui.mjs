@@ -37,6 +37,24 @@ const materialIconImportRewrites = new Map(
     },
   ]),
 );
+for (const [sourcePath, from, to] of [
+  [
+    "apps/frontend/src/rework/components/shared/molecules/Select/Select.tsx",
+    'import Icon, { type IconProps } from "../../atoms/Icon/Icon.tsx";',
+    'import { MaterialIcon as Icon, type MaterialIconProps as IconProps } from "../../atoms/Icon/Icon.tsx";',
+  ],
+  [
+    "apps/frontend/src/rework/components/shared/atoms/MenuItem/MenuItem.tsx",
+    'import Icon, { type IconProps } from "../Icon/Icon.tsx";',
+    'import { MaterialIcon as Icon, type MaterialIconProps as IconProps } from "../Icon/Icon.tsx";',
+  ],
+  [
+    "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
+    'import Icon from "../Icon/Icon";',
+    'import { MaterialIcon as Icon } from "../Icon/Icon";',
+  ],
+])
+  materialIconImportRewrites.set(sourcePath, { from, to });
 const generatedIconPath =
   "apps/frontend/src/rework/components/shared/atoms/Icon/Icon.tsx";
 const generatedTypePath =
@@ -65,6 +83,42 @@ async function copyCanonical(relativePath) {
       `canonical material-icon import changed in ${relativePath}`,
     );
     generated = generated.replace(rewrite.from, rewrite.to);
+  }
+  const outlinedIconMarkup = new Map([
+    [
+      "apps/frontend/src/rework/components/shared/molecules/Select/Select.tsx",
+      [
+        '<Icon category={"outlined"} type={"arrow_drop_down"} />',
+        '<Icon type="arrow_drop_down" />',
+      ],
+    ],
+    [
+      "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
+      ['<Icon category="outlined" type="close" />', '<Icon type="close" />'],
+    ],
+  ]).get(relativePath);
+  if (outlinedIconMarkup) {
+    assert.equal(
+      generated.split(outlinedIconMarkup[0]).length - 1,
+      1,
+      `canonical outlined icon markup changed in ${relativePath}`,
+    );
+    generated = generated.replace(...outlinedIconMarkup);
+  }
+  if (
+    relativePath ===
+    "apps/frontend/src/rework/components/shared/molecules/Menu/Menu.tsx"
+  ) {
+    const appDefault = 'noOptionsMessage = "Aucune option disponible"';
+    assert.equal(
+      generated.split(appDefault).length - 1,
+      1,
+      "canonical FRED Menu empty wording changed",
+    );
+    generated = generated.replace(
+      appDefault,
+      'noOptionsMessage = "No options available"',
+    );
   }
   if (relativePath === generatedIconPath) {
     const broadImport =

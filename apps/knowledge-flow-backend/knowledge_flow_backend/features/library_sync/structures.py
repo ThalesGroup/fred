@@ -136,6 +136,18 @@ def split_document_path(raw: str) -> tuple[list[str], str]:
     return segments[:-1], segments[-1]
 
 
+def validate_synchronized_by(raw: str) -> str:
+    """Bound the machine reference and return it unchanged.
+
+    Not parsed: Fred acts on its presence, never on what it names. Bounded the
+    same way a version is, because it is stored the same way — opaquely.
+    """
+    bounded = validate_version(raw, label="A machine reference", code_prefix="synchronized_by")
+    if bounded is None:
+        raise InvalidSourceRequest("synchronized_by_empty", "A machine reference is required.")
+    return bounded
+
+
 class DocumentWritten(BaseModel):
     """The outcome of one write: it happened, and to which of the caller's names.
 
@@ -164,3 +176,12 @@ class LibrarySourceVersion(BaseModel):
     """The version of its own source a library last accepted; null if never."""
 
     source_version: Optional[str] = None
+
+
+class LibrarySynchronizedBy(BaseModel):
+    """Which machine fills a library, as `<kind>:<id>`."""
+
+    synchronized_by: str = Field(
+        ...,
+        description=('Qualified reference to the machine that fills this library, e.g. "knowledge_base:ab12". Opaque to Fred: only its presence is acted on.'),
+    )

@@ -346,7 +346,7 @@ test("rejects a declared producer member whose real target escapes", async (cont
 test("enforces exact registry coordinates and release toolchain", () => {
   assert.doesNotThrow(() =>
     assertExactRegistryCoordinate(
-      "@fred-oss/ui@0.1.0-alpha.1",
+      `${contract.packages.ui.name}@${contract.packages.ui.version}`,
       contract.packages.ui,
     ),
   );
