@@ -135,6 +135,21 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** a text only had to be shrunk to the font floor to fit, or a box auto-sizes to its text through the rule it inherits from its layout
 - **THEN** no content is dropped and the result does not report a truncation; a zone that genuinely overflows keeps a cut first line rather than rendering empty
 
+#### Scenario: Unused item slots leave the slide clean
+
+- **WHEN** a repeated group is filled with fewer items than the template shows
+- **THEN** the unused slots go with the loose decoration drawn for them — icons, card frames, and the connectors that span the area they occupied — the kept items are slid back to the middle of the room the group had, and nothing that also serves a kept item is touched
+
+#### Scenario: A group pattern given no items keeps its design
+
+- **WHEN** the plan names a pattern whose content is a repeated group but puts its content in another field
+- **THEN** every slot is removed without sweeping the slide's own background with them, and the result tells the agent the pattern shows its content as items and how many it holds
+
+#### Scenario: No placeholder is left prompting
+
+- **WHEN** a pattern has more text placeholders than the plan fills
+- **THEN** the unfilled ones are removed rather than emptied, so the delivered deck shows no "click to add text" prompt when the user opens it to edit
+
 #### Scenario: A pattern is chosen for the content it is given
 
 - **WHEN** the plan asks for an intent rather than a pattern id

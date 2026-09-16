@@ -48,6 +48,7 @@ from fred_capability_ppt_filler.builder.render import (
     MIN_FONT_SCALE,
     RenderError,
     _assign_text,
+    _covered,
     _fit,
     _Line,
     _unused_item_fields,
@@ -1005,3 +1006,60 @@ def test_a_pattern_that_would_truncate_loses_to_one_that_holds_the_text():
     )
     slide = SlidePlan(title="Detail", bullets=["A sentence far longer than twenty"] * 4)
     assert best_for_intent(inventory, plain.intent, slide) is plain
+
+
+# --- unused item slots leave the slide clean ---
+
+
+def test_a_group_pattern_given_no_items_keeps_the_slide_design():
+    """Sweeping decoration by overlap with nothing kept took the slide's own
+    background with it, silently."""
+    kpi = _pattern("Key figures")
+    result, deck = _render(SlidePlan(pattern=kpi.id, title="KPIs", bullets=["Stray"]))
+    assert _title(deck.slides[0]) == "KPIs"
+    assert any("gave none" in w for w in result.warnings)
+    # The icons drawn beside the cards are gone with them, the title stays.
+    assert _texts(deck.slides[0]) == ["KPIs"]
+
+
+def test_a_connector_counts_as_inside_the_area_it_spans():
+    """A connector is a line, zero-thick on one axis: every area ratio scores it
+    nothing, so the org-chart stubs of dropped slots used to dangle on."""
+    area = (0, 0, 1000, 1000)
+    horizontal_rule = (100, 500, 900, 500)
+    outside = (100, 1500, 900, 1500)
+    assert _covered(horizontal_rule, area) == 1.0
+    assert _covered(outside, area) == 0.0
+
+
+def test_the_kept_items_are_recentred_on_the_room_the_group_had():
+    kpi = _pattern("Key figures")
+    _, deck = _render(
+        SlidePlan(
+            pattern=kpi.id, title="KPIs", items=[PlanItem(number="42%", label="Margin")]
+        )
+    )
+    groups = [
+        p
+        for p in walk_shapes(deck.slides[0].shapes)
+        if cast(Any, p.shape).shape_type == MSO_SHAPE_TYPE.GROUP
+    ]
+    assert len(groups) == 1
+    centre = groups[0].left + groups[0].width // 2
+    slide_centre = INVENTORY.slide_width // 2
+    assert abs(centre - slide_centre) < Inches(0.6).emu
+
+
+def test_an_unfilled_placeholder_is_removed_not_left_prompting():
+    """An empty placeholder shows "Click to add text" as soon as the user opens
+    the deck to edit it."""
+    two = next(p for p in INVENTORY.patterns if p.label == "Two Content")
+    _, deck = _render(
+        SlidePlan(pattern=two.id, title="One side", bullets=["Only this"])
+    )
+    empty = [
+        shape
+        for shape in deck.slides[0].placeholders
+        if not cast(Any, shape).text_frame.text.strip()
+    ]
+    assert not empty

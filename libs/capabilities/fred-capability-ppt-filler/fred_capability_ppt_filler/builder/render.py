@@ -257,6 +257,35 @@ def _overlap_ratio(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -
     return (width * height) / smaller if smaller else 0.0
 
 
+def _box_of(placed: PlacedShape) -> Tuple[int, int, int, int]:
+    return (
+        placed.left,
+        placed.top,
+        placed.left + placed.width,
+        placed.top + placed.height,
+    )
+
+
+def _axis_cover(low: int, high: int, other_low: int, other_high: int) -> float:
+    span = high - low
+    if span <= 0:
+        # A connector is a line: zero-thick on one axis, and any area ratio
+        # scores it 0 however squarely it sits inside the other shape.
+        return 1.0 if other_low <= low <= other_high else 0.0
+    return max(0, min(high, other_high) - max(low, other_low)) / span
+
+
+def _covered(box: Tuple[int, int, int, int], other: Tuple[int, int, int, int]) -> float:
+    """Share of ``box`` that lies inside ``other``, lines included."""
+    return _axis_cover(box[0], box[2], other[0], other[2]) * _axis_cover(
+        box[1], box[3], other[1], other[3]
+    )
+
+
+# Below this the shift is not worth the risk of nudging a deliberate alignment.
+_RECENTRE_MIN_EMU = 91440
+
+
 def _remove(placed: PlacedShape) -> None:
     element = cast(Any, placed.shape)._element
     parent = element.getparent()
@@ -819,22 +848,21 @@ class _Renderer:
                     f"Slide {position}: '{pattern.label}' holds {group.count} items, "
                     f"{len(plan.items) - group.count} were dropped."
                 )
-            kept_boxes = []
-            for item_key in group.item_keys[:used]:
-                kept = index.get(item_key)
-                if kept is not None:
-                    kept_boxes.append(
-                        (
-                            kept.left,
-                            kept.top,
-                            kept.left + kept.width,
-                            kept.top + kept.height,
-                        )
-                    )
-            for item_key in group.item_keys[used:]:
-                placed = index.get(item_key)
-                if placed is not None:
-                    self._remove_with_decoration(placed, index, pattern, kept_boxes)
+            kept = [p for p in (index.get(k) for k in group.item_keys[:used]) if p]
+            dropped = [p for p in (index.get(k) for k in group.item_keys[used:]) if p]
+            if dropped and kept:
+                self._remove_decoration(dropped, kept, index, pattern)
+            elif dropped:
+                # Nothing was kept, so nothing anchors the decoration: sweeping
+                # by overlap here takes the slide's own background with it.
+                self.warnings.append(
+                    f"Slide {position}: '{pattern.label}' shows its content as items, "
+                    f"and the plan gave none; use `items` (up to {group.count}) for it."
+                )
+            for placed in dropped:
+                _remove(placed)
+            if kept and dropped:
+                self._recentre_items(kept, dropped, index, pattern)
             self._even_out_item_widths(group, index)
         if lost:
             self.warnings.append(
@@ -869,7 +897,14 @@ class _Renderer:
                 continue
             lines = text.get(zone.key, [])
             if not lines:
-                _clear_text(shape)
+                # An empty placeholder is not blank in PowerPoint: it shows its
+                # prompt ("Click to add text") the moment the user opens the
+                # deck to edit it. Dropping it leaves the slide clean, and the
+                # layout can always put it back.
+                if cast(Any, shape).is_placeholder:
+                    _remove(placed)
+                else:
+                    _clear_text(shape)
                 continue
             if zone.role == "number":
                 # "1 200", "62 %", "4,2 M€" never break across lines.
@@ -936,52 +971,101 @@ class _Renderer:
             self._place_image(slide, placed, prepared)
 
     @staticmethod
-    def _remove_with_decoration(
-        placed: PlacedShape,
-        index: Dict[str, PlacedShape],
-        pattern: Pattern,
-        kept_boxes: List[Tuple[int, int, int, int]],
-    ) -> None:
-        """Drop an unused item and the loose decoration drawn with it (an icon
-        or a card frame the designer left outside the group). A shape survives
-        when it is a zone, carries text, or also serves a kept item — a
-        full-slide background touches every item and stays."""
+    def _loose_decoration(
+        index: Dict[str, PlacedShape], pattern: Pattern
+    ) -> List[PlacedShape]:
+        """Top-level shapes that carry no content: the icons, card frames and
+        connectors a designer draws beside a group rather than inside it."""
         zone_keys = {z.key for z in pattern.zones}
         zone_keys.update(
             z.key for g in pattern.groups for item in g.items for z in item
         )
-        item_box = (
-            placed.left,
-            placed.top,
-            placed.left + placed.width,
-            placed.top + placed.height,
+        # An item's own container is content, not decoration drawn beside it.
+        zone_keys.update(key for g in pattern.groups for key in g.item_keys)
+        loose = []
+        for key, placed in index.items():
+            if len(placed.path) != 1 or key in zone_keys or key.startswith("ph:"):
+                continue
+            shape = cast(Any, placed.shape)
+            if (
+                getattr(shape, "has_text_frame", False)
+                and shape.text_frame.text.strip()
+            ):
+                continue
+            loose.append(placed)
+        return loose
+
+    def _remove_decoration(
+        self,
+        dropped: List[PlacedShape],
+        kept: List[PlacedShape],
+        index: Dict[str, PlacedShape],
+        pattern: Pattern,
+    ) -> None:
+        """Drop the loose decoration drawn with the unused items.
+
+        A shape goes when it sits on one of them, or anywhere inside the area
+        they occupied — a connector between two dropped slots overlaps neither
+        by much and used to be left dangling over an empty half-slide. Anything
+        that also serves a kept item stays, and so does a full-slide background:
+        it reaches beyond the dropped area and touches what was kept.
+        """
+        dropped_boxes = [_box_of(p) for p in dropped]
+        kept_boxes = [_box_of(p) for p in kept]
+        area = (
+            min(b[0] for b in dropped_boxes),
+            min(b[1] for b in dropped_boxes),
+            max(b[2] for b in dropped_boxes),
+            max(b[3] for b in dropped_boxes),
         )
-        for key, other in list(index.items()):
-            if (
-                other is placed
-                or len(other.path) != 1
-                or key in zone_keys
-                or key.startswith("ph:")
-            ):
+        for other in self._loose_decoration(index, pattern):
+            if other in dropped:
                 continue
-            other_shape = cast(Any, other.shape)
-            if (
-                getattr(other_shape, "has_text_frame", False)
-                and other_shape.text_frame.text.strip()
-            ):
+            box = _box_of(other)
+            on_dropped = any(_covered(box, b) >= 0.5 for b in dropped_boxes)
+            if not on_dropped and _covered(box, area) < 0.9:
                 continue
-            other_box = (
-                other.left,
-                other.top,
-                other.left + other.width,
-                other.top + other.height,
-            )
-            if _overlap_ratio(other_box, item_box) < 0.5:
-                continue
-            if any(_overlap_ratio(other_box, kept) >= 0.2 for kept in kept_boxes):
+            if any(_covered(box, b) >= 0.2 for b in kept_boxes):
                 continue
             _remove(other)
-        _remove(placed)
+
+    def _recentre_items(
+        self,
+        kept: List[PlacedShape],
+        dropped: List[PlacedShape],
+        index: Dict[str, PlacedShape],
+        pattern: Pattern,
+    ) -> None:
+        """Slide the used items back to the middle of the room the group had.
+
+        Four cards of a six-card row left at the designer's coordinates hug the
+        left edge with a third of the slide empty beside them. A translation
+        only: the corporate spacing and sizing are untouched.
+        """
+        used = [_box_of(p) for p in kept]
+        whole = used + [_box_of(p) for p in dropped]
+        shift_x = ((min(b[0] for b in whole) + max(b[2] for b in whole)) // 2) - (
+            (min(b[0] for b in used) + max(b[2] for b in used)) // 2
+        )
+        shift_y = ((min(b[1] for b in whole) + max(b[3] for b in whole)) // 2) - (
+            (min(b[1] for b in used) + max(b[3] for b in used)) // 2
+        )
+        if abs(shift_x) < _RECENTRE_MIN_EMU and abs(shift_y) < _RECENTRE_MIN_EMU:
+            return
+        # The icons and frames drawn over a kept item belong to it and move with
+        # it; anything else on the slide stays where the designer put it.
+        movers = list(kept)
+        for other in self._loose_decoration(index, pattern):
+            box = _box_of(other)
+            if any(_covered(box, b) >= 0.5 for b in used):
+                movers.append(other)
+        for placed in movers:
+            shape = cast(Any, placed.shape)
+            try:
+                shape.left = Emu(shape.left + shift_x)
+                shape.top = Emu(shape.top + shift_y)
+            except (TypeError, ValueError):
+                continue
 
     def _even_out_item_widths(
         self, group: RepeatGroup, index: Dict[str, PlacedShape]
