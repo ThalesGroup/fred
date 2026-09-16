@@ -866,9 +866,9 @@ def test_a_truncated_zone_is_never_left_empty():
     assert kept and kept[0].text.strip()
 
 
-def test_a_placeholder_that_auto_sizes_on_its_layout_is_not_truncated():
+def test_a_placeholder_that_does_not_wrap_on_its_layout_is_not_truncated():
     """A cloned placeholder carries a bare bodyPr but still draws with the
-    layout's autofit: reading only the slide's cut text the box grows to hold."""
+    layout's rule: reading only the slide's cut text the box grows to hold."""
     inventory = analyze_template(build_spaced_template(space_before_pt=0)).inventory
     assert inventory is not None
     pattern = next(p for p in inventory.patterns if any(z.grows for z in p.zones))
@@ -1211,3 +1211,44 @@ def test_one_unbreakable_token_does_not_shrink_its_whole_zone_below_the_floor():
         Inches(7.5).emu,
     )
     assert scale is None or scale >= MIN_FONT_SCALE
+
+
+def test_a_title_that_auto_sizes_in_height_is_fitted_not_widened():
+    """Such a box wraps inside its width and grows downwards. Widening it pushes
+    a cover title over the photo beside it, and growing unchecked runs the text
+    off the bottom of the slide - neither is reported unless it is fitted."""
+    template = build_spaced_template(space_before_pt=0, no_wrap_title=False)
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    # The layout the fixture gives an auto-sizing title to.
+    pattern = next(p for p in inventory.patterns if p.id == "layout:1" and p.zones)
+    zone = next(z for z in pattern.zones if z.role == "title")
+    assert not zone.grows
+    designed = zone.box.w
+    result = render_deck(
+        template,
+        inventory,
+        DeckPlan(
+            slides=[
+                SlidePlan(
+                    pattern=pattern.id,
+                    title="Un titre de couverture nettement plus long que la zone que "
+                    "le concepteur a dessinee pour lui, au point de sortir du cadre "
+                    "prevu et de courir sur la photo placee juste a cote de lui",
+                )
+            ]
+        ),
+    )
+    deck = Presentation(io.BytesIO(result.pptx))
+    titles = [
+        p
+        for p in walk_shapes(deck.slides[0].shapes)
+        if cast(Any, p.shape).has_text_frame
+        and cast(Any, p.shape).text_frame.text.strip()
+    ]
+    assert titles
+    widest = max(p.width for p in titles)
+    assert widest <= designed / 1000 * inventory.slide_width * 1.02, (
+        "the box was widened"
+    )
+    assert [w for w in result.warnings if "truncated" in w]

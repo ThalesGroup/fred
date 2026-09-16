@@ -472,9 +472,10 @@ def build_builder_tools(
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
             )
             return (
-                f"The presentation '{file_name}' ({result.slide_count} slides) is ready. A preview opens beside "
-                "the chat and a download button is shown automatically; do not write a download link."
-                + notes,
+                f"The presentation '{file_name}' ({result.slide_count} slides) is delivered and replaces any "
+                "deck built earlier in this answer. A preview opens beside the chat and a download button is "
+                "shown automatically; do not write a download link. Do not call this tool again in this "
+                "answer: say what the deck contains and stop." + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),

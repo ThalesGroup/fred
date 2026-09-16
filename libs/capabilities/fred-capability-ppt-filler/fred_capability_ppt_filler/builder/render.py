@@ -417,17 +417,20 @@ def _text_insets(shape) -> int:
 
 
 def _grows_with_text(shape, inherited=None) -> bool:
-    """A box that does not wrap, or auto-sizes to its text, has no capacity to enforce.
+    """A box that does not wrap: its width follows its text, so it is sized
+    rather than fitted.
 
-    A placeholder cloned from a layout carries a bare ``bodyPr``: it draws with
-    the layout's autofit but does not declare it, so the layout's own is what
-    decides. Reading only the slide's would truncate text the box in fact grows
-    to hold.
+    Auto-sizing the *height* is a different thing and must not come here: such a
+    box still wraps inside its width, and widening it pushes the text out of the
+    design (a cover title over the photo beside it). It grows downwards without
+    complaint, which is exactly why its line budget has to be enforced — off the
+    bottom of the slide is not "fitted".
+
+    A placeholder cloned from a layout carries a bare ``bodyPr`` and draws with
+    the layout's rule, so the layout's own is what decides.
     """
     for bodyPr in (shape.text_frame._txBody.find(qn("a:bodyPr")), inherited):
-        if bodyPr is None:
-            continue
-        if bodyPr.get("wrap") == "none" or bodyPr.find(qn("a:spAutoFit")) is not None:
+        if bodyPr is not None and bodyPr.get("wrap") == "none":
             return True
     return False
 

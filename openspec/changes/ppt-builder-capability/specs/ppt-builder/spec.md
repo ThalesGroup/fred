@@ -130,6 +130,11 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** the catalogue quotes a limit for a plan field several zones are filled from
 - **THEN** it quotes the tightest of those zones, item zones carry their own limits, a box that grows with its text instead of wrapping carries none, and the generation enforces exactly the number the catalogue quoted
 
+#### Scenario: A box that auto-sizes in height is still fitted
+
+- **WHEN** a zone's box wraps inside its width and auto-sizes its height, on the slide or through the rule it inherits from its layout
+- **THEN** it is fitted to its line budget like any other wrapping zone — never widened, since that pushes the text out of the design — and an overflow is reported; only a box that does not wrap at all is sized to its text instead
+
 #### Scenario: Shrinking is not truncating
 
 - **WHEN** a text only had to be shrunk to the font floor to fit, or a box auto-sizes to its text through the rule it inherits from its layout

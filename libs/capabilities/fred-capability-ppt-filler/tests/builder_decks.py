@@ -347,7 +347,9 @@ def build_layouts_only_template() -> bytes:
     return _save(Presentation())
 
 
-def build_spaced_template(space_before_pt: int = 24) -> bytes:
+def build_spaced_template(
+    space_before_pt: int = 24, no_wrap_title: bool = True
+) -> bytes:
     """A deck whose layout declares body line spacing and space before each
     paragraph — the shape of a corporate master — plus a figure that does not
     wrap. Both are read off the layout, never off the slide's own text.
@@ -356,8 +358,14 @@ def build_spaced_template(space_before_pt: int = 24) -> bytes:
     layout = presentation.slide_layouts[L_CONTENT]
     for placeholder in layout.placeholders:
         if placeholder.placeholder_format.idx == 0:
-            # The heading is sized to its text, the way a designer sets a figure.
-            placeholder.text_frame._txBody.find(qn("a:bodyPr")).set("wrap", "none")
+            body = placeholder.text_frame._txBody.find(qn("a:bodyPr"))
+            if no_wrap_title:
+                # Sized to its text, the way a designer sets a figure.
+                body.set("wrap", "none")
+            else:
+                # Wraps inside its width and grows downwards - a cover title.
+                body.set("wrap", "square")
+                body.append(body.makeelement(qn("a:spAutoFit"), {}))
             continue
         body = placeholder.text_frame._txBody
         lst = body.makeelement(qn("a:lstStyle"), {})
