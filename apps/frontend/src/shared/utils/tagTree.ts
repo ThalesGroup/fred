@@ -27,6 +27,25 @@ export function fullPath(t: Pick<TagWithItemsId, "name" | "path">): string {
   return t.path && t.path.trim() ? `${t.path}/${t.name}` : t.name;
 }
 
+/**
+ * The tags belonging to a corpus people manage themselves — everything a
+ * machine fills left out.
+ *
+ * A Knowledge Base marks only the library root it writes into; nothing nested
+ * below carries a copy of the mark. So a sub-folder is recognised by its path
+ * prefix rather than by a mark of its own: dropping the marked root alone would
+ * leave `<library>/guides` behind, and `buildTree` would raise the library back
+ * up as a synthetic node from that path.
+ */
+export function withoutMachineWritten(tags: TagWithPermissions[]): TagWithPermissions[] {
+  const machineRoots = tags.filter((t) => t.synchronized_by).map(fullPath);
+  if (machineRoots.length === 0) return tags;
+  return tags.filter((t) => {
+    const p = fullPath(t);
+    return !machineRoots.some((root) => p === root || p.startsWith(`${root}/`));
+  });
+}
+
 // ---------- Tree building ----------
 export function buildTree(tags: TagWithPermissions[]): TagNode {
   const root: TagNode = { name: "", full: "", children: new Map(), tagsHere: [] };

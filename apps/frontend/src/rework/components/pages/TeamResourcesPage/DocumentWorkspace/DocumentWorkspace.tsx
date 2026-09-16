@@ -54,6 +54,7 @@ import {
   collectDescendantTagIds,
   findNode,
   fullPath,
+  withoutMachineWritten,
   type TagNode,
 } from "../../../../../shared/utils/tagTree.ts";
 import { selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
@@ -121,6 +122,19 @@ interface DocumentWorkspaceProps {
    * stats cards (file count/size by type) refresh without owning any of
    * this workspace's own mutation plumbing. */
   onDocumentsChanged?: () => void;
+  /** The library this workspace is rooted at, by tag id — the breadcrumb
+   * starts there and nothing above it is reachable. Given as an id rather than
+   * a path because that is what a caller holds and because a path can be
+   * renamed underneath it. Absent means the team corpus itself, which is also
+   * the only mode that leaves out the libraries a machine fills: once inside
+   * one, its contents are precisely what you came to see. */
+  rootTagId?: string;
+  /** Offer no way to write. A Knowledge Base library is filled by its pod and
+   * the backend refuses every person-facing mutation against it, so upload,
+   * folder creation, rename, move, deletion and the bulk selection they serve
+   * are absent rather than shown disabled. Reading — opening, previewing,
+   * downloading, searching — is untouched. */
+  readOnly?: boolean;
 }
 
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
@@ -176,14 +190,28 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
  * children (subfolders + documents). Heavy listing stays on the backend:
  * folders lazy-load their first document page on entry.
  */
-function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: DocumentWorkspaceProps) {
+function DocumentWorkspace({
+  teamId,
+  isPersonalTeam,
+  onDocumentsChanged,
+  rootTagId,
+  readOnly = false,
+}: DocumentWorkspaceProps) {
   const { t } = useTranslation();
   const { showSuccess, showError, showWarn, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
   const { data: team } = useGetTeamQuery({ teamId });
-  const { canUpdateResources: canCreateFolder } = useTeamCapabilities(team);
+  const { canUpdateResources } = useTeamCapabilities(team);
+  // The single gate every write affordance already passes through — folder and
+  // document menus, both drop targets, the toolbar, folder creation on upload.
+  // A read-only workspace withholds them exactly as a member lacking the
+  // capability does, which is right: the backend refuses a person's write into
+  // a machine-filled library, so offering the action could only produce a
+  // failed request. Reading is untouched — download is deliberately outside
+  // this gate below.
+  const canCreateFolder = canUpdateResources && !readOnly;
 
   const ownerFilter: OwnerFilter = isPersonalTeam ? "personal" : "team";
   const {
@@ -206,13 +234,35 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
     return refetchTagsQuery();
   }, [refetchTagsQuery, onDocumentsChanged]);
 
+  // Has the library we were rooted at been found? Not yet loaded and deleted
+  // look the same here, and both must withhold: `baseFull` below would be null
+  // either way, which is also the corpus-root sentinel, and a rooted tree
+  // carries every team tag. Without this the page would answer "show me one
+  // library" with the whole corpus — and a library outliving its folder is a
+  // supported state, since deleting one stays available to people.
+  const rootResolved = !rootTagId || (tags ?? []).some((tag) => tag.id === rootTagId);
+
   const tree = useMemo(() => {
     const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
-    return buildTree(documentTags);
-  }, [tags]);
+    // Rooted inside one library, everything it holds is in scope — the filter
+    // only applies to the corpus, where a machine-filled library is not one of
+    // the folders people manage.
+    if (!rootResolved) return buildTree([]);
+    return buildTree(rootTagId ? documentTags : withoutMachineWritten(documentTags));
+  }, [tags, rootTagId, rootResolved]);
 
-  // null => at the Corpus root (the tree's synthetic top node).
+  // Where the breadcrumb starts: null at the Corpus root (the tree's synthetic
+  // top node), or the path of the library this workspace was rooted at.
+  const baseFull = useMemo(() => {
+    if (!rootTagId) return null;
+    const rootTag = (tags ?? []).find((tag) => tag.id === rootTagId);
+    return rootTag ? fullPath(rootTag) : null;
+  }, [tags, rootTagId]);
+
   const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
+  // Null means the base, wherever that is — so navigation keeps working across
+  // the render where `baseFull` resolves.
+  const currentFull = currentFolderFull ?? baseFull;
   // Stack of previously-viewed folders, oldest first — the back button pops
   // the most recent one. Not "go to parent": if you drilled in from a
   // search result or a distant breadcrumb click, back returns to wherever
@@ -357,7 +407,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
 
-  const currentNode = currentFolderFull ? findNode(tree, currentFolderFull) : tree;
+  const currentNode = currentFull ? findNode(tree, currentFull) : tree;
   const currentTag = currentNode.tagsHere[0] ?? null;
 
   const loadTagPage = useCallback(
@@ -627,7 +677,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
             .unwrap()
             .then(() => {
               showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
-              if (currentFolderFull === node.full)
+              if (currentFull === node.full)
                 navigateTo(node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : null);
               void refetchTags();
             })
@@ -648,7 +698,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       showError,
       t,
       refetchTags,
-      currentFolderFull,
+      currentFull,
       navigateTo,
     ],
   );
@@ -1523,11 +1573,14 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   ];
 
   const breadcrumbSegments = useMemo(() => {
-    const rootLabel = t("rework.resources.roots.resources");
-    if (!currentFolderFull) return [{ label: rootLabel }];
-    const parts = currentFolderFull.split("/");
-    const segments = [{ label: rootLabel, onClick: () => navigateTo(null) }];
-    let acc = "";
+    // Rooted inside a library, the trail starts at the library itself: the
+    // corpus above it is not somewhere this workspace can go.
+    const rootLabel = baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources");
+    if (currentFull === baseFull) return [{ label: rootLabel }];
+    const relative = baseFull ? currentFull!.slice(baseFull.length + 1) : currentFull!;
+    const parts = relative.split("/");
+    const segments = [{ label: rootLabel, onClick: () => navigateTo(baseFull) }];
+    let acc = baseFull ?? "";
     parts.forEach((part, i) => {
       acc = acc ? `${acc}/${part}` : part;
       // Snapshot this iteration's path: every segment's onClick otherwise
@@ -1540,7 +1593,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
     });
     return segments;
-  }, [currentFolderFull, t, navigateTo]);
+  }, [currentFull, baseFull, t, navigateTo]);
 
   const isEmpty = !tagsLoading && !page?.loading && childFolders.length === 0 && (page?.docs.length ?? 0) === 0;
 
@@ -1606,7 +1659,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
   // corpus root there is no tag to attach plain files to, so only dropped
   // FOLDERS are accepted there — each one becomes a library mirroring its
   // structure (openDrawerWithDroppedFiles filters loose files out).
-  const atRoot = !currentFolderFull;
+  const atRoot = currentFull === baseFull;
   const pageDroppable = canCreateFolder && (!!currentTag || atRoot);
   const pageDropProps = pageDroppable
     ? {
@@ -1637,7 +1690,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         breadcrumb={{
           segments: breadcrumbSegments,
           onBack: navigateBack,
-          canGoBack: !!currentFolderFull,
+          canGoBack: !atRoot,
           backLabel: t("rework.resources.action.back"),
         }}
         search={{
@@ -1651,18 +1704,23 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
           hasSelection ? (
             <BulkActionsBar
               selectedCount={selectedDocs.length + selectedFolders.length}
-              onDelete={bulkDelete}
+              // Selection survives read-only because bulk download is a read:
+              // only the actions that write drop out, so the same rows can
+              // still be picked and fetched as a ZIP.
+              onDelete={canCreateFolder ? bulkDelete : undefined}
               deleteLoading={bulkDeleting}
               onClearSelection={() => setSelectedKeys(new Set())}
               searchToggle={
                 // A folder-containing selection can't be resolved to a single
                 // direction cheaply (#2446): offer "exclude" only, resolved on
                 // click. A file-only selection keeps the directional toggle.
-                selectedFolders.length > 0
-                  ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
-                  : searchToggleMode
-                    ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
-                    : undefined
+                !canCreateFolder
+                  ? undefined
+                  : selectedFolders.length > 0
+                    ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
+                    : searchToggleMode
+                      ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
+                      : undefined
               }
               onDownload={() => void bulkDownload()}
               downloadLoading={bulkDownloading}
@@ -1715,7 +1773,10 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
         loadingMessage={t("rework.resources.loading")}
         empty={isEmpty}
         emptyMessage={
-          currentFolderFull ? t("rework.resources.empty.folder") : t("rework.resources.empty.createLibrary")
+          // "Create a library" belongs to the corpus root alone: an empty
+          // library, or an empty folder inside one, is not an invitation to
+          // create anything here.
+          atRoot && !baseFull ? t("rework.resources.empty.createLibrary") : t("rework.resources.empty.folder")
         }
         columns={columns}
         rows={filteredRows}
@@ -1769,7 +1830,7 @@ function DocumentWorkspace({ teamId, isPersonalTeam, onDocumentsChanged }: Docum
       <CreateFolderModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        parentPath={currentFolderFull ?? undefined}
+        parentPath={currentFull ?? undefined}
         teamId={isPersonalTeam ? undefined : teamId}
         onCreated={() => void refetchTags()}
       />
