@@ -40,3 +40,10 @@
 ## Acceptance evidence
 
 The exact local commands, toolchains, results, compatibility inventory, npm/workflow version check, independent review findings, UI-only transfer readiness, and disposable specification composition are recorded in [design.md](design.md#implementation-evidence-local-not-publication). Checkmarks represent implemented local requirements, not GitHub workflow execution, OIDC publication, or public-registry verification. Those operations remain outside this change and require a reviewed commit and manual maintainer action.
+
+## 6. Opaque Select option-key correction
+
+- [x] 6.1 Reproduce colon/period key failures before changing Menu. Evidence: three new canonical Select tests failed on missing active-option scroll; the pre-fix installed-package browser smoke unmounted the consumer on `team:alpha` and timed out waiting for Select.
+- [x] 6.2 Replace Menu's CSS-selector interpolation with exact child ID comparison; keep IDs, generic values, ARIA, disabled handling, and navigation unchanged. Evidence: the three focused regressions and all 15 Select tests pass after the one-line lookup correction.
+- [x] 6.3 Exercise punctuation-bearing enabled keys through the installed UI archive in fresh light and dark browser contexts; verify offline UI-only consumer/transfer gates. Evidence: offline `test:consumer:ui`, `test:browser`, and UI-only fixture transfer validation passed after separate cache, baseline, and Chromium provisioning; fixture readiness is not release evidence.
+- [x] 6.4 Run affected quality, archive, strict OpenSpec, and diff checks; update local validation evidence without claiming CI or publication. Evidence: application quality/build/full tests and focused 15/15, producer quality/full 365/365/archive checks, strict OpenSpec, and diff whitespace check passed locally; independent follow-up review found no code defect.

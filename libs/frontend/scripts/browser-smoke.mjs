@@ -900,6 +900,14 @@ async function verifyUiTheme(browser, origin, theme) {
     await choose.focus();
     await observation.page.keyboard.press("ArrowDown");
     assert.equal(await choose.getAttribute("aria-expanded"), "true");
+    const firstOptionId = await choose.getAttribute("aria-activedescendant");
+    assert(firstOptionId?.endsWith("-opt-team:alpha"));
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "First" })
+        .getAttribute("id"),
+      firstOptionId,
+    );
     assert.equal(
       await observation.page
         .getByRole("option", { name: "Unavailable" })
@@ -907,6 +915,14 @@ async function verifyUiTheme(browser, origin, theme) {
       "true",
     );
     await observation.page.keyboard.press("ArrowDown");
+    const secondOptionId = await choose.getAttribute("aria-activedescendant");
+    assert(secondOptionId?.endsWith("-opt-team.alpha"));
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "Second" })
+        .getAttribute("id"),
+      secondOptionId,
+    );
     await observation.page.keyboard.press("Enter");
     assert((await choose.textContent()).startsWith("Second"));
     const empty = observation.page.getByRole("button", {

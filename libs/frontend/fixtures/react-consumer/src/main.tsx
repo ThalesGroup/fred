@@ -65,9 +65,14 @@ const typedTooltip: TooltipProps = {
   children: <button type="button">Hint trigger</button>,
 };
 const options: SelectOption<string>[] = [
-  { key: "first", value: "first", label: "First", icon: { type: "check" } },
+  {
+    key: "team:alpha",
+    value: "first",
+    label: "First",
+    icon: { type: "check" },
+  },
   { key: "disabled", value: "disabled", label: "Unavailable", disabled: true },
-  { key: "second", value: "second", label: "Second" },
+  { key: "team.alpha", value: "second", label: "Second" },
 ];
 
 function App() {

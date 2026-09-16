@@ -47,6 +47,11 @@ The `@fred-oss/ui` archive SHALL expose named JavaScript and TypeScript declarat
 - **WHEN** a caller supplies an empty or fully disabled option set and a custom empty message
 - **THEN** the configured message is rendered and keyboard navigation cannot select a disabled option
 
+#### Scenario: Select option keys remain opaque
+
+- **WHEN** enabled options use unique keys containing punctuation such as `team:alpha` or `team.alpha`, including when multiple menus are mounted
+- **THEN** opening and keyboard navigation locate and scroll only the active option in its owning menu, ARIA IDs remain connected, and Enter selects the corresponding generic value without interpreting the key as CSS syntax
+
 #### Scenario: Chip and Tooltip actions are accessible
 
 - **WHEN** a removable Chip and a Tooltip are rendered with caller content
