@@ -135,9 +135,14 @@ The system SHALL expose to the agent one tool that renders a deck from a plan: a
 - **WHEN** a text only had to be shrunk to the font floor to fit, or a box auto-sizes to its text through the rule it inherits from its layout
 - **THEN** no content is dropped and the result does not report a truncation; a zone that genuinely overflows keeps a cut first line rather than rendering empty
 
+#### Scenario: A pattern is chosen for the content it is given
+
+- **WHEN** the plan asks for an intent rather than a pattern id
+- **THEN** the pattern is the one that can show the most of what the slide actually fills — weighted by how costly each field is to lose, a title more than a column heading — rather than the first of that intent; a pattern whose picture zones the plan cannot fill and one that would truncate the text both lose to one that can hold the content
+
 #### Scenario: Missing intent degrades gracefully
 
-- **WHEN** the plan asks for an intent the inventory does not offer
+- **WHEN** the plan asks for an intent the inventory does not offer, or the patterns of that intent cannot show the slide's content
 - **THEN** the tool substitutes the closest available pattern following a documented degradation order (for example `two_columns` → `content`, `section` → `title`) and reports the substitution in its result
 
 #### Scenario: Unknown or excluded pattern is substituted

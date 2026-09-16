@@ -54,6 +54,8 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
+    ITEM_FIELDS,
+    SLIDE_FIELDS,
     DeckPlan,
     SlidePlan,
     has_content,
@@ -108,24 +110,10 @@ _BUSY_MESSAGE = "The server is busy building other presentations right now. Plea
 
 # The catalogue names the plan field a zone is filled from, not the zone's role:
 # a model copies these names into the plan, and a role name it cannot map to a
-# field is content silently lost. Roles absent here are never filled.
-_SLIDE_FIELDS = {
-    "title": "title",
-    "subtitle": "subtitle",
-    "body": "bullets",
-    "caption": "bullets",
-    "heading": "columns.heading",
-}
-_ITEM_FIELDS = {
-    "number": "number",
-    "heading": "heading",
-    "title": "heading",
-    "subtitle": "heading",
-    "body": "text",
-    "caption": "text",
-    "label": "label",
-    "image": "image",
-}
+# field is content silently lost. Shared with the pattern scoring, so what the
+# agent is offered and what a pattern is picked for cannot diverge.
+_SLIDE_FIELDS = SLIDE_FIELDS
+_ITEM_FIELDS = ITEM_FIELDS
 
 
 def _limit(zones: Sequence[Zone]) -> str:

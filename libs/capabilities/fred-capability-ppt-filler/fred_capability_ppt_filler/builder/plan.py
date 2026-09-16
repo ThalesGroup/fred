@@ -36,6 +36,28 @@ from fred_capability_ppt_filler.builder.models import (
     TemplateInventory,
 )
 
+# The plan field a zone of each role is filled from. The catalogue names these
+# to the agent and the scoring below asks whether a pattern can show them, so a
+# pattern is never chosen for content it has nowhere to put. Roles absent here
+# are never filled.
+SLIDE_FIELDS: Dict[str, str] = {
+    "title": "title",
+    "subtitle": "subtitle",
+    "body": "bullets",
+    "caption": "bullets",
+    "heading": "columns.heading",
+}
+ITEM_FIELDS: Dict[str, str] = {
+    "number": "number",
+    "heading": "heading",
+    "title": "heading",
+    "subtitle": "heading",
+    "body": "text",
+    "caption": "text",
+    "label": "label",
+    "image": "image",
+}
+
 # Closest available intent when the requested one has no pattern, in order.
 DEGRADATION: Dict[str, Tuple[str, ...]] = {
     "title": ("section", "statement", "content"),
@@ -234,10 +256,133 @@ def included_patterns(inventory: TemplateInventory) -> List[Pattern]:
     return [pattern for pattern in inventory.patterns if pattern.included]
 
 
-def best_for_intent(inventory: TemplateInventory, intent: str) -> Optional[Pattern]:
-    """The preferred included pattern of ``intent``: an example slide first,
-    then a layout, in inventory order. A fixed slide asked by intent closes the
-    deck, so one named as a closing slide ("Merci", "Thank you") comes first."""
+def _pattern_fields(pattern: Pattern) -> Tuple[set, set]:
+    """(slide fields, item fields) a pattern can display."""
+    slide_fields = {
+        SLIDE_FIELDS[z.role] for z in pattern.zones if z.role in SLIDE_FIELDS
+    }
+    item_fields = {
+        ITEM_FIELDS[z.role]
+        for group in pattern.groups
+        for item in group.items
+        for z in item
+        if z.role in ITEM_FIELDS
+    }
+    return slide_fields, item_fields
+
+
+# How much losing each field costs. A title has nowhere else to go; column
+# headings fall back to a bold first bullet, so losing one hurts less.
+_FIELD_WEIGHT: Dict[str, float] = {
+    "title": 3.0,
+    "bullets": 3.0,
+    "columns": 3.0,
+    "items": 3.0,
+    "heading": 2.0,
+    "text": 2.0,
+    "number": 2.0,
+    "image": 2.0,
+    "subtitle": 1.0,
+    "label": 1.0,
+    "columns.heading": 1.0,
+}
+
+
+def _shown_fields(pattern: Pattern, slide: SlidePlan) -> Tuple[float, float]:
+    """What share of the slide's content this pattern can show, weighted by how
+    costly each field is to lose. A field with nowhere to go never reaches the
+    reader."""
+    available, item_fields = _pattern_fields(pattern)
+    bodies = sum(1 for z in pattern.zones if SLIDE_FIELDS.get(z.role) == "bullets")
+    given = shown = 0.0
+
+    def check(name: str, filled, can_show: bool) -> None:
+        nonlocal given, shown
+        if filled:
+            weight = _FIELD_WEIGHT[name]
+            given += weight
+            shown += weight if can_show else 0.0
+
+    check(
+        "title",
+        slide.title,
+        "title" in available
+        # With columns the headings own those zones: the title is then lost.
+        or ("columns.heading" in available and not slide.columns),
+    )
+    check("subtitle", slide.subtitle, "subtitle" in available or bodies > 0)
+    check(
+        "bullets", slide.bullets, bodies > 0 or bool(item_fields & {"text", "heading"})
+    )
+    check("columns", len(slide.columns) >= 2, bodies >= 2)
+    check(
+        "columns.heading",
+        any(c.heading for c in slide.columns),
+        "columns.heading" in available,
+    )
+    check("items", slide.items, bool(pattern.groups))
+    for name in ("number", "heading", "text", "label"):
+        check(
+            name, any(getattr(item, name) for item in slide.items), name in item_fields
+        )
+    check(
+        "image",
+        slide.image or slide.images,
+        any(z.role == "image" for z in pattern.zones) or "image" in item_fields,
+    )
+    return shown, given
+
+
+# A picture zone left unfilled is a white hole the reader reads as a mistake.
+_IMAGE_HOLE = 12.0
+# An example slide the designer built outranks a bare layout, but never at the
+# cost of a field that would be lost.
+_PREFERRED_BONUS = 6.0
+
+
+def _overflow_penalty(pattern: Pattern, slide: SlidePlan) -> float:
+    """What the slide's text would lose on this pattern's body.
+
+    Only overflow is scored. A body roomier than the content is merely plain;
+    one too small truncates, and choosing it throws content away.
+    """
+    room = sum(
+        z.max_chars or 0
+        for z in pattern.zones
+        if SLIDE_FIELDS.get(z.role) == "bullets" and not z.grows
+    )
+    text = sum(len(b) for b in slide.bullets) + sum(
+        len(b) for column in slide.columns for b in column.bullets
+    )
+    if not room or text <= room:
+        return 0.0
+    return -30.0 * min(1.0, (text - room) / room)
+
+
+def score_pattern(pattern: Pattern, slide: SlidePlan) -> float:
+    """How well a pattern serves one slide's content. Higher is better."""
+    shown, given = _shown_fields(pattern, slide)
+    value = 100.0 * (shown / given if given else 1.0)
+    unfilled = sum(1 for z in pattern.zones if z.role == "image")
+    if unfilled and not (slide.image or slide.images):
+        value -= _IMAGE_HOLE * unfilled
+    if pattern.preferred:
+        value += _PREFERRED_BONUS
+    return value + _overflow_penalty(pattern, slide)
+
+
+def best_for_intent(
+    inventory: TemplateInventory, intent: str, slide: Optional[SlidePlan] = None
+) -> Optional[Pattern]:
+    """The included pattern of ``intent`` that best serves ``slide``.
+
+    Without a slide, the preferred example slide then the first layout, in
+    inventory order. With one, the pattern is scored on the content it is
+    actually given: taking the first of the intent is how a cards slide ended
+    up on a pattern whose cards have no heading, and an image layout on a plan
+    carrying no image. A fixed slide asked by intent closes the deck, so one
+    named as a closing slide ("Merci", "Thank you") comes first.
+    """
     candidates = [p for p in included_patterns(inventory) if p.intent == intent]
     if not candidates:
         return None
@@ -250,6 +395,8 @@ def best_for_intent(inventory: TemplateInventory, intent: str) -> Optional[Patte
         ]
         if closing:
             return closing[0]
+    if slide is not None:
+        return max(candidates, key=lambda p: score_pattern(p, slide))
     preferred = [p for p in candidates if p.preferred]
     return (preferred or candidates)[0]
 
@@ -276,17 +423,39 @@ def infer_intent(slide: SlidePlan) -> str:
     return "fixed"
 
 
+# Keeps the intent the slide asked for unless a fallback serves it markedly
+# better — a nudge, not enough to overturn a field the requested intent shows.
+_REQUESTED_INTENT_BONUS = 3.0
+
+
 def _for_intent(
-    inventory: TemplateInventory, intent: str
+    inventory: TemplateInventory, intent: str, slide: Optional[SlidePlan] = None
 ) -> Tuple[Optional[Pattern], Optional[str]]:
-    direct = best_for_intent(inventory, intent)
+    direct = best_for_intent(inventory, intent, slide)
+    if slide is None:
+        if direct is not None:
+            return direct, None
+        for fallback in DEGRADATION.get(intent, ()):
+            candidate = best_for_intent(inventory, fallback)
+            if candidate is not None:
+                return candidate, intent
+        return None, intent
+
+    # The template may hold no pattern of this intent that can show the slide's
+    # content; a neighbouring intent that can beats one that cannot.
+    options: List[Tuple[Pattern, Optional[str], float]] = []
     if direct is not None:
-        return direct, None
+        options.append(
+            (direct, None, score_pattern(direct, slide) + _REQUESTED_INTENT_BONUS)
+        )
     for fallback in DEGRADATION.get(intent, ()):
-        candidate = best_for_intent(inventory, fallback)
+        candidate = best_for_intent(inventory, fallback, slide)
         if candidate is not None:
-            return candidate, intent
-    return None, intent
+            options.append((candidate, intent, score_pattern(candidate, slide)))
+    if not options:
+        return None, intent
+    pattern, degraded_from, _ = max(options, key=lambda option: option[2])
+    return pattern, degraded_from
 
 
 _NUMBERED_ID = re.compile(r"^(layout|slide)\s*[:#_ -]?\s*(\d+)$", re.IGNORECASE)
@@ -335,7 +504,7 @@ def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
         return Resolution(pattern=pattern)
 
     if requested in INTENTS:
-        found, degraded_from = _for_intent(inventory, requested)
+        found, degraded_from = _for_intent(inventory, requested, slide)
         if found is not None:
             reason = (
                 f"no '{degraded_from}' pattern in this template, used '{found.label}' ({found.intent})"
@@ -353,9 +522,9 @@ def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
             )
 
     intent = pattern.intent if pattern is not None else infer_intent(slide)
-    found, _ = _for_intent(inventory, intent)
+    found, _ = _for_intent(inventory, intent, slide)
     if found is None:
-        found, _ = _for_intent(inventory, "content")
+        found, _ = _for_intent(inventory, "content", slide)
     if found is None:
         included = included_patterns(inventory)
         if not included:

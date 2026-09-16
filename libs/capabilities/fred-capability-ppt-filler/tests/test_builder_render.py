@@ -32,6 +32,7 @@ from fred_capability_ppt_filler.builder.models import (
     Box,
     Pattern,
     PatternOverride,
+    RepeatGroup,
     TemplateInventory,
     Zone,
 )
@@ -873,3 +874,134 @@ def test_a_placeholder_that_auto_sizes_on_its_layout_is_not_truncated():
     deck = Presentation(io.BytesIO(result.pptx))
     assert long_title in _texts(deck.slides[0])
     assert not [w for w in result.warnings if "truncated" in w]
+
+
+# --- a pattern is chosen for the content it is actually given ---
+
+
+def _cards_inventory() -> TemplateInventory:
+    """Two cards patterns: the first shows only a description, the second a
+    heading too — the shape of the real corporate template."""
+
+    def group(roles, key) -> RepeatGroup:
+        return RepeatGroup(
+            key=key,
+            count=3,
+            item_zones=roles,
+            item_keys=[f"{key}/{i}" for i in range(3)],
+            items=[
+                [
+                    Zone(
+                        key=f"{key}/{i}/{role}",
+                        role=role,
+                        box=Box(x=i * 300, y=300, w=280, h=200),
+                        font_pt=14.0,
+                        max_chars=80,
+                        max_lines=3,
+                    )
+                    for role in roles
+                ]
+                for i in range(3)
+            ],
+        )
+
+    title = Zone(
+        key="ph:0",
+        role="title",
+        box=Box(x=0, y=0, w=900, h=100),
+        font_pt=32.0,
+        max_chars=60,
+        max_lines=1,
+    )
+    return TemplateInventory(
+        slide_width=Inches(13.333).emu,
+        slide_height=Inches(7.5).emu,
+        patterns=[
+            Pattern(
+                id="slide:1",
+                source="slide",
+                source_index=1,
+                name="Text cards",
+                label="Text cards",
+                intent="cards",
+                zones=[title],
+                groups=[group(["body"], "g1")],
+            ),
+            Pattern(
+                id="slide:2",
+                source="slide",
+                source_index=2,
+                name="Titled cards",
+                label="Titled cards",
+                intent="cards",
+                zones=[title],
+                groups=[group(["heading", "body"], "g2")],
+            ),
+        ],
+    )
+
+
+def test_cards_with_headings_skip_the_pattern_that_cannot_show_them():
+    """Taking the first pattern of the intent rendered cards with no heading —
+    in the worst case, three empty boxes."""
+    slide = SlidePlan(
+        pattern="cards",
+        title="Three axes",
+        items=[PlanItem(heading="Near", text="Close to clients")] * 3,
+    )
+    chosen = best_for_intent(_cards_inventory(), "cards", slide)
+    assert chosen is not None and chosen.id == "slide:2"
+
+
+def test_a_pattern_without_headings_still_wins_when_the_plan_has_none():
+    slide = SlidePlan(
+        pattern="cards", title="Three axes", items=[PlanItem(text="Close")] * 3
+    )
+    chosen = best_for_intent(_cards_inventory(), "cards", slide)
+    assert chosen is not None and chosen.id == "slide:1"
+
+
+def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
+    """Every unfilled picture zone is a white hole on the finished slide."""
+    plain = _pattern("Title and Content")
+    imaged = Pattern(
+        id="slide:99",
+        source="slide",
+        source_index=99,
+        name="Photos",
+        label="Photos",
+        intent=plain.intent,
+        zones=plain.zones
+        + [
+            Zone(key=f"sp:{i}", role="image", box=Box(x=i * 300, y=400, w=280, h=300))
+            for i in range(4)
+        ],
+        preferred=True,
+    )
+    inventory = TemplateInventory(
+        slide_width=INVENTORY.slide_width,
+        slide_height=INVENTORY.slide_height,
+        patterns=[imaged, plain],
+    )
+    slide = SlidePlan(title="Method", bullets=["Frame", "Build", "Measure"])
+    assert best_for_intent(inventory, plain.intent, slide) is plain
+    with_image = slide.model_copy(update={"image": "doc-1"})
+    assert best_for_intent(inventory, plain.intent, with_image) is imaged
+
+
+def test_a_pattern_that_would_truncate_loses_to_one_that_holds_the_text():
+    plain = _pattern("Title and Content")
+    narrow = plain.model_copy(
+        deep=True,
+        update={"id": "slide:98", "label": "Narrow", "preferred": True},
+    )
+    for zone in narrow.zones:
+        if zone.role == "body":
+            zone.max_chars = 20
+    inventory = TemplateInventory(
+        slide_width=INVENTORY.slide_width,
+        slide_height=INVENTORY.slide_height,
+        patterns=[narrow, plain],
+    )
+    slide = SlidePlan(title="Detail", bullets=["A sentence far longer than twenty"] * 4)
+    assert best_for_intent(inventory, plain.intent, slide) is plain
