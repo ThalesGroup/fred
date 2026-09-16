@@ -154,6 +154,19 @@ class Tag(BaseModelWithId):
     # never has to restate a folder's name or description to move its cursor.
     source_version: Optional[str] = None
 
+    # Which machine fills this folder, as "<kind>:<id>". Present means a machine
+    # writes here and people may not change what it holds; absent means people
+    # do, which is every folder that predates this field. Only a service
+    # identity can set it, and only on the folder a library starts at — anything
+    # nested resolves its own state from that root, so the two cannot disagree.
+    # Never parsed here: presence is the whole question.
+    synchronized_by: Optional[str] = None
+
+    @property
+    def is_synchronized(self) -> bool:
+        """True when a machine fills this folder, so people may not write in it."""
+        return self.synchronized_by is not None
+
     @property
     def full_path(self) -> str:
         """Canonical hierarchical identifier (used for uniqueness & permissions)."""
