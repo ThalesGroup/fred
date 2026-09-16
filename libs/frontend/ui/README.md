@@ -1,10 +1,10 @@
 # `@fred-oss/ui`
 
 This package is generated from FRED's canonical React components. The published
-`0.1.0-alpha.1` archive contains `Button`, `IconButton`, `Icon`, `TextInput`, and
-`Spinner`; the reviewed `0.1.0-alpha.2` source candidate adds `Dialog`, `Select`,
-`Chip`, `Tooltip`, and `Checkbox`. This README describes the candidate API; it does
-not claim that the new version has been published.
+`@fred-oss/ui@0.1.0-alpha.2` archive contains `Button`, `Icon`, `IconButton`,
+`Spinner`, `TextInput`, `Dialog`, `Select`, `Chip`, `Tooltip`, and `Checkbox`.
+Publication and public-registry verification do not imply adoption by RAGS or
+another external application.
 
 The public root exports ten component values and the reviewed `ButtonProps`,
 `IconButtonProps`, `IconProps`, `TextInputProps`, `SpinnerProps`, `DialogProps`,
@@ -64,9 +64,9 @@ prerequisites are errors.
 
 Canonical ownership, package boundaries, and future work are described by the existing
 [frontend packaging RFC](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/FRED-FRONTEND-PACKAGING-RFC.md). Rounded,
-Sharp, custom SVG icons, deferred components, other overlays, iframe SDK work, this
-version's publication, and adopter migrations are outside this extension milestone.
+Sharp, custom SVG icons, deferred components, other overlays, iframe SDK work, and
+adopter migrations are outside this extension milestone.
 
-The checked-in manifest uses the selected UI-only prerelease coordinate. Release candidates must still
-be compared with a complete, maintainer-confirmed contract as described in
+The checked-in manifest uses the published UI prerelease coordinate. Future release
+candidates must still be compared with a complete, maintainer-confirmed contract as described in
 [../RELEASE.md](../RELEASE.md).

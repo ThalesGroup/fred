@@ -4,9 +4,9 @@ The first `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk`
 `0.1.0-alpha.1` versions are published on public npm under the `next` tag. Genuine
 all-package registry verification completed in a separate read-only run. The retained manual
 workflow now has manual `prepare-only`, protected `publish`, and read-only `verify`
-operations for subsequent independently selected versions. This ordinary path has not
-been dispatched or used to publish a new version; the completed first-release evidence
-below remains historical and unchanged.
+operations for subsequent independently selected versions. It published
+`@fred-oss/ui@0.1.0-alpha.2`, which was subsequently verified in a separate
+read-only run. The completed first-release evidence below remains historical and unchanged.
 
 ## Release contracts
 
@@ -423,7 +423,7 @@ The existing confirmed release policy names organization `fred-oss`, scope `@fre
 the public npm registry, `next` tag, source branch/workflow/environment,
 bootstrap account `marc.fawaz`, named package API / SDK protocol / release / enduring
 publishing owners, and direct Trusted Publishing as the selected subsequent policy.
-The committed member manifests supply their current `0.1.0-alpha.1` coordinates;
+The committed member manifests supply independently versioned current coordinates;
 historical publication facts remain in the evidence appendix and compatibility ledger.
 The distinct required GitHub reviewer is `marcfawaz`. This slice changes no published
 coordinates and neither installs a Trusted Publisher nor establishes bootstrap-token
@@ -471,3 +471,21 @@ signatures, Sigstore provenance, clean registry consumers, browser smoke, and pr
 compatibility. It keeps the historical publishing commits separate from the verifier's actual
 commit/run/attempt. It does not establish subsequent Trusted Publisher configuration or
 bootstrap-token revocation; predecessor OpenSpec task 12.7 remains open.
+
+## Published UI alpha.2 evidence (2026-09-16)
+
+`@fred-oss/ui@0.1.0-alpha.2` was published from the approved UI-only candidate, then
+independently verified against the public registry. These are three distinct executions;
+the later verifier source is not the candidate or publication source. The historical
+design-token alpha.1 publication identity above remains separate.
+
+| Boundary                           | Retained identity and result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved candidate                 | [Run `35081898300`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35081898300), source `044d2443f0f51b987482ef1e80602e243d0edbf7`; [artifact `10441065222`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10441065222), ZIP SHA-256 `b9f392a0361a50f476e457134b765137a09491c47e381a5d786a794112227d4c`, record digest `sha256-JabMeTWtin8UMm85hZw82RV+tE93XOB6dNfcgPYZbuY=`; `fred-oss-ui-0.1.0-alpha.2.tgz` SHA-512 `sha512-vBjN2DG1DUexZ+MpO9q3XckPVuBZmtCCwEELBnhAAddUzzQFI67yzxkOVhm5SjUrErbCayGjwkCB+MIgMvD4DA==`. Artifact expires `2026-10-16 09:56:32 UTC`.                                                                                                                                                          |
+| Actual publication                 | [Run `35084392325`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35084392325), source `044d2443f0f51b987482ef1e80602e243d0edbf7`; durable [attempt artifact `10441309689`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10441309689), ZIP SHA-256 `60275152082a79eb4826c0768301458df7a1abb6ed754727ad18d71b8906eed6`, attempt digest `sha256-Qr3wvKCaiPjyx26kx760MFG7i17FjKmlku/VpXObjIQ=`. Artifact expires `2026-10-16 10:23:45 UTC`. `npm publish` succeeded; the job subsequently failed only when exact-version metadata visibility retries were exhausted. This is not a failed publication and does not call for republishing.                                                                                      |
+| Final public-registry verification | [Run `35092202323`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35092202323), verifier source `eeb630cbcf1db6ccc7f64996808064663698ebdc`, selected package `ui`; [artifact `10444573490`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10444573490), ZIP SHA-256 `02875ff84f2e6d26c10c7ceb09c0b4af221e3a252acf2ad85d69ebd3a7628c35`, outcome digest `sha256-5xqcFsVp0fJmTY55bgtwjNUXxwoAACp26gsfEPcsx4g=`. Readiness `registry-verified`; exact registry archive, npm signatures, Sigstore provenance, clean registry consumer, and browser smoke passed. Production-host compatibility was `not-applicable` for UI-only. Compatibility-only dependency: `@fred-oss/design-tokens@0.1.0-alpha.1`. Completed `2026-09-16`. |
+
+Retained GitHub artifacts have finite lifetimes. The source-reviewed token compatibility
+baseline, not its historical CI ZIP, supplies the independent expectation for the
+UI-only consumer; the selected UI candidate and attempt remain bound to their own
+original source and execution identities.
