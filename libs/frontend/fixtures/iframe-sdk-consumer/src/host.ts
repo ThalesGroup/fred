@@ -18,9 +18,12 @@ interface HostHarness {
   readyCount: number;
   send(message: ApplicationHostMessage): void;
   sendRoute(subPath: string): void;
+  sendContext(theme: "light" | "dark", locale: string): void;
+  sendRawContext(message: unknown): void;
   configureContext(
     mode: "valid" | "malformed" | "mismatch" | "silent" | "unsupported",
     teamId?: string,
+    theme?: "light" | "dark",
   ): void;
   replaceFrame(connectionTimeoutMs?: number): void;
 }
@@ -54,6 +57,7 @@ const pendingPair = new Map<string, string>();
 let contextMode: "valid" | "malformed" | "mismatch" | "silent" | "unsupported" =
   "valid";
 let contextTeamId = "team-1";
+let contextTheme: "light" | "dark" = "light";
 
 function applicationWindow(): Window {
   if (!applicationFrame.contentWindow)
@@ -191,6 +195,7 @@ window.addEventListener("message", (event) => {
           subPath: "A",
         },
         locale: "en",
+        theme: contextTheme,
       },
     });
   } else if (message.type === "fred:request") {
@@ -209,9 +214,30 @@ window.__fredHost = {
   },
   send,
   sendRoute: (subPath) => send({ type: "fred:route", subPath }),
-  configureContext: (mode, teamId = "team-1") => {
+  sendContext: (theme, locale) =>
+    send({
+      type: "fred:context",
+      protocolVersion: FRED_APP_PROTOCOL_VERSION,
+      applicationId: "example",
+      context: {
+        team: {
+          id: contextTeamId,
+          name: contextTeamId === "team-1" ? "Team One" : "Team Two",
+          isPersonal: false,
+        },
+        route: {
+          basePath: `/team/${contextTeamId}/apps/example`,
+          subPath: "A",
+        },
+        locale,
+        theme,
+      },
+    }),
+  sendRawContext: sendRaw,
+  configureContext: (mode, teamId = "team-1", theme = "light") => {
     contextMode = mode;
     contextTeamId = teamId;
+    contextTheme = theme;
   },
   replaceFrame: (connectionTimeoutMs) => {
     const replacement = applicationFrame.cloneNode(false) as HTMLIFrameElement;

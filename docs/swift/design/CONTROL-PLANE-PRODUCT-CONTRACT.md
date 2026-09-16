@@ -3106,8 +3106,8 @@ frame -> host : fred:navigate { path, replace }
 The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
 protected-header predicate, and relative-path validation is
 `apps/frontend/src/rework/features/applications/applicationProtocol.ts`. The
-`@fred/iframe-sdk` archive is generated from that canonical file and exposes the wire
-surface separately at `@fred/iframe-sdk/protocol`; no second maintained protocol copy
+`@fred-oss/iframe-sdk` archive is generated from that canonical file and exposes the wire
+surface separately at `@fred-oss/iframe-sdk/protocol`; no second maintained protocol copy
 exists in the package producer. Its child client validates its configured HTTP(S)
 origin, captured parent window, application identity, and all received shapes before
 admission. It delivers every accepted route event to current subscribers—even when a
@@ -3130,7 +3130,18 @@ Fred state, the router, or diagnostics. A request id already in flight is
 refused with `fred:response-error` rather than dropped: the id is the channel's
 only correlation token, so admitting it twice would leave one frame request
 answered twice and one call outside the concurrency bound. The context handed
-over is plain cloneable data: team identity, base and sub path, locale.
+over is plain cloneable data: team identity, base and sub path, locale, and an
+optional resolved `"light"` or `"dark"` theme. The host derives the theme from
+its existing theme owner, including the system preference, and resends
+`fred:context` to the same ready frame when the resolved theme or locale
+changes. The source-tree SDK's `onContext` delivers each accepted later context
+to current subscribers, including identical repeats; `connect()` still owns
+the initial snapshot. An older host omits theme, leaving fallback to the
+consumer. Applications own their translation state and catalogs. The
+deployment-owned `hostOrigin` must match the parent origin exactly; iframe
+`?theme=&locale=` query values are not authoritative or live. This extension
+is not in the published `0.1.0-alpha.1` SDK archive and requires a new release
+coordinate.
 
 `fred:navigate` moves the user only inside the application's own subtree: its
 path is resolved against `basePath` and an absolute, traversing, or schemed

@@ -46,6 +46,7 @@ export interface FredApplicationContext {
     readonly subPath: string;
   };
   readonly locale: string;
+  readonly theme?: "light" | "dark";
 }
 
 export interface FredApplicationRoute {
@@ -103,7 +104,8 @@ function parseContext(value: unknown): FredApplicationContext | null {
     typeof team.isPersonal !== "boolean" ||
     typeof route.basePath !== "string" ||
     typeof route.subPath !== "string" ||
-    typeof context.locale !== "string"
+    typeof context.locale !== "string" ||
+    (Object.prototype.hasOwnProperty.call(context, "theme") && context.theme !== "light" && context.theme !== "dark")
   ) {
     return null;
   }
@@ -111,6 +113,7 @@ function parseContext(value: unknown): FredApplicationContext | null {
     team: { id: team.id, name: team.name, isPersonal: team.isPersonal },
     route: { basePath: route.basePath, subPath: route.subPath },
     locale: context.locale,
+    ...(context.theme === undefined ? {} : { theme: context.theme as "light" | "dark" }),
   };
 }
 

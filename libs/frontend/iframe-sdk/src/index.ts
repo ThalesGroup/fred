@@ -75,6 +75,7 @@ export interface FredApplicationClient {
   readonly context: FredApplicationContext | null;
   connect(): Promise<FredApplicationContext>;
   onRoute(listener: (route: FredApplicationRoute) => void): () => void;
+  onContext(listener: (context: FredApplicationContext) => void): () => void;
   navigate(path: string, options?: { replace?: boolean }): void;
   openChat(sessionId?: string | null): void;
   request(path: string, init?: FredApplicationRequestInit): Promise<Response>;
@@ -171,6 +172,9 @@ class FredApplicationClientImplementation implements FredApplicationClient {
   readonly #childWindow: Window;
   readonly #parentWindow: Window;
   readonly #subscribers = new Set<(route: FredApplicationRoute) => void>();
+  readonly #contextSubscribers = new Set<
+    (context: FredApplicationContext) => void
+  >();
   readonly #pending = new Map<string, PendingRequest>();
   #state: ClientState = "idle";
   #context: FredApplicationContext | null = null;
@@ -270,6 +274,14 @@ class FredApplicationClientImplementation implements FredApplicationClient {
       throw new TypeError("route listener must be a function");
     this.#subscribers.add(listener);
     return () => this.#subscribers.delete(listener);
+  }
+
+  onContext(listener: (context: FredApplicationContext) => void): () => void {
+    this.#requireConnected();
+    if (typeof listener !== "function")
+      throw new TypeError("context listener must be a function");
+    this.#contextSubscribers.add(listener);
+    return () => this.#contextSubscribers.delete(listener);
   }
 
   navigate(path: string, options: { replace?: boolean } = {}): void {
@@ -401,6 +413,7 @@ class FredApplicationClientImplementation implements FredApplicationClient {
     for (const requestId of [...this.#pending.keys()])
       this.#rejectPending(requestId, error);
     this.#subscribers.clear();
+    this.#contextSubscribers.clear();
     if (this.#listening)
       this.#childWindow.removeEventListener("message", this.#onMessage);
     this.#listening = false;
@@ -428,26 +441,38 @@ class FredApplicationClientImplementation implements FredApplicationClient {
       return;
     }
     if (message.type === "fred:context") {
-      if (this.#state !== "connecting") return;
+      if (this.#state !== "connecting" && this.#state !== "connected") return;
       if (message.protocolVersion !== FRED_APP_PROTOCOL_VERSION) {
-        this.#failConnection(
-          clientError(
-            "unsupported-protocol",
-            `unsupported FRED application protocol: ${message.protocolVersion}`,
-          ),
-        );
+        if (this.#state === "connecting")
+          this.#failConnection(
+            clientError(
+              "unsupported-protocol",
+              `unsupported FRED application protocol: ${message.protocolVersion}`,
+            ),
+          );
         return;
       }
       if (message.applicationId !== this.#applicationId) {
-        this.#failConnection(
-          clientError(
-            "application-mismatch",
-            "the FRED host context names a different application",
-          ),
-        );
+        if (this.#state === "connecting")
+          this.#failConnection(
+            clientError(
+              "application-mismatch",
+              "the FRED host context names a different application",
+            ),
+          );
         return;
       }
       this.#context = freezeContext(message.context);
+      if (this.#state === "connected") {
+        for (const subscriber of [...this.#contextSubscribers]) {
+          try {
+            subscriber(this.#context);
+          } catch (error) {
+            globalThis.reportError?.(error);
+          }
+        }
+        return;
+      }
       this.#state = "connected";
       this.#stopConnectionTimers();
       this.#resolveConnection?.(this.#context);

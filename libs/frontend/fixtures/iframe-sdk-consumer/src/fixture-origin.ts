@@ -104,6 +104,8 @@ export function applicationFixtureUrl(
 ): URL {
   const destination = fixtureUrl(origins.applicationPort, "/child.html");
   destination.searchParams.set("hostOrigin", origins.hostOrigin);
+  destination.searchParams.set("theme", "dark");
+  destination.searchParams.set("locale", "fr");
   if (connectionTimeoutMs !== undefined) {
     if (!Number.isSafeInteger(connectionTimeoutMs) || connectionTimeoutMs <= 0)
       throw new Error("fixture connection timeout must be a positive integer");

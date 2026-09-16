@@ -18,6 +18,13 @@ Current FRED callers retained by this slice:
 - Existing tests construct raw protocol messages dynamically and remain the legacy-client
   compatibility boundary.
 
-The packaging RFC's SDK API was illustrative, theme/live-locale behavior remains deferred, and the
-current transport is buffered text/JSON over ordinary HTTP(S) origins. Opaque or `null` origins,
+The source-tree extension adds optional resolved light/dark theme and later locale/theme context
+events through the canonical protocol. The published `0.1.0-alpha.1` SDK does not expose `onContext`.
+The four-way published/new SDK and pinned/extended host matrix passed locally, including published
+archive integrity, npm signature, and Sigstore identity checks. This supports retaining protocol
+`"1"`; it is not publication evidence for the new extension. Consumers own missing-theme fallback
+and translations; deployment configuration supplies exact `hostOrigin` separately, and
+`?theme=&locale=` iframe query values are not an authoritative channel.
+
+The current transport is buffered text/JSON over ordinary HTTP(S) origins. Opaque or `null` origins,
 streaming, binary bodies, remote cancellation, and automatic mutation retries are not implemented.
