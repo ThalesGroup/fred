@@ -247,7 +247,7 @@ You: [reads codebase]
 
 **User is stuck mid-implementation:**
 ```
-User: $openspec-explore (Codex) or /openspec-explore (other agents) add-auth-system
+User: /opsx:explore add-auth-system (Claude Code) or $openspec-explore add-auth-system (Codex)
       The OAuth integration is more complex than expected
 
 You: [reads change artifacts]
