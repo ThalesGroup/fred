@@ -54,7 +54,7 @@ Fred is built around three platform applications and a publishable SDK stack:
 
 > `agentic-backend` is still present during migration but no new features go there. Execution moves to `fred-agents` / `fred-runtime`; product/session/admin moves to `control-plane-backend`. See [`docs/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) for migration status.
 
-See the project site: <https://fredk8.dev>
+See the project site: <https://fredlab.dev>
 
 Contents:
 
@@ -696,7 +696,7 @@ Persistence options:
 ## Documentation
 
 - Generic information
-  - [Main docs](https://fredk8.dev/docs)
+  - [Main docs](https://fredlab.dev/docs)
   - [Features overview](./docs/swift/platform/FEATURES.md)
 
 - fred-agents pod and runtime libraries
