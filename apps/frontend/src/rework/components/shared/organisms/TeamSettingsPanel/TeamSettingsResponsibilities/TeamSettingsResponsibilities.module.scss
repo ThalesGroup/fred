@@ -1,0 +1,21 @@
+.responsibilities {
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-m);
+  max-width: 760px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-top: var(--spacing-m);
+}
+
+.acceptedAt {
+  margin-right: auto;
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}

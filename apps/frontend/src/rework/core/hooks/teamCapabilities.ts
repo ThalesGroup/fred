@@ -117,6 +117,6 @@ export function hasElevatedTeamRole(capabilities: TeamCapabilities): boolean {
 export function canAdministerTeamRole(capabilities: TeamCapabilities, role: UserTeamRelation): boolean {
   if (role === "team_editor") return capabilities.canAdministerEditors;
   if (role === "team_analyst") return capabilities.canAdministerAnalysts;
-  if (role === "team_admin") return capabilities.canAdministerAdmins;
+  if (role === "team_admin" || role === "pending_team_admin") return capabilities.canAdministerAdmins;
   return capabilities.canAdministerMembers;
 }

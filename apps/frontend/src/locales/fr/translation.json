@@ -2355,11 +2355,13 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
+      "pending_team_admin": "Admin (en attente)",
       "team_editor": "Éditeur",
       "team_analyst": "Analyste",
       "team_member": "Membre",
       "descriptions": {
         "team_admin": "Gouverne l'équipe : gère les membres et leurs rôles, et définit la politique d'équipe (quotas, modèles autorisés, serveurs MCP, limites de stockage). Ne donne aucun droit sur les agents, les prompts ou le routage - c'est le rôle Éditeur.",
+        "pending_team_admin": "Admin nommé qui n'a pas encore accepté la charte de l'administrateur d'équipe : simple membre jusqu'à son acceptation.",
         "team_editor": "Gère ce que l'équipe construit : agents, prompts partagés, politique de routage et corpus documentaire. Ne donne aucun droit sur les membres ni sur la politique d'équipe.",
         "team_analyst": "Crée et lance les campagnes d'évaluation d'agents, et gère les corpus d'évaluation.",
         "team_member": "L'accès par défaut de toute personne de l'équipe : utiliser les agents et les prompts de l'équipe, et gérer les siens. Aucun droit de configuration ni d'administration."
@@ -2367,6 +2369,12 @@
       "warnings": {
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
+    },
+    "teamAdminCharter": {
+      "accept": "Accepter",
+      "acceptedOn": "Acceptée le {{date}}",
+      "pendingNotice": "Acceptez la charte de l'administrateur d'équipe pour activer vos droits d'admin sur cette équipe.",
+      "review": "Lire la charte"
     },
     "teamSettings": {
       "members": {
@@ -2416,6 +2424,7 @@
         "activity": "Activité",
         "evaluations": "Évaluations",
         "usage": "Consommation",
+        "responsibilities": "Responsabilités",
         "routing": "Routage des modèles",
         "retention": "Rétention"
       },

@@ -150,6 +150,22 @@ Until that is implemented, enabling `gcu_version` gives you versioned
 acceptance gating, but not yet a documented way to inject your own Terms text
 without changing frontend code.
 
+## Team Administrator Charter
+
+The same versioned acceptance, scoped to team administrators. Set
+`app.team_admin_charter_version` in the control-plane configuration and a user
+nominated team admin holds `pending_team_admin`, with a member's rights, until
+they accept that version. Opening one of their teams shows the charter until
+they do; the home page and the personal space stay usable. Admins read it again
+from team settings, Responsibilities.
+
+The charter text is deployment-owned: ship `team-admin-charter.md` and
+`team-admin-charter.fr.md` at the root of the frontend theme archive (see
+"Theme overlay" in [the frontend README](../../../apps/frontend/README.md)).
+Publish the archive before setting the version, and change the version when the
+text changes materially. Contract:
+[CONTROL-PLANE-PRODUCT-CONTRACT.md §54](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md).
+
 ## Related Components
 
 - control-plane publishes the active version on the public pre-auth

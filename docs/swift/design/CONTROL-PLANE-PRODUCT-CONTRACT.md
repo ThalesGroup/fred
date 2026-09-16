@@ -3971,3 +3971,78 @@ are unchanged, and the `can_list_all_teams` gate still runs first.
 
 `/admin/features` uses it for the per-team enablement picker, which only needs
 ids and names. `/admin/teams` keeps the full listing for its admins column.
+
+## 54. Contract Notes - team administrator charter (2026-09-14, reworked 2026-09-15, issue #2658)
+
+**What it is.** A deployment can require every team administrator to accept a
+charter of responsibilities before they hold `team_admin`. The text is frontend
+markdown (`team-admin-charter.md`, `team-admin-charter.fr.md`), replaced from
+the theme archive like `gcu.md`; the stock file is a template.
+
+**Configuration.** `app.team_admin_charter_version: str | None`. `None`, the
+default, turns the charter off. Changing the value asks every admin to accept
+again (see Reconciliation).
+
+**Model.** `schema.fga` adds `team.pending_team_admin: [user]`, part of the
+`team_member` union and of nothing else. A pending admin is a member with no
+admin authority, in every service that asks OpenFGA, by construction.
+
+**Nomination.** Every write of `team_admin` (add member, grant role, rescue,
+team creation, import) writes `pending_team_admin` instead while a version is
+set and the user has not accepted it. `pending_team_admin` cannot be requested
+directly (422). Revoking it cancels the nomination and needs
+`can_administer_admins`; removing the member deletes it with the other roles.
+`my_relations` and the member list expose it.
+
+**Endpoint.**
+
+| Method | Path                                   | Permission    |
+| ------ | -------------------------------------- | ------------- |
+| GET    | `/control-plane/v1/team-admin-charter` | authenticated |
+| POST   | `/control-plane/v1/team-admin-charter` | authenticated |
+
+`GET` returns the caller's `TeamAdminCharterAcceptance {accepted_at}` for the
+configured version, or `null` when they have not accepted it or the charter is
+off.
+
+`POST` records the caller's acceptance of the configured version, then turns every
+`pending_team_admin` they hold into `team_admin`, writing the new tuple before
+deleting the old one. Idempotent: a repeat also promotes a nomination that raced
+the first call. Returns `TeamAdminCharterAcceptance {accepted_at}`. The first
+acceptance of a version emits the audit event `team_admin.charter.accepted`
+`{actor_uid, charter_version}`. With no version set: 409
+`team_admin_charter_disabled`.
+
+**Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`
+plus `accepted_at`, where `user_id` is the Keycloak uid used as the OpenFGA
+subject and rows are never updated; `team_admin_charter_state`, one row holding
+the last `applied_version` ("" when off).
+
+**Reconciliation.** At startup, under an advisory lock, and only when the
+configured version differs from `applied_version`:
+
+- a `team_admin` who has not accepted the version becomes `pending_team_admin`;
+- a pending admin who has accepted it, or every one when the charter is off, is
+  promoted;
+- `applied_version` is stored last, so a failed pass is retried.
+
+It costs one ReBAC read per team, once per version change, and is fail-closed:
+an error stops the startup.
+
+**Unchanged invariants.** The last-admin guard and the rescue "orphaned team"
+check count `team_admin` only, so a team whose nominated admin never accepts can
+still be rescued.
+
+**Frontend.** On the pages of a team where `my_relations` holds
+`pending_team_admin`, the charter page replaces the team content until Accept
+while the team has no `team_admin`. Once the team has one, the pages stay
+available to the user's other roles under a notice leading to the charter. The
+home page, the personal space and other teams stay usable. Team settings show
+the Responsibilities section to `team_admin`s, with the time they accepted it,
+and to pending admins, with Accept. The member list marks a pending admin's
+admin chip in light orange with a clock icon ("Admin (pending)" on hover).
+
+**Rollout.** Publish the theme archive with the charter first, then set the
+version: existing admins become pending at the next startup and see the charter
+when they open their team. Unsetting the version promotes every pending admin
+at the next startup.

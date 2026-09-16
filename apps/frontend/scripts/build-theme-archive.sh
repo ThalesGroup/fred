@@ -32,7 +32,8 @@ A theme directory mirrors apps/frontend/public/, and only these are served:
 
   images/<file>          logos, favicons, avatars, icons/<name>.svg
   contrib/<brand>/<file> per-brand markdown
-  <name>.md              gcu, gcu.fr, gdpr, gdpr.fr, release
+  <name>.md              gcu, gcu.fr, gdpr, gdpr.fr, team-admin-charter,
+                         team-admin-charter.fr, release
 
 apps/frontend/theme/ is a working example to copy and edit.
 EOF
@@ -53,10 +54,13 @@ if [ -n "${ignored}" ]; then
 fi
 
 # The app tries <name>.<lang>.md before <name>.md, and the stock image ships
-# French variants: an English-only override never reaches a French browser.
-for document in gcu gdpr; do
+# both: an override missing either one leaves those users on the stock text.
+for document in gcu gdpr team-admin-charter; do
     if [ -f "${source_directory}/${document}.md" ] && [ ! -f "${source_directory}/${document}.fr.md" ]; then
         echo "Warning: ${document}.md without ${document}.fr.md - French users keep the stock text" >&2
+    fi
+    if [ -f "${source_directory}/${document}.fr.md" ] && [ ! -f "${source_directory}/${document}.md" ]; then
+        echo "Warning: ${document}.fr.md without ${document}.md - other languages keep the stock text" >&2
     fi
 done
 

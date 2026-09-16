@@ -37,6 +37,13 @@ class TeamAdminConstraintError(Exception):
         super().__init__(detail)
 
 
+class TeamAdminCharterDisabledError(Exception):
+    """Raised when accepting the charter while no charter version is configured."""
+
+    def __init__(self) -> None:
+        super().__init__("team_admin_charter_disabled")
+
+
 class TeamMemberRoleNotHeldError(Exception):
     """AUTHZ-06 (RFC Part 7 §35): raised when revoking a role the member does
     not currently hold — nothing to revoke."""
@@ -201,6 +208,7 @@ class TeamWithPermissions(Team):
 
 class UserTeamRelation(str, Enum):
     TEAM_ADMIN = RelationType.TEAM_ADMIN.value
+    PENDING_TEAM_ADMIN = RelationType.PENDING_TEAM_ADMIN.value
     TEAM_EDITOR = RelationType.TEAM_EDITOR.value
     TEAM_ANALYST = RelationType.TEAM_ANALYST.value
     TEAM_MEMBER = RelationType.TEAM_MEMBER.value
@@ -265,9 +273,24 @@ class DefaultTeamForNewUsers(BaseModel):
     name: str
 
 
+class TeamAdminCharterAcceptance(BaseModel):
+    """When the caller accepted the configured team administrator charter version."""
+
+    accepted_at: datetime
+
+
 class AddTeamMemberRequest(BaseModel):
     user_id: str
     relation: UserTeamRelation
+
+    @field_validator("relation")
+    @classmethod
+    def _refuse_pending_team_admin(cls, relation: UserTeamRelation) -> UserTeamRelation:
+        if relation == UserTeamRelation.PENDING_TEAM_ADMIN:
+            raise ValueError(
+                "pending_team_admin is set by the server: grant team_admin"
+            )
+        return relation
 
 
 class GrantTeamMemberRoleRequest(BaseModel):
@@ -276,6 +299,15 @@ class GrantTeamMemberRoleRequest(BaseModel):
     `POST /teams/{team_id}/members/{user_id}/roles`."""
 
     relation: UserTeamRelation
+
+    @field_validator("relation")
+    @classmethod
+    def _refuse_pending_team_admin(cls, relation: UserTeamRelation) -> UserTeamRelation:
+        if relation == UserTeamRelation.PENDING_TEAM_ADMIN:
+            raise ValueError(
+                "pending_team_admin is set by the server: grant team_admin"
+            )
+        return relation
 
 
 class UpdateTeamRequest(BaseModel):

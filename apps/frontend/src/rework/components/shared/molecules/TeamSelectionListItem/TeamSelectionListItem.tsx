@@ -26,6 +26,7 @@ import { Link, type To } from "react-router-dom";
 // baseline and is only shown (as the sole label) when no elevated role is held.
 const ROLE_PRIORITY: Record<string, number> = {
   team_admin: 0,
+  pending_team_admin: 0,
   team_editor: 1,
   team_analyst: 2,
 };

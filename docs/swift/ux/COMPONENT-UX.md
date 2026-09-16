@@ -2512,6 +2512,16 @@ control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
 
+**`TeamRoleChips`: pending admin nomination** (2026-09-15, #2658). A member
+holding `pending_team_admin` keeps the short "Admin" label on the admin chip,
+marked by `data-pending`: light orange `warning-container` /
+`on-warning-container` with a transparent border and a `schedule` clock icon,
+whatever the reader may administer. "Admin (pending)" moved to the tooltip and
+the accessible name: the longer label wrapped every pending row onto two lines.
+Toggling the chip cancels the nomination. In `TeamSettingsMembersTable` the role
+column is a fixed `23rem`, sized to that widest row, so the chips always fit on
+one line and the identifier/name columns truncate instead.
+
 **`TeamRoleChips`: a static `Member` badge and a description tooltip on
 every badge** (2026-08-17, #2383). Two complaints from team admins, one
 fix. (1) A member holding no elevated role rendered as three _inactive_

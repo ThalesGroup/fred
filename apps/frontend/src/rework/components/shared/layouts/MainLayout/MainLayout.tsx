@@ -14,6 +14,7 @@
 
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
+import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate.tsx";
 import { useTaskSseManager } from "../../../../features/tasks/useTaskSseManager.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
 import styles from "./MainLayout.module.css";
@@ -27,7 +28,9 @@ export default function MainLayout() {
         <Sidebar />
       </nav>
       <main className={styles.content}>
-        <Outlet />
+        <TeamAdminCharterGate>
+          <Outlet />
+        </TeamAdminCharterGate>
       </main>
     </div>
   );
