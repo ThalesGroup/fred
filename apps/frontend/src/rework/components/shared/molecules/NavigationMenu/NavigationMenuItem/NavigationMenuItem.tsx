@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { ReactNode } from "react";
 import styles from "./NavigationMenuItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { useTranslation } from "react-i18next";
@@ -21,6 +22,7 @@ export interface NavigationMenuItemBase {
   label: string;
   icon: IconProps;
   badge?: number;
+  trailingBadge?: ReactNode;
 }
 
 export interface NavigationLinkProps extends NavigationMenuItemBase {
@@ -36,14 +38,17 @@ export interface NavigationActionProps extends NavigationMenuItemBase {
 
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
-export default function NavigationMenuItem({ label, icon, badge, ...props }: NavigationMenuItemProps) {
+export default function NavigationMenuItem({ label, icon, badge, trailingBadge, ...props }: NavigationMenuItemProps) {
   const { t } = useTranslation();
   const Content = (
     <>
       <span className={styles.icon} aria-hidden="true">
         <Icon {...icon} />
       </span>
-      <span className={styles.label}>{label}</span>
+      <span className={styles.label} title={label}>
+        {label}
+      </span>
+      {trailingBadge}
       {badge != null && badge > 0 && (
         <span className={styles.badge} aria-label={t("rework.sidebar.admin.badge.activeTasks", { count: badge })}>
           {badge > 99 ? "99+" : badge}

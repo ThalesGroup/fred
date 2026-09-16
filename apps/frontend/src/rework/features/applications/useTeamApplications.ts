@@ -12,34 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@hooks/crossSessionRefresh.ts";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { useTeamApplicationsQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
-
-export const TEAM_APPLICATIONS_REFRESH_INTERVAL_MS = 60_000;
 
 /** One bounded, team-keyed subscription shared by the sidebar and app pages. */
 export function useTeamApplications(teamId: string | undefined, skip = false) {
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
   const shouldSkip = !applicationsEnabled || skip || !teamId;
-  const result = useTeamApplicationsQuery(
-    { teamId: teamId ?? "" },
-    {
-      skip: shouldSkip,
-      pollingInterval: shouldSkip ? 0 : TEAM_APPLICATIONS_REFRESH_INTERVAL_MS,
-      refetchOnMountOrArgChange: TEAM_APPLICATIONS_REFRESH_INTERVAL_MS / 1000,
-    },
-  );
-
-  // This store does not install RTK Query's global focus listeners. Keep the
-  // security-sensitive catalog fresh explicitly so a grant revoked in another
-  // session replaces an already-open app without waiting for the poll.
-  useEffect(() => {
-    if (shouldSkip || typeof window === "undefined") return;
-    const refetchOnFocus = () => void result.refetch();
-    window.addEventListener("focus", refetchOnFocus);
-    return () => window.removeEventListener("focus", refetchOnFocus);
-  }, [result.refetch, shouldSkip]);
+  // Security-sensitive catalog: a grant revoked in another session has to
+  // replace an already-open app without waiting for the next poll.
+  const result = useTeamApplicationsQuery({ teamId: teamId ?? "" }, crossSessionRefreshOptions(shouldSkip));
+  useRefetchOnWindowFocus(result.refetch, shouldSkip);
 
   return result;
 }

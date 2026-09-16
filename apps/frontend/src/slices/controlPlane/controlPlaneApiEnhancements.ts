@@ -370,6 +370,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
     // route needs no team — so it invalidates the whole type rather than one
     // team's list: the alternative is passing a team id the API never asked for.
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneKnowledgeBase" as const, id: `LIST-${arg.teamId}` }],
     },
