@@ -37,19 +37,14 @@
 ## 6. Documentation, release boundary, and review
 
 - [x] 6.1 Update `libs/frontend/iframe-sdk/README.md`, `COMPATIBILITY.md`, applicable host/consumer docs, and `CONTROL-PLANE-PRODUCT-CONTRACT.md` after behavior passes; verify they describe live context, absent-theme consumer fallback, no SDK translation ownership, exact `hostOrigin`, and no `?theme=&locale=` synchronization or RAGS adoption claim.
-- [ ] 6.2 After matrix and implementation acceptance, verify an unused SDK-only prerelease coordinate immediately before changing the SDK manifest/changelog/producer lockfile and preparing immutable candidate evidence with existing commands; verify design-token/UI versions and public exports remain unchanged and no published SDK version is overwritten. Keep fixture evidence distinct from approved release evidence.
-- [ ] 6.3 After separately authorized publication through the existing independent-release process, genuinely verify the exact SDK registry archive, integrity, npm signatures, Sigstore identity, and clean consumer/browser/host gates before claiming a published context extension; verify the retained candidate and actual publishing identities match, and do not check this task from local fixtures or a workflow dispatch alone.
+- [x] 6.2 After matrix and implementation acceptance, verify an unused SDK-only prerelease coordinate immediately before changing the SDK manifest/changelog/producer lockfile and preparing immutable candidate evidence with existing commands; verify design-token/UI versions and public exports remain unchanged and no published SDK version is overwritten. Keep fixture evidence distinct from approved release evidence.
+- [x] 6.3 After separately authorized publication through the existing independent-release process, genuinely verify the exact SDK registry archive, integrity, npm signatures, Sigstore identity, and clean consumer/browser/host gates before claiming a published context extension; verify the retained candidate and actual publishing identities match, and do not check this task from local fixtures or a workflow dispatch alone.
 - [x] 6.4 Run producer quality/unit, package/archive, offline consumer/browser, host integration, and FRED application quality/build/tests under their pinned separate toolchains, with provisioning separate from offline gates; record exact commands/results and verify existing iframe/proxy/auth and token/UI regressions remain green.
 - [x] 6.5 Obtain the repository-required independent implementation review, resolve in-scope findings, run `openspec validate extend-frontend-application-context --strict` and `git diff --check`, and keep this change active until its implementation and release-dependent evidence are complete.
 
 Local evidence for completed compatibility and gate tasks is in [verification.md](verification.md).
-Task 6.2 has source-preparation progress for both alpha.2 and its successor alpha.3.
-The approved alpha.2 candidate was prepared, but its protected publication attempt invoked
-`npm publish` and failed with `ENEEDAUTH` without a retained terminal or outcome. Public npm
-still showed alpha.2 absent on 2026-09-16; it cannot be silently retried. The independently
-checked unused alpha.3 coordinate is now in the SDK manifest, reviewed changelog, and
-producer lockfile. Task 6.2 remains unchecked pending a fresh registry check and approved
-immutable alpha.3 candidate evidence from clean committed `swift`. Task 6.3 remains unchecked
-pending separately authorized alpha.3 publication and genuine registry verification. See
-[verification.md](verification.md) for the incident identities, exact coordinate checks, and
-local results.
+The alpha.3 immutable candidate was retained from run `35147048936`; publication is bound
+to actual attempt run `35147742170`, and independent public-registry verification run
+`35148411102` passed all six public gates. Alpha.2 remains only failed-publication-attempt
+history, not a published coordinate. Exact identities and results are in
+[verification.md](verification.md). All 26 tasks are complete.
