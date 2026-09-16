@@ -1,17 +1,34 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Button, Icon, IconButton, Spinner, TextInput } from "@fred-oss/ui";
+import {
+  Button,
+  Checkbox,
+  Chip,
+  Dialog,
+  Icon,
+  IconButton,
+  Select,
+  Spinner,
+  TextInput,
+  Tooltip,
+} from "@fred-oss/ui";
 import type {
   ButtonProps,
   ButtonSize,
   ButtonVariant,
+  CheckboxProps,
+  ChipProps,
   ColorTheme,
   IconButtonProps,
   IconButtonVariant,
   IconProps,
+  DialogProps,
   MaterialIconType,
+  SelectOption,
+  SelectProps,
   SpinnerProps,
   TextInputProps,
+  TooltipProps,
 } from "@fred-oss/ui";
 import "@fred-oss/design-tokens/tokens.css";
 import "@fred-oss/ui/styles.css";
@@ -41,11 +58,43 @@ const typedIconButton: IconButtonProps = {
 };
 const typedInput: TextInputProps = { label: "Project name", maxLength: 12 };
 const typedSpinner: SpinnerProps = { statusText: "Saving package" };
+const typedCheckbox: CheckboxProps = { "aria-label": "Accept terms" };
+const typedChip: ChipProps = { label: "Draft", tone: "default" };
+const typedTooltip: TooltipProps = {
+  text: "More details",
+  children: <button type="button">Hint trigger</button>,
+};
+const options: SelectOption<string>[] = [
+  { key: "first", value: "first", label: "First", icon: { type: "check" } },
+  { key: "disabled", value: "disabled", label: "Unavailable", disabled: true },
+  { key: "second", value: "second", label: "Second" },
+];
 
 function App() {
   const [clicks, setClicks] = useState(0);
   const [name, setName] = useState("Fred");
   const [resetCount, setResetCount] = useState(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selection, setSelection] = useState<string | undefined>(undefined);
+  const [dialogSelection, setDialogSelection] = useState<string | undefined>(
+    undefined,
+  );
+  const [chipRemoved, setChipRemoved] = useState(false);
+  const [checkboxChecked, setCheckboxChecked] = useState(false);
+  const typedSelect: SelectProps<string> = {
+    options,
+    value: selection,
+    onChange: setSelection,
+    size: "medium",
+    label: "Choose option",
+  };
+  const typedDialog: Omit<DialogProps, "children"> = {
+    open: dialogOpen,
+    title: "Confirm choice",
+    confirmLabel: "Apply",
+    onConfirm: () => setDialogOpen(false),
+    onCancel: () => setDialogOpen(false),
+  };
   return (
     <main className="fred-ui consumer-shell" data-clicks={clicks}>
       <h1>FRED UI archive consumer</h1>
@@ -131,6 +180,63 @@ function App() {
           />
           <button type="reset">Reset counter</button>
         </form>
+        <section aria-label="Extended public components">
+          <Select {...typedSelect} />
+          <Select
+            options={[]}
+            size="small"
+            onChange={() => {}}
+            ariaLabel="Empty selection"
+            emptyMessage="No choices available"
+          />
+          <Select
+            options={[
+              {
+                key: "disabled-only",
+                value: "disabled-only",
+                label: "Unavailable",
+                disabled: true,
+              },
+            ]}
+            size="small"
+            onChange={() => {}}
+            ariaLabel="Disabled selection"
+            emptyMessage="No enabled choices"
+          />
+          {!chipRemoved && (
+            <Chip
+              {...typedChip}
+              secondary="Ready"
+              leading={<Icon type="info" />}
+              onRemove={() => setChipRemoved(true)}
+            />
+          )}
+          <Tooltip {...typedTooltip} />
+          <Checkbox
+            {...typedCheckbox}
+            checked={checkboxChecked}
+            onChange={(event) =>
+              setCheckboxChecked(event.currentTarget.checked)
+            }
+          />
+          <Checkbox aria-label="Disabled choice" disabled />
+          <Checkbox aria-label="Partial choice" indeterminate />
+          <button type="button" onClick={() => setDialogOpen(true)}>
+            Open dialog
+          </button>
+          <Dialog {...typedDialog}>
+            <Select
+              options={options}
+              value={dialogSelection}
+              onChange={setDialogSelection}
+              size="medium"
+              label="Dialog option"
+            />
+            <Tooltip text="Inside dialog">
+              <button type="button">Dialog hint</button>
+            </Tooltip>
+          </Dialog>
+        </section>
       </section>
     </main>
   );

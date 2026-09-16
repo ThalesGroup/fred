@@ -251,6 +251,7 @@ describe("Select does not leak the keys it handles to its host", () => {
 
   it("keeps Escape from reaching the host while the menu is open", () => {
     render(<Select options={OPTS} value="a" onChange={() => {}} size="medium" />);
+    trigger().focus();
     pressKey("ArrowDown"); // open
     const host = countingHost();
 

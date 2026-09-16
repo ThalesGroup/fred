@@ -24,19 +24,30 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { OptionModel } from "@models/Option.model.ts";
-import Menu from "@shared/molecules/Menu/Menu.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { ComponentSize } from "@shared/utils/Type.ts";
-import { viewportHeight } from "@shared/utils/viewport.ts";
+import Menu from "../Menu/Menu.tsx";
+import Icon, { type IconProps } from "../../atoms/Icon/Icon.tsx";
+import { type ComponentSize } from "../../utils/Type.ts";
+import { uiPortalRoot } from "../../utils/Portal.tsx";
+import { viewportHeight } from "../../utils/viewport.ts";
 
 // Gap between the trigger and the popover (matches --spacing-3xs).
 const MENU_GAP = 4;
 // Vertical room (px) required below the trigger before the menu flips upward.
 const MIN_MENU_SPACE = 240;
 
-interface SelectProps<T> {
-  options: OptionModel<T>[];
+export interface SelectOption<T = string> {
+  value: T;
+  label: string;
+  key: string;
+  icon?: IconProps;
+  disabled?: boolean;
+  description?: string;
+  destructive?: boolean;
+  tooltip?: string;
+}
+
+export interface SelectProps<T> {
+  options: SelectOption<T>[];
   value?: T;
   onChange: (value: T) => void;
   size: ComponentSize;
@@ -49,6 +60,8 @@ interface SelectProps<T> {
   disabled?: boolean;
   error?: string;
   compact?: boolean;
+  /** Consumer-owned empty-state wording; FRED callers retain the existing default. */
+  emptyMessage?: string;
 }
 
 export default function Select<T>({
@@ -62,6 +75,7 @@ export default function Select<T>({
   onChange,
   compact = false,
   size,
+  emptyMessage,
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   // Virtual focus (aria-activedescendant pattern): DOM focus stays on the
@@ -122,6 +136,19 @@ export default function Select<T>({
     return () => document.removeEventListener("mousedown", handler);
   }, [isOpen]);
 
+  // Virtual focus stays on the trigger. Once focus moves elsewhere, the
+  // popover is no longer the active keyboard interaction and must not leave
+  // an apparently open menu for a parent Dialog's later Escape handling.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (!containerRef.current?.contains(target) && !popoverRef.current?.contains(target)) setIsOpen(false);
+    };
+    document.addEventListener("focusin", handler);
+    return () => document.removeEventListener("focusin", handler);
+  }, [isOpen]);
+
   // Close on Escape. The event is stopped here: an open menu is what Escape
   // dismisses, and letting it travel on would also close whatever hosts the
   // select — a Dialog listening on `window` cancels, taking the user's edits.
@@ -129,6 +156,11 @@ export default function Select<T>({
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (
+        !containerRef.current?.contains(document.activeElement) &&
+        !popoverRef.current?.contains(document.activeElement)
+      )
+        return;
       e.stopPropagation();
       setIsOpen(false);
     };
@@ -257,6 +289,8 @@ export default function Select<T>({
         onClick={toggleMenu}
         onKeyDown={handleTriggerKeyDown}
         aria-label={ariaLabel}
+        aria-labelledby={!ariaLabel && label ? `${baseId}-label` : undefined}
+        aria-describedby={error ? `${baseId}-error` : undefined}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={options.length > 0 ? `${baseId}-listbox` : undefined}
@@ -286,13 +320,15 @@ export default function Select<T>({
               baseId={baseId}
               activeId={activeOptionId}
               selectedId={value}
+              noOptionsMessage={emptyMessage}
+              noEnabledOptionsMessage={emptyMessage}
               onChange={(v) => {
                 setIsOpen(false);
                 onChange(v);
               }}
             />
           </div>,
-          document.body,
+          uiPortalRoot(containerRef.current),
         )}
 
       {(!compact || error) && (

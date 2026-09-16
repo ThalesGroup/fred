@@ -14,15 +14,16 @@
 
 import { memo, useRef, useEffect, ReactElement } from "react";
 import styles from "./Menu.module.scss";
-import { OptionModel } from "@models/Option.model.ts";
-import MenuItem from "@shared/atoms/MenuItem/MenuItem.tsx";
+import { type SelectOption } from "../Select/Select.tsx";
+import MenuItem from "../../atoms/MenuItem/MenuItem.tsx";
 
 interface MenuProps<T> {
-  options: OptionModel<T>[];
+  options: SelectOption<T>[];
   baseId: string;
   activeId?: string;
   selectedId?: T;
   noOptionsMessage?: string;
+  noEnabledOptionsMessage?: string;
   onChange?: (selectedId: T) => void;
 }
 
@@ -33,6 +34,7 @@ const MenuInternal = <T,>({
   selectedId,
   onChange,
   noOptionsMessage = "Aucune option disponible",
+  noEnabledOptionsMessage,
 }: MenuProps<T>) => {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -57,50 +59,57 @@ const MenuInternal = <T,>({
   }
 
   return (
-    <ul
-      ref={listRef}
-      id={`${baseId}-listbox`}
-      className={styles["menu"]}
-      role="listbox"
-      aria-activedescendant={activeId}
-      tabIndex={-1}
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      {options.map((option) => {
-        // `option.key` (already required, already unique — it's React's own
-        // list key) rather than `option.value`: `value` can be any type,
-        // including a non-primitive object (e.g. a candidate user record in
-        // `Autocomplete`), which stringifies to the same "[object Object]"
-        // for every option and both breaks the id's uniqueness and isn't
-        // valid unescaped in the `#${activeId}` selector `Menu` itself uses
-        // below to scroll the active option into view.
-        const itemId = `${baseId}-opt-${option.key}`;
-        const isFocused = activeId === itemId;
+    <>
+      {noEnabledOptionsMessage && options.every((option) => option.disabled) && (
+        <div className={`${styles["menu"]} ${styles["menu-empty"]}`} role="status">
+          {noEnabledOptionsMessage}
+        </div>
+      )}
+      <ul
+        ref={listRef}
+        id={`${baseId}-listbox`}
+        className={styles["menu"]}
+        role="listbox"
+        aria-activedescendant={activeId}
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {options.map((option) => {
+          // `option.key` (already required, already unique — it's React's own
+          // list key) rather than `option.value`: `value` can be any type,
+          // including a non-primitive object (e.g. a candidate user record in
+          // `Autocomplete`), which stringifies to the same "[object Object]"
+          // for every option and both breaks the id's uniqueness and isn't
+          // valid unescaped in the `#${activeId}` selector `Menu` itself uses
+          // below to scroll the active option into view.
+          const itemId = `${baseId}-opt-${option.key}`;
+          const isFocused = activeId === itemId;
 
-        const isSelected = Array.isArray(selectedId)
-          ? (selectedId as unknown[]).includes(option.value)
-          : selectedId === option.value;
+          const isSelected = Array.isArray(selectedId)
+            ? (selectedId as unknown[]).includes(option.value)
+            : selectedId === option.value;
 
-        return (
-          <MenuItem
-            key={option.key}
-            id={itemId}
-            label={option.label}
-            description={option.description}
-            title={option.tooltip}
-            icon={option.icon}
-            disabled={option.disabled}
-            destructive={option.destructive}
-            selected={isSelected}
-            focused={isFocused}
-            onClick={() => {
-              if (option.disabled) return;
-              onChange?.(option.value);
-            }}
-          />
-        );
-      })}
-    </ul>
+          return (
+            <MenuItem
+              key={option.key}
+              id={itemId}
+              label={option.label}
+              description={option.description}
+              title={option.tooltip}
+              icon={option.icon}
+              disabled={option.disabled}
+              destructive={option.destructive}
+              selected={isSelected}
+              focused={isFocused}
+              onClick={() => {
+                if (option.disabled) return;
+                onChange?.(option.value);
+              }}
+            />
+          );
+        })}
+      </ul>
+    </>
   );
 };
 

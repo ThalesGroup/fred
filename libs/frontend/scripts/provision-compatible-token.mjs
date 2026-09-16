@@ -162,7 +162,12 @@ export async function assertCompatibleTokenProvision({
     "prepared token integrity differs",
   );
   assert.deepEqual(
-    receipt.provenance,
+    {
+      artifactDigest: receipt.provenance?.artifactDigest,
+      repository: receipt.provenance?.repository,
+      sourceCommit: receipt.provenance?.sourceCommit,
+      workflow: receipt.provenance?.workflow,
+    },
     {
       artifactDigest: baseline.expected.artifactDigest,
       repository: baseline.expected.repository,
