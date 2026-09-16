@@ -40,7 +40,6 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
-from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
     Tag,
@@ -52,6 +51,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagWithPermissions,
     UserTagRelation,
 )
+from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized
 from knowledge_flow_backend.features.tag.tag_item_service import get_specific_tag_item_service
 from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
 

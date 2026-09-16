@@ -40,7 +40,6 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common.team_id import TeamId
-from fred_core.security.structure import is_service_agent
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -53,6 +52,7 @@ from fred_core.documents.document_structures import (
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
+from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
