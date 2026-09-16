@@ -234,18 +234,25 @@ function DocumentWorkspace({
     return refetchTagsQuery();
   }, [refetchTagsQuery, onDocumentsChanged]);
 
+  // Has the library we were rooted at been found? Not yet loaded and deleted
+  // look the same here, and both must withhold: `baseFull` below would be null
+  // either way, which is also the corpus-root sentinel, and a rooted tree
+  // carries every team tag. Without this the page would answer "show me one
+  // library" with the whole corpus — and a library outliving its folder is a
+  // supported state, since deleting one stays available to people.
+  const rootResolved = !rootTagId || (tags ?? []).some((tag) => tag.id === rootTagId);
+
   const tree = useMemo(() => {
     const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
     // Rooted inside one library, everything it holds is in scope — the filter
     // only applies to the corpus, where a machine-filled library is not one of
     // the folders people manage.
+    if (!rootResolved) return buildTree([]);
     return buildTree(rootTagId ? documentTags : withoutMachineWritten(documentTags));
-  }, [tags, rootTagId]);
+  }, [tags, rootTagId, rootResolved]);
 
   // Where the breadcrumb starts: null at the Corpus root (the tree's synthetic
-  // top node), or the path of the library this workspace was rooted at. It
-  // resolves only once the tag list has loaded, which is why `null` below
-  // means "at the base" rather than "at the corpus root".
+  // top node), or the path of the library this workspace was rooted at.
   const baseFull = useMemo(() => {
     if (!rootTagId) return null;
     const rootTag = (tags ?? []).find((tag) => tag.id === rootTagId);
