@@ -73,10 +73,11 @@ Strictly less state, no propagation to keep in step, no subfolder that can drift
 out of agreement with its library, and folders created before this change are
 covered without a data migration of their own.
 
-The cost is one lookup, on an already-indexed pair of columns, and only on a
-**human** mutation — interactive and rare. It is not paid at all when the folder
-being mutated is itself the root, and not paid on the synchronization path,
-which already holds the library in hand.
+The cost is one read to reach the folder and a second, on an already-indexed pair
+of columns, to reach its root — and only on a **human** mutation, which is
+interactive and rare. The second is not paid when the folder being mutated is
+itself a library's root, and neither is paid on the synchronization path, which
+is recognized by identity before any folder is read.
 
 ### 3. The value is a qualified owner reference, not a bare instance id
 

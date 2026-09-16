@@ -23,6 +23,7 @@ and a reader that never receives the mark cannot withhold the actions it governs
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,13 +42,20 @@ from knowledge_flow_backend.features.tag.structure import (
 )
 
 OWNER = "team-1"
+MACHINE = "knowledge_base:ab12"
 
 
+@asynccontextmanager
 async def _engine(tmp_path: Path):
+    """Disposed on the way out: an undisposed pool leaves a worker thread to be
+    collected after the loop closes, which surfaces as teardown noise."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'tags.db'}")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    return engine
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield engine
+    finally:
+        await engine.dispose()
 
 
 def _tag(tag_id: str, name: str, synchronized_by: str | None) -> Tag:
@@ -67,66 +75,82 @@ def _tag(tag_id: str, name: str, synchronized_by: str | None) -> Tag:
 
 @pytest.mark.asyncio
 async def test_a_marked_folder_reads_back_with_its_machine(tmp_path):
-    store = PostgresTagStore(await _engine(tmp_path))
-    await store.create_tag(_tag("lib", "Mirror", "knowledge_base:ab12"))
+    async with _engine(tmp_path) as engine:
+        store = PostgresTagStore(engine)
+        await store.create_tag(_tag("lib", "Mirror", MACHINE))
 
-    found = await store.get_tag_by_id("lib")
+        found = await store.get_tag_by_id("lib")
 
-    assert found.synchronized_by == "knowledge_base:ab12"
-    assert found.is_synchronized
+        assert found.synchronized_by == MACHINE
+        assert found.is_synchronized
 
 
 @pytest.mark.asyncio
 async def test_an_unmarked_folder_is_written_by_people(tmp_path):
-    store = PostgresTagStore(await _engine(tmp_path))
-    await store.create_tag(_tag("plain", "Notes", None))
+    async with _engine(tmp_path) as engine:
+        store = PostgresTagStore(engine)
+        await store.create_tag(_tag("plain", "Notes", None))
 
-    found = await store.get_tag_by_id("plain")
+        found = await store.get_tag_by_id("plain")
 
-    assert found.synchronized_by is None
-    assert not found.is_synchronized
+        assert found.synchronized_by is None
+        assert not found.is_synchronized
 
 
 @pytest.mark.asyncio
 async def test_a_folder_stored_before_the_field_existed_still_reads(tmp_path):
     """The row this writes is what every folder in an existing deployment looks like."""
-    engine = await _engine(tmp_path)
-    store = PostgresTagStore(engine)
-    stored = _tag("old", "Legacy", None).model_dump(mode="json")
-    del stored["synchronized_by"]
+    async with _engine(tmp_path) as engine:
+        store = PostgresTagStore(engine)
+        stored = _tag("old", "Legacy", None).model_dump(mode="json")
+        del stored["synchronized_by"]
 
-    sessions = make_session_factory(engine)
-    async with sessions() as session:
-        session.add(
-            TagRow(
-                tag_id="old",
-                created_at=None,
-                updated_at=None,
-                owner_id=OWNER,
-                name="Legacy",
-                path=None,
-                description=None,
-                type=TagType.DOCUMENT.value,
-                doc=stored,
+        sessions = make_session_factory(engine)
+        async with sessions() as session:
+            session.add(
+                TagRow(
+                    tag_id="old",
+                    created_at=None,
+                    updated_at=None,
+                    owner_id=OWNER,
+                    name="Legacy",
+                    path=None,
+                    description=None,
+                    type=TagType.DOCUMENT.value,
+                    doc=stored,
+                )
             )
-        )
-        await session.commit()
+            await session.commit()
 
-    found = await store.get_tag_by_id("old")
+        found = await store.get_tag_by_id("old")
 
-    assert found.synchronized_by is None
-    assert not found.is_synchronized
+        assert found.synchronized_by is None
+        assert not found.is_synchronized
+
+
+@pytest.mark.asyncio
+async def test_updating_a_folder_keeps_its_machine(tmp_path):
+    """Renaming happens through a full rewrite of the document, so the mark rides along."""
+    async with _engine(tmp_path) as engine:
+        store = PostgresTagStore(engine)
+        await store.create_tag(_tag("lib", "Mirror", MACHINE))
+
+        renamed = await store.get_tag_by_id("lib")
+        renamed.description = "Synchronized by WebDAV share"
+        await store.update_tag_by_id("lib", renamed)
+
+        assert (await store.get_tag_by_id("lib")).synchronized_by == MACHINE
 
 
 def test_the_projections_a_reader_receives_carry_the_machine():
     """These rebuild a folder field by field, which is where a new field gets dropped."""
-    marked = _tag("lib", "Mirror", "knowledge_base:ab12")
+    marked = _tag("lib", "Mirror", MACHINE)
 
     with_items = TagWithItemsId.from_tag(marked, item_ids=[])
     with_permissions = TagWithPermissions.from_tag_with_items(with_items, permissions=[])
 
-    assert with_items.synchronized_by == "knowledge_base:ab12"
-    assert with_permissions.synchronized_by == "knowledge_base:ab12"
+    assert with_items.synchronized_by == MACHINE
+    assert with_permissions.synchronized_by == MACHINE
 
 
 def test_an_unmarked_folder_is_omitted_rather_than_sent_as_null():
@@ -134,16 +158,3 @@ def test_an_unmarked_folder_is_omitted_rather_than_sent_as_null():
     plain = TagWithItemsId.from_tag(_tag("plain", "Notes", None), item_ids=[])
 
     assert "synchronized_by" not in plain.model_dump(exclude_none=True)
-
-
-@pytest.mark.asyncio
-async def test_updating_a_folder_keeps_its_machine(tmp_path):
-    """Renaming happens through a full rewrite of the document, so the mark rides along."""
-    store = PostgresTagStore(await _engine(tmp_path))
-    await store.create_tag(_tag("lib", "Mirror", "knowledge_base:ab12"))
-
-    renamed = await store.get_tag_by_id("lib")
-    renamed.description = "Synchronized by WebDAV share"
-    await store.update_tag_by_id("lib", renamed)
-
-    assert (await store.get_tag_by_id("lib")).synchronized_by == "knowledge_base:ab12"

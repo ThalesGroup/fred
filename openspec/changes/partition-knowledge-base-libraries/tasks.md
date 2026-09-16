@@ -11,14 +11,13 @@ inside an authorization change.
 
 ## 2. The guard (knowledge-flow)
 
-- [ ] 2.1 Add root-ancestor resolution: given any folder, report whether its root carries a mark, short-circuiting when the folder is itself the root; verify with a unit test over a folder nested several levels deep and one at the root
-- [ ] 2.2 Guard adding a document to a folder; verify a person is refused naming the base, and the service identity succeeds
-- [ ] 2.3 Guard removing a document from a folder; verify the same pair
-- [ ] 2.4 Guard creating a folder beneath a marked folder; verify the same pair
-- [ ] 2.5 Guard renaming and moving a marked folder; verify the folder keeps its recorded name after a refused attempt
-- [ ] 2.6 Guard the ingestion upload path; verify an upload targeting a marked folder is refused and creates no document
-- [ ] 2.7 Assert the guard runs after the existing authorization check: verify a caller with no right is refused for lacking the right, not for the folder being marked
-- [ ] 2.8 Assert deletion is deliberately not guarded; verify a person holding the delete right still deletes a marked folder with its cascade
+- [x] 2.1 Add root-ancestor resolution: given any folder, report whether its root carries a mark, short-circuiting when the folder is itself the root; verify with a unit test over a folder nested several levels deep and one at the root
+- [x] 2.2 Guard `update_tag_for_user`, which is the single person-facing path for adding a document to a folder, removing one from it, and renaming or moving it; verify a person is refused naming the base, the folder keeps its recorded name, and the service identity succeeds
+- [x] 2.3 Guard `create_tag_for_user` on its resolved parent, so a folder cannot be created beneath a marked one; verify the same pair
+- [x] 2.4 Guard the ingestion upload routes, which authorize per target folder; verify an upload targeting a marked folder is refused and creates no document
+- [x] 2.5 Map the refusal to its own status on the app, distinct from being unauthorized; verify the response names the base
+- [x] 2.6 Assert the guard runs after the existing authorization check: verify a caller with no right is refused for lacking the right, not for the folder being marked
+- [x] 2.7 Assert deletion is deliberately not guarded, and that its cascade — which reaches documents through the item service rather than through `update_tag_for_user` — is unaffected; verify a person holding the delete right still deletes a marked folder with its documents
 
 ## 3. Marking a library at creation (control-plane)
 

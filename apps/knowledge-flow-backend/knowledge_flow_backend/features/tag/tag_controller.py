@@ -40,6 +40,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagWithItemsId,
     TagWithPermissions,
 )
+from knowledge_flow_backend.features.tag.synchronized import FolderIsSynchronized
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,12 @@ class TagController:
         @app.exception_handler(TagAlreadyExistsError)
         async def tag_already_exists_handler(request: Request, exc: TagAlreadyExistsError) -> JSONResponse:
             return JSONResponse(status_code=409, content={"detail": "Tag already exists"})
+
+        @app.exception_handler(FolderIsSynchronized)
+        async def folder_is_synchronized_handler(request: Request, exc: FolderIsSynchronized) -> JSONResponse:
+            # Not 403: the caller's right was already checked and may well be
+            # held. What they need is which machine owns this folder.
+            return JSONResponse(status_code=409, content={"detail": str(exc), "synchronized_by": exc.machine})
 
         @app.exception_handler(MetadataNotFound)
         async def metadata_not_found_handler(request: Request, exc: MetadataNotFound) -> JSONResponse:

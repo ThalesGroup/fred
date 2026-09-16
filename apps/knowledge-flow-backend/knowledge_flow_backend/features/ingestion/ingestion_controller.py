@@ -40,6 +40,7 @@ from fred_core import (
     get_current_user,
 )
 from fred_core.common.team_id import TeamId
+from fred_core.security.structure import is_service_agent
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -107,6 +108,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcessWithoutUser,
 )
 from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +161,23 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
         return False
     raise deny()
+
+
+async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None:
+    """Every target folder must be one this caller may write in, and not a machine's.
+
+    Every right is checked before any folder is read, so a caller holding none is
+    told that and never learns from a refusal which folders a machine fills. A
+    machine writing into its own library needs no second pass at all.
+    """
+    for tag_id in tags:
+        await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+    if not tags or is_service_agent(user):
+        return
+
+    tag_store = ApplicationContext.get_instance().get_tag_store()
+    for tag_id in tags:
+        await refuse_if_synchronized_by_id(tag_store, tag_id, user)
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
@@ -1035,8 +1054,7 @@ class IngestionController:
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
-            for tag_id in tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, tags)
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
@@ -1109,8 +1127,7 @@ class IngestionController:
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
-            for tag_id in tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, tags)
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
@@ -1145,8 +1162,7 @@ class IngestionController:
         ) -> QuotaPrecheckResponse:
             # Mirror the upload endpoints' authorization so the precheck leaks
             # no team's usage numbers to callers who couldn't upload there.
-            for tag_id in precheck.tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, precheck.tags)
             team_id = None if precheck.team_id in (None, "personal") else precheck.team_id
             if team_id:
                 await get_rebac_engine().check_user_team_permission_or_raise(
