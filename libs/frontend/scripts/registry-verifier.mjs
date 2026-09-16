@@ -353,6 +353,22 @@ export async function verifyRegistryTooling({
     });
     compatibilityOnly = [baseline];
   }
+  const consumerContract = structuredClone(contract);
+  const verificationEvidence = {
+    ...evidence,
+    packages: { ...evidence.packages },
+  };
+  for (const baseline of compatibilityOnly) {
+    const role = baseline.memberId;
+    const version = baseline.coordinate.slice(
+      baseline.coordinate.lastIndexOf("@") + 1,
+    );
+    consumerContract.packages[role].version = version;
+    verificationEvidence.packages[role] = {
+      coordinate: baseline.coordinate,
+      integrity: baseline.expected.integrity,
+    };
+  }
   for (const role of selectedIds) {
     const expectedPackage = contract.packages[role];
     const candidate = evidence.packages[role];
@@ -361,10 +377,11 @@ export async function verifyRegistryTooling({
       coordinate: coordinates[role],
       registry: contract.registry,
       role,
-      contract,
-      evidence,
+      contract: consumerContract,
+      evidence: verificationEvidence,
       expectedPackage,
       candidate,
+      registryRoles: consumerRoles[role] ?? [role],
     });
     assert.equal(
       registryPackage.integrity,
@@ -405,28 +422,16 @@ export async function verifyRegistryTooling({
         : {}),
     };
   }
-  const consumerContract = structuredClone(contract);
-  const verificationEvidence = {
-    ...evidence,
-    packages: { ...evidence.packages },
-  };
   for (const baseline of compatibilityOnly) {
     const role = baseline.memberId;
-    const version = baseline.coordinate.slice(
-      baseline.coordinate.lastIndexOf("@") + 1,
-    );
-    consumerContract.packages[role].version = version;
     const expectedPackage = consumerContract.packages[role];
-    const candidate = {
-      coordinate: baseline.coordinate,
-      integrity: baseline.expected.integrity,
-    };
+    const candidate = verificationEvidence.packages[role];
     const registryPackage = await resolvePackage({
       coordinate: baseline.coordinate,
       registry: baseline.registry,
       role,
       contract: consumerContract,
-      evidence: { packages: { [role]: candidate } },
+      evidence: verificationEvidence,
       expectedPackage,
       candidate,
     });
@@ -445,7 +450,6 @@ export async function verifyRegistryTooling({
       expected: baseline.expected,
     });
     resolved[role] = registryPackage;
-    verificationEvidence.packages[role] = candidate;
     verifiedPackages[role] = {
       coordinate: baseline.coordinate,
       integrity: registryPackage.integrity,
@@ -591,6 +595,7 @@ export async function resolveNpmRegistryPackage({
   evidence,
   expectedPackage,
   candidate,
+  registryRoles = [role],
   runCommand = run,
   fetchMetadata = fetchExactPackageMetadata,
   waitForPackageVisibility = waitForPackageMetadata,
@@ -704,9 +709,23 @@ export async function resolveNpmRegistryPackage({
     new URL(registry).origin,
     `${coordinate} attestation URL escaped the approved registry`,
   );
+  assert(
+    registryRoles.includes(role),
+    `${role} is missing from registry dependency roles`,
+  );
+  const dependencies = {};
+  for (const dependencyRole of registryRoles) {
+    const dependency = contract.packages[dependencyRole];
+    assert(dependency, `unknown registry dependency ${dependencyRole}`);
+    assert(
+      evidence.packages?.[dependencyRole],
+      `registry evidence missing ${dependencyRole}`,
+    );
+    dependencies[dependency.name] = dependency.version;
+  }
   await writeFile(
     path.join(root, "package.json"),
-    `${JSON.stringify({ private: true, dependencies: { [metadata.name]: metadata.version } })}\n`,
+    `${JSON.stringify({ private: true, dependencies })}\n`,
   );
   await runCommand(
     "npm",
@@ -732,7 +751,7 @@ export async function resolveNpmRegistryPackage({
     lockfile,
     contract,
     evidence,
-    roles: [role],
+    roles: registryRoles,
   });
   await runCommand(
     "npm",
@@ -976,6 +995,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         evidence: candidateEvidence,
         expectedPackage,
         candidate,
+        registryRoles,
       }) => {
         const root = await mkdtemp(
           path.join(os.tmpdir(), "fred-registry-package-"),
@@ -990,6 +1010,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           evidence: candidateEvidence,
           expectedPackage,
           candidate,
+          registryRoles,
         });
       },
       verifyPackageSignature: async (

@@ -283,6 +283,13 @@ the exact prior candidate and publishing attempts while recording the verifier's
 execution. A selected fixture-only command still reports controlled tooling; the historical
 all-member generic command remains available.
 
+For UI-only verification, a separate disposable registry graph explicitly installs UI
+with the exact design-token version from the approved compatibility ledger. Its lockfile
+must match both independent integrities and the approved registry before installation;
+tokens remain compatibility-only, not a selected publication or a new candidate archive.
+The token's registry bytes and provenance are verified separately against its historical
+baseline before final consumer evidence can succeed.
+
 For each exact coordinate, the verifier checks registry metadata and downloaded archive SHA-512
 against the approved candidate before installation. It then creates and validates a registry-only
 lock graph, including every resolved FRED package in that graph, and runs `npm ci --ignore-scripts`
