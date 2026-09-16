@@ -23,11 +23,10 @@ declares nothing, and a declaration that fails never costs the run.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
-
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import declare_library_synchronized
 
@@ -175,6 +174,7 @@ def test_the_declaration_is_sent_before_the_handler_runs(monkeypatch):
 
     from fred_sdk.knowledge_base import worker as worker_module
     from fred_sdk.knowledge_base._workflow import SynchronizeInput
+    from fred_sdk.knowledge_base.client import ControlPlaneClient
     from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
     from fred_sdk.knowledge_base.models import (
         KnowledgeBaseRunContext,
@@ -215,7 +215,7 @@ def test_the_declaration_is_sent_before_the_handler_runs(monkeypatch):
 
     activity_fn = worker_module._build_activity(
         kb,
-        SimpleNamespace(fetch_run_context=_fetch),
+        cast(ControlPlaneClient, SimpleNamespace(fetch_run_context=_fetch)),
         _configuration("http://kf.invalid/knowledge-flow/v1"),
     )
 
