@@ -94,7 +94,7 @@ ARG GROUP_ID=1000
 # themselves; Century Gothic is mapped to URW Gothic, its closest free metrics.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libreoffice-impress-nogui \
+        libreoffice-impress-nogui fontconfig \
         fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
     rm -rf /var/lib/apt/lists/* && \
     printf '%s\n' \
