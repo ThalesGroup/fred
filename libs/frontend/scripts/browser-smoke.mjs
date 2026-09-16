@@ -372,6 +372,148 @@ async function verifyIframeSdk(
     assert.equal(admission.applicationOrigin, applicationOrigin);
     assert(admission.readyCount >= 2, "ready retry was not observed");
     assert.equal(admission.protocolVersion, "1");
+    assert.equal(new URL(child.url()).searchParams.get("theme"), "dark");
+    assert.equal(new URL(child.url()).searchParams.get("locale"), "fr");
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "en", 0],
+    );
+
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await child.waitForFunction(() => window.__fredChild.contexts.length === 4);
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.contexts.map(({ theme, locale }) => [theme, locale]),
+      ),
+      [
+        ["dark", "en"],
+        ["light", "en"],
+        ["light", "fr"],
+        ["light", "fr"],
+      ],
+    );
+    const invalidContext = {
+      type: "fred:context",
+      protocolVersion: "1",
+      applicationId: "example",
+      context: {
+        team: { id: "team-1", name: "Team One", isPersonal: false },
+        route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+        locale: "en",
+        theme: "system",
+      },
+    };
+    await observation.page.evaluate(
+      (message) => window.__fredHost.sendRawContext(message),
+      invalidContext,
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendRawContext({
+        type: "fred:context",
+        protocolVersion: "1",
+        applicationId: "other",
+        context: {
+          team: { id: "team-1", name: "Team One", isPersonal: false },
+          route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+          locale: "en",
+          theme: "dark",
+        },
+      }),
+    );
+    const validButMisattributedContext = {
+      ...invalidContext,
+      context: { ...invalidContext.context, theme: "dark" },
+    };
+    await attacker.evaluate(
+      (message) => window.__attack(message),
+      validButMisattributedContext,
+    );
+    await observation.page.evaluate(async () => {
+      const sibling = document.createElement("iframe");
+      sibling.name = "wrong-source";
+      sibling.srcdoc = "<!doctype html><title>Sibling</title>";
+      const loaded = new Promise((resolve) =>
+        sibling.addEventListener("load", resolve, { once: true }),
+      );
+      document.body.appendChild(sibling);
+      await loaded;
+    });
+    const wrongSource = observation.page
+      .frames()
+      .find((frame) => frame.name() === "wrong-source");
+    assert(wrongSource, "same-origin sibling frame is missing");
+    await child.evaluate(() => {
+      window.__fredWrongSourceObserved = 0;
+      window.addEventListener("message", (event) => {
+        if (
+          event.data?.type === "fred:context" &&
+          event.origin ===
+            new URLSearchParams(window.location.search).get("hostOrigin") &&
+          event.source !== window.parent
+        )
+          window.__fredWrongSourceObserved += 1;
+      });
+    });
+    await wrongSource.evaluate((message) => {
+      const application = parent.document.querySelector("#application");
+      application.contentWindow.postMessage(
+        message,
+        new URL(application.src).origin,
+      );
+    }, validButMisattributedContext);
+    await child.waitForFunction(() => window.__fredWrongSourceObserved === 1);
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "fr", 4],
+    );
+    await child.evaluate(() => window.__fredChild.stopContext());
+    await child.evaluate(() => {
+      window.__fredContextIsolation = { errors: [], delivered: 0 };
+      globalThis.reportError = (error) =>
+        window.__fredContextIsolation.errors.push(error.message);
+      window.__fredChild.client.onContext(() => {
+        throw new Error("expected listener failure");
+      });
+      window.__fredChild.client.onContext(() => {
+        window.__fredContextIsolation.delivered += 1;
+      });
+    });
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "fr"),
+    );
+    await child.waitForFunction(
+      () => window.__fredContextIsolation?.delivered === 1,
+    );
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredContextIsolation),
+      { errors: ["expected listener failure"], delivered: 1 },
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", 4],
+    );
 
     await observation.page.evaluate(() => window.__fredHost.sendRoute("A"));
     await child.evaluate(() => window.__fredChild.navigate("B"));
@@ -529,7 +671,7 @@ async function verifyIframeSdk(
     assert.match(rejectedConnections.deadline, /deadline/i);
 
     await observation.page.evaluate(() => {
-      window.__fredHost.configureContext("valid", "team-2");
+      window.__fredHost.configureContext("valid", "team-2", "dark");
       window.__fredHost.replaceFrame();
     });
     ({ child } = await iframeHarness(observation.page));
@@ -538,6 +680,14 @@ async function verifyIframeSdk(
     assert.equal(
       await child.evaluate(() => window.__fredChild.client.context?.team.id),
       "team-2",
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", "en", 0],
     );
     assert.equal(
       await child.evaluate(() => window.__fredChild.capacity()),

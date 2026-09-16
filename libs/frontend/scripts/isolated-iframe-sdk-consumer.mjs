@@ -89,7 +89,8 @@ export async function assertIframeSdkConsumerFixture(root = fixtureRoot) {
   assert(source[1].includes('"@fred-oss/iframe-sdk"'));
   assert(source[3].includes("readonly-context-typecheck-only"));
   assert(source[3].includes("readonly-route-typecheck-only"));
-  assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 2);
+  assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 3);
+  assert(source[1].includes("onContext"));
   assert(
     !/(?:workspace|file|link):|apps\/frontend|libs\/frontend|\breact\b/i.test(
       `${JSON.stringify(manifest)}\n${source.join("\n")}`,

@@ -2,8 +2,10 @@
 
 Framework-independent browser client for applications hosted by FRED in an iframe. The package
 uses the existing protocol `"1"`; it does not receive FRED credentials or authorization state.
-This checked-in first-release coordinate is not evidence of registry publication or an instruction
-for FRED or an external application to adopt a local workspace dependency.
+The live-context API below is implemented in this source tree but is not part of the published
+`0.1.0-alpha.1` archive. The four-way compatibility matrix passed locally; release still requires
+a new SDK-only coordinate and separate publication/registry verification. Do not adopt the local
+workspace package as a substitute for a release.
 
 ```ts
 import { createFredApplicationClient } from "@fred-oss/iframe-sdk";
@@ -13,8 +15,14 @@ const fred = createFredApplicationClient({
   applicationId: "example",
 });
 const context = await fred.connect();
+// The initial snapshot may omit theme when connecting to an older host.
+const initialTheme = context.theme ?? "light"; // Choose your own fallback.
 
 const unsubscribe = fred.onRoute(({ subPath }) => renderRoute(subPath));
+const unsubscribeContext = fred.onContext(({ theme, locale }) => {
+  setApplicationTheme(theme ?? "light"); // Consumer-owned fallback.
+  setApplicationLocale(locale); // Consumer-owned translations.
+});
 fred.navigate("reports/42");
 fred.openChat();
 
@@ -24,6 +32,7 @@ const response = await fred.request("items", {
 if (response.ok) console.log(await response.json());
 
 unsubscribe();
+unsubscribeContext();
 fred.dispose();
 ```
 
@@ -38,6 +47,12 @@ context. The client accepts messages only from that exact origin and `window.par
 readiness immediately, retries every 500 ms, and uses a 10-second connection deadline by default.
 Every accepted route event is delivered once to each current subscriber, even when its `subPath`
 was seen before.
+`onContext` requires a connected client and does not replay the initial context. Each later valid
+host context replaces the immutable `client.context` snapshot and reaches current subscribers once,
+including identical repeats. Invalid later context is ignored without disconnecting or canceling
+requests. Unsubscribe is idempotent; disposal ends both subscriptions. Applications own their theme
+fallback and translations. Neither the SDK nor the iframe URL reads or synchronizes the parent's
+DOM, storage, or locale state; only accepted host messages provide FRED values.
 
 FRED remains responsible for application/team authorization, route and chat destinations,
 protected-header enforcement, bearer injection, token refresh, proxying, host concurrency, and
@@ -54,7 +69,7 @@ message. Unknown, duplicate, canceled, timed-out, disposed, and late replies are
 ID. Mutations are never retried by the SDK.
 
 The transport is buffered text/JSON, not complete Fetch equivalence. Binary or multipart bodies,
-streaming responses, SSE, opaque/`null` origins, theme/live-locale extensions, and detailed host
+streaming responses, SSE, opaque/`null` origins, and detailed host
 transport errors are unsupported.
 
 ## Archive verification

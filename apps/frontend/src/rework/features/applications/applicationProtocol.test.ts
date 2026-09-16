@@ -81,6 +81,24 @@ describe("protocol 1 golden wire shapes", () => {
 });
 
 describe("protocol validation", () => {
+  it("preserves optional resolved themes and rejects invalid present values", () => {
+    const wire = (value: unknown) => ({
+      type: "fred:context",
+      protocolVersion: "1",
+      applicationId: "example",
+      context: { ...context, theme: value },
+    });
+    expect(
+      parseApplicationHostMessage({ type: "fred:context", protocolVersion: "1", applicationId: "example", context }),
+    ).toMatchObject({ context });
+    for (const theme of ["light", "dark"] as const) {
+      expect(parseApplicationHostMessage(wire(theme))).toMatchObject({ context: { ...context, theme } });
+    }
+    for (const invalid of ["system", null, undefined, "blue", 1]) {
+      expect(parseApplicationHostMessage(wire(invalid))).toBeNull();
+    }
+  });
+
   it.each(APPLICATION_REQUEST_METHODS)("accepts request method %s", (method) => {
     expect(parseApplicationFrameMessage({ type: "fred:request", requestId: "r", path: "items", method })).toMatchObject(
       {
