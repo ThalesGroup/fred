@@ -207,6 +207,19 @@ beforeEach(() => {
 });
 
 describe("TeamApplicationHostPage frame admission", () => {
+  it("grants only the reviewed sandbox permissions to an admitted frame", async () => {
+    await renderPage();
+
+    const permissions = frame()?.sandbox;
+    expect(permissions).not.toBeNull();
+    expect(new Set(permissions ? Array.from(permissions) : [])).toEqual(
+      new Set(["allow-scripts", "allow-same-origin", "allow-forms", "allow-popups", "allow-downloads"]),
+    );
+    expect(permissions?.contains("allow-top-navigation")).toBe(false);
+    expect(permissions?.contains("allow-top-navigation-by-user-activation")).toBe(false);
+    expect(permissions?.contains("allow-popups-to-escape-sandbox")).toBe(false);
+  });
+
   it("points the frame at the catalog's configured prefix, not one derived from the id", async () => {
     await renderPage();
 
