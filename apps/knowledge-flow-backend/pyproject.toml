@@ -37,7 +37,7 @@ dependencies = [
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
-  "fred-core>=1.5.0",
+  "fred-core>=4.0.0",
   "dateparser>=1.2.2",
   "pymysql>=1.1.1",
   "duckdb-engine>=0.17.0",
