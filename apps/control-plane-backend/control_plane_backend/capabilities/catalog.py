@@ -199,6 +199,12 @@ async def aggregate_capability_catalog(
                     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
+            if entry.kind != "model":
+                # Stamp the advertising pod. Skipped for models on purpose:
+                # several pods can serve the same model and their entries are
+                # unioned just below, so a single pod id would be whichever one
+                # merged last.
+                entry = entry.model_copy(update={"runtime_id": source.runtime_id})
             existing = catalog.get(entry.id)
             if (
                 existing is not None
@@ -247,7 +253,11 @@ async def aggregate_capability_catalog(
     for definition in await deps.get_knowledge_base_definition_store().list_all():
         entry = CapabilityCatalogEntry(
             id=knowledge_base_catalog_id(definition.id),
+            # Same shape as an application above: its own deployed unit, so no
+            # pod serves it and `runtime_id` stays unset.
+            source_id=definition.id,
             version=definition.version,
+            public_version=definition.version,
             name=definition.name,
             description=definition.description,
             icon="database",

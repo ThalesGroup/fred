@@ -283,6 +283,11 @@ def build_mcp_capability(server: MCPServerConfiguration) -> McpCapability:
     manifest = CapabilityManifest(
         id=server.id,
         version=MCP_CAPABILITY_SCHEMA_VERSION,
+        # An MCP server has no version of its own: the constant above is the
+        # stored-config schema version, and every other capability declares a
+        # real semver here. Surfacing the schema constant made every MCP row
+        # read "v1" in the admin catalog, which looked like information.
+        public_version=None,
         name=server.name,
         description=server.description or server.name,
         icon=_MCP_CAPABILITY_ICON,

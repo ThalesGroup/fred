@@ -2888,7 +2888,10 @@ export type AssetSlot = {
 export type TeamScopePolicy = "default_on" | "admin_gated";
 export type CapabilityCatalogEntry = {
   id: string;
+  runtime_id?: string | null;
+  source_id?: string | null;
   version: string;
+  public_version?: string | null;
   /** i18n key */
   name: string;
   /** i18n key */
@@ -3419,9 +3422,14 @@ export type ImpactedInstanceSummary = {
 };
 export type CapabilityEnablementItem = {
   id: string;
+  runtime_id?: string | null;
+  source_id?: string | null;
   /** i18n key */
   name: string;
+  /** Stored-config schema version. */
   version: string;
+  /** Shown to a human; absent when the kind has none. */
+  public_version?: string | null;
   icon: string;
   team_scope: TeamScopePolicy;
   /** Whether the platform-wide default_on marker is set. */

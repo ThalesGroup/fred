@@ -772,6 +772,12 @@ async def _agent_capabilities_for_source(
     return [
         CapabilityCatalogEntry(
             id=template_capability_id(runtime_id, template.template_agent_id),
+            runtime_id=runtime_id,
+            source_id=template.template_agent_id,
+            # `version` is the stored-config schema version; no public_version
+            # because an agent has no version of its own yet. The id above is
+            # FGA-safe and mangled, which is why provenance travels as its own
+            # fields rather than being parsed back out of it.
             version="1",
             name=template.title,
             description=template.description,
@@ -872,6 +878,12 @@ async def _model_capabilities_for_source_uncached(
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
+            source_id=entry["id"],
+            # No runtime_id on purpose: several pods can serve the same model,
+            # and the catalog unions their entries below. A single pod id would
+            # be whichever one merged last — arbitrary, and read as fact.
+            # No public_version either: a pod advertises a model's routable
+            # identity, not a version of it.
             version="1",
             name=entry["name"],
             description=entry.get("description") or entry["name"],
