@@ -58,6 +58,10 @@ The last-admin guard and the rescue check keep counting `team_admin` only. Count
 
 `useLegalMarkdown(name)` keeps the current candidate order and SPA-fallback rejection, and replaces both inline copies.
 
+### Reuse the content-storage credentials for the theme archive
+
+When the control-plane content storage has both credentials configured, the Helm chart exposes them in the namespace-local `s3-credentials` Secret under `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`. The frontend can reference that Secret without copying either value into a second values block. The Secret is omitted when either credential is empty.
+
 ## Risks / Trade-offs
 
 - [A version change on a large deployment reads every team at startup] → Only once per change, under a lock, and the applied version skips it afterwards.
