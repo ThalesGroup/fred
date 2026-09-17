@@ -30,6 +30,7 @@ DEFAULT_CSV_ENCODINGS = ["utf-8", "cp1252", "windows-1252", "latin1", "iso-8859-
 # very large CSV files. 1 MiB comfortably covers even wide, multi-hundred-column
 # exports (e.g. Jira) whose header line alone can be several kilobytes.
 _ENCODING_DETECTION_SAMPLE_BYTES = 1 << 20
+_DUCKDB_NATIVE_ENCODINGS = frozenset({"utf-8", "utf-16", "latin-1"})
 
 
 @dataclass(frozen=True)
@@ -175,10 +176,9 @@ class CsvTabularProcessor(BaseTabularProcessor):
         - The scalable tabular pipeline should inspect CSV settings once and
           then reuse them for metadata extraction, preview generation, and
           Parquet conversion.
-        - Some CSV files come from Windows/Excel exports and use cp1252. DuckDB
-          reads the common legacy encodings directly; when the installed build
-          rejects one, the file is transcoded to UTF-8 once and the transcoded
-          path is stored in the returned options.
+        - Some CSV files come from Windows/Excel exports and use cp1252. Those
+          files are transcoded before DuckDB sees them, avoiding its optional
+          encoding extension and runtime network access.
 
         How to use:
         - Pass the CSV path and optional candidate encodings.
@@ -191,6 +191,25 @@ class CsvTabularProcessor(BaseTabularProcessor):
         source_encoding = self.detect_source_encoding(path, encodings_to_try)
         delimiter = self.detect_delimiter(path, [source_encoding])
         duckdb_encoding = self.normalize_duckdb_encoding_name(source_encoding)
+
+        if duckdb_encoding not in _DUCKDB_NATIVE_ENCODINGS:
+            logger.info(
+                "Transcoding %s from '%s' to UTF-8 before DuckDB inspection",
+                path,
+                source_encoding,
+            )
+            utf8_path = self.transcode_csv_to_utf8(path, source_encoding)
+            try:
+                self._validate_duckdb_read(utf8_path, delimiter=delimiter, encoding="utf-8")
+            except Exception as utf8_exc:  # noqa: BLE001
+                logger.error(
+                    "DuckDB could not read %s after transcoding to UTF-8 (delimiter '%s'): %s",
+                    utf8_path,
+                    delimiter,
+                    utf8_exc,
+                )
+                raise
+            return CsvReadOptions(delimiter=delimiter, encoding="utf-8", header=True, source_path=utf8_path)
 
         try:
             self._validate_duckdb_read(path, delimiter=delimiter, encoding=duckdb_encoding)
@@ -350,7 +369,5 @@ class CsvTabularProcessor(BaseTabularProcessor):
             "latin1": "latin-1",
             "latin-1": "latin-1",
             "iso-8859-1": "latin-1",
-            "cp1252": "CP1252",
-            "windows-1252": "CP1252",
         }
         return encoding_aliases.get(normalized_encoding, normalized_encoding)

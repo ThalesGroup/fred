@@ -141,6 +141,10 @@ Additional runtime/model dependencies:
 
 - `fast` profile for ingestion
 - fast attachment map with explicit suffixes
+- CSV ingestion passes only DuckDB-native UTF-8, UTF-16, and Latin-1 sources
+  directly to DuckDB. Other detected encodings, including Windows-1252, are
+  transcoded to UTF-8 before the first DuckDB read, so offline deployments do
+  not trigger an encoding-extension download.
 
 3. Control Docling model-dependent features
 
