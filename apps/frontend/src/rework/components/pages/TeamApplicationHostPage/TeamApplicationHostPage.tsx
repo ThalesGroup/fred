@@ -338,7 +338,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           className={status === "ready" ? styles.frame : styles.frameLoading}
           src={src}
           title={applicationLocaleText(application.name, locale)}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
         />
       )}
     </div>
