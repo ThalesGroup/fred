@@ -32,7 +32,7 @@ const banner: InfoBannerConfig = {
   color: "#00BBDD",
   titles: { en: "New version available", fr: "Nouvelle version disponible" },
   messages: { en: "Access the Fred documentation & blog" },
-  links: [{ url: "https://fredlab.dev", labels: { en: "Go to the Fred blog" } }],
+  links: [{ url: "https://site.fredlab.dev", labels: { en: "Go to the Fred blog" } }],
 };
 
 describe("InfoBanner", () => {
@@ -59,7 +59,7 @@ describe("InfoBanner", () => {
     expect(html).toContain("New version available");
     expect(html).toContain("Access the Fred documentation &amp; blog");
     expect(html).toContain("--banner-bg:#00BBDD");
-    expect(html).toContain('href="https://fredlab.dev"');
+    expect(html).toContain('href="https://site.fredlab.dev"');
     expect(html).toContain("Go to the Fred blog");
   });
 
@@ -77,13 +77,13 @@ describe("InfoBanner", () => {
   it("falls back to the link URL when no label matches the locale", () => {
     mockGetInfoBanner.mockReturnValue({
       ...banner,
-      links: [{ url: "https://fredlab.dev", labels: {} }],
+      links: [{ url: "https://site.fredlab.dev", labels: {} }],
     });
     mockLanguage = "en";
 
     const html = renderToStaticMarkup(<InfoBanner />);
 
-    expect(html).toContain(">https://fredlab.dev</a>");
+    expect(html).toContain(">https://site.fredlab.dev</a>");
   });
 
   it("drops non-http(s) links but keeps relative ones", () => {

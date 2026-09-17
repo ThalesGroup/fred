@@ -1121,7 +1121,7 @@ async def test_frontend_config_exposes_configured_info_banner() -> None:
         },
         links=[
             InfoBannerLink(
-                url="https://fredlab.dev", labels={"en": "Go to the Fred blog"}
+                url="https://site.fredlab.dev", labels={"en": "Go to the Fred blog"}
             )
         ],
     )
@@ -1138,7 +1138,7 @@ async def test_frontend_config_exposes_configured_info_banner() -> None:
     assert banner["titles"] == {"en": "New version available"}
     assert banner["messages"]["fr"] == "Accédez à la doc"
     assert banner["links"] == [
-        {"url": "https://fredlab.dev", "labels": {"en": "Go to the Fred blog"}}
+        {"url": "https://site.fredlab.dev", "labels": {"en": "Go to the Fred blog"}}
     ]
 
 
