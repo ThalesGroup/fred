@@ -1,0 +1,123 @@
+.root {
+  border: 1px solid var(--outline-muted);
+  border-bottom: 0;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: var(--surface-container-low);
+  padding-bottom: calc(var(--radius-m) + var(--spacing-s));
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.toggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  text-align: left;
+}
+
+.toggle:hover {
+  background:
+    linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container-low);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.heading {
+  font: var(--font-label-large);
+}
+
+.progress {
+  overflow: hidden;
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron,
+.statusIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.chevron {
+  color: var(--on-surface-muted);
+  font-size: 1rem;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-height: 12rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.statusIcon {
+  margin-top: 0.125rem;
+  font-size: 1rem;
+}
+
+.content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pending .statusIcon {
+  color: var(--on-surface-muted);
+}
+
+.in_progress .statusIcon {
+  animation: todo-spin 1.4s linear infinite;
+  color: var(--primary);
+}
+
+.completed {
+  color: var(--on-surface-muted);
+}
+
+.completed .statusIcon {
+  color: var(--success);
+}
+
+.completed .content {
+  text-decoration: line-through;
+}
+
+@keyframes todo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .in_progress .statusIcon {
+    animation: none;
+  }
+}
