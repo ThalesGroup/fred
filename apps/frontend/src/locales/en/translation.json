@@ -1538,6 +1538,18 @@
         }
       }
     },
+    "agentTodoPanel": {
+      "announcementComplete": "Task plan complete",
+      "ariaLabel": "Agent task plan",
+      "remaining_one": "{{count}} remaining",
+      "remaining_other": "{{count}} remaining",
+      "status": {
+        "completed": "Completed",
+        "in_progress": "In progress",
+        "pending": "Pending"
+      },
+      "title": "Tasks"
+    },
     "back": "Back",
     "bootstrap": {
       "continue": "Continue",

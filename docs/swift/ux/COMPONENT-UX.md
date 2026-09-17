@@ -439,6 +439,46 @@ agents) so the decision is informed at the point it is made.
 
 ---
 
+### `AgentTodoPanel`
+
+**Location:** `src/rework/components/shared/molecules/AgentTodoPanel/AgentTodoPanel.tsx`
+**Status:** `Functional`
+
+Conversation-level projection of the latest valid Deep Agent `write_todos` snapshot. The panel is
+mounted by `ManagedChatPage` between the scrollable conversation and the composer, aligned to the
+composer's 720px content lane, so the current plan stays visible while messages scroll. The panel
+extends behind the higher-stacking composer by its corner radius plus one spacing step. Hovering
+`Tasks` highlights only that header; the backing surface never changes colour through the composer.
+
+The compact header shows `Tasks` plus the number of pending or in-progress items. Expanded content
+keeps all three states visible: pending uses an open circle, in-progress uses the primary-colour
+sync indicator, and completed uses a success check with muted struck text. The disclosure defaults
+open while work remains; an explicit choice is stored as one boolean per `session_id`. When no work
+remains, the panel disappears regardless of that preference. Todo text itself is never copied into
+browser storage: live and reloaded content both come from runtime-owned `session_history`.
+
+If the same exchange contains its final answer without an error or failed tool result while the last
+snapshot still marks the active item `in_progress`, the panel presents that item as completed. This
+does not depend on array position because the streaming reducer may reserve the final frame's slot
+before later tool events. Failed turns retain the unfinished status. If no pending item remains after
+successful settlement, the entire panel is removed instead of showing a redundant completed-state
+summary.
+
+The visible panel sits outside the conversation log, so a persistent visually hidden `role=status`
+region announces task contents, accessible statuses, remaining-count changes, and final completion.
+
+Only strict, supported snapshots leave the generic reasoning trace. A valid `write_todos` call and
+its non-failed matching result are represented here instead; malformed or explicitly failed calls
+stay in `ThoughtTrace` so a runtime, dependency, or execution failure remains diagnosable. A failed
+update also leaves the last successful snapshot in the panel. An explicit empty snapshot removes
+the panel. The panel does not read, write, or synchronize a workspace `TODO.md` file.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
@@ -716,6 +756,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
   dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
   `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
+
   - SSE consumption) — a reasonable fast-follow, not required for the current fix since
     `content` already carries enough to render useful citations.
 
@@ -997,10 +1038,10 @@ with `corner-shape: round`. A switch is a true pill, not a squircle.
 track height changes per size. Everything else derives from it, so both sizes
 keep the same proportions:
 
-| Size | Track | Handle off | Handle on |
-| --- | --- | --- | --- |
-| `medium` | 52×32 | 22px | 24px |
-| `small` | 39×24 | 16.5px | 18px |
+| Size     | Track | Handle off | Handle on |
+| -------- | ----- | ---------- | --------- |
+| `medium` | 52×32 | 22px       | 24px      |
+| `small`  | 39×24 | 16.5px     | 18px      |
 
 The handle is smaller when off on purpose. At equal size, the handle looks
 smaller on the filled "on" track than on the pale "off" one. It stays centered
@@ -2428,6 +2469,7 @@ generic `Dialog` primitive exists yet):
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
+
   - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
     (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
     selector (see below, `8px` gap between its own chips), and a
