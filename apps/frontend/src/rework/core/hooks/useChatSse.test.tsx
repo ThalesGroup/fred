@@ -771,7 +771,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("sendHitlResume() round-trips interrupt_id from the awaiting_human event into the resume request body (#2216)", async () => {
+  it("sendHitlResume() round-trips interrupt and occurrence identity into the resume request body", async () => {
     // ReAct V2 resume identity: the id received on the awaiting_human SSE
     // event (LangGraph's own Interrupt.id) must be echoed back verbatim on
     // resume — the backend rejects a resume without it. checkpoint_id is
@@ -782,7 +782,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
-      payload: { interrupt_id: "interrupt-a", checkpoint_id: null },
+      payload: { interrupt_id: "interrupt-a", occurrence_id: "call-2", checkpoint_id: null },
     };
 
     await act(async () => {
@@ -792,6 +792,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
     expect(body.interrupt_id).toBe("interrupt-a");
+    expect(body.occurrence_id).toBe("call-2");
     expect(body.checkpoint_id).toBeNull();
     fetchSpy.mockRestore();
   });
@@ -1071,6 +1072,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
 
     expect(requestBodies[0].resume_payload).toEqual({ answer: "  a  " });
+    expect(requestBodies[0]).not.toHaveProperty("occurrence_id");
     expect(requestBodies[1].resume_payload).toEqual({
       answer: "proceed",
       choice_id: "proceed",

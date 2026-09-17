@@ -93,6 +93,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
                 "free_text": True,
                 "checkpoint_id": None,
                 "interrupt_id": "9f3a7c2e4b1d6805af23c9de71b04f6a",
+                "occurrence_id": "call-update-ticket",
             },
         },
         {"kind": "final", "content": "done"},
@@ -116,6 +117,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
     req = hitl["request"]
     resume_interrupt_id = req.get("interrupt_id")
     resume_checkpoint_id = req.get("checkpoint_id")
+    resume_occurrence_id = req.get("occurrence_id")
     assert resume_interrupt_id == "9f3a7c2e4b1d6805af23c9de71b04f6a"
     assert resume_checkpoint_id is None
 
@@ -131,6 +133,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
         color_enabled=False,
         checkpoint_id=resume_checkpoint_id,
         interrupt_id=resume_interrupt_id,
+        occurrence_id=resume_occurrence_id,
         resume_payload={"choice_id": "proceed"},
     )
 
@@ -139,6 +142,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
 
     resume_body = pod.request_bodies[1]
     assert resume_body["interrupt_id"] == "9f3a7c2e4b1d6805af23c9de71b04f6a"
+    assert resume_body["occurrence_id"] == "call-update-ticket"
     assert "checkpoint_id" not in resume_body  # None -> omitted, never aliased
     assert resume_body["resume_payload"] == {"choice_id": "proceed"}
 
@@ -173,6 +177,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
                     "free_text": True,
                     "checkpoint_id": None,
                     "interrupt_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+                    "occurrence_id": "call-streaming-update",
                 },
             }
         ],
@@ -206,6 +211,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
         color_enabled=False,
         checkpoint_id=req.get("checkpoint_id"),
         interrupt_id=req.get("interrupt_id"),
+        occurrence_id=req.get("occurrence_id"),
         resume_payload={"choice_id": "proceed"},
     )
 
@@ -213,6 +219,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
     assert hitl_after is None
     resume_body = pod.request_bodies[1]
     assert resume_body["interrupt_id"] == "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    assert resume_body["occurrence_id"] == "call-streaming-update"
     assert "checkpoint_id" not in resume_body
 
 
@@ -269,3 +276,4 @@ def test_legacy_graph_v2_resume_still_forwards_checkpoint_id_not_interrupt_id() 
     resume_body = pod.request_bodies[1]
     assert resume_body["checkpoint_id"] == "cp-legacy-123"
     assert "interrupt_id" not in resume_body
+    assert "occurrence_id" not in resume_body

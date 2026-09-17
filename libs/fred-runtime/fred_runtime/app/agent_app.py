@@ -932,6 +932,7 @@ class _AgentExecuteRequest(BaseModel):
     context: dict[str, Any] | None = None
     checkpoint_id: str | None = Field(default=None, min_length=1)
     interrupt_id: str | None = Field(default=None, min_length=1)
+    occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
         default=None,
         description=(
@@ -1002,6 +1003,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
         interrupt_id=r.interrupt_id,
+        occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
         inline_tuning=r.inline_tuning,
@@ -1921,19 +1923,18 @@ def _validate_resolved_team(
 _REACT_V2_INTERRUPT_CHANNEL = "__interrupt__"
 
 
-def _pending_react_v2_interrupt_ids(
+def _pending_react_v2_interrupt_occurrences(
     pending_writes: Sequence[tuple[str, str, Any]],
-) -> frozenset[str]:
+) -> frozenset[tuple[str, str | None]]:
     """
-    Extract LangGraph's own `Interrupt.id` for every currently pending
-    `"__interrupt__"` write on a ReAct V2 checkpoint (#2216).
+    Extract every pending ReAct V2 `(interrupt_id, occurrence_id)` pair.
 
     Collects ALL matching ids rather than the first one found: FRED's own
     `FredHitlMiddleware` never raises more than one interrupt per task
     (`test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`),
     but this function does not assume that — it proves the caller's
-    `interrupt_id` matches *some* currently pending occurrence, not merely
-    "a" pending write chosen arbitrarily.
+    resume identity matches the exact occurrence, not merely a pending write
+    chosen arbitrarily. Legacy payloads without an occurrence id keep `None`.
 
     Why `pending_writes` is read directly instead of going through
     LangGraph's supported `compiled_graph.aget_state(...).tasks[*].interrupts`:
@@ -1967,7 +1968,7 @@ def _pending_react_v2_interrupt_ids(
       that don't round-trip through LangGraph's own serde
     """
 
-    ids: set[str] = set()
+    occurrences: set[tuple[str, str | None]] = set()
     for _task_id, channel, value in pending_writes:
         if channel != _REACT_V2_INTERRUPT_CHANNEL:
             continue
@@ -1980,8 +1981,21 @@ def _pending_react_v2_interrupt_ids(
         if interrupt_id is None and isinstance(candidate, dict):
             interrupt_id = candidate.get("id")
         if isinstance(interrupt_id, str) and interrupt_id:
-            ids.add(interrupt_id)
-    return frozenset(ids)
+            payload = getattr(candidate, "value", None)
+            if payload is None and isinstance(candidate, dict):
+                payload = candidate.get("value")
+            occurrence_id = getattr(payload, "occurrence_id", None)
+            if occurrence_id is None and isinstance(payload, dict):
+                occurrence_id = payload.get("occurrence_id")
+            occurrences.add(
+                (
+                    interrupt_id,
+                    occurrence_id
+                    if isinstance(occurrence_id, str) and occurrence_id
+                    else None,
+                )
+            )
+    return frozenset(occurrences)
 
 
 def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, ...]:
@@ -2064,7 +2078,7 @@ async def _validate_session_checkpoint_access(
       `request.interrupt_id`, LangGraph's own `Interrupt.id` — this
       function requires it to exactly match one of the ids currently
       pending on the thread's latest checkpoint
-      (`_pending_react_v2_interrupt_ids`) — a stale response for an earlier
+      (`_pending_react_v2_interrupt_occurrences`) — a stale response for an earlier
       interrupt must never be accepted for a later one (#2216 P1).
       `react_message_codec.py` threads the same id into LangGraph's own
       targeted `Command(resume={id: ...})` form as defense in depth, so the
@@ -2167,19 +2181,26 @@ async def _validate_session_checkpoint_access(
     # an EARLIER interrupt on this same thread must never be allowed to
     # resume a LATER one. `request.interrupt_id` must exactly match one of
     # the ids currently pending on this checkpoint.
-    pending_interrupt_ids = _pending_react_v2_interrupt_ids(pending_writes)
-    if not pending_interrupt_ids:
+    pending_occurrences = _pending_react_v2_interrupt_occurrences(pending_writes)
+    if not pending_occurrences:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="checkpoint is not waiting for resume.",
         )
-    if (
-        request.interrupt_id is None
-        or request.interrupt_id not in pending_interrupt_ids
-    ):
+    matching_occurrence_ids = {
+        occurrence_id
+        for interrupt_id, occurrence_id in pending_occurrences
+        if interrupt_id == request.interrupt_id
+    }
+    if not matching_occurrence_ids:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="interrupt_id does not match the pending HITL request for this session.",
+        )
+    if request.occurrence_id not in matching_occurrence_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="occurrence_id does not match the pending HITL request for this session.",
         )
 
 
@@ -2215,6 +2236,7 @@ async def _write_turn_history(
     agent_instance_id: str | None = None,
     exchange_id: str | None = None,
     resume_payload: Any | None = None,
+    occurrence_id: str | None = None,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -2277,16 +2299,33 @@ async def _write_turn_history(
 
     # 1. Opening row: user text on normal turns, HITL response on resume turns.
     if resume_payload is not None:
-        # Extract choice_id from whatever shape the resume payload takes.
+        choice_id: str | None = None
+        text: str | None = None
         if isinstance(resume_payload, dict):
-            choice_id = str(resume_payload.get("choice_id") or "")
+            raw_choice_id = resume_payload.get("choice_id")
+            if isinstance(raw_choice_id, str) and raw_choice_id:
+                choice_id = raw_choice_id
+            raw_text = resume_payload.get("text")
+            if isinstance(raw_text, str) and raw_text:
+                text = raw_text
+            elif choice_id is None:
+                raw_answer = resume_payload.get("answer")
+                if isinstance(raw_answer, str) and raw_answer:
+                    text = raw_answer
         elif isinstance(resume_payload, str):
             choice_id = resume_payload
         else:
             choice_id = str(resume_payload)
-        if choice_id:
+        if choice_id or text:
             messages.append(
-                make_hitl_response(session_id, exchange_id, rank, choice_id=choice_id)
+                make_hitl_response(
+                    session_id,
+                    exchange_id,
+                    rank,
+                    choice_id=choice_id,
+                    text=text,
+                    occurrence_id=occurrence_id,
+                )
             )
             rank += 1
     elif request_message:
@@ -2451,6 +2490,7 @@ async def _write_turn_history(
                     title=req.get("title"),
                     free_text=bool(req.get("free_text")),
                     interrupt_id=req.get("interrupt_id"),
+                    occurrence_id=req.get("occurrence_id"),
                     checkpoint_id=req.get("checkpoint_id"),
                     pending_calls=[
                         {
@@ -2915,6 +2955,7 @@ async def _stream(
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
+                    occurrence_id=request.occurrence_id,
                 )
             )
 
@@ -3220,6 +3261,7 @@ class _HitlResumeClaim:
     _thread_id: str
     _checkpoint_ns: str
     _interrupt_id: str
+    _occurrence_id: str | None
     _claim_token: str
 
     async def consume(self) -> None:
@@ -3227,6 +3269,7 @@ class _HitlResumeClaim:
             thread_id=self._thread_id,
             checkpoint_ns=self._checkpoint_ns,
             interrupt_id=self._interrupt_id,
+            occurrence_id=self._occurrence_id,
             claim_token=self._claim_token,
         )
 
@@ -3236,6 +3279,7 @@ async def _claim_hitl_resume_before_invocation(
     session_id: str | None,
     checkpoint_ns: str,
     interrupt_id: str,
+    occurrence_id: str | None = None,
 ) -> _HitlResumeClaim | None:
     """
     Acquire and confirm the durable single-use HITL resume claim,
@@ -3294,7 +3338,10 @@ async def _claim_hitl_resume_before_invocation(
         )
         return None
     claim_token = await checkpointer.aclaim_hitl_resume(
-        thread_id=session_id, checkpoint_ns=checkpoint_ns, interrupt_id=interrupt_id
+        thread_id=session_id,
+        checkpoint_ns=checkpoint_ns,
+        interrupt_id=interrupt_id,
+        occurrence_id=occurrence_id,
     )
     if claim_token is None:
         raise RuntimeError("This HITL request is already being resumed.")
@@ -3303,6 +3350,7 @@ async def _claim_hitl_resume_before_invocation(
             thread_id=session_id,
             checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
+            occurrence_id=occurrence_id,
             claim_token=claim_token,
         )
     except Exception:
@@ -3315,6 +3363,7 @@ async def _claim_hitl_resume_before_invocation(
             thread_id=session_id,
             checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
+            occurrence_id=occurrence_id,
             claim_token=claim_token,
         )
         raise
@@ -3328,6 +3377,7 @@ async def _claim_hitl_resume_before_invocation(
             thread_id=session_id,
             checkpoint_ns=checkpoint_ns,
             interrupt_id=interrupt_id,
+            occurrence_id=occurrence_id,
             claim_token=claim_token,
         )
         raise RuntimeError(
@@ -3339,6 +3389,7 @@ async def _claim_hitl_resume_before_invocation(
         _thread_id=session_id,
         _checkpoint_ns=checkpoint_ns,
         _interrupt_id=interrupt_id,
+        _occurrence_id=occurrence_id,
         _claim_token=claim_token,
     )
 
@@ -3403,6 +3454,7 @@ async def _iterate_runtime_event_payloads(
     )
     resolved_checkpoint_id = request.checkpoint_id or ctx.get("checkpoint_id")
     resolved_interrupt_id = request.interrupt_id or ctx.get("interrupt_id")
+    resolved_occurrence_id = request.occurrence_id or ctx.get("occurrence_id")
 
     portable_context = PortableContext(
         request_id=request_id,
@@ -3423,6 +3475,7 @@ async def _iterate_runtime_event_payloads(
                 "template_agent_id": definition.agent_id,
                 "checkpoint_id": resolved_checkpoint_id,
                 "interrupt_id": resolved_interrupt_id,
+                "occurrence_id": resolved_occurrence_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
                 "is_service_agent": ctx.get("is_service_agent"),
@@ -3661,6 +3714,7 @@ async def _iterate_runtime_event_payloads(
                     # regardless of runtime configuration.
                     checkpoint_ns="",
                     interrupt_id=request.interrupt_id,
+                    occurrence_id=request.occurrence_id,
                 )
 
             async for event in executor.stream(react_input, execution_config):
@@ -4736,6 +4790,7 @@ def _build_agent_router(
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
+                    occurrence_id=request.occurrence_id,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -4823,6 +4878,7 @@ def _build_agent_router(
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
+                    occurrence_id=request.occurrence_id,
                 )
         return _build_eval_trace(
             payloads=payloads,

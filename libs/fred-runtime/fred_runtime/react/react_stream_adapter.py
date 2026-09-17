@@ -127,15 +127,9 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
     - the Fred runtime wants one stable `HumanInputRequest` object regardless of
       the SDK shape
 
-    `interrupt_id` (#2216): populated from the wrapping `Interrupt.id` — a
-    hash of the interrupted task's checkpoint namespace. NOT universally
-    occurrence-unique (two `interrupt()` calls within the SAME LangGraph
-    task share it — see `test_langgraph_interrupt_id_semantics.py`); FRED
-    relies on the narrower fact that `FredHitlMiddleware` has exactly one
-    `interrupt()` call site, so two DISTINCT FRED HITL occurrences always
-    land in different tasks and get different ids (proven by
-    `test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`).
-    See RUNTIME-EXECUTION-CONTRACT.md §8.39 for the full identity model.
+    `interrupt_id` is populated from the wrapping `Interrupt.id`. The payload's
+    optional `occurrence_id` is preserved so pauses sharing that id remain
+    distinguishable; tool-raised pauses derive it from their `tool_call_id`.
     This is a DIFFERENT field from `HumanInputRequest.checkpoint_id`, which
     this function never sets — that field is populated only by the legacy
     Graph V2 runtime with a real checkpointer-storage id.

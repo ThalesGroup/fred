@@ -662,12 +662,13 @@ Runtime must validate before resuming:
 - `checkpoint_id` is in a resumable state (not already consumed)
 - For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
 - For ReAct V2 HITL resume specifically (#2216, see §8.39): `interrupt_id`
-  (a field distinct from `checkpoint_id` — see §8.39 for why) must exactly
-  match LangGraph's own `Interrupt.id` for one of the interrupts currently
-  pending on that thread, not merely prove that *some* interrupt is
-  pending. That occurrence is then atomically claimed, immediately before
-  graph invocation, so a concurrent duplicate response can never resume it
-  a second time
+  (a field distinct from `checkpoint_id` — see §8.39 for why) and the optional
+  `occurrence_id` must exactly match one currently pending occurrence. A
+  tool-raised pause declares `occurrence_id` from its stable `tool_call_id`;
+  legacy and platform-gate pauses omit it and continue to match on
+  `interrupt_id` alone. That exact occurrence is then atomically claimed
+  immediately before graph invocation, so a concurrent duplicate response
+  cannot resume it a second time
 
 Separation of concerns:
 
@@ -2238,18 +2239,21 @@ already-resumed, HITL prompt:
    — a real checkpointer-storage id) and `.interrupt_id` (ReAct V2 —
    LangGraph's own `Interrupt.id`) are mutually exclusive, enforced by a
    pydantic validator (`fred_sdk.contracts.execution._validate_execution_target`)
-   — never both set, and `interrupt_id` is meaningless without
-   `resume_payload`. This is what lets layer 2's checkpoint lookup double
+   — never both set, and `interrupt_id` and `occurrence_id` are meaningless
+   without `resume_payload`. `occurrence_id` names one pause within a native
+   interrupt; it does not replace either checkpoint identity. This is what
+   lets layer 2's checkpoint lookup double
    as "the thread's latest checkpoint" for every ReAct V2 request, never a
    client-chosen historical one.
 2. **Read-only admission gate** (`agent_app._validate_session_checkpoint_access`,
    runs before session ownership, OpenFGA, and target resolution): extracts
-   every currently pending `"__interrupt__"` id on the thread's latest
-   checkpoint (`_pending_react_v2_interrupt_ids` — collects ALL matching
-   ids, not just the first) and requires the client's `interrupt_id` to
-   match one of them exactly — missing, empty, malformed, unknown,
-   cross-thread, or stale all fail closed with `409 Conflict`. Never
-   mutates anything.
+   every currently pending `(interrupt_id, occurrence_id | None)` pair on the
+   thread's latest checkpoint
+   (`_pending_react_v2_interrupt_occurrences` — collects ALL matching pairs,
+   not just the first) and requires the client to match one exactly. A legacy
+   pair ending in `None` preserves interrupt-only matching; a pause that
+   declares an occurrence rejects a missing, unknown, cross-thread, or stale
+   value with `409 Conflict`. Never mutates anything.
 3. **Targeted LangGraph resume, mandatory** (`react_message_codec.graph_input_from_react_input`):
    `Command(resume={interrupt_id: payload})`, never the scalar
    `Command(resume=payload)` form. LangGraph resolves the map key against
@@ -2260,7 +2264,7 @@ already-resumed, HITL prompt:
    `interrupt_id` raises — no scalar fallback exists.
 4. **Durable, atomic, fenced claim** (`FredSqlCheckpointer`'s
    `checkpoint_hitl_claim` table, key `(thread_id, checkpoint_ns,
-   interrupt_id)`, with `checkpoint_ns` always `""` for ReAct V2 — see
+   occurrence_key)`, with `checkpoint_ns` always `""` for ReAct V2 — see
    §8.61), acquired as LATE as possible — inside
    `agent_app._iterate_runtime_event_payloads`, immediately before
    `executor.stream(...)`, never in the read-only gate. State machine
@@ -2283,7 +2287,15 @@ already-resumed, HITL prompt:
    - Claim timestamps use the DATABASE's own clock (`_db_now`), not the
      calling process's, so replica clock skew cannot incorrectly steal or
      fail to steal a lease.
-   Deliberately a separate table from `langgraph_checkpoint_write`: that
+   `occurrence_key` reuses the existing `interrupt_id` column: it stores the
+   bare native id for a pause without an occurrence, and a versioned,
+   fixed-length SHA-256 digest of the canonical JSON
+   `(interrupt_id, occurrence_id)` pair otherwise. Native ids are fixed-width
+   hexadecimal values, so the non-hex digest prefix cannot collide with their
+   bare form. The bounded key also remains safe for the indexed Postgres column
+   when an occurrence id is unusually large. This avoids a schema migration
+   for the self-initializing claim table. Deliberately a separate table from
+   `langgraph_checkpoint_write`: that
    table is LangGraph-owned semantic storage read back as `pending_writes`,
    and an artificial row there would corrupt `pending_write_count` /
    checkpoint-administration semantics
@@ -2293,30 +2305,30 @@ already-resumed, HITL prompt:
 **Native LangGraph ownership vs FRED's admission boundary.** LangGraph owns
 `Interrupt.id`, interrupt persistence, pending graph state, and targeted
 resume routing (layer 3). FRED owns exactly three things: HTTP-layer
-authorization (layer 2), cross-stack transport of `interrupt_id` (CLI,
-frontend, OpenAPI contract), and the minimum durable multi-replica
-admission guard LangGraph itself has no opinion on (layer 4) — FRED never
-mints a parallel occurrence identity of its own. `Interrupt.id` is
+authorization (layer 2), cross-stack transport of `interrupt_id` and
+`occurrence_id` (frontend and OpenAPI contract), and the minimum durable
+multi-replica admission guard LangGraph itself has no opinion on (layer 4).
+FRED does not mint occurrence identity at pause time: a tool pause derives it
+from the model-assigned, checkpointed `tool_call_id`, which remains stable when
+LangGraph replays the task from the top. `Interrupt.id` is
 `xxh3_128_hexdigest(task_checkpoint_ns)` and is **NOT universally
 occurrence-unique**: two `interrupt()` calls within the SAME LangGraph task
 share it, matched by call order instead
 (`test_langgraph_interrupt_id_semantics.py` pins this against the installed
-LangGraph version). #2216 relies on a narrower, FRED-specific fact instead:
-`FredHitlMiddleware.aafter_model` has exactly one `interrupt()` call site,
-invoked at most once per task, so two DISTINCT FRED HITL occurrences
-always land in different tasks and always get different ids — proven
-against FRED's real tool loop
-(`test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`)
-and, end to end against a real compiled agent + `FredSqlCheckpointer` +
-the actual emitted `Interrupt.id` + `graph_input_from_react_input`, by
-`test_hitl_resume_langgraph_integration.py`.
+LangGraph version). Existing platform approval pauses omit `occurrence_id`
+because `FredHitlMiddleware.aafter_model` still invokes at most one
+`interrupt()` per task. Tool-raised pauses declare it even when the installed
+`ToolNode` currently assigns distinct task ids: this keeps identity correct for
+replay and for execution shapes where several pauses share one native id. The
+real compiled-agent test verifies that each injected `tool_call_id` survives
+every replay unchanged.
 
 **Guaranteed properties** (see `FredSqlCheckpointer.aclaim_hitl_resume`'s
 docstring for the authoritative version):
 
-- a stale response for an earlier interrupt (A) can never resume a later
-  one (B) — enforced independently by layer 2's exact-id match and layer
-  3's targeted resume-map matching
+- a stale response for an earlier occurrence (A) can never resume a sibling or
+  later one (B) — layer 2 requires the exact identity pair, while layer 3 keeps
+  native targeted resume-map matching
 - no two healthy requests can both hold a live claim (`claimed` or
   `started`) for the same occurrence at once — proven same-process (N-way
   race via `asyncio.gather`), cross-replica (two independently created
@@ -2392,7 +2404,11 @@ the interactive REPL extracts both from the pending
 it through an explicit `RuntimeHitlPayload`/`RuntimeAwaitingHumanEvent`
 type pair based on the generated `HumanInputRequest` contract, replacing
 the legacy agentic-backend `HitlPayload`'s open index signature for this
-purpose.
+purpose. The frontend also echoes `occurrence_id` verbatim when the pending
+request declares one. History persists request and response occurrence ids,
+pairs them by identity, and stores free-form answer text separately from an
+optional `choice_id`; legacy rows without occurrences retain positional
+pairing.
 
 **Immediate follow-up (tracked, not in this patch).** `FredHitlMiddleware`
 stays a hand-rolled `AgentMiddleware` with FRED's own `interrupt()` call

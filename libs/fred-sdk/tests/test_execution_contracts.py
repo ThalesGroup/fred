@@ -357,6 +357,26 @@ def test_interrupt_id_without_resume_payload_is_rejected() -> None:
         )
 
 
+def test_occurrence_id_without_resume_payload_is_rejected() -> None:
+    with pytest.raises(Exception, match="occurrence_id is only valid together"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent", input="hello", occurrence_id="tool-call-1"
+        )
+
+
+def test_occurrence_id_is_carried_with_a_resume() -> None:
+    req = RuntimeExecuteRequest(
+        agent_id="my-agent",
+        input="",
+        interrupt_id="interrupt-a",
+        occurrence_id="tool-call-1",
+        resume_payload={"choice_id": "proceed"},
+    )
+
+    assert req.occurrence_id == "tool-call-1"
+    assert req.to_legacy_context()["occurrence_id"] == "tool-call-1"
+
+
 def test_to_legacy_context_carries_interrupt_id_when_set() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",
