@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,12 +8,25 @@ import {
   assertIframeSdkConsumerFixture,
   stageIsolatedIframeSdkConsumer,
 } from "../scripts/isolated-iframe-sdk-consumer.mjs";
+import { iframeSdkConsumerCache } from "../scripts/provision-iframe-sdk-consumer.mjs";
+
+// Populating that cache needs network access, which `make test` does not have.
+// Without this the suite reports a red test on a clean checkout, which reads as
+// a regression rather than "you have not provisioned yet" — and the skip
+// message says exactly what to run.
+const cacheReady = await stat(path.join(iframeSdkConsumerCache, "_cacache")).then(
+  () => true,
+  () => false,
+);
+const skipWithoutCache = cacheReady
+  ? false
+  : `iframe SDK consumer cache absent — run 'make consumer-provision-iframe-sdk' (needs network)`;
 
 test("the iframe SDK consumer is neutral and lockfile-pinned", async () => {
   await assertIframeSdkConsumerFixture();
 });
 
-test("the actual iframe SDK archive installs and builds outside FRED", async () => {
+test("the actual iframe SDK archive installs and builds outside FRED", { skip: skipWithoutCache }, async () => {
   const evidence = await stageIsolatedIframeSdkConsumer();
   assert.deepEqual(evidence.dependencyGraph, {
     "@fred-oss/iframe-sdk": "0.1.0-alpha.1",
