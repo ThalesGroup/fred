@@ -28,6 +28,10 @@ The frontend SHALL load the charter from `team-admin-charter.<lang>.md`, then `t
 - **WHEN** the theme archive contains no charter document
 - **THEN** the stock template is shown
 
+#### Scenario: Theme archive uses the content-storage credentials
+- **WHEN** the control-plane content storage has an access key and a MinIO secret key
+- **THEN** the Helm chart creates `s3-credentials` with `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` for the frontend theme configuration to reference
+
 ### Requirement: A nominated administrator is pending until they accept the configured version
 
 While a version is configured, every grant of `team_admin` to a user who has not accepted that version SHALL write `pending_team_admin` instead. `pending_team_admin` MUST grant the rights of `team_member` and nothing more. It MUST NOT be requestable directly, and revoking it MUST require `can_administer_admins`. The last-admin guard and the rescue check MUST count `team_admin` only.
