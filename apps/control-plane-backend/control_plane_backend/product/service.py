@@ -656,6 +656,11 @@ async def _runtime_execution_metadata_for_source(
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
+            if "public_version" not in entry.model_fields_set:
+                # A pod predating the version split sends `version` alone,
+                # where it meant both. Drop this once no pod below 4.0.0 can
+                # register; an explicit null still publishes nothing.
+                entry = entry.model_copy(update={"public_version": entry.version})
             merged.setdefault(entry.id, entry)
     max_chat_input_chars = next(
         (
@@ -772,6 +777,12 @@ async def _agent_capabilities_for_source(
     return [
         CapabilityCatalogEntry(
             id=template_capability_id(runtime_id, template.template_agent_id),
+            runtime_id=runtime_id,
+            source_id=template.template_agent_id,
+            # `version` is the stored-config schema version; no public_version
+            # because an agent has no version of its own yet. The id above is
+            # FGA-safe and mangled, which is why provenance travels as its own
+            # fields rather than being parsed back out of it.
             version="1",
             name=template.title,
             description=template.description,
@@ -872,6 +883,12 @@ async def _model_capabilities_for_source_uncached(
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
+            source_id=entry["id"],
+            # No runtime_id on purpose: several pods can serve the same model,
+            # and the catalog unions their entries below. A single pod id would
+            # be whichever one merged last — arbitrary, and read as fact.
+            # No public_version either: a pod advertises a model's routable
+            # identity, not a version of it.
             version="1",
             name=entry["name"],
             description=entry.get("description") or entry["name"],

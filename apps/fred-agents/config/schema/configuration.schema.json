@@ -351,8 +351,14 @@
       "additionalProperties": false
     },
     "PodAppConfig": {
-      "description": "Basic HTTP server and local observability settings for an agent pod.\n\nWhy this exists:\n- every pod needs the same HTTP binding knobs plus the small Prometheus/KPI\n  settings already used by the other Fred backends\n- keeping these fields in `app` preserves the familiar startup contract for\n  local benches and scrape-based debugging\n\nHow to use it:\n- keep the defaults for simple local development\n- set `metrics_port` / `metrics_address` when `observability.metrics` is\n  `prometheus`\n\nExample:\n- `PodAppConfig(base_url=\"/pod/v1\", port=8000, metrics_port=9115)`",
+      "description": "Identity and HTTP server settings for an agent pod.\n\nWhy this exists:\n- every pod needs the same identity and HTTP binding knobs, in the same\n  place, whoever built it\n- keeping these fields in `app` preserves the familiar startup contract for\n  local benches and scrape-based debugging\n\nHow to use it:\n- declare `runtime_id`; every other field defaults sanely for local work\n- the metrics exporter is configured under `observability.kpi.prometheus`,\n  not here\n\nExample:\n- `PodAppConfig(runtime_id=\"my-agents\", base_url=\"/pod/v1\", port=8000)`",
       "properties": {
+        "runtime_id": {
+          "description": "Slug identifying this pod across every telemetry stream: the KPI `service` dimension, the `runtime_id` KPI dimension, and the `service` field of every log record. MUST equal the id the control-plane registers this pod under in `runtime_catalog_sources[].runtime_id` \u2014 that equality is what lets a log line be joined to its own KPI. Lowercase slug only, so no display prose can reach a Prometheus label.",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "title": "Runtime Id",
+          "type": "string"
+        },
         "name": {
           "default": "Fred Agent Pod",
           "title": "Name",
@@ -417,6 +423,9 @@
           "type": "boolean"
         }
       },
+      "required": [
+        "runtime_id"
+      ],
       "title": "PodAppConfig",
       "type": "object",
       "additionalProperties": false
@@ -970,6 +979,7 @@
     }
   },
   "required": [
+    "app",
     "security"
   ],
   "title": "AgentPodConfig",

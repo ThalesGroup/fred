@@ -36,6 +36,15 @@ tool or route, success/failure/error-code, which model, which agent *type* (the 
 blueprint — e.g. "customer-support-bot" — not a specific team's configured copy of it), which
 pod/service.
 
+**How a service names itself.** The `service` dimension is a lowercase slug, and it is the same
+value in this stream and in the log records of §6 — that equality is what lets a log line be
+joined to its own metric. A standalone backend declares it in its own `log_setup` /
+`build_kpi_writer` calls (`control-plane`, `knowledge-flow`, `rags-services`). An agent pod
+declares it as `app.runtime_id` in its `configuration.yaml`, where it must equal the id the
+control-plane registers that pod under in `runtime_catalog_sources[].runtime_id`. A pod that
+omits it does not start. `app.name` is a display string and is never used as an identifier —
+sourcing one from it would put spaces and capitals in a Prometheus label.
+
 **What is structurally excluded — by design, enforced in code, not by operator discipline:**
 - User identity (`user_id`), session identity (`session_id`, `exchange_id`).
 - Per-call correlation identifiers (`trace_id`, `correlation_id`, `checkpoint_id`) — these carry

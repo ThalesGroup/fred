@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabular SQL sandbox — team presentation</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --slide-bg: #0f1522;
+    --text: #e6edf5;
+    --muted: #8b96a8;
+    --faint: #55617a;
+    --accent: #2dd4bf;
+    --accent-dim: rgba(45, 212, 191, .12);
+    --amber: #fbbf24;
+    --red: #f87171;
+    --green: #4ade80;
+    --blue: #60a5fa;
+    --violet: #c084fc;
+    --line: #232c3f;
+    --code-bg: #0a0e16;
+    --chip-bg: #161e30;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono {
+    font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+
+  /* ---------- deck mechanics ---------- */
+  .slide {
+    position: absolute; top: 50%; left: 50%;
+    width: 1280px; height: 720px;
+    transform: translate(-50%, -50%);
+    background:
+      radial-gradient(1000px 600px at 85% -10%, rgba(45,212,191,.05), transparent 60%),
+      var(--slide-bg);
+    border-radius: 14px;
+    padding: 54px 72px 60px;
+    opacity: 0; visibility: hidden;
+    transition: opacity .22s ease;
+    display: flex; flex-direction: column;
+  }
+  .slide.active { opacity: 1; visibility: visible; }
+
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: var(--accent); width: 0; z-index: 10;
+    transition: width .25s ease;
+  }
+  #counter { position: fixed; bottom: 14px; right: 20px; z-index: 10; color: var(--faint); font-size: 13px; user-select: none; }
+  #navhint { position: fixed; bottom: 14px; left: 20px; z-index: 10; color: var(--faint); font-size: 13px; user-select: none; }
+  .navbtn { position: fixed; top: 0; bottom: 0; width: 12%; z-index: 5; background: transparent; border: 0; cursor: pointer; }
+  #prevzone { left: 0; } #nextzone { right: 0; }
+
+  /* ---------- typography ---------- */
+  .kicker { font-size: 15px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; font-weight: 600; }
+  h1 { font-size: 58px; line-height: 1.1; font-weight: 700; }
+  h2 { font-size: 38px; line-height: 1.15; font-weight: 700; margin-bottom: 24px; }
+  .sub { color: var(--muted); font-size: 23px; line-height: 1.5; }
+  .body, li { font-size: 22px; line-height: 1.5; }
+  ul { list-style: none; }
+  ul li { padding-left: 30px; position: relative; margin-bottom: 13px; }
+  ul li::before { content: "—"; position: absolute; left: 0; color: var(--accent); }
+  ul.tight li { margin-bottom: 8px; font-size: 20px; }
+  strong { color: #fff; }
+  em { color: var(--amber); font-style: normal; }
+  .muted { color: var(--muted); }
+  .punch { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--line); font-size: 23px; color: var(--amber); font-weight: 600; }
+  .cols { display: flex; gap: 46px; flex: 1; min-height: 0; }
+  .col { flex: 1; min-width: 0; }
+  h4.colhead { font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; font-weight: 600; }
+
+  /* ---------- code ---------- */
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; font-size: 17px; line-height: 1.5; overflow: hidden; }
+  pre.small { font-size: 15.5px; }
+  .k { color: #f472b6; } .t { color: #7dd3fc; } .s { color: #bef264; } .c { color: #5b6b84; } .f { color: #fbbf24; }
+
+  /* ---------- tables ---------- */
+  table { border-collapse: collapse; width: 100%; font-size: 19px; }
+  th, td { text-align: left; padding: 10px 15px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; }
+  td { line-height: 1.38; vertical-align: top; }
+  td code { font-size: 16px; color: var(--blue); }
+  table.dense { font-size: 16.5px; }
+  table.dense th, table.dense td { padding: 7px 13px; }
+  table.dense td code { font-size: 14.5px; }
+
+  /* ---------- pills / chips ---------- */
+  .pill { display: inline-block; padding: 3px 14px; border-radius: 999px; font-size: 15px; font-weight: 600; vertical-align: middle; margin-left: 12px; }
+  .pill.shipped { background: rgba(74,222,128,.14); color: var(--green); }
+  .pill.rfc     { background: rgba(96,165,250,.14); color: var(--blue); }
+  .pill.future  { background: rgba(251,191,36,.14); color: var(--amber); }
+  .pill.horizon { background: rgba(192,132,252,.14); color: var(--violet); }
+
+  .tag { display:inline-block; padding: 2px 10px; border-radius: 6px; font-size: 14px; font-weight: 700; }
+  .tag.broken  { background: rgba(248,113,113,.16); color: var(--red); }
+  .tag.viable  { background: rgba(74,222,128,.16); color: var(--green); }
+  .tag.rejected{ background: rgba(139,150,168,.16); color: var(--muted); }
+  .tag.died    { background: rgba(251,191,36,.16); color: var(--amber); }
+
+  /* before / after + generic panels */
+  .ba { display: flex; gap: 32px; flex: 1; align-items: stretch; }
+  .ba-panel { flex: 1; border-radius: 12px; padding: 22px 26px; border: 1px solid var(--line); background: var(--chip-bg); display: flex; flex-direction: column; }
+  .ba-panel h3 { font-size: 22px; margin-bottom: 4px; }
+  .ba-panel .cap { font-size: 16.5px; color: var(--muted); margin-bottom: 16px; }
+  .ba-panel.a { border-color: rgba(45,212,191,.45); }
+  .ba-panel.b { border-color: rgba(96,165,250,.45); }
+  .ba-panel ul li { font-size: 18.5px; margin-bottom: 10px; padding-left: 26px; line-height: 1.4; }
+
+  /* flow steps */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 6px 0 18px; }
+  .flow-step { background: var(--chip-bg); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; flex: 1; text-align: center; }
+  .flow-step b { display: block; font-size: 16px; margin-bottom: 4px; color: var(--accent); }
+  .flow-step span { color: var(--muted); font-size: 13.5px; line-height: 1.35; display: block; }
+  .flow-arrow { font-size: 22px; color: var(--faint); padding: 0 9px; align-self: center; flex: 0 0 auto; }
+
+  /* pod schema */
+  .podmap { display: flex; align-items: stretch; gap: 0; margin: 4px 0 2px; }
+  .pod { border: 1px solid var(--line); background: var(--chip-bg); border-radius: 11px; padding: 15px 16px; flex: 1; display: flex; flex-direction: column; }
+  .pod b { display: block; font-size: 17px; margin-bottom: 7px; }
+  .pod span { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.4; }
+  .pod .egress { margin-top: auto; padding-top: 9px; font-size: 12.5px; line-height: 1.45; }
+  .pod .ok { color: var(--green); } .pod .no { color: var(--red); }
+  .pod.kf { border-color: rgba(96,165,250,.4); } .pod.kf b { color: var(--blue); }
+  .pod.exec { border-color: rgba(45,212,191,.5); } .pod.exec b { color: var(--accent); }
+  .pod.store { border-color: rgba(192,132,252,.4); } .pod.store b { color: var(--violet); }
+  .pod-arrow { flex: 0 0 auto; align-self: center; padding: 0 12px; text-align: center; color: var(--muted); font-size: 12px; width: 110px; }
+  .pod-arrow b { display: block; color: var(--accent); font-size: 20px; line-height: 1; margin-bottom: 3px; }
+  .pod-arrow.small { width: 70px; }
+
+  /* architecture diagram — a "canvas", visually distinct from step rows */
+  .diagram {
+    flex: 1; margin: 8px 0 4px;
+    display: flex; align-items: center; justify-content: center; gap: 0;
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 20px 34px;
+    background:
+      linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px) 0 0 / 24px 24px,
+      radial-gradient(700px 380px at 50% 0%, rgba(45,212,191,.05), transparent 65%),
+      #070b12;
+    box-shadow: inset 0 2px 34px rgba(0,0,0,.45);
+  }
+  .node { display: flex; flex-direction: column; align-items: center; text-align: center; width: 214px; }
+  .node .glyph {
+    font-size: 62px; line-height: 1; margin-bottom: 12px;
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,.5));
+  }
+  .node .plate {
+    border-radius: 16px; padding: 16px 14px 14px; width: 100%;
+    border: 1px solid var(--line); background: rgba(255,255,255,.015);
+  }
+  .node.kf .plate   { border-color: rgba(96,165,250,.5);  box-shadow: 0 0 0 1px rgba(96,165,250,.08), 0 10px 30px rgba(0,0,0,.35); }
+  .node.exec .plate { border-color: rgba(45,212,191,.6);  box-shadow: 0 0 0 1px rgba(45,212,191,.1), 0 10px 30px rgba(0,0,0,.35); }
+  .node.store .plate{ border-color: rgba(192,132,252,.5); box-shadow: 0 0 0 1px rgba(192,132,252,.08), 0 10px 30px rgba(0,0,0,.35); }
+  .node b { font-size: 18px; display: block; }
+  .node .role { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+  .node .egress-tag { margin-top: 10px; font-size: 12px; line-height: 1.5; }
+  .node .egress-tag .ok { color: var(--green); display: block; }
+  .node .egress-tag .no { color: var(--red); display: block; }
+  .node .egress-tag .warn { color: var(--amber); display: block; }
+  .wire { flex: 0 0 auto; width: 110px; display: flex; flex-direction: column; align-items: center; padding: 0 6px; margin-bottom: 40px; }
+  .wire .arw { font-size: 34px; line-height: 1; color: var(--accent); }
+  .wire span { font-size: 11.5px; color: var(--muted); margin-top: 5px; max-width: 100px; line-height: 1.3; }
+  .diagram-inner { position: relative; width: 862px; }
+  .diagram-row { display: flex; align-items: center; justify-content: center; }
+  .mint-arc { display: block; width: 862px; height: 78px; margin-top: -26px; overflow: visible; }
+  .mint-arc path { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 7 6; }
+  .mint-arc text { fill: var(--amber); font-size: 13.5px; font-weight: 600; }
+  .mint-arc .halo { stroke: #070b12; stroke-width: 9; fill: none; }
+
+  /* holes / status cards */
+  .cards { display: flex; gap: 22px; flex: 1; }
+  .card { flex: 1; border-radius: 12px; padding: 20px 22px; border: 1px solid var(--line); background: var(--chip-bg); }
+  .card.bad { border-color: rgba(248,113,113,.4); background: rgba(248,113,113,.06); }
+  .card.good { border-color: rgba(74,222,128,.35); background: rgba(74,222,128,.05); }
+  .card h3 { font-size: 20px; margin-bottom: 10px; }
+  .card.bad h3 { color: var(--red); } .card.good h3 { color: var(--green); }
+  .card p { font-size: 16.5px; color: var(--muted); line-height: 1.45; }
+  .card .mono { color: var(--text); font-size: 15px; }
+
+  /* gap rows */
+  .risk-low { color: var(--green); font-weight: 600; }
+  .risk-med { color: var(--amber); font-weight: 600; }
+  .hot td:first-child { color: var(--accent); }
+
+  /* divider slide */
+  .divider { justify-content: center; align-items: flex-start; }
+
+  @media print {
+    html, body { overflow: visible; background: #fff; }
+    .slide { position: relative; top: 0; left: 0; transform: none !important; opacity: 1; visibility: visible; page-break-after: always; margin: 0 auto; }
+    #progress, #counter, #navhint, .navbtn { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="counter"></div>
+<div id="navhint">← → to navigate</div>
+<button id="prevzone" class="navbtn" aria-label="previous slide"></button>
+<button id="nextzone" class="navbtn" aria-label="next slide"></button>
+
+<!-- ============ 1 · TITLE ============ -->
+<section class="slide">
+  <div style="margin: auto 0;">
+    <div class="kicker">Fred · Knowledge Flow · RFC TABULAR-SANDBOX</div>
+    <h1>Executing agent SQL over<br>tabular data, safely</h1>
+    <p class="sub" style="margin-top:22px; max-width: 940px;">
+      The agent writes arbitrary SQL. It runs in <strong>DuckDB</strong>, in our pod, over
+      Parquet the user is allowed to read. <strong>Where does the security boundary sit?</strong>
+    </p>
+    <p class="muted" style="margin-top:56px; font-size:19px;">
+      Florian Muller · August 2026<br>
+      Full design: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/TABULAR-SQL-SANDBOX-RFC.md</code>
+      · trigger: <code class="mono" style="color:var(--blue); font-size:17px;">#2364</code> (GCS signBlob outage)
+    </p>
+  </div>
+</section>
+
+<!-- ============ 2 · THE PROBLEM ============ -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Arbitrary SQL, authored by an LLM, run in our pod</h2>
+  <div class="cols">
+    <div class="col">
+      <ul>
+        <li>The tabular feature lets an agent answer questions over CSV/Excel by writing <strong>read-only SQL</strong>, executed by DuckDB against the ingested Parquet.</li>
+        <li>The SQL text is <strong>attacker-controlled</strong> in the worst case (prompt injection through an ingested document).</li>
+        <li>ReBAC already decides <em>which datasets</em> the user may read. The question is enforcing that — and nothing more — at execution.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Four requirements</h4>
+      <ul class="tight">
+        <li><strong>R1</strong> — never read a dataset the user can't see</li>
+        <li><strong>R2</strong> — never read anything <em>else</em> in the pod: local files, other buckets, internal HTTP, the metadata server</li>
+        <li><strong style="color:var(--accent);">R3</strong> — the boundary must <strong>not</strong> be a hand-written SQL parser: a parser gap must not be a breach</li>
+        <li><strong>R4</strong> <span class="muted">(goal)</span> — read big Parquet without downloading the whole file</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">Today R1/R2 rest on an AST-walking SQL validator. R3 says: that's exactly what we don't want to depend on.</p>
+</section>
+
+<!-- ============ 3 · THREAT MODEL ============ -->
+<section class="slide">
+  <div class="kicker">Why R3 matters</div>
+  <h2>What one gap in the SQL parser costs</h2>
+  <p class="sub" style="margin-bottom:22px;">DuckDB is powerful by design. If a crafted query slips past the validator, plain SQL functions reach far beyond the dataset:</p>
+  <div class="cols">
+    <div class="col">
+      <pre class="small"><span class="c">-- read any file the pod can read</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> <span class="f">read_text</span>(<span class="s">'/app/.env'</span>);
+
+<span class="c">-- SSRF → the cloud metadata server →</span>
+<span class="c">-- the pod's service-account token</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> <span class="f">read_csv</span>(
+  <span class="s">'http://169.254.169.254/computeMetadata/...'</span>);
+
+<span class="c">-- reach another team's bucket with</span>
+<span class="c">-- the pod's own store credentials</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> <span class="f">read_parquet</span>(
+  <span class="s">'s3://fred-data/other-team/secret.parquet'</span>);</pre>
+    </div>
+    <div class="col">
+      <ul class="tight">
+        <li>The validator is a <strong>recursive AST walk</strong> (joins, CTEs, subqueries, table functions). It works today — but it is a hand-written allowlist.</li>
+        <li>One missed node shape = full reach of the pod's <strong>filesystem, network, and credentials</strong>.</li>
+        <li>A boundary that fails <strong>closed</strong> — and lives outside the SQL stream — is worth more than a cleverer parser.</li>
+      </ul>
+      <p class="muted" style="margin-top:18px; font-size:17px;">This is the lens for judging every option that follows.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 · EVERY SOLUTION CONSIDERED ============ -->
+<section class="slide">
+  <div class="kicker">The homework</div>
+  <h2>Ten approaches considered</h2>
+  <table class="dense">
+    <tr><th style="width:30px;">#</th><th>Approach</th><th style="width:120px;">Verdict</th><th>Why</th></tr>
+    <tr><td>1</td><td>DuckDB + pre-registered views + <strong>SQL parsing guard</strong></td><td><span class="tag rejected">rejected</span></td><td>Security depends on the parser (fails R3). Ships today as UX only.</td></tr>
+    <tr><td>2</td><td>DuckDB + httpfs reading <code>s3://</code> with normal store creds</td><td><span class="tag broken">broken</span></td><td>Credential grants the whole bucket; a gap reads any team's data.</td></tr>
+    <tr><td>3</td><td>Download authorized files locally + <code>enable_external_access=false</code></td><td><span class="tag viable">viable → A</span></td><td>Security by physical absence. Cost: full-file download.</td></tr>
+    <tr><td>4</td><td>Postgres RLS + <code>SET app.current_team</code></td><td><span class="tag broken">broken</span></td><td>Agent controls the stream → <code>SET</code>/<code>RESET</code> clears the context.</td></tr>
+    <tr><td>5</td><td>Postgres schema-per-team + <code>SET ROLE</code></td><td><span class="tag broken">broken</span></td><td>Runner is member of every role → <code>SET ROLE</code> escalates.</td></tr>
+    <tr><td>6</td><td>Postgres per-team LOGIN role, no memberships</td><td><span class="tag rejected">rejected</span></td><td>Genuinely secure, but roles are cluster-global — doesn't scale.</td></tr>
+    <tr><td>7</td><td>SQLite file per team <span class="muted">(+ setuid / pod-per-query variants)</span></td><td><span class="tag broken">broken</span></td><td>No engine-level ACL; <code>ATTACH</code> can't be disabled. Variants too heavy.</td></tr>
+    <tr><td>8</td><td>Object-store <strong>STS</strong> scoped creds + DuckDB httpfs</td><td><span class="tag viable">viable → B</span></td><td>Boundary = the credential, at the store's IAM layer.</td></tr>
+    <tr><td>9</td><td>Presigned URL per object + httpfs <span class="muted">(what shipped)</span></td><td><span class="tag died">died on GCS</span></td><td>Needs <code>signBlob</code> — not granted on tp-s3ns (#2364).</td></tr>
+    <tr><td>10</td><td>GCS server-side ADC download <span class="muted">(current branch, PR #2444)</span></td><td><span class="tag viable">= A, partial</span></td><td>The GCS-shaped instance of 3 — without the sandbox flags yet.</td></tr>
+  </table>
+  <p class="punch" style="font-size:21px;">Two survive the R1–R3 filter: <strong style="color:var(--accent);">A</strong> (download + sandbox) and <strong style="color:var(--blue);">B</strong> (STS + httpfs).</p>
+</section>
+
+<!-- ============ 5 · A vs B OVERVIEW ============ -->
+<section class="slide">
+  <div class="kicker">The two survivors</div>
+  <h2>Same job, opposite strategy</h2>
+  <div class="ba">
+    <div class="ba-panel a">
+      <h3 style="color:var(--accent);">A · Local materialization + sandbox</h3>
+      <p class="cap">Bring the data to a locked-down DuckDB.</p>
+      <ul>
+        <li>Backend downloads <strong>only the authorized files</strong> into a per-job directory</li>
+        <li>DuckDB runs with external access off, pinned to that directory, config locked</li>
+        <li><strong>Boundary = physical absence</strong> — there is nothing else to reach</li>
+        <li>No credential in DuckDB's hands, no network</li>
+      </ul>
+      <p class="muted" style="margin-top:auto; font-size:16px;">Cost: full-file download (weak on R4). Verified workable on DuckDB 1.5.4.</p>
+    </div>
+    <div class="ba-panel b">
+      <h3 style="color:var(--blue);">B · STS-scoped credential + httpfs</h3>
+      <p class="cap">Give DuckDB a key that only opens the right doors.</p>
+      <ul>
+        <li>Backend mints a <strong>short-lived credential scoped to exactly those object keys</strong></li>
+        <li>DuckDB reads <code>s3://</code>/<code>https://</code> directly, with range reads</li>
+        <li><strong>Boundary = the credential</strong>, enforced at the object store's IAM layer</li>
+        <li>A foreign key → 403 from the store, outside the SQL stream</li>
+      </ul>
+      <p class="muted" style="margin-top:auto; font-size:16px;">Meets R4. But httpfs stays on → needs a network layer (next).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 · SOLUTION A DEPTH ============ -->
+<section class="slide">
+  <div class="kicker">Solution A · in depth</div>
+  <h2>Download, sandbox, delete</h2>
+  <div class="flow">
+    <div class="flow-step"><b>ReBAC</b><span>resolve the authorized datasets</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Materialize</b><span>download only those into a per-job dir</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Sandbox</b><span>external access off · pinned to dir · locked</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Run &amp; delete</b><span>query, then drop the whole dir</span></div>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The lock (verified on 1.5.4)</h4>
+<pre class="small"><span class="k">SET</span> allowed_directories = [<span class="s">'&lt;job dir&gt;'</span>];
+<span class="k">SET</span> enable_external_access = <span class="t">false</span>;
+<span class="k">SET</span> lock_configuration   = <span class="t">true</span>;
+<span class="c">-- httpfs never loaded · no s3 · no http</span>
+<span class="c">-- agent SQL cannot leave the dir or re-SET</span></pre>
+      <p class="muted" style="margin-top:12px; font-size:16.5px;">The job dir contains <strong>only</strong> authorized artifacts, so "which files are present" is the boundary — not the parser.</p>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Efficiency — a pnpm-style cache</h4>
+      <ul class="tight">
+        <li>Shared pod-local cache; each job dir gets <strong>hardlinks</strong> to what it may read (symlinks are correctly refused by the sandbox)</li>
+        <li>Invalidation = the store's own <strong>etag / generation</strong> (one HEAD per mount) — catches re-ingestion and out-of-band writes</li>
+        <li>Eviction is safe: a running job's hardlink keeps the file alive</li>
+        <li><strong>Local mode</strong>: copy instead, no cache — the local file <em>is</em> the store of record</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7 · SOLUTION B DEPTH ============ -->
+<section class="slide">
+  <div class="kicker">Solution B · in depth</div>
+  <h2>Mint a scoped key — in a pod that can only reach the store</h2>
+  <div class="flow">
+    <div class="flow-step"><b>ReBAC</b><span>resolve the authorized datasets</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Mint token</b><span>scoped to those exact object keys</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Executor runs</b><span>DuckDB httpfs, with the scoped token</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><b>Range-read</b><span>only needed bytes → rows back to KF</span></div>
+  </div>
+  <div class="diagram">
+    <div class="diagram-inner">
+      <div class="diagram-row">
+        <div class="node kf">
+          <div class="glyph">📦</div>
+          <div class="plate">
+            <b>Knowledge Flow</b>
+            <div class="role">ReBAC · mints the scoped token</div>
+            <div class="egress-tag"><span class="warn">↳ needs the metadata server</span></div>
+          </div>
+        </div>
+        <div class="wire"><span class="arw">→</span><span>SQL + scoped token</span></div>
+        <div class="node exec">
+          <div class="glyph">🔒</div>
+          <div class="plate">
+            <b>tabular-executor</b>
+            <div class="role">DuckDB + httpfs · no-privilege pod</div>
+            <div class="egress-tag"><span class="no">✗ metadata · ✗ internal</span></div>
+          </div>
+        </div>
+        <div class="wire"><span class="arw">↔</span><span>range reads</span></div>
+        <div class="node store">
+          <div class="glyph">🪣</div>
+          <div class="plate">
+            <b>GCS / MinIO</b>
+            <div class="role">403 on a foreign key, at the IAM layer</div>
+            <div class="egress-tag"><span class="ok">✓ scoped token only</span></div>
+          </div>
+        </div>
+      </div>
+      <svg class="mint-arc" viewBox="0 0 862 78" aria-label="Knowledge Flow mints the scoped token against the store's STS API">
+        <defs>
+          <marker id="arcArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24" stroke="none"/>
+          </marker>
+        </defs>
+        <path class="halo" d="M 107 6 C 250 74, 612 74, 755 6"/>
+        <path d="M 107 6 C 250 74, 612 74, 755 6" marker-start="url(#arcArrow)" marker-end="url(#arcArrow)"/>
+        <rect x="330" y="46" width="202" height="24" rx="6" fill="#070b12"/>
+        <text x="431" y="63" text-anchor="middle">mint scoped token · STS API</text>
+      </svg>
+    </div>
+  </div>
+  <p class="punch" style="font-size:20px;">The catch: httpfs can't be locked down like A — external access must stay on, so SSRF is closed at the <strong>pod's network edge</strong>, not in DuckDB. That edge can't live on KF (it needs the metadata server) → a <strong>separate minimal pod</strong>.</p>
+</section>
+
+<!-- ============ 8 · THE PARSER, DEMOTED ============ -->
+<section class="slide">
+  <div class="kicker">Both solutions · a fair question</div>
+  <h2>"So do we delete the parser?" — No, we demote it</h2>
+  <div class="ba">
+    <div class="ba-panel">
+      <h3 style="color:var(--red);">Today — the parser is the wall</h3>
+      <p class="cap">A row cap forces the SQL into one wrapped SELECT; the AST allowlist is what keeps it safe.</p>
+<pre class="small"><span class="c"># the query is wrapped to force a cap</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> (
+    &lt;agent sql&gt;          <span class="c"># must be ONE SELECT</span>
+) <span class="k">AS</span> fred_result
+<span class="k">LIMIT</span> 200;</pre>
+      <ul class="tight" style="margin-top:14px;">
+        <li>Security = the recursive AST allowlist</li>
+        <li>Wrapper is injectable if a gap admits a 2nd statement</li>
+        <li>No multi-statement, no temp-table staging</li>
+      </ul>
+    </div>
+    <div class="ba-panel a">
+      <h3 style="color:var(--accent);">With the sandbox — the parser steps back</h3>
+      <p class="cap">The sandbox (A) or the scoped credential (B) is the wall. The cap becomes a Python fetch.</p>
+<pre class="small"><span class="c"># no wrapper — cap is a streaming fetch</span>
+cur = con.<span class="f">execute</span>(agent_sql)   <span class="c"># any script</span>
+rows = cur.<span class="f">fetchmany</span>(max_rows + 1)</pre>
+      <ul class="tight" style="margin-top:14px;">
+        <li>Security = sandbox / credential — <strong>not</strong> the parser</li>
+        <li>Parser kept only for <strong>clean 400s</strong> + <strong>mount-narrowing</strong></li>
+        <li>Multi-statement + <code>CREATE TEMP TABLE</code> now allowed</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">The agent gets <strong>more</strong> SQL power, not less — the sandbox is what makes that safe.</p>
+</section>
+
+<!-- ============ 9 · WHERE WE ARE TODAY ============ -->
+<section class="slide">
+  <div class="kicker">Current state · PR #2444</div>
+  <h2>The GCS outage is fixed — the boundary isn't moved yet</h2>
+  <p class="sub" style="margin-bottom:20px;">
+    #2364 removed the presigned URL: GCS reads now download server-side via ADC (plain <code class="mono" style="font-size:19px; color:var(--blue);">storage.objects.get</code>, no <code class="mono" style="font-size:19px; color:var(--blue);">signBlob</code>). Good. But the DuckDB sandbox flags aren't on, so <strong>even with the download in place</strong>, the agent's SQL can still:
+  </p>
+  <div class="cards">
+    <div class="card bad">
+      <h3>Reach any URL</h3>
+      <p>httpfs is still loadable → <span class="mono">read_csv('http://169.254.169.254/…')</span> — SSRF to the SA token.</p>
+    </div>
+    <div class="card bad">
+      <h3>Read any file in the pod</h3>
+      <p>External access is on → <span class="mono">read_text('/app/.env')</span>, any path the process can reach.</p>
+    </div>
+    <div class="card bad">
+      <h3>Change its own config</h3>
+      <p>No <span class="mono">lock_configuration</span> → a query can <span class="mono">SET</span> its way around limits.</p>
+    </div>
+  </div>
+  <p class="punch">The parser is still the only wall. Solution A is half-built: the expensive half.</p>
+</section>
+
+<!-- ============ 10 · HOW FAR FROM A ============ -->
+<section class="slide">
+  <div class="kicker">The gap to full Solution A</div>
+  <h2>One small change moves the boundary off the parser</h2>
+  <table>
+    <tr><th style="width:52px;">Gap</th><th>What's needed</th><th style="width:150px;">Size</th></tr>
+    <tr class="hot"><td><strong>G1</strong></td><td><strong>Sandbox flags</strong> on the local-file path: <code>allowed_directories</code> + <code>enable_external_access=false</code> + <code>lock_configuration</code>. The strategy is already known at connection-open.</td><td class="risk-low">small — the one that matters</td></tr>
+    <tr><td>G2</td><td>Non-GCS remote stores (MinIO/SeaweedFS) still use presigned URL + httpfs → decide: extend download model, or hold for B</td><td class="risk-med">decision + medium</td></tr>
+    <tr><td>G3</td><td>Local filesystem store hands direct paths into <code>object_root</code> (all docs) → copy authorized artifacts into the job dir</td><td class="risk-low">small</td></tr>
+    <tr><td>G4</td><td>Pod-local artifact cache (hardlinks, etag invalidation) — kills per-request re-downloads</td><td class="risk-med">medium · optimization</td></tr>
+    <tr><td>G5</td><td>Unrestricted-SQL execution model — streaming row cap, multi-statement, temp tables (adds capability)</td><td class="risk-med">medium · contract change</td></tr>
+  </table>
+  <p class="punch">With <strong style="color:var(--accent);">G1 alone</strong>, the GCS path — the one in production trouble — stops depending on the parser.</p>
+</section>
+
+<!-- ============ 11 · THE DECISION ============ -->
+<section class="slide">
+  <div style="margin:auto 0;">
+    <div class="kicker">The decision for this room</div>
+    <h2 style="margin-bottom:20px;">Do we go A, or B?</h2>
+    <div class="ba" style="flex:0 0 auto; margin-bottom:26px;">
+      <div class="ba-panel a" style="padding:18px 24px;">
+        <h3 style="color:var(--accent); font-size:20px;">A wins if…</h3>
+        <p style="font-size:17px; color:var(--muted); line-height:1.5;">artifacts stay within a disk budget · we want no new infrastructure · we want the boundary that fails closed with zero credential and zero network. <strong style="color:var(--text);">Meets R1–R3 today via G1.</strong></p>
+      </div>
+      <div class="ba-panel b" style="padding:18px 24px;">
+        <h3 style="color:var(--blue); font-size:20px;">B wins if…</h3>
+        <p style="font-size:17px; color:var(--muted); line-height:1.5;">big-Parquet analysis (R4) becomes real · we accept running a <span class="mono" style="font-size:15px;">tabular-executor</span> service + egress policy · and S3NS actually exposes STS.</p>
+      </div>
+    </div>
+    <ul class="tight" style="font-size:19px;">
+      <li><strong>Open question, gating B:</strong> does S3NS (sovereign GCP) expose STS / Credential Access Boundaries at all? <span class="muted">Same class of gap as the <code class="mono" style="font-size:16px;">signBlob</code> denial that started this.</span></li>
+      <li><strong>Not exclusive:</strong> A now (uniform, small), B later behind the executor when R4 arrives — the parser is demoted either way.</li>
+    </ul>
+    <p class="muted" style="margin-top:30px; font-size:18px;">
+      Detail + test results: <code class="mono" style="color:var(--accent); font-size:16px;">docs/swift/rfc/TABULAR-SQL-SANDBOX-RFC.md</code>
+    </p>
+  </div>
+</section>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  let idx = 0;
+
+  const fromHash = parseInt(location.hash.slice(1), 10);
+  if (!isNaN(fromHash) && fromHash >= 1 && fromHash <= slides.length) idx = fromHash - 1;
+
+  function show(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, j) => s.classList.toggle('active', j === idx));
+    progress.style.width = ((idx + 1) / slides.length * 100) + '%';
+    counter.textContent = (idx + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (idx + 1));
+  }
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1320, window.innerHeight / 760);
+    slides.forEach(s => { s.style.transform = 'translate(-50%, -50%) scale(' + scale + ')'; });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(idx + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(idx - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); show(0); }
+    else if (e.key === 'End') { e.preventDefault(); show(slides.length - 1); }
+  });
+  document.getElementById('prevzone').addEventListener('click', () => show(idx - 1));
+  document.getElementById('nextzone').addEventListener('click', () => show(idx + 1));
+  window.addEventListener('resize', fit);
+
+  fit();
+  show(idx);
+})();
+</script>
+</body>
+</html>

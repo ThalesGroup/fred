@@ -1175,6 +1175,72 @@ async def test_aggregation_quarantines_invalid_capability_ids(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
+async def test_aggregation_withdraws_runtime_id_from_shared_capabilities(
+    monkeypatch,
+) -> None:
+    # Every pod installing fred-runtime advertises its built-in capabilities
+    # under the same ids. Naming the pod that merged last would present a
+    # capability they all serve as hosted by one of them.
+    from types import SimpleNamespace
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+    from control_plane_backend.product import service as product_service
+
+    per_pod = {
+        "http://pod-a": [_entry("doc_access"), _entry("bank_core_demo")],
+        "http://pod-b": [_entry("doc_access"), _entry("rags_information_system")],
+    }
+
+    async def _fake_fetch(base_url: str):
+        return per_pod[base_url]
+
+    async def _fake_fetch_agents(base_url: str, runtime_id: str):
+        return []
+
+    async def _fake_fetch_models(base_url: str):
+        return PodModelCatalog(entries=[])
+
+    monkeypatch.setattr(
+        product_service, "_available_capabilities_for_source", _fake_fetch
+    )
+    monkeypatch.setattr(
+        product_service, "_agent_capabilities_for_source", _fake_fetch_agents
+    )
+    monkeypatch.setattr(
+        product_service, "_model_capabilities_for_source", _fake_fetch_models
+    )
+    deps = SimpleNamespace(
+        get_knowledge_base_definition_store=no_knowledge_base_store,
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                frontend=SimpleNamespace(
+                    feature_flags=SimpleNamespace(enableApplications=False)
+                ),
+                application_sources=[],
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-a", runtime_id="fred-agents"
+                    ),
+                    SimpleNamespace(
+                        enabled=True, base_url="http://pod-b", runtime_id="rags-agents"
+                    ),
+                ],
+            )
+        ),
+    )
+
+    catalog = await aggregate_capability_catalog(deps)
+
+    assert catalog["doc_access"].runtime_id is None
+    # A capability only one pod advertises still names it — that is the whole
+    # point of the stamp.
+    assert catalog["bank_core_demo"].runtime_id == "fred-agents"
+    assert catalog["rags_information_system"].runtime_id == "rags-agents"
+
+
+@pytest.mark.asyncio
 async def test_aggregation_unions_agent_kind_projections(monkeypatch) -> None:
     """
     CAPAB-01 (RFC §8.6): the admin catalog (`GET /admin/capabilities`) must

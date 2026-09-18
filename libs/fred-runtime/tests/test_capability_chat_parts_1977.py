@@ -115,6 +115,7 @@ def _openapi_pod_config():
     return AgentPodConfig.model_validate(
         {
             "app": {
+                "runtime_id": "chat-parts-test-pod",
                 "name": "Chat Parts Test Pod",
                 "base_url": "/pod/v1",
                 "port": 8000,

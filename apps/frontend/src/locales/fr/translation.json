@@ -371,6 +371,14 @@
         }
       }
     },
+    "document_triage": {
+      "name": "Tri de documents",
+      "description": "Passer en revue un dossier de documents et consigner les d\u00e9cisions."
+    },
+    "progress_tracker": {
+      "name": "Suivi d'avancement",
+      "description": "Suivre un travail de longue haleine et les d\u00e9cisions prises en chemin."
+    },
     "team_wiki": {
       "name": "Wiki d'équipe",
       "description": "Donne à l'agent accès au wiki de l'équipe : il lit les pages écrites par l'équipe et suit les règles qu'elle y a fixées. Activer cette capacité pour une équipe est aussi ce qui donne un wiki à ses membres.",

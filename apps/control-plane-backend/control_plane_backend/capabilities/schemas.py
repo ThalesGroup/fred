@@ -37,8 +37,16 @@ class CapabilityEnablementItem(BaseModel):
     """One capability's admin-facing scope + enablement state (RFC §8.5)."""
 
     id: str
+    # Mirrors `CapabilityCatalogEntry`: provenance travels as its own fields
+    # because `id` is a composite mangled to be colon-free for OpenFGA, and
+    # `version` is absent for kinds that have none rather than defaulted.
+    runtime_id: str | None = None
+    source_id: str | None = None
     name: str = Field(description="i18n key")
-    version: str
+    version: str = Field(description="Stored-config schema version.")
+    public_version: str | None = Field(
+        default=None, description="Shown to a human; absent when the kind has none."
+    )
     icon: str
     team_scope: TeamScopePolicy
     default_on: bool = Field(
