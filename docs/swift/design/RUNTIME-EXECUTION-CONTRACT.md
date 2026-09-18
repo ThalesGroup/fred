@@ -5860,6 +5860,5 @@ span; nested execution attaches beneath the invoking tool and restores its paren
 returned content remain gated by `Tracer.captures_content`; KPI/audit payloads and
 labels are unchanged.
 
-Behavioral scenarios live in `capability-tool-tracing` under OpenSpec. Native-child
-middleware composition is a separate integration layer; this correction does not
+Native-child middleware composition is a separate integration layer; this correction does not
 introduce custom delegation or a filesystem backend.
