@@ -27,9 +27,11 @@
  * no admin "Features" change, no backend/DB change. See `toolPackLogic.ts` for
  * how pack on/off state is derived from, and written back to, that selection.
  *
- * The `document_access` tool is shared by two packs ("team resources" and
- * "conversation attachments") and its mode is COMPUTED from their combination
- * (see `toolPackLogic.ts` / the truth table below) rather than owned by one:
+ * Several tools are shared by the two document-access packs ("team resources"
+ * and "conversation attachments"). `document_access` is the subtle one: its mode
+ * is COMPUTED from their combination rather than owned by one pack (truth table
+ * below). `document_summarize`, `document_verbatim` and `document_extract` are
+ * simply on when either pack is on. See `toolPackLogic.ts`.
  *
  *   Team resources | Attachments | corpus searchable | attach files | search scope
  *   ---------------+-------------+-------------------+--------------+-------------------
@@ -105,9 +107,9 @@ export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_HTML_ARTIFACT = "html_artifact";
-// Document-reading pair (DOCREAD-01): two independent backend capabilities that
-// the Simple view groups under one "Lecture de documents" pack, while the
-// Advanced view keeps each toggle separate.
+// Document-reading pair: verbatim read + exhaustive extraction. Granted by both
+// document-access packs (on when either is on); the Advanced view keeps each
+// toggle separate.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
 export const CAP_TEAM_WIKI = "team_wiki";
@@ -140,11 +142,19 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
           { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
           { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
           { capabilityId: CAP_DOCUMENT_SIMILARITY, labelKey: "capability.document_similarity.name" },
+          { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
+          { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
         ],
         // document_access is handled via documentAccessIntent (computed config);
-        // the rest are corpus-only, and `withResourceState` is what actually
-        // selects them — this list documents the pack, it does not drive it.
-        enablesCapabilityIds: [CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_SIMILARITY],
+        // `withResourceState` is what actually selects the rest — this list
+        // documents the pack, it does not drive it.
+        enablesCapabilityIds: [
+          CAP_TABULAR,
+          CAP_DOCUMENT_SUMMARIZE,
+          CAP_DOCUMENT_SIMILARITY,
+          CAP_DOCUMENT_VERBATIM,
+          CAP_DOCUMENT_EXTRACT,
+        ],
         documentAccessIntent: "corpus",
       },
       {
@@ -164,27 +174,16 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         icon: "attach_file",
         titleKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.description",
-        // Visible included list is summarize only (per spec); the attach-files
-        // control is delivered by document_access (via documentAccessIntent).
-        includes: [{ capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" }],
-        enablesCapabilityIds: [CAP_DOCUMENT_SUMMARIZE],
-        documentAccessIntent: "attachments",
-      },
-      {
-        // DOCREAD-01: one Simple-view card grouping the two independent
-        // document-reading capabilities (verbatim read + exhaustive extraction).
-        // Plain pack — enabling it selects both ids; the Advanced view still
-        // toggles each on its own.
-        id: "document_reading",
-        kind: "capabilities",
-        icon: "article",
-        titleKey: "rework.teams.formAgent.capabilities.packs.documentReading.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.documentReading.description",
+        // document_access is deliberately absent: this card presents attaching
+        // files, not the capability that implements it (delivered via
+        // documentAccessIntent). document_similarity too — see its constant.
         includes: [
+          { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
           { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
           { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
         ],
-        enablesCapabilityIds: [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
+        enablesCapabilityIds: [CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
+        documentAccessIntent: "attachments",
       },
     ],
   },

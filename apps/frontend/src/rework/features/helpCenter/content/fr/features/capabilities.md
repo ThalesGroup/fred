@@ -34,16 +34,14 @@ affichages :
 Les packs sont regroupés en **sections** selon ce qu'ils apportent :
 
 - **Données et connaissances**
-  - **Accès aux ressources de l'équipe** : l'agent peut chercher et exploiter
-    les documents partagés de votre équipe pour répondre. Voir le guide
-    [Créer un assistant sur vos ressources](/help/fr/guides/build-rag-assistant).
+  - **Accès aux ressources de l'équipe** : l'agent peut chercher dans les
+    documents partagés de votre équipe, en lire le texte exact et en extraire
+    tous les éléments correspondant à une demande, sans rien omettre. Voir le
+    guide [Créer un assistant sur vos ressources](/help/fr/guides/build-rag-assistant)
+    et « Comment votre agent lit les documents » plus loin sur cette page.
   - **Pièces jointes à une conversation** : l'agent peut exploiter les fichiers
-    que vous déposez dans une conversation — sans accéder au reste des
-    ressources de l'équipe.
-  - **Lecture de documents** : en plus de la recherche, l'agent peut lire le
-    texte exact d'un document et en extraire tous les éléments correspondant à
-    une demande, sans rien omettre. Voir « Comment votre agent lit les
-    documents » plus loin sur cette page.
+    que vous déposez dans une conversation, avec les mêmes outils de lecture —
+    sans accéder au reste des ressources de l'équipe.
 - **Production de documents**
   - **Générer un document Word** : l'agent rédige un document texte que vous
     pouvez télécharger. Voir le guide
@@ -73,10 +71,12 @@ confiance à la réponse.
 - **Recherche** (dans _Accès aux ressources de l'équipe_) : trouve les
   passages les plus pertinents dans vos documents et répond à partir d'eux.
   Rapide, et le bon réflexe par défaut pour « que sait l'équipe sur X ».
-- **Lecture mot à mot** (dans _Lecture de documents_) : lit le texte exact
+- **Lecture mot à mot** (dans _Accès aux ressources de l'équipe_ et _Pièces
+  jointes à une conversation_) : lit le texte exact
   d'un document, dans l'ordre, quand vous avez besoin du libellé précis d'un
   passage — « que dit exactement la section 4.3, mot pour mot ».
-- **Extraction** (dans _Lecture de documents_) : parcourt un document entier
+- **Extraction** (dans _Accès aux ressources de l'équipe_ et _Pièces jointes à
+  une conversation_) : parcourt un document entier
   et liste tout ce qui correspond à votre demande, sans rien omettre —
   « liste toutes les échéances de ce contrat ». C'est l'option la plus lente,
   la plus exhaustive, et celle qui coûte le plus à exécuter.
@@ -85,10 +85,10 @@ confiance à la réponse.
   des détails sont omis à dessein pour rester bref.
 
 > **Astuce.** Si une demande exige de **ne rien omettre** — « liste tout… »,
-> « chacun des… », « sans en oublier aucun… » —, assurez-vous que **Lecture de
-> documents** est activé, pas seulement **Accès aux ressources de l'équipe**.
-> La recherche seule ne remonte que les passages qu'elle juge les plus
-> pertinents, et peut manquer des éléments jugés moins prioritaires.
+> « chacun des… », « sans en oublier aucun… » —, dites-le explicitement dans
+> votre demande : l'agent passe alors par l'extraction plutôt que par la
+> recherche, qui ne remonte que les passages qu'elle juge les plus pertinents
+> et peut manquer des éléments jugés moins prioritaires.
 
 ## Savoir en un coup d'œil : les trois états
 

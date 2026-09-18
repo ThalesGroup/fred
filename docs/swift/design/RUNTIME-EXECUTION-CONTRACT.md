@@ -3229,14 +3229,16 @@ does not carry it). Additive and optional, so no existing runtime breaks.
 (tool `read_document`, positional verbatim slice) and `document_extract` (tool
 `extract_from_document`, exhaustive enumeration), both on this one port and
 differing only in tool intent and how the continuation footer is worded. The
-frontend Simple view groups them under one `document_reading` tool pack while the
-Advanced view keeps each toggle independent (front-only presentation, no backend
-change). Phase 1 relies on the agent paging to completion (guided by
-`next_offset`); a server-side map-reduce extraction endpoint is the deliberately
-deferred Phase 2 if that proves unreliable on very large documents. Tests:
-`test_capability_document_reading.py` (pagination contract, both tools' footers,
-config cap, error shaping), `test_capability_endpoints_1974.py` (pod advertises
-the pair).
+frontend Simple view grants both from either document-access pack — "team
+resources" or "conversation attachments" — while the Advanced view keeps each
+toggle independent (front-only presentation, no backend change; the standalone
+`document_reading` pack it first shipped with was retired 2026-09-18).
+`document_verbatim` still pages agent-side to completion (guided by
+`next_offset`); `document_extract` no longer does — Phase 2 moved it to a
+server-side map-reduce endpoint (§8.44, 2026-08-07). Tests:
+`test_capability_document_reading.py` (verbatim's pagination contract, footer and
+config cap; error shaping for both), `test_capability_endpoints_1974.py` (pod
+advertises the pair).
 
 ---
 
