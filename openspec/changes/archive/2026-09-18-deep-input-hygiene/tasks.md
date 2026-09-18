@@ -7,5 +7,5 @@
 
 ## 2. Verification and documentation
 
-- [ ] 2.1 Run root quality and offline runtime tests, including ReAct and HITL regression suites, and record exact results.
-- [ ] 2.2 Complete independent standards/spec/performance review, update execution documentation, and archive the validated scoped change.
+- [x] 2.1 Run root quality and offline runtime tests, including ReAct and HITL regression suites, and record exact results.
+- [x] 2.2 Complete independent standards/spec/performance review, update execution documentation, and archive the validated scoped change.
