@@ -1092,6 +1092,19 @@ class GraphAgentDefinition(AgentDefinition, ABC):
             "Use this when graph execution should see external MCP tools at runtime."
         ),
     )
+    default_capabilities_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Default config values for the capabilities this template activates, "
+            "keyed by capability id. Carries CONFIGURATION only - which "
+            "capabilities are pre-selected stays in `default_mcp_servers`. "
+            "Values are the capability's own input shape, not the stored "
+            "envelope: the pod runs them through `validate_config` like a "
+            "member's submitted values, so one path produces every stored slice. "
+            "A seed for a NEW instance, never a lock - the member can change "
+            "any of it before saving."
+        ),
+    )
 
     @abstractmethod
     def build_graph(self) -> GraphDefinition:
@@ -1262,6 +1275,19 @@ class ReActAgentDefinition(AgentDefinition, ABC):
         description=(
             "Default MCP servers Fred should attach for this conversational agent. "
             "Use this when external MCP tools should be available by default at runtime."
+        ),
+    )
+    default_capabilities_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Default config values for the capabilities this template activates, "
+            "keyed by capability id. Carries CONFIGURATION only - which "
+            "capabilities are pre-selected stays in `default_mcp_servers`. "
+            "Values are the capability's own input shape, not the stored "
+            "envelope: the pod runs them through `validate_config` like a "
+            "member's submitted values, so one path produces every stored slice. "
+            "A seed for a NEW instance, never a lock - the member can change "
+            "any of it before saving."
         ),
     )
 

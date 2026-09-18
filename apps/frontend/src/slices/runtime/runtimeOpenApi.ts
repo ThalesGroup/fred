@@ -1036,6 +1036,11 @@ export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type AgentTemplateSummary = {
   available_capabilities?: CapabilityCatalogEntry[];
   available_mcp_servers?: McpServerConfiguration[];
+  default_capabilities_config?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
   default_capability_ids?: string[];
   default_tuning: AgentTuning;
   description: string;

@@ -192,6 +192,7 @@ class _RuntimeTemplatePayload:
         available_capabilities: list[CapabilityCatalogEntry] | None = None,
         supports_capabilities: bool = True,
         default_capability_ids: list[str] | None = None,
+        default_capabilities_config: dict[str, dict[str, Any]] | None = None,
         max_chat_input_chars: int | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
@@ -212,6 +213,9 @@ class _RuntimeTemplatePayload:
         # so `_apply_capability_selection` can ReBAC-check the None case instead of
         # skipping it.
         self.default_capability_ids = default_capability_ids or []
+        # Configuration counterpart of the ids above: what those capabilities
+        # start configured as on a new instance. Never an activation signal.
+        self.default_capabilities_config = default_capabilities_config or {}
         self.max_chat_input_chars = max_chat_input_chars
 
     @classmethod
@@ -297,6 +301,23 @@ class _RuntimeTemplatePayload:
                 and cid not in quarantined_capability_ids
                 and not cid.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
             ],
+            # Absent on older runtime pods during a rolling upgrade — an empty
+            # map then means "declares no default config", which is exactly the
+            # pre-field behaviour.
+            default_capabilities_config={
+                capability_id: values
+                for capability_id, values in (
+                    data.get("default_capabilities_config") or {}
+                ).items()
+                if isinstance(capability_id, str)
+                and capability_id
+                and isinstance(values, dict)
+                # Same exclusions as the ids above: config for a capability the
+                # ids comprehension drops would never be applied anyway, and
+                # carrying it past the quarantine defeats its point.
+                and capability_id not in quarantined_capability_ids
+                and not capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX)
+            },
             # Optional during rolling upgrades: older runtime pods do not
             # advertise this deployment policy yet.
             max_chat_input_chars=max_chat_input_chars,
@@ -1339,6 +1360,7 @@ async def _apply_capability_selection(
     reset_values: bool,
     available: Sequence[CapabilityCatalogEntry],
     default_capability_ids: Sequence[str],
+    default_capabilities_config: Mapping[str, dict[str, Any]] | None = None,
     base_url: str,
     team_id: TeamId,
     agent_instance_id: str | None,
@@ -1448,6 +1470,16 @@ async def _apply_capability_selection(
             values = (
                 dict(stored.get("config") or {}) if isinstance(stored, dict) else {}
             )
+            # Enrollment only (the update path passes no template config):
+            # fall back to what the template declares, so the declaration holds
+            # whatever the client is — form, API or CLI. Applying it here rather
+            # than earlier keeps `validate_config` below the one path every
+            # stored slice is produced by, so a malformed template default fails
+            # loudly at save instead of at agent assembly. `reset_values` above
+            # deliberately bypasses this: a reset returns a capability to ITS
+            # own defaults, not to the defaults its template happened to seed.
+            if not values and default_capabilities_config:
+                values = dict(default_capabilities_config.get(cap_id) or {})
         envelope = await _validate_capability_config_via_pod(
             base_url=base_url,
             capability_id=cap_id,
@@ -1557,6 +1589,9 @@ async def list_agent_templates(
                     # rendered) — same result as filtering here, without
                     # making the field lie about what the template declares.
                     default_capability_ids=list(template.default_capability_ids),
+                    default_capabilities_config=dict(
+                        template.default_capabilities_config
+                    ),
                     # REASON-01 level 3 + Amendment B (#2473), read off the
                     # pod's `default_tuning`. Unfiltered by platform state on
                     # purpose: this is what the template DECLARES. Levels 1-2
@@ -2652,6 +2687,7 @@ async def enroll_agent_instance(
         reset_values=False,
         available=template.available_capabilities,
         default_capability_ids=template.default_capability_ids,
+        default_capabilities_config=template.default_capabilities_config,
         base_url=source.base_url,
         team_id=team_id,
         agent_instance_id=agent_instance_id,
@@ -2845,6 +2881,13 @@ async def update_agent_instance(
                 ),
                 available=template.available_capabilities,
                 default_capability_ids=template.default_capability_ids,
+                # Deliberately NOT passed on the update path: a template default
+                # is a creation-time seed. On an update the form submits values
+                # only for capability options the member actually opened, so a
+                # newly ticked capability arrives with neither submitted nor
+                # stored config — and applying the template default there would
+                # persist something the form never showed (a confirmation gate
+                # reading ON in the editor and saved OFF, for instance).
                 base_url=source.base_url,
                 team_id=team_id,
                 agent_instance_id=agent_instance_id,

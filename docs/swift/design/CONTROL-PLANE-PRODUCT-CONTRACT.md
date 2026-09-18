@@ -2232,6 +2232,26 @@ change only: `AgentTuning.reasoning_enabled`/`reasoning_default_on` remain
 plain agent properties (no `ConfigModel`, no `TurnOptionsModel`, no
 middleware), enforced at the single `build_for_chat` point as before.
 
+### Addendum — a template declares its capability config defaults (2026-09-18, #2750)
+
+`AgentTemplateSummary` gains
+`default_capabilities_config: dict[str, dict[str, Any]]` — the configuration
+counterpart of `default_capability_ids`, mirrored verbatim from the pod's
+`definition.default_capabilities_config` (`RUNTIME-EXECUTION-CONTRACT.md`
+§8.79). Configuration only: activation stays `default_capability_ids`.
+
+Unfiltered by the team's `can_use`, exactly like the ids beside it — the
+agent-creation form intersects both with `available_capabilities`, which the
+server has already narrowed, so a default for a capability the team cannot use
+is neither seeded nor submitted.
+
+`_apply_capability_selection` resolves one capability's effective config in this
+order: submitted values → the instance's stored slice → the template default →
+`{}`. An existing instance always carries a stored slice, so changing a
+template's declared defaults never rewrites a live agent. Whatever wins is
+round-tripped through the pod's `validate_config` as before, so the stored
+envelope still has exactly one producer.
+
 ### Addendum — a template declares its reasoning defaults (2026-08-28, #2473)
 
 Both reasoning fields were settable **per agent instance only**: whoever filled

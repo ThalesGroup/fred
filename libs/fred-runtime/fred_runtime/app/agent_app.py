@@ -1038,6 +1038,11 @@ class _AgentTemplateSummary(BaseModel):
     # for); this field is the one control-plane reads to resolve what a
     # `selected_capability_ids = None` instance activates (#1980).
     default_capability_ids: list[str] = Field(default_factory=list)
+    # Default config values for those capabilities, keyed by capability id,
+    # verbatim from `definition.default_capabilities_config`. Configuration
+    # only — activation is `default_capability_ids` above. The agent form seeds
+    # a new instance from it so the form shows what the agent will actually do.
+    default_capabilities_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     # Pod-scoped deployment policy mirrored per template so control-plane can
     # publish it to the managed-chat composer without another runtime endpoint.
     max_chat_input_chars: int
@@ -4028,6 +4033,12 @@ def _build_agent_router(
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
+                default_capabilities_config={
+                    capability_id: dict(values)
+                    for capability_id, values in (
+                        definition.default_capabilities_config or {}
+                    ).items()
+                },
                 max_chat_input_chars=max_chat_input_chars,
             )
             for definition in registry.values()

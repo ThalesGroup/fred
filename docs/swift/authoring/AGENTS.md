@@ -61,6 +61,45 @@ Real, currently shipping example (with the full rationale in its module
 docstring — read it before writing your own):
 [`apps/fred-agents/fred_agents/general_assistant.py`](../../../apps/fred-agents/fred_agents/general_assistant.py)
 
+### Pre-configuring the defaults (2026-09-18)
+
+`default_mcp_servers` says WHICH capabilities a new instance starts with —
+native capability ids are valid entries, not only MCP server ids.
+`default_capabilities_config` says how they start CONFIGURED:
+
+```python
+    default_mcp_servers: tuple[MCPServerRef, ...] = (
+        MCPServerRef(id="document_access"),
+    )
+    default_capabilities_config: dict[str, dict[str, object]] = {
+        "document_access": {
+            "search_attachments_only": False,
+            "show_attach_files_control": True,
+        },
+    }
+```
+
+Declare the capability's own input values, not the stored
+`{schema_version, config}` envelope: control-plane runs them through your
+capability's `validate_config` like a member's submitted values, so a wrong
+default fails at save with attribution instead of at agent assembly.
+
+Three things worth knowing before you add either:
+
+- **A default is a seed, never a lock.** The member can untick a capability or
+  change a value before saving, and an existing instance keeps what it stored —
+  changing a template's defaults never rewrites a live agent.
+- **Every default feeds the dependency gate.** Enabling your template for a team
+  requires every declared capability to be usable by that team first; the admin
+  "Enable all" flow grants them together. That is correct for a specialised
+  template and wrong for a generic starting point, which is why
+  `general_assistant` deliberately declares none.
+- **Configure only what you activate.** Config for a capability the instance
+  does not select is inert — the pod only round-trips config for selected ones.
+
+Pre-equipped example:
+[`apps/fred-agents/fred_agents/basic_knowledge_assistant.py`](../../../apps/fred-agents/fred_agents/basic_knowledge_assistant.py)
+
 ---
 
 ## Shape 2 — Deep research assistant

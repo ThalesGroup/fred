@@ -287,6 +287,249 @@ def test_runtime_template_payload_parses_default_capability_ids() -> None:
 
 
 @pytest.mark.asyncio
+async def test_template_config_default_seeds_a_new_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A brand-new instance has nothing stored, so the template's declared config
+    is what reaches the pod's `validate_config` — the one path every stored
+    slice is produced by, so a malformed default fails there rather than at
+    agent assembly.
+    """
+
+    calls = _fake_pod_validate(monkeypatch)
+
+    tuning = await service._apply_capability_selection(
+        ManagedAgentTuning(role="Echo", description="Echo"),
+        selected_ids=["demo_echo"],
+        submitted_values=None,
+        reset_values=False,
+        available=[_DEMO_ENTRY],
+        default_capability_ids=["demo_echo"],
+        default_capabilities_config={"demo_echo": {"uppercase": True}},
+        base_url="http://runtime-a/pod/v1",
+        team_id=TeamId("team-a"),
+        agent_instance_id="agent-1",
+        authorization=None,
+        context_label="agent enrollment",
+    )
+
+    assert [call["config_values"] for call in calls] == [{"uppercase": True}]
+    assert tuning.capability_config["demo_echo"]["config"]["uppercase"] is True
+
+
+@pytest.mark.asyncio
+async def test_member_values_win_over_the_template_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A template default is a seed, never a lock."""
+
+    calls = _fake_pod_validate(monkeypatch)
+
+    await service._apply_capability_selection(
+        ManagedAgentTuning(role="Echo", description="Echo"),
+        selected_ids=["demo_echo"],
+        submitted_values={"demo_echo": {"uppercase": False}},
+        reset_values=False,
+        available=[_DEMO_ENTRY],
+        default_capability_ids=["demo_echo"],
+        default_capabilities_config={"demo_echo": {"uppercase": True}},
+        base_url="http://runtime-a/pod/v1",
+        team_id=TeamId("team-a"),
+        agent_instance_id="agent-1",
+        authorization=None,
+        context_label="agent enrollment",
+    )
+
+    assert [call["config_values"] for call in calls] == [{"uppercase": False}]
+
+
+@pytest.mark.asyncio
+async def test_stored_config_wins_over_a_changed_template_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    An existing instance must not change behaviour when its template's declared
+    defaults change: its own stored slice is what the pod re-validates.
+    """
+
+    calls = _fake_pod_validate(monkeypatch)
+
+    await service._apply_capability_selection(
+        ManagedAgentTuning(
+            role="Echo",
+            description="Echo",
+            capability_config={
+                "demo_echo": {"schema_version": "0.1.0", "config": {"uppercase": False}}
+            },
+        ),
+        selected_ids=["demo_echo"],
+        submitted_values=None,
+        reset_values=False,
+        available=[_DEMO_ENTRY],
+        default_capability_ids=["demo_echo"],
+        default_capabilities_config={"demo_echo": {"uppercase": True}},
+        base_url="http://runtime-a/pod/v1",
+        team_id=TeamId("team-a"),
+        agent_instance_id="agent-1",
+        authorization=None,
+        context_label="agent update",
+    )
+
+    assert [call["config_values"] for call in calls] == [{"uppercase": False}]
+
+
+@pytest.mark.asyncio
+async def test_template_config_default_does_not_apply_on_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A template default is a creation-time seed. On an update the form submits
+    values only for capability options the member actually opened, so a newly
+    ticked capability arrives with neither submitted nor stored config —
+    applying the template default there would persist something the form never
+    showed (a confirmation gate reading ON in the editor and saved OFF).
+    """
+
+    calls = _fake_pod_validate(monkeypatch)
+
+    await service._apply_capability_selection(
+        ManagedAgentTuning(role="Echo", description="Echo"),
+        selected_ids=["demo_echo"],
+        submitted_values=None,
+        reset_values=False,
+        available=[_DEMO_ENTRY],
+        default_capability_ids=["demo_echo"],
+        # The update call site passes no template config at all.
+        base_url="http://runtime-a/pod/v1",
+        team_id=TeamId("team-a"),
+        agent_instance_id="agent-1",
+        authorization=None,
+        context_label="agent update",
+    )
+
+    assert [call["config_values"] for call in calls] == [{}]
+
+
+@pytest.mark.asyncio
+async def test_reset_returns_to_the_capability_defaults_not_the_template_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reset returns a capability to ITS own defaults, not to whatever its
+    template happened to seed at creation."""
+
+    calls = _fake_pod_validate(monkeypatch)
+
+    await service._apply_capability_selection(
+        ManagedAgentTuning(role="Echo", description="Echo"),
+        selected_ids=["demo_echo"],
+        submitted_values=None,
+        reset_values=True,
+        available=[_DEMO_ENTRY],
+        default_capability_ids=["demo_echo"],
+        default_capabilities_config={"demo_echo": {"uppercase": True}},
+        base_url="http://runtime-a/pod/v1",
+        team_id=TeamId("team-a"),
+        agent_instance_id="agent-1",
+        authorization=None,
+        context_label="agent update",
+    )
+
+    assert [call["config_values"] for call in calls] == [{}]
+
+
+def test_runtime_template_payload_quarantines_config_like_the_ids() -> None:
+    """
+    Config for a capability the ids comprehension drops would never be applied;
+    carrying it past the quarantine defeats the quarantine's point.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+            "default_capability_ids": ["demo_echo"],
+            "default_capabilities_config": {
+                "demo_echo": {"uppercase": True},
+                f"{service.APPLICATION_CATALOG_NAMESPACE_PREFIX}app_echo": {"x": 1},
+            },
+        }
+    )
+    assert payload.default_capabilities_config == {"demo_echo": {"uppercase": True}}
+
+
+def test_runtime_template_payload_parses_default_capabilities_config() -> None:
+    """
+    The pod's declared per-capability config reaches the payload verbatim.
+    Configuration only — activation stays `default_capability_ids`.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+            "default_capability_ids": ["document_access"],
+            "default_capabilities_config": {
+                "document_access": {"search_attachments_only": False},
+            },
+        }
+    )
+    assert payload.default_capabilities_config == {
+        "document_access": {"search_attachments_only": False},
+    }
+
+
+def test_runtime_template_payload_tolerates_a_pod_without_the_field() -> None:
+    """
+    An older pod mid-rolling-upgrade sends no `default_capabilities_config`;
+    an empty map means "declares no default config", the pre-field behaviour.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+        }
+    )
+    assert payload.default_capabilities_config == {}
+
+
+def test_runtime_template_payload_drops_malformed_config_entries() -> None:
+    """
+    A slice that is not a mapping cannot be a capability's config values;
+    keeping it would push the failure to `validate_config` on the pod with no
+    useful attribution.
+    """
+
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "rags.sample.echo",
+            "title": "Echo Agent",
+            "description": "Echo template description",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+            "default_capabilities_config": {
+                "document_access": {"search_attachments_only": False},
+                "broken": "not-a-mapping",
+                "": {"ignored": True},
+            },
+        }
+    )
+    assert payload.default_capabilities_config == {
+        "document_access": {"search_attachments_only": False},
+    }
+
+
+@pytest.mark.asyncio
 async def test_runtime_templates_quarantine_product_application_entries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

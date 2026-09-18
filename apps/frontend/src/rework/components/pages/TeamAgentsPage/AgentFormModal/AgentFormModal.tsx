@@ -131,6 +131,29 @@ export function defaultCapabilitySelection(template: AgentTemplateSummary | unde
 }
 
 /**
+ * The capability config a NEW instance of `template` starts with, narrowed
+ * through the same `can_use`-filtered advertised set as the selection above so
+ * the two cannot disagree.
+ *
+ * The backend applies the same declaration when nothing is submitted, so this
+ * is not what makes it reach the agent — it is what makes the FORM show it.
+ * Some pack cards read their state from config (the attachments card needs an
+ * explicit `show_attach_files_control`), so without seeding, a template could
+ * declare a configuration the agent would honour and the form would display as
+ * off.
+ */
+export function defaultCapabilityConfig(
+  template: AgentTemplateSummary | undefined,
+): Record<string, Record<string, unknown>> {
+  const advertised = advertisedCapabilityIds(template);
+  return Object.fromEntries(
+    Object.entries(template?.default_capabilities_config ?? {}).filter(([capabilityId]) =>
+      advertised.has(capabilityId),
+    ),
+  );
+}
+
+/**
  * The reasoning settings a NEW instance of `template` starts with (#2473):
  * whether its Reasoning card is pre-ticked (REASON-01 level 3) and whether the
  * nested "start conversations in Boost" switch is pre-set (Amendment B).
@@ -317,7 +340,7 @@ export default function AgentFormModal({
       ...defaultReasoningSelection(tpl),
       tuningValues: defaultTuningValues,
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
-      capabilityConfigValues: {},
+      capabilityConfigValues: defaultCapabilityConfig(tpl),
       capabilityAssetFiles: {},
       capabilityBlockingErrors: {},
     });

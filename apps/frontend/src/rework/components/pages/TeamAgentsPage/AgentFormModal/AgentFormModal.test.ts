@@ -5,6 +5,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   buildAgentFormSubmitPayload,
+  defaultCapabilityConfig,
   defaultCapabilitySelection,
   defaultReasoningSelection,
   extractCapabilityConfigValues,
@@ -248,5 +249,37 @@ describe("extractCapabilityConfigValues", () => {
 
   it("returns an empty object when no capability config is stored", () => {
     expect(extractCapabilityConfigValues(undefined)).toEqual({});
+  });
+});
+
+describe("defaultCapabilityConfig", () => {
+  it("seeds the config a template declares for a capability it advertises", () => {
+    const template = {
+      ...makeCapabilityTemplate(["document_access"]),
+      default_capabilities_config: {
+        document_access: { search_attachments_only: false, show_attach_files_control: true },
+      },
+    } as AgentTemplateSummary;
+
+    expect(defaultCapabilityConfig(template)).toEqual({
+      document_access: { search_attachments_only: false, show_attach_files_control: true },
+    });
+  });
+
+  it("drops config for a capability the team cannot use", () => {
+    // `available_capabilities` is already can_use-filtered server-side, so a
+    // capability absent from it is one this team is not enabled for. Seeding
+    // its config would submit values for something never activated.
+    const template = {
+      ...makeCapabilityTemplate([]),
+      default_capabilities_config: { document_access: { show_attach_files_control: true } },
+    } as AgentTemplateSummary;
+
+    expect(defaultCapabilityConfig(template)).toEqual({});
+  });
+
+  it("is empty for a template declaring nothing, and for no template", () => {
+    expect(defaultCapabilityConfig(makeCapabilityTemplate(["document_access"]))).toEqual({});
+    expect(defaultCapabilityConfig(undefined)).toEqual({});
   });
 });

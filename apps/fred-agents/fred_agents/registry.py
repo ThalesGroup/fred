@@ -28,6 +28,7 @@ Example:
 
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 
+from fred_agents.basic_knowledge_assistant import BASIC_KNOWLEDGE_ASSISTANT_AGENT
 from fred_agents.comparison import COMPARISON_AGENT
 from fred_agents.deep_assistant import DEEP_ASSISTANT_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
@@ -50,6 +51,14 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                no MCP by default. Admins equip it with catalog
                                MCP servers via the control-plane agent form.
                                First entry → default agent in fred-agents-cli.
+    - fred.github.basic-knowledge-assistant  Pre-equipped knowledge ReAct agent.
+                               Defaults to the capabilities of four packs (team
+                               resources, wiki, conversation attachments, Word
+                               generation) and configures them, so it answers
+                               without the member ticking anything. Reasoning on
+                               by default. Counterpart to fred.github.assistant:
+                               that one is the blank slate, this one is the
+                               ready-made.
     - fred.github.deep_assistant  General-purpose deep-agent (LangGraph planner)
                                counterpart to fred.github.assistant. No
                                filesystem MCP by default (DeepAgentRuntime's
@@ -86,6 +95,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     return {
         # First entry is the default agent selected by fred-agents-cli on connect.
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
+        BASIC_KNOWLEDGE_ASSISTANT_AGENT.agent_id: BASIC_KNOWLEDGE_ASSISTANT_AGENT,
         DEEP_ASSISTANT_AGENT.agent_id: DEEP_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,

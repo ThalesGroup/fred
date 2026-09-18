@@ -221,6 +221,20 @@ class AgentTemplateSummary(BaseModel):
             "by hand."
         ),
     )
+    default_capabilities_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Default config values for the capabilities this template "
+            "activates, keyed by capability id, verbatim from the pod's "
+            "`definition.default_capabilities_config`. Configuration only — "
+            "activation is `default_capability_ids` above. Unfiltered by the "
+            "team's `can_use` for the same reason as that field: the "
+            "agent-creation form intersects with `available_capabilities`, so "
+            "a default for a capability the team cannot use is never seeded. "
+            "Affects NEW instances only; an existing instance carries its own "
+            "stored `capability_config`."
+        ),
+    )
     reasoning_enabled: bool = Field(
         default=False,
         description=(

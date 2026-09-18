@@ -5846,3 +5846,40 @@ their team enablement and reasoning toggle have to be set again.
 `libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
 OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
 until archived).
+
+---
+
+### 8.79 ✅ `default_capabilities_config` — a template declares how its defaults are configured (2026-09-18, #2750)
+
+**A template could pre-select capabilities, not configure them.**
+`default_mcp_servers` carries the ids a new instance starts with (native ids
+included — `default_capability_ids` on the wire); nothing carried the values
+those capabilities start with. A template could tick `document_access`; it could
+not say "in corpus + attachments mode".
+
+**New optional field on `GraphAgentDefinition` / `ReActAgentDefinition`:**
+`default_capabilities_config: dict[str, dict[str, Any]]` — capability id →
+default config values. **Configuration only**; activation stays
+`default_mcp_servers`, so there is one activation source, not two. Values are
+the capability's own input shape, not the stored `{schema_version, config}`
+envelope: control-plane runs them through the pod's `validate_config` on the
+same seam as a member's submitted values, so every stored slice is produced one
+way and a malformed template default fails at save with attribution rather than
+lazily at agent assembly.
+
+Projected verbatim onto `_AgentTemplateSummary` beside `default_capability_ids`,
+unfiltered by the team's `can_use` for the same reason that field is: the
+agent-creation form intersects with `available_capabilities`.
+
+**Precedence when control-plane resolves one capability's effective config:**
+submitted values → stored slice → template default → `{}`. An existing instance
+always has a stored slice, so a changed template default never rewrites a live
+agent; the default reaches new instances only.
+
+Absent on an older pod mid-rolling-upgrade, which reads as "declares no default
+config" — the pre-field behaviour.
+
+**Scope.** `libs/fred-sdk/fred_sdk/contracts/models.py`,
+`libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record: OpenSpec
+capability `agent-template-defaults`
+(`openspec/changes/add-basic-knowledge-assistant-template/` until archived).
