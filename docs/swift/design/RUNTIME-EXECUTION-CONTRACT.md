@@ -5903,7 +5903,7 @@ labels are unchanged.
 Native-child middleware composition is a separate integration layer; this correction does not
 introduce custom delegation or a filesystem backend.
 
-### 8.80 Provider rate-limit retries (2026-09-18)
+### 8.81 Provider rate-limit retries (2026-09-18)
 
 ReAct and Deep **parent** model calls now share `RateLimitRetryMiddleware`,
 placed after capability wrappers and before `TracingKpiMiddleware`. Input
