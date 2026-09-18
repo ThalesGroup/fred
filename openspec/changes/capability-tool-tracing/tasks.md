@@ -7,4 +7,4 @@
 ## 2. Validation
 
 - [ ] 2.1 Run root code quality, runtime offline tests and raw type checking; record exact evidence.
-- [ ] 2.2 Complete independent correctness/standards and performance review before submission.
+- [x] 2.2 Complete independent correctness/standards and performance review before submission.
