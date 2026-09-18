@@ -1073,3 +1073,38 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
     assert tracer.parents[index] is parent
     assert tracer.spans[index][2].ended
     assert result["messages"][-1].content == "finished"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture", [False, True])
+async def test_command_trace_captures_only_matching_tool_result(capture: bool) -> None:
+    tracer = _RecordingTracer(capture=capture)
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+
+    async def handler(req: ToolCallRequest) -> Command[Any]:
+        return Command(
+            update={
+                "private_state": "not trace content",
+                "messages": [
+                    AIMessage(content="not a tool result"),
+                    ToolMessage(content="other call", tool_call_id="other"),
+                    ToolMessage(content="updated todos", tool_call_id="call-1"),
+                ],
+            }
+        )
+
+    await middleware.awrap_tool_call(
+        _request(name="write_todos", tool_obj=None), handler
+    )
+    span = tracer.spans[0][2]
+    assert span.io == (
+        [
+            {"input": {}, "output": None},
+            {"input": None, "output": ["updated todos"]},
+        ]
+        if capture
+        else []
+    )
+    assert span.ended

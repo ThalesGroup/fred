@@ -243,7 +243,17 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         ) as span:
             result = await self._observe_tool_call(request, handler, span=span)
             if span is not None and tracer is not None and tracer.captures_content:
-                span.set_io(output=getattr(result, "content", None))
+                output = getattr(result, "content", None)
+                if isinstance(result, Command) and isinstance(result.update, dict):
+                    messages = result.update.get("messages", [])
+                    if isinstance(messages, (list, tuple)):
+                        output = [
+                            message.content
+                            for message in messages
+                            if isinstance(message, ToolMessage)
+                            and message.tool_call_id == tool_call.get("id")
+                        ]
+                span.set_io(output=output)
             return result
 
     async def _observe_tool_call(
