@@ -153,6 +153,8 @@ class BasicKnowledgeAssistantDefinition(ReActAgentDefinition):
 
     agent_id: str = "fred.github.basic-knowledge-assistant"
     role: str = "Knowledge assistant"
+    # Kept in English on purpose: the product name travels untranslated.
+    role_by_lang: dict[str, str] | None = {"fr": "Knowledge Assistant"}
     description: str = (
         "A ready-to-use knowledge assistant. It searches your team's documents, "
         "the files you attach to a conversation and your team wiki, then "

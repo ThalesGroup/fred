@@ -90,6 +90,13 @@ def test_confirmation_gates_are_off() -> None:
     assert config["document_summarize"]["require_confirmation"] is False
 
 
+def test_its_name_stays_in_english_in_french() -> None:
+    # The product name travels untranslated; only its casing differs.
+    assert (BASIC_KNOWLEDGE_ASSISTANT_AGENT.role_by_lang or {})["fr"] == (
+        "Knowledge Assistant"
+    )
+
+
 def test_reasoning_is_offered_and_pre_armed() -> None:
     assert BASIC_KNOWLEDGE_ASSISTANT_AGENT.reasoning_enabled is True
     assert BASIC_KNOWLEDGE_ASSISTANT_AGENT.reasoning_default_on is True
