@@ -327,6 +327,7 @@ def run_single_turn(
     color_enabled: bool,
     checkpoint_id: str | None = None,
     interrupt_id: str | None = None,
+    occurrence_id: str | None = None,
     resume_payload: Any = None,
     inline_tuning: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any] | None]:
@@ -336,12 +337,12 @@ def run_single_turn(
     Returns (exit_code, hitl_request) where hitl_request is set when the agent
     is paused at a HITL gate, or None when the turn completed normally.
 
-    checkpoint_id / interrupt_id (#2216):
+    checkpoint_id / interrupt_id / occurrence_id:
     - forwarded verbatim to the pod, never aliased for each other — the
       legacy Graph V2 runtime resumes via checkpoint_id, ReAct V2 resumes
-      via interrupt_id (LangGraph's own `Interrupt.id`). The caller extracts
-      whichever one the pending `AwaitingHumanRuntimeEvent.request` actually
-      carries; only one is ever set per resume.
+      via interrupt_id (LangGraph's own `Interrupt.id`). Tool-raised pauses
+      additionally carry occurrence_id. The caller echoes the identifiers
+      present on the pending `AwaitingHumanRuntimeEvent.request` verbatim.
     """
     if not stream:
         payload = client.execute(
@@ -352,6 +353,7 @@ def run_single_turn(
             team_id=team_id,
             checkpoint_id=checkpoint_id,
             interrupt_id=interrupt_id,
+            occurrence_id=occurrence_id,
             resume_payload=resume_payload,
             inline_tuning=inline_tuning,
         )
@@ -390,6 +392,7 @@ def run_single_turn(
         team_id=team_id,
         checkpoint_id=checkpoint_id,
         interrupt_id=interrupt_id,
+        occurrence_id=occurrence_id,
         resume_payload=resume_payload,
         inline_tuning=inline_tuning,
     ):
@@ -422,7 +425,8 @@ def run_single_turn(
 def build_hitl_resume_payload(
     *,
     raw_response: str,
-    choices: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    choices: list[dict[str, Any]] | tuple[dict[str, Any], ...] = (),
+    free_text: bool = False,
 ) -> Any:
     """
     Convert one terminal HITL answer into the runtime resume payload shape.
@@ -431,7 +435,12 @@ def build_hitl_resume_payload(
     - the interactive shell accepts either a 1-based menu index or a raw
       choice id, but graph `choice_step(...)` expects a structured
       `{"choice_id": ...}` resume payload
+    - a typed answer must travel as `{"answer": ...}`, the same field the web
+      client sends: a bare string is stored as the chosen `choice_id`, which
+      is exactly the audit shape the response contract dropped
     """
+    if free_text:
+        return {"answer": raw_response}
     selected_choice_id = raw_response
     if raw_response.isdigit():
         idx = int(raw_response) - 1

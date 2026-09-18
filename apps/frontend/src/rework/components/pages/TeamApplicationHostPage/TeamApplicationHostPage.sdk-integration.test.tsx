@@ -16,6 +16,7 @@
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -28,8 +29,11 @@ interface PackedClient {
   connect(): Promise<{
     route: { subPath: string };
     team: { id: string };
+    theme?: "light" | "dark";
+    locale: string;
   }>;
   onRoute(listener: (route: { subPath: string }) => void): () => void;
+  onContext(listener: (context: { theme?: "light" | "dark"; locale: string }) => void): () => void;
   navigate(path: string, options?: { replace?: boolean }): void;
   openChat(sessionId?: string | null): void;
   request(path: string, init?: { method?: string; body?: string; timeoutMs?: number }): Promise<Response>;
@@ -52,6 +56,8 @@ const h = vi.hoisted(() => ({
   subPath: "",
   teamId: "team-1",
   teamName: "Team One",
+  darkMode: false,
+  locale: "en",
   agents: [] as Array<{ agent_instance_id: string; status?: string }>,
   result: {
     data: {
@@ -74,7 +80,7 @@ const h = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: "en", resolvedLanguage: "en" },
+    i18n: { language: h.locale, resolvedLanguage: h.locale },
   }),
 }));
 vi.mock("react-router-dom", () => ({
@@ -108,6 +114,7 @@ import TeamApplicationHostPage from "./TeamApplicationHostPage.tsx";
 const FRED_ORIGIN = "http://localhost:3000";
 const sdkEntry = process.env.FRED_IFRAME_SDK_ENTRY_URL;
 const integration = sdkEntry ? describe : describe.skip;
+const liveIntegration = sdkEntry && process.env.FRED_IFRAME_SDK_LEGACY !== "1" ? describe : describe.skip;
 
 let sdk: PackedSdkModule;
 let container: HTMLDivElement | undefined;
@@ -131,7 +138,17 @@ async function rerender() {
   await act(async () => {
     root?.render(
       <StrictMode>
-        <TeamApplicationHostPage />
+        <ApplicationContext.Provider
+          value={{
+            darkMode: h.darkMode,
+            themeMode: "system",
+            isSidebarCollapsed: false,
+            toggleSidebar: () => undefined,
+            setThemeMode: () => undefined,
+          }}
+        >
+          <TeamApplicationHostPage />
+        </ApplicationContext.Provider>
       </StrictMode>,
     );
     await Promise.resolve();
@@ -222,11 +239,34 @@ beforeEach(() => {
   h.subPath = "";
   h.teamId = "team-1";
   h.teamName = "Team One";
+  h.darkMode = false;
+  h.locale = "en";
   h.agents = [];
   h.result.data.items[0].ui_prefix = "/apps/example-ui/";
 });
 
 integration("actual packed SDK with the production FRED host page", () => {
+  it("keeps the client operational after repeated theme and locale contexts", async () => {
+    h.request.mockResolvedValue(new Response("ok"));
+    const connected = await connectPackedSdk();
+    h.darkMode = true;
+    await rerender();
+    h.locale = "fr";
+    await rerender();
+    h.darkMode = false;
+    await rerender();
+    h.locale = "en";
+    await rerender();
+
+    expect(connected.client.context).toMatchObject({ team: { id: "team-1" } });
+    expect(await (await connected.client.request("still-connected")).text()).toBe("ok");
+    connected.client.navigate("after-context");
+    connected.client.openChat();
+    await flush();
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/apps/example/after-context", { replace: false });
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
+  });
+
   it("connects, preserves route events, and sends navigation and open-chat intents", async () => {
     const connected = await connectPackedSdk();
     expect(connected.context.team.id).toBe("team-1");
@@ -306,5 +346,44 @@ integration("actual packed SDK with the production FRED host page", () => {
 
     connected.client.dispose();
     await Promise.allSettled(pending);
+  });
+});
+
+liveIntegration("packed SDK live context with the production FRED host page", () => {
+  it("connects with an initially dark resolved theme", async () => {
+    h.darkMode = true;
+    h.locale = "fr";
+    const connected = await connectPackedSdk();
+    expect(connected.context).toMatchObject({ theme: "dark", locale: "fr" });
+    expect(connected.client.context).toMatchObject({ theme: "dark", locale: "fr" });
+  });
+
+  it("reads initial resolved theme and receives later theme and locale without a route echo", async () => {
+    const connected = await connectPackedSdk();
+    expect(connected.context).toMatchObject({ theme: "light", locale: "en" });
+    const contexts: Array<{ theme?: "light" | "dark"; locale: string }> = [];
+    const routes: string[] = [];
+    const unsubscribe = connected.client.onContext((context) => contexts.push(context));
+    connected.client.onRoute(({ subPath }) => routes.push(subPath));
+
+    h.darkMode = true;
+    await rerender();
+    h.darkMode = false;
+    await rerender();
+    h.locale = "fr";
+    await rerender();
+    expect(contexts.map(({ theme, locale }) => [theme, locale])).toEqual([
+      ["dark", "en"],
+      ["light", "en"],
+      ["light", "fr"],
+    ]);
+    expect(connected.client.context).toMatchObject({ theme: "light", locale: "fr" });
+    expect(routes).toEqual([]);
+
+    unsubscribe();
+    h.darkMode = true;
+    await rerender();
+    expect(contexts).toHaveLength(3);
+    expect(connected.client.context).toMatchObject({ theme: "dark", locale: "fr" });
   });
 });

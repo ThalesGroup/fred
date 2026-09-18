@@ -130,9 +130,10 @@ describe("hitlResponseKey", () => {
 // made the prompt vanish (live-only state) and left the gated tool stuck
 // showing "running" with no way to answer it.
 
-function hitlRequestMsg(eid: string, overrides: Record<string, unknown> = {}): ChatMessage {
+function hitlRequestMsg(eid: string, overrides: Record<string, unknown> = {}, rank = 0): ChatMessage {
   return msg({
     exchange_id: eid,
+    rank,
     role: "system",
     channel: "hitl_request" as never,
     parts: [
@@ -155,12 +156,13 @@ function hitlRequestMsg(eid: string, overrides: Record<string, unknown> = {}): C
   });
 }
 
-function hitlResponseMsg(eid: string): ChatMessage {
+function hitlResponseMsg(eid: string, overrides: Record<string, unknown> = {}, rank = 0): ChatMessage {
   return msg({
     exchange_id: eid,
+    rank,
     role: "user",
     channel: "hitl_response" as never,
-    parts: [{ type: "hitl_response", choice_id: "proceed", label: null } as never],
+    parts: [{ type: "hitl_response", choice_id: "proceed", label: null, ...overrides } as never],
   });
 }
 
@@ -215,5 +217,48 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     // Only e1's (answered) card renders; e2's dangling one does not duplicate
     // the interactive prompt `reconstructPendingHitl` reconstructs for it.
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(1);
+  });
+
+  it("pairs several requests and responses by occurrence_id and restores the first unanswered request", () => {
+    const messages = [
+      hitlRequestMsg("e1", { occurrence_id: "call-1", question: "First?" }, 1),
+      hitlRequestMsg("e1", { occurrence_id: "call-2", question: "Second?" }, 2),
+      hitlResponseMsg("e1", { occurrence_id: "call-2", choice_id: "cancel" }, 3),
+      hitlResponseMsg("e1", { occurrence_id: "call-1", choice_id: "proceed" }, 4),
+      hitlRequestMsg("e1", { occurrence_id: "call-3", question: "Third?" }, 5),
+    ];
+
+    const pending = reconstructPendingHitl(messages);
+    const rows = toThreadMessages(messages, false);
+
+    expect(pending?.payload.occurrence_id).toBe("call-3");
+    expect(pending?.payload.question).toBe("Third?");
+    expect(rows.filter((row) => row.role === "hitl_request").map((row) => row.text)).toEqual(["First?", "Second?"]);
+    expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["proceed", "cancel"]);
+  });
+
+  it("keeps position-based pairing for legacy rows without occurrence_id", () => {
+    const messages = [
+      hitlRequestMsg("e1", { question: "First legacy?" }, 1),
+      hitlResponseMsg("e1", { choice_id: "first" }, 2),
+      hitlRequestMsg("e1", { question: "Second legacy?" }, 3),
+      hitlResponseMsg("e1", { choice_id: "second" }, 4),
+    ];
+
+    const rows = toThreadMessages(messages, false);
+
+    expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["first", "second"]);
+    expect(reconstructPendingHitl(messages)).toBeNull();
+  });
+
+  it("renders a pure free-text response from its dedicated text field", () => {
+    const messages = [
+      hitlRequestMsg("e1", { occurrence_id: "call-text", question: "Explain" }, 1),
+      hitlResponseMsg("e1", { occurrence_id: "call-text", choice_id: null, text: "Because it is safer" }, 2),
+    ];
+
+    const rows = toThreadMessages(messages, false);
+
+    expect(rows.find((row) => row.role === "hitl_response")?.text).toBe("Because it is safer");
   });
 });

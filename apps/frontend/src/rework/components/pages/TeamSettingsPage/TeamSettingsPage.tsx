@@ -19,6 +19,7 @@ import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSett
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
+import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import styles from "./TeamSettingsPage.module.scss";
@@ -35,6 +36,10 @@ export default function TeamSettingsPage() {
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
+  // The relations themselves: no permission belongs to team_admin alone.
+  const myRelations = selectedTeam && "my_relations" in selectedTeam ? (selectedTeam.my_relations ?? []) : [];
+  const isTeamAdmin = myRelations.includes("team_admin");
+  const isPendingTeamAdmin = myRelations.includes("pending_team_admin");
 
   // Permissions arrive with the per-team fetch. While they are still loading
   // `selectedTeam` is either undefined or a permission-less bootstrap summary —
@@ -53,6 +58,7 @@ export default function TeamSettingsPage() {
   // sections the sidebar hides for them via a direct/refreshed URL.
   const sectionAllowed =
     section === "members" ||
+    (section === "responsibilities" && (isTeamAdmin || isPendingTeamAdmin)) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
     (section === "evaluations" && canUpdateAgents) ||
     ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
@@ -78,6 +84,8 @@ export default function TeamSettingsPage() {
         // TEAM-05, #2118: team_editor writes, team_admin reads (hard
         // cross-write rule) — canUpdateResources is team_editor-only.
         return <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateResources} />;
+      case "responsibilities":
+        return <TeamSettingsResponsibilities canAccept={isPendingTeamAdmin} />;
       default:
         return <Navigate to={`/team/${teamId}/settings/members`} replace />;
     }

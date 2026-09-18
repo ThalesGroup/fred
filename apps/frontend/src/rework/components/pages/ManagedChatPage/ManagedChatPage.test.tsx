@@ -122,6 +122,13 @@ vi.mock("../../../core/hooks/useUploadWarningAcknowledgement", () => ({
 }));
 
 vi.mock("@shared/molecules/SessionTitleEditor/SessionTitleEditor", () => ({ SessionTitleEditor: () => null }));
+vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
+  AgentTodoPanel: ({ sessionId, todos }: { sessionId: string; todos: { content: string }[] }) => (
+    <div data-testid="agent-todo-panel" data-session-id={sessionId}>
+      {todos.map((todo) => todo.content).join("|")}
+    </div>
+  ),
+}));
 vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
@@ -227,6 +234,122 @@ describe("ManagedChatPage chat-input policy wiring", () => {
     expect(html).toContain('data-testid="thread"');
     expect(html).toContain('data-hitl-draft="complete HITL draft"');
     expect(html).toContain('data-has-hitl-change-handler="true"');
+  });
+});
+
+describe("ManagedChatPage agent todo panel", () => {
+  const baseChatValue = (messages: Record<string, unknown>[]) => {
+    const noop = () => undefined;
+    return {
+      agentDisplayName: "Agent",
+      attachments: [],
+      attachmentsUploading: false,
+      capabilityIds: [],
+      chatControls: [],
+      commitTitle: noop,
+      deletePersistedAttachment: noop,
+      handleAbort: noop,
+      handleAddAttachments: noop,
+      handleHitlAnswer: noop,
+      handleSend: noop,
+      hitlFreeText: "",
+      input: "",
+      inputCharacterCount: 0,
+      inputTooLong: false,
+      isHistorySettled: true,
+      isHydratingAttachments: false,
+      isLoadingHistory: false,
+      messages,
+      pendingHitl: null,
+      persistedAttachments: [],
+      ragScope: "all",
+      reasoning: false,
+      removeAttachment: noop,
+      searchPolicy: "hybrid",
+      selectedDocumentUids: [],
+      selectedLibraryIds: [],
+      sessionId: "session-1",
+      sessionTitle: "Chat",
+      setHitlFreeText: noop,
+      setInput: noop,
+      setRagScope: noop,
+      setReasoning: noop,
+      setSearchPolicy: noop,
+      setSelectedDocumentUids: noop,
+      setSelectedLibraryIds: noop,
+      threadMessages: [renderedTurn],
+      waitResponse: false,
+    };
+  };
+
+  const todoCall = (todos: Record<string, unknown>[]) => ({
+    session_id: "session-1",
+    exchange_id: "exchange-1",
+    rank: 1,
+    timestamp: "2026-09-17T00:00:00.000Z",
+    role: "assistant",
+    channel: "tool_call",
+    parts: [{ type: "tool_call", call_id: "todo-1", name: "write_todos", args: { todos } }],
+  });
+
+  it("mounts the latest live or restored snapshot between the thread and composer", () => {
+    chatValue = baseChatValue([
+      todoCall([{ content: "First plan", status: "pending" }]),
+      { ...todoCall([{ content: "Current plan", status: "in_progress" }]), rank: 2 },
+    ]);
+
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).toContain('data-testid="agent-todo-panel"');
+    expect(html).toContain("Current plan");
+    expect(html).not.toContain("First plan");
+    expect(html.indexOf('data-testid="thread"')).toBeLessThan(html.indexOf('data-testid="agent-todo-panel"'));
+    expect(html.indexOf('data-testid="agent-todo-panel"')).toBeLessThan(html.indexOf('data-testid="composer"'));
+  });
+
+  it("removes the panel when the final answer settles its only remaining task", () => {
+    chatValue = baseChatValue([
+      todoCall([{ content: "Current plan", status: "in_progress" }]),
+      {
+        session_id: "session-1",
+        exchange_id: "exchange-1",
+        rank: 2,
+        timestamp: "2026-09-17T00:00:01.000Z",
+        role: "assistant",
+        channel: "final",
+        parts: [{ type: "text", text: "Done" }],
+      },
+    ]);
+
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).not.toContain('data-testid="agent-todo-panel"');
+    expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+
+  it("removes the panel when the streamed final retains an earlier array slot", () => {
+    chatValue = baseChatValue([
+      {
+        session_id: "session-1",
+        exchange_id: "exchange-1",
+        rank: 0,
+        timestamp: "2026-09-17T00:00:01.000Z",
+        role: "assistant",
+        channel: "final",
+        parts: [{ type: "text", text: "Done" }],
+      },
+      todoCall([{ content: "Current plan", status: "in_progress" }]),
+    ]);
+
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).not.toContain('data-testid="agent-todo-panel"');
+    expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+
+  it("does not mount a panel for an explicit empty snapshot", () => {
+    chatValue = baseChatValue([todoCall([])]);
+
+    const html = renderToStaticMarkup(<ManagedChatPage />);
+    expect(html).not.toContain('data-testid="agent-todo-panel"');
+    expect(html).toContain("rework.agentTodoPanel.announcementComplete");
   });
 });
 

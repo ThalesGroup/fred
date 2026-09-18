@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hosted application download</title>
+  </head>
+  <body>
+    <button id="download" type="button">Download Markdown</button>
+    <script>
+      const hostOrigin = new URLSearchParams(location.search).get("hostOrigin");
+      if (!hostOrigin) throw new Error("hostOrigin is required");
+      const announce = () =>
+        window.parent.postMessage(
+          { type: "fred:ready", protocolVersion: "1" },
+          hostOrigin,
+        );
+      const retry = setInterval(announce, 100);
+      window.addEventListener("message", (event) => {
+        if (event.origin === hostOrigin && event.data?.type === "fred:context")
+          clearInterval(retry);
+      });
+      announce();
+
+      document.getElementById("download").addEventListener("click", () => {
+        const blob = new Blob(
+          ["# Hosted synthesis\n\nKnown Markdown bytes.\n"],
+          { type: "text/markdown" },
+        );
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "synthesis.md";
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      });
+    </script>
+  </body>
+</html>

@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { chromium } from "@playwright/test";
+import { createServer as createViteServer } from "vite";
 
 import { workspaceRoot } from "./pack-design-tokens.mjs";
 import { loadReleaseContract } from "./release-contract.mjs";
@@ -372,6 +381,148 @@ async function verifyIframeSdk(
     assert.equal(admission.applicationOrigin, applicationOrigin);
     assert(admission.readyCount >= 2, "ready retry was not observed");
     assert.equal(admission.protocolVersion, "1");
+    assert.equal(new URL(child.url()).searchParams.get("theme"), "dark");
+    assert.equal(new URL(child.url()).searchParams.get("locale"), "fr");
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "en", 0],
+    );
+
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await child.waitForFunction(() => window.__fredChild.contexts.length === 4);
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.contexts.map(({ theme, locale }) => [theme, locale]),
+      ),
+      [
+        ["dark", "en"],
+        ["light", "en"],
+        ["light", "fr"],
+        ["light", "fr"],
+      ],
+    );
+    const invalidContext = {
+      type: "fred:context",
+      protocolVersion: "1",
+      applicationId: "example",
+      context: {
+        team: { id: "team-1", name: "Team One", isPersonal: false },
+        route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+        locale: "en",
+        theme: "system",
+      },
+    };
+    await observation.page.evaluate(
+      (message) => window.__fredHost.sendRawContext(message),
+      invalidContext,
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendRawContext({
+        type: "fred:context",
+        protocolVersion: "1",
+        applicationId: "other",
+        context: {
+          team: { id: "team-1", name: "Team One", isPersonal: false },
+          route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+          locale: "en",
+          theme: "dark",
+        },
+      }),
+    );
+    const validButMisattributedContext = {
+      ...invalidContext,
+      context: { ...invalidContext.context, theme: "dark" },
+    };
+    await attacker.evaluate(
+      (message) => window.__attack(message),
+      validButMisattributedContext,
+    );
+    await observation.page.evaluate(async () => {
+      const sibling = document.createElement("iframe");
+      sibling.name = "wrong-source";
+      sibling.srcdoc = "<!doctype html><title>Sibling</title>";
+      const loaded = new Promise((resolve) =>
+        sibling.addEventListener("load", resolve, { once: true }),
+      );
+      document.body.appendChild(sibling);
+      await loaded;
+    });
+    const wrongSource = observation.page
+      .frames()
+      .find((frame) => frame.name() === "wrong-source");
+    assert(wrongSource, "same-origin sibling frame is missing");
+    await child.evaluate(() => {
+      window.__fredWrongSourceObserved = 0;
+      window.addEventListener("message", (event) => {
+        if (
+          event.data?.type === "fred:context" &&
+          event.origin ===
+            new URLSearchParams(window.location.search).get("hostOrigin") &&
+          event.source !== window.parent
+        )
+          window.__fredWrongSourceObserved += 1;
+      });
+    });
+    await wrongSource.evaluate((message) => {
+      const application = parent.document.querySelector("#application");
+      application.contentWindow.postMessage(
+        message,
+        new URL(application.src).origin,
+      );
+    }, validButMisattributedContext);
+    await child.waitForFunction(() => window.__fredWrongSourceObserved === 1);
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "fr", 4],
+    );
+    await child.evaluate(() => window.__fredChild.stopContext());
+    await child.evaluate(() => {
+      window.__fredContextIsolation = { errors: [], delivered: 0 };
+      globalThis.reportError = (error) =>
+        window.__fredContextIsolation.errors.push(error.message);
+      window.__fredChild.client.onContext(() => {
+        throw new Error("expected listener failure");
+      });
+      window.__fredChild.client.onContext(() => {
+        window.__fredContextIsolation.delivered += 1;
+      });
+    });
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "fr"),
+    );
+    await child.waitForFunction(
+      () => window.__fredContextIsolation?.delivered === 1,
+    );
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredContextIsolation),
+      { errors: ["expected listener failure"], delivered: 1 },
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", 4],
+    );
 
     await observation.page.evaluate(() => window.__fredHost.sendRoute("A"));
     await child.evaluate(() => window.__fredChild.navigate("B"));
@@ -529,7 +680,7 @@ async function verifyIframeSdk(
     assert.match(rejectedConnections.deadline, /deadline/i);
 
     await observation.page.evaluate(() => {
-      window.__fredHost.configureContext("valid", "team-2");
+      window.__fredHost.configureContext("valid", "team-2", "dark");
       window.__fredHost.replaceFrame();
     });
     ({ child } = await iframeHarness(observation.page));
@@ -538,6 +689,14 @@ async function verifyIframeSdk(
     assert.equal(
       await child.evaluate(() => window.__fredChild.client.context?.team.id),
       "team-2",
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", "en", 0],
     );
     assert.equal(
       await child.evaluate(() => window.__fredChild.capacity()),
@@ -1188,6 +1347,146 @@ async function verifyUi(browser, origin) {
   };
 }
 
+async function verifyProductionHostDownload(browser) {
+  const frontendRoot = path.resolve(workspaceRoot, "../../apps/frontend");
+  const fixtureRoot = path.join(workspaceRoot, "fixtures/production-host");
+  const mocksPath = path.join(fixtureRoot, "application-download-mocks.tsx");
+  const mockedAliases = [
+    "react-i18next",
+    "react-router-dom",
+    "@shared/molecules/PageEmptyState/PageEmptyState.tsx",
+    "@rework/features/applications/applicationRequest.ts",
+    "@rework/features/applications/useTeamApplications.ts",
+  ];
+  const mockedImports = new Set([
+    "../../../../hooks/useSelectedTeam.ts",
+    "../../../../app/ApplicationContextProvider.tsx",
+    "../../../../slices/controlPlane/controlPlaneOpenApi.ts",
+  ]);
+  let vite;
+  let childServer;
+  let observation;
+  let downloadRoot;
+  try {
+    childServer = await startServer(
+      fixtureRoot,
+      "application-download-child.html",
+    );
+    vite = await createViteServer({
+      configFile: false,
+      root: fixtureRoot,
+      esbuild: { jsx: "automatic" },
+      plugins: [
+        {
+          name: "production-application-host-fixture",
+          enforce: "pre",
+          resolveId(source) {
+            if (mockedImports.has(source)) return mocksPath;
+          },
+        },
+      ],
+      resolve: {
+        alias: [
+          ...mockedAliases.map((find) => ({ find, replacement: mocksPath })),
+          {
+            find: "@rework",
+            replacement: path.join(frontendRoot, "src/rework"),
+          },
+          {
+            find: "react-dom",
+            replacement: path.join(frontendRoot, "node_modules/react-dom"),
+          },
+          {
+            find: "react",
+            replacement: path.join(frontendRoot, "node_modules/react"),
+          },
+        ],
+        dedupe: ["react", "react-dom"],
+      },
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        fs: { allow: [path.resolve(workspaceRoot, "../..")] },
+      },
+      optimizeDeps: {
+        noDiscovery: true,
+        include: ["react", "react-dom/client", "react/jsx-dev-runtime"],
+      },
+    });
+    await vite.listen();
+    const address = vite.httpServer?.address();
+    assert(address && typeof address === "object");
+    const hostOrigin = `http://127.0.0.1:${address.port}`;
+    assert.notEqual(hostOrigin, childServer.origin);
+    observation = await createObservedPage(browser, [
+      hostOrigin,
+      childServer.origin,
+    ]);
+    const pageErrors = [];
+    observation.page.on("pageerror", (error) => pageErrors.push(error.message));
+    const fixtureUrl = new URL("/application-download-host.html", hostOrigin);
+    fixtureUrl.searchParams.set("childOrigin", childServer.origin);
+    await observation.page.goto(fixtureUrl.href);
+    const frame = observation.page.locator("iframe");
+    try {
+      await frame.waitFor({ state: "attached", timeout: 10_000 });
+    } catch {
+      throw new Error(
+        `production host did not render an iframe: ${JSON.stringify({ pageErrors, body: await observation.page.locator("body").innerText(), responses: observation.responses })}`,
+      );
+    }
+    const sandbox = await frame.getAttribute("sandbox");
+    assert.equal(
+      new URL(await frame.getAttribute("src")).origin,
+      childServer.origin,
+    );
+    assert.deepEqual(sandbox?.split(" "), [
+      "allow-scripts",
+      "allow-same-origin",
+      "allow-forms",
+      "allow-popups",
+      "allow-downloads",
+    ]);
+    const child = observation.page.frameLocator("iframe");
+    const expectedContents = "# Hosted synthesis\n\nKnown Markdown bytes.\n";
+    const [download] = await Promise.all([
+      observation.page.waitForEvent("download", { timeout: 10_000 }),
+      child.locator("#download").click(),
+    ]);
+    assert.equal(download.suggestedFilename(), "synthesis.md");
+    downloadRoot = await mkdtemp(
+      path.join(workspaceRoot, "target/application-download-"),
+    );
+    const downloadedFile = path.join(downloadRoot, "synthesis.md");
+    await download.saveAs(downloadedFile);
+    assert.deepEqual(
+      await readFile(downloadedFile),
+      Buffer.from(expectedContents),
+    );
+    assertSuccessfulBrowserRequests(observation);
+    assert.deepEqual(pageErrors, [], "production host raised a browser error");
+    assert.deepEqual(
+      observation.blockedRequests,
+      [],
+      "browser attempted an external request",
+    );
+    return {
+      hostOrigin,
+      childOrigin: childServer.origin,
+      filename: download.suggestedFilename(),
+      content: expectedContents,
+      bytes: Buffer.byteLength(expectedContents),
+      externalRequests: 0,
+      productionComponent: "TeamApplicationHostPage.tsx",
+    };
+  } finally {
+    await observation?.context.close();
+    await vite?.close();
+    await childServer?.close();
+    if (downloadRoot) await rm(downloadRoot, { recursive: true, force: true });
+  }
+}
+
 export async function runBrowserSmoke({
   evidencePath,
   tokenOutput = path.join(workspaceRoot, "target/staged-consumers/tokens"),
@@ -1225,32 +1524,41 @@ export async function runBrowserSmoke({
       );
     }
     browser = await chromium.launch({ headless: true });
-    const [tokens, fonts, ui, rejectedFixtureOrigins, iframeSdk] =
-      await Promise.all([
-        selected.has("tokens")
-          ? verifyTokens(browser, tokenServer.origin)
-          : undefined,
-        selected.has("fonts")
-          ? verifyFonts(browser, tokenServer.origin)
-          : undefined,
-        selected.has("ui") ? verifyUi(browser, reactServer.origin) : undefined,
-        selected.has("iframeSdk")
-          ? verifyRejectedFixtureOrigins(
-              browser,
-              iframeHostServer.origin,
-              iframeChildServer.origin,
-              iframeAttackerServer.origin,
-            )
-          : undefined,
-        selected.has("iframeSdk")
-          ? verifyIframeSdk(
-              browser,
-              iframeHostServer.origin,
-              iframeChildServer.origin,
-              iframeAttackerServer.origin,
-            )
-          : undefined,
-      ]);
+    const [
+      tokens,
+      fonts,
+      ui,
+      rejectedFixtureOrigins,
+      iframeSdk,
+      productionHostDownload,
+    ] = await Promise.all([
+      selected.has("tokens")
+        ? verifyTokens(browser, tokenServer.origin)
+        : undefined,
+      selected.has("fonts")
+        ? verifyFonts(browser, tokenServer.origin)
+        : undefined,
+      selected.has("ui") ? verifyUi(browser, reactServer.origin) : undefined,
+      selected.has("iframeSdk")
+        ? verifyRejectedFixtureOrigins(
+            browser,
+            iframeHostServer.origin,
+            iframeChildServer.origin,
+            iframeAttackerServer.origin,
+          )
+        : undefined,
+      selected.has("iframeSdk")
+        ? verifyIframeSdk(
+            browser,
+            iframeHostServer.origin,
+            iframeChildServer.origin,
+            iframeAttackerServer.origin,
+          )
+        : undefined,
+      selected.has("iframeSdk")
+        ? verifyProductionHostDownload(browser)
+        : undefined,
+    ]);
     if (tokens && ui)
       for (const property of [
         "documentOverflow",
@@ -1273,6 +1581,7 @@ export async function runBrowserSmoke({
       ...(ui ? { ui } : {}),
       ...(rejectedFixtureOrigins ? { rejectedFixtureOrigins } : {}),
       ...(iframeSdk ? { iframeSdk } : {}),
+      ...(productionHostDownload ? { productionHostDownload } : {}),
       ...(tokens && ui
         ? {
             shellOwnershipComparison: {

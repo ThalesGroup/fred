@@ -1018,6 +1018,152 @@ test("selected registry tooling verifies SDK alone and UI with an independently 
   }
 });
 
+test("UI-only registry resolution validates an exact compatibility-token peer graph", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const baseline = ledger.baselines.find(
+    ({ memberId }) => memberId === "designTokens",
+  );
+  const baselineVersion = baseline.coordinate.slice(
+    baseline.coordinate.lastIndexOf("@") + 1,
+  );
+  const contract = structuredClone(selectedContract);
+  contract.packages.designTokens.version = "0.1.0-alpha.2";
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-ui-registry-graph-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "ui-selected.tgz");
+  await writeFile(archivePath, "controlled UI registry bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "ui", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const coordinate = evidence.packages.ui.coordinate;
+  const tokenName = contract.packages.designTokens.name;
+  const uiName = contract.packages.ui.name;
+  const metadata = {
+    name: uiName,
+    version: contract.packages.ui.version,
+    dist: {
+      integrity: evidence.packages.ui.integrity,
+      attestations: {
+        url: `${contract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
+      },
+    },
+  };
+  let observedDependencies;
+  let graphFault;
+  const runCommand = async (_command, args) => {
+    if (args[0] === "pack")
+      return {
+        stdout: JSON.stringify([{ filename: path.basename(archivePath) }]),
+      };
+    if (args.includes("--package-lock-only")) {
+      const manifest = JSON.parse(
+        await readFile(path.join(root, "package.json"), "utf8"),
+      );
+      observedDependencies = manifest.dependencies;
+      await writeFile(
+        path.join(root, "package-lock.json"),
+        `${JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            "": { dependencies: manifest.dependencies },
+            [`node_modules/${uiName}`]: {
+              version: contract.packages.ui.version,
+              resolved: `${contract.registry}@fred-oss/ui/-/ui.tgz`,
+              integrity: evidence.packages.ui.integrity,
+              peerDependencies:
+                contract.packages.ui.expectedManifest.peerDependencies,
+            },
+            [`node_modules/${tokenName}`]: {
+              version: graphFault?.version ?? baselineVersion,
+              resolved:
+                graphFault?.resolved ??
+                `${contract.registry}@fred-oss/design-tokens/-/design-tokens.tgz`,
+              integrity: graphFault?.integrity ?? baseline.expected.integrity,
+            },
+          },
+        })}\n`,
+      );
+    }
+    return { stdout: "" };
+  };
+  let consumersInstalled = false;
+  const options = {
+    contract,
+    evidence,
+    coordinates: { ui: coordinate },
+    selectedIds: ["ui"],
+    ledger,
+    resolvePackage: async (options) =>
+      options.role === "ui"
+        ? resolveNpmRegistryPackage({
+            ...options,
+            root,
+            runCommand,
+            fetchMetadata: async () => metadata,
+            waitForPackageVisibility: async () => metadata,
+          })
+        : {
+            role: "designTokens",
+            coordinate: baseline.coordinate,
+            integrity: baseline.expected.integrity,
+            archivePath,
+          },
+    verifyPackageSignature: async (
+      _registryPackage,
+      { expectedProvenance },
+    ) => ({
+      cryptographicallyVerified: true,
+      identity: expectedProvenance,
+    }),
+    installConsumers: async () => {
+      consumersInstalled = true;
+    },
+  };
+  const result = await verifyRegistryTooling(options);
+  assert.equal(observedDependencies[uiName], contract.packages.ui.version);
+  assert.equal(observedDependencies[tokenName], baselineVersion);
+  const lockfile = JSON.parse(
+    await readFile(path.join(root, "package-lock.json"), "utf8"),
+  );
+  assert.equal(
+    lockfile.packages[`node_modules/${uiName}`].peerDependencies[tokenName],
+    contract.packages.ui.expectedManifest.peerDependencies[tokenName],
+  );
+  assert.notEqual(baselineVersion, contract.packages.designTokens.version);
+  assert.equal(result.packages.designTokens.compatibilityOnly, true);
+  assert.equal(consumersInstalled, true);
+  for (const [fault, message] of [
+    [
+      { version: contract.packages.designTokens.version },
+      /cached registry|lock version differs/,
+    ],
+    [{ integrity: "sha512-incorrect" }, /registry integrity differs/],
+    [
+      { resolved: "https://registry.example/design-tokens.tgz" },
+      /unexpected registry/,
+    ],
+    [
+      { resolved: "file:/tmp/design-tokens.tgz" },
+      /unexpected registry|local fallback/,
+    ],
+  ]) {
+    graphFault = fault;
+    consumersInstalled = false;
+    await assert.rejects(verifyRegistryTooling(options), message);
+    assert.equal(consumersInstalled, false);
+  }
+});
+
 test("retained attempts bind a later actual publishing commit without rewriting candidate identity", async (context) => {
   const { createCandidateEvidence } =
     await import("../scripts/release-evidence.mjs");

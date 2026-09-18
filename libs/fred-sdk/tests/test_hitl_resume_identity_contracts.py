@@ -14,12 +14,14 @@
 """
 Offline unit tests for the HITL resume identity contract (#2216 P1).
 
-`checkpoint_id` and `interrupt_id` are two distinct fields on
-`HumanInputRequest` and `ExecutionConfig`, never aliases for each other:
+`checkpoint_id`, `interrupt_id`, and `occurrence_id` are distinct fields,
+never aliases for each other:
 - `checkpoint_id`: a real checkpointer-storage identifier, populated only
   by the legacy Graph V2 runtime.
 - `interrupt_id`: LangGraph's own `Interrupt.id`, populated only by the
   ReAct V2 runtime.
+- `occurrence_id`: one pause within an interrupt, derived from a tool call
+  when the pause originates there.
 
 These tests pin that independence at the contract level.
 """
@@ -33,6 +35,8 @@ def test_human_input_request_checkpoint_id_and_interrupt_id_default_to_none() ->
     request = HumanInputRequest(question="Proceed?")
     assert request.checkpoint_id is None
     assert request.interrupt_id is None
+    assert request.occurrence_id is None
+    assert "occurrence_id" not in request.model_dump(mode="json")
 
 
 def test_human_input_request_checkpoint_id_and_interrupt_id_are_independent() -> None:
@@ -46,6 +50,17 @@ def test_human_input_request_checkpoint_id_and_interrupt_id_are_independent() ->
     interrupt_only = request.model_copy(update={"checkpoint_id": None})
     assert interrupt_only.checkpoint_id is None
     assert interrupt_only.interrupt_id == "interrupt-a"
+
+
+def test_human_input_request_occurrence_id_names_a_pause_within_interrupt() -> None:
+    request = HumanInputRequest(
+        question="Choose one",
+        interrupt_id="interrupt-a",
+        occurrence_id="tool-call-2",
+    )
+
+    assert request.interrupt_id == "interrupt-a"
+    assert request.occurrence_id == "tool-call-2"
 
 
 def test_execution_config_checkpoint_id_and_interrupt_id_are_independent() -> None:

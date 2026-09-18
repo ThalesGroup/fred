@@ -1048,17 +1048,16 @@ applications:
     #   - name: FRONTEND_THEME_URL
     #     value: "http://minio:9000/fred-themes/acme-1.0.zip"
     #
-    # For a store that demands authentication, add the two key variables and
-    # point them at a Secret this deployment already has. The chart's own
-    # <app>-env Secrets cannot serve here: each holds a single `.env` key whose
-    # value is the whole dotenv file, not one credential per key.
+    # For an authenticated S3-compatible content store, the chart creates
+    # `s3-credentials` from control-plane-backend's content-storage access key
+    # and MINIO_SECRET_KEY. Wire the frontend to that Secret:
     #
     #   - name: FRONTEND_THEME_S3_ACCESS_KEY
     #     valueFrom:
-    #       secretKeyRef: { name: your-s3-secret, key: accessKey, optional: true }
+    #       secretKeyRef: { name: s3-credentials, key: MINIO_ACCESS_KEY, optional: true }
     #   - name: FRONTEND_THEME_S3_SECRET_KEY
     #     valueFrom:
-    #       secretKeyRef: { name: your-s3-secret, key: secretKey, optional: true }
+    #       secretKeyRef: { name: s3-credentials, key: MINIO_SECRET_KEY, optional: true }
     #
     # optional: true keeps the pod schedulable when the Secret is absent; the
     # fetch then degrades to anonymous instead of blocking startup over branding.

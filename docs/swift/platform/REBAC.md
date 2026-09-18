@@ -100,6 +100,14 @@ Can:
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
 
+A nominated admin who has not accepted the configured team administrator
+charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
+a `team_member` with no admin authority. Accepting the charter
+(`POST /team-admin-charter`) turns it into `team_admin`, and a version change
+moves admins back to pending at the next startup. The last-admin guard and the
+rescue check count `team_admin` only. Contract:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
+
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
 above):
 

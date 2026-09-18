@@ -4,9 +4,10 @@ The first `@fred-oss/design-tokens`, `@fred-oss/ui`, and `@fred-oss/iframe-sdk`
 `0.1.0-alpha.1` versions are published on public npm under the `next` tag. Genuine
 all-package registry verification completed in a separate read-only run. The retained manual
 workflow now has manual `prepare-only`, protected `publish`, and read-only `verify`
-operations for subsequent independently selected versions. This ordinary path has not
-been dispatched or used to publish a new version; the completed first-release evidence
-below remains historical and unchanged.
+operations for subsequent independently selected versions. It published
+`@fred-oss/ui@0.1.0-alpha.2` and `@fred-oss/iframe-sdk@0.1.0-alpha.3`, each
+subsequently verified in a separate read-only run. The completed first-release
+evidence below remains historical and unchanged.
 
 ## Release contracts
 
@@ -283,6 +284,13 @@ the exact prior candidate and publishing attempts while recording the verifier's
 execution. A selected fixture-only command still reports controlled tooling; the historical
 all-member generic command remains available.
 
+For UI-only verification, a separate disposable registry graph explicitly installs UI
+with the exact design-token version from the approved compatibility ledger. Its lockfile
+must match both independent integrities and the approved registry before installation;
+tokens remain compatibility-only, not a selected publication or a new candidate archive.
+The token's registry bytes and provenance are verified separately against its historical
+baseline before final consumer evidence can succeed.
+
 For each exact coordinate, the verifier checks registry metadata and downloaded archive SHA-512
 against the approved candidate before installation. It then creates and validates a registry-only
 lock graph, including every resolved FRED package in that graph, and runs `npm ci --ignore-scripts`
@@ -416,7 +424,7 @@ The existing confirmed release policy names organization `fred-oss`, scope `@fre
 the public npm registry, `next` tag, source branch/workflow/environment,
 bootstrap account `marc.fawaz`, named package API / SDK protocol / release / enduring
 publishing owners, and direct Trusted Publishing as the selected subsequent policy.
-The committed member manifests supply their current `0.1.0-alpha.1` coordinates;
+The committed member manifests supply independently versioned current coordinates;
 historical publication facts remain in the evidence appendix and compatibility ledger.
 The distinct required GitHub reviewer is `marcfawaz`. This slice changes no published
 coordinates and neither installs a Trusted Publisher nor establishes bootstrap-token
@@ -464,3 +472,53 @@ signatures, Sigstore provenance, clean registry consumers, browser smoke, and pr
 compatibility. It keeps the historical publishing commits separate from the verifier's actual
 commit/run/attempt. It does not establish subsequent Trusted Publisher configuration or
 bootstrap-token revocation; predecessor OpenSpec task 12.7 remains open.
+
+## Published UI alpha.2 evidence (2026-09-16)
+
+`@fred-oss/ui@0.1.0-alpha.2` was published from the approved UI-only candidate, then
+independently verified against the public registry. These are three distinct executions;
+the later verifier source is not the candidate or publication source. The historical
+design-token alpha.1 publication identity above remains separate.
+
+| Boundary                           | Retained identity and result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved candidate                 | [Run `35081898300`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35081898300), source `044d2443f0f51b987482ef1e80602e243d0edbf7`; [artifact `10441065222`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10441065222), ZIP SHA-256 `b9f392a0361a50f476e457134b765137a09491c47e381a5d786a794112227d4c`, record digest `sha256-JabMeTWtin8UMm85hZw82RV+tE93XOB6dNfcgPYZbuY=`; `fred-oss-ui-0.1.0-alpha.2.tgz` SHA-512 `sha512-vBjN2DG1DUexZ+MpO9q3XckPVuBZmtCCwEELBnhAAddUzzQFI67yzxkOVhm5SjUrErbCayGjwkCB+MIgMvD4DA==`. Artifact expires `2026-10-16 09:56:32 UTC`.                                                                                                                                                          |
+| Actual publication                 | [Run `35084392325`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35084392325), source `044d2443f0f51b987482ef1e80602e243d0edbf7`; durable [attempt artifact `10441309689`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10441309689), ZIP SHA-256 `60275152082a79eb4826c0768301458df7a1abb6ed754727ad18d71b8906eed6`, attempt digest `sha256-Qr3wvKCaiPjyx26kx760MFG7i17FjKmlku/VpXObjIQ=`. Artifact expires `2026-10-16 10:23:45 UTC`. `npm publish` succeeded; the job subsequently failed only when exact-version metadata visibility retries were exhausted. This is not a failed publication and does not call for republishing.                                                                                      |
+| Final public-registry verification | [Run `35092202323`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35092202323), verifier source `eeb630cbcf1db6ccc7f64996808064663698ebdc`, selected package `ui`; [artifact `10444573490`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10444573490), ZIP SHA-256 `02875ff84f2e6d26c10c7ceb09c0b4af221e3a252acf2ad85d69ebd3a7628c35`, outcome digest `sha256-5xqcFsVp0fJmTY55bgtwjNUXxwoAACp26gsfEPcsx4g=`. Readiness `registry-verified`; exact registry archive, npm signatures, Sigstore provenance, clean registry consumer, and browser smoke passed. Production-host compatibility was `not-applicable` for UI-only. Compatibility-only dependency: `@fred-oss/design-tokens@0.1.0-alpha.1`. Completed `2026-09-16`. |
+
+Retained GitHub artifacts have finite lifetimes. The source-reviewed token compatibility
+baseline, not its historical CI ZIP, supplies the independent expectation for the
+UI-only consumer; the selected UI candidate and attempt remain bound to their own
+original source and execution identities.
+
+## Published iframe SDK alpha.3 evidence (2026-09-16)
+
+`@fred-oss/iframe-sdk@0.1.0-alpha.3` carries the accepted live application-context
+extension on protocol `"1"`. Its approved SDK-only candidate, protected publishing
+attempt, and independent public-registry verification are three distinct executions
+from source commit `56b498c0e338606b00b50f33bfcdd6e02ee61693`. The earlier
+alpha.2 candidate and its `ENEEDAUTH` publication attempt remain historical evidence;
+alpha.2 was not published or silently retried.
+
+| Boundary                        | Retained identity and result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved immutable candidate    | [Prepare-only run `35147048936`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35147048936); [artifact `10466938820`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10466938820), ZIP SHA-256 `1e1c8b8e03f32d76e187835e0a7db2be52cb80ee33fb380ed54ab97f7d5fb7bc`, candidate record digest `sha256-PmrhhDt8IHBXAr2hf8z3YQRZEx//oZYFzKyZz21z0Og=`. Selected `fred-oss-iframe-sdk-0.1.0-alpha.3.tgz` SHA-512: `sha512-RtGsASmlDCPw9i6QOzejU65c8baC+AM8Yi3kUuQ99fevhbXa3xIjyOhUiesraDpV2gPY4g1FobnJOEagSHEdkQ==`.                                                                                                   |
+| Protected publication attempt   | [Publish run `35147742170`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35147742170); [attempt artifact `10466824522`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10466824522), ZIP SHA-256 `0836b12d5b1709914f087586facc78ed3f54997adb0c74d0a4528a4aaba013a8`, attempt record digest `sha256-gmlkcY4Pjy0baONTa0AVM9wAr2ATxvA37FJzsHupP4A=`. npm accepted the publish command into automated validation. The GitHub job later failed because exact-version metadata remained invisible through its six bounded reads; that job failure does not mean package publication failed or authorize republishing. |
+| Independent public verification | [Verify-only run `35148411102`, attempt `1`](https://github.com/ThalesGroup/fred/actions/runs/35148411102); [artifact `10467986853`](https://api.github.com/repos/ThalesGroup/fred/actions/artifacts/10467986853), ZIP SHA-256 `764d602a7b24eadbb5936dc91de82c0e8cf45b017d9de1f6ae79e75198cc493b`, outcome digest `sha256-5sI1oUJNA8N+c/f27rVmldR8MdH1CAs+TjQcKyKH4Js=`. Readiness `registry-verified`; the exact public archive, npm signatures, Sigstore provenance, clean registry consumer, cross-origin browser smoke, and production-host compatibility all passed.                                                                         |
+
+The verification record binds the exact public archive digest to repository
+`https://github.com/ThalesGroup/fred`, source commit
+`56b498c0e338606b00b50f33bfcdd6e02ee61693`, workflow
+`https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift`,
+invocation repository `https://github.com/ThalesGroup/fred`, actual publishing run
+`35147742170` attempt `1`, and issuer `https://token.actions.githubusercontent.com`.
+The verifier's own run `35148411102` attempt `1` is recorded separately; it does
+not relabel the publication. At close-out, read-only public npm metadata returned
+the exact alpha.3 name, version, and candidate SHA-512, and `next` pointed to
+alpha.3 (`latest` still pointed to alpha.1).
+
+GitHub's read-only artifact API returned the three expected ZIP digests, which
+were also independently checked against the downloaded ZIP bytes. The extracted
+candidate archive's SHA-512 matched the public coordinate and retained final
+record. The artifacts are retention-limited; their recorded identities and
+results do not authorize rebuilding or replacing the published bytes.

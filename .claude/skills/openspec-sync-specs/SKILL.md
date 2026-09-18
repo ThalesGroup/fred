@@ -31,7 +31,7 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
    When prompting, show changes that have delta specs (under `specs/` directory).
 
-   Always announce: "Using change: <name>" and how to override (e.g., `/opsx:sync <other>`).
+   Always announce: "Using change: <name>" and how to override (e.g., `/opsx:sync <other>` in Claude Code or `$openspec-sync-specs <other>` in Codex).
 
 2. **Resolve change context**
 

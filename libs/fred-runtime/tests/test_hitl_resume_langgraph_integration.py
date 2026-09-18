@@ -54,10 +54,10 @@ real checkpointer.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import pytest
-from fred_runtime.app.agent_app import _pending_react_v2_interrupt_ids
+from fred_runtime.app.agent_app import _pending_react_v2_interrupt_occurrences
 from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
@@ -74,12 +74,12 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.react_contract import ReActInput
-from fred_sdk.contracts.runtime import ExecutionConfig
+from fred_sdk.contracts.runtime import ExecutionConfig, HumanInputRequest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import tool
-from langgraph.types import Checkpointer, Command, Interrupt
+from langchain_core.tools import InjectedToolCallId, tool
+from langgraph.types import Checkpointer, Command, Interrupt, interrupt
 from pydantic import Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -158,6 +158,139 @@ def _interrupt_object(update: dict[str, Any]) -> Interrupt:
         f"expected a real LangGraph Interrupt object, got {type(first)!r}"
     )
     return first
+
+
+def _interrupt_objects(update: dict[str, Any]) -> tuple[Interrupt, ...]:
+    raw = update["__interrupt__"]
+    values = raw if isinstance(raw, (list, tuple)) else (raw,)
+    assert all(isinstance(value, Interrupt) for value in values)
+    return tuple(values)
+
+
+def _all_interrupt_objects(updates: list[dict[str, Any]]) -> tuple[Interrupt, ...]:
+    return tuple(
+        value
+        for update in updates
+        if "__interrupt__" in update
+        for value in _interrupt_objects(update)
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_pauses_keep_occurrence_identity_across_replay(tmp_path) -> None:
+    seen_occurrences: list[str] = []
+
+    @tool
+    def ask_user(
+        question: str,
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ) -> str:
+        """Ask one pure question and return its answer."""
+
+        seen_occurrences.append(tool_call_id)
+        answer = interrupt(
+            HumanInputRequest(
+                question=question,
+                occurrence_id=tool_call_id,
+            ).model_dump(mode="json")
+        )
+        assert isinstance(answer, dict)
+        return str(answer["text"])
+
+    model = _RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("ask_user", {"question": "First?"}, "ask-1"),
+                    _tool_call("ask_user", {"question": "Second?"}, "ask-2"),
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    db_path = tmp_path / "tool_pause_replay.sqlite3"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    try:
+        checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
+        agent = build_tool_loop_compiled_react_agent(
+            model=model,
+            tools=[ask_user],
+            system_prompt="Ask both questions.",
+            binding=_binding(),
+            approval_policy=ToolApprovalPolicy(enabled=False),
+            checkpointer=cast(Checkpointer, checkpointer),
+            definition=cast(ReActAgentDefinition, _FakeDefinition()),
+            available_tool_names={"ask_user"},
+        )
+        thread_id = "t-tool-pause-replay"
+
+        first_updates = await _drive(
+            agent,
+            {"messages": [HumanMessage("ask both questions")]},
+            thread_id,
+        )
+        first_interrupts = _all_interrupt_objects(first_updates)
+        assert len(first_interrupts) == 2
+
+        # Each interrupting task yields its own `updates` event, so parsing the
+        # run exactly as `react_runtime` does surfaces BOTH pauses — and the
+        # still-pending sibling is surfaced again by the resumed run below.
+        surfaced = [
+            request
+            for update in first_updates
+            if (request := extract_interrupt_request(update)) is not None
+        ]
+        assert [request.occurrence_id for request in surfaced] == ["ask-1", "ask-2"]
+
+        first_requests = [
+            extract_interrupt_request({"__interrupt__": (value,)})
+            for value in first_interrupts
+        ]
+        assert all(request is not None for request in first_requests)
+        assert [request.occurrence_id for request in first_requests if request] == [
+            "ask-1",
+            "ask-2",
+        ]
+        first_by_occurrence = {
+            request.occurrence_id: interrupt_value
+            for request, interrupt_value in zip(
+                first_requests, first_interrupts, strict=True
+            )
+            if request is not None
+        }
+
+        resumed = await _drive(
+            agent,
+            Command(resume={first_by_occurrence["ask-1"].id: {"text": "one"}}),
+            thread_id,
+        )
+        replayed_interrupts = _all_interrupt_objects(resumed)
+        assert len(replayed_interrupts) == 1
+        replayed_request = extract_interrupt_request(
+            {"__interrupt__": replayed_interrupts}
+        )
+        assert replayed_request is not None
+        assert replayed_request.interrupt_id == first_by_occurrence["ask-2"].id
+        assert replayed_request.occurrence_id == "ask-2"
+        assert sorted(seen_occurrences) == ["ask-1", "ask-1", "ask-2", "ask-2"]
+
+        completed = await _drive(
+            agent,
+            Command(resume={first_by_occurrence["ask-2"].id: {"text": "two"}}),
+            thread_id,
+        )
+        assert not _all_interrupt_objects(completed)
+        assert sorted(seen_occurrences) == [
+            "ask-1",
+            "ask-1",
+            "ask-2",
+            "ask-2",
+            "ask-2",
+        ]
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -380,8 +513,8 @@ async def test_paused_checkpoint_is_stored_unnamespaced_whatever_the_config_asks
         loaded = await load_checkpoint(reader, thread_id=thread_id)
         assert loaded is not None
         _, pending_writes = loaded
-        assert _pending_react_v2_interrupt_ids(pending_writes) == frozenset(
-            {interrupt.id}
+        assert _pending_react_v2_interrupt_occurrences(pending_writes) == frozenset(
+            {(interrupt.id, None)}
         )
     finally:
         await engine.dispose()

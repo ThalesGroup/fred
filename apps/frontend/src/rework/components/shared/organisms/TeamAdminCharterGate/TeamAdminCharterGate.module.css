@@ -1,0 +1,35 @@
+/* A full-width strip on top of the team's pages, in theme colours, so it is hard to miss. */
+.notice {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-retreat);
+  background-color: var(--primary-container);
+  padding: var(--spacing-s) var(--spacing-xl);
+  color: var(--on-primary-container);
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  font: var(--font-body-medium-emphasized);
+}
+
+.action {
+  flex-shrink: 0;
+}
+
+/* Routed pages size with height: 100%, so they need a definite box under the notice. */
+.pages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}

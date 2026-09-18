@@ -211,6 +211,35 @@ describe("groupTraceEntries", () => {
     expect(entries[0]).toMatchObject({ kind: "combo", call, result });
   });
 
+  it("omits a valid write_todos call and its matching result", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "in_progress" }],
+    });
+    const result = toolResultMsg("todo-1", "Updated todo list");
+    expect(groupTraceEntries([call, result])).toEqual([]);
+  });
+
+  it("keeps a failed write_todos call and result visible", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "in_progress" }],
+    });
+    const result = toolResultMsg("todo-1", "Failed to update todo list", false);
+    expect(groupTraceEntries([call, result])).toEqual([{ kind: "combo", call, result }]);
+  });
+
+  it("keeps malformed write_todos calls paired with their result", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "unknown" }],
+    });
+    const result = toolResultMsg("todo-1", "Invalid todo list", false);
+    expect(groupTraceEntries([call, result])).toEqual([{ kind: "combo", call, result }]);
+  });
+
+  it("keeps an orphan result when no valid write_todos call identifies it", () => {
+    const result = toolResultMsg("todo-1", "Updated todo list");
+    expect(groupTraceEntries([result])).toEqual([{ kind: "solo", message: result }]);
+  });
+
   it("pairs tool_call+result even when result appears before call in array", () => {
     const call = toolCallMsg("c1", "search");
     const result = toolResultMsg("c1", "found it");

@@ -1,0 +1,6 @@
+.content {
+  max-height: 60vh;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+}

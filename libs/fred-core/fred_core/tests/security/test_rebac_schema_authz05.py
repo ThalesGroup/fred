@@ -140,8 +140,8 @@ def test_can_access_files_is_team_member_only() -> None:
     marketplace can list it, so `can_read` would let any connected user
     enumerate and read that team's `shared/` area.
 
-    `team_member` already unions `team_admin`/`team_editor`/`team_analyst`, so
-    the elevated roles reach it without a separate branch here.
+    `team_member` already unions `team_admin`/`pending_team_admin`/`team_editor`/
+    `team_analyst`, so every team role reaches it without a separate branch here.
     """
     team = _type_definition("team")
 
@@ -153,6 +153,7 @@ def test_can_access_files_is_team_member_only() -> None:
             "child": [
                 {"this": {}},
                 {"computedUserset": {"relation": "team_admin"}},
+                {"computedUserset": {"relation": "pending_team_admin"}},
                 {"computedUserset": {"relation": "team_editor"}},
                 {"computedUserset": {"relation": "team_analyst"}},
             ]

@@ -11,6 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import semver from "semver";
 
 import { assertChangelogVersion } from "../scripts/release-changelog.mjs";
 import { buildReleaseCandidate } from "../scripts/release-candidate.mjs";
@@ -140,10 +141,12 @@ test("authoritative manifests permit a future SDK-only fixture coordinate withou
   const root = await disposableProducer(context);
   const sdkPath = path.join(root, "iframe-sdk/package.json");
   const sdk = JSON.parse(await readFile(sdkPath, "utf8"));
-  sdk.version = "0.1.0-alpha.2";
+  const fixtureVersion = semver.inc(sdk.version, "prerelease", "alpha");
+  assert(fixtureVersion && fixtureVersion !== sdk.version);
+  sdk.version = fixtureVersion;
   await writeFile(sdkPath, JSON.stringify(sdk));
   const contract = await loadReleaseContract(selectedPolicy, { root });
-  assert.equal(contract.packages.iframeSdk.version, "0.1.0-alpha.2");
+  assert.equal(contract.packages.iframeSdk.version, fixtureVersion);
   assert.equal(
     contract.packages.ui.version,
     JSON.parse(await readFile(path.join(root, "ui/package.json"), "utf8"))
@@ -190,12 +193,12 @@ test("authoritative manifests permit a future SDK-only fixture coordinate withou
   assert.deepEqual(calls, []);
   await writeFile(
     path.join(root, "iframe-sdk/CHANGELOG.md"),
-    "## 0.1.0-alpha.2\n\nReview: approved\nChanges: Fixture-only SDK version.\n",
+    `## ${fixtureVersion}\n\nReview: approved\nChanges: Fixture-only SDK version.\n`,
   );
   assert.doesNotThrow(() =>
     assertChangelogVersion(
-      "## 0.1.0-alpha.2\n\nReview: approved\nChanges: Fixture-only SDK version.\n",
-      "0.1.0-alpha.2",
+      `## ${fixtureVersion}\n\nReview: approved\nChanges: Fixture-only SDK version.\n`,
+      fixtureVersion,
     ),
   );
   sdk.exports["./protocol"].import = "../missing.js";

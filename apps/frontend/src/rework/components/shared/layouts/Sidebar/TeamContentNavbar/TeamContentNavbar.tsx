@@ -141,7 +141,7 @@ export default function TeamContentNavbar() {
   // analyst); no shield glyph — the team panel header keeps the roles line
   // typographic only, matching the Home team list item (#2298).
   const roleLabel = (() => {
-    const priority: Record<string, number> = { team_admin: 0, team_editor: 1, team_analyst: 2 };
+    const priority: Record<string, number> = { team_admin: 0, pending_team_admin: 0, team_editor: 1, team_analyst: 2 };
     const heldRoles = (selectedTeam?.my_relations ?? [])
       .filter((relation) => relation in priority)
       .slice()
@@ -246,6 +246,20 @@ export default function TeamContentNavbar() {
       label: t("rework.teamSettings.navigation.settings"),
       icon: { category: "outlined", type: "settings", filled: true },
       linkProps: { to: `${settingsBase}/parameters` },
+    });
+  }
+  // From the relations, not the permissions: a pending admin accepts the charter
+  // here, before holding any admin permission.
+  if (
+    (selectedTeam?.my_relations ?? []).some(
+      (relation) => relation === "team_admin" || relation === "pending_team_admin",
+    )
+  ) {
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.responsibilities"),
+      icon: { category: "outlined", type: "admin_panel_settings", filled: false },
+      linkProps: { to: `${settingsBase}/responsibilities` },
     });
   }
   if (canSeeActivity) {

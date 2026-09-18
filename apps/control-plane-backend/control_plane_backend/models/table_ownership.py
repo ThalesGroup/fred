@@ -50,6 +50,9 @@ import control_plane_backend.models.routing_policy_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
 import control_plane_backend.models.task_models  # noqa: F401 — registers cp_task_run / cp_task_event_log with Base
+
+# codeql[py/unused-import]
+import control_plane_backend.models.team_admin_charter_models  # noqa: F401 - registers team_admin_charter_acceptances with Base
 import control_plane_backend.models.team_wiki_models  # noqa: F401 — registers team_wiki_pages / team_wiki_revisions with Base
 from control_plane_backend.models.base import Base
 

@@ -562,6 +562,18 @@ test("canonical protocol and declared host compatibility inputs select both gate
   }
 });
 
+test("resolved theme and locale owners select SDK and host validation", () => {
+  for (const owner of [
+    "apps/frontend/src/app/ApplicationContextStruct.tsx",
+    "apps/frontend/src/app/ApplicationContextProvider.tsx",
+    "apps/frontend/src/i18n.ts",
+  ]) {
+    assert(selectsPackageJob([owner]), owner);
+    assert(selectsFrontendJob([owner]), owner);
+  }
+  assert(!selectsPackageJob(["apps/frontend/src/rework/unrelated-page.tsx"]));
+});
+
 test("frontend-package CI runs transferred archives with application-owned host dependencies", () => {
   const steps = workflow.jobs["frontend-package-checks"].steps;
   assert(

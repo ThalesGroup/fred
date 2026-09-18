@@ -192,6 +192,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setDefaultTeamsForNewUsersRequest,
       }),
     }),
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: build.query<
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse,
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
+    }),
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter`, method: "POST" }),
+    }),
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg
@@ -1581,6 +1593,12 @@ export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut
 export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
   setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
 };
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance | null;
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg = void;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
@@ -2570,7 +2588,7 @@ export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
 export type GcuVersionsType = "v1";
-export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
+export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
@@ -2659,6 +2677,9 @@ export type DefaultTeamForNewUsers = {
 };
 export type SetDefaultTeamsForNewUsersRequest = {
   team_ids: string[];
+};
+export type TeamAdminCharterAcceptance = {
+  accepted_at: string;
 };
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
@@ -4146,6 +4167,9 @@ export const {
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
   useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useLazyGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,

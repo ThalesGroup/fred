@@ -12510,6 +12510,19 @@
                       "default": null,
                       "title": "Gcu Version"
                     },
+                    "team_admin_charter_version": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Version of the team administrator charter a team_admin must accept before their admin-only team permissions apply. None disables the charter. Changing it asks every team admin to accept again.",
+                      "title": "Team Admin Charter Version"
+                    },
                     "bootstrap_token_env_var": {
                       "anyOf": [
                         {
@@ -14647,6 +14660,19 @@
                       ],
                       "default": null,
                       "title": "Gcu Version"
+                    },
+                    "team_admin_charter_version": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Version of the team administrator charter a team_admin must accept before their admin-only team permissions apply. None disables the charter. Changing it asks every team admin to accept again.",
+                      "title": "Team Admin Charter Version"
                     },
                     "bootstrap_token_env_var": {
                       "anyOf": [

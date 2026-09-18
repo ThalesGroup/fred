@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ApplicationSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -22,6 +22,7 @@ import {
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { ApplicationErrorBoundary } from "@rework/features/applications/ApplicationErrorBoundary.tsx";
 import {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
@@ -90,11 +91,13 @@ function pathnameOf(path: string): string {
  */
 function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, subPath }: ApplicationFrameProps) {
   const { i18n } = useTranslation();
+  const { darkMode } = useContext(ApplicationContext);
   const navigate = useNavigate();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<FrameStatus>("connecting");
 
   const locale = i18n.resolvedLanguage ?? i18n.language ?? "en";
+  const theme: "light" | "dark" = darkMode ? "dark" : "light";
   const basePath = applicationRouteBasePath(teamId, application.id);
   const request = useMemo(() => createApplicationRequest(application.id, teamId), [application.id, teamId]);
 
@@ -163,13 +166,41 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
   );
 
   // The message listener is installed once per frame but must read the current
-  // route and locale, so those travel through a ref instead of resubscribing.
-  const contextRef = useRef({ basePath, subPath, locale, teamName });
+  // route and resolved display values, so those travel through a ref instead of resubscribing.
+  const contextRef = useRef({ basePath, subPath, locale, theme, teamName });
   const sentSubPathRef = useRef<string | null>(null);
+  const sentContextRef = useRef<{ locale: string; theme: "light" | "dark" } | null>(null);
 
   useEffect(() => {
-    contextRef.current = { basePath, subPath, locale, teamName };
+    contextRef.current = { basePath, subPath, locale, theme, teamName };
   });
+
+  const postContext = useCallback(() => {
+    const frame = frameRef.current;
+    if (!frame?.contentWindow) return;
+    const {
+      basePath: currentBase,
+      subPath: currentSubPath,
+      locale: currentLocale,
+      theme: currentTheme,
+      teamName: name,
+    } = contextRef.current;
+    frame.contentWindow.postMessage(
+      {
+        type: "fred:context",
+        protocolVersion: FRED_APP_PROTOCOL_VERSION,
+        applicationId: application.id,
+        context: {
+          team: { id: teamId, name, isPersonal: false },
+          route: { basePath: currentBase, subPath: currentSubPath },
+          locale: currentLocale,
+          theme: currentTheme,
+        },
+      } satisfies ApplicationHostMessage,
+      targetOrigin,
+    );
+    sentContextRef.current = { locale: currentLocale, theme: currentTheme };
+  }, [application.id, targetOrigin, teamId]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -222,23 +253,8 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           setStatus("protocol-mismatch");
           return;
         }
-        const {
-          basePath: currentBase,
-          subPath: currentSubPath,
-          locale: currentLocale,
-          teamName: name,
-        } = contextRef.current;
-        post({
-          type: "fred:context",
-          protocolVersion: FRED_APP_PROTOCOL_VERSION,
-          applicationId: application.id,
-          context: {
-            team: { id: teamId, name, isPersonal: false },
-            route: { basePath: currentBase, subPath: currentSubPath },
-            locale: currentLocale,
-          },
-        });
-        sentSubPathRef.current = currentSubPath;
+        postContext();
+        sentSubPathRef.current = contextRef.current.subPath;
         setStatus("ready");
         return;
       }
@@ -295,7 +311,14 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       for (const controller of inFlight.values()) controller.abort();
       inFlight.clear();
     };
-  }, [application.id, navigate, openChat, request, targetOrigin, teamId]);
+  }, [navigate, openChat, postContext, request, targetOrigin]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    const sent = sentContextRef.current;
+    if (sent?.theme === theme && sent.locale === locale) return;
+    postContext();
+  }, [locale, postContext, status, theme]);
 
   // Route changes made in Fred (back/forward, a sidebar link) are pushed down.
   // Echoing back the sub-path the frame itself asked for would ping-pong.
@@ -315,7 +338,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           className={status === "ready" ? styles.frame : styles.frameLoading}
           src={src}
           title={applicationLocaleText(application.name, locale)}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
         />
       )}
     </div>

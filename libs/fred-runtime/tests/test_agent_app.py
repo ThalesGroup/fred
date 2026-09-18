@@ -3158,6 +3158,7 @@ async def _write_react_v2_interrupt(
     *,
     thread_id: str,
     interrupt_id: str,
+    occurrence_id: str | None = None,
     task_id: str = "task-1",
     channel_values: dict[str, Any] | None = None,
 ):
@@ -3176,9 +3177,12 @@ async def _write_react_v2_interrupt(
         thread_id=thread_id,
         channel_values=channel_values or {"messages": []},
     )
+    payload = {"question": "proceed?"}
+    if occurrence_id is not None:
+        payload["occurrence_id"] = occurrence_id
     await checkpointer.aput_writes(
         stored_config,
-        [("__interrupt__", {"value": {"question": "proceed?"}, "id": interrupt_id})],
+        [("__interrupt__", {"value": payload, "id": interrupt_id})],
         task_id=task_id,
     )
     return stored_config
@@ -3270,6 +3274,132 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
         )
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("request_occurrence_id", "expected_detail"),
+    [
+        (None, "occurrence_id does not match"),
+        ("call-stale", "occurrence_id does not match"),
+    ],
+)
+def test_resume_rejects_missing_or_stale_occurrence_id(
+    monkeypatch,
+    request_occurrence_id,
+    expected_detail,
+) -> None:
+    async def _fake_load_checkpoint(
+        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
+    ):
+        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+            (
+                "task-1",
+                "__interrupt__",
+                {
+                    "id": "interrupt-shared",
+                    "value": {"occurrence_id": "call-current"},
+                },
+            )
+        ]
+
+    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+    )
+    request = RuntimeExecuteRequest(
+        agent_id="rags.sample.echo",
+        input="",
+        session_id="session-occurrence",
+        interrupt_id="interrupt-shared",
+        occurrence_id=request_occurrence_id,
+        resume_payload={"choice_id": "proceed"},
+    )
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        asyncio.run(agent_app_module._validate_session_checkpoint_access(request))
+
+    assert exc.value.status_code == 409
+    assert expected_detail in exc.value.detail
+
+
+def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
+    async def _fake_load_checkpoint(
+        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
+    ):
+        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+            (
+                "task-1",
+                "__interrupt__",
+                {
+                    "id": "interrupt-shared",
+                    "value": {"occurrence_id": "call-current"},
+                },
+            )
+        ]
+
+    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+    )
+    request = RuntimeExecuteRequest(
+        agent_id="rags.sample.echo",
+        input="",
+        session_id="session-occurrence",
+        interrupt_id="interrupt-shared",
+        occurrence_id="call-current",
+        resume_payload={"choice_id": "proceed"},
+    )
+
+    asyncio.run(agent_app_module._validate_session_checkpoint_access(request))
+
+
+def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> None:
+    async def _fake_load_checkpoint(
+        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
+    ):
+        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+            (
+                "task-legacy",
+                "__interrupt__",
+                {"id": "interrupt-shared", "value": {}},
+            ),
+            (
+                "task-current",
+                "__interrupt__",
+                {
+                    "id": "interrupt-shared",
+                    "value": {"occurrence_id": "call-current"},
+                },
+            ),
+        ]
+
+    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+    )
+    request = RuntimeExecuteRequest(
+        agent_id="rags.sample.echo",
+        input="",
+        session_id="session-occurrence",
+        interrupt_id="interrupt-shared",
+        occurrence_id="call-unknown",
+        resume_payload={"choice_id": "proceed"},
+    )
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        asyncio.run(agent_app_module._validate_session_checkpoint_access(request))
+
+    assert exc.value.status_code == 409
+    assert "occurrence_id does not match" in exc.value.detail
 
 
 def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
