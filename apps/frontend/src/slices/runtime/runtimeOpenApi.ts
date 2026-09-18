@@ -959,7 +959,10 @@ export type CapabilityCatalogEntry = {
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
+  public_version?: string | null;
   route_base_url?: string | null;
+  runtime_id?: string | null;
+  source_id?: string | null;
   team_scope?: TeamScopePolicy;
   team_settings_fields?: FieldSpec[];
   version: string;
