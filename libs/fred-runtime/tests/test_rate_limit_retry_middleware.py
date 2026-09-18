@@ -413,6 +413,7 @@ async def test_delayed_wakeup_does_not_start_a_late_attempt(
 async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from conftest import ToolFriendlyFakeChatModel
     from fred_core.portable import Span, Tracer
     from fred_runtime.capabilities.assembly import CapabilityAgentBlock
     from fred_runtime.deep.deep_runtime import (
@@ -426,7 +427,6 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
     from fred_sdk.contracts.models import ToolApprovalPolicy
     from langchain.agents import create_agent
     from langchain.agents.middleware import AgentMiddleware
-    from langchain_core.language_models.chat_models import BaseChatModel
     from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
@@ -461,18 +461,8 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             self.calls += 1
             return await handler(request)
 
-    class Model(BaseChatModel):
+    class Model(ToolFriendlyFakeChatModel):
         calls: int = 0
-
-        @property
-        def _llm_type(self) -> str:
-            return "retry-test"
-
-        def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
-            return self
-
-        def _generate(self, messages: list[BaseMessage], **kwargs: Any) -> ChatResult:
-            raise AssertionError("async model expected")
 
         async def _agenerate(
             self,
@@ -518,8 +508,8 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
         return await original(self, request, handler)
 
     monkeypatch.setattr(CheckpointHygieneMiddleware, "awrap_model_call", hygiene)
-    model, preparation, tracer = Model(), Preparation(), RecordingTracer()
-    common = dict(
+    model, preparation, tracer = Model(responses=[]), Preparation(), RecordingTracer()
+    common: dict[str, Any] = dict(
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(),
         available_tool_names={"perform_once"},
