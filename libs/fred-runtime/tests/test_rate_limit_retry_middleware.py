@@ -428,7 +428,7 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
     from langchain.agents import create_agent
     from langchain.agents.middleware import AgentMiddleware
     from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.outputs import ChatResult
     from langchain_core.tools import tool
     from langgraph.checkpoint.memory import InMemorySaver
 
@@ -472,23 +472,11 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             **kwargs: Any,
         ) -> ChatResult:
             self.calls += 1
-            if self.calls == 1:
-                message = AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "name": "perform_once",
-                            "args": {},
-                            "id": "once",
-                            "type": "tool_call",
-                        }
-                    ],
-                )
-            elif self.calls == 2:
+            if self.calls == 2:
                 raise _RateLimited()
-            else:
-                message = AIMessage(content="done")
-            return ChatResult(generations=[ChatGeneration(message=message)])
+            return await super()._agenerate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
 
     tool_calls = 0
 
@@ -508,7 +496,23 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
         return await original(self, request, handler)
 
     monkeypatch.setattr(CheckpointHygieneMiddleware, "awrap_model_call", hygiene)
-    model, preparation, tracer = Model(responses=[]), Preparation(), RecordingTracer()
+    model = Model(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "perform_once",
+                        "args": {},
+                        "id": "once",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+    preparation, tracer = Preparation(), RecordingTracer()
     common: dict[str, Any] = dict(
         binding=_binding(),
         approval_policy=ToolApprovalPolicy(),
