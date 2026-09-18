@@ -101,5 +101,26 @@ It SHALL remain a starting point the member can narrow, not a fixed agent.
 #### Scenario: The blank-slate template is still the generic starting point
 
 - **WHEN** a member browses the available templates
-- **THEN** the pre-equipped knowledge assistant is offered alongside the
-  blank-slate template, which keeps declaring no default capabilities
+- **THEN** every pre-equipped template is offered alongside the blank-slate
+  template, which keeps declaring no default capabilities
+
+### Requirement: A lightly equipped assistant is available off the shelf
+
+The platform SHALL offer a template that starts able to read the files a user
+attaches to a conversation and to reason before answering, and that carries no
+other capability by default. It SHALL remain a starting point the member can
+narrow or extend.
+
+#### Scenario: Asking about an attached file needs no capability picking
+
+- **WHEN** a member of a team enabled for its capabilities creates an agent from
+  this template, saves without opening the capabilities view, then attaches a
+  file to a conversation and asks about it
+- **THEN** the agent reads the attached file and answers from it, with reasoning
+  already on for that conversation
+
+#### Scenario: Its declared defaults stop at one pack
+
+- **WHEN** a platform admin enables this template for a team
+- **THEN** the capabilities the team must already be able to use are those of
+  the conversation-attachments pack and no others

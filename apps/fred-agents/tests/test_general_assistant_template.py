@@ -13,12 +13,13 @@
 # limitations under the License.
 
 """
-Default invariants for the blank-slate template every team starts from.
+Invariants for the blank-slate template every team starts from.
 
 Why this test exists:
-- this template's defaults are load-bearing twice over: they decide what a new
-  agent can do on creation, and every id in the list raises the bar a team must
-  clear before an admin can enable the template at all
+- "blank" is a load-bearing property, not an accident of authoring: every
+  default a template declares becomes an admission hurdle a team must clear
+  before an admin can enable it, and this is the one template that must suit
+  any team. Pre-equipped siblings exist precisely so this one can stay empty
 
 How to use it:
 - run via the default offline `fred-agents` test suite
@@ -32,33 +33,17 @@ from __future__ import annotations
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 
 
-def test_defaults_are_the_attachments_pack_and_nothing_else() -> None:
-    # Widening this list is never free: it is the admission hurdle for the one
-    # template meant to suit any team, so a new id belongs to a deliberate
-    # decision rather than to a convenient import.
-    declared = {ref.id for ref in GENERAL_ASSISTANT_AGENT.default_mcp_servers}
-
-    assert declared == {"document_access", "document_summarize"}
-
-
-def test_document_access_stays_scoped_to_attachments() -> None:
-    # This template ships no corpus search, so widening the scope would bind a
-    # tool it cannot otherwise reach. `show_attach_files_control` is what makes
-    # the agent form read the attachments pack as on.
-    config = GENERAL_ASSISTANT_AGENT.default_capabilities_config["document_access"]
-
-    assert config["search_attachments_only"] is True
-    assert config["show_attach_files_control"] is True
+def test_the_blank_slate_declares_nothing() -> None:
+    # If a default belongs on a ready-to-use template, add it to a pre-equipped
+    # sibling (`basic_assistant`, `basic_knowledge_assistant`) — not here.
+    assert GENERAL_ASSISTANT_AGENT.default_mcp_servers == ()
+    assert GENERAL_ASSISTANT_AGENT.default_capabilities_config == {}
+    assert GENERAL_ASSISTANT_AGENT.reasoning_enabled is False
+    assert GENERAL_ASSISTANT_AGENT.reasoning_default_on is False
 
 
-def test_reasoning_is_offered_and_pre_armed() -> None:
-    assert GENERAL_ASSISTANT_AGENT.reasoning_enabled is True
-    assert GENERAL_ASSISTANT_AGENT.reasoning_default_on is True
-
-
-def test_every_configured_capability_is_also_activated() -> None:
-    # Configuration without activation is inert: the pod only round-trips config
-    # for capabilities the instance actually selects.
-    activated = {ref.id for ref in GENERAL_ASSISTANT_AGENT.default_mcp_servers}
-
-    assert set(GENERAL_ASSISTANT_AGENT.default_capabilities_config) <= activated
+def test_its_name_is_offered_in_french() -> None:
+    assert GENERAL_ASSISTANT_AGENT.role == "Custom assistant"
+    assert (GENERAL_ASSISTANT_AGENT.role_by_lang or {})[
+        "fr"
+    ] == "Assistant personnalisé"

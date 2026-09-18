@@ -535,6 +535,17 @@ the operator configures freely at enrollment: pick any tool from the full
 catalog, write or import any system prompt (`fred.github.assistant` is the
 canonical instance in the `fred-agents` pod).
 
+**Pre-equipped generalists (2026-09-18).** Ready-to-use like a specialized
+template, unlocked like the generic one: a non-empty `default_mcp_servers`
+(optionally configured through `default_capabilities_config`), no `locked`
+server, and every default untickable by the member in the agent form. They
+exist so the generic assistant can stay empty — each default a template
+declares is an admission hurdle the team must clear before an admin can enable
+it, and that is the one property the universal starting point must not carry.
+Examples in `fred-agents`: `fred.github.basic-assistant` (conversation
+attachments, reasoning on), `fred.github.basic-knowledge-assistant` (four
+packs, reasoning on).
+
 **Specialized templates.** Ready-to-use agents pre-wired for a specific
 operational domain: a non-empty `default_mcp_servers` tuple, a curated
 default system prompt (operator-overridable via `FieldSpec`), and a

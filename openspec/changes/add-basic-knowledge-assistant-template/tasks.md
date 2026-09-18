@@ -20,6 +20,22 @@
 - [x] 3.3 Add the EN and FR descriptions from design.md; verify both render in the template picker
 - [x] 3.4 Register it in `registry.py` with its lineup comment, after `general_assistant` so the blank slate stays the default agent; verify `general_assistant` still declares no default capabilities and remains the first entry
 
+## 3bis. The lightly equipped template (2026-09-18)
+
+- [x] 3b.1 Add `fred.github.basic-assistant` declaring the conversation-attachments pack (`document_access` in attachments mode, `document_summarize`) and reasoning on by default; verify the blank slate is left untouched and still declares nothing
+- [x] 3b.2 Add its EN and FR prompts and descriptions behind the same `prompts.system` field; verify both prompts use `{response_language}` rather than restating a language rule
+- [x] 3b.3 Register it between the blank slate and the knowledge assistant; verify the blank slate remains the first entry and so stays the CLI default
+- [x] 3b.4 Add a third category to the template taxonomy in `AGENT_DESIGN.md` — pre-equipped but unlocked — which the knowledge assistant already fell outside of; verify both pre-equipped templates are named there
+- [ ] 3b.5 **As an ordinary team member**, create an agent from this template without opening the capabilities view, attach a file and ask about it; verify it answers from the file with reasoning already on
+
+## 3ter. Translatable template names (2026-09-18)
+
+- [x] 3t.1 Add `role_by_lang` to `AgentDefinition`, projected as `title_by_lang` on the pod's template summary and `display_name_by_lang` on the control-plane catalog; verify a pod that predates the field still serializes
+- [x] 3t.2 Apply the fallback at all three frontend sites that render a template name; verify one language never mixes names from two
+- [x] 3t.3 Regenerate the control-plane and runtime clients from source; verify only the new field appears in the diff
+- [x] 3t.4 Give the blank slate its French name "Assistant personnalisé"; verify the English one is unchanged
+- [x] 3t.5 Add a `_RuntimeTemplatePayload` parse test for `title_by_lang`, mirroring the existing `default_capability_ids` one (audit finding: the chain had no automated coverage at any layer); verify it covers a pod that predates the field
+
 ## 4. Verification
 
 - [x] 4.1 Add tests for the new field: declared config reaches the template summary, an absent declaration behaves as today, and an invalid declaration is refused; verify they fail without the implementation

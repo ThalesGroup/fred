@@ -22,9 +22,9 @@ Why this module exists:
   `general_assistant` (all KF MCP servers by default), which was confusing
 
 Key design:
-- ships the conversation-attachments pack plus reasoning: a new instance can
-  read the files a user attaches and think before answering, and the operator
-  adds or removes anything else in the agent form's Tools tab
+- declares NO default capabilities: a new instance starts with nothing ticked
+  and the operator adds what it needs in the agent form's Tools tab (see the
+  comment on `default_mcp_servers` for why the former end-user pair went away)
 - one `prompts.system` field lets operators specialise the role without creating
   a new agent template
 - system prompt handles both the tool-equipped and no-tool cases
@@ -85,8 +85,8 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     - single entry point for operators who want to build a custom agent from
       scratch: they pick the capabilities they need and write their own
       system prompt
-    - ships the conversation-attachments pack and reasoning as its defaults;
-      the Tools tab lets operators add or remove capabilities per instance
+    - ships end-user defaults only (document search + tabular, #2429); the
+      Tools tab lets operators add or remove capabilities per instance
 
     Key design choices:
     - `default_mcp_servers` lists this template's default capabilities, MCP-backed
@@ -125,16 +125,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
 
-    # The "conversation attachments" pack, and only it: `document_access` in
-    # attachments mode plus `document_summarize`. This is exactly what ticking
-    # that pack in the agent form selects, so the form reads the pack as on.
+    # No default capabilities: a blank slate really is blank. The operator
+    # ticks what this instance needs in the agent form's Tools tab.
     #
-    # Every id here feeds the template dependency gate - a team must already be
-    # able to use all of them before an admin can enable this template for it.
-    # Keep the list at this one pack: each addition raises the admission hurdle
-    # for the template meant to be the universal starting point.
+    # Why empty rather than the former end-user pair (`document_access` +
+    # tabular, #2429): every default feeds the #2408 dependency gate, so
+    # enabling this template for a team required every listed server to be
+    # usable by that team first - a needless admission hurdle for the one
+    # template meant to be the universal starting point. Defaults now reach
+    # new instances pre-ticked, which made carrying any at all a decision to
+    # take deliberately rather than by inheritance.
     #
-    # If you add one, mind two constraints that outlive this list:
+    # If you re-add one, mind two constraints that outlive this list:
     # - `document_access` (native, #1906) and the legacy inprocess
     #   `mcp-knowledge-flow-mcp-text` must never be selected together on one
     #   instance - duplicate vector-search tool, see
@@ -142,24 +144,7 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     # - Filesystem (`mcp-knowledge-flow-fs`) stays out until the /fs boundary
     #   is agent/team-scoped (AGENT-FILESYSTEM-HARDENING-RFC F1, #2334) - same
     #   stance as `deep_assistant`.
-    default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id="document_access"),
-        MCPServerRef(id="document_summarize"),
-    )
-
-    # Attachments mode: this template ships no corpus search, so the tool must
-    # not widen its scope to the team corpus; the attach-files control is what
-    # the pack exists to deliver. `document_summarize` keeps its own
-    # confirmation default - the operator added nothing deliberate to bypass.
-    default_capabilities_config: dict[str, dict[str, object]] = {
-        "document_access": {
-            "search_attachments_only": True,
-            "show_attach_files_control": True,
-        },
-    }
-
-    reasoning_enabled: bool = True
-    reasoning_default_on: bool = True
+    default_mcp_servers: tuple[MCPServerRef, ...] = ()
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

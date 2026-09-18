@@ -286,6 +286,37 @@ def test_runtime_template_payload_parses_default_capability_ids() -> None:
     ]
 
 
+def test_runtime_template_payload_parses_the_localized_title() -> None:
+    """
+    `title_by_lang` is what lets the agent form show a template's name in the
+    member's language. A pod predating the field sends nothing, which must read
+    as "this template translates its name nowhere" rather than fail the parse.
+    """
+
+    translated = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "fred.github.assistant",
+            "title": "Custom assistant",
+            "title_by_lang": {"fr": "Assistant personnalisé"},
+            "description": "Build your own assistant",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+        }
+    )
+    older_pod = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "fred.github.assistant",
+            "title": "Custom assistant",
+            "description": "Build your own assistant",
+            "kind": "assistant",
+            "available_mcp_servers": [],
+        }
+    )
+
+    assert translated.title_by_lang == {"fr": "Assistant personnalisé"}
+    assert older_pod.title_by_lang is None
+
+
 @pytest.mark.asyncio
 async def test_template_config_default_seeds_a_new_instance(
     monkeypatch: pytest.MonkeyPatch,
