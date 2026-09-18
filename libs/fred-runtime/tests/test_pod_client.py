@@ -188,6 +188,7 @@ class TestExecute:
         assert "agent_instance_id" not in body
         assert "checkpoint_id" not in body
         assert "interrupt_id" not in body
+        assert "occurrence_id" not in body
         assert "resume_payload" not in body
         assert "inline_tuning" not in body
 
@@ -212,13 +213,16 @@ class TestExecute:
         assert body["resume_payload"] == {"step": 2}
         assert body["inline_tuning"] == {"prompts.system": "override"}
 
-    def test_interrupt_id_included_when_provided(self) -> None:
+    def test_interrupt_and_occurrence_ids_included_when_provided(self) -> None:
         # #2216 — the ReAct V2 HITL resume identifier, forwarded
         # independently of (never together with, in real use) checkpoint_id.
         body, _ = self._capture_execute(
-            interrupt_id="interrupt-a", resume_payload={"choice_id": "proceed"}
+            interrupt_id="interrupt-a",
+            occurrence_id="call-a",
+            resume_payload={"choice_id": "proceed"},
         )
         assert body["interrupt_id"] == "interrupt-a"
+        assert body["occurrence_id"] == "call-a"
         assert "checkpoint_id" not in body
 
     def test_non_dict_response_raises(self) -> None:
@@ -329,7 +333,7 @@ class TestIterStreamEvents:
         body = capture.last_json()
         assert body["inline_tuning"] == {"settings.verbose": True}
 
-    def test_interrupt_id_forwarded(self) -> None:
+    def test_interrupt_and_occurrence_ids_forwarded(self) -> None:
         # #2216 — the streaming path must forward interrupt_id exactly like
         # the terminal-JSON `execute()` path.
         capture = _Capture(_sse_response({"kind": "final"}))
@@ -340,10 +344,12 @@ class TestIterStreamEvents:
             session_id="s",
             user_id="u",
             interrupt_id="interrupt-a",
+            occurrence_id="call-a",
             resume_payload={"choice_id": "proceed"},
         )
         body = capture.last_json()
         assert body["interrupt_id"] == "interrupt-a"
+        assert body["occurrence_id"] == "call-a"
         assert "checkpoint_id" not in body
 
     def test_http_error_propagates(self) -> None:

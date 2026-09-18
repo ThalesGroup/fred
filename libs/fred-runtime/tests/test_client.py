@@ -679,6 +679,22 @@ def test_build_hitl_resume_payload_supports_choice_index_and_raw_id() -> None:
     }
 
 
+def test_build_hitl_resume_payload_sends_typed_text_as_an_answer() -> None:
+    """
+    Verify a free-text terminal answer travels in the field the runtime stores
+    as text.
+
+    Why this test exists:
+    - a bare string resume is recorded as the chosen `choice_id`, the audit
+      shape the human response contract replaced; the web client already sends
+      `{"answer": ...}` and the terminal must not diverge from it
+    """
+
+    assert build_hitl_resume_payload(
+        raw_response="2 tickets please", free_text=True
+    ) == {"answer": "2 tickets please"}
+
+
 def test_agent_pod_client_injects_bearer_token() -> None:
     """
     Verify the pod client forwards the current bearer token on requests.

@@ -110,7 +110,9 @@ answers when that request declared one.
 
 History reconstruction SHALL pair each human input request with its answer by
 `occurrence_id` and SHALL NOT assume at most one request and one answer per exchange. A
-request with no matching answer SHALL be reported as still pending.
+request with no matching answer SHALL be reported as still pending. A pause already
+surfaced by an earlier run SHALL NOT be recorded a second time when a resumed run
+re-raises it.
 
 #### Scenario: Every question in a turn is reconstructed
 
@@ -125,6 +127,14 @@ request with no matching answer SHALL be reported as still pending.
 - **WHEN** the conversation is reloaded
 - **THEN** only the third is offered as answerable, carrying the identity needed to
   resume it
+
+#### Scenario: A re-emitted pause is not recorded twice
+
+- **GIVEN** a turn that raised two pauses, the first answered and the second still
+  pending
+- **WHEN** the resumed run re-raises the second pause and persists its events
+- **THEN** history still holds the single request row written when that pause was first
+  surfaced
 
 #### Scenario: A legacy exchange keeps pairing by position
 

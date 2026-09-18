@@ -569,6 +569,7 @@ export function useChatSse(
               // DIFFERENT field (legacy Graph V2's real storage id); never
               // aliased. Both are explicitly typed on `RuntimeHitlPayload`.
               interrupt_id: event.request.interrupt_id ?? null,
+              occurrence_id: event.request.occurrence_id ?? null,
               checkpoint_id: event.request.checkpoint_id ?? null,
               metadata: event.request.metadata,
               // Tool calls this prompt gates (#2177 batching — one combined
@@ -1215,6 +1216,7 @@ export function useChatSse(
             // occurrence backend-side) — checkpoint_id is the unrelated
             // legacy Graph V2 field and is forwarded only for that runtime.
             interrupt_id: hitlPayload?.interrupt_id ?? null,
+            occurrence_id: hitlPayload?.occurrence_id ?? undefined,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
             // `language` matters here too: a resumed turn can reach a fresh
             // gated tool call of its own (the model replans and requests more

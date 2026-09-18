@@ -40,7 +40,10 @@ import asyncio
 import pytest
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_runtime.runtime_support.checkpoints import checkpoint_config, load_checkpoint
-from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_runtime.runtime_support.sql_checkpointer import (
+    FredSqlCheckpointer,
+    _hitl_claim_key,
+)
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -114,6 +117,72 @@ async def test_aclaim_hitl_resume_different_interrupt_ids_are_independent(
     assert a is not None
     assert b is not None
     assert a != b
+
+
+def test_occurrence_claim_key_cannot_collide_with_a_bare_langgraph_id() -> None:
+    interrupt_id = "0123456789abcdef0123456789abcdef"
+
+    bare = _hitl_claim_key(interrupt_id, None)
+    composite = _hitl_claim_key(interrupt_id, "call:with:[delimiters]")
+
+    assert bare == interrupt_id
+    assert composite != bare
+    assert composite != _hitl_claim_key(interrupt_id, "another-call")
+
+
+def test_occurrence_claim_key_has_fixed_size_for_unbounded_input() -> None:
+    short = _hitl_claim_key("interrupt", "call")
+    long = _hitl_claim_key("interrupt" * 10_000, "call" * 10_000)
+
+    assert len(short) == len(long) == len("occurrence:v1:") + 64
+    assert short != long
+
+
+@pytest.mark.asyncio
+async def test_sibling_occurrences_sharing_an_interrupt_are_independent(
+    checkpointer,
+) -> None:
+    first = await checkpointer.aclaim_hitl_resume(
+        thread_id="t1",
+        checkpoint_ns="",
+        interrupt_id="interrupt-shared",
+        occurrence_id="call-1",
+    )
+    second = await checkpointer.aclaim_hitl_resume(
+        thread_id="t1",
+        checkpoint_ns="",
+        interrupt_id="interrupt-shared",
+        occurrence_id="call-2",
+    )
+
+    assert first is not None
+    assert second is not None
+    rows = await _claim_rows(checkpointer)
+    assert {row.interrupt_id for row in rows} == {
+        _hitl_claim_key("interrupt-shared", "call-1"),
+        _hitl_claim_key("interrupt-shared", "call-2"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_concurrent_claims_for_one_sibling_occurrence_have_one_winner(
+    checkpointer,
+) -> None:
+    await checkpointer._ensure_tables()
+
+    results = await asyncio.gather(
+        *[
+            checkpointer.aclaim_hitl_resume(
+                thread_id="t1",
+                checkpoint_ns="",
+                interrupt_id="interrupt-shared",
+                occurrence_id="call-1",
+            )
+            for _ in range(5)
+        ]
+    )
+
+    assert len([result for result in results if result is not None]) == 1
 
 
 @pytest.mark.asyncio

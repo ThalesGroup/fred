@@ -93,6 +93,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
+        occurrence_id: str | None = None,
         resume_payload: Any = None,
         inline_tuning: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -111,6 +112,8 @@ class AgentPodClient:
             payload["checkpoint_id"] = checkpoint_id
         if interrupt_id is not None:
             payload["interrupt_id"] = interrupt_id
+        if occurrence_id is not None:
+            payload["occurrence_id"] = occurrence_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
         if inline_tuning:
@@ -172,6 +175,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
+        occurrence_id: str | None = None,
         resume_payload: Any = None,
         inline_tuning: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
@@ -185,6 +189,7 @@ class AgentPodClient:
             agent_instance_id=agent_instance_id,
             checkpoint_id=checkpoint_id,
             interrupt_id=interrupt_id,
+            occurrence_id=occurrence_id,
             resume_payload=resume_payload,
             inline_tuning=inline_tuning,
         ):
@@ -202,6 +207,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
+        occurrence_id: str | None = None,
         resume_payload: Any = None,
         inline_tuning: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
@@ -220,6 +226,8 @@ class AgentPodClient:
             payload["checkpoint_id"] = checkpoint_id
         if interrupt_id is not None:
             payload["interrupt_id"] = interrupt_id
+        if occurrence_id is not None:
+            payload["occurrence_id"] = occurrence_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
         if inline_tuning:

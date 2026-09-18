@@ -10,10 +10,10 @@ LangGraph tasks and receive distinct ids.
 LangGraph itself does not guarantee that. `Interrupt.id` is a hash of the interrupted
 task's checkpoint namespace, so two `interrupt()` calls in one task share it and are
 matched by call order - already pinned against the installed version by
-`test_langgraph_interrupt_id_semantics.py`. A probe confirmed the consequence for the
-tool the epic introduces: `ToolNode` executes all of a turn's tool calls in one task, so
-N tool-raised pauses in one turn share a single id, and a targeted resume re-interrupts
-on the next sibling rather than distinguishing them.
+`test_langgraph_interrupt_id_semantics.py`. The installed `create_agent` currently
+schedules sibling tool calls as distinct tasks, but occurrence identity must not depend
+on that implementation detail: replay preserves a model-assigned tool call id, while a
+native interrupt id is neither the domain identifier nor universally occurrence-unique.
 
 ## Goals / Non-Goals
 
@@ -78,11 +78,12 @@ primary-key column would therefore need manual DDL on every existing deployment,
 table whose whole purpose is short-lived admission bookkeeping.
 
 Instead, the claim's `interrupt_id` column holds the occurrence key: the bare
-`interrupt_id` when no `occurrence_id` exists, and a composite of the two when one does.
-The column is already an opaque string to every query - all of them match it for exact
-equality - so uniqueness per occurrence is obtained with no schema change and no
-migration. The composite form must be unambiguous enough that a bare id can never collide
-with a composite one.
+`interrupt_id` when no `occurrence_id` exists, and a versioned, fixed-length SHA-256
+digest of their canonical JSON pair when one does. The column is already an opaque string
+to every query - all of them match it for exact equality - so uniqueness per occurrence
+is obtained with no schema change and no migration. The versioned prefix separates a
+digest from a bare id, and the fixed length protects the indexed column from unusually
+large occurrence identifiers.
 
 Alternative considered and rejected: add an `occurrence_id` primary-key column. Cleaner to
 read, but it requires hand-written DDL outside the migration system this repository
