@@ -7,5 +7,5 @@
 
 ## 2. Verification
 
-- [ ] 2.1 Run relevant offline tabular tests and root code quality; record exact outcomes.
-- [ ] 2.2 Obtain independent standards/spec and request-path performance review, then archive the completed change after checks pass.
+- [x] 2.1 Run relevant offline tabular tests and root code quality; record exact outcomes.
+- [x] 2.2 Obtain independent standards/spec and request-path performance review, then archive the completed change after checks pass.
