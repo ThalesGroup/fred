@@ -5934,7 +5934,7 @@ is exported to Prometheus/Grafana; no new label cardinality is introduced.
 Concurrency admission and retry UI remain separate work.
 
 
-### 8.81 Model-input hygiene for Deep parents (2026-09-18)
+### 8.82 Model-input hygiene for Deep parents (2026-09-18)
 
 Deep parent calls now use Fred's shared request-only hygiene before capability
 wrappers and retries. Dangling tool exchanges are removed, open-turn reasoning is
