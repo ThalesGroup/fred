@@ -5951,7 +5951,7 @@ The 200,000-character guard stays ReAct-only.
 Native `task` child composition is the next extraction layer; this parent-only
 change does not complete issues #2740 and #2741's native-child acceptance.
 
-### 8.82 Native Deep child integration (2026-09-18)
+### 8.83 Native Deep child integration (2026-09-18)
 
 Deep explicitly configures the native general-purpose `task` child with the Fred-composed
 instance prompt, delegation framing and the parent's resolved tools and selected capability
