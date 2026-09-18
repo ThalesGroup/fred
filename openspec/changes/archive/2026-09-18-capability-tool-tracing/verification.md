@@ -10,10 +10,10 @@
   test reproduced the same reversed-order failure. The separate test-only correction
   compares exact ID multisets and retains all replay/interrupt identity checks. The
   controlled baseline probe then passed. No production scheduling change was made.
-- Final full runtime tests and root quality are still pending; no full-gate pass is claimed.
-  Earlier root quality completed all Python libraries, then stopped because the isolated
-  frontend dependencies were absent. Locked dependencies were installed and root checks
-  restarted with supported Node 24.15.0.
+- Final full runtime `make test`: 1235 passed, 16 deselected, 18 warnings. A subsequent
+  type-safe sort-key adjustment to the test passed all 3 HITL regression tests.
+- Root `make code-quality`: passed across all modules, including frontend TypeScript,
+  Prettier and ESLint, using supported Node 24.15.0 and isolated locked dependencies.
 - Independent standards review found no actionable issue. Independent spec review found
   missing native Command output capture; the fix captures only matching ToolMessage
   content behind the existing capture gate, with two regression cases. The coordinator
