@@ -126,6 +126,8 @@ class RuntimeConfig:
     """
 
     knowledge_flow_url: str
+    # The pod's `app.runtime_id` slug — the same value carried by the KPI
+    # `service` dim and by every log record, so the streams join on it.
     service_name: str | None = None
     control_plane_url: str | None = None
     # The pod-wide async HTTP client for control-plane calls, built once at

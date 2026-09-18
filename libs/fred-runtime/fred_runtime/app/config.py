@@ -89,23 +89,36 @@ from ..runtime_context import RuntimeTimeouts
 
 class PodAppConfig(BaseModel):
     """
-    Basic HTTP server and local observability settings for an agent pod.
+    Identity and HTTP server settings for an agent pod.
 
     Why this exists:
-    - every pod needs the same HTTP binding knobs plus the small Prometheus/KPI
-      settings already used by the other Fred backends
+    - every pod needs the same identity and HTTP binding knobs, in the same
+      place, whoever built it
     - keeping these fields in `app` preserves the familiar startup contract for
       local benches and scrape-based debugging
 
     How to use it:
-    - keep the defaults for simple local development
-    - set `metrics_port` / `metrics_address` when `observability.metrics` is
-      `prometheus`
+    - declare `runtime_id`; every other field defaults sanely for local work
+    - the metrics exporter is configured under `observability.kpi.prometheus`,
+      not here
 
     Example:
-    - `PodAppConfig(base_url="/pod/v1", port=8000, metrics_port=9115)`
+    - `PodAppConfig(runtime_id="my-agents", base_url="/pod/v1", port=8000)`
     """
 
+    runtime_id: str = Field(
+        ...,
+        pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        description=(
+            "Slug identifying this pod across every telemetry stream: the KPI "
+            "`service` dimension, the `runtime_id` KPI dimension, and the "
+            "`service` field of every log record. MUST equal the id the "
+            "control-plane registers this pod under in "
+            "`runtime_catalog_sources[].runtime_id` — that equality is what "
+            "lets a log line be joined to its own KPI. Lowercase slug only, so "
+            "no display prose can reach a Prometheus label."
+        ),
+    )
     name: str = "Fred Agent Pod"
     base_url: str = "/api/v1"
     host: str = "127.0.0.1"
@@ -369,7 +382,9 @@ class AgentPodConfig(BaseModel):
     _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
     _platform_prompt_file: Any | None = PrivateAttr(default=None)
 
-    app: PodAppConfig = Field(default_factory=PodAppConfig)
+    # Required, unlike every other section: `app.runtime_id` has no default, so
+    # an omitted `app:` block would leave the pod unable to name itself.
+    app: PodAppConfig
     security: SecurityConfiguration
     ai: PodAIConfig = Field(default_factory=PodAIConfig)
     observability: PodObservabilityConfig = Field(

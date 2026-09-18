@@ -91,7 +91,7 @@ platform:
   #       en: "Access the Fred documentation & blog"
   #       fr: "Accédez à la documentation et au blog de Fred."
   #     links:
-  #       - url: "https://fredk8.dev"
+  #       - url: "https://site.fredlab.dev"
   #         labels:
   #           en: "Go to the Fred blog"
   #           fr: "Accéder au blog de Fred"

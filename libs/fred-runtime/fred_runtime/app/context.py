@@ -142,7 +142,7 @@ class PodApplicationContext:
         self._kpi_writer = build_kpi_writer(
             kpi_config=config.observability.kpi,
             opensearch_config=config.storage.opensearch,
-            service_name="fred-runtime",
+            service_name=config.app.runtime_id,
             log_level=config.app.log_level,
         )
 

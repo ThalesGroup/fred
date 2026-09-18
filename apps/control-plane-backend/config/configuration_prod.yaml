@@ -102,6 +102,7 @@ platform:
   frontend:
     feature_flags:
       enableInformationSystems: true # local dev — unused now the in-repo SI UI is gone, kept for the standalone rags-services page
+      enableApplications: true # local dev — serves the fred-samples applications
   #   info_banner:
   #     color: "#00BBDD"
   #     auto_hide_seconds: 30 # omit for a persistent banner (the default)
@@ -112,7 +113,7 @@ platform:
   #       en: "Access the Fred documentation & blog"
   #       fr: "Accédez à la documentation et au blog de Fred."
   #     links:
-  #       - url: "https://fredk8.dev"
+  #       - url: "https://site.fredlab.dev"
   #         labels:
   #           en: "Go to the Fred blog"
   #           fr: "Accéder au blog de Fred"
@@ -137,13 +138,18 @@ platform:
       ingress_prefix: /dt/agents/v2
   # Register application catalog entries against typed authorization resources.
   # Configure gateway upstreams separately from browser-facing prefixes.
-  # application_sources:
-  #   - app_id: example
-  #     ui_prefix: /apps/example
-  #     version: 1.0.0
-  #     icon: extension
-  #     display_name:
-  #       en: "Example"
-  #       fr: "Exemple"
-  #     description:
-  #       en: "An application served from its own container."
+  # The fred-samples applications, run locally. The frontend half lives in
+  # FRONTEND_APPLICATIONS_JSON (apps/frontend/.env) — nothing cross-checks the
+  # two, so the app_id must match there exactly.
+  application_sources:
+    - app_id: document-triage
+      ui_prefix: /apps/document-triage # must be exactly /apps/<app_id>
+      version: 0.1.0
+      icon: checklist
+      display_name:
+        en: "Document Triage"
+        fr: "Tri de documents"
+      description:
+        en: "Review a folder of documents and record what was decided."
+        fr: "Passer en revue un dossier de documents et consigner les décisions."
+      enabled: true

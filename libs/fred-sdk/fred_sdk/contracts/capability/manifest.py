@@ -240,7 +240,16 @@ class CapabilityManifest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str = Field(min_length=1, pattern=CAPABILITY_ID_PATTERN)
+    # The stored-config schema version: `assembly.py` compares it against each
+    # persisted slice and calls `upgrade_config` on a mismatch. Almost every
+    # capability also uses it as its public semver, which is why the catalog
+    # falls back to it.
     version: str = Field(min_length=1)
+    # What the catalog shows a human, when that differs from the schema version
+    # above. Leave it unset to publish `version`; set it explicitly to None to
+    # publish nothing — an MCP server's `version` is a schema constant, so
+    # surfacing it put the same "v1" on every MCP row.
+    public_version: str | None = None
     name: str = Field(min_length=1, description="i18n key")
     description: str = Field(min_length=1, description="i18n key")
     icon: str = Field(
@@ -341,7 +350,20 @@ class CapabilityCatalogEntry(BaseModel):
     """
 
     id: str = Field(min_length=1)
+    # Which pod advertises this entry, and the identifier its author wrote.
+    # `id` above is a composite mangled to be colon-free for OpenFGA, so it
+    # cannot be parsed back without coupling the reader to a ReBAC storage
+    # detail. Both are None for kinds that no pod hosts.
+    runtime_id: str | None = None
+    source_id: str | None = None
+    # The stored-config schema version. Always present: it is half of the
+    # chat-controls cache key alongside the config hash, so a config-shape
+    # change invalidates what was cached for the old shape.
     version: str = Field(min_length=1)
+    # What a human is shown, when the kind has one. Absent for agents, models
+    # and MCP servers, whose `version` above is a schema constant — surfacing
+    # it put the same "v1" on every row, which reads as information and is not.
+    public_version: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1, description="i18n key")
     description: str = Field(min_length=1, description="i18n key")
     icon: str = Field(
@@ -428,7 +450,17 @@ class CapabilityCatalogEntry(BaseModel):
 
         return cls(
             id=manifest.id,
+            # A manifest's own id is already the author's identifier — no pod
+            # prefix is folded into it, unlike the agent and model projections.
+            source_id=manifest.id,
             version=manifest.version,
+            # `model_fields_set` separates "did not say" from "said none", so a
+            # capability can publish no version without a sentinel value.
+            public_version=(
+                manifest.public_version
+                if "public_version" in manifest.model_fields_set
+                else manifest.version
+            ),
             name=manifest.name,
             description=manifest.description,
             icon=manifest.icon,

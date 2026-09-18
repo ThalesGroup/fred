@@ -5848,3 +5848,43 @@ their team enablement and reasoning toggle have to be set again.
 `libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
 OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
 until archived).
+
+### 8.79 ✅ `app.runtime_id` — every pod names itself in telemetry (2026-09-16)
+
+`PodApplicationContext.initialize_kpi_writer` passed the literal
+`service_name="fred-runtime"` to `build_kpi_writer`. That value is the KPI
+writer's one static dim, so it landed on every event from every pod built on
+the SDK. Three pods running simultaneously — `fred-agents`, `fred-samples/agents`,
+`rags-agents`, three repos, three `/metrics` endpoints — all reported
+`service="fred-runtime"`, collapsing into one Prometheus series and one
+`kpi-index` bucket. The same startup used `config.app.name` for `log_setup` and
+for `RuntimeConfig.service_name`, so within one pod the logs said "Fred default
+agents" while the KPIs said "fred-runtime": no way to tell the pods apart, and
+no way to join a log line to its own KPI.
+
+- `PodAppConfig.runtime_id` (**required**, no default, `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+  is the pod's identity in all three streams: the KPI `service` dim, the
+  `runtime_id` KPI dim, and every log record's `service`. `app.name` stays what
+  it always was — a human display string, never an identifier.
+- The value MUST equal the id the control-plane registers the pod under in
+  `runtime_catalog_sources[].runtime_id` (`fred-agents`, `fred-samples-agents`,
+  `rags-agents`). That equality is the cross-stream join key. It also repairs the
+  `runtime_id` KPI dim, which is in `PROMETHEUS_ALLOWED_LABELS` and until now
+  carried display prose that matched no runtime the control-plane knew about.
+- The pattern is enforced at config load, so a display name can never reach a
+  Prometheus label through this field.
+- Required, not defaulted: one shared default is precisely what made every pod
+  agree. A pod that cannot say who it is fails Pydantic validation at boot
+  rather than quietly polluting a shared series.
+
+**Upgrade note (breaking — fred-runtime 4.0.0).** Every pod's
+`configuration.yaml` needs `app.runtime_id`, in-repo and third-party alike; a
+pod without it will not start. In a deployment that is a ConfigMap change
+shipped with the chart. `app-logs-index` `service` values for agent pods change
+from prose to slug, so saved OpenSearch queries matching the old display names
+need updating. No KPI preset, chart or manifest filtered on
+`service="fred-runtime"`, so nothing queried breaks.
+
+**Scope.** `libs/fred-runtime/fred_runtime/app/config.py`,
+`.../app/context.py`, `.../app/agent_app.py`, `.../runtime_context.py`,
+`apps/fred-agents/config/`, `deploy/charts/fred/values.yaml`.
