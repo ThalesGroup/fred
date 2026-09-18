@@ -918,7 +918,7 @@ def _install_recording_kpi_writer() -> tuple[_RecordingKPIStore, KPIWriter]:
 async def test_current_turn_too_large_emits_a_kpi_counter() -> None:
     """
     `agent.turn_rejected_total` is the production signal for whether
-    `MAX_HISTORY_CHARS` is well-tuned (#2350) — same shape as the
+    `MAX_HISTORY_CHARS` is well-tuned — same shape as the
     sibling `agent.tool_failed_total` counter in `ToolObservabilityMiddleware`
     (status/error_code/exception_type dims, `KPIActor(type="system")`), so it
     reaches Grafana through the same allow-listed labels without needing a
