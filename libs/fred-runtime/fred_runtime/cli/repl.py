@@ -1327,7 +1327,10 @@ def run_interactive_chat(
                         print("\nCancelled.")
                         hitl = None
                         continue
-                    resume_value: Any = answer
+                    resume_value: Any = build_hitl_resume_payload(
+                        raw_response=answer,
+                        free_text=True,
+                    )
                 elif choices:
                     try:
                         raw = input("Your choice (number or id): ").strip()

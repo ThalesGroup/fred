@@ -30,6 +30,8 @@ depend on it and are tracked separately.
 - [x] 2.6 Return the pending occurrences from the admission gate and skip persisting a
       pause a previous run already surfaced, so a sibling re-raised by a resume keeps
       one history row.
+- [x] 2.7 Send a typed CLI answer in the same `answer` field the web client uses, so
+      terminal free text is stored as text instead of as the chosen `choice_id`.
 
 ## 3. Frontend
 

@@ -425,7 +425,8 @@ def run_single_turn(
 def build_hitl_resume_payload(
     *,
     raw_response: str,
-    choices: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    choices: list[dict[str, Any]] | tuple[dict[str, Any], ...] = (),
+    free_text: bool = False,
 ) -> Any:
     """
     Convert one terminal HITL answer into the runtime resume payload shape.
@@ -434,7 +435,12 @@ def build_hitl_resume_payload(
     - the interactive shell accepts either a 1-based menu index or a raw
       choice id, but graph `choice_step(...)` expects a structured
       `{"choice_id": ...}` resume payload
+    - a typed answer must travel as `{"answer": ...}`, the same field the web
+      client sends: a bare string is stored as the chosen `choice_id`, which
+      is exactly the audit shape the response contract dropped
     """
+    if free_text:
+        return {"answer": raw_response}
     selected_choice_id = raw_response
     if raw_response.isdigit():
         idx = int(raw_response) - 1

@@ -2426,10 +2426,13 @@ it through an explicit `RuntimeHitlPayload`/`RuntimeAwaitingHumanEvent`
 type pair based on the generated `HumanInputRequest` contract, replacing
 the legacy agentic-backend `HitlPayload`'s open index signature for this
 purpose. The frontend also echoes `occurrence_id` verbatim when the pending
-request declares one. History persists request and response occurrence ids,
-pairs them by identity, and stores free-form answer text separately from an
-optional `choice_id`; legacy rows without occurrences retain positional
-pairing.
+request declares one. Both clients send a typed answer in the same
+`{"answer": ...}` field (`build_hitl_resume_payload(free_text=True)` for the
+terminal): a bare string resume is recorded as the chosen `choice_id`, the
+audit shape this contract replaced. History persists request and response
+occurrence ids, pairs them by identity, and stores free-form answer text
+separately from an optional `choice_id`; legacy rows without occurrences
+retain positional pairing.
 
 **Immediate follow-up (tracked, not in this patch).** `FredHitlMiddleware`
 stays a hand-rolled `AgentMiddleware` with FRED's own `interrupt()` call
