@@ -242,14 +242,20 @@ async def test_tool_pauses_keep_occurrence_identity_across_replay(tmp_path) -> N
             for update in first_updates
             if (request := extract_interrupt_request(update)) is not None
         ]
-        assert [request.occurrence_id for request in surfaced] == ["ask-1", "ask-2"]
+        # Concurrent tool pauses can arrive in either completion order.
+        assert sorted(request.occurrence_id for request in surfaced) == [
+            "ask-1",
+            "ask-2",
+        ]
 
         first_requests = [
             extract_interrupt_request({"__interrupt__": (value,)})
             for value in first_interrupts
         ]
         assert all(request is not None for request in first_requests)
-        assert [request.occurrence_id for request in first_requests if request] == [
+        assert sorted(
+            request.occurrence_id for request in first_requests if request
+        ) == [
             "ask-1",
             "ask-2",
         ]
