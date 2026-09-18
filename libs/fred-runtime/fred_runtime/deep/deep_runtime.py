@@ -74,7 +74,6 @@ from fred_runtime.react.react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
-from fred_runtime.support.tool_loop import MAX_HISTORY_CHARS
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +278,6 @@ def _build_deepagent_runtime_middleware(
     middleware: list[AgentMiddleware] = [
         CheckpointHygieneMiddleware(
             max_history_messages=None,
-            max_history_chars=MAX_HISTORY_CHARS,
             binding=binding,
             kpi=kpi,
         ),

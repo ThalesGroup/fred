@@ -44,11 +44,6 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 logger = logging.getLogger(__name__)
 
 
-# Provider-agnostic guard calibrated against large tool outputs. Deep keeps
-# this size limit while leaving message-count compaction to its summarizer.
-MAX_HISTORY_CHARS = 200_000
-
-
 class ChatTurnTooLargeError(RuntimeError):
     """
     Raised when even the trimmed model-input window still exceeds the

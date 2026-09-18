@@ -150,7 +150,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 # `ToolObservabilityMiddleware`) is what actually reaches
                 # Grafana, since this middleware has no paired latency timer
                 # to piggyback a `status` dim on. Whether
-                # `MAX_HISTORY_CHARS` (calibrated off one field incident,
+                # `_V2_MAX_HISTORY_CHARS` (calibrated off one field incident,
                 # #2350) is well-tuned is exactly what this counter is for —
                 # silent-by-default would hide that until a user complains
                 # again. Numbers/identifiers only in both: no message

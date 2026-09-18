@@ -44,7 +44,6 @@ from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
-from fred_runtime.support.tool_loop import MAX_HISTORY_CHARS, ChatTurnTooLargeError
 from fred_sdk.contracts.capability import HitlSpec
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -523,7 +522,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
 
 
 @pytest.mark.asyncio
-async def test_deep_hygiene_keeps_long_history_below_character_budget() -> None:
+async def test_deep_hygiene_leaves_history_size_to_deep_compaction() -> None:
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -531,9 +530,11 @@ async def test_deep_hygiene_keeps_long_history_below_character_budget() -> None:
         approval_policy=ToolApprovalPolicy(),
         available_tool_names=set(),
     )
+    # Deep's summarization middleware owns compaction: no count or size trim.
     messages: list[AnyMessage] = [
         HumanMessage(content=str(index)) for index in range(501)
     ]
+    messages.append(HumanMessage(content="x" * 250_000))
     seen: list[ModelRequest] = []
 
     async def handler(request: ModelRequest) -> ModelResponse:
@@ -545,29 +546,6 @@ async def test_deep_hygiene_keeps_long_history_below_character_budget() -> None:
         handler,
     )
     assert seen[0].messages == messages
-
-
-@pytest.mark.asyncio
-async def test_deep_hygiene_retains_character_guard() -> None:
-    middleware = deep_mod._build_deepagent_runtime_middleware(
-        tracer=None,
-        kpi=None,
-        binding=_binding(),
-        approval_policy=ToolApprovalPolicy(),
-        available_tool_names=set(),
-    )
-
-    async def handler(request: ModelRequest) -> ModelResponse:
-        pytest.fail("Oversized current turn reached the provider")
-
-    with pytest.raises(ChatTurnTooLargeError):
-        await middleware[0].awrap_model_call(
-            ModelRequest(
-                model=ToolFriendlyFakeChatModel(responses=[]),
-                messages=[HumanMessage(content="x" * (MAX_HISTORY_CHARS + 1))],
-            ),
-            handler,
-        )
 
 
 @pytest.mark.asyncio

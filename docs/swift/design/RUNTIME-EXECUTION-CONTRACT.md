@@ -5943,14 +5943,10 @@ OpenAI-compatible Mistral payloads omit unsupported `assistant.name`. Checkpoint
 history retains its original names, reasoning and tool messages. ReAct uses the
 same name sanitizer and retains its existing trimming policy.
 
-Deep disables message-count trimming (`max_history_messages=None`) and explicitly
-uses the existing 200,000-character Fred guard. This is newly wired into Deep;
-its earlier frame had no hygiene guard. The threshold is a provider-independent
-proxy calibrated from French/HTML-heavy traffic at approximately 1.35 characters
-per token (200,000 characters is approximately 148,000 tokens in that sample),
-not a universal token conversion. Recalibrate when models or traffic change.
-Oversized open turns retain the existing readable error and metric. Deep
-summarization and context-compaction redesign remain separate work.
+Deep applies neither message-count nor character trimming
+(`max_history_messages=None`, no `max_history_chars`): `create_deep_agent`
+already installs its summarization middleware, which owns context compaction.
+The 200,000-character guard stays ReAct-only.
 
 Native `task` child composition is the next extraction layer; this parent-only
 change does not complete issues #2740 and #2741's native-child acceptance.
