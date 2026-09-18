@@ -8,4 +8,4 @@
 ## 2. Verify
 
 - [x] 2.1 Run CLI help and a representative managed-instance turn; record observed evidence and limitations.
-- [ ] 2.2 Run root quality and independent standards/spec review; record outcomes.
+- [x] 2.2 Run root quality and independent standards/spec review; record outcomes.
