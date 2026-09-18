@@ -635,6 +635,7 @@ class _NativeModel(ToolFriendlyFakeChatModel):
     bound_names: list[set[str]] = Field(default_factory=list)
     fail_after_tool: bool = False
     failed: bool = False
+    pause_model: asyncio.Event | None = None
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> _NativeModel:
         self.bound_names.append({tool.name for tool in tools})
@@ -653,6 +654,9 @@ class _NativeModel(ToolFriendlyFakeChatModel):
             for message in messages
             if isinstance(message, HumanMessage)
         )
+        if self.pause_model is not None and key != "parent":
+            self.pause_model.set()
+            await asyncio.Future()
         if (
             self.fail_after_tool
             and key != "parent"
@@ -990,5 +994,48 @@ async def test_native_parallel_children_keep_trace_context_and_close_spans(
                 for span in observed.values()
             )
             assert all(span.attributes["status"] == "cancelled" for span in task_spans)
+    finally:
+        active_agent_span.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_native_child_model_cancellation_propagates_and_closes_spans() -> None:
+    started = asyncio.Event()
+    model = _NativeModel(
+        responses=[],
+        pause_model=started,
+        scripts={
+            "parent": [_delegation("child")],
+            "child": [],
+        },
+    )
+    tracer = RecordingTracer()
+    root = RecordingSpan()
+    token = active_agent_span.set(root)
+    try:
+        agent = _native_agent(model, tools=[], tracer=tracer)
+        run = asyncio.create_task(
+            agent.ainvoke(
+                {"messages": [HumanMessage(content="parent")]},
+                {"configurable": {"thread_id": "model-cancel"}},
+            )
+        )
+        try:
+            await asyncio.wait_for(started.wait(), timeout=10)
+            run.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run
+        finally:
+            if not run.done():
+                run.cancel()
+                await asyncio.gather(run, return_exceptions=True)
+        assert active_agent_span.get() is root
+        assert len(tracer.spans) == 3  # Parent model, task tool, child model.
+        assert all(span.ended for _, _, span in tracer.spans)
+        task_span = next(
+            span for _, attrs, span in tracer.spans if attrs.get("tool_name") == "task"
+        )
+        assert task_span.attributes["status"] == "cancelled"
+        assert tracer.parents[-1] is task_span
     finally:
         active_agent_span.reset(token)
