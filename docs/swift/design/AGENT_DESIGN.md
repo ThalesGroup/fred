@@ -529,29 +529,27 @@ To reduce ambiguity, the team should consider creating short ADRs for:
 Fred distinguishes two categories of ReAct agent template exposed in an
 agentic pod — user-facing, reflected in naming, UX, and documentation.
 
-**Generic assistant.** One per pod, no pre-wired MCP servers
-(`default_mcp_servers = ()`) and no opinionated system prompt — a blank slate
-the operator configures freely at enrollment: pick any tool from the full
-catalog, write or import any system prompt (`fred.github.assistant` is the
-canonical instance in the `fred-agents` pod).
+**Generic assistants.** Templates the operator configures freely at
+enrollment: pick any tool from the full catalog, untick anything the template
+declared, write or import any system prompt. What makes a template generic is
+that nothing it declares is `locked` — not that it declares nothing. A pod may
+ship several: `fred.github.assistant` starts empty (the blank slate, and the
+`fred-agents` CLI default), while `fred.github.basic-assistant` and
+`fred.github.basic-knowledge-assistant` pre-select capabilities and configure
+them (`default_mcp_servers` + `default_capabilities_config`, 2026-09-18). Those
+defaults are a head start, not a constraint.
 
-**Pre-equipped generalists (2026-09-18).** Ready-to-use like a specialized
-template, unlocked like the generic one: a non-empty `default_mcp_servers`
-(optionally configured through `default_capabilities_config`), no `locked`
-server, and every default untickable by the member in the agent form. They
-exist so the generic assistant can stay empty — each default a template
-declares is an admission hurdle the team must clear before an admin can enable
-it, and that is the one property the universal starting point must not carry.
-Examples in `fred-agents`: `fred.github.basic-assistant` (conversation
-attachments, reasoning on), `fred.github.basic-knowledge-assistant` (four
-packs, reasoning on).
+A default is never free, which is why the blank slate keeps declaring none:
+every capability a template lists must already be usable by a team before an
+admin can enable that template for it, and the universal starting point is the
+one template that has to suit any team.
 
 **Specialized templates.** Ready-to-use agents pre-wired for a specific
-operational domain: a non-empty `default_mcp_servers` tuple, a curated
-default system prompt (operator-overridable via `FieldSpec`), and a
-descriptive `role` string. The MCP servers a specialized template declares
-are **locked** — the `locked: bool` field on `MCPServerRef` (`fred-sdk`)
-marks a server non-toggleable: it appears in the enrollment form's Tools tab
+operational domain: a curated default system prompt (operator-overridable via
+`FieldSpec`), a descriptive `role` string, and — the trait that actually
+separates them from a pre-equipped generic — a **locked** tool set. The
+`locked: bool` field on `MCPServerRef` (`fred-sdk`) marks a server
+non-toggleable: it appears in the enrollment form's Tools tab
 with its toggle rendered disabled, stays in `selected_mcp_server_ids`
 regardless of operator input, and cannot be removed via
 `UpdateAgentInstanceRequest`. There is no extension mechanism — an operator

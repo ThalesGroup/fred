@@ -25,7 +25,7 @@
 - [x] 3b.1 Add `fred.github.basic-assistant` declaring the conversation-attachments pack (`document_access` in attachments mode, `document_summarize`) and reasoning on by default; verify the blank slate is left untouched and still declares nothing
 - [x] 3b.2 Add its EN and FR prompts and descriptions behind the same `prompts.system` field; verify both prompts use `{response_language}` rather than restating a language rule
 - [x] 3b.3 Register it between the blank slate and the knowledge assistant; verify the blank slate remains the first entry and so stays the CLI default
-- [x] 3b.4 Add a third category to the template taxonomy in `AGENT_DESIGN.md` — pre-equipped but unlocked — which the knowledge assistant already fell outside of; verify both pre-equipped templates are named there
+- [x] 3b.4 Widen the generic category in `AGENT_DESIGN.md`'s template taxonomy: a generic template is one whose tools are not `locked`, not one that declares none, so a pre-equipped generic stops reading as specialized; verify `locked` is stated as the discriminator on both sides
 - [ ] 3b.5 **As an ordinary team member**, create an agent from this template without opening the capabilities view, attach a file and ask about it; verify it answers from the file with reasoning already on
 
 ## 3ter. Translatable template names (2026-09-18)
