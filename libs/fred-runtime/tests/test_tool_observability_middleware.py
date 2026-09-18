@@ -38,17 +38,25 @@ from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
+from fred_core.portable import Span, Tracer
 from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.deep.deep_runtime import (
+    _build_deepagent_runtime_middleware,
+    _create_compiled_deep_agent,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
+from fred_runtime.react.react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
+from fred_runtime.react.react_tracing import active_agent_span
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     RuntimeContext,
     get_runtime_context,
     set_runtime_context,
 )
+from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -57,9 +65,12 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.context import (
     RuntimeContext as PortableRuntimeContext,
 )
-from fred_sdk.contracts.models import AgentTuning, MCPServerRef
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolApprovalPolicy
+from langchain.agents import create_agent
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool, StructuredTool, tool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
@@ -747,3 +758,323 @@ def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> N
     assert dims["agent_instance_id"] == "instance-1"
     assert dims["template_agent_id"] == "template-1"
     assert dims["correlation_id"] == "correlation-1"
+
+
+# ---------------------------------------------------------------------------
+# Trace spans for tools the ReAct binder never sees
+# ---------------------------------------------------------------------------
+
+
+class _RecordingSpan(Span):
+    def __init__(self) -> None:
+        self.attributes: dict[str, object] = {}
+        self.ended = False
+        self.io: list[dict[str, object]] = []
+
+    def set_io(self, *, input: Any = None, output: Any = None) -> None:
+        self.io.append({"input": input, "output": output})
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def end(self) -> None:
+        self.ended = True
+
+
+class _RecordingTracer(Tracer):
+    def __init__(self, *, capture: bool = False) -> None:
+        self._capture = capture
+        self.spans: list[tuple[str, dict[str, object], _RecordingSpan]] = []
+        self.parents: list[Span | None] = []
+
+    @property
+    def captures_content(self) -> bool:
+        return self._capture
+
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Any = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        del context, kwargs
+        span = _RecordingSpan()
+        self.parents.append(parent)
+        self.spans.append((name, dict(attributes or {}), span))
+        return span
+
+
+def _self_traced_tool() -> BaseTool:
+    """Shaped like what `ReActToolBinder` hands to `create_agent`."""
+
+    async def _run(question: str) -> str:
+        return "ok"
+
+    return StructuredTool.from_function(
+        func=None,
+        coroutine=_run,
+        name="declared.search",
+        description="A binder-bound tool.",
+        metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
+    )
+
+
+@pytest.mark.asyncio
+async def test_capability_tool_call_gets_a_trace_span() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(
+        name="native_capability_tool", tool_obj=cast(Any, native_capability_tool)
+    )
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="ok", name="native_capability_tool", tool_call_id="call-1"
+        )
+
+    await middleware.awrap_tool_call(request, handler)
+
+    assert len(tracer.spans) == 1
+    name, attributes, span = tracer.spans[0]
+    assert name == "v2.react.runtime_tool"
+    assert attributes["tool_name"] == "native_capability_tool"
+    assert span.attributes["status"] == "ok"
+    assert span.ended is True
+
+
+@pytest.mark.asyncio
+async def test_binder_bound_tool_is_not_spanned_twice() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(name="declared.search", tool_obj=_self_traced_tool())
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="declared.search", tool_call_id="call-1")
+
+    await middleware.awrap_tool_call(request, handler)
+
+    assert tracer.spans == []
+
+
+@pytest.mark.asyncio
+async def test_failing_capability_tool_ends_its_span_as_an_error() -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    request = _request(
+        name="native_capability_tool", tool_obj=cast(Any, native_capability_tool)
+    )
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        await middleware.awrap_tool_call(request, handler)
+
+    _, _, span = tracer.spans[0]
+    assert span.attributes["status"] == "error"
+    assert span.attributes["error_type"] == "RuntimeError"
+    assert span.ended is True
+
+
+@pytest.mark.asyncio
+async def test_tool_span_parents_on_the_turn_and_hosts_the_child_turn() -> None:
+    """The orphaned-sub-agent bug in two assertions.
+
+    The tool span must hang under the turn's own span, and must itself be the
+    active parent while the tool runs — that is what makes a `native_capability_tool`
+    child's root span nest inside the call that opened it instead of landing
+    beside its parent as a second root.
+    """
+
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+    turn_span = _RecordingSpan()
+    token = active_agent_span.set(turn_span)
+    seen_inside: list[Span | None] = []
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        seen_inside.append(active_agent_span.get())
+        return ToolMessage(
+            content="ok", name="native_capability_tool", tool_call_id="call-1"
+        )
+
+    try:
+        await middleware.awrap_tool_call(
+            _request(
+                name="native_capability_tool",
+                tool_obj=cast(Any, native_capability_tool),
+            ),
+            handler,
+        )
+        restored = active_agent_span.get()
+    finally:
+        active_agent_span.reset(token)
+
+    _, _, tool_span_obj = tracer.spans[0]
+    assert tracer.parents == [turn_span]
+    assert seen_inside == [tool_span_obj]
+    assert restored is turn_span
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture", [False, True])
+async def test_capability_trace_content_is_opt_in(capture: bool) -> None:
+    tracer = _RecordingTracer(capture=capture)
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="private-result", tool_call_id="call-1")
+
+    await middleware.awrap_tool_call(
+        _request(name="search", tool_obj=None, args={"question": "private-argument"}),
+        handler,
+    )
+    span = tracer.spans[0][2]
+    assert span.io == (
+        [
+            {"input": {"question": "private-argument"}, "output": None},
+            {"input": None, "output": "private-result"},
+        ]
+        if capture
+        else []
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancelled_capability_span_ends_and_restores_parent() -> None:
+    tracer = _RecordingTracer()
+    parent = _RecordingSpan()
+    token = active_agent_span.set(parent)
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        raise asyncio.CancelledError
+
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await middleware.awrap_tool_call(
+                _request(name="search", tool_obj=None), handler
+            )
+        assert active_agent_span.get() is parent
+    finally:
+        active_agent_span.reset(token)
+    span = tracer.spans[0][2]
+    assert span.ended
+    assert span.attributes["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status,artifact,error_type",
+    [
+        ("error", None, "tool_error_status"),
+        ("success", {"is_error": True}, "tool_error_artifact"),
+    ],
+)
+async def test_returned_capability_error_marks_trace(
+    status: str, artifact: Any, error_type: str
+) -> None:
+    tracer = _RecordingTracer()
+    middleware = ToolObservabilityMiddleware(
+        kpi=None, binding=_binding(), tracer=tracer
+    )
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="failed",
+            tool_call_id="call-1",
+            status=cast(Any, status),
+            artifact=artifact,
+        )
+
+    await middleware.awrap_tool_call(_request(name="search", tool_obj=None), handler)
+    span = tracer.spans[0][2]
+    assert span.ended
+    assert span.attributes == {"status": "error", "error_type": error_type}
+
+
+class _ToolCallingModel(FakeMessagesListChatModel):
+    def bind_tools(self, tools: Any, **kwargs: Any) -> _ToolCallingModel:
+        return self
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runtime", ["react", "deep"])
+async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
+    tracer = _RecordingTracer()
+    model = _ToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "native_capability_tool",
+                        "args": {"question": "hello"},
+                        "id": "call-1",
+                    }
+                ],
+            ),
+            AIMessage(content="finished"),
+        ]
+    )
+    carrier = ToolCarrierMiddleware([native_capability_tool], capability_id="test")
+    if runtime == "deep":
+        middleware = _build_deepagent_runtime_middleware(
+            tracer=tracer,
+            kpi=None,
+            binding=_binding(),
+            approval_policy=ToolApprovalPolicy(),
+            available_tool_names={"native_capability_tool"},
+        )
+        agent = _create_compiled_deep_agent(
+            model=model,
+            tools=[],
+            system_prompt="Use the tool.",
+            checkpointer=None,
+            middleware=[carrier, *middleware],
+        )
+    else:
+        agent = create_agent(
+            model=model,
+            tools=[],
+            middleware=[
+                carrier,
+                ToolObservabilityMiddleware(
+                    kpi=None, binding=_binding(), tracer=tracer
+                ),
+            ],
+        )
+    parent = _RecordingSpan()
+    token = active_agent_span.set(parent)
+    try:
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": "hello"}]}
+        )
+        assert active_agent_span.get() is parent
+    finally:
+        active_agent_span.reset(token)
+    tool_indices = [
+        i
+        for i, (name, _, _) in enumerate(tracer.spans)
+        if name == "v2.react.runtime_tool"
+    ]
+    assert len(tool_indices) == 1
+    index = tool_indices[0]
+    assert tracer.parents[index] is parent
+    assert tracer.spans[index][2].ended
+    assert result["messages"][-1].content == "finished"

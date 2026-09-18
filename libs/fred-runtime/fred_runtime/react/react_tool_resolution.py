@@ -65,6 +65,7 @@ from .react_tool_rendering import (
     stringify_tool_output,
 )
 from .react_tool_utils import sanitize_tool_name
+from .react_tracing import RUNTIME_TOOL_SPAN_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -545,7 +546,7 @@ class ReActRuntimeToolResolver:
             args_schema=getattr(runtime_tool, "args_schema", None),
             tool_ref=tool_name,
             invoke=_invoke,
-            trace_span_name="v2.react.runtime_tool",
+            trace_span_name=RUNTIME_TOOL_SPAN_NAME,
             mcp_server_id=mcp_server_id,
         )
 

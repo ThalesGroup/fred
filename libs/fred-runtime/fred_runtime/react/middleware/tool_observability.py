@@ -83,6 +83,7 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.tool import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
@@ -90,6 +91,9 @@ from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_context import get_runtime_context
+
+from ..react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
+from ..react_tracing import RUNTIME_TOOL_SPAN_NAME, tool_span
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +119,12 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         *,
         kpi: BaseKPIWriter | None,
         binding: BoundRuntimeContext,
+        tracer: TracerPort | None = None,
     ) -> None:
         super().__init__()
         self._kpi = kpi
         self._binding = binding
+        self._tracer = tracer
 
     def _base_dims(self, *, tool_name: str, source: str) -> dict[str, Optional[str]]:
         """
@@ -211,10 +217,41 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             RebacReference(Resource.TEAM, team_id),
         )
 
+    def _span_tracer(self, request: ToolCallRequest) -> TracerPort | None:
+        """Skip binder-owned spans; middleware tools need their own span."""
+
+        metadata = getattr(request.tool, "metadata", None) or {}
+        if metadata.get(SELF_TRACED_TOOL_METADATA_KEY):
+            return None
+        return self._tracer
+
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
+        tracer = self._span_tracer(request)
+        tool_call = request.tool_call
+        async with tool_span(
+            tracer,
+            name=RUNTIME_TOOL_SPAN_NAME,
+            context=self._binding.portable_context,
+            attributes={"tool_name": self._tool_name(request)},
+            input_payload=tool_call.get("args")
+            if isinstance(tool_call, dict)
+            else None,
+        ) as span:
+            result = await self._observe_tool_call(request, handler, span=span)
+            if span is not None and tracer is not None and tracer.captures_content:
+                span.set_io(output=getattr(result, "content", None))
+            return result
+
+    async def _observe_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+        *,
+        span: SpanPort | None,
     ) -> ToolMessage | Command[Any]:
         tool_name = self._tool_name(request)
         # `ContextAwareTool` wraps every MCP-catalog tool (`mcp_toolkit.py`);
@@ -341,6 +378,9 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                         if status_is_error
                         else "tool_error_artifact"
                     )
+                    if span is not None:
+                        span.set_attribute("status", "error")
+                        span.set_attribute("error_type", error_code)
                     if kpi_dims is not None:
                         # `status` only — see the timer comment above.
                         kpi_dims["status"] = "error"

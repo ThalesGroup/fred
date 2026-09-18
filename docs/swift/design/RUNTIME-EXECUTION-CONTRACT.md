@@ -5848,3 +5848,18 @@ their team enablement and reasoning toggle have to be set again.
 `libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
 OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
 until archived).
+
+### 8.79 Capability-tool tracing (2026-09-18)
+
+ReAct and Deep tool observability creates spans for middleware-contributed tools.
+Binder-resolved tools carry an internal self-traced marker so the middleware does
+not duplicate their spans. Both paths share the same active-parent and terminal
+lifecycle: success, returned tool error, raised exception and cancellation end the
+span; nested execution attaches beneath the invoking tool and restores its parent.
+`v2.react.runtime_tool` is classified as a Langfuse tool observation. Arguments and
+returned content remain gated by `Tracer.captures_content`; KPI/audit payloads and
+labels are unchanged.
+
+Behavioral scenarios live in `capability-tool-tracing` under OpenSpec. Native-child
+middleware composition is a separate integration layer; this correction does not
+introduce custom delegation or a filesystem backend.
