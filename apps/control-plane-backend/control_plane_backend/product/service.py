@@ -6,7 +6,6 @@ import contextvars
 import hashlib
 import json
 import logging
-import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -19,6 +18,7 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    is_service_agent,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
@@ -56,6 +56,7 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -1168,123 +1169,42 @@ def _validate_tuning_field_values(
     - unknown keys are ignored by default to preserve current write
       compatibility; pass `reject_unknown_keys=True` for dedicated typed
       contracts
+    - a write may carry any subset of the declared fields, so `required` is not
+      enforced here — it is a form-level rule, not a per-write one
     - invalid values raise `EnrollmentError(http_status=422)`
 
     Example:
     - `values = _validate_tuning_field_values(field_specs=tuning.fields, submitted_values={"settings.verbose": True}, context_label="agent enrollment")`
     """
-    specs_by_key: dict[str, ManagedAgentFieldSpec] = {
-        field.key: field for field in field_specs
-    }
-    validated: dict[str, Any] = {}
-    scalar_string_types = {
-        "string",
-        "text",
-        "text-multiline",
-        "prompt",
-        "secret",
-        "url",
-    }
 
-    def _fail(field_key: str, reason: str) -> None:
-        raise EnrollmentError(
+    def _fail(field_key: str, reason: str) -> EnrollmentError:
+        return EnrollmentError(
             f"Invalid value for tuning field {field_key!r} during {context_label}: {reason}.",
             http_status=422,
         )
 
-    def _is_numeric(value: object) -> bool:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    def _refuse_reserved_tag(value: str) -> str | None:
+        # No token validation: the runtime renderer leaves any unknown `{…}`
+        # verbatim. A reserved system-prompt tag is the one thing refused: the
+        # runtime substitutes each string into the agent template, where it
+        # could close the <agent_instructions> block.
+        reserved = find_reserved_prompt_tag(value)
+        if reserved is None:
+            return None
+        return f"reserved system-prompt tag <{reserved}> is not allowed"
 
-    def _validate_array_item(
-        *, field_key: str, item_type: str | None, value: object
-    ) -> None:
-        if item_type is None:
-            if isinstance(value, (str, int, float, bool)):
-                return
-            _fail(field_key, "array items must be scalar values")
-        if item_type in scalar_string_types or item_type == "select":
-            if not isinstance(value, str):
-                _fail(field_key, f"array items for type {item_type!r} must be strings")
-            return
-        if item_type == "boolean":
-            if not isinstance(value, bool):
-                _fail(field_key, "array items for type 'boolean' must be booleans")
-            return
-        if item_type == "integer":
-            if not (isinstance(value, int) and not isinstance(value, bool)):
-                _fail(field_key, "array items for type 'integer' must be integers")
-            return
-        if item_type == "number":
-            if not _is_numeric(value):
-                _fail(field_key, "array items for type 'number' must be numeric")
-            return
-        _fail(field_key, f"unsupported array item_type {item_type!r}")
-
-    for key, value in submitted_values.items():
-        field = specs_by_key.get(key)
-        if field is None:
-            if reject_unknown_keys:
-                _fail(key, "unknown key")
-            continue
-        if value is None:
-            continue
-        numeric_value: float | None = None
-
-        if field.type in scalar_string_types:
-            if not isinstance(value, str):
-                _fail(key, f"expected a string for type {field.type!r}")
-            if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
-                _fail(key, f"value does not match pattern {field.pattern!r}")
-            # No token validation: the runtime renderer leaves any unknown `{…}`
-            # verbatim. A reserved system-prompt tag is the one thing refused, on
-            # every string field: the runtime substitutes each one into the
-            # agent template, where it could close the <agent_instructions> block.
-            reserved = find_reserved_prompt_tag(value)
-            if reserved is not None:
-                _fail(key, f"reserved system-prompt tag <{reserved}> is not allowed")
-        elif field.type == "select":
-            if not isinstance(value, str):
-                _fail(key, "expected a string for type 'select'")
-        elif field.type == "boolean":
-            if not isinstance(value, bool):
-                _fail(key, "expected a boolean")
-        elif field.type == "integer":
-            if not (isinstance(value, int) and not isinstance(value, bool)):
-                _fail(key, "expected an integer")
-            numeric_value = float(value)
-        elif field.type == "number":
-            if not _is_numeric(value):
-                _fail(key, "expected a number")
-            numeric_value = float(value)
-        elif field.type == "array":
-            if not isinstance(value, list):
-                _fail(key, "expected an array")
-            for item in value:
-                _validate_array_item(
-                    field_key=key, item_type=field.item_type, value=item
-                )
-        elif field.type == "object":
-            if not isinstance(value, dict):
-                _fail(key, "expected an object")
-            if not all(
-                isinstance(obj_key, str)
-                and isinstance(obj_value, (str, int, float, bool))
-                for obj_key, obj_value in value.items()
-            ):
-                _fail(key, "object keys must be strings and values must be scalars")
-        else:
-            _fail(key, f"unsupported field type {field.type!r}")
-
-        if field.enum is not None and value not in field.enum:
-            _fail(key, f"value must be one of {field.enum!r}")
-        if numeric_value is not None:
-            if field.min is not None and numeric_value < field.min:
-                _fail(key, f"value must be >= {field.min}")
-            if field.max is not None and numeric_value > field.max:
-                _fail(key, f"value must be <= {field.max}")
-
-        validated[key] = value
-    return validated
+    return validate_field_values(
+        field_specs,
+        submitted_values,
+        fail=_fail,
+        fail_unknown=(lambda keys: _fail(keys[0], "unknown key"))
+        if reject_unknown_keys
+        else None,
+        enforce_required=False,
+        enum_on_every_type=True,
+        strict_array_items=False,
+        text_check=_refuse_reserved_tag,
+    )
 
 
 def _validate_capability_ids(
@@ -3197,6 +3117,7 @@ async def prepare_execution(
     session_id: str | None = None,
     deps: ProductServiceDependencies,
     authorization: str | None = None,
+    agent_model_override: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3210,6 +3131,11 @@ async def prepare_execution(
     - pass request-scoped product dependencies when available
     - the returned payload now includes `effective_chat_options`, the typed
       chat-affordance surface resolved from the stored managed-agent config
+    - `agent_model_override`, when set, replaces this instance's entry in the
+      `agent_profile_overrides` snapshot for THIS call only — never persisted,
+      never visible via `GET .../routing-policy`. Restricted to the evaluator's
+      service identity (`is_service_agent`); rejected outright for any other
+      caller, and rejected if the profile isn't `can_use`-enabled for the team.
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -3366,6 +3292,47 @@ async def prepare_execution(
         # back.
         deps.get_model_reasoning_store().list_enabled_model_ids(),
     )
+
+    # One-shot evaluator override (fred-agent-evaluator): replaces this
+    # instance's entry in the snapshot for this call only, never persisted.
+    # Fails closed rather than silently falling back to the team default —
+    # a caller who asked for model X and silently got the team default would
+    # draw wrong conclusions from the resulting evaluation scores.
+    if agent_model_override is not None:
+        if not is_service_agent(user):
+            raise ExecutionPreparationError(
+                "agent_model_override is only honored for the evaluator's "
+                "service identity.",
+                http_status=403,
+            )
+        # Lazy import: breaks the product.service <-> routing_policy import
+        # cycle (same reason routing_policy/service.py imports this module
+        # lazily for `_pod_catalog_fetch_scope`).
+        from control_plane_backend.routing_policy.schemas import (
+            ProfileNotUsableError,
+            UnknownProfileError,
+        )
+        from control_plane_backend.routing_policy.service import (
+            check_profile_usable_for_team,
+        )
+
+        try:
+            await check_profile_usable_for_team(
+                deps,
+                team_id=team_id,
+                profile_id=agent_model_override,
+                source_runtime_ids={instance.source_runtime_id},
+            )
+        except (UnknownProfileError, ProfileNotUsableError) as exc:
+            # 422, not 400: fred-agent-evaluator's error mapper only classifies
+            # 401/403/404/409/422 from this endpoint, and 422 ("target_invalid")
+            # is the closest existing fit for a bad request parameter.
+            raise ExecutionPreparationError(str(exc), http_status=422) from exc
+        agent_profile_overrides = {
+            **agent_profile_overrides,
+            instance.source_agent_id: agent_model_override,
+        }
+
     sorted_reasoning_model_ids = sorted(reasoning_enabled_ids)
     # The reasoning toggle (REASON-01 §7) is contributed by the PLATFORM, not by
     # a capability — appended last so it sits after the capability-owned rows in

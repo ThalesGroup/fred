@@ -213,11 +213,19 @@ class IngestionService:
         tags: list[str],
         source_tag: str,
         profile: IngestionProcessingProfile | str | None = None,
+        *,
+        apply_versioning: bool = True,
     ) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
         to extract metadata. It also validates the metadata to ensure it contains a document UID.
+
+        `apply_versioning` keeps the suffix-based draft version a person gets for
+        uploading the same name twice. A caller that addresses its documents by a
+        source key turns it off: it has one document per key by construction, so
+        a second write of that key is the same document again, not a draft beside
+        it — and the scan would refuse the third write outright.
         """
         suffix = file_path.suffix.lower()
         normalized_profile = coerce_processing_profile(profile)
@@ -231,7 +239,8 @@ class IngestionService:
         # per-processor extract_file_metadata(), which only ever sees the
         # file's own embedded metadata, never who is uploading it.
         metadata.identity.uploaded_by = user.uid
-        metadata = await self._apply_versioning(metadata)
+        if apply_versioning:
+            metadata = await self._apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata
         if source_config:

@@ -16,14 +16,12 @@
 // by editors, with agents reading and (behind human approval) proposing edits.
 // Design: rfc/TEAM-WIKI-RFC.md.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import TextInput from "@shared/atoms/TextInput/TextInput";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Select from "@shared/molecules/Select/Select";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
@@ -51,7 +49,10 @@ import {
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
-import { WikiEditor } from "./WikiEditor";
+// Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
+// only ever rendered in edit mode — a static import put all of it in the chunk
+// every eagerly-routed page loads, the chat included.
+const WikiEditor = lazy(async () => ({ default: (await import("./WikiEditor")).WikiEditor }));
 import { WikiRevisions } from "./WikiRevisions";
 import { WikiTree } from "./WikiTree";
 import styles from "./TeamWikiPage.module.css";
@@ -385,9 +386,6 @@ export default function TeamWikiPage() {
           <div className={styles.railHeader}>
             <span className={styles.railTitleGroup}>
               <span className={styles.railTitle}>{t("rework.wiki.title")}</span>
-              <Tooltip content={<span className={styles.betaTooltip}>{t("rework.wiki.betaBadge.tooltip")}</span>}>
-                <BetaBadge label={t("rework.wiki.betaBadge.label")} />
-              </Tooltip>
             </span>
             {/* Not while a draft is open: creating a page navigates to it, and
                 the prompt would come after the page already existed. */}
@@ -425,27 +423,37 @@ export default function TeamWikiPage() {
 
         {/* First, and from captured values: a refetch landing mid-draft must not
             swap the editor for a spinner and take the text with it. */}
+        {/* The editor is code-split; an empty fallback would blank the whole
+            pane, Save and Cancel included, for the length of the chunk fetch. */}
         {editingTarget ? (
-          <WikiEditor
-            key={editorGeneration}
-            title={editingTarget.title}
-            initialContent={editorSeed ?? editingTarget.content}
-            maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
-            saving={savingPage || savingRules}
-            conflict={conflict}
-            hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
-            onSave={handleSave}
-            onCancel={leaveEditor}
-            onTakeTheirs={(current) => {
-              // Remount on the server's text: MDXEditor reads `markdown` only at
-              // mount, so changing the prop alone would leave the user's own text
-              // on screen while claiming to have loaded theirs. The draft is lost,
-              // but they chose that — it was never silently overwritten.
-              setEditorSeed(current);
-              setConflict(null);
-              setEditorGeneration((n) => n + 1);
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className={styles.state}>
+                <Spinner />
+              </div>
+            }
+          >
+            <WikiEditor
+              key={editorGeneration}
+              title={editingTarget.title}
+              initialContent={editorSeed ?? editingTarget.content}
+              maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
+              saving={savingPage || savingRules}
+              conflict={conflict}
+              hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
+              onSave={handleSave}
+              onCancel={leaveEditor}
+              onTakeTheirs={(current) => {
+                // Remount on the server's text: MDXEditor reads `markdown` only at
+                // mount, so changing the prop alone would leave the user's own text
+                // on screen while claiming to have loaded theirs. The draft is lost,
+                // but they chose that — it was never silently overwritten.
+                setEditorSeed(current);
+                setConflict(null);
+                setEditorGeneration((n) => n + 1);
+              }}
+            />
+          </Suspense>
         ) : !hasPages && !isRules ? (
           <PageEmptyState
             icon="book_2"

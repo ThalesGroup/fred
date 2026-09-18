@@ -16,6 +16,7 @@
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,6 +32,8 @@ const h = vi.hoisted(() => ({
   subPath: "",
   teamId: "team-1",
   teamName: "Team One",
+  darkMode: false,
+  locale: "en",
   uiPrefix: "/apps/example-ui/",
   sessions: [] as Array<{ session_id: string; agent_instance_id?: string }>,
   sessionsFail: false,
@@ -45,7 +48,7 @@ const h = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: "en", resolvedLanguage: "en" },
+    i18n: { language: h.locale, resolvedLanguage: h.locale },
   }),
 }));
 vi.mock("react-router-dom", () => ({
@@ -127,7 +130,17 @@ async function rerender() {
   await act(async () => {
     root?.render(
       <StrictMode>
-        <TeamApplicationHostPage />
+        <ApplicationContext.Provider
+          value={{
+            darkMode: h.darkMode,
+            themeMode: "system",
+            isSidebarCollapsed: false,
+            toggleSidebar: () => undefined,
+            setThemeMode: () => undefined,
+          }}
+        >
+          <TeamApplicationHostPage />
+        </ApplicationContext.Provider>
       </StrictMode>,
     );
     await Promise.resolve();
@@ -187,11 +200,26 @@ beforeEach(() => {
   h.subPath = "";
   h.teamId = "team-1";
   h.teamName = "Team One";
+  h.darkMode = false;
+  h.locale = "en";
   h.uiPrefix = "/apps/example-ui/";
   h.result = { data: { items: [application()] }, isLoading: false, isError: false };
 });
 
 describe("TeamApplicationHostPage frame admission", () => {
+  it("grants only the reviewed sandbox permissions to an admitted frame", async () => {
+    await renderPage();
+
+    const permissions = frame()?.sandbox;
+    expect(permissions).not.toBeNull();
+    expect(new Set(permissions ? Array.from(permissions) : [])).toEqual(
+      new Set(["allow-scripts", "allow-same-origin", "allow-forms", "allow-popups", "allow-downloads"]),
+    );
+    expect(permissions?.contains("allow-top-navigation")).toBe(false);
+    expect(permissions?.contains("allow-top-navigation-by-user-activation")).toBe(false);
+    expect(permissions?.contains("allow-popups-to-escape-sandbox")).toBe(false);
+  });
+
   it("points the frame at the catalog's configured prefix, not one derived from the id", async () => {
     await renderPage();
 
@@ -255,10 +283,57 @@ describe("TeamApplicationHostPage protocol handshake", () => {
           team: { id: "team-1", name: "Team One", isPersonal: false },
           route: { basePath: "/team/team-1/apps/example", subPath: "" },
           locale: "en",
+          theme: "light",
         },
       },
     ]);
     expect(spy.mock.calls[0]?.[1]).toBe(FRED_ORIGIN);
+  });
+
+  it("publishes resolved theme and locale changes to the same ready frame without rerender duplicates", async () => {
+    await renderPage();
+    const originalFrame = frame();
+    const spy = spyOnFrame();
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" });
+
+    h.darkMode = true;
+    await rerender();
+    h.darkMode = false;
+    await rerender();
+    h.locale = "fr";
+    await rerender();
+    await rerender();
+
+    expect(frame()).toBe(originalFrame);
+    expect(
+      postedMessages(spy).map((message) => [
+        message.type,
+        (message.context as { theme: string; locale: string }).theme,
+        (message.context as { theme: string; locale: string }).locale,
+      ]),
+    ).toEqual([
+      ["fred:context", "light", "en"],
+      ["fred:context", "dark", "en"],
+      ["fred:context", "light", "en"],
+      ["fred:context", "light", "fr"],
+    ]);
+  });
+
+  it("uses the latest resolved system theme and locale when ready races their change", async () => {
+    await renderPage();
+    const spy = spyOnFrame();
+    h.darkMode = true;
+    h.locale = "fr";
+    await rerender();
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" });
+
+    expect(postedMessages(spy)).toHaveLength(1);
+    expect(postedMessages(spy)[0]?.context).toMatchObject({ theme: "dark", locale: "fr" });
+    await rerender();
+    expect(postedMessages(spy)).toHaveLength(1);
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" });
+    expect(postedMessages(spy)).toHaveLength(2);
+    expect(postedMessages(spy)[1]?.context).toMatchObject({ theme: "dark", locale: "fr" });
   });
 
   it("shows the mismatch state and never marks a frame ready on an unsupported version", async () => {
@@ -607,6 +682,7 @@ describe("TeamApplicationHostPage lifecycle replacement", () => {
     h.request.mockReturnValue(new Promise<Response>(() => undefined));
     await connect();
     const oldFrameWindow = frameWindow();
+    const oldFrameSpy = vi.spyOn(oldFrameWindow, "postMessage");
     await postFromFrame({
       type: "fred:request",
       requestId: "pending",
@@ -624,5 +700,10 @@ describe("TeamApplicationHostPage lifecycle replacement", () => {
     expect(replacementSpy).not.toHaveBeenCalled();
     await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, frameWindow(), replacementOrigin);
     expect(postedMessages(replacementSpy)[0]?.type).toBe("fred:context");
+    const oldMessageCount = oldFrameSpy.mock.calls.length;
+    h.darkMode = true;
+    await rerender();
+    expect(oldFrameSpy).toHaveBeenCalledTimes(oldMessageCount);
+    expect(postedMessages(replacementSpy).slice(-1)[0]?.context).toMatchObject({ theme: "dark" });
   });
 });

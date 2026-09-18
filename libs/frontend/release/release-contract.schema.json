@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ThalesGroup/fred/libs/frontend/release/release-contract.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "state",
+    "registry",
+    "distTag",
+    "sourceBranch",
+    "workflowFilename",
+    "publishingEnvironment",
+    "approvedBaselineDigest",
+    "releaseToolchain",
+    "applicationToolchain",
+    "maintainerApproval",
+    "expectedProvenance"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 2 },
+    "state": { "enum": ["proposed", "fixture", "maintainer-confirmed"] },
+    "registry": { "type": "string", "format": "uri" },
+    "distTag": { "type": "string", "pattern": "^[a-z][a-z0-9._-]*$" },
+    "sourceBranch": { "type": "string", "pattern": "^[a-z][a-z0-9._/-]*$" },
+    "workflowFilename": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+\\.yml$"
+    },
+    "publishingEnvironment": { "type": "string", "minLength": 1 },
+    "approvedBaselineDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "releaseToolchain": { "$ref": "#/$defs/toolchain" },
+    "applicationToolchain": { "$ref": "#/$defs/toolchain" },
+    "maintainerApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopeOwner",
+        "owners",
+        "bootstrapIdentity",
+        "bootstrapAuthorityVerified",
+        "registryAccess",
+        "publishingPolicy"
+      ],
+      "properties": {
+        "scopeOwner": { "type": ["string", "null"] },
+        "owners": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["packageApi", "sdkProtocol", "release", "npmPublishing"],
+          "properties": {
+            "packageApi": { "type": ["string", "null"] },
+            "sdkProtocol": { "type": ["string", "null"] },
+            "release": { "type": ["string", "null"] },
+            "npmPublishing": { "type": ["string", "null"] }
+          }
+        },
+        "bootstrapIdentity": { "type": ["string", "null"] },
+        "bootstrapAuthorityVerified": { "type": "boolean" },
+        "registryAccess": { "enum": ["public", null] },
+        "publishingPolicy": { "enum": ["direct", "staged", null] }
+      }
+    },
+    "expectedProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "workflow", "certificateIssuer"],
+      "properties": {
+        "repository": { "type": ["string", "null"] },
+        "workflow": { "type": ["string", "null"] },
+        "certificateIssuer": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "npm"],
+      "properties": {
+        "node": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "npm": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    }
+  }
+}

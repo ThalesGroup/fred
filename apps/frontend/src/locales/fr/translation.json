@@ -420,6 +420,13 @@
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
     },
+    "fullReasoning": {
+      "title": "Raisonnement complet",
+      "copy": "Copier le raisonnement complet",
+      "copied": "Copié",
+      "empty": "L'agent n'a pas encore raisonné dans cette conversation.",
+      "hideRestatements": "Masquer les reformulations"
+    },
     "debugRaw": {
       "title": "Débogage — messages bruts",
       "scopeAria": "Portée des messages",
@@ -1111,12 +1118,13 @@
         "loading": "Chargement des fonctionnalités…",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
-        "manageTeams": "Gérer les équipes",
+        "manageTeams": "Gérer par équipe",
         "kindFilter": {
           "tool": "Capacités",
           "agent": "Agents",
           "model": "Modèles",
           "app": "Apps",
+          "knowledge_base": "Bases de connaissances",
           "aria": "Filtrer par type de fonctionnalité"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
@@ -1149,7 +1157,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — agents suspendus",
-          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer les équipes pour les réactiver.",
+          "subtitle": "Agents que cette fonctionnalité bloque actuellement, groupés par équipe. Rétablissez l'accès de chaque équipe depuis Gérer par équipe pour les réactiver.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
@@ -1157,8 +1165,6 @@
         "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
         "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
         "defaultOffConfirm": {
-          "title": "Désactiver l'activation par défaut ?",
-          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
           "appTitle": "Désactiver l'application par défaut ?",
           "appMessage": "Désactiver l'activation par défaut retire l'accès hérité à l'application pour toutes les équipes. Les autorisations explicites restent inchangées.",
           "confirm": "Désactiver",
@@ -1168,7 +1174,11 @@
           "impactUnknown": "{{count}} agent(s) n'ont pas pu être vérifiés — leur pod était injoignable, l'impact est donc inconnu.",
           "showAffected": "Afficher les agents concernés",
           "hideAffected": "Masquer les agents concernés",
-          "affectedAgent": "{{name}} (équipe {{team}})"
+          "affectedAgent": "{{name}} (équipe {{team}})",
+          "genericTitle": "Désactiver l'activation par défaut ?",
+          "genericMessage": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette fonctionnalité.",
+          "knowledgeBaseTitle": "Désactiver la base de connaissances par défaut ?",
+          "knowledgeBaseMessage": "La désactivation du mode par défaut retire l'accès hérité à toutes les équipes. Les accès accordés explicitement restent inchangés."
         },
         "matrix": {
           "title": "{{name}} — accès des équipes",
@@ -1227,7 +1237,8 @@
           "depFailed": "Impossible d'activer {{dep}} — {{agent}} n'a pas été modifié.",
           "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
-        }
+        },
+        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
       },
       "platformModelBindings": {
         "openButton": "Liaison de modèle plateforme",
@@ -1426,11 +1437,8 @@
         "valueLabel": "Tours"
       },
       "presets": {
-        "last15m": "15 dernières minutes",
-        "last1h": "Dernière heure",
         "last24h": "24 dernières heures",
         "last30d": "30 derniers jours",
-        "last6h": "6 dernières heures",
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
@@ -1474,6 +1482,9 @@
       },
       "timeRange": {
         "apply": "Appliquer",
+        "months": "Mois",
+        "next": "Période suivante",
+        "previous": "Période précédente",
         "since": "Depuis",
         "until": "Jusqu'à"
       },
@@ -1527,6 +1538,18 @@
         }
       }
     },
+    "agentTodoPanel": {
+      "announcementComplete": "Plan de tâches terminé",
+      "ariaLabel": "Plan de tâches de l'agent",
+      "remaining_one": "{{count}} restante",
+      "remaining_other": "{{count}} restantes",
+      "status": {
+        "completed": "Terminée",
+        "in_progress": "En cours",
+        "pending": "À faire"
+      },
+      "title": "Tâches"
+    },
     "back": "Retour",
     "bootstrap": {
       "continue": "Continuer",
@@ -1554,6 +1577,7 @@
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
+      "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
@@ -2088,7 +2112,8 @@
         "menu": {
           "apps": "Apps",
           "resources": "Ressources",
-          "wiki": "Wiki"
+          "wiki": "Wiki",
+          "knowledgeBases": "Bases de connaissance"
         },
         "teamLabel": "Equipe",
         "userTeam": "Espace personnel"
@@ -2114,6 +2139,17 @@
         "title": "Auto-test d'autorisation",
         "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",
+        "expiry": {
+          "title": "Auto-test de renouvellement des identifiants",
+          "run": "Lancer l'expiration des identifiants",
+          "warning": {
+            "title": "Gardez cette page ouverte jusqu'à la fin du test",
+            "message": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc environ {{minutes}} minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "messageUnknownWait": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc plusieurs minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
+            "confirm": "Lancer et garder la page ouverte"
+          },
+          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
+        },
         "testProfile": {
           "title": "Tester un autre profil",
           "usernameLabel": "Compte",
@@ -2260,15 +2296,16 @@
       },
       "grant": {
         "title": "Attribuer un rôle",
-        "userLabel": "Utilisateur",
-        "userPlaceholder": "Rechercher un utilisateur",
-        "clearSelection": "Effacer la sélection",
+        "userLabel": "Utilisateurs",
+        "userPlaceholder": "Rechercher et ajouter des utilisateurs",
+        "removeUser": "Retirer {{user}}",
         "roleLabel": "Rôle",
         "rootOnlyHint": "Seul l'admin principal peut nommer ou révoquer des admins plateforme.",
         "submit": "Attribuer",
-        "successSummary": "{{role}} attribué à {{user}}",
+        "successSummary_one": "{{role}} attribué à {{user}}",
+        "successSummary_other": "{{role}} attribué à {{count}} utilisateurs",
         "errors": {
-          "summary": "Impossible d'attribuer le rôle",
+          "summary": "Impossible d'attribuer le rôle à {{users}}",
           "fallbackDetail": "Une erreur inattendue est survenue lors de l'attribution du rôle.",
           "forbiddenDetail": "Seul l'admin principal peut gérer les admins plateforme.",
           "conflictDetail": "Le bootstrap root n'a jamais été exécuté sur cette plateforme."
@@ -2294,6 +2331,19 @@
           "admins": "Administrateur(s)"
         }
       },
+      "defaultTeam": {
+        "title": "Équipes par défaut des nouveaux utilisateurs",
+        "description": "Chaque nouvel utilisateur rejoint ces équipes en tant que membre lorsqu'il accepte les conditions d'utilisation pour la première fois. Les utilisateurs qui les ont déjà acceptées ne sont pas concernés.",
+        "gcuDisabled": "Les conditions d'utilisation ne sont pas activées sur ce déploiement : aucun utilisateur ne rejoindra ces équipes automatiquement.",
+        "none": "Aucune équipe par défaut.",
+        "searchPlaceholder": "Ajouter une équipe par nom",
+        "remove": "Retirer {{name}}",
+        "savedSummary": "Équipes par défaut mises à jour",
+        "errors": {
+          "summary": "Échec de la mise à jour des équipes par défaut",
+          "fallbackDetail": "Impossible de mettre à jour les équipes par défaut. Veuillez réessayer."
+        }
+      },
       "createTeam": {
         "title": "Créer une équipe",
         "nameLabel": "Nom de l'équipe",
@@ -2317,11 +2367,13 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
+      "pending_team_admin": "Admin (en attente)",
       "team_editor": "Éditeur",
       "team_analyst": "Analyste",
       "team_member": "Membre",
       "descriptions": {
         "team_admin": "Gouverne l'équipe : gère les membres et leurs rôles, et définit la politique d'équipe (quotas, modèles autorisés, serveurs MCP, limites de stockage). Ne donne aucun droit sur les agents, les prompts ou le routage - c'est le rôle Éditeur.",
+        "pending_team_admin": "Admin nommé qui n'a pas encore accepté la charte de l'administrateur d'équipe : simple membre jusqu'à son acceptation.",
         "team_editor": "Gère ce que l'équipe construit : agents, prompts partagés, politique de routage et corpus documentaire. Ne donne aucun droit sur les membres ni sur la politique d'équipe.",
         "team_analyst": "Crée et lance les campagnes d'évaluation d'agents, et gère les corpus d'évaluation.",
         "team_member": "L'accès par défaut de toute personne de l'équipe : utiliser les agents et les prompts de l'équipe, et gérer les siens. Aucun droit de configuration ni d'administration."
@@ -2329,6 +2381,12 @@
       "warnings": {
         "team_analyst": "Rôle technique : il ouvre aussi l'accès aux extraits de conversation limités sur lesquels ces jeux d'évaluation sont construits. À accorder en connaissance de cause."
       }
+    },
+    "teamAdminCharter": {
+      "accept": "Accepter",
+      "acceptedOn": "Acceptée le {{date}}",
+      "pendingNotice": "Acceptez la charte de l'administrateur d'équipe pour activer vos droits d'admin sur cette équipe.",
+      "review": "Lire la charte"
     },
     "teamSettings": {
       "members": {
@@ -2378,6 +2436,7 @@
         "activity": "Activité",
         "evaluations": "Évaluations",
         "usage": "Consommation",
+        "responsibilities": "Responsabilités",
         "routing": "Routage des modèles",
         "retention": "Rétention"
       },
@@ -2719,6 +2778,10 @@
           "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
           "none": "Aucun tool activé sur cette instance."
         },
+        "modelOverride": {
+          "label": "Surcharge de modèle (optionnel)",
+          "placeholder": "Utiliser le modèle par défaut de l'équipe"
+        },
         "agent": {
           "label": "Identifiant d'agent",
           "placeholder": "agent-..."
@@ -2802,7 +2865,8 @@
           "metrics": "Métriques",
           "customMetrics": "Métriques personnalisées",
           "profile": "Profil",
-          "profileAuto": "Automatique"
+          "profileAuto": "Automatique",
+          "modelOverride": "Surcharge de modèle"
         }
       },
       "detail": {
@@ -2846,6 +2910,7 @@
           "author": "Auteur",
           "profile": "Profil de vérifications structurelles",
           "judge": "Juge",
+          "modelOverride": "Surcharge de modèle",
           "team": "Identifiant d'évaluation",
           "created": "Créée le",
           "started": "Démarrée le",
@@ -2868,6 +2933,7 @@
         "downloading": "Préparation…",
         "downloadError": "Échec du téléchargement",
         "latency": "Latence",
+        "actualModel": "Modèle réel",
         "input": "Entrée",
         "expected": "Sortie attendue",
         "actual": "Sortie réelle",
@@ -3195,6 +3261,78 @@
       "copied": "Prompt copié dans le presse-papier",
       "copyFailed": "Impossible de copier le prompt",
       "reservedTag": "Ce texte ne peut pas contenir <{{tag}}> : c'est une balise réservée qui délimite un bloc du prompt système. Toute autre balise est acceptée."
+    },
+    "knowledgeBases": {
+      "title": "Bases de connaissance",
+      "loading": "Chargement des bases de connaissance…",
+      "empty": "Aucune base de connaissance",
+      "deleted": "{{name}} supprimée",
+      "deleteFailed": "Impossible de supprimer {{name}}",
+      "unavailable": {
+        "title": "Bases de connaissance indisponibles",
+        "description": "La liste n'a pas pu être chargée. Réessayez dans un instant."
+      },
+      "cadence": {
+        "hourly": "Toutes les heures",
+        "daily": "Tous les jours",
+        "weekly": "Toutes les semaines"
+      },
+      "card": {
+        "open": "Documents",
+        "delete": "Supprimer",
+        "suspended": "Synchronisation suspendue",
+        "tooltip": {
+          "label": "Détails de la base de connaissance",
+          "kind": "Type",
+          "cadence": "Exécution",
+          "created": "Créée le"
+        },
+        "edit": "Modifier",
+        "noDescription": "Aucune description"
+      },
+      "deleteDialog": {
+        "title": "Supprimer cette base de connaissance ?",
+        "message": "{{name}} et tous ses documents seront supprimés. C'est irréversible.",
+        "confirm": "Supprimer",
+        "cancel": "Annuler"
+      },
+      "documents": {
+        "back": "Bases de connaissance",
+        "empty": "Cette base de connaissance ne contient encore aucun document",
+        "loadFailed": "Impossible de charger les documents",
+        "unavailable": {
+          "title": "Base de connaissance introuvable",
+          "description": "Elle a peut-être été supprimée, ou appartient à une autre équipe."
+        }
+      },
+      "create": "Ajouter une base",
+      "form": {
+        "title": "Nouvelle base de connaissance",
+        "name": "Nom",
+        "namePlaceholder": "ex. Manuel de l'équipe",
+        "synchronizedBy": "Synchronisée par",
+        "pickOne": "Choisissez une source",
+        "noDefinitions": "Aucune base de connaissance activée pour cette équipe",
+        "definitionsLoading": "Chargement…",
+        "definitionsFailed": "Impossible de charger la liste",
+        "zoneFred": "Fréquence d'exécution",
+        "zoneSource": "Provenance des documents",
+        "submit": "Créer",
+        "created": "{{name}} créée",
+        "createFailed": "Impossible de créer {{name}}",
+        "titleEdit": "Modifier {{name}}",
+        "subtitleReadOnly": "Sa configuration est en lecture seule pour le moment."
+      }
+    },
+    "schedule": {
+      "label": "S'exécute toutes les",
+      "every": "Nombre",
+      "unit": {
+        "label": "Unité",
+        "minutes": "minutes",
+        "hours": "heures",
+        "days": "jours"
+      }
     }
   },
   "runtime": {

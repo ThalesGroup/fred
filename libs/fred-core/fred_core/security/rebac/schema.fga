@@ -109,9 +109,12 @@ type team
     # one-shot, `can_create_team`-gated bootstrap action outside this schema
     # (RFC §28, `POST /teams`), never by a standing relation grant here.
     define team_admin: [user]
+    # A nominated admin who has not accepted the team administrator charter yet:
+    # a member with no admin authority, promoted to team_admin on acceptance.
+    define pending_team_admin: [user]
     define team_editor: [user]
     define team_analyst: [user]
-    define team_member: [user] or team_admin or team_editor or team_analyst
+    define team_member: [user] or team_admin or pending_team_admin or team_editor or team_analyst
 
     # Public visibility - allows anyone to read team info. Profile/discovery
     # only: `public` is wired into `can_read` alone, never into any
@@ -152,6 +155,14 @@ type team
     # -> must be member; deliberately excludes `public` and is independent
     # from agent access.
     define can_use_team_applications: team_member
+
+    # Can see the team's Knowledge Bases: which ones it may synchronize a
+    # folder from, the fields they declare, and the synchronized folders it
+    # holds.
+    # -> must be member; reusing `can_read` would let any connected user read
+    # a PUBLIC team's sources — and a source's declared fields name what it
+    # expects, down to which of them are secret
+    define can_use_team_knowledge_bases: team_member
 
     # Can enter the team's filesystem box (/teams/{id}/... in the virtual FS)
     # -> must be member; reusing `can_read` would turn "listed in the
@@ -334,5 +345,29 @@ type app
     # Same delegation as `capability#can_manage`: applications are governed
     # from the same admin surface, behind the same org-level gate.
     define can_manage: can_manage_capabilities from organization
+    define inherited: team from default_on
+    define can_use: (enabled or inherited) but not disabled
+
+type knowledge_base_definition
+  # A Knowledge Base definition configured into this deployment. The authorized
+  # object is the definition, never an instance of it — instances are
+  # team-scoped rows that follow their team. Same enablement shape as `app`,
+  # deliberately a distinct type: a capability or application grant must never
+  # make a Knowledge Base usable. No personal-space class on purpose: a personal
+  # space is enabled one definition at a time, like any other team, so nothing
+  # reaches every personal space at once.
+  relations
+    # Platform anchor for management rights.
+    define organization: [organization]
+
+    # Organization-wide default inherited through the contextual team edge.
+    define default_on: [organization]
+
+    # Explicit per-team grant and override.
+    define enabled: [team]
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    define can_manage: platform_admin from organization
     define inherited: team from default_on
     define can_use: (enabled or inherited) but not disabled

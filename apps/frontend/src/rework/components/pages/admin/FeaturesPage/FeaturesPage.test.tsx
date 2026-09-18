@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
     isError: boolean;
   },
   allTeams: { data: [] as Team[], isLoading: false, isError: false },
+  allTeamsArg: undefined as unknown,
   // Every key `t` was asked for during the last render. Needed for hints that
   // live in a `Tooltip`: its panel is portaled and only mounts once hovered, so
   // `renderToStaticMarkup` (no effects, no DOM) never contains the hint text —
@@ -52,7 +53,10 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => h.list,
-  useListAllTeamsQuery: () => h.allTeams,
+  useListAllTeamsQuery: (arg: unknown) => {
+    h.allTeamsArg = arg;
+    return h.allTeams;
+  },
   useSetCapabilityDefaultOnMutation: () => [vi.fn(), { isLoading: false }],
   useSetModelReasoningMutation: () => [vi.fn(), { isLoading: false }],
   useLazyCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
@@ -155,6 +159,11 @@ describe("FeaturesPage team registry wiring", () => {
     h.allTeams = { data: registryTeams, isLoading: false, isError: false };
     render();
     expect(drawerProps.current).toMatchObject({ teams: registryTeams });
+  });
+
+  it("asks the registry for ids and names only, without membership reads", () => {
+    render();
+    expect(h.allTeamsArg).toEqual({ includeMembership: false });
   });
 
   it("passes the FULL catalog to the drawer, not the kind-filtered view", () => {

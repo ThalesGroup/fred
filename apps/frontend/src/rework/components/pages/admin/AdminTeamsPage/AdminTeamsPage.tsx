@@ -18,17 +18,21 @@ import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Chip from "@shared/atoms/Chip/Chip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
+import { useUserCapabilities } from "@core/hooks/useUserCapabilities.ts";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import {
   useCreateTeamMutation,
+  useDefaultTeamsForNewUsersQuery,
   useListAllTeamsQuery,
   useSearchCandidateTeamAdminsQuery,
+  useSetDefaultTeamsForNewUsersMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Team, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
@@ -57,8 +61,41 @@ export default function AdminTeamsPage() {
     { query: trimmedAdminQuery },
     { skip: trimmedAdminQuery.length < 2 },
   );
-  const { data: allTeams } = useListAllTeamsQuery();
+  // The admins column needs each team's roster.
+  const { data: allTeams } = useListAllTeamsQuery({ includeMembership: true });
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
+
+  // Choosing where new users land is platform_admin-only, unlike the rest of this page.
+  const { canAdmin } = useUserCapabilities();
+  // Membership is granted on GCU acceptance: without GCU the setting never applies.
+  const { gcuVersion } = useFrontendProperties();
+  const [setDefaultTeams, { isLoading: isSettingDefaultTeams }] = useSetDefaultTeamsForNewUsersMutation();
+  const [defaultTeamQuery, setDefaultTeamQuery] = useState("");
+  const { data: defaultTeams } = useDefaultTeamsForNewUsersQuery(undefined, { skip: !canAdmin });
+
+  // Filtered client-side: the registry listing is already loaded for the table.
+  const defaultTeamOptions = useMemo(() => {
+    const query = defaultTeamQuery.trim().toLowerCase();
+    const defaultIds = new Set((defaultTeams ?? []).map((team) => team.team_id));
+    return (allTeams ?? [])
+      .filter((team) => !defaultIds.has(team.id) && team.name.toLowerCase().includes(query))
+      .map((team) => ({ label: team.name, value: team, key: team.id }));
+  }, [allTeams, defaultTeams, defaultTeamQuery]);
+
+  // The PUT replaces the whole list, so every change sends the teams it keeps.
+  const saveDefaultTeams = (teamIds: string[]) =>
+    runMutationAction({
+      action: () => setDefaultTeams({ setDefaultTeamsForNewUsersRequest: { team_ids: teamIds } }).unwrap(),
+      onSuccess: () => showSuccess({ summary: t("rework.adminTeams.defaultTeam.savedSummary") }),
+      onError: (error) =>
+        notifyApiError(error, {
+          summary: t("rework.adminTeams.defaultTeam.errors.summary"),
+          fallbackDetail: t("rework.adminTeams.defaultTeam.errors.fallbackDetail"),
+        }),
+    });
+  const defaultTeamIds = (defaultTeams ?? []).map((team) => team.team_id);
+  const handleAddDefaultTeam = (team: Team) => saveDefaultTeams([...defaultTeamIds, team.id]);
+  const handleRemoveDefaultTeam = (teamId: string) => saveDefaultTeams(defaultTeamIds.filter((id) => id !== teamId));
 
   const teamColumns = useMemo(
     (): DataTableColumn<Team>[] => [
@@ -124,15 +161,49 @@ export default function AdminTeamsPage() {
   return (
     <div className={styles.adminTeamsPage}>
       <PageHeader title={t("rework.adminTeams.title")} />
-      <section className={styles.existingTeamsSection}>
-        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
-        {allTeams && allTeams.length > 0 ? (
-          <DataTable columns={teamColumns} data={allTeams} />
-        ) : (
-          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
-        )}
-      </section>
-      <Separator />
+      {/* Actions first: the registry list grows long and pushed them out of reach. */}
+      {canAdmin && (
+        <>
+          <section className={styles.defaultTeamSection}>
+            <h2 className={styles.sectionTitle}>{t("rework.adminTeams.defaultTeam.title")}</h2>
+            <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.description")}</p>
+            {!gcuVersion && (
+              <p className={styles.sectionDescription}>{t("rework.adminTeams.defaultTeam.gcuDisabled")}</p>
+            )}
+            <Autocomplete<Team>
+              textInput={{
+                placeholder: t("rework.adminTeams.defaultTeam.searchPlaceholder"),
+                icon: { category: "outlined", type: "search" },
+                // Adding before the current list is known would drop the teams already set.
+                disabled: isSettingDefaultTeams || defaultTeams === undefined,
+              }}
+              onFieldValueChange={setDefaultTeamQuery}
+              options={defaultTeamOptions}
+              onSelect={handleAddDefaultTeam}
+            />
+            {defaultTeams && defaultTeams.length > 0 ? (
+              <ul className={styles.adminChipList}>
+                {defaultTeams.map((team) => (
+                  <li key={team.team_id}>
+                    <Chip
+                      label={team.name}
+                      // No remove while a save is in flight, so two removals never race.
+                      onRemove={isSettingDefaultTeams ? undefined : () => handleRemoveDefaultTeam(team.team_id)}
+                      removeAriaLabel={t("rework.adminTeams.defaultTeam.remove", { name: team.name })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              // `undefined` while loading or on error: only the server's empty list means none.
+              defaultTeams?.length === 0 && (
+                <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.defaultTeam.none")}</p>
+              )
+            )}
+          </section>
+          <Separator />
+        </>
+      )}
       <section className={styles.createTeamSection}>
         <h2 className={styles.sectionTitle}>{t("rework.adminTeams.createTeam.title")}</h2>
         <TextInput
@@ -160,14 +231,8 @@ export default function AdminTeamsPage() {
           {selectedAdmins.length > 0 && (
             <ul className={styles.adminChipList}>
               {selectedAdmins.map((user) => (
-                <li key={user.id} className={styles.adminChip}>
-                  <span>{`${user.first_name} ${user.last_name}`}</span>
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    icon={{ category: "outlined", type: "close" }}
-                    onClick={() => handleRemoveAdmin(user.id)}
-                  />
+                <li key={user.id}>
+                  <Chip label={`${user.first_name} ${user.last_name}`} onRemove={() => handleRemoveAdmin(user.id)} />
                 </li>
               ))}
             </ul>
@@ -178,6 +243,15 @@ export default function AdminTeamsPage() {
             {t("rework.adminTeams.createTeam.submit")}
           </Button>
         </div>
+      </section>
+      <Separator />
+      <section className={styles.existingTeamsSection}>
+        <h2 className={styles.sectionTitle}>{t("rework.adminTeams.existingTeams.title")}</h2>
+        {allTeams && allTeams.length > 0 ? (
+          <DataTable columns={teamColumns} data={allTeams} />
+        ) : (
+          <p className={styles.emptyTeamsMessage}>{t("rework.adminTeams.existingTeams.empty")}</p>
+        )}
       </section>
     </div>
   );

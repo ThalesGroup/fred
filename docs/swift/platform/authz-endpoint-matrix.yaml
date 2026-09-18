@@ -298,6 +298,26 @@ operations:
     required_permission: can_list_all_teams
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/default-teams
+    review_status: approved
+    required_permission: can_manage_platform # teams.service.get_default_teams_for_new_users. Reads platform_default_teams and resolves the team names; deleted teams are skipped. Same gate as the write it serves.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/default-teams
+    review_status: approved
+    required_permission: can_manage_platform # teams.service.set_default_teams_for_new_users. Replaces the list of teams every user joins as team_member on first GCU acceptance (POST /gcu); [] clears it. platform_admin only - it decides where every future account lands. Personal spaces have no registry row and are refused as unknown teams (404), and nothing is written.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/team-admin-charter
+    review_status: approved
+    required_permission: authenticated # teams.service.get_team_admin_charter_acceptance. Reads the caller's own acceptance time of the configured version; null when they have not accepted it or no version is set. Reveals nothing about other users.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/team-admin-charter
+    review_status: approved
+    required_permission: authenticated # teams.service.accept_team_admin_charter. Records the caller's own acceptance of the configured version (idempotent, audited as team_admin.charter.accepted) and turns every pending_team_admin they hold into team_admin; 409 team_admin_charter_disabled when no version is set.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/teams/candidate-admins
     review_status: approved
     required_permission: can_create_team
@@ -714,22 +734,62 @@ operations:
     method: GET
     path: /control-plane/v1/admin/capabilities/{capability_id}/revoke-impact
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution. Same gate as the disable mutation this preview precedes.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/capabilities/{capability_id}/teams/{team_id}
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/knowledge-bases/definitions/{name}
+    review_status: approved
+    required_permission: none # Deliberately not a ReBAC check. A Knowledge Base image publishes its own declaration with its confidential M2M client; the first publication claims the declared PREFIX for that client and every later publication under it must present the same client, so nobody writes under another contributor's prefix. The binding is enforced inside the writing transaction, so two concurrent first publications cannot both win. A broad service role alone never authorizes. Existence is not usage: a published definition stays unusable until a platform admin enables it for a team. Deliberately outside the GCU gate: accepting conditions of use is a human admission control, and the publisher is a confidential client with no user row and nobody to accept them — `get_current_user` would make the route unreachable wherever `app.gcu_version` is set.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/fields
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases + knowledge_base_definition.can_use # The declared fields an instance form renders. DELIBERATELY not can_read: `can_read` is `team_member or public`, so on a team flagged public it would hand a declaration to non-members — and a declaration names what a source expects, down to which of its fields are secret. Read from the stored declaration, so it renders whether or not the definition's pod is running.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases # Which Knowledge Bases a team may synchronize a folder from, to a member of that team. DELIBERATELY not can_read, for the reason above.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/instances
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases # Synchronized folders of one team, to a member of that team. DELIBERATELY not can_read: on a team flagged public it would show every signed-in user which sources that team draws from. An instance is not an authorization object of its own — the definition is, and everything an instance holds belongs to the team that created it.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/knowledge-bases/instances
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases + knowledge_base_definition.can_use + tag.create # Creating a folder that fills itself. Team membership and enablement are checked here; the right to add a folder to this team is checked by knowledge-flow's own folder endpoint, which this route calls with the caller's own token rather than a service identity. The pod's `editor` grant over the new library is written as part of the same transaction and is never broader than that one library.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases # Scoped to the instance's own team. A non-member is answered not-found rather than forbidden: whether a team holds an instance is itself the team's business.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/knowledge-bases/instances/{instance_id}
+    review_status: approved
+    required_permission: team.can_use_team_knowledge_bases + tag.delete # Undoes the creation in reverse: cadence, grant, library, row. The library deletion goes through knowledge-flow with the caller's own token, so the right to delete the folder is checked there — that is where the destructive authority is verified — and its existing cascade takes the documents with it.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/instances/{instance_id}/runs/{run_id}/context
+    review_status: approved
+    required_permission: none # Deliberately not a ReBAC check, and the same exact-client verification publication uses: the caller must be the confidential client this definition was published by. A broad service role alone never authorizes — every backend workload holds one, and this route serves the instance configuration, which is where a source's secrets are. The instance must belong to the named definition, so one pod cannot read another's. Outside the GCU gate for the same reason publication is: the caller is a client with no user row.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on
     review_status: approved
-    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution.
+    required_permission: can_manage # Capability rows use capability#can_manage (can_manage_capabilities from organization); app__ rows use the equivalent organization#can_manage_capabilities gate before exact configured-app resolution; kb__ rows use the organization#can_manage_platform gate before published-definition resolution. app__ and kb__ grants are written on their own ReBAC type.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/personal-scope
@@ -1031,6 +1091,31 @@ operations:
     path: /knowledge-flow/v1/fs/write/{path:path}
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/libraries/{library_id}/documents
+    review_status: approved
+    required_permission: tag.update
+  - service: knowledge-flow
+    method: DELETE
+    path: /knowledge-flow/v1/libraries/{library_id}/documents
+    review_status: approved
+    required_permission: tag.update
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/libraries/{library_id}/source-version
+    review_status: approved
+    required_permission: tag.read
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/libraries/{library_id}/source-version
+    review_status: approved
+    required_permission: tag.update
+  - service: knowledge-flow
+    method: PUT
+    path: /knowledge-flow/v1/libraries/{library_id}/synchronized-by
+    review_status: approved
+    required_permission: tag.update
   - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/markdown/{document_uid}

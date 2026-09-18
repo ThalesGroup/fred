@@ -14,9 +14,13 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+import { parameterizeConsumerSources } from "./consumer-contract.mjs";
+import { installAfterOfflineReferenceValidation } from "./dependency-boundaries.mjs";
 import { packIframeSdk } from "./pack-iframe-sdk.mjs";
 import { run } from "./process.mjs";
 import { iframeSdkConsumerCache } from "./provision-iframe-sdk-consumer.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { sha512Integrity } from "./release-evidence.mjs";
 import { validateIframeSdkArchive } from "./validate-iframe-sdk-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -81,11 +85,12 @@ export async function assertIframeSdkConsumerFixture(root = fixtureRoot) {
       "src/readonly-declarations.ts",
     ].map((file) => readFile(path.join(root, file), "utf8")),
   );
-  assert(source[0].includes('"@fred/iframe-sdk/protocol"'));
-  assert(source[1].includes('"@fred/iframe-sdk"'));
+  assert(source[0].includes('"@fred-oss/iframe-sdk/protocol"'));
+  assert(source[1].includes('"@fred-oss/iframe-sdk"'));
   assert(source[3].includes("readonly-context-typecheck-only"));
   assert(source[3].includes("readonly-route-typecheck-only"));
-  assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 2);
+  assert.equal((source[3].match(/@ts-expect-error/g) ?? []).length, 3);
+  assert(source[1].includes("onContext"));
   assert(
     !/(?:workspace|file|link):|apps\/frontend|libs\/frontend|\breact\b/i.test(
       `${JSON.stringify(manifest)}\n${source.join("\n")}`,
@@ -98,15 +103,26 @@ export async function stageIsolatedIframeSdkConsumer({
   evidencePath,
   stagedOutputPath,
   cachePath = iframeSdkConsumerCache,
+  contract: selectedContract,
+  archivePath: suppliedArchive,
+  expectedIntegrity,
 } = {}) {
+  const contract = selectedContract ?? (await loadReleaseContract());
   await assertIframeSdkConsumerFixture();
   await stat(path.join(cachePath, "_cacache")).catch(() => {
     throw new Error(
       `iframe SDK consumer cache is missing at ${cachePath}; run npm run consumer:provision:iframe-sdk first`,
     );
   });
-  const { archivePath } = await packIframeSdk();
-  await validateIframeSdkArchive(archivePath);
+  const archivePath =
+    suppliedArchive ?? (await packIframeSdk({ contract })).archivePath;
+  await validateIframeSdkArchive(archivePath, { contract });
+  if (expectedIntegrity)
+    assert.equal(
+      await sha512Integrity(archivePath),
+      expectedIntegrity,
+      "iframe SDK candidate integrity differs",
+    );
   const consumerRoot = await mkdtemp(
     path.join(os.tmpdir(), "fred-iframe-sdk-consumer-"),
   );
@@ -119,11 +135,21 @@ export async function stageIsolatedIframeSdkConsumer({
       recursive: true,
       filter: (source) => !source.includes("node_modules"),
     });
+    await parameterizeConsumerSources(consumerRoot, contract, ["iframeSdk"]);
     const originalLock = await readFile(
       path.join(fixtureRoot, "package-lock.json"),
     );
     const archiveTarget = path.join(consumerRoot, "iframe-sdk.tgz");
     await cp(archivePath, archiveTarget);
+    const candidateEvidence = {
+      packages: {
+        iframeSdk: {
+          coordinate: `${contract.packages.iframeSdk.name}@${contract.packages.iframeSdk.version}`,
+          filename: path.basename(archiveTarget),
+          integrity: await sha512Integrity(archiveTarget),
+        },
+      },
+    };
     const env = offlineEnvironment(cachePath);
     try {
       await run(
@@ -139,21 +165,32 @@ export async function stageIsolatedIframeSdkConsumer({
         ],
         { cwd: consumerRoot, env },
       );
-      await run(
-        "npm",
-        [
-          "ci",
-          "--offline",
-          "--include=dev",
-          "--ignore-scripts",
-          "--no-audit",
-          "--no-fund",
-        ],
-        {
-          cwd: consumerRoot,
-          env,
-        },
-      );
+      await installAfterOfflineReferenceValidation({
+        manifest: JSON.parse(
+          await readFile(path.join(consumerRoot, "package.json"), "utf8"),
+        ),
+        lockfile: JSON.parse(
+          await readFile(path.join(consumerRoot, "package-lock.json"), "utf8"),
+        ),
+        consumerRoot,
+        evidence: candidateEvidence,
+        installDependencies: () =>
+          run(
+            "npm",
+            [
+              "ci",
+              "--offline",
+              "--include=dev",
+              "--ignore-scripts",
+              "--no-audit",
+              "--no-fund",
+            ],
+            {
+              cwd: consumerRoot,
+              env,
+            },
+          ),
+      });
     } catch (error) {
       throw new Error(
         `Offline iframe SDK consumer installation failed using ${cachePath}. Run npm run consumer:provision:iframe-sdk with network access, then retry.\n${error.message}`,
@@ -174,18 +211,21 @@ export async function stageIsolatedIframeSdkConsumer({
       ).stdout,
     );
     assert.equal(
-      graph.dependencies?.["@fred/iframe-sdk"]?.version,
-      "0.0.0-development",
+      graph.dependencies?.[contract.packages.iframeSdk.name]?.version,
+      contract.packages.iframeSdk.version,
     );
     assert(
       !Object.keys(graph.dependencies ?? {}).some(
         (name) =>
           name === "react" ||
-          (name.startsWith("@fred/") && name !== "@fred/iframe-sdk"),
+          (Object.values(contract.packages).some(
+            ({ name: packageName }) => name === packageName,
+          ) &&
+            name !== contract.packages.iframeSdk.name),
       ),
     );
     await assertNoLinks(
-      path.join(consumerRoot, "node_modules/@fred/iframe-sdk"),
+      path.join(consumerRoot, "node_modules", contract.packages.iframeSdk.name),
     );
     const typecheck = await run(
       path.join(consumerRoot, "node_modules/.bin/tsc"),
@@ -253,6 +293,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         keep: process.argv.includes("--keep"),
         evidencePath: optionValue("--evidence"),
         stagedOutputPath: optionValue("--stage"),
+        contract: await loadReleaseContract(optionValue("--contract")),
       }),
       null,
       2,

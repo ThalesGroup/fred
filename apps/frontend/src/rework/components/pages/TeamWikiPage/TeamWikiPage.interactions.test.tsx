@@ -208,10 +208,10 @@ describe("TeamWikiPage — review mark wiring", () => {
     });
   });
 
-  it("marks the wiki as beta in the rail header", async () => {
+  it("keeps the beta badge out of the rail header", async () => {
     mount();
     await settle();
 
-    expect(container.querySelector('[aria-label="rework.wiki.betaBadge.label"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="rework.wiki.betaBadge.label"]')).toBeNull();
   });
 });

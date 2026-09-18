@@ -15,7 +15,7 @@
 import styles from "./Checkbox.module.scss";
 import { ComponentPropsWithRef, useEffect, useRef } from "react";
 
-interface CheckboxProps extends ComponentPropsWithRef<"input"> {
+export interface CheckboxProps extends ComponentPropsWithRef<"input"> {
   /** Neither checked nor unchecked — e.g. a "select all" header checkbox when
    *  only some rows on the page are selected. */
   indeterminate?: boolean;

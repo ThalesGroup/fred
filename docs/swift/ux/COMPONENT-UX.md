@@ -84,7 +84,10 @@ _(none)_
 **Status:** `Functional`
 
 Portaled listbox with virtual focus (DOM focus stays on the trigger,
-`aria-activedescendant` tracks the highlighted option).
+`aria-activedescendant` tracks the highlighted option). Options use a generic
+value type and unique key; `emptyMessage` overrides the default empty wording.
+The menu portals into the nearest consumer-owned `.fred-ui` root when present,
+or retains the legacy FRED body portal.
 
 **Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
 the same token `TextInput` uses, so a `Select` and a text field placed in one
@@ -94,11 +97,38 @@ theme (both resolve to `cold-grey-80`) but dimmer in the dark one
 dark-theme users. `--outline-muted` remains correct for containers and
 dividers; form controls take `--outline-retreat`.
 
-**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+**Naming the trigger.** A visible `label` names it through `aria-labelledby`. Where a
 toolbar has no room for one, pass `ariaLabel` instead — without either, the
 button falls back to its own content and a screen reader announces the current
 value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
 over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `Dialog`, `Chip`, `Tooltip`, and `Checkbox` shared atoms (UI Extension 1)
+
+**Locations:** `src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx`,
+`src/rework/components/shared/atoms/Chip/Chip.tsx`,
+`src/rework/components/shared/atoms/Tooltip/Tooltip.tsx`, and
+`src/rework/components/shared/atoms/Checkbox/Checkbox.tsx`.
+**Status:** `Functional`
+
+The action-oriented Dialog primitive now owns initial focus, Tab containment,
+Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
+wrapper supplying its translated Cancel default; neutral callers supply their
+own labels. Consumer-root portals inherit light/dark theme; the application
+without `.fred-ui` retains its body portal. An open Select gets the first Escape
+inside Dialog, and option selection does not confirm the Dialog.
+
+Removable Chip controls are named `Remove <label>` unless a caller supplies
+`removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
+placement but dismisses on Escape; the panel portals to the themed root where
+available. Checkbox preserves native input props, refs, checked and disabled
+behavior, and exposes indeterminate as a mixed state.
 
 #### Open UX issues
 
@@ -409,6 +439,46 @@ agents) so the decision is informed at the point it is made.
 
 ---
 
+### `AgentTodoPanel`
+
+**Location:** `src/rework/components/shared/molecules/AgentTodoPanel/AgentTodoPanel.tsx`
+**Status:** `Functional`
+
+Conversation-level projection of the latest valid Deep Agent `write_todos` snapshot. The panel is
+mounted by `ManagedChatPage` between the scrollable conversation and the composer, aligned to the
+composer's 720px content lane, so the current plan stays visible while messages scroll. The panel
+extends behind the higher-stacking composer by its corner radius plus one spacing step. Hovering
+`Tasks` highlights only that header; the backing surface never changes colour through the composer.
+
+The compact header shows `Tasks` plus the number of pending or in-progress items. Expanded content
+keeps all three states visible: pending uses an open circle, in-progress uses the primary-colour
+sync indicator, and completed uses a success check with muted struck text. The disclosure defaults
+open while work remains; an explicit choice is stored as one boolean per `session_id`. When no work
+remains, the panel disappears regardless of that preference. Todo text itself is never copied into
+browser storage: live and reloaded content both come from runtime-owned `session_history`.
+
+If the same exchange contains its final answer without an error or failed tool result while the last
+snapshot still marks the active item `in_progress`, the panel presents that item as completed. This
+does not depend on array position because the streaming reducer may reserve the final frame's slot
+before later tool events. Failed turns retain the unfinished status. If no pending item remains after
+successful settlement, the entire panel is removed instead of showing a redundant completed-state
+summary.
+
+The visible panel sits outside the conversation log, so a persistent visually hidden `role=status`
+region announces task contents, accessible statuses, remaining-count changes, and final completion.
+
+Only strict, supported snapshots leave the generic reasoning trace. A valid `write_todos` call and
+its non-failed matching result are represented here instead; malformed or explicitly failed calls
+stay in `ThoughtTrace` so a runtime, dependency, or execution failure remains diagnosable. A failed
+update also leaves the last successful snapshot in the panel. An explicit empty snapshot removes
+the panel. The panel does not read, write, or synchronize a workspace `TODO.md` file.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
@@ -427,6 +497,35 @@ agents) so the decision is informed at the point it is made.
   lowercase with a subtler pill, or icon-only at narrow widths.
 
 #### Resolved
+
+- **Reasoning rows still repeated a rephrased preamble (2026-09-14, #2666)** — the fix below
+  only trimmed sentences identical character for character to the _previous_ block. Models
+  rarely restate verbatim ("L'utilisateur demande…" → "L'utilisateur a demandé…"), so on six
+  local multi-round conversations almost no row was trimmed. `traceRows()` now splits each
+  block into lines and whole sentences and drops the leading run already said in _any_ earlier
+  block of the turn, matched by word overlap (Jaccard ≥ 0.8, case- and accent-insensitive;
+  0.75 confused sentences differing by one noun). Numbers and negation must match exactly —
+  "3 pages left" / "no results" share nearly all their words with what they contradict — and
+  soft-wrapped lines rejoin their paragraph first. A block with nothing new renders
+  `rework.chatTrace.restatedReasoning` instead of its text, unless it is still streaming.
+
+  The lead is not cut at the first unmatched sentence: agents re-listing the user's
+  instructions retouch one item or reword the intro, which shielded the verbatim rest. The
+  lead may carry near repeats (a list item ≥ 60% said, prose with every word said) and an
+  intro (":") that resembles an earlier sentence and opens a list, as long as ≥ 40% of its
+  characters are real repeats — below that it is a recap in new words, kept. It never ends on
+  an intro, and never opens the row mid-list.
+
+  Overlap alone hides a fact in a long sentence: past eight meaningful words, one swapped word
+  ("production" → "staging") stays ≥ 0.8. So a sentence carrying a word the turn has never used
+  is new, and a list item carrying one only drops to a near repeat. Function words (an explicit
+  French/English list, not a length rule, so "EU" or "dev" still count) are ignored, and words
+  match on their first five letters ("résume" / "résumant"). An intro is exempt from that rule
+  unless it is ≥ 0.8 alike an earlier one ("staging deploy:" → "production deploy:"): the
+  rephrased intros of the local sessions share 55–70% of their words and bring words of their
+  own. Replayed on the 75 local blocks, the trim is unchanged. Headings and code blocks are
+  their own blocks (a line never wraps into them), code is compared like a sentence, and a row
+  whose only new part is code previews its first line.
 
 - **Consecutive reasoning rows read as the same row twice (2026-09-04, #2565)** — closes the
   "reasoning preview length" open issue above. Reasoning models restate the task from scratch
@@ -657,6 +756,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
   dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
   `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
+
   - SSE consumption) — a reasonable fast-follow, not required for the current fix since
     `content` already carries enough to render useful citations.
 
@@ -925,6 +1025,33 @@ digit after the name.
 
 ---
 
+### `Switch` sizes and pill shape (2026-09-14)
+
+**Location:** `src/rework/components/shared/atoms/Switch/`
+
+**Status:** `Functional`
+
+The track and handle opt out of the global `corner-shape: superellipse(1.4)`
+with `corner-shape: round`. A switch is a true pill, not a squircle.
+
+`size` is `medium` (default, 32px track) or `small` (24px track). Only the
+track height changes per size. Everything else derives from it, so both sizes
+keep the same proportions:
+
+| Size     | Track | Handle off | Handle on |
+| -------- | ----- | ---------- | --------- |
+| `medium` | 52×32 | 22px       | 24px      |
+| `small`  | 39×24 | 16.5px     | 18px      |
+
+The handle is smaller when off on purpose. At equal size, the handle looks
+smaller on the filled "on" track than on the pale "off" one. It stays centered
+in a square slot at each end of the track, and grows while it slides.
+
+The name `small` is scoped to this component. On the shared scale, 24px is
+`2xs`.
+
+---
+
 ### Package-foundation component corrections (2026-09-09)
 
 **Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
@@ -973,6 +1100,10 @@ library:
   it keeps only its own scroll row and its muted leading icon. (`ContextPromptChips` also used it
   briefly, before context prompts moved to insert-into-input — see the 2026-08-03 prompt-library
   entry below.)
+
+  **Width (2026-09-14):** the chip sizes to its content (`width: fit-content`). In a column flex
+  parent it was stretched to its 18rem cap, leaving the remove button far from the label (the
+  user picked on `/admin/platform-roles`). Rows are unaffected.
 
 - **`IconButton` tonal variant (new)** — adds the M3 _filled tonal_ style (container =
   scheme `container` role, icon = `on-container`, state layer in the `on-container` color;
@@ -1081,6 +1212,45 @@ never that same surface token — painting it makes hover disappear.
 A new chat panel should mount `ChatSidePanel`, not `InlineDrawer` directly, and
 take a `kind` in `ManagedChatPage`'s `activePushDrawer` union so it shares the
 single push-drawer slot.
+
+---
+
+### `FullReasoningPanel` (2026-09-14, #2672)
+
+**Location:** `src/rework/components/shared/molecules/FullReasoningPanel/`
+
+**Status:** `Functional`
+
+Expert view of the agent's whole reasoning across the conversation, in one
+block. The chain of thought stays the condensed view: each `ReasoningRow` is
+clamped to three lines and trimmed of what earlier rows said. This panel is the
+opposite, every reasoning block (`thought`, `plan`, `observation`) untrimmed and
+markdown-rendered, grouped by turn under the user's question, with the block's
+duration. The tools run _between_ two blocks collapse into one marker (`build`
+glyph, humanized labels): they are why the reasoning resumed. Tools before the
+first block or after the last are left out. Each part has its own look so they
+tell apart at a glance: a block sits in a `surface-main` container (`--radius-s`),
+the tool marker is `primary` text, and the user's message is a
+`secondary-container` / `on-secondary-container` container (`--radius-m`). The header's copy action
+exports the same content as markdown (`## question`, blocks, `_→ tools_`).
+
+**Launcher.** At the rail's foot (expert tooling), above the admin-only raw
+message dump, with the glyph a reasoning row carries (`settings`, **filled**:
+`ChatLauncher.iconFilled`) and the rail's usual tooltip. **Every user** gets
+it, not only admins: each block is already readable one at a time in
+`TraceDetailDrawer`, so restricting the panel would protect nothing.
+
+**Hide restatements.** A switch pinned above the turns (off by default) trims
+each block the way the chain of thought does (`traceRows`, same detection), but
+keeps its markdown: `TraceRow.reasoningMarkdown` cuts the original text at the
+dropped paragraph or item, so the lists and code after the cut still render.
+Only the rest of a paragraph cut mid-way comes back flattened. A block with
+nothing new shows `rework.chatTrace.restatedReasoning`. Copy follows the switch.
+
+**Streaming.** `fullReasoning()` runs only while the panel is open, since
+`messages` changes on every token. Each block is a memoized component, so a
+token re-renders the block it lands in, not the markdown of the whole
+conversation.
 
 ---
 
@@ -1298,6 +1468,19 @@ inline popover into a full-height right-side push panel (#2259).
 
 **Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`
 **Status:** `Functional`
+
+Opening a conversation puts the cursor in the composer (2026-09-11). That used
+to fall out of the field being RE-ENABLED after a history load, so it happened
+only when a load actually ran — a conversation served from the session cache
+silently got none, and which conversations those are is arbitrary. The page asks
+for it outright on every conversation change; a field still disabled by a
+loading history takes it on re-enable.
+
+Loading a conversation shows a centred `Spinner` in the lane (2026-09-11),
+replacing the italic pulsing line of text. What drives it is not "a fetch is in
+flight" but "this conversation has not answered yet" — `isLoadingHistory` is
+false BEFORE a load starts and stays false on a cache hit, so reading it left a
+gap in which the page believed the conversation was empty.
 
 #### Open UX issues
 
@@ -2286,6 +2469,7 @@ generic `Dialog` primitive exists yet):
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
+
   - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
     (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
     selector (see below, `8px` gap between its own chips), and a
@@ -2369,6 +2553,16 @@ control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 `spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
+
+**`TeamRoleChips`: pending admin nomination** (2026-09-15, #2658). A member
+holding `pending_team_admin` keeps the short "Admin" label on the admin chip,
+marked by `data-pending`: light orange `warning-container` /
+`on-warning-container` with a transparent border and a `schedule` clock icon,
+whatever the reader may administer. "Admin (pending)" moved to the tooltip and
+the accessible name: the longer label wrapped every pending row onto two lines.
+Toggling the chip cancels the nomination. In `TeamSettingsMembersTable` the role
+column is a fixed `23rem`, sized to that widest row, so the chips always fit on
+one line and the identifier/name columns truncate instead.
 
 **`TeamRoleChips`: a static `Member` badge and a description tooltip on
 every badge** (2026-08-17, #2383). Two complaints from team admins, one
@@ -2581,7 +2775,7 @@ _(none — design approved at implementation)_
 
 Complete create / edit modal for managed agent instances, organized as a clean sub-component tree:
 
-- `AgentFormModal.tsx` — modal shell + `FormState` ownership; no field rendering
+- `AgentFormModal.tsx` — `FormState` ownership; no field rendering. The shell itself is `shared/organisms/SettingsModal/` (see below)
 - `AgentFormBody.tsx` — controlled form body; 4-tab layout, create or edit
 - `TemplateBrowser/` — responsive card grid for template selection
 - `TemplateCard/` — single selectable card with category label, name, clamped description
@@ -2596,7 +2790,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
 
-Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop `--surface-container`, form card `--surface-main`, no drop shadow — scoped to this modal only via `FullPageModal`'s new `background` prop (other `FullPageModal` consumers unchanged).
+Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back button; merged the team name and selected template name into one subtitle line (`"Équipe : <team> · Template : <template>"`, i18n'd — template segment omitted until a template is picked, or in edit mode if the original template is missing); dropped the in-body context bar (template name + category pill). Page backdrop `--surface-container`, form card `--surface-main`, no drop shadow — carried by `SettingsModal` through `FullPageModal`'s `background` prop, and shared since 2026-09-14 with the Knowledge Base settings panel (other `FullPageModal` consumers unchanged).
 
 #### Open UX issues
 
@@ -2616,6 +2810,40 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
 - **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
+
+---
+
+### `SettingsModal`
+
+**Location:** `src/rework/components/shared/organisms/SettingsModal/`
+**Status:** `Functional`
+
+The shell every full-page settings or creation form renders in: `FullPageModal`
+(`background="container"`) wrapping one `--surface-main` card — header with
+title, optional subtitle and a right-aligned `actions` block, the form as
+children, an optional left-aligned `footer` below a rule. Extracted from
+`AgentFormModal` on 2026-09-14 so the Knowledge Base settings panel is the same
+object on screen rather than a copy of it.
+
+**Not for a couple of questions** — that is `molecules/Dialog`, the app's
+central centred dialog (scrim, Escape/Enter/click-outside, `maxWidth`).
+`KnowledgeBaseFormModal` uses both in sequence: `Dialog` asks for a name and a
+source, and choosing a source turns the panel into this page, which renders
+what that source declared.
+
+Takes focus onto the card itself when opening leaves focus on `document.body` —
+a panel whose fields are all disabled (the read-only Knowledge Base view)
+autofocuses nothing otherwise, stranding a keyboard user behind an
+`aria-modal` overlay. A form with its own autofocused first field keeps it.
+
+#### Open UX issues
+
+- **No height cap** — the card grows with its content and the page scrolls it,
+  so a very tall form scrolls its header (and its Cancel/Save) off the top.
+  Inherited from `AgentFormModal`, which has always behaved this way.
+- **`ManageCategoriesDialog` is a third copy** — it hand-rolls a centred
+  card/header/footer at `min(32rem, …)` over `FullPageModal`, which is what
+  `molecules/Dialog` already is. It belongs there, not here.
 
 ---
 
@@ -2683,10 +2911,10 @@ now share one consistent header pattern instead of diverging per page:
 
 | Page                                                   | Slots used                                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
 | `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
-| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh)                                           |
+| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
 | `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
@@ -2695,6 +2923,14 @@ now share one consistent header pattern instead of diverging per page:
 | `TeamSettingsMembers`                                  | title, actions (search + `LeaveTeamButton` + Add members)                                |
 | `TeamSettingsParameters`                               | title only (new)                                                                         |
 | `TeamSettingsRouting`                                  | title only (new)                                                                         |
+
+`sticky` (2026-09-14) pins the header to the top of the scrolling `<main>` so the two usage
+dashboards keep their time range reachable next to the charts far down the page. It bleeds over
+the page's `--spacing-xl` gutter to hide what scrolls under it, so it only fits pages with that
+gutter. The `TimeRangeSelector` in those headers steps the range back/forward with ‹ › (calendar
+presets by a whole day/week/month, rolling and custom ranges by their length, weeks starting
+Monday) and ends its dropdown with a month timeline: current month on the right, older months
+loaded as you scroll left, each year labelled once above its months.
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
 variant="radio"` (a mutually-exclusive filter), not `variant="tabs"` (a content-switcher) —
@@ -2800,7 +3036,7 @@ _(none yet)_
 **Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
 **Status:** `Functional`
 
-Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; availability that is not yet known stays hidden. An enabled definition is sufficient even before an instance is created. Navigation follows definition enablement even when older instances remain; this does not delete them or change their API access. Availability refreshes every 60 seconds and on window focus, in addition to same-session admin cache invalidation; a failed refresh keeps the last known answer rather than making the entry flap. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
 #### Open UX issues
 
@@ -3155,6 +3391,13 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
 
 - **Hierarchy debt** (2026-05-24) — moved from `shared/organisms/` to `pages/ManagedChatPage/ConversationThread/`. Organism→organism imports eliminated. `ThreadMessage` extracted to `@rework/types/thread`.
 - **Empty state** (2026-05-24) — `ChatMessagesArea` renders `t("chatbot.startConversationHint")` when `!isLoading && isEmpty`. EN + FR translations present.
+- **Welcome stage flashed on the way into a conversation (2026-09-11)** — entering an existing
+  conversation showed the "start a new conversation" stage for the moment between the click and
+  the messages landing. Emptiness alone does not mean empty: the page now waits for the history to
+  answer (`isHistorySettled`) before claiming a conversation has nothing, and shows the loading
+  state until then. A chat with no session id is settled on the spot — it has no history to
+  resolve, and making it wait would put a spinner in front of the one screen that is empty by
+  nature.
 
 ---
 
@@ -3338,14 +3581,69 @@ a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
-Mounted by `CapabilitySidePanelHost` when the capability is active.
+Restored behind the conversation (2026-09-11): the chat page holds a panel-open
+request until the thread has something on screen (messages rendered, or history
+settled with none), then applies it. Mounting the editor is one long synchronous
+task, and landing it on a still-loading thread delays the messages — which is
+what the user opened the conversation for. The request is held, not dropped, so
+it applies the moment the thread is there. Leaving the conversation drops it,
+and so does opening another push drawer while it waits — the hold opens a window
+in which the user can act, and it must yield to them rather than land on top of
+what they chose a second later. A request made mid-conversation (an agent
+writing a document) is long past that point and stays immediate. Code-splitting alone did not achieve this: it only
+delayed the editor on the FIRST page load, and click-navigation — which does not
+remount the page — found the chunk already in memory.
 
-Auto-open (2026-07-22): opening a conversation that already holds a document
-opens the editor pane immediately (`WritableDocumentAutoOpenProbe`, a headless
-`sessionProbes` plugin entry evaluated once per conversation-open against the
-authoritative list API). Live writes mid-conversation keep their existing pop
-via the card renderer; a list refresh never re-opens a pane the user closed.
-writable_document only — the PPT preview declares no probe.
+The drawer animates before the pane mounts (2026-09-11): `CapabilitySidePanelHost`
+opens the drawer empty and mounts the panel once the slide has landed
+(`--duration-medium-1`), mirroring the lag it already had on the way down. A
+pane's first render can be a long synchronous task — this editor parses the
+whole document at mount — and anything synchronous during the slide stops it
+dead, so a large document made the drawer snap open instead of animating.
+Swapping between two panels while the drawer is already open is immediate:
+nothing is sliding. A loading placeholder fills the drawer for the whole wait —
+the slide, and the chunk fetch when there is one. The `Suspense` fallback alone
+would not do: a code-split pane suspends only on the first open of a page load,
+so every later open showed an empty drawer. The drawer's chrome (title band,
+inset) is dressed from the panel it is opening onto, not from the one mounted,
+or it flips mid-slide.
+
+Mounted by `CapabilitySidePanelHost` when the capability is active, through a
+`Suspense` boundary: the pane is code-split (2026-09-11) because MDXEditor pulls
+the whole lexical graph, and a static import put ~600 kB of it in the chunk every
+eagerly-routed page loads — the chat included, whether or not a document exists.
+`TeamWikiPage` splits `WikiEditor` for the same reason (it only renders in edit
+mode); both paths have to stay lazy or lexical returns to the shared chunk.
+
+Resume-if-left-open (2026-07-22, default inverted and generalised 2026-09-11):
+re-opening a conversation restores the editor pane only where the user had it
+open, and only once `useHasContent` confirms there is still something to show.
+**Closed is the default** — holding a document is not reason enough to push the
+editor in front of someone reading the thread; the launcher rail offers it.
+Live writes mid-conversation keep their existing pop via the card renderer.
+
+Nothing here is specific to this capability any more: `CapabilitySidePanelHost`
+restores **every** declared panel the same way, so the HTML artifact viewer and
+the PPT preview resume too. The `sessionProbes` plugin contract this used to
+need is gone — it had exactly one implementation, and its two jobs were already
+expressible: "has this conversation got content" is `useHasContent` (which the
+launcher rail already asks), and "was it left open" is the record below. The
+probe's once-per-conversation guard went with it: closing clears the record, so
+the record is the guard.
+
+What "left open" means is recorded per conversation and per browser
+(`capabilityPanelMemory.ts`, bounded localStorage, the same class of UI
+preference as the persisted drawer width). The chat page derives it from the
+push-drawer state rather than recording at each of the dozen call sites that
+change it, so every route to the same outcome agrees: the launcher, the pane's
+✕, a capability's own `requestSidePanelOpen`, a switch to another capability
+panel, and opening the attachments drawer over the editor all land correctly,
+and only one panel is ever remembered because only one drawer is ever open. The
+page's own close on a conversation switch is excluded — it lands while the state
+still describes the conversation being left, and must touch neither side's
+record. With no record — a new machine, cleared storage, blocked storage — the
+answer is the default, closed. Capability-agnostic by construction: every
+declared panel is restored from the same record.
 
 Double close removed (2026-07-22): the pane (and `PptPreviewPane`) shipped its
 own header close button — a Kea-port leftover from `ResizablePaneShell`, which
@@ -4123,7 +4421,10 @@ root card above the table was tried on 2026-08-21 and removed the same day
   segmented choice (observer/admin). The admin option renders **disabled**
   (not hidden) for non-root callers, with a persistent hint line explaining
   the root-only rule — the restriction stays discoverable instead of the
-  option silently missing.
+  option silently missing. **Several users (2026-09-14):** the picker keeps a
+  wrapping row of removable `Chip`s, and one submit grants the chosen role to
+  each of them (one call per user, settled together). Users whose grant failed
+  stay picked and are named in the error toast; the others get one success toast.
 - All affordances are display-only mirrors; every action is re-checked
   server-side (403/404/409 mapped to toasts via `useApiErrorToast`).
 

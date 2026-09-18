@@ -50,11 +50,11 @@ test("constructs fixed fixture paths from three distinct dynamic loopback ports"
   });
   assert.equal(
     fixtureOrigins.applicationFixtureUrl(origins).href,
-    "http://127.0.0.1:41002/child.html?hostOrigin=http%3A%2F%2F127.0.0.1%3A41001",
+    "http://127.0.0.1:41002/child.html?hostOrigin=http%3A%2F%2F127.0.0.1%3A41001&theme=dark&locale=fr",
   );
   assert.equal(
     fixtureOrigins.applicationFixtureUrl(origins, 100).href,
-    "http://127.0.0.1:41002/child.html?hostOrigin=http%3A%2F%2F127.0.0.1%3A41001&connectionTimeoutMs=100",
+    "http://127.0.0.1:41002/child.html?hostOrigin=http%3A%2F%2F127.0.0.1%3A41001&theme=dark&locale=fr&connectionTimeoutMs=100",
   );
   assert.equal(
     fixtureOrigins.attackerFixtureUrl(origins).href,

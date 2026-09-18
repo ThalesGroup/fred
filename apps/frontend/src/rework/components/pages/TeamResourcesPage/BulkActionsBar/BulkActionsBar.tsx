@@ -19,7 +19,10 @@ import styles from "./BulkActionsBar.module.css";
 
 interface BulkActionsBarProps {
   selectedCount: number;
-  onDelete: () => void;
+  /** Omit to hide the action, like `onDownload` — a workspace rooted at a
+   *  machine-filled library offers reading only, and the backend refuses a
+   *  person's delete there anyway. */
+  onDelete?: () => void;
   /** Clears the current row selection — swaps this whole bar back out for
    *  the create-folder/add-file toolbar. */
   onClearSelection: () => void;
@@ -101,17 +104,19 @@ export default function BulkActionsBar({
           />
         </Tooltip>
       )}
-      <Tooltip text={t("rework.resources.bulkActions.delete")}>
-        <IconButton
-          color="error"
-          variant="outlined"
-          size="small"
-          icon={{ category: "outlined", type: "delete" }}
-          aria-label={t("rework.resources.bulkActions.delete")}
-          loading={deleteLoading}
-          onClick={onDelete}
-        />
-      </Tooltip>
+      {onDelete && (
+        <Tooltip text={t("rework.resources.bulkActions.delete")}>
+          <IconButton
+            color="error"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "delete" }}
+            aria-label={t("rework.resources.bulkActions.delete")}
+            loading={deleteLoading}
+            onClick={onDelete}
+          />
+        </Tooltip>
+      )}
       <Tooltip text={t("rework.resources.bulkActions.clearSelection")}>
         <IconButton
           variant="icon"

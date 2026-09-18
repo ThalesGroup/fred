@@ -3,8 +3,8 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const outputRoot = path.resolve("dist");
-const tokensUrl = import.meta.resolve("@fred/design-tokens/tokens.css");
-const fontsUrl = import.meta.resolve("@fred/design-tokens/fonts.css");
+const tokensUrl = import.meta.resolve("@fred-oss/design-tokens/tokens.css");
+const fontsUrl = import.meta.resolve("@fred-oss/design-tokens/fonts.css");
 const tokensPath = fileURLToPath(tokensUrl);
 const fontsPath = fileURLToPath(fontsUrl);
 const tokensCss = await readFile(tokensPath, "utf8");

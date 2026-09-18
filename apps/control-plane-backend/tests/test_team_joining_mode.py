@@ -89,6 +89,8 @@ def _deps(rebac: object, store: _FakeMetadataStore):
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
     config = MagicMock()
+
+    config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
     config.app.default_team_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
@@ -96,6 +98,8 @@ def _deps(rebac: object, store: _FakeMetadataStore):
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, lambda: store),
+        get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),

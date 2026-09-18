@@ -37,6 +37,8 @@ export interface ChatLauncher {
   key: string;
   label: string;
   icon: IconType;
+  /** Renders the icon filled rather than outlined. */
+  iconFilled?: boolean;
   /** Rendered as an M3 badge on the button; nothing shows below 1. */
   badgeCount?: number;
   /** Reads as selected while its panel is the one showing. */
@@ -70,6 +72,7 @@ const launcherLabelOf = (t: TFunction, entry: SidePanelEntry): string =>
 function RailButton({
   label,
   icon,
+  iconFilled,
   badgeCount,
   selected = false,
   onOpen,
@@ -81,7 +84,7 @@ function RailButton({
         // tonal variant, so the rail says which viewer is showing.
         variant={selected ? "tonal" : "icon"}
         size="small"
-        icon={{ category: "outlined", type: icon }}
+        icon={{ category: "outlined", type: icon, filled: iconFilled }}
         aria-label={label}
         aria-pressed={selected}
         badgeCount={badgeCount}
@@ -134,6 +137,7 @@ export function ChatLauncherRail({
           key={launcher.key}
           label={launcher.label}
           icon={launcher.icon}
+          iconFilled={launcher.iconFilled}
           badgeCount={launcher.badgeCount}
           selected={launcher.selected}
           onOpen={launcher.onOpen}
@@ -157,6 +161,7 @@ export function ChatLauncherRail({
               key={launcher.key}
               label={launcher.label}
               icon={launcher.icon}
+              iconFilled={launcher.iconFilled}
               badgeCount={launcher.badgeCount}
               selected={launcher.selected}
               onOpen={launcher.onOpen}

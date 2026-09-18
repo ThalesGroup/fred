@@ -262,7 +262,35 @@
 
 /* ── Composer footer — in-flow, keeps its intrinsic height ─────────────── */
 .inputOverlay {
+  position: relative;
   flex-shrink: 0;
+  z-index: 2;
+}
+
+.todoPanelSlot {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 1;
+  margin-bottom: calc(0px - var(--radius-m) - var(--spacing-s));
+  padding: var(--spacing-xs) var(--spacing-l) 0;
+}
+
+.todoPanelSlot > * {
+  margin: 0 auto;
+  width: 100%;
+  max-width: var(--composer-max-width);
+}
+
+.todoStatusAnnouncement {
+  position: absolute;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip: rect(0 0 0 0);
 }
 
 .aiDisclaimer {

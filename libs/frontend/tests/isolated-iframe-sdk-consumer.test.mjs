@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -15,8 +15,14 @@ test("the iframe SDK consumer is neutral and lockfile-pinned", async () => {
 
 test("the actual iframe SDK archive installs and builds outside FRED", async () => {
   const evidence = await stageIsolatedIframeSdkConsumer();
+  const sdkManifest = JSON.parse(
+    await readFile(
+      new URL("../iframe-sdk/package.json", import.meta.url),
+      "utf8",
+    ),
+  );
   assert.deepEqual(evidence.dependencyGraph, {
-    "@fred/iframe-sdk": "0.0.0-development",
+    [sdkManifest.name]: sdkManifest.version,
     typescript: "5.9.3",
     vite: "6.4.3",
   });

@@ -420,6 +420,13 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "fullReasoning": {
+      "title": "Full reasoning",
+      "copy": "Copy the full reasoning",
+      "copied": "Copied",
+      "empty": "The agent has not reasoned in this conversation yet.",
+      "hideRestatements": "Hide restatements"
+    },
     "debugRaw": {
       "title": "Debug — raw messages",
       "scopeAria": "Message scope",
@@ -1111,12 +1118,13 @@
         "loading": "Loading features…",
         "loadError": "Could not load the feature catalog.",
         "empty": "No features are advertised by any runtime pod yet.",
-        "manageTeams": "Manage teams",
+        "manageTeams": "Manage by team",
         "kindFilter": {
           "tool": "Capabilities",
           "agent": "Agents",
           "model": "Models",
           "app": "Apps",
+          "knowledge_base": "Knowledge Bases",
           "aria": "Filter by feature kind"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
@@ -1149,7 +1157,7 @@
         },
         "suspendedDrawer": {
           "title": "{{name}} — suspended agents",
-          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage teams to revive them.",
+          "subtitle": "Agents this feature breaks right now, grouped by team. Restore each team's access from Manage by team to revive them.",
           "teamCount": "{{count}} agent(s)"
         },
         "defaultOnToast": "Default-on enabled platform-wide.",
@@ -1157,8 +1165,6 @@
         "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
         "defaultToggleError": "Could not change the default-on setting.",
         "defaultOffConfirm": {
-          "title": "Disable default-on?",
-          "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
           "appTitle": "Disable application by default?",
           "appMessage": "Turning off default-on removes inherited application access from every team. Explicit team grants remain unchanged.",
           "confirm": "Disable",
@@ -1168,7 +1174,11 @@
           "impactUnknown": "{{count}} agent(s) could not be checked — their pod was unreachable, so the impact is unknown.",
           "showAffected": "Show affected agents",
           "hideAffected": "Hide affected agents",
-          "affectedAgent": "{{name}} (team {{team}})"
+          "affectedAgent": "{{name}} (team {{team}})",
+          "genericTitle": "Disable default-on?",
+          "genericMessage": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this feature.",
+          "knowledgeBaseTitle": "Disable Knowledge Base by default?",
+          "knowledgeBaseMessage": "Turning off default-on removes inherited Knowledge Base access from every team. Explicit team grants remain unchanged."
         },
         "matrix": {
           "title": "{{name}} — team access",
@@ -1227,7 +1237,8 @@
           "depFailed": "Could not enable {{dep}} — {{agent}} was left unchanged.",
           "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
-        }
+        },
+        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
       },
       "platformModelBindings": {
         "openButton": "Platform model binding",
@@ -1426,11 +1437,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
-        "last15m": "Last 15 minutes",
-        "last1h": "Last 1 hour",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
-        "last6h": "Last 6 hours",
         "last7d": "Last 7 days",
         "thisMonth": "This month",
         "thisWeek": "This week",
@@ -1474,6 +1482,9 @@
       },
       "timeRange": {
         "apply": "Apply",
+        "months": "Months",
+        "next": "Next period",
+        "previous": "Previous period",
         "since": "From",
         "until": "To"
       },
@@ -1527,6 +1538,18 @@
         }
       }
     },
+    "agentTodoPanel": {
+      "announcementComplete": "Task plan complete",
+      "ariaLabel": "Agent task plan",
+      "remaining_one": "{{count}} remaining",
+      "remaining_other": "{{count}} remaining",
+      "status": {
+        "completed": "Completed",
+        "in_progress": "In progress",
+        "pending": "Pending"
+      },
+      "title": "Tasks"
+    },
     "back": "Back",
     "bootstrap": {
       "continue": "Continue",
@@ -1554,6 +1577,7 @@
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
+      "restatedReasoning": "Restates the earlier reasoning",
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
       "running": "running…",
@@ -2088,7 +2112,8 @@
         "menu": {
           "apps": "Apps",
           "resources": "Resources",
-          "wiki": "Wiki"
+          "wiki": "Wiki",
+          "knowledgeBases": "Knowledge Bases"
         },
         "teamLabel": "Team",
         "userTeam": "Personal space"
@@ -2114,6 +2139,17 @@
         "title": "Authorization self-test",
         "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
         "runSelf": "Run for myself",
+        "expiry": {
+          "title": "Credential renewal self-test",
+          "run": "Run credential expiry",
+          "warning": {
+            "title": "Keep this page open until the check finishes",
+            "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "confirm": "Start and keep the page open"
+          },
+          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
+        },
         "testProfile": {
           "title": "Test another profile",
           "usernameLabel": "Account",
@@ -2260,15 +2296,16 @@
       },
       "grant": {
         "title": "Grant a role",
-        "userLabel": "User",
-        "userPlaceholder": "Search for a user",
-        "clearSelection": "Clear selected user",
+        "userLabel": "Users",
+        "userPlaceholder": "Search and add users",
+        "removeUser": "Remove {{user}}",
         "roleLabel": "Role",
         "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
         "submit": "Grant role",
-        "successSummary": "{{role}} granted to {{user}}",
+        "successSummary_one": "{{role}} granted to {{user}}",
+        "successSummary_other": "{{role}} granted to {{count}} users",
         "errors": {
-          "summary": "Could not grant the role",
+          "summary": "Could not grant the role to {{users}}",
           "fallbackDetail": "An unexpected error occurred while granting the role.",
           "forbiddenDetail": "Only the primary admin can manage platform admins.",
           "conflictDetail": "Root bootstrap has never run on this platform."
@@ -2294,6 +2331,19 @@
           "admins": "Admin(s)"
         }
       },
+      "defaultTeam": {
+        "title": "Default teams for new users",
+        "description": "Every new user joins these teams as a member when they accept the terms of use for the first time. Users who already accepted are not affected.",
+        "gcuDisabled": "Terms of use are not enabled on this deployment, so no user will join these teams automatically.",
+        "none": "No default team.",
+        "searchPlaceholder": "Add a team by name",
+        "remove": "Remove {{name}}",
+        "savedSummary": "Default teams updated",
+        "errors": {
+          "summary": "Failed to update the default teams",
+          "fallbackDetail": "Could not update the default teams. Please try again."
+        }
+      },
       "createTeam": {
         "title": "Create team",
         "nameLabel": "Team name",
@@ -2317,11 +2367,13 @@
     },
     "teamRoles": {
       "team_admin": "Admin",
+      "pending_team_admin": "Admin (pending)",
       "team_editor": "Editor",
       "team_analyst": "Analyst",
       "team_member": "Member",
       "descriptions": {
         "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "pending_team_admin": "Nominated admin who has not accepted the team administrator charter yet: a member until they accept it.",
         "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
         "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
         "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
@@ -2329,6 +2381,12 @@
       "warnings": {
         "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
       }
+    },
+    "teamAdminCharter": {
+      "accept": "Accept",
+      "acceptedOn": "Accepted on {{date}}",
+      "pendingNotice": "Accept the team administrator charter to turn on your admin rights on this team.",
+      "review": "Read the charter"
     },
     "teamSettings": {
       "members": {
@@ -2378,6 +2436,7 @@
         "activity": "Activity",
         "evaluations": "Evaluations",
         "usage": "Usage",
+        "responsibilities": "Responsibilities",
         "routing": "Model routing",
         "retention": "Retention"
       },
@@ -2719,6 +2778,10 @@
           "inherited": "This instance follows its template's default tools — no per-instance override.",
           "none": "No tools enabled on this instance."
         },
+        "modelOverride": {
+          "label": "Model override (optional)",
+          "placeholder": "Use the team's default model"
+        },
         "agent": {
           "label": "Agent ID",
           "placeholder": "agent-..."
@@ -2802,7 +2865,8 @@
           "metrics": "Metrics",
           "customMetrics": "Custom metrics",
           "profile": "Profile",
-          "profileAuto": "Automatic"
+          "profileAuto": "Automatic",
+          "modelOverride": "Model override"
         }
       },
       "detail": {
@@ -2846,6 +2910,7 @@
           "author": "Author",
           "profile": "Structural-check profile",
           "judge": "Judge",
+          "modelOverride": "Model override",
           "team": "Evaluation ID",
           "created": "Created",
           "started": "Started",
@@ -2868,6 +2933,7 @@
         "downloading": "Preparing…",
         "downloadError": "Download failed",
         "latency": "Latency",
+        "actualModel": "Actual model",
         "input": "Input",
         "expected": "Expected output",
         "actual": "Actual output",
@@ -3195,6 +3261,78 @@
       "copied": "Prompt copied to the clipboard",
       "copyFailed": "Could not copy the prompt",
       "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
+    },
+    "knowledgeBases": {
+      "title": "Knowledge Bases",
+      "loading": "Loading the knowledge bases…",
+      "empty": "No knowledge base yet",
+      "deleted": "{{name}} deleted",
+      "deleteFailed": "Could not delete {{name}}",
+      "unavailable": {
+        "title": "Knowledge bases unavailable",
+        "description": "The list could not be loaded. Try again in a moment."
+      },
+      "cadence": {
+        "hourly": "Every hour",
+        "daily": "Every day",
+        "weekly": "Every week"
+      },
+      "card": {
+        "open": "Documents",
+        "delete": "Delete",
+        "suspended": "Synchronization suspended",
+        "tooltip": {
+          "label": "Knowledge base details",
+          "kind": "Kind",
+          "cadence": "Runs",
+          "created": "Created"
+        },
+        "edit": "Edit",
+        "noDescription": "No description"
+      },
+      "deleteDialog": {
+        "title": "Delete this knowledge base?",
+        "message": "{{name}} and every document it holds will be deleted. This cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "documents": {
+        "back": "Knowledge bases",
+        "empty": "This knowledge base holds no document yet",
+        "loadFailed": "Could not load the documents",
+        "unavailable": {
+          "title": "Knowledge base not found",
+          "description": "It may have been deleted, or belong to another team."
+        }
+      },
+      "create": "Add knowledge base",
+      "form": {
+        "title": "New knowledge base",
+        "name": "Name",
+        "namePlaceholder": "e.g. Team handbook",
+        "synchronizedBy": "Synchronized by",
+        "pickOne": "Choose a source",
+        "noDefinitions": "No knowledge base is enabled for this team",
+        "definitionsLoading": "Loading…",
+        "definitionsFailed": "Could not load the list",
+        "zoneFred": "How often it runs",
+        "zoneSource": "Where its documents come from",
+        "submit": "Create",
+        "created": "{{name}} created",
+        "createFailed": "Could not create {{name}}",
+        "titleEdit": "Edit {{name}}",
+        "subtitleReadOnly": "Its settings are read-only for now."
+      }
+    },
+    "schedule": {
+      "label": "Runs every",
+      "every": "Number",
+      "unit": {
+        "label": "Unit",
+        "minutes": "minutes",
+        "hours": "hours",
+        "days": "days"
+      }
     }
   },
   "runtime": {

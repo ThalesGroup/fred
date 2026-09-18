@@ -1,0 +1,31 @@
+{
+  "$schema": "./release-contract.schema.json",
+  "schemaVersion": 2,
+  "state": "maintainer-confirmed",
+  "registry": "https://registry.npmjs.org/",
+  "distTag": "next",
+  "sourceBranch": "swift",
+  "workflowFilename": "Publish-frontend-packages.yml",
+  "publishingEnvironment": "npm-publish",
+  "approvedBaselineDigest": "2cde70b055c308e69f371c5fe96c62a606c71bd5f8465a9f53b33be80348b263",
+  "releaseToolchain": { "node": "24.21.0", "npm": "11.19.0" },
+  "applicationToolchain": { "node": "22.13.0", "npm": "10.9.2" },
+  "maintainerApproval": {
+    "scopeOwner": "fred-oss",
+    "owners": {
+      "packageApi": "marc.fawaz",
+      "sdkProtocol": "marc.fawaz",
+      "release": "marc.fawaz",
+      "npmPublishing": "marc.fawaz"
+    },
+    "bootstrapIdentity": "marc.fawaz",
+    "bootstrapAuthorityVerified": true,
+    "registryAccess": "public",
+    "publishingPolicy": "direct"
+  },
+  "expectedProvenance": {
+    "repository": "https://github.com/ThalesGroup/fred",
+    "workflow": "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+    "certificateIssuer": "https://token.actions.githubusercontent.com"
+  }
+}

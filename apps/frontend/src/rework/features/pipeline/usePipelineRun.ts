@@ -17,7 +17,6 @@ import {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
-  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
@@ -57,7 +56,6 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
-  const [listInstances] = useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery();
   const [listTemplates] = useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery();
   const [enrollInstance] = usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
   const [deleteInstance] =
@@ -102,22 +100,16 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
         const taskId = await uploadDocument(libraryId, file);
         await awaitIngestion(taskId, signal);
       },
-      provisionAgentInstance: async (sourceAgentId, tuningFieldValues) => {
+      provisionAgentInstance: async (sourceAgentId, tuningFieldValues, signal) => {
+        signal?.throwIfAborted();
         // 1. Find the template (composite template_id) for this agent definition.
         //    include_non_public so the internal self-test agent is discoverable
         //    even though it's hidden from the create-agent catalog.
         const templates = await listTemplates({ teamId, includeNonPublic: true }).unwrap();
+        signal?.throwIfAborted();
         const template = templates.find((t) => t.source_agent_id === sourceAgentId && t.status !== "unavailable");
         if (!template) return null;
-        // 2. Reconcile: delete any leftover instances of this internal template
-        //    (all of which are harness-created) so we always enroll fresh and
-        //    delete exactly what we created.
-        const instances = await listInstances({ teamId }).unwrap();
-        for (const stale of instances.filter((i) => i.template_id === template.template_id)) {
-          await deleteInstance({ teamId, agentInstanceId: stale.agent_instance_id }).unwrap();
-        }
-        // 3. Enroll a fresh instance, with the optional initial tuning (e.g. the
-        //    system-prompt marker for the tuning-prompt journey).
+        // Each run owns its new instance; concurrent runs keep theirs.
         const created = await enrollInstance({
           teamId,
           createAgentInstanceRequest: {
@@ -127,6 +119,7 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
             ...(tuningFieldValues ? { tuning_field_values: tuningFieldValues } : {}),
           },
         }).unwrap();
+        // Return the created id even after cancellation so cleanup can remove it.
         return created.agent_instance_id;
       },
       deleteAgentInstance: async (agentInstanceId) => {
@@ -159,18 +152,35 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
       deleteSession: async (sessionId) => {
         await deleteSessionMutation({ teamId, sessionId }).unwrap();
       },
-      runAgentTurn: async ({ agentInstanceId, question, libraryIds, sessionId }) => {
+      runAgentTurn: async ({
+        agentInstanceId,
+        question,
+        libraryIds,
+        sessionId,
+        bearer,
+        signal,
+        onProgress,
+        onStatus,
+      }) => {
+        signal?.throwIfAborted();
+        // Preparation stays on the session; only the streamed turn honors an
+        // explicit bearer, so a scenario can let that one call expire.
         const prep = await prepareExecution({
           teamId,
           agentInstanceId,
           ...(sessionId ? { sessionId } : {}),
         }).unwrap();
+        signal?.throwIfAborted();
         return streamAgentTurn(prep, {
           agentInstanceId,
           teamId,
           question,
           libraryIds,
           sessionId: sessionId ?? null,
+          bearer,
+          signal,
+          onProgress,
+          onStatus,
         });
       },
     }),
@@ -179,7 +189,6 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
       deleteTag,
       listTags,
       prepareExecution,
-      listInstances,
       listTemplates,
       enrollInstance,
       deleteInstance,

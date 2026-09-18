@@ -106,6 +106,7 @@ from control_plane_backend.teams.schemas import (
 from control_plane_backend.teams.service import (
     create_team,
     invalidate_team_relations_cache,
+    resolve_granted_team_relation,
 )
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import CreateUserRequest
@@ -795,8 +796,9 @@ async def _apply_bundle_user_roles(
         for team_name, relations in _effective_team_relations(entry).items():
             team_id = team_ids_by_name[team_name]
             for relation in relations:
+                granted = await resolve_granted_team_relation(sub, relation, team_deps)
                 await _grant_team_role_via_import(
-                    rebac, sub, relation, team_id, actor_uid=platform_admin.uid
+                    rebac, sub, granted, team_id, actor_uid=platform_admin.uid
                 )
                 report.team_roles_granted += 1
 
@@ -1062,6 +1064,8 @@ async def _run_import_body(
                         source_tag=row.get("source_tag"),
                         date_added_to_kb=_coerce_dt(row.get("date_added_to_kb")),
                         tag_ids=row.get("tag_ids") or [],
+                        source_library_id=row.get("source_library_id"),
+                        source_key=row.get("source_key"),
                         doc=_reset_transported_stages(row.get("doc")),
                     )
                 )

@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
+
 import {
   assertArchiveEntriesSafe,
   assertNoArchiveLinks,
@@ -17,6 +19,11 @@ import {
 } from "./package-inputs.mjs";
 import { inspectModuleReferences } from "./module-references.mjs";
 import { run } from "./process.mjs";
+import {
+  assertExpectedManifest,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -41,6 +48,129 @@ const expectedExports = {
     import: "./dist/protocol.js",
   },
 };
+
+function assertRuntimeContextMethod(content) {
+  const source = ts.createSourceFile(
+    "dist/index.js",
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const exported = source.statements
+    .filter(ts.isExportDeclaration)
+    .flatMap((entry) =>
+      entry.exportClause && ts.isNamedExports(entry.exportClause)
+        ? entry.exportClause.elements
+        : [],
+    )
+    .find((entry) => entry.name.text === "createFredApplicationClient");
+  const factoryName = exported?.propertyName?.text ?? exported?.name.text;
+  const factory = source.statements.find(
+    (entry) =>
+      ts.isFunctionDeclaration(entry) && entry.name?.text === factoryName,
+  );
+  const constructed = factory?.body?.statements.find(
+    ts.isReturnStatement,
+  )?.expression;
+  const className =
+    constructed &&
+    ts.isNewExpression(constructed) &&
+    ts.isIdentifier(constructed.expression)
+      ? constructed.expression.text
+      : undefined;
+  const clientClass = source.statements.find(
+    (entry) => ts.isClassDeclaration(entry) && entry.name?.text === className,
+  );
+  assert(
+    clientClass?.members.some(
+      (member) =>
+        ts.isMethodDeclaration(member) &&
+        ts.isIdentifier(member.name) &&
+        member.name.text === "onContext" &&
+        member.body,
+    ),
+    "iframe SDK runtime must expose onContext on its exported client",
+  );
+}
+
+function declarationInterface(content, fileName, name) {
+  const source = ts.createSourceFile(
+    fileName,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  return source.statements.find(
+    (entry) => ts.isInterfaceDeclaration(entry) && entry.name.text === name,
+  );
+}
+
+function assertContextDeclaration(content) {
+  const declaration = declarationInterface(
+    content,
+    "dist/types/src/index.d.ts",
+    "FredApplicationClient",
+  );
+  const method = declaration?.members.find(
+    (member) =>
+      ts.isMethodSignature(member) &&
+      ts.isIdentifier(member.name) &&
+      member.name.text === "onContext",
+  );
+  const listener = method?.parameters[0]?.type;
+  const context =
+    listener && ts.isFunctionTypeNode(listener)
+      ? listener.parameters[0]?.type
+      : undefined;
+  assert(
+    method?.parameters.length === 1 &&
+      listener &&
+      ts.isFunctionTypeNode(listener) &&
+      listener.parameters.length === 1 &&
+      context &&
+      ts.isTypeReferenceNode(context) &&
+      context.typeName.getText() === "FredApplicationContext" &&
+      method.type &&
+      ts.isFunctionTypeNode(method.type) &&
+      method.type.parameters.length === 0 &&
+      method.type.type.kind === ts.SyntaxKind.VoidKeyword,
+    "iframe SDK declaration must expose onContext with its public listener and unsubscribe types",
+  );
+}
+
+function assertOptionalThemeDeclaration(content) {
+  const declaration = declarationInterface(
+    content,
+    "dist/types/.generated/applicationProtocol.d.ts",
+    "FredApplicationContext",
+  );
+  const property = declaration?.members.find(
+    (member) =>
+      ts.isPropertySignature(member) &&
+      ts.isIdentifier(member.name) &&
+      member.name.text === "theme",
+  );
+  const alternatives = property?.type;
+  assert(
+    property?.questionToken &&
+      property.modifiers?.some(
+        (modifier) => modifier.kind === ts.SyntaxKind.ReadonlyKeyword,
+      ) &&
+      alternatives &&
+      ts.isUnionTypeNode(alternatives) &&
+      alternatives.types.length === 2 &&
+      alternatives.types.every(
+        (type) =>
+          ts.isLiteralTypeNode(type) && ts.isStringLiteral(type.literal),
+      ) &&
+      new Set(alternatives.types.map((type) => type.literal.text)).size === 2 &&
+      alternatives.types.some((type) => type.literal.text === "light") &&
+      alternatives.types.some((type) => type.literal.text === "dark"),
+    "canonical protocol declaration must expose optional resolved theme",
+  );
+}
 
 function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
@@ -176,7 +306,12 @@ async function assertExportTarget(packageRoot, exportName, condition, target) {
   }
 }
 
-export async function validateIframeSdkArchive(archivePath) {
+export async function validateIframeSdkArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "iframeSdk");
   const temporary = await mkdtemp(
     path.join(os.tmpdir(), "fred-iframe-sdk-archive-"),
   );
@@ -196,8 +331,8 @@ export async function validateIframeSdkArchive(archivePath) {
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),
     );
-    assert.equal(manifest.name, "@fred/iframe-sdk");
-    assert.equal(manifest.version, "0.0.0-development");
+    assert.equal(manifest.name, expectedPackage.name);
+    assert.equal(manifest.version, expectedPackage.version);
     assert.equal(
       manifest.description,
       "Framework-independent child client for FRED application iframes",
@@ -235,6 +370,24 @@ export async function validateIframeSdkArchive(archivePath) {
     for (const file of files.filter((name) => name.endsWith(".d.ts"))) {
       await assertDeclarationReferences(packageRoot, file);
     }
+    assertRuntimeContextMethod(
+      await readFile(path.join(packageRoot, "dist/index.js"), "utf8"),
+    );
+    assertContextDeclaration(
+      await readFile(
+        path.join(packageRoot, "dist/types/src/index.d.ts"),
+        "utf8",
+      ),
+    );
+    assertOptionalThemeDeclaration(
+      await readFile(
+        path.join(
+          packageRoot,
+          "dist/types/.generated/applicationProtocol.d.ts",
+        ),
+        "utf8",
+      ),
+    );
 
     const licenseHash = sha256(
       await readFile(path.join(packageRoot, "LICENSE")),
@@ -282,6 +435,7 @@ export async function validateIframeSdkArchive(archivePath) {
       !/\bRAGS\b|rags-|rag[_-]specific/i.test(combined.join("\n")),
       "iframe SDK archive contains consumer-specific identity",
     );
+    assertExpectedManifest(manifest, expectedPackage);
     return {
       package: `${manifest.name}@${manifest.version}`,
       files,

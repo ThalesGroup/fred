@@ -225,6 +225,124 @@ test("delivers every accepted route event, including host A, child B, host A", a
   }
 });
 
+test("delivers later valid contexts, including repeats, without replay or route events", async () => {
+  const fake = new FakeWindow();
+  const restore = installWindow(fake);
+  try {
+    const client = createFredApplicationClient({
+      hostOrigin,
+      applicationId: "example",
+    });
+    assert.throws(
+      () => client.onContext(() => {}),
+      (error) => error.code === "not-connected",
+    );
+    const initial = client.connect();
+    fake.emit(contextMessage());
+    assert.equal((await initial).theme, undefined);
+    const contexts = [];
+    const routes = [];
+    const unsubscribe = client.onContext((context) => contexts.push(context));
+    client.onRoute((route) => routes.push(route));
+    assert.equal(contexts.length, 0);
+    const dark = { ...applicationContext, theme: "dark" };
+    fake.emit(contextMessage({ context: dark }));
+    fake.emit(contextMessage({ context: dark }));
+    fake.emit(
+      contextMessage({ context: { ...dark, theme: "light", locale: "fr" } }),
+    );
+    assert.deepEqual(
+      contexts.map(({ theme, locale }) => [theme, locale]),
+      [
+        ["dark", "en"],
+        ["dark", "en"],
+        ["light", "fr"],
+      ],
+    );
+    assert(Object.isFrozen(client.context));
+    assert.equal(client.context.theme, "light");
+    assert.deepEqual(routes, []);
+    unsubscribe();
+    unsubscribe();
+    fake.emit(contextMessage({ context: dark }));
+    assert.equal(contexts.length, 3);
+    client.dispose();
+    fake.emit(contextMessage({ context: dark }));
+    assert.equal(contexts.length, 3);
+  } finally {
+    restore();
+  }
+});
+
+test("later malformed or misattributed context leaves state and requests intact", async () => {
+  const { client, fake, restore } = await connectedClient();
+  try {
+    const contexts = [];
+    client.onContext((context) => contexts.push(context));
+    const pending = client.request("items");
+    const request = fake.posts.at(-1).message;
+    const initial = client.context;
+    for (const message of [
+      contextMessage({ context: { ...applicationContext, theme: "system" } }),
+      contextMessage({ context: { ...applicationContext, theme: null } }),
+      contextMessage({ context: {} }),
+      contextMessage({ applicationId: "other" }),
+      contextMessage({ protocolVersion: "2" }),
+    ])
+      fake.emit(message);
+    fake.emit(
+      contextMessage({ context: { ...applicationContext, theme: "dark" } }),
+      { origin: "https://attacker.example" },
+    );
+    fake.emit(
+      contextMessage({ context: { ...applicationContext, theme: "dark" } }),
+      { source: {} },
+    );
+    assert.equal(client.context, initial);
+    assert.equal(contexts.length, 0);
+    fake.emit({
+      type: "fred:response",
+      requestId: request.requestId,
+      status: 200,
+      headers: {},
+      body: "ok",
+    });
+    assert.equal(await (await pending).text(), "ok");
+  } finally {
+    client.dispose();
+    restore();
+  }
+});
+
+test("context subscribers use snapshot delivery and isolate listener exceptions", async () => {
+  const { client, fake, restore } = await connectedClient();
+  const originalReportError = globalThis.reportError;
+  const errors = [];
+  globalThis.reportError = (error) => errors.push(error);
+  try {
+    const received = [];
+    let unsubscribe;
+    client.onContext(() => {
+      unsubscribe();
+      throw new Error("listener failed");
+    });
+    unsubscribe = client.onContext((context) => received.push(context.theme));
+    fake.emit(
+      contextMessage({ context: { ...applicationContext, theme: "dark" } }),
+    );
+    assert.deepEqual(received, ["dark"]);
+    assert.equal(errors.length, 1);
+    fake.emit(
+      contextMessage({ context: { ...applicationContext, theme: "light" } }),
+    );
+    assert.deepEqual(received, ["dark"]);
+  } finally {
+    client.dispose();
+    globalThis.reportError = originalReportError;
+    restore();
+  }
+});
+
 test("posts normalized navigation and open-chat intents and rejects escaping paths", async () => {
   const { client, fake, restore } = await connectedClient();
   try {

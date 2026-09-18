@@ -5,19 +5,10 @@
   min-height: 0;
 }
 
+/* Only the inset the header sits in: PageHeader owns its type, colour and the
+   right-alignment of the controls. */
 .pageTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
-  color: var(--on-surface);
-  font: var(--font-title-large);
-}
-
-/* Title text pushes the create button and the search/category actions to the
-   right edge of the toolbar. */
-.pageTitleText {
-  margin-right: auto;
 }
 
 /* Search field + category-management button, grouped at the far right of the

@@ -17,8 +17,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
+    "ControlPlaneKnowledgeBase",
   ],
   endpoints: {
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
@@ -123,6 +125,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneTeam" as const, id: "LIST" },
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
+    },
+    // Accepting the charter turns the caller's pending_team_admin relations into
+    // team_admin, so every team projection must be read again.
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: {
+      invalidatesTags: ["ControlPlaneTeam"],
+    },
+    // Read again by the same acceptance, alongside the team projections.
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: {
+      providesTags: ["ControlPlaneTeam"],
     },
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
     // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
@@ -229,10 +240,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     createTeamControlPlaneV1TeamsPost: {
       invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
     },
+    // Platform-wide default teams for new users: replaced as a whole, one LIST tag.
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: {
+      providesTags: [{ type: "ControlPlanePlatformDefaultTeams" as const, id: "LIST" }],
+    },
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformDefaultTeams", id: "LIST" }],
+    },
     updateTeamControlPlaneV1TeamsTeamIdPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
+        // A rename changes the names the default-teams query echoes.
+        { type: "ControlPlanePlatformDefaultTeams", id: "LIST" },
       ],
     },
     // TEAM-09: self-service join — same tags as updateTeam so the marketplace
@@ -355,6 +375,23 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
       ],
+    },
+    // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
+    // route needs no team — so it invalidates the whole type rather than one
+    // team's list: the alternative is passing a team id the API never asked for.
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneKnowledgeBase" as const, id: `LIST-${arg.teamId}` }],
+    },
+    createKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneKnowledgeBase", id: `LIST-${arg.knowledgeBaseInstanceCreate.team_id}` },
+      ],
+    },
+    deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: {
+      invalidatesTags: () => [{ type: "ControlPlaneKnowledgeBase" }],
     },
     // Prompt library (PROMPT-09 follow-up, #2174): the single-prompt detail
     // query is shared by both the edit form and PromptViewDialog — without
@@ -489,6 +526,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  // A team's Knowledge Bases: what fills a library, and how often.
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,
+  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation: useCreateKnowledgeBaseMutation,
+  useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation:
+    useDeleteKnowledgeBaseMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery: useKnowledgeBaseDefinitionsQuery,
+  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
@@ -500,6 +545,9 @@ export const {
   useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery: useDefaultTeamsForNewUsersQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation:
+    useSetDefaultTeamsForNewUsersMutation,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation: useJoinTeamMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation: useUploadTeamAvatarMutation,
@@ -613,4 +661,7 @@ export const {
   useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
     useRestoreWikiRevisionMutation,
   useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
+  // Team administrator charter acceptance.
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
 } = enhancedControlPlaneApi;

@@ -30,7 +30,7 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
-import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
+import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
@@ -44,9 +44,6 @@ import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 
-const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
-const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30d" };
-
 /**
  * Personal token-usage dashboard — OBSERV-02 / BACKLOG.md §7b — extended in
  * place (v3, §2.5 Page 2) with capability-conditional team sections prepended
@@ -56,7 +53,7 @@ const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30
  */
 export default function TeamUsagePage() {
   const { t } = useTranslation();
-  const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange);
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
 
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
@@ -168,10 +165,7 @@ export default function TeamUsagePage() {
   };
 
   const handleRefresh = () => {
-    if (timeRange.presetKey) {
-      const preset = TIME_PRESETS.find((p) => p.key === timeRange.presetKey)!;
-      setTimeRange({ ...preset.resolve(), presetKey: timeRange.presetKey });
-    }
+    setTimeRange(refreshTimeRange(timeRange));
   };
 
   const serviceDown = [overTimeIsError, byAgentIsError, byModelIsError].every(Boolean);
@@ -194,6 +188,7 @@ export default function TeamUsagePage() {
     <div className={styles.page}>
       <PageHeader
         title={pageTitle}
+        sticky
         actions={
           <>
             <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />

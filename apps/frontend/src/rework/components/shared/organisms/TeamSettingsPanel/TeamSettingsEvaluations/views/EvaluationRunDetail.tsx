@@ -301,6 +301,9 @@ export default function EvaluationRunDetail({
     // it; otherwise fall back to the raw uid so the audit information is never lost.
     { label: t("rework.evaluation.detail.meta.author"), value: authorLabel },
     { label: t("rework.evaluation.detail.meta.judge"), value: run.judge_profile_id },
+    ...(run.agent_model_override
+      ? [{ label: t("rework.evaluation.detail.meta.modelOverride"), value: run.agent_model_override }]
+      : []),
     { label: t("rework.evaluation.detail.meta.team"), value: run.evaluation_id },
     { label: t("rework.evaluation.detail.meta.created"), value: formatDate(run.created_at) },
     { label: t("rework.evaluation.detail.meta.started"), value: formatDate(run.started_at) },
@@ -589,6 +592,11 @@ function CaseDetail({ caseData, t }: { caseData: EvaluationCaseResponse; t: Retu
         <span className={styles.muted}>
           {t("rework.evaluation.detail.col.status")}: {caseData.status}
         </span>
+        {caseData.actual_model_name && (
+          <span className={styles.muted}>
+            {t("rework.evaluation.detail.actualModel")}: {caseData.actual_model_name}
+          </span>
+        )}
         <span className={styles.spacer} />
         <IconButton
           variant="icon"

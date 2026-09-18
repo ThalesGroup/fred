@@ -242,6 +242,31 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             await self._hydrate_labels(docs, s)
         return docs
 
+    async def get_metadata_by_source_key(
+        self,
+        source_library_id: str,
+        source_key: str,
+        session: AsyncSession | None = None,
+    ) -> Optional[DocumentMetadata]:
+        async with use_session(self._sessions, session) as s:
+            row = (
+                (
+                    await s.execute(
+                        select(DocumentMetadataRow).where(
+                            DocumentMetadataRow.source_library_id == source_library_id,
+                            DocumentMetadataRow.source_key == source_key,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row is None:
+                return None
+            doc = self._from_row(row)
+            await self._hydrate_labels([doc], s)
+        return doc
+
     async def get_metadata_in_tag(
         self, tag_id: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:
@@ -434,6 +459,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                         source_tag=metadata.source.source_tag,
                         date_added_to_kb=metadata.source.date_added_to_kb,
                         tag_ids=list(metadata.tags.tag_ids or []),
+                        source_library_id=metadata.source.source_library_id,
+                        source_key=metadata.source.source_key,
                         doc=self._to_dict(metadata),
                     )
                 ),
@@ -446,6 +473,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         row.source_tag = metadata.source.source_tag
         row.date_added_to_kb = metadata.source.date_added_to_kb
         row.tag_ids = list(metadata.tags.tag_ids or [])
+        row.source_library_id = metadata.source.source_library_id
+        row.source_key = metadata.source.source_key
         row.doc = self._to_dict(metadata)
 
     async def bulk_mark_vector_done(

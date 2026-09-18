@@ -51,6 +51,7 @@ import {
   enabledTeamCount,
   hasReasoningControl,
   isCapabilityUnused as isUnused,
+  hasAgentInstanceLifecycle,
   missingAgentDependenciesForPlatform,
   personalSpaceCount,
   requiresTeamSettings,
@@ -63,8 +64,11 @@ import {
 // page: a tool can be depended on by several agents, so admins need all
 // enabled views over the same underlying mechanism, not several disconnected
 // pages. The optional Apps view follows the deployment-wide feature gate.
-type CapabilityKind = "tool" | "agent" | "model" | "app";
-const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model"];
+// "knowledge_base" is a control-plane projection of a published Knowledge Base
+// definition: same enablement shape as an app, on its own ReBAC type, so it
+// belongs on this surface rather than a page of its own.
+type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
 
 export default function FeaturesPage() {
   const { t } = useTranslation();
@@ -73,10 +77,14 @@ export default function FeaturesPage() {
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
 
   const { data, isLoading, isError } = useAdminCapabilitiesQuery();
-  // The registry-governance view (`can_list_all_teams`), not the caller-scoped
-  // `/teams` list — a platform admin managing per-team enablement must see
-  // every team, including ones they don't personally belong to (#1981).
-  const { data: teams = [], isLoading: isTeamsLoading, isError: isTeamsError } = useListAllTeamsQuery();
+  // The full registry (`can_list_all_teams`), not the caller-scoped `/teams`: an admin
+  // must see teams they don't belong to. The drawer only needs ids and names, so the
+  // per-team membership reads are skipped.
+  const {
+    data: teams = [],
+    isLoading: isTeamsLoading,
+    isError: isTeamsError,
+  } = useListAllTeamsQuery({ includeMembership: false });
   const [setDefaultOn, { isLoading: isTogglingDefault }] = useSetCapabilityDefaultOnMutation();
   // Per-model reasoning activation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md §5).
   const [setModelReasoning, { isLoading: isTogglingReasoning }] = useSetModelReasoningMutation();
@@ -137,7 +145,7 @@ export default function FeaturesPage() {
   // as the backend's own `CapabilityEnablementItem.kind`.
   const capabilities = allCapabilities.filter((cap) => (cap.kind ?? "tool") === activeKindFilter);
   const rowIsUnused = (capability: CapabilityEnablementItem) =>
-    capability.kind === "app" ? enabledTeamCount(capability) === 0 : isUnused(capability);
+    hasAgentInstanceLifecycle(capability.kind) ? isUnused(capability) : enabledTeamCount(capability) === 0;
 
   // Resolved from the live query on every render — NOT snapshotted into state.
   // Every drawer mutation invalidates and refetches the list; a snapshot taken
@@ -146,6 +154,15 @@ export default function FeaturesPage() {
   const matrixCapability = capabilities.find((cap) => cap.id === matrixCapabilityId) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
   const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
+  // Each kind loses something different when default-on goes off: agent
+  // instances can be suspended, an application or a Knowledge Base only loses
+  // inherited access. Naming the object is what makes the dialog truthful.
+  const defaultOffCopyVariant =
+    visiblePendingDefaultOff?.kind === "app"
+      ? "app"
+      : visiblePendingDefaultOff?.kind === "knowledge_base"
+        ? "knowledgeBase"
+        : "generic";
 
   const applyDefaultOn = async (capability: CapabilityEnablementItem, nextValue: boolean) => {
     if (inFlightDefaultOnIdRef.current === capability.id) {
@@ -263,7 +280,7 @@ export default function FeaturesPage() {
       // Applications have no agent-instance dependencies or suspension
       // lifecycle. Their confirmation stays generic and never asks the
       // agent-specific impact endpoint for a meaningless preview.
-      if (capability.kind !== "app") {
+      if (hasAgentInstanceLifecycle(capability.kind)) {
         void fetchRevokeImpact({ capabilityId: capability.id });
       }
     } else if (missingAgentDependenciesForPlatform(capability, allCapabilities).length > 0) {
@@ -286,7 +303,7 @@ export default function FeaturesPage() {
   // the preview is still loading we render nothing extra — the dialog keeps its
   // generic message and stays actionable.
   const renderImpactDetails = () => {
-    if (!visiblePendingDefaultOff || visiblePendingDefaultOff.kind === "app") return null;
+    if (!visiblePendingDefaultOff || !hasAgentInstanceLifecycle(visiblePendingDefaultOff.kind)) return null;
     if (revokeImpact.isFetching || !impact) return null;
     return (
       <div className={styles.impact}>
@@ -357,6 +374,7 @@ export default function FeaturesPage() {
         const blockedOn = !cap.default_on && requiresTeamSettings(cap);
         const control = (
           <Switch
+            size="small"
             checked={cap.default_on}
             disabled={blockedOn || (isTogglingDefault && togglingCapabilityId !== cap.id)}
             onChange={() => onToggleDefault(cap)}
@@ -381,8 +399,8 @@ export default function FeaturesPage() {
         <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
           <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
           <div className={styles.capText}>
-            <span className={styles.capName} title={t(cap.name, { defaultValue: cap.name })}>
-              {t(cap.name, { defaultValue: cap.name })}
+            <span className={styles.capName} title={capabilityLabel(t, cap)}>
+              {capabilityLabel(t, cap)}
             </span>
             <span className={styles.capVersion}>v{cap.version}</span>
           </div>
@@ -411,6 +429,7 @@ export default function FeaturesPage() {
                 <div className={styles.centered}>
                   <Tooltip text={t("rework.admin.capabilities.reasoningHint")}>
                     <Switch
+                      size="small"
                       checked={cap.reasoning_enabled ?? false}
                       disabled={isTogglingReasoning && togglingReasoningId !== cap.id}
                       onChange={() => void applyReasoning(cap, !(cap.reasoning_enabled ?? false))}
@@ -430,7 +449,7 @@ export default function FeaturesPage() {
       size: "1.6fr",
       cellRenderer: (cap) => {
         const count = enabledTeamCount(cap);
-        const personal = cap.kind === "app" ? 0 : personalSpaceCount(cap);
+        const personal = hasAgentInstanceLifecycle(cap.kind) ? personalSpaceCount(cap) : 0;
         // Personal-class reach is additive to the team count — "12 teams" over
         // "40 personal spaces", one line each — because personal spaces are
         // deliberately not in `total_team_count` (RFC §8.4). A zero part says
@@ -475,7 +494,7 @@ export default function FeaturesPage() {
         );
       },
     },
-    ...(activeKindFilter === "app"
+    ...(!hasAgentInstanceLifecycle(activeKindFilter)
       ? []
       : [
           {
@@ -519,9 +538,7 @@ export default function FeaturesPage() {
         ]),
     {
       label: t("rework.admin.capabilities.col.actions"),
-      // Wide enough for the one-line button at desktop widths, but still a
-      // shrinkable fr so narrow viewports fall back to the wrapped label
-      // rather than forcing the table to overflow.
+      // Wide enough for the one-line button at desktop widths.
       size: "1.4fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
@@ -587,12 +604,16 @@ export default function FeaturesPage() {
                 ? "rework.admin.capabilities.emptyModels"
                 : activeKindFilter === "app"
                   ? "rework.admin.capabilities.emptyApps"
-                  : "rework.admin.capabilities.empty",
+                  : activeKindFilter === "knowledge_base"
+                    ? "rework.admin.capabilities.emptyKnowledgeBases"
+                    : "rework.admin.capabilities.empty",
           )}
         />
       )}
 
-      {!isLoading && !isError && capabilities.length > 0 && <DataTable columns={columns} data={capabilities} />}
+      {!isLoading && !isError && capabilities.length > 0 && (
+        <DataTable columns={columns} data={capabilities} size="medium" />
+      )}
 
       <CapabilityTeamMatrixDrawer
         capability={matrixCapability}
@@ -620,16 +641,8 @@ export default function FeaturesPage() {
 
       <ConfirmationDialog
         open={visiblePendingDefaultOff !== null}
-        title={t(
-          visiblePendingDefaultOff?.kind === "app"
-            ? "rework.admin.capabilities.defaultOffConfirm.appTitle"
-            : "rework.admin.capabilities.defaultOffConfirm.title",
-        )}
-        message={t(
-          visiblePendingDefaultOff?.kind === "app"
-            ? "rework.admin.capabilities.defaultOffConfirm.appMessage"
-            : "rework.admin.capabilities.defaultOffConfirm.message",
-        )}
+        title={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Title`)}
+        message={t(`rework.admin.capabilities.defaultOffConfirm.${defaultOffCopyVariant}Message`)}
         details={renderImpactDetails()}
         confirmLabel={t("rework.admin.capabilities.defaultOffConfirm.confirm")}
         cancelLabel={t("rework.admin.capabilities.defaultOffConfirm.cancel")}

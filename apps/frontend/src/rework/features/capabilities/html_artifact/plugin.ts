@@ -16,8 +16,9 @@
 // object, registered once in ../index.ts. Mirrors the backend `html_artifact`
 // capability: the `html_artifact` chat part (the card) and the read-only tabbed
 // viewer side pane (Preview / HTML / CSS). No config widget, no chat control.
-// No sessionProbe in v1: the card auto-opens live renders; a replayed conversation
-// offers the pane through the launcher (useHasContent) instead of auto-opening.
+// The card auto-opens live renders; re-opening a conversation restores the pane
+// if the user left it open, which the host does for every declared panel off
+// `useHasContent` — nothing to declare here for it.
 
 import type { CapabilityUiPlugin } from "../types";
 import { CAPABILITY_ID } from "./types";

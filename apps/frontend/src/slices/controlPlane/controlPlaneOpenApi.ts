@@ -120,7 +120,12 @@ const injectedRtkApi = api.injectEndpoints({
       ListAllTeamsControlPlaneV1TeamsAllGetApiResponse,
       ListAllTeamsControlPlaneV1TeamsAllGetApiArg
     >({
-      query: () => ({ url: `/control-plane/v1/teams/all` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/all`,
+        params: {
+          include_membership: queryArg.includeMembership,
+        },
+      }),
     }),
     searchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGet: build.query<
       SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse,
@@ -170,6 +175,34 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.rescueTeamAdminRequest,
       }),
+    }),
+    getDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGet: build.query<
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse,
+      GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/default-teams` }),
+    }),
+    setDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPut: build.mutation<
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse,
+      SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/default-teams`,
+        method: "PUT",
+        body: queryArg.setDefaultTeamsForNewUsersRequest,
+      }),
+    }),
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: build.query<
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse,
+      GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter` }),
+    }),
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: build.mutation<
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse,
+      AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/team-admin-charter`, method: "POST" }),
     }),
     uploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: build.mutation<
       UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse,
@@ -594,6 +627,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
+          agent_model_override: queryArg.agentModelOverride,
         },
       }),
     }),
@@ -676,6 +710,83 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
+    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
+      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
+        method: "PUT",
+        body: queryArg.knowledgeBasePublicationRequest,
+      }),
+    }),
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: build.query<
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse,
+      ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGet: build.query<
+      GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse,
+      GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/fields`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: build.query<
+      ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiResponse,
+      ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    createKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPost: build.mutation<
+      CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiResponse,
+      CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances`,
+        method: "POST",
+        body: queryArg.knowledgeBaseInstanceCreate,
+      }),
+    }),
+    getKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGet: build.query<
+      GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiResponse,
+      GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}` }),
+    }),
+    deleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDelete: build.mutation<
+      DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse,
+      DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/instances/${queryArg.instanceId}`,
+        method: "DELETE",
+      }),
+    }),
+    getKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGet:
+      build.query<
+        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse,
+        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
+        }),
+      }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -1442,7 +1553,10 @@ export type CreateTeamControlPlaneV1TeamsPostApiArg = {
   createTeamRequest: CreateTeamRequest;
 };
 export type ListAllTeamsControlPlaneV1TeamsAllGetApiResponse = /** status 200 Successful Response */ Team[];
-export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = void;
+export type ListAllTeamsControlPlaneV1TeamsAllGetApiArg = {
+  /** false skips the per-team ReBAC reads: admins, membership and member_count are left unset. For pickers that only need ids and names. */
+  includeMembership?: boolean;
+};
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiResponse =
   /** status 200 Successful Response */ UserSummary[];
 export type SearchCandidateTeamAdminsControlPlaneV1TeamsCandidateAdminsGetApiArg = {
@@ -1472,6 +1586,19 @@ export type RescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostApiArg = {
   teamId: string;
   rescueTeamAdminRequest: RescueTeamAdminRequest;
 };
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiResponse =
+  /** status 200 Successful Response */ DefaultTeamForNewUsers[];
+export type GetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetApiArg = void;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiResponse = unknown;
+export type SetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutApiArg = {
+  setDefaultTeamsForNewUsersRequest: SetDefaultTeamsForNewUsersRequest;
+};
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance | null;
+export type GetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetApiArg = void;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiResponse =
+  /** status 200 Successful Response */ TeamAdminCharterAcceptance;
+export type AcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostApiArg = void;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiResponse = unknown;
 export type UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg = {
   teamId: string;
@@ -1750,6 +1877,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
+  agentModelOverride?: string | null;
 };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
@@ -1799,6 +1927,50 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
+  /** status 200 Successful Response */ KnowledgeBasePublicationResult;
+export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+  name: string;
+  knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
+};
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseDefinitionChoice[];
+export type ListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetApiArg = {
+  teamId: string;
+};
+export type GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceFields;
+export type GetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetApiArg = {
+  definitionId: string;
+  teamId: string;
+};
+export type ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceSummary[];
+export type ListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetApiArg = {
+  teamId: string;
+};
+export type CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiResponse =
+  /** status 201 Successful Response */ KnowledgeBaseInstanceSummary;
+export type CreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostApiArg = {
+  knowledgeBaseInstanceCreate: KnowledgeBaseInstanceCreate;
+};
+export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseInstanceSummary;
+export type GetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetApiArg = {
+  instanceId: string;
+};
+export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiResponse = unknown;
+export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
+  instanceId: string;
+};
+export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse =
+  /** status 200 Successful Response */ KnowledgeBaseRunContext;
+export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg =
+  {
+    definitionId: string;
+    instanceId: string;
+    runId: string;
+  };
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -2416,7 +2588,7 @@ export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
 export type GcuVersionsType = "v1";
-export type UserTeamRelation = "team_admin" | "team_editor" | "team_analyst" | "team_member";
+export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
@@ -2432,6 +2604,7 @@ export type TeamPermission =
   | "can_read_conversations"
   | "can_use_team_agents"
   | "can_use_team_applications"
+  | "can_use_team_knowledge_bases"
   | "can_access_files"
   | "can_run_evaluations"
   | "can_manage_evaluation_corpus"
@@ -2497,6 +2670,16 @@ export type UpdateTeamRequest = {
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
+};
+export type DefaultTeamForNewUsers = {
+  team_id: string;
+  name: string;
+};
+export type SetDefaultTeamsForNewUsersRequest = {
+  team_ids: string[];
+};
+export type TeamAdminCharterAcceptance = {
+  accepted_at: string;
 };
 export type BodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost = {
   /** Avatar image file (max 5MB, JPEG/PNG/WebP) */
@@ -2737,7 +2920,7 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
-  kind?: "tool" | "agent" | "model" | "app";
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   execution_models?: ("react" | "graph")[];
   route_base_url?: string | null;
   default_capability_ids?: string[];
@@ -3276,8 +3459,8 @@ export type CapabilityEnablementItem = {
   personal_scope?: "enabled" | "disabled" | "default";
   /** The enable-with-settings form (rendered like config fields). */
   team_settings_fields?: FieldSpec[];
-  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. */
-  kind?: "tool" | "agent" | "model" | "app";
+  /** "tool": a pod-advertised capability. "agent": a control-plane-side projection of an agent template into this same catalog (CAPAB-01, RFC §8.6) — every team's access to every agent is an explicit admin grant, exactly like a tool. "model": a pod-advertised projection of one models_catalog.yaml (provider, name) pair (OBSERV-02 v3, RFC §8.7). "app": a control-plane projection of one installed Fred application. "knowledge_base": a control-plane projection of one published Knowledge Base definition — same enablement shape as an application, on its own ReBAC type so no capability or application grant can make one usable. */
+  kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   /** For a `kind="agent"` row: the template's default tool/MCP capability ids (RFC §8.6 `depends_on` gate, GitHub #2004 item 5). Enabling the agent for a team 409s unless each of these is already usable by that team - exposed so the admin UI can disable the grant up front and explain why (GitHub #2408). Always empty for `kind="tool"`/`"model"`. */
   default_capability_ids?: string[];
   /** Agent instances this capability breaks AT REST, across every team (#1975 health). DERIVED per request — `suspension_reason` records why an instance is suspended, never which capability did it, so an instance broken by capa1 while also selecting capa2 must not count against capa2. An instance is counted when it selects this capability AND its team lacks `can_use` on it OR its pod no longer advertises it. */
@@ -3290,6 +3473,8 @@ export type CapabilityEnablementItem = {
   thinking_profile_ids?: string[];
   /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
   reasoning_enabled?: boolean;
+  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  model_display_name?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -3349,6 +3534,78 @@ export type ModelReasoningResult = {
 };
 export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
+};
+export type KnowledgeBasePublicationResult = {
+  id: string;
+  prefix: string;
+  version: string;
+};
+export type KnowledgeBasePublicationRequest = {
+  prefix: string;
+  version: string;
+  name: string;
+  description: string;
+  configuration_fields?: FieldSpec[];
+};
+export type KnowledgeBaseDefinitionChoice = {
+  definition_id: string;
+  name: string;
+  description?: string;
+};
+export type KnowledgeBaseInstanceFields = {
+  configuration_fields?: FieldSpec[];
+};
+export type IntervalSchedule = {
+  type?: "interval";
+  /** Seconds between two occurrences. */
+  every_seconds: number;
+};
+export type KnowledgeBaseInstanceSummary = {
+  id: string;
+  definition_id: string;
+  definition_name: string;
+  team_id: string;
+  library_id: string;
+  library_name: string;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  suspended: boolean;
+  configuration?: {
+    [key: string]: any;
+  };
+  created_at: string;
+  updated_at: string;
+};
+export type KnowledgeBaseInstanceCreate = {
+  definition_id: string;
+  team_id: string;
+  folder_name: string;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  suspended?: boolean;
+  configuration?: {
+    [key: string]: any;
+  };
+};
+export type KnowledgeBaseRunContext = {
+  definition_id: string;
+  instance_id: string;
+  team_id: string;
+  run_id: string;
+  library_id: string;
+  configuration?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
 };
 export type TeamRoutingPolicy = {
   team_id: string;
@@ -3899,6 +4156,12 @@ export const {
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
+  useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useLazyGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
+  useSetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsPutMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useLazyGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery,
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation,
   useUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
@@ -3976,6 +4239,19 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
+  useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
+  useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
+  useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
+  useLazyGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
+  useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery,
+  useLazyListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery,
+  useCreateKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesPostMutation,
+  useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
+  useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
+  useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
+  useGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
+  useLazyGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,

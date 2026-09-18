@@ -28,6 +28,14 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    team_admin_charter_version: str | None = Field(
+        default=None,
+        description=(
+            "Version of the team administrator charter a team_admin must accept "
+            "before their admin-only team permissions apply. None disables the "
+            "charter. Changing it asks every team admin to accept again."
+        ),
+    )
     bootstrap_token_env_var: str | None = Field(
         default=None,
         description=(
@@ -390,6 +398,29 @@ class SchedulerConfig(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class KnowledgeBasesConfig(BaseModel):
+    """What Fred decides about running a Knowledge Base, wherever its image
+    came from.
+
+    A Knowledge Base pod is contributed, often by somebody outside this
+    repository, so anything Fred must be able to change without waiting for a
+    new image belongs here rather than in the SDK.
+    """
+
+    run_max_attempts: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many times one synchronization run is attempted before it is "
+            "recorded as failed. Without a bound the workflow engine retries "
+            "for ever, so a handler that fails the same way every time never "
+            "reaches a terminal state and its instance shows a run that is "
+            "permanently in progress. Counts the first attempt: 1 means no "
+            "retry."
+        ),
+    )
+
+
 class PolicyConfig(BaseModel):
     purge_catalog_path: str = "./conversation_policy_catalog.yaml"
 
@@ -515,6 +546,7 @@ class Configuration(BaseModel):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     policies: PolicyConfig = Field(default_factory=PolicyConfig)
+    knowledge_bases: KnowledgeBasesConfig = Field(default_factory=KnowledgeBasesConfig)
 
 
 class AppState(BaseModel):

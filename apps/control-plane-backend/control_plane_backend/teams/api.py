@@ -13,11 +13,15 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     AvatarUploadError,
     CreateTeamRequest,
+    DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
     RetentionUpdateError,
+    SetDefaultTeamsForNewUsersRequest,
     Team,
+    TeamAdminCharterAcceptance,
+    TeamAdminCharterDisabledError,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
     TeamMember,
@@ -31,10 +35,19 @@ from control_plane_backend.teams.schemas import (
     UserTeamRelation,
 )
 from control_plane_backend.teams.service import (
+    accept_team_admin_charter as accept_team_admin_charter_from_service,
+)
+from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
 )
 from control_plane_backend.teams.service import create_team as create_team_from_service
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
+from control_plane_backend.teams.service import (
+    get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
+)
+from control_plane_backend.teams.service import (
+    get_team_admin_charter_acceptance as get_team_admin_charter_acceptance_from_service,
+)
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
@@ -63,6 +76,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import (
     search_candidate_team_members as search_candidate_team_members_from_service,
+)
+from control_plane_backend.teams.service import (
+    set_default_teams_for_new_users as set_default_teams_for_new_users_from_service,
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
@@ -107,6 +123,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def team_admin_constraint_error_handler(
         _request,
         exc: TeamAdminConstraintError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamAdminCharterDisabledError)
+    async def team_admin_charter_disabled_handler(
+        _request,
+        exc: TeamAdminCharterDisabledError,
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
@@ -183,10 +206,22 @@ async def create_team(
 async def list_all_teams(
     deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    include_membership: Annotated[
+        bool,
+        Query(
+            description=(
+                "false skips the per-team ReBAC reads: admins, membership and "
+                "member_count are left unset. For pickers that only need ids "
+                "and names."
+            )
+        ),
+    ] = True,
 ) -> list[Team]:
     """Registered before `/teams/{team_id}` so the literal `all` path segment
     is not swallowed by the team-id path parameter."""
-    return await list_all_teams_from_service(user, deps)
+    return await list_all_teams_from_service(
+        user, deps, include_membership=include_membership
+    )
 
 
 @router.get(
@@ -278,6 +313,55 @@ async def rescue_team_admin(
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rescue_team_admin_from_service(user, team_id, request.user_id, deps)
+
+
+@router.get(
+    "/admin/platform/default-teams",
+    response_model=list[DefaultTeamForNewUsers],
+    summary="List the teams every new user joins on first GCU acceptance (platform admin only)",
+)
+async def get_default_teams_for_new_users(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[DefaultTeamForNewUsers]:
+    return await get_default_teams_for_new_users_from_service(user, deps)
+
+
+@router.put(
+    "/admin/platform/default-teams",
+    status_code=204,
+    summary="Replace the teams every new user joins on first GCU acceptance (platform admin only)",
+)
+async def set_default_teams_for_new_users(
+    request: SetDefaultTeamsForNewUsersRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await set_default_teams_for_new_users_from_service(user, request.team_ids, deps)
+
+
+@router.get(
+    "/team-admin-charter",
+    response_model=TeamAdminCharterAcceptance | None,
+    summary="Read when the caller accepted the current team administrator charter",
+)
+async def get_team_admin_charter_acceptance(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamAdminCharterAcceptance | None:
+    return await get_team_admin_charter_acceptance_from_service(user, deps)
+
+
+@router.post(
+    "/team-admin-charter",
+    response_model=TeamAdminCharterAcceptance,
+    summary="Accept the current team administrator charter and activate pending admin roles",
+)
+async def accept_team_admin_charter(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamAdminCharterAcceptance:
+    return await accept_team_admin_charter_from_service(user, deps)
 
 
 @router.post(

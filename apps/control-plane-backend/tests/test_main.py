@@ -3198,6 +3198,11 @@ class _FakeTeamWikiStore:
         return self.rejected
 
 
+async def _no_temporal() -> Any:
+    """Erasure never dispatches a run, so it never reaches the workflow engine."""
+    raise AssertionError("erase_session must not reach the workflow engine")
+
+
 def _build_erasure_deps(
     session_store: _FakeSessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
@@ -3225,6 +3230,9 @@ def _build_erasure_deps(
         team_dependencies=None,  # type: ignore[arg-type]
         get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_team_capability_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_knowledge_base_definition_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_knowledge_base_instance_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_temporal_client=_no_temporal,
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
@@ -5723,6 +5731,8 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
@@ -5800,6 +5810,8 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),
@@ -6120,6 +6132,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
         get_team_metadata_store=lambda: cast(Any, object()),
+        get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),

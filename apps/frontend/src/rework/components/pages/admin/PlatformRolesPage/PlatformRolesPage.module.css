@@ -76,6 +76,15 @@
   font: var(--font-label-medium);
 }
 
+.selectedUsers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .relationChoices {
   display: flex;
   flex-wrap: wrap;

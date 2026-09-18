@@ -986,14 +986,14 @@ embeds its table name (`ix_cp_task_run_kind`, `uq_kf_task_event_log_task_seq`, �
 `import_export/api.py` derives the single-active-migration index name it matches
 in an `IntegrityError` from `single_active_migration_index_name` for the same reason.
 
-Task rows are progress bookkeeping, so the split ships with **no backfill**. It
-also does **not drop** the old shared `task_run`/`task_event_log`: they are left
-orphaned for a later release. The two Temporal workers have no `migration:` block
-in `deploy/charts/fred/values.yaml`, so they get no scale-down hook and keep
-running old code — which writes the shared table through an unguarded activity
-that is the first step of every push-file ingestion. Dropping it mid-deploy would
-fail those workflows outright and lose the document, not just its task row.
-Expand now, contract in a later release.
+Task rows are progress bookkeeping, so the split shipped with **no backfill**. The
+old shared `task_run`/`task_event_log` stayed orphaned for one release and were
+dropped in a later one (control-plane revision `d3f8a2c6e174`, issue #2377). The
+two Temporal workers have no `migration:` block in `deploy/charts/fred/values.yaml`,
+so they get no scale-down hook and run the **previous** image through a rollout:
+a table they write can only be dropped once the release before already stopped
+writing it. Any future rename of a worker-written table needs the same two-release
+split.
 
 ### Ownership boundary
 
@@ -1131,6 +1131,20 @@ list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
 `UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
+
+**`POST …/prepare-execution` `agent_model_override` query param** (added
+2026-09-10) — optional, evaluator-only. When set, `prepare_execution`
+validates it against the team's `can_use`-enabled chat profiles (fails
+closed, 422, on an unknown or disabled profile) and overwrites this
+instance's entry in the returned `agent_profile_overrides` snapshot for
+**this call only** — never persisted, never visible via
+`GET …/routing-policy`. Restricted to the evaluator's M2M service identity
+(`is_service_agent`); rejected (403) for a regular user token. This sits at
+the "team override" precedence level — a platform chat binding or pod
+static override still wins silently over it; `fred-agent-evaluator` detects
+that by comparing the requested override against the model that actually
+answered (`EvalTrace.model_name`), not by anything this endpoint can
+guarantee.
 
 ## 14. Contract Notes — AUTHZ-05 review item 11 (2026-07-11)
 
@@ -1374,10 +1388,11 @@ kind-agnostic).
 
 **Catalog projection, cross-pod.** `fred-runtime` exposes
 `GET /agents/models-catalog`, projecting `catalog.profiles` into one entry
-per distinct `(provider, name)` pair — not per `profile_id` (a concrete model
-has one enablement decision even if different typed consumers eventually use
-it) — and deriving the id itself
-(`model_capability_id(provider, name)`, fred-sdk). Control-plane
+per distinct model identity — not per `profile_id` (a concrete model has one
+enablement decision even if different typed consumers eventually use it) — and
+deriving the id itself (`ModelProfile.capability_id`, which is
+`model_capability_id(provider, model_id or name)` — see
+`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Control-plane
 (`product/service.py::_model_capabilities_for_source`) fetches that endpoint
 per runtime source as a third catalog fetch alongside the existing tool and
 agent fetches (same best-effort contract — `None` on an unreachable pod),
@@ -2077,12 +2092,13 @@ per-model off switch in place _before_ levels 3–4 widen exposure to it (RFC §
 
 ### Contract additions
 
-| Field                                               | On                        | Meaning                                                                                                                                                       |
-| --------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                        |
-| `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                             |
-| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction |
-| `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                          |
+| Field                                               | On                        | Meaning                                                                                                                                                               |
+| --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                                |
+| `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                                     |
+| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
+| `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction         |
+| `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                                  |
 
 ### Delivery to the runtime
 
@@ -3090,8 +3106,8 @@ frame -> host : fred:navigate { path, replace }
 The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
 protected-header predicate, and relative-path validation is
 `apps/frontend/src/rework/features/applications/applicationProtocol.ts`. The
-`@fred/iframe-sdk` archive is generated from that canonical file and exposes the wire
-surface separately at `@fred/iframe-sdk/protocol`; no second maintained protocol copy
+`@fred-oss/iframe-sdk` archive is generated from that canonical file and exposes the wire
+surface separately at `@fred-oss/iframe-sdk/protocol`; no second maintained protocol copy
 exists in the package producer. Its child client validates its configured HTTP(S)
 origin, captured parent window, application identity, and all received shapes before
 admission. It delivers every accepted route event to current subscribers—even when a
@@ -3114,7 +3130,18 @@ Fred state, the router, or diagnostics. A request id already in flight is
 refused with `fred:response-error` rather than dropped: the id is the channel's
 only correlation token, so admitting it twice would leave one frame request
 answered twice and one call outside the concurrency bound. The context handed
-over is plain cloneable data: team identity, base and sub path, locale.
+over is plain cloneable data: team identity, base and sub path, locale, and an
+optional resolved `"light"` or `"dark"` theme. The host derives the theme from
+its existing theme owner, including the system preference, and resends
+`fred:context` to the same ready frame when the resolved theme or locale
+changes. The source-tree SDK's `onContext` delivers each accepted later context
+to current subscribers, including identical repeats; `connect()` still owns
+the initial snapshot. An older host omits theme, leaving fallback to the
+consumer. Applications own their translation state and catalogs. The
+deployment-owned `hostOrigin` must match the parent origin exactly; iframe
+`?theme=&locale=` query values are not authoritative or live. This extension
+is not in the published `0.1.0-alpha.1` SDK archive and requires a new release
+coordinate.
 
 `fred:navigate` moves the user only inside the application's own subtree: its
 path is resolved against `basePath` and an absolute, traversing, or schemed
@@ -3346,10 +3373,10 @@ template. Runtime side, block ordering and trust boundary:
 
 **Endpoints.**
 
-| Method | Path                                      | Permission                                                    |
-| ------ | ----------------------------------------- | ------------------------------------------------------------- |
-| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
-| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`)   |
+| Method | Path                                      | Permission                                                  |
+| ------ | ----------------------------------------- | ----------------------------------------------------------- |
+| GET    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
+| PUT    | `/control-plane/v1/admin/platform/prompt` | `can_edit_platform_prompt` (`require_edit_platform_prompt`) |
 
 Both are registered in `authz-endpoint-matrix.yaml`. The gate was
 `can_manage_platform` until §51 carved this surface out of that catch-all so a
@@ -3877,7 +3904,7 @@ revokes that delete nothing.
 **Breaking (frontend bootstrap):** `PermissionSummary` replaces
 `is_platform_admin` / `is_platform_observer` with
 `platform_roles: PlatformRoleRelation[]` — the roles the caller
-*effectively* holds, union-resolved, so a `platform_admin` carries all five.
+_effectively_ holds, union-resolved, so a `platform_admin` carries all five.
 That is deliberately unlike `GET /users/platform-roles`, which reports
 directly-granted tuples only because those are what a revoke can delete.
 Five parallel `is_*` booleans over one closed enum is a list, and each future
@@ -3892,3 +3919,141 @@ computed relations and the agent-capability packages; the page governs
 platform features — capabilities, agent templates and models — so it takes the
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
+
+## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
+
+**What it is.** A platform admin picks any number of registry teams that every
+new user joins as `team_member` when they accept the GCU for the first time.
+
+**Endpoints.**
+
+| Method | Path                                             | Permission            |
+| ------ | ------------------------------------------------ | --------------------- |
+| GET    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+| PUT    | `/control-plane/v1/admin/platform/default-teams` | `can_manage_platform` |
+
+`GET` returns `list[DefaultTeamForNewUsers]` `{team_id, name}`, sorted by name;
+`[]` when none is set. `PUT` takes `SetDefaultTeamsForNewUsersRequest`
+`{team_ids: string[]}`, `extra="forbid"`, and replaces the whole list: `[]`
+clears it, duplicates are ignored. 204 on success; 404 naming the first team
+without a registry row - personal spaces included, they never have one - and
+nothing is written. Gated on `can_manage_platform` rather than a new narrow
+relation: it decides where every future account lands, and no delegated role
+owns that decision today.
+
+**Storage.** A `platform_default_teams` table, one row per team keyed by
+`team_id`; a `PUT` deletes and re-inserts the list in one transaction. `team_id`
+has no foreign key, since `teammetadata` belongs to the fred-core metadata: a
+deleted team is skipped on every read, so deleting a team needs no cleanup
+here. The setting stays out of `teammetadata` on purpose - a per-team flag would
+ship a field on every `Team` for a platform-wide choice.
+
+**Trigger.** `POST /gcu`, only while the user's stored `gcuVersionAccepted` is
+still empty:
+
+- membership on every default team is written, concurrently, before the
+  acceptance is persisted, so a ReBAC failure on any of them fails the call and
+  the retry is still a first acceptance;
+- a user already holding any role on one of the teams is left untouched there;
+  a concurrent second call is harmless, OpenFGA writes ignore duplicates;
+- re-accepting a newer GCU version does not re-add someone who left a team;
+- users who already accepted are not backfilled, but an account that never
+  accepted joins at its first acceptance, even if it predates the setting.
+
+**Limits.** A deployment without `app.gcu_version` never calls `POST /gcu`, so
+the setting is inert there and the admin page says so. Two admins saving
+overlapping lists at the same instant can collide on the primary key (500 for
+one of them). The setting is not part of the platform export bundle.
+
+---
+
+## 53. Contract Notes - registry listing without membership (2026-09-15, issue #2631)
+
+**Extends §51.** `GET /control-plane/v1/teams/all` takes an optional
+`include_membership` query parameter, default `true`: the response is unchanged
+when it is omitted.
+
+With `include_membership=false` the route returns the same `list[Team]` built
+from the registry rows alone, with no per-team OpenFGA `Read`, so its cost no
+longer grows with the number of teams. `member_count` is omitted, `admins` and
+`my_relations` are `[]` and `is_member` is `false`: read them as unknown, not as
+empty. Name, description, visibility, joining mode, avatar and storage fields
+are unchanged, and the `can_list_all_teams` gate still runs first.
+
+`/admin/features` uses it for the per-team enablement picker, which only needs
+ids and names. `/admin/teams` keeps the full listing for its admins column.
+
+## 54. Contract Notes - team administrator charter (2026-09-14, reworked 2026-09-15, issue #2658)
+
+**What it is.** A deployment can require every team administrator to accept a
+charter of responsibilities before they hold `team_admin`. The text is frontend
+markdown (`team-admin-charter.md`, `team-admin-charter.fr.md`), replaced from
+the theme archive like `gcu.md`; the stock file is a template.
+
+**Configuration.** `app.team_admin_charter_version: str | None`. `None`, the
+default, turns the charter off. Changing the value asks every admin to accept
+again (see Reconciliation).
+
+**Model.** `schema.fga` adds `team.pending_team_admin: [user]`, part of the
+`team_member` union and of nothing else. A pending admin is a member with no
+admin authority, in every service that asks OpenFGA, by construction.
+
+**Nomination.** Every write of `team_admin` (add member, grant role, rescue,
+team creation, import) writes `pending_team_admin` instead while a version is
+set and the user has not accepted it. `pending_team_admin` cannot be requested
+directly (422). Revoking it cancels the nomination and needs
+`can_administer_admins`; removing the member deletes it with the other roles.
+`my_relations` and the member list expose it.
+
+**Endpoint.**
+
+| Method | Path                                   | Permission    |
+| ------ | -------------------------------------- | ------------- |
+| GET    | `/control-plane/v1/team-admin-charter` | authenticated |
+| POST   | `/control-plane/v1/team-admin-charter` | authenticated |
+
+`GET` returns the caller's `TeamAdminCharterAcceptance {accepted_at}` for the
+configured version, or `null` when they have not accepted it or the charter is
+off.
+
+`POST` records the caller's acceptance of the configured version, then turns every
+`pending_team_admin` they hold into `team_admin`, writing the new tuple before
+deleting the old one. Idempotent: a repeat also promotes a nomination that raced
+the first call. Returns `TeamAdminCharterAcceptance {accepted_at}`. The first
+acceptance of a version emits the audit event `team_admin.charter.accepted`
+`{actor_uid, charter_version}`. With no version set: 409
+`team_admin_charter_disabled`.
+
+**Storage.** `team_admin_charter_acceptances`, primary key `(user_id, version)`
+plus `accepted_at`, where `user_id` is the Keycloak uid used as the OpenFGA
+subject and rows are never updated; `team_admin_charter_state`, one row holding
+the last `applied_version` ("" when off).
+
+**Reconciliation.** At startup, under an advisory lock, and only when the
+configured version differs from `applied_version`:
+
+- a `team_admin` who has not accepted the version becomes `pending_team_admin`;
+- a pending admin who has accepted it, or every one when the charter is off, is
+  promoted;
+- `applied_version` is stored last, so a failed pass is retried.
+
+It costs one ReBAC read per team, once per version change, and is fail-closed:
+an error stops the startup.
+
+**Unchanged invariants.** The last-admin guard and the rescue "orphaned team"
+check count `team_admin` only, so a team whose nominated admin never accepts can
+still be rescued.
+
+**Frontend.** On the pages of a team where `my_relations` holds
+`pending_team_admin`, the charter page replaces the team content until Accept
+while the team has no `team_admin`. Once the team has one, the pages stay
+available to the user's other roles under a notice leading to the charter. The
+home page, the personal space and other teams stay usable. Team settings show
+the Responsibilities section to `team_admin`s, with the time they accepted it,
+and to pending admins, with Accept. The member list marks a pending admin's
+admin chip in light orange with a clock icon ("Admin (pending)" on hover).
+
+**Rollout.** Publish the theme archive with the charter first, then set the
+version: existing admins become pending at the next startup and see the charter
+when they open their team. Unsetting the version promotes every pending admin
+at the next startup.

@@ -1,6 +1,14 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision isolated-consumer host-integration browser-install browser-smoke clean
+FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
+FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
+RELEASE_CONTRACT ?= release/proposed-release-contract.json
+RELEASE_TRANSFER_ROOT ?= target/release-transfer
+RELEASE_VALIDATION_ROOT ?= target/release-validation
+RELEASE_SELECTION ?=
+SELECTION_ARGS = $(if $(filter command line,$(origin RELEASE_SELECTION)),--select "$(RELEASE_SELECTION)",$(if $(RELEASE_SELECTION),--select "$(RELEASE_SELECTION)",))
+
+.PHONY: help install build lint format-check code-quality test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -49,6 +57,15 @@ pack-check-iframe-sdk: ## Validate the iframe SDK tarball contract
 consumer-provision: ## Populate the pinned consumer caches (network allowed)
 	npm run consumer:provision
 
+consumer-provision-iframe-sdk: ## Provision only the SDK consumer cache
+	npm run consumer:provision:iframe-sdk
+
+consumer-provision-react: ## Provision only the pinned React consumer cache
+	npm run consumer:provision:ui
+
+compatibility-provision: ## Recheck exact prior token bytes/provenance and cache them for UI-only use
+	npm run release:provision:ui-baseline
+
 isolated-consumer: ## Install actual tarballs offline in isolated consumers and build
 	npm run test:consumer
 
@@ -60,6 +77,33 @@ browser-install: ## Provision Chromium separately from browser-smoke execution
 
 browser-smoke: ## Run local-only browser checks against staged consumer output
 	npm run test:browser
+
+release-check: ## Validate release contracts and dependency boundaries
+	npm run release:check
+
+release-test: ## Run controlled release tooling tests without registry access
+	npm run release:test
+
+fixture-transfer-create: ## Produce the three-archive fixture transfer for this run
+	npm run fixture:transfer:create -- --output $(FIXTURE_TRANSFER_ROOT) $(SELECTION_ARGS)
+
+fixture-transfer-validate: ## Verify and exercise the received fixture archives
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- --transfer $(FIXTURE_TRANSFER_ROOT) --evidence $(FIXTURE_VALIDATION_ROOT)/final-evidence.json --stage-root $(FIXTURE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
+
+release-transfer-create: ## Produce a maintainer-confirmed candidate transfer
+	npm run release:transfer:create -- --contract $(RELEASE_CONTRACT) --output $(RELEASE_TRANSFER_ROOT) $(SELECTION_ARGS)
+
+release-transfer-validate: ## Validate candidate bytes under application tooling
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:transfer:validate -- --contract $(RELEASE_CONTRACT) --transfer $(RELEASE_TRANSFER_ROOT) --evidence $(RELEASE_TRANSFER_ROOT)/candidate-evidence.json --stage-root $(RELEASE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
+
+release-candidate: ## Build evidence under an explicitly selected contract
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:candidate -- $(SELECTION_ARGS)
+
+release-verify-evidence: ## Recompute integrity for an existing candidate set
+	npm run release:verify-evidence -- $(SELECTION_ARGS)
+
+registry-verify: ## Verify exact published coordinates (network; never local fallback)
+	npm run registry:verify -- $(SELECTION_ARGS)
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

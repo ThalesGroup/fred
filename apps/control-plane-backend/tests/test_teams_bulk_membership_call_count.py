@@ -58,6 +58,7 @@ from fred_core.teams.metadata_store import TeamMetadata
 
 def _fake_deps() -> TeamServiceDependencies:
     mock_config = MagicMock()
+    mock_config.app.team_admin_charter_version = None
     mock_config.app.default_team_max_resources_storage_size = 5368709120
     mock_config.app.personal_max_resources_storage_size = 5368709120
     mock_config.scheduler.enabled = False
@@ -77,6 +78,8 @@ def _fake_deps() -> TeamServiceDependencies:
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         get_team_metadata_store=cast(Any, object),
+        get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, _FakeContentStore()),

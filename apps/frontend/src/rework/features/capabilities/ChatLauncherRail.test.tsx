@@ -26,8 +26,6 @@ const state = vi.hoisted(() => ({ entries: [] as unknown[], clicks: [] as Array<
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-vi.mock("./sessionProbeRegistry", () => ({ sessionProbesForCapabilities: () => [] }));
-
 vi.mock("./sidePanelRegistry", () => ({ sidePanelsForCapabilities: () => state.entries }));
 
 // Stubbed down to what the rail actually decides: which glyph, which label,
@@ -42,7 +40,7 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({
     onClick,
     ...rest
   }: {
-    icon: { type: string };
+    icon: { type: string; filled?: boolean };
     badgeCount?: number;
     onClick?: () => void;
     "aria-pressed"?: boolean;
@@ -52,6 +50,7 @@ vi.mock("@shared/atoms/IconButton/IconButton", () => ({
     return (
       <button
         data-icon={icon.type}
+        data-filled={icon.filled || undefined}
         aria-label={rest["aria-label"]}
         aria-pressed={rest["aria-pressed"]}
         data-badge={badgeCount}
@@ -154,6 +153,17 @@ describe("ChatLauncherRail", () => {
 
     expect(html.indexOf('data-icon="slideshow"')).toBeLessThan(html.indexOf('data-icon="build"'));
     expect(html).toMatch(/_railFooter[^"]*"><span[^>]*><button data-icon="build"/);
+  });
+
+  it("renders a launcher's icon filled when it asks to be", () => {
+    const html = render(
+      null,
+      [],
+      [{ ...attachmentsLauncher(), key: "full-reasoning", icon: "settings", iconFilled: true }],
+    );
+
+    expect(html).toContain('data-icon="settings" data-filled="true"');
+    expect(render(null, [attachmentsLauncher()])).not.toContain("data-filled");
   });
 
   it("renders a rail holding nothing but a footer launcher", () => {

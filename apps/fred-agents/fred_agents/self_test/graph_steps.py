@@ -22,6 +22,9 @@ chunk text, which lets a caller assert a marker phrase is present (or absent).
 
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
     TOOL_REF_KNOWLEDGE_SEARCH,
@@ -38,11 +41,27 @@ from fred_sdk import (
 from .graph_state import SelfTestState
 
 _DEFAULT_TOP_K = 5
+_DEFAULT_HOLD_SECONDS = 0
+MAX_HOLD_SECONDS = 900
+_HOLD_SLICE_SECONDS = 10
+
+CREDENTIAL_EXPIRED = "credential expired during protected call"
+PROTECTED_CALL_REFUSED = "protected call refused"
+PROTECTED_CALL_FAILED = "protected call failed"
+
+# Indirected so a test can substitute the wait instead of spending it.
+_sleep = asyncio.sleep
 
 
 def _top_k(context: GraphNodeContext) -> int:
     value: TuningValue | None = context.tuning_values.get("settings.top_k")
     return int(value) if isinstance(value, (int, float)) else _DEFAULT_TOP_K
+
+
+def _hold_seconds(context: GraphNodeContext) -> int:
+    value: TuningValue | None = context.tuning_values.get("settings.hold_seconds")
+    seconds = int(value) if isinstance(value, (int, float)) else _DEFAULT_HOLD_SECONDS
+    return max(0, min(seconds, MAX_HOLD_SECONDS))
 
 
 def _delivery_footer(context: GraphNodeContext) -> str:
@@ -92,16 +111,100 @@ def _collect_hits(result: object) -> list[VectorSearchHit]:
 
 
 @typed_node(SelfTestState)
+async def baseline_step(state: SelfTestState, context: GraphNodeContext) -> StepResult:
+    """Prove the credential is accepted before any waiting.
+
+    Its own node on purpose: a node's statuses are flushed when it ends, so this
+    one reaches the stream before the hold begins rather than after it.
+    """
+    if context.tuning_values.get("settings.check_access") is True:
+        await _check_access(context)
+        context.emit_status("credential_baseline")
+    return StepResult()
+
+
+@typed_node(SelfTestState)
+async def hold_step(state: SelfTestState, context: GraphNodeContext) -> StepResult:
+    """Wait before retrieving, so a turn can be made to outlive its bearer."""
+    total = _hold_seconds(context)
+    if total == 0:
+        return StepResult()
+
+    # Heartbeats are thoughts because only those reach the stream while the node
+    # is still running; the one status is buffered with the node's events, so it
+    # is flushed last and marks the moment retrieval begins.
+    elapsed = 0
+    while elapsed < total:
+        await _sleep(min(_HOLD_SLICE_SECONDS, total - elapsed))
+        elapsed = min(elapsed + _HOLD_SLICE_SECONDS, total)
+        context.emit_thought(
+            "tool_use", f"holding {elapsed}/{total} s before retrieval"
+        )
+    context.emit_status("hold", f"{total}/{total} s before retrieval")
+    return StepResult()
+
+
+def _protected_call_error(error: httpx.HTTPError) -> RuntimeError:
+    """Classify a call made as the person.
+
+    The harness reads the verdict off this message, so it stays fixed and never
+    carries upstream response text.
+    """
+    if isinstance(error, httpx.HTTPStatusError):
+        challenge = error.response.headers.get("WWW-Authenticate", "").lower()
+        if error.response.status_code == 401 and "token expired" in challenge:
+            return RuntimeError(CREDENTIAL_EXPIRED)
+        return RuntimeError(PROTECTED_CALL_REFUSED)
+    return RuntimeError(PROTECTED_CALL_FAILED)
+
+
+async def _check_access(context: GraphNodeContext) -> None:
+    folders = context.services.document_folders
+    if folders is None:
+        raise RuntimeError("authenticated metadata check unavailable")
+    try:
+        # Resolution always lists authenticated metadata; no matching folder is required.
+        await folders.resolve_folder("credential-check")
+    except httpx.HTTPError as error:
+        raise _protected_call_error(error) from None
+
+
+@typed_node(SelfTestState)
 async def retrieve_step(state: SelfTestState, context: GraphNodeContext) -> StepResult:
     """Retrieve from the selected libraries and echo the chunks verbatim."""
+    if context.tuning_values.get("settings.check_access") is True:
+        runtime_context = context.binding.runtime_context
+        original = getattr(runtime_context, "access_token", None)
+        await _check_access(context)
+        current = getattr(runtime_context, "access_token", None)
+        if original and current and original != current:
+            context.emit_status("credential_renewed")
+        context.emit_status("protected_call_succeeded")
+        return StepResult(
+            state_update={
+                "final_text": "Authenticated metadata check completed.",
+                "sources_data": [],
+                "hit_count": 0,
+                "done_reason": "self_test_access_ok",
+            }
+        )
     context.emit_status(
         "retrieve", f"Searching selected libraries for: {state.latest_user_text}"
     )
 
-    result = await context.invoke_tool(
-        TOOL_REF_KNOWLEDGE_SEARCH,
-        {"query": state.latest_user_text, "top_k": _top_k(context)},
-    )
+    runtime_context = context.binding.runtime_context
+    original = getattr(runtime_context, "access_token", None)
+    try:
+        result = await context.invoke_tool(
+            TOOL_REF_KNOWLEDGE_SEARCH,
+            {"query": state.latest_user_text, "top_k": _top_k(context)},
+        )
+    except httpx.HTTPError as error:
+        raise _protected_call_error(error) from None
+    current = getattr(runtime_context, "access_token", None)
+    if _hold_seconds(context) and original and current and original != current:
+        # Only the observation crosses the stream; credential values stay local.
+        context.emit_status("credential_renewed")
     hits = _collect_hits(result)
     footer = _delivery_footer(context)
 

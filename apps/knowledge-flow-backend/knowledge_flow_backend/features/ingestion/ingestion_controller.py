@@ -50,7 +50,9 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 from fred_core.kpi import KPIActor, KPIWriter
+from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
+from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
@@ -106,6 +108,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcessWithoutUser,
 )
 from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +161,23 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     if await asyncio.to_thread(vector_store.may_delete_session_document, document_uid, user.uid):
         return False
     raise deny()
+
+
+async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None:
+    """Every target folder must be one this caller may write in, and not a machine's.
+
+    Every right is checked before any folder is read, so a caller holding none is
+    told that and never learns from a refusal which folders a machine fills. A
+    machine writing into its own library needs no second pass at all.
+    """
+    for tag_id in tags:
+        await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+    if not tags or is_service_agent(user):
+        return
+
+    tag_store = ApplicationContext.get_instance().get_tag_store()
+    for tag_id in tags:
+        await refuse_if_synchronized_by_id(tag_store, tag_id, user)
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
@@ -269,7 +289,7 @@ def upload_basename(raw_filename: str | None) -> str:
     return leaf if leaf not in ("", ".", "..") else "uploaded_file"
 
 
-def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
+def uploadfile_to_path(file: UploadFile, *, filename: str | None = None) -> pathlib.Path:
     """
     Persist one uploaded file into a single temporary work directory.
 
@@ -282,10 +302,14 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     How to use:
     - Pass the FastAPI `UploadFile`.
     - The returned path always points to `<temp>/input/<filename>`.
+    - `filename` overrides the multipart name for a caller that names the
+      document itself rather than letting the upload name it. It goes through
+      the same leaf-name reduction, so an override is no more trusted than a
+      browser's.
     """
     tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = tmp_dir / upload_basename(file.filename)
+    tmp_path = tmp_dir / upload_basename(filename if filename is not None else file.filename)
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
     return tmp_path
@@ -1030,8 +1054,7 @@ class IngestionController:
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
-            for tag_id in tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, tags)
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
@@ -1098,14 +1121,13 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
-            kpi_actor = KPIActor(type="human", user_id=user.uid)
+            kpi_actor = to_kpi_actor(user)
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
-            for tag_id in tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, tags)
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
@@ -1140,8 +1162,7 @@ class IngestionController:
         ) -> QuotaPrecheckResponse:
             # Mirror the upload endpoints' authorization so the precheck leaks
             # no team's usage numbers to callers who couldn't upload there.
-            for tag_id in precheck.tags:
-                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+            await _authorize_upload_targets(user, precheck.tags)
             team_id = None if precheck.team_id in (None, "personal") else precheck.team_id
             if team_id:
                 await get_rebac_engine().check_user_team_permission_or_raise(

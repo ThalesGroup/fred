@@ -47,6 +47,10 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.evaluations.store import EvaluationStore
+from control_plane_backend.knowledge_bases.instance_store import (
+    KnowledgeBaseInstanceStore,
+)
+from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
@@ -65,6 +69,8 @@ from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.team_wiki.store import TeamWikiStore
+from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStore
+from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +94,12 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
+        self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
+        self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
+            None
+        )
+        self._platform_default_team_store: PlatformDefaultTeamStore | None = None
+        self._team_admin_charter_store: TeamAdminCharterStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
@@ -361,6 +373,34 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_prompt_store
+
+    def get_knowledge_base_definition_store(self) -> KnowledgeBaseDefinitionStore:
+        if self._knowledge_base_definition_store is None:
+            self._knowledge_base_definition_store = KnowledgeBaseDefinitionStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._knowledge_base_definition_store
+
+    def get_knowledge_base_instance_store(self) -> KnowledgeBaseInstanceStore:
+        if self._knowledge_base_instance_store is None:
+            self._knowledge_base_instance_store = KnowledgeBaseInstanceStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._knowledge_base_instance_store
+
+    def get_platform_default_team_store(self) -> PlatformDefaultTeamStore:
+        if self._platform_default_team_store is None:
+            self._platform_default_team_store = PlatformDefaultTeamStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_default_team_store
+
+    def get_team_admin_charter_store(self) -> TeamAdminCharterStore:
+        if self._team_admin_charter_store is None:
+            self._team_admin_charter_store = TeamAdminCharterStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._team_admin_charter_store
 
     def get_model_reasoning_store(self) -> ModelReasoningStore:
         if self._model_reasoning_store is None:

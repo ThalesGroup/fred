@@ -1,0 +1,328 @@
+name: Publish frontend packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Prepare only, publish, or verify exact retained archives
+        required: true
+        default: prepare-only
+        type: choice
+        options: [prepare-only, publish, verify]
+      packages:
+        description: Comma-separated registered package IDs
+        required: true
+        default: designTokens,ui,iframeSdk
+        type: string
+      candidate-ref:
+        description: JSON retained candidate reference for continuation or verification
+        required: false
+        default: ""
+        type: string
+      attempt-refs:
+        description: JSON array of prior retained attempt references
+        required: false
+        default: "[]"
+        type: string
+      terminal-refs:
+        description: JSON array of retained aborted-publishing terminal references
+        required: false
+        default: "[]"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  authorize-source:
+    runs-on: ubuntu-24.04
+    outputs:
+      operation: ${{ steps.inputs.outputs.operation }}
+      selected: ${{ steps.inputs.outputs.selected }}
+      fresh: ${{ steps.inputs.outputs.fresh }}
+      candidate_ref: ${{ steps.inputs.outputs.candidate_ref }}
+      candidate_source: ${{ steps.inputs.outputs.candidate_source }}
+      attempt_refs: ${{ steps.inputs.outputs.attempt_refs }}
+      terminal_refs: ${{ steps.inputs.outputs.terminal_refs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+      - run: npm install --global npm@11.19.0
+      - run: npm ci
+        working-directory: libs/frontend
+      - name: Validate source and manual inputs before dependent jobs
+        id: inputs
+        run: node scripts/release-dispatch.mjs
+        working-directory: libs/frontend
+        env:
+          RELEASE_OPERATION: ${{ inputs.operation }}
+          RELEASE_SELECTION: ${{ inputs.packages }}
+          RELEASE_CANDIDATE_REF: ${{ inputs['candidate-ref'] }}
+          RELEASE_ATTEMPT_REFS: ${{ inputs['attempt-refs'] }}
+          RELEASE_TERMINAL_REFS: ${{ inputs['terminal-refs'] }}
+
+  prepare-candidate:
+    if: needs.authorize-source.outputs.fresh == 'true'
+    needs: authorize-source
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_SELECTION: ${{ needs.authorize-source.outputs.selected }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+      - run: npm install --global npm@11.19.0
+      - run: npm ci
+        working-directory: libs/frontend
+      - name: Provision SDK cache separately
+        run: make consumer-provision-iframe-sdk
+        working-directory: libs/frontend
+      - name: Provision React cache separately
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,')
+        run: make consumer-provision-react
+        working-directory: libs/frontend
+      - name: Provision exact prior tokens after React cache
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,') && !contains(format(',{0},', env.RELEASE_SELECTION), ',designTokens,')
+        run: make compatibility-provision
+        working-directory: libs/frontend
+      - name: Validate policy and preserve archive regressions
+        run: make release-check release-test code-quality test pack-check
+        working-directory: libs/frontend
+      - name: Pack only selected release candidates
+        run: make RELEASE_SELECTION="${RELEASE_SELECTION}" release-transfer-create
+        working-directory: libs/frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+          if-no-files-found: error
+          retention-days: 30
+
+  validate-application-compatibility:
+    if: needs.prepare-candidate.result == 'success'
+    needs: [authorize-source, prepare-candidate]
+    runs-on: ubuntu-24.04
+    outputs:
+      candidate_ref: ${{ steps.candidate-ref.outputs.ref }}
+    env:
+      RELEASE_SELECTION: ${{ needs.authorize-source.outputs.selected }}
+      PLAYWRIGHT_BROWSERS_PATH: target/playwright
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+      - run: npm install --global npm@10.9.2
+      - run: npm ci
+        working-directory: libs/frontend
+      - run: npm ci
+        working-directory: apps/frontend
+      - name: Provision SDK cache in this job
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',iframeSdk,')
+        run: make consumer-provision-iframe-sdk
+        working-directory: libs/frontend
+      - name: Provision React cache in this job
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,')
+        run: make consumer-provision-react
+        working-directory: libs/frontend
+      - name: Provision exact prior tokens after React cache
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,') && !contains(format(',{0},', env.RELEASE_SELECTION), ',designTokens,')
+        run: make compatibility-provision
+        working-directory: libs/frontend
+      - name: Provision Chromium before offline validation
+        run: make browser-install
+        working-directory: libs/frontend
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-packages-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+      - name: Validate selected immutable transfer
+        run: make RELEASE_SELECTION="${RELEASE_SELECTION}" release-transfer-validate
+        working-directory: libs/frontend
+      - name: Digest complete candidate record
+        id: record
+        run: node scripts/release-artifact.mjs record-digest target/release-transfer/candidate-record.json
+        working-directory: libs/frontend
+      - name: Retain exact candidate and successful gate evidence
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-transfer
+          if-no-files-found: error
+          retention-days: 30
+      - name: Bind retained candidate API identity
+        id: candidate-ref
+        run: node scripts/release-artifact.mjs uploaded-ref
+        working-directory: libs/frontend
+        env:
+          RELEASE_UPLOADED_ID: ${{ steps.upload.outputs.artifact-id }}
+          RELEASE_UPLOADED_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          RELEASE_RECORD_DIGEST: ${{ steps.record.outputs.record_digest }}
+      - name: Summarize candidate preparation
+        run: node scripts/release-summary.mjs prepare-only
+        working-directory: libs/frontend
+        env:
+          RELEASE_CANDIDATE_REF: ${{ steps.candidate-ref.outputs.ref }}
+
+  publish:
+    if: always() && needs.authorize-source.result == 'success' && needs.authorize-source.outputs.operation == 'publish' && (needs.authorize-source.outputs.fresh == 'false' || needs.validate-application-compatibility.result == 'success')
+    needs: [authorize-source, validate-application-compatibility]
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    concurrency:
+      group: frontend-packages-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      id-token: write
+    outputs:
+      attempt_ref: ${{ steps.attempt-ref.outputs.ref }}
+      candidate_ref: ${{ steps.candidate-ref.outputs.ref }}
+    env:
+      RELEASE_CANDIDATE_REF: ${{ needs.authorize-source.outputs.fresh == 'true' && needs.validate-application-compatibility.outputs.candidate_ref || needs.authorize-source.outputs.candidate_ref }}
+      RELEASE_PRIOR_ATTEMPT_REFS: ${{ needs.authorize-source.outputs.attempt_refs }}
+      RELEASE_PRIOR_TERMINAL_REFS: ${{ needs.authorize-source.outputs.terminal_refs }}
+      RELEASE_SELECTION: ${{ needs.authorize-source.outputs.selected }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+      - run: npm install --global npm@11.19.0
+      - run: npm ci --ignore-scripts
+        working-directory: libs/frontend
+      - name: Reverify exact prior token dependency before UI-only publication
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,') && !contains(format(',{0},', env.RELEASE_SELECTION), ',designTokens,')
+        run: make compatibility-provision
+        working-directory: libs/frontend
+      - name: Preserve explicit original candidate reference
+        id: candidate-ref
+        run: node scripts/release-artifact.mjs print-ref
+        working-directory: libs/frontend
+      - name: Prepare actual-execution attempt before any npm mutation
+        run: node scripts/release-publisher.mjs prepare-attempt
+        working-directory: libs/frontend
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ATTEMPT_PATH: target/publishing-attempt.json
+      - id: attempt-record
+        run: node scripts/release-artifact.mjs record-digest target/publishing-attempt.json
+        working-directory: libs/frontend
+      - name: Durably retain pre-command attempt
+        id: upload-attempt
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-attempt-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/publishing-attempt.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Bind attempt API identity
+        id: attempt-ref
+        run: node scripts/release-artifact.mjs uploaded-ref
+        working-directory: libs/frontend
+        env:
+          RELEASE_UPLOADED_ID: ${{ steps.upload-attempt.outputs.artifact-id }}
+          RELEASE_UPLOADED_DIGEST: ${{ steps.upload-attempt.outputs.artifact-digest }}
+          RELEASE_RECORD_DIGEST: ${{ steps.attempt-record.outputs.record_digest }}
+      - name: Read back attempt and publish demonstrably absent archives
+        run: node scripts/release-publisher.mjs execute
+        working-directory: libs/frontend
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_CURRENT_ATTEMPT_REF: ${{ steps.attempt-ref.outputs.ref }}
+          RELEASE_OUTCOME_PATH: target/release-outcome.json
+          RELEASE_TERMINAL_PATH: target/publishing-terminal.json
+      - name: Durably retain aborted publishing boundaries
+        if: failure() && hashFiles('libs/frontend/target/publishing-terminal.json') != ''
+        id: upload-terminal
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-terminal-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/publishing-terminal.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain verified outcomes separately
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-outcomes-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/release-outcome.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summarize exact publication outcomes
+        run: node scripts/release-summary.mjs publish target/release-outcome.json
+        working-directory: libs/frontend
+        env:
+          RELEASE_CURRENT_ATTEMPT_REF: ${{ steps.attempt-ref.outputs.ref }}
+
+  verify-public-registry:
+    if: always() && needs.authorize-source.result == 'success' && (needs.authorize-source.outputs.operation == 'verify' || (needs.authorize-source.outputs.operation == 'publish' && needs.publish.result == 'success'))
+    needs: [authorize-source, validate-application-compatibility, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      RELEASE_CANDIDATE_REF: ${{ needs.authorize-source.outputs.operation == 'verify' && needs.authorize-source.outputs.candidate_ref || needs.publish.outputs.candidate_ref }}
+      RELEASE_PRIOR_ATTEMPT_REFS: ${{ needs.authorize-source.outputs.attempt_refs }}
+      RELEASE_CURRENT_ATTEMPT_REF: ${{ needs.publish.outputs.attempt_ref }}
+      RELEASE_SELECTION: ${{ needs.authorize-source.outputs.selected }}
+      PLAYWRIGHT_BROWSERS_PATH: target/playwright
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+      - run: npm install --global npm@10.9.2
+      - run: npm ci
+        working-directory: libs/frontend
+      - name: Install production-host dependencies in this job
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',iframeSdk,')
+        run: npm ci
+        working-directory: apps/frontend
+      - name: Provision SDK cache
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',iframeSdk,')
+        run: make consumer-provision-iframe-sdk
+        working-directory: libs/frontend
+      - name: Provision React cache
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,')
+        run: make consumer-provision-react
+        working-directory: libs/frontend
+      - name: Provision exact prior tokens
+        if: contains(format(',{0},', env.RELEASE_SELECTION), ',ui,') && !contains(format(',{0},', env.RELEASE_SELECTION), ',designTokens,')
+        run: make compatibility-provision
+        working-directory: libs/frontend
+      - name: Provision Chromium separately
+        run: make browser-install
+        working-directory: libs/frontend
+      - name: Retrieve retained material and verify genuine registry consumers
+        run: node scripts/registry-verifier.mjs --retained --select "${RELEASE_SELECTION}" --contract release/proposed-release-contract.json --output target/registry-verification.json
+        working-directory: libs/frontend
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Retain final success evidence only after all gates
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-packages-public-registry-verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: libs/frontend/target/registry-verification.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summarize public-registry verification
+        run: node scripts/release-summary.mjs verify target/registry-verification.json
+        working-directory: libs/frontend

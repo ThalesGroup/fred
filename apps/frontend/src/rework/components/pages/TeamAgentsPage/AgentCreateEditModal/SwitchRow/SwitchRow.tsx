@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Switch from "@components/shared/atoms/Switch/Switch";
+import Switch, { SwitchSize } from "@components/shared/atoms/Switch/Switch";
 import styles from "./SwitchRow.module.css";
 
 export interface SwitchRowProps {
@@ -20,16 +20,20 @@ export interface SwitchRowProps {
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  /** A read-only form still renders its switches; one that can be flicked
+   *  promises a save the surface cannot make. */
+  disabled?: boolean;
+  size?: SwitchSize;
 }
 
-export function SwitchRow({ label, description, checked, onChange }: SwitchRowProps) {
+export function SwitchRow({ label, description, checked, onChange, disabled, size }: SwitchRowProps) {
   return (
     <label className={styles.switchRow}>
       <div className={styles.text}>
         <span className={styles.label}>{label}</span>
         <span className={styles.description}>{description}</span>
       </div>
-      <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <Switch size={size} checked={checked} onChange={(e) => onChange(e.target.checked)} disabled={disabled} />
     </label>
   );
 }

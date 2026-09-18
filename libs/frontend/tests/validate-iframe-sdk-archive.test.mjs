@@ -41,7 +41,13 @@ const { archivePath } = await packIframeSdk();
 
 test("accepts the actual packed iframe SDK with runtime and declaration closure", async () => {
   const evidence = await validateIframeSdkArchive(archivePath);
-  assert.equal(evidence.package, "@fred/iframe-sdk@0.0.0-development");
+  const sdkManifest = JSON.parse(
+    await readFile(
+      new URL("../iframe-sdk/package.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(evidence.package, `${sdkManifest.name}@${sdkManifest.version}`);
   assert.deepEqual(evidence.runtimeModules, [
     "dist/index.js",
     "dist/protocol.js",
@@ -61,6 +67,71 @@ test("loads the actual packed root entry with native ESM", async (context) => {
   );
   assert.equal(typeof loaded.createFredApplicationClient, "function");
 });
+
+for (const [file, from, to, pattern] of [
+  [
+    "dist/index.js",
+    "onContext(",
+    "onMissing(",
+    /runtime must expose onContext/,
+  ],
+  [
+    "dist/types/src/index.d.ts",
+    "onContext(",
+    "onMissing(",
+    /declaration must expose onContext/,
+  ],
+  [
+    "dist/types/.generated/applicationProtocol.d.ts",
+    "readonly theme?:",
+    "readonly missingTheme?:",
+    /optional resolved theme/,
+  ],
+]) {
+  test(`rejects missing live-context contract in ${file}`, async (context) => {
+    const archive = await mutateArchive(archivePath, context, async (root) => {
+      const target = path.join(root, file);
+      const source = await readFile(target, "utf8");
+      assert(source.includes(from));
+      await writeFile(target, source.replace(from, to));
+    });
+    await assert.rejects(validateIframeSdkArchive(archive), pattern);
+  });
+}
+
+for (const [file, from, to, decoy, pattern] of [
+  [
+    "dist/index.js",
+    "onContext(",
+    "onMissing(",
+    "// onContext(",
+    /runtime must expose onContext/,
+  ],
+  [
+    "dist/types/src/index.d.ts",
+    "onContext(",
+    "onMissing(",
+    "// onContext(listener: (context: FredApplicationContext)",
+    /declaration must expose onContext/,
+  ],
+  [
+    "dist/types/.generated/applicationProtocol.d.ts",
+    "readonly theme?:",
+    "readonly missingTheme?:",
+    '// readonly theme?: "light" | "dark"',
+    /optional resolved theme/,
+  ],
+]) {
+  test(`rejects comment-only live-context markers in ${file}`, async (context) => {
+    const archive = await mutateArchive(archivePath, context, async (root) => {
+      const target = path.join(root, file);
+      const source = await readFile(target, "utf8");
+      assert(source.includes(from));
+      await writeFile(target, `${source.replace(from, to)}\n${decoy}\n`);
+    });
+    await assert.rejects(validateIframeSdkArchive(archive), pattern);
+  });
+}
 
 for (const file of [
   "dist/index.js",

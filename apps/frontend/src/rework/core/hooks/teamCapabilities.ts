@@ -36,6 +36,7 @@ export type TeamCapabilities = {
   canReadConversations: boolean;
   canUseTeamAgents: boolean;
   canUseTeamApplications: boolean;
+  canUseTeamKnowledgeBases: boolean;
   canAccessFiles: boolean;
   canRunEvaluations: boolean;
   canManageEvaluationCorpus: boolean;
@@ -62,6 +63,7 @@ const PERMISSION_TO_FLAG: Record<TeamPermission, keyof TeamCapabilities> = {
   can_read_conversations: "canReadConversations",
   can_use_team_agents: "canUseTeamAgents",
   can_use_team_applications: "canUseTeamApplications",
+  can_use_team_knowledge_bases: "canUseTeamKnowledgeBases",
   can_access_files: "canAccessFiles",
   can_run_evaluations: "canRunEvaluations",
   can_manage_evaluation_corpus: "canManageEvaluationCorpus",
@@ -115,6 +117,6 @@ export function hasElevatedTeamRole(capabilities: TeamCapabilities): boolean {
 export function canAdministerTeamRole(capabilities: TeamCapabilities, role: UserTeamRelation): boolean {
   if (role === "team_editor") return capabilities.canAdministerEditors;
   if (role === "team_analyst") return capabilities.canAdministerAnalysts;
-  if (role === "team_admin") return capabilities.canAdministerAdmins;
+  if (role === "team_admin" || role === "pending_team_admin") return capabilities.canAdministerAdmins;
   return capabilities.canAdministerMembers;
 }

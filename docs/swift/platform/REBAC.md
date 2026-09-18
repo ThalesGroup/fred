@@ -100,6 +100,14 @@ Can:
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
 
+A nominated admin who has not accepted the configured team administrator
+charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
+a `team_member` with no admin authority. Accepting the charter
+(`POST /team-admin-charter`) turns it into `team_admin`, and a version change
+moves admins back to pending at the next startup. The last-admin guard and the
+rescue check count `team_admin` only. Contract:
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
+
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see
 above):
 
@@ -237,7 +245,13 @@ Discovery and first-party app checks request higher consistency from the
 authorization engine and never use administration caches as admission decisions.
 Typed administration caches remain process-local, with mutation invalidation and
 expiry rather than a database permission-revision protocol. They do not promise
-immediate cross-replica display freshness.
+immediate cross-replica display freshness. The admin capability health column
+folds `can_use` from that 45-second cached per-capability tuple set rather than
+issuing one `ListObjects` per team: same-replica writes invalidate it, so
+another replica's write may show up to 45 seconds late. The revoke preview
+folds the same way but from a fresh read of the one capability it is about,
+because an admin confirms a mutation against that number. Neither is an
+admission decision.
 
 **Deferred shared lifecycle:** global Deactivate/Activate/Delete requires a
 separate design across all or most applicable ReBAC types, including ownership,
@@ -312,6 +326,9 @@ the read-only listing is delegable:
   member count, storage usage and `admins` roster (`UserSummary`, email
   included). That is registry metadata, not the agents, prompts,
   conversations or files those relations still gate exclusively.
+  `?include_membership=false` returns the same rows without member count,
+  `admins` or membership, and reads no relation: pickers such as
+  `/admin/features` use it.
 - **`can_delete_team`** → `DELETE /teams/{team_id}`: deletes the registry row
   and every relation referencing that team.
 - **`can_rescue_team_admin`** → `POST /teams/{team_id}/rescue-admin`: grants

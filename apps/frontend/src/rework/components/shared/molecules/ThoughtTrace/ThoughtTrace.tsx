@@ -100,9 +100,9 @@ export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: Tho
           tool steps alternate rather than being stacked into two lanes. */}
       {expanded && (
         <div className={styles.body}>
-          {rows.map(({ entry, lane, index, reasoningText }) =>
+          {rows.map(({ entry, lane, index, reasoningText, restated }) =>
             lane === "reasoning" ? (
-              <ReasoningRow key={traceEntryKey(entry)} entry={entry} text={reasoningText ?? ""} />
+              <ReasoningRow key={traceEntryKey(entry)} entry={entry} text={reasoningText ?? ""} restated={restated} />
             ) : (
               <TraceEntryRow
                 key={traceEntryKey(entry)}

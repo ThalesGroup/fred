@@ -21,7 +21,6 @@ import {
   textOf,
   toolCopyText,
   toolDiscriminator,
-  stripRepeatedPreamble,
   totalLatencyMs,
   traceRows,
   traceSummary,
@@ -210,6 +209,35 @@ describe("groupTraceEntries", () => {
     const entries = groupTraceEntries([call, result]);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ kind: "combo", call, result });
+  });
+
+  it("omits a valid write_todos call and its matching result", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "in_progress" }],
+    });
+    const result = toolResultMsg("todo-1", "Updated todo list");
+    expect(groupTraceEntries([call, result])).toEqual([]);
+  });
+
+  it("keeps a failed write_todos call and result visible", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "in_progress" }],
+    });
+    const result = toolResultMsg("todo-1", "Failed to update todo list", false);
+    expect(groupTraceEntries([call, result])).toEqual([{ kind: "combo", call, result }]);
+  });
+
+  it("keeps malformed write_todos calls paired with their result", () => {
+    const call = toolCallMsg("todo-1", "write_todos", {
+      todos: [{ content: "Inspect the change", status: "unknown" }],
+    });
+    const result = toolResultMsg("todo-1", "Invalid todo list", false);
+    expect(groupTraceEntries([call, result])).toEqual([{ kind: "combo", call, result }]);
+  });
+
+  it("keeps an orphan result when no valid write_todos call identifies it", () => {
+    const result = toolResultMsg("todo-1", "Updated todo list");
+    expect(groupTraceEntries([result])).toEqual([{ kind: "solo", message: result }]);
   });
 
   it("pairs tool_call+result even when result appears before call in array", () => {
@@ -460,71 +488,357 @@ describe("totalLatencyMs", () => {
   });
 });
 
-// ── stripRepeatedPreamble ─────────────────────────────────────────────────────
+// ── restated reasoning ────────────────────────────────────────────────────────
 
-describe("stripRepeatedPreamble", () => {
-  it("keeps the text when there is no previous block", () => {
-    expect(stripRepeatedPreamble("Only block.", null)).toBe("Only block.");
+/** The display text of each reasoning block of one turn, in order. */
+function reasoningTexts(...blocks: (string | ChatMessage)[]) {
+  const rows = traceRows(
+    blocks.map((block) => ({ kind: "solo" as const, message: typeof block === "string" ? thoughtMsg(block) : block })),
+  );
+  return rows.map((row) => row.reasoningText);
+}
+
+describe("traceRows — restated reasoning", () => {
+  it("leaves the first block untouched", () => {
+    expect(reasoningTexts("Only block. Nothing before it.")).toEqual(["Only block. Nothing before it."]);
   });
 
-  it("drops the whole sentences the previous block already carried", () => {
-    const previous = "I found the document. It is a fictional report.";
-    const current = "I found the document. It is a fictional report. The tool is unavailable.";
-    expect(stripRepeatedPreamble(current, previous)).toBe("The tool is unavailable.");
+  it("drops the sentences an earlier block already said", () => {
+    const shared = "The user asked for a document. I identified it and summarised it.";
+    expect(reasoningTexts(shared, `${shared} However, the tool is unavailable.`)).toEqual([
+      shared,
+      "However, the tool is unavailable.",
+    ]);
   });
 
-  // The failure the sentence rule exists to prevent: two blocks that merely open
-  // on the same few words share no complete sentence, and a character-level trim
-  // would have rendered "asked for a document." — a mutilated line.
-  // A `.` is not a sentence end on its own. Cutting after one of these opens a
-  // row mid-sentence — the mutilated line the whole function exists to prevent.
-  // Each prefix below holds NO real sentence end, so the only cut on offer is
-  // the wrong one; a passing case returns the text untouched.
+  // The shape seen in real conversations: the model restates its context at every
+  // round, rephrased rather than verbatim, so a character-level match finds nothing.
+  it("drops a rephrased restatement", () => {
+    const first =
+      "L'utilisateur demande de traduire deux pages du wiki en espagnol et en italien. Je dois les localiser.";
+    const second =
+      "L'utilisateur a demandé de traduire deux pages du wiki en espagnol et en italien. J'ai lu les deux pages.";
+    expect(reasoningTexts(first, second)[1]).toBe("J'ai lu les deux pages.");
+  });
+
+  it("drops what any earlier block said, not only the previous one", () => {
+    const texts = reasoningTexts(
+      "The user wants a summary. I will list the files.",
+      "Two PDF files were found.",
+      "The user wants a summary. Two PDF files were found. Reading the first one now.",
+    );
+    expect(texts[2]).toBe("Reading the first one now.");
+  });
+
+  it("drops the list items an earlier block already listed", () => {
+    const first = "I read both pages:\n- Activities / Spain\n- Activities / Italy";
+    const second = "I read both pages:\n- Activities / Spain\n- Activities / Italy\n\nNow translating them.";
+    expect(reasoningTexts(first, second)[1]).toBe("Now translating them.");
+  });
+
+  // The shape of a real session: the agent re-lists the user's instructions at
+  // every round, verbatim, under an intro rephrased too far to match on its own.
+  it("drops a repeated list together with its rephrased intro", () => {
+    const tasks = "1. Lister les documents\n2. Résumer un document au hasard\n3. Générer un document Word";
+    const first = `L'utilisateur me donne des instructions détaillées sur mon processus de travail :\n${tasks}\n\nJe commence.`;
+    const second = `L'utilisateur m'a donné des instructions très précises sur la manière de procéder :\n${tasks}\n\nLe document est créé.`;
+    expect(reasoningTexts(first, second)[1]).toBe("Le document est créé.");
+  });
+
+  // The real session: the rewording still shares two thirds of its words with the
+  // first intro, and brings words of its own ("fourni", "suivre").
+  it("drops a list whose intro was reworded with words of its own", () => {
+    const tasks = "1. Lister les documents\n2. Résumer un document au hasard";
+    const first = `L'utilisateur me donne des instructions détaillées sur mon processus de travail :\n${tasks}\n\nJe commence.`;
+    const second = `L'utilisateur a fourni des instructions détaillées sur le processus à suivre :\n${tasks}\n\nJ'ai déjà listé.`;
+    expect(reasoningTexts(first, second)[1]).toBe("J'ai déjà listé.");
+  });
+
+  it("keeps an intro whose list brings something new", () => {
+    const first = "Voici le plan :\n1. Lister les documents";
+    const second = "Voici ce qui reste à faire :\n1. Lister les documents\n2. Écrire le rapport";
+    expect(reasoningTexts(first, second)[1]).toBe(
+      "Voici ce qui reste à faire : 1. Lister les documents 2. Écrire le rapport",
+    );
+  });
+
+  it("drops a repeated list even when one item was retouched", () => {
+    const first =
+      "L'utilisateur me demande de :\n1. Chercher dans les documents RAG (vector search)\n2. Lister les documents";
+    const second =
+      "L'utilisateur me demande de :\n1. Chercher dans les documents RAG\n2. Lister les documents\n\nJ'ai reçu la liste.";
+    expect(reasoningTexts(first, second)[1]).toBe("J'ai reçu la liste.");
+  });
+
+  // One sentence reworded just below the threshold used to stop the trim, and
+  // every verbatim sentence after it stayed on the row.
+  it("does not let one reworded sentence shield the verbatim ones after it", () => {
+    const tail =
+      "Je dois localiser ces pages dans l'index du wiki. Je vais utiliser wiki_read_page pour les deux pages.";
+    const first = `L'utilisateur demande de traduire en espagnol et en italien deux pages du wiki. ${tail}`;
+    const second = `L'utilisateur demande de traduire deux pages du wiki en espagnol et en italien. ${tail} Les pages sont lues.`;
+    expect(reasoningTexts(first, second)[1]).toBe("Les pages sont lues.");
+  });
+
+  // Near repeats are dropped only INSIDE a lead of real repeats: a trailing one
+  // may be the only new fact of the block.
+  it("keeps a near-repeated sentence that would end the lead", () => {
+    const shared = "La page parente a été créée dans le wiki.";
+    const texts = reasoningTexts(
+      `${shared} Je dois maintenant publier la page Italie.`,
+      `${shared} Je dois maintenant publier la page Espagne.`,
+    );
+    expect(texts[1]).toBe("Je dois maintenant publier la page Espagne.");
+  });
+
+  // Every recap item resembles an earlier one, but a lead of near repeats with
+  // few real ones is progress told in new words, not a restatement.
+  it("keeps a recap told in new words", () => {
+    const first =
+      "Je dois :\n- Lister les documents disponibles dans le chat\n- Résumer un document au hasard dans le corpus";
+    const recap =
+      "Bilan :\n- Documents disponibles dans le chat listés hier soir\n- Document au hasard dans le corpus résumé ce matin";
+    const second = `- Lister les documents disponibles dans le chat\n\n${recap}\n\nSuite.`;
+    expect(reasoningTexts(first, second)[1]).toBe(
+      "Bilan : Documents disponibles dans le chat listés hier soir Document au hasard dans le corpus résumé ce matin Suite.",
+    );
+  });
+
+  // Past eight meaningful words, a single swapped word stays above the overlap
+  // threshold: only the word being new to the turn gives it away.
   it.each([
-    ["an abbreviation before a lowercase word", "Two sources agree, e.g. the audit log and "],
-    ["an abbreviation before a capital", "See cf. Section 4 and the appendix "],
-    ["a titled reference before a digit", "See Fig. 2 and the appendix "],
-    ["a numbered list marker", "1. Read the configuration file and "],
-    ["an ordinal before a digit", "Ranked No. 3 by score and "],
-    ["a person's title", "Escalated to Dr. Martin and the on-call "],
-  ])("does not cut inside %s", (_label, prefix) => {
-    expect(stripRepeatedPreamble(`${prefix}stop.`, `${prefix}go.`)).toBe(`${prefix}stop.`);
+    [
+      "The configuration file config.yaml sets the database url for the production environment here.",
+      "The configuration file config.yaml sets the database url for the staging environment here.",
+    ],
+    [
+      "Je dois maintenant publier dans le wiki de l'équipe la page consacrée à l'Italie.",
+      "Je dois maintenant publier dans le wiki de l'équipe la page consacrée à l'Espagne.",
+    ],
+  ])("keeps a long sentence whose one swapped word is new to the turn", (first, second) => {
+    expect(reasoningTexts(first, second)[1]).toBe(second);
   });
 
-  it("still cuts on a real sentence end that follows an abbreviation", () => {
-    const previous = "Checked the audit log, e.g. the last entry. Nothing matched.";
-    const current = "Checked the audit log, e.g. the last entry. Retrying with a wider range.";
-    expect(stripRepeatedPreamble(current, previous)).toBe("Retrying with a wider range.");
+  it.each([
+    [
+      "a short word",
+      "I will now send the quarterly report to the finance team in EU region.",
+      "I will now send the quarterly report to the finance team in US region.",
+    ],
+    [
+      "an intro close to an earlier one",
+      "I need to check the staging deploy:\n- read the config\n- run the tests",
+      "I need to check the production deploy:\n- read the config\n- run the tests",
+    ],
+  ])("keeps a block whose only change is %s", (_label, first, second) => {
+    const rows = traceRows([first, second].map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) })));
+    expect(rows[1].restated).toBe(false);
+    expect(rows[1].reasoningMarkdown).toBe(second);
   });
 
-  // The length-based guard this replaced rejected these: "it" and "us" are as
-  // short as "cf", and they end sentences all the time.
-  it("cuts after a short final word", () => {
-    const previous = "I identified it and summarised it. Nothing else to add.";
-    const current = "I identified it and summarised it. However, the tool is unavailable.";
-    expect(stripRepeatedPreamble(current, previous)).toBe("However, the tool is unavailable.");
+  // What a rephrasing changes without adding a fact must not count as a new word.
+  it.each([
+    [
+      "an inflection",
+      "L'utilisateur demande un document Word qui résume les bonnes pratiques de gestion de produit en entreprise.",
+      "L'utilisateur demande un document Word résumant les bonnes pratiques de gestion de produit en entreprise.",
+    ],
+    [
+      "a function word",
+      "L'utilisateur demande une page d'accueil pour un site gouvernemental sur la santé et la protection civile.",
+      "L'utilisateur a demandé une page d'accueil pour un site gouvernemental autour de la santé et de la protection civile.",
+    ],
+  ])("still drops a restatement that only changes %s", (_label, first, second) => {
+    expect(reasoningTexts(first, `${second} Voici la suite.`)[1]).toBe("Voici la suite.");
   });
 
-  it("cuts on ! and ?", () => {
-    const previous = "Found it! Now summarising.";
-    const current = "Found it! Now writing the report.";
-    expect(stripRepeatedPreamble(current, previous)).toBe("Now writing the report.");
+  it("keeps a near-repeated sentence between repeats", () => {
+    const before = "La page parente a été créée dans le wiki.";
+    const after = "Je vais utiliser wiki_propose_page pour cela.";
+    const texts = reasoningTexts(
+      `${before} Je dois maintenant publier la page Italie. ${after}`,
+      `${before} Je dois maintenant publier la page Espagne. ${after}`,
+    );
+    expect(texts[1]).toBe(`Je dois maintenant publier la page Espagne. ${after}`);
   });
 
-  it("keeps the text when the shared prefix holds no complete sentence", () => {
-    const previous = "The user wrote a filename. I will search for it.";
-    const current = "The user asked for a document. I will summarise it.";
-    expect(stripRepeatedPreamble(current, previous)).toBe(current);
+  it.each([
+    ["before a repeated sentence", "Trois pages manquent encore :\nLa page parente a été créée dans le wiki."],
+    ["before a repeated list", "Deux étapes restent bloquées :\n1. Lister les documents\n2. Résumer un document"],
+  ])("keeps a new intro %s", (_label, second) => {
+    const first =
+      "Plan :\n1. Lister les documents\n2. Résumer un document\n\nLa page parente a été créée dans le wiki.";
+    expect(reasoningTexts(first, second)[1]).not.toBe("");
+    expect(reasoningTexts(first, second)[1]).toMatch(/^(Trois|Deux)/);
   });
 
-  it("keeps the text when the block is wholly contained in its predecessor", () => {
-    const previous = "First. Second. Third.";
-    expect(stripRepeatedPreamble("First. Second.", previous)).toBe("First. Second.");
+  it("recognises a numbered item still streaming as a repeat", () => {
+    const earlier = thoughtMsg("Plan :\n1. Lister les documents disponibles du corpus.");
+    const streaming = thoughtMsg("Plan :\n2. Lister les documents disponibles du cor", { streaming_delta: true });
+    const rows = traceRows([
+      { kind: "solo", message: earlier },
+      { kind: "solo", message: streaming },
+    ]);
+    expect(rows[1]).toMatchObject({ reasoningText: "", restated: false });
   });
 
-  it("cuts on ! and ? as well as .", () => {
-    expect(stripRepeatedPreamble("Done! Next step.", "Done! Other.")).toBe("Next step.");
-    expect(stripRepeatedPreamble("Which one? Then this.", "Which one? Other.")).toBe("Then this.");
+  it("still drops a renumbered list item", () => {
+    expect(
+      reasoningTexts("1. Lister les documents disponibles", "2. Lister les documents disponibles\n\nEnsuite.")[1],
+    ).toBe("Ensuite.");
+  });
+
+  it("only drops the leading run, never a sentence in the middle", () => {
+    const texts = reasoningTexts("The user wants a summary.", "A new finding. The user wants a summary.");
+    expect(texts[1]).toBe("A new finding. The user wants a summary.");
+  });
+
+  it("keeps a sentence that differs from an earlier one by a single noun", () => {
+    const texts = reasoningTexts(
+      "Je dois maintenant publier la page Italie.",
+      "Je dois maintenant publier la page Espagne.",
+    );
+    expect(texts[1]).toBe("Je dois maintenant publier la page Espagne.");
+  });
+
+  it.each([
+    ["a number", "Il reste 3 pages à traduire dans le wiki.", "Il reste 2 pages à traduire dans le wiki."],
+    ["a negation", "The search returned relevant results.", "The search returned no relevant results."],
+    ["a French negation", "La page parente existe dans le wiki.", "La page parente n'existe pas dans le wiki."],
+  ])("keeps a sentence that changes %s", (_label, first, second) => {
+    expect(reasoningTexts(first, second)[1]).toBe(second);
+  });
+
+  // Were a soft-wrapped line its own segment, its first half would match and
+  // the row would open on "and then check the logs".
+  it("does not treat a soft-wrapped line as a sentence end", () => {
+    const text = "I will reread the configuration file\nand then check the logs.";
+    expect(reasoningTexts("I will reread the configuration file", text)[1]).toBe(
+      "I will reread the configuration file and then check the logs.",
+    );
+  });
+
+  it("recomputes a block when an earlier block changes", () => {
+    const later = thoughtMsg("The user wants a summary. Reading the files.");
+    const rows = (first: string) =>
+      traceRows([
+        { kind: "solo", message: thoughtMsg(first) },
+        { kind: "solo", message: later },
+      ]);
+    expect(rows("The user wants a summary.")[1].reasoningText).toBe("Reading the files.");
+    expect(rows("Something unrelated.")[1].reasoningText).toBe("The user wants a summary. Reading the files.");
+  });
+
+  // A `.` is not a sentence end on its own. Were the block split after one of
+  // these, the head alone would match the earlier block and the row would open
+  // mid-sentence — so each case must come back untouched.
+  it.each([
+    ["an abbreviation before a capital", "See cf.", "See cf. Section 4 and the appendix."],
+    ["a titled reference before a digit", "See Fig.", "See Fig. 2 and the appendix."],
+    ["a numbered list marker", "1.", "1. Read the configuration file."],
+    ["an ordinal before a digit", "Ranked No.", "Ranked No. 3 by score."],
+    ["a person's title", "Escalated to Dr.", "Escalated to Dr. Martin and the on-call."],
+  ])("does not cut inside %s", (_label, head, text) => {
+    expect(reasoningTexts(head, text)[1]).toBe(text);
+  });
+
+  describe("reasoningMarkdown", () => {
+    const markdownOf = (...blocks: string[]) =>
+      traceRows(blocks.map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) }))).map(
+        (row) => row.reasoningMarkdown,
+      );
+
+    it("is the block's markdown untouched when nothing was dropped", () => {
+      expect(markdownOf("**Plan** :\n- Lister les documents")).toEqual(["**Plan** :\n- Lister les documents"]);
+    });
+
+    // Cut between blocks, what follows keeps its markdown: the list stays a list.
+    it("keeps the markdown of the blocks after the cut", () => {
+      const first = "L'utilisateur veut un résumé.";
+      const second = `${first}\n\nJe dois :\n- **Lister** les documents\n- Résumer le premier`;
+      expect(markdownOf(first, second)[1]).toBe("Je dois :\n- **Lister** les documents\n- Résumer le premier");
+    });
+
+    it("flattens only the rest of a paragraph cut mid-way", () => {
+      const first = "L'utilisateur veut un résumé.";
+      const second = `${first} Je lis **le premier** fichier.\n\n- Ensuite, le second`;
+      expect(markdownOf(first, second)[1]).toBe("Je lis le premier fichier.\n\n- Ensuite, le second");
+    });
+
+    it("keeps a code block that follows the cut", () => {
+      const first = "L'utilisateur veut la requête.";
+      const second = `${first}\n\n\`\`\`sql\nSELECT 1;\n\`\`\`\n\nJe l'exécute.`;
+      expect(markdownOf(first, second)[1]).toBe("\`\`\`sql\nSELECT 1;\n\`\`\`\n\nJe l'exécute.");
+    });
+
+    // Code is compared like a sentence: new code stops the cut, repeated code goes.
+    it("never drops a new code block, even between repeated sentences", () => {
+      const first = "The user wants X. I will list files.";
+      const second = "The user wants X.\n\n```sh\nls -la\n```\n\nI will list files.";
+      expect(markdownOf(first, second)[1]).toBe("```sh\nls -la\n```\n\nI will list files.");
+      expect(
+        traceRows([first, second].map((text) => ({ kind: "solo" as const, message: thoughtMsg(text) })))[1].restated,
+      ).toBe(false);
+    });
+
+    // The chain of thought flattens and never shows code, so a row whose only new
+    // part is code would otherwise render empty.
+    it("previews the first line of code when code is all a block adds", () => {
+      const said = "I will read the config file.";
+      const rows = traceRows(
+        [said, `${said}\n\n\`\`\`yaml\nport: 8080\nhost: local\n\`\`\``].map((text) => ({
+          kind: "solo" as const,
+          message: thoughtMsg(text),
+        })),
+      );
+      expect(rows[1]).toMatchObject({ reasoningText: "port: 8080", restated: false });
+    });
+
+    it("drops a code block the turn already showed", () => {
+      const code = "```sh\nls -la\n```";
+      expect(markdownOf(`Listing.\n\n${code}`, `Listing.\n\n${code}\n\nDone.`)[1]).toBe("Done.");
+    });
+
+    it("keeps a heading apart from the line below it", () => {
+      const said = "The user wants the sales report for Q3.";
+      // A heading the turn never showed stops the cut instead of vanishing with the line under it.
+      expect(markdownOf(said, `## Plan\n${said}\n\nI will now query the database.`)[1]).toBe(
+        `## Plan\n${said}\n\nI will now query the database.`,
+      );
+      // Glued to its heading, a repeated line fell under the overlap threshold and stayed.
+      const heading = "Plan for the quarterly sales analysis.";
+      expect(
+        markdownOf(
+          `${heading} ${said}`,
+          `## Plan for the quarterly sales analysis\n${said}\n\nI will now query the database.`,
+        )[1],
+      ).toBe("I will now query the database.");
+    });
+
+    it("is empty for a block with nothing new", () => {
+      expect(markdownOf("Même chose.", "Même chose.")[1]).toBe("");
+    });
+  });
+
+  it("marks a block with nothing new as restated", () => {
+    const rows = traceRows([
+      { kind: "solo", message: thoughtMsg("The user wants a summary. I will list the files.") },
+      { kind: "solo", message: thoughtMsg("The user wants a summary. I will list the files.") },
+    ]);
+    expect(rows.map((row) => row.restated)).toEqual([false, true]);
+    expect(rows[1].reasoningText).toBe("");
+  });
+
+  // Still streaming, the block may yet add something: it shows nothing rather
+  // than a restatement label, and its unfinished sentence does not flash in.
+  it("does not call a streaming block restated, nor show its restated tail", () => {
+    const earlier = thoughtMsg("The user asked for a translation of two pages.");
+    const streaming = thoughtMsg("The user asked for a transl", { streaming_delta: true });
+    const rows = traceRows([
+      { kind: "solo", message: earlier },
+      { kind: "solo", message: streaming },
+    ]);
+    expect(rows[1]).toMatchObject({ reasoningText: "", restated: false });
   });
 });
 
@@ -609,23 +923,6 @@ describe("traceRows", () => {
       ["reasoning", null],
       ["step", 2],
     ]);
-  });
-
-  // The real shape of the defect, from session fausse-situation-thales-espagne:
-  // two model-native blocks of one turn sharing 533 identical leading characters,
-  // differing only after them. Every character must still appear exactly once
-  // across the rows — nothing is dropped from the turn, only from the repeat.
-  it("trims a reasoning row of the sentences the previous row already showed", () => {
-    const shared = "The user asked for a document. I identified it and summarised it.";
-    const first = thoughtMsg(shared, { phase: "planning" });
-    const second = thoughtMsg(`${shared} However, the tool is unavailable.`, { phase: "planning" });
-    const rows = traceRows(groupTraceEntries([first, toolCallMsg("c1", "search"), second]));
-
-    expect(rows[0].reasoningText).toBe(shared);
-    expect(rows[2].reasoningText).toBe("However, the tool is unavailable.");
-    // Trimmed against the previous block's FULL text, so the rows tile the whole
-    // reasoning with no gap between them.
-    expect(`${rows[0].reasoningText} ${rows[2].reasoningText}`).toBe(`${shared} However, the tool is unavailable.`);
   });
 
   it("leaves step rows without reasoning text", () => {

@@ -48,6 +48,7 @@ import {
   dependencyLabels,
   excludePersonalTeams,
   filterTeamsByName,
+  hasAgentInstanceLifecycle,
   isCapabilityOnForTeam,
   missingAgentDependenciesForPersonalSpaces,
   missingAgentDependenciesForTeam,
@@ -235,7 +236,7 @@ export function CapabilityTeamMatrixDrawer({
   // The pinned class row is not a team, so it stays out of name filtering and
   // out of the registry-empty/search-empty status below; it is simply hidden
   // while a search query is active.
-  const showPersonalRow = capability?.kind !== "app" && !hasQuery;
+  const showPersonalRow = hasAgentInstanceLifecycle(capability?.kind) && !hasQuery;
   // `teams`, not the sorted snapshot: the registry-empty check must reflect
   // the live query result immediately, not wait for the sort effect to
   // re-run — otherwise a freshly-loaded roster can flash "no teams" for a
@@ -497,9 +498,7 @@ export function CapabilityTeamMatrixDrawer({
     void submitOff(teamId, next === "disabled" ? "disable" : "default");
   };
 
-  const title = capability
-    ? t("rework.admin.capabilities.matrix.title", { name: t(capability.name, { defaultValue: capability.name }) })
-    : "";
+  const title = capability ? t("rework.admin.capabilities.matrix.title", { name: agentLabel }) : "";
 
   // Missing dependencies for whichever row the confirmation is open on —
   // re-derived on render, so the dialog's sentence tracks a catalog refetch

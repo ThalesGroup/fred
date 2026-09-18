@@ -1,8 +1,8 @@
 # FRED frontend package producer
 
 This private npm workspace builds distributable frontend packages from canonical
-FRED sources. It produces the implemented `@fred/design-tokens`, bounded `@fred/ui`, and
-framework-independent `@fred/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
+FRED sources. It produces the implemented `@fred-oss/design-tokens`, bounded `@fred-oss/ui`, and
+framework-independent `@fred-oss/iframe-sdk` archive foundations; the broader package architecture and sequencing remain in the
 [frontend packaging RFC](../../docs/swift/FRED-FRONTEND-PACKAGING-RFC.md).
 
 ## Workspace and publication boundary
@@ -10,7 +10,9 @@ framework-independent `@fred/iframe-sdk` archive foundations; the broader packag
 `private: true` applies to this workspace root and prevents treating its
 orchestration manifest as a package. It does not make workspace members private
 or configure their eventual registry, access policy, version, credentials, or
-publication workflow. This change does not publish anything.
+publication workflow. The retained manual workflow defaults to preparation only; its
+separately protected direct-OIDC publication and read-only verification operations are
+documented in [RELEASE.md](RELEASE.md). No development or pull-request command publishes.
 
 The members generate disposable output from canonical files under
 `apps/frontend/src/styles/` and `apps/frontend/src/assets/fonts/`. Do not copy
@@ -113,3 +115,24 @@ iframe client contract and its deliberately buffered transport are documented in
 [iframe-sdk/README.md](iframe-sdk/README.md). Deferred components and overlays,
 theme/live-locale protocol extensions, registry publication, FRED package consumption,
 and external adopter integration remain outside these archive foundations.
+
+Release-contract checks, immutable evidence, the manual release workflow, and generic
+registry-verification tooling are documented in [RELEASE.md](RELEASE.md). Fixture evidence
+never authorizes publication. A prepared code path is not evidence that direct trust has
+been configured or a later version has been published.
+
+For independent-release preparation, a schema-checked [package inventory](release/package-inventory.json)
+registers stable IDs and specialized profiles without copying member manifest coordinates.
+The [central release policy](release/proposed-release-contract.json), per-member changelogs,
+and durable [design-token compatibility ledger](release/compatibility-baselines.json) are
+reviewed separately. Run `make release-check` and `make release-test` under the exact release
+Node 24.21.0/npm 11.19.0 toolchain; application-host checks retain their separate Node
+22.13.0/npm 10.9.2 dependencies. The generated candidate record is preparation evidence,
+not a publication authorization.
+The current CLI can prepare selected inventory IDs with `--select` (or
+`RELEASE_SELECTION=<ids>` for transfer Makefile targets). Omission retains the existing
+all-member development and preparation commands. SDK-only validation needs only its neutral
+consumer cache; UI-only validation separately provisions and provenance-checks the reviewed
+exact token baseline before its offline React consumer runs. The workflow dispatch now
+accepts selected IDs while keeping `prepare-only` as its default; see [RELEASE.md](RELEASE.md)
+for manual inputs, artifact references, and execution prerequisites.

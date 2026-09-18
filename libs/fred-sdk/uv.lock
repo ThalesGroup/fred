@@ -501,7 +501,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "3.10.0"
+version = "3.10.1"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -596,7 +596,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "3.6.0"
+version = "3.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "fred-core" },
@@ -616,6 +616,10 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-socket" },
     { name = "ruff" },
+    { name = "temporalio" },
+]
+knowledge-base = [
+    { name = "temporalio" },
 ]
 
 [package.dev-dependencies]
@@ -627,6 +631,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-socket" },
     { name = "ruff" },
+    { name = "temporalio" },
 ]
 
 [package.metadata]
@@ -644,8 +649,10 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "temporalio", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.7.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["knowledge-base", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -656,6 +663,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "pytest-socket", specifier = ">=0.7.0" },
     { name = "ruff", specifier = ">=0.12.5" },
+    { name = "temporalio", specifier = ">=1.7.0" },
 ]
 
 [[package]]

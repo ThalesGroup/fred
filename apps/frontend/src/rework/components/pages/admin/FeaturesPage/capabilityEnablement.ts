@@ -171,12 +171,19 @@ export function missingAgentDependenciesForPlatform(
 /**
  * Human-readable name for one capability row. Catalog `name`s are i18n keys
  * for first-party capabilities and plain strings for out-of-tree ones, so the
- * key is looked up with itself as the default value.
+ * key is looked up with itself as the default value. A model row prefers its
+ * ops-authored display name: its `name` is the wire model value, which several
+ * models behind one gateway can share.
  *
  * Takes `t` rather than calling `useTranslation`: this module is deliberately
  * framework-free so the enablement rules stay unit-testable without rendering.
  */
-export function capabilityLabel(t: TFunc, capability: Pick<CapabilityEnablementItem, "name">): string {
+export function capabilityLabel(
+  t: TFunc,
+  capability: Pick<CapabilityEnablementItem, "name" | "model_display_name">,
+): string {
+  const displayName = capability.model_display_name?.trim();
+  if (displayName) return displayName;
   return t(capability.name, { defaultValue: capability.name });
 }
 
@@ -266,6 +273,20 @@ export function sortTeamsForMatrix<T extends { id: string; name: string }>(
       CHOICE_RANK[teamCapabilityChoice(capability, a.id)] - CHOICE_RANK[teamCapabilityChoice(capability, b.id)];
     return rank !== 0 ? rank : a.name.localeCompare(b.name);
   });
+}
+
+/**
+ * Whether this kind can have agent instances depending on it, and a
+ * personal-space class.
+ *
+ * False for the two control-plane-projected product objects — an application
+ * and a Knowledge Base definition. Both are things a team is simply enabled
+ * for: no agent selects them, so nothing suspends when access is revoked, and
+ * neither ReBAC type carries a personal class. Drives the health column, the
+ * revoke-impact preview and the drawer's personal row.
+ */
+export function hasAgentInstanceLifecycle(kind: CapabilityEnablementItem["kind"]): boolean {
+  return kind !== "app" && kind !== "knowledge_base";
 }
 
 /**

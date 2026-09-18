@@ -208,6 +208,29 @@ describe("TeamRoleChips — role descriptions", () => {
   });
 });
 
+describe("TeamRoleChips — pending admin nomination", () => {
+  it("keeps the short Admin label, marks it pending and explains it on hover", () => {
+    renderChips({ heldRoles: ["pending_team_admin", "team_editor"] });
+
+    const chip = container.querySelector('button[data-pending="true"]') as HTMLButtonElement;
+    expect(chip.textContent).toContain("rework.teamRoles.team_admin");
+    expect(chip.getAttribute("aria-label")).toBe("rework.teamRoles.pending_team_admin");
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(hover(chip)).toContain("rework.teamRoles.descriptions.pending_team_admin");
+  });
+
+  it("cancels the nomination when toggled", () => {
+    const onToggle = renderChips({ heldRoles: ["pending_team_admin"] });
+
+    act(() => {
+      container
+        .querySelector('button[data-pending="true"]')!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onToggle).toHaveBeenCalledWith("pending_team_admin", true);
+  });
+});
+
 describe("TeamRoleChips — toggling", () => {
   it("reports the role and its current held state to the caller", () => {
     const onToggle = renderChips({ heldRoles: ["team_editor"] });

@@ -28,9 +28,19 @@ const { archivePath } = await packUi();
 
 test("accepts the actual packed UI archive", async () => {
   const evidence = await validateUiArchive(archivePath);
-  assert.equal(evidence.package, "@fred/ui@0.0.0-development");
+  const manifest = JSON.parse(
+    await readFile(
+      path.join(import.meta.dirname, "../ui/package.json"),
+      "utf8",
+    ),
+  );
+  assert.equal(evidence.package, `${manifest.name}@${manifest.version}`);
   assert.equal(evidence.glyphCount, 132);
-  assert.deepEqual(evidence.externalModules, ["react", "react/jsx-runtime"]);
+  assert.deepEqual(evidence.externalModules, [
+    "react",
+    "react-dom",
+    "react/jsx-runtime",
+  ]);
 });
 
 for (const file of [
@@ -108,6 +118,14 @@ for (const peerMutation of [
     },
     /deep-equal|local dependency/,
   ],
+  [
+    "local Git checkout",
+    (manifest) => {
+      manifest.peerDependencies.react =
+        "\tGiT+FiLe:///tmp/fred-frontend-checkout";
+    },
+    /deep-equal|local dependency/,
+  ],
 ]) {
   test(`rejects ${peerMutation[0]}`, async (context) => {
     const archive = await mutateArchive(archivePath, context, (root) =>
@@ -158,6 +176,9 @@ test("accepts an executable runtime relative reference", async (context) => {
 
 for (const forbidden of [
   "customAgent",
+  "react-i18next",
+  "OptionModel",
+  "Aucune option disponible",
   "material-symbols-rounded",
   "material-symbols-sharp",
   "/images/icons/",
@@ -190,9 +211,25 @@ test("rejects application-only icon declarations", async (context) => {
   });
   await assert.rejects(
     validateUiArchive(archive),
-    /application-only icon declarations/,
+    /application-only declarations/,
   );
 });
+
+for (const forbidden of ["react-i18next", "OptionModel"]) {
+  test(`rejects application-only declaration ${forbidden}`, async (context) => {
+    const archive = await mutateArchive(archivePath, context, async (root) => {
+      const file = path.join(root, "dist/types/src/index.d.ts");
+      await writeFile(
+        file,
+        `${await readFile(file, "utf8")}\n/* ${forbidden} */\n`,
+      );
+    });
+    await assert.rejects(
+      validateUiArchive(archive),
+      /application-only declarations/,
+    );
+  });
+}
 
 for (const forbidden of [
   "@shared/atoms/Icon",
@@ -223,6 +260,28 @@ test("rejects an unresolved declaration reference", async (context) => {
     );
   });
   await assert.rejects(validateUiArchive(archive), /unresolved reference/);
+});
+
+test("rejects a declaration reference whose only packed target is executable JavaScript", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/types/src/index.d.ts");
+    await writeFile(
+      file,
+      `export type X = import("../../index.js").X;\n${await readFile(file, "utf8")}`,
+    );
+  });
+  await assert.rejects(validateUiArchive(archive), /unresolved reference/);
+});
+
+test("accepts a declaration reference to a packed declaration", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/types/src/index.d.ts");
+    await writeFile(
+      file,
+      `export type X = import("../.generated/src/rework/components/shared/molecules/Select/Select").SelectOption<string>;\n${await readFile(file, "utf8")}`,
+    );
+  });
+  await assert.doesNotReject(validateUiArchive(archive));
 });
 
 test("rejects an escaping declaration reference", async (context) => {

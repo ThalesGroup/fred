@@ -22,43 +22,18 @@ import {
   useValidateGcuControlPlaneV1GcuPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { getProperty } from "../../../../common/config.tsx";
+import { useLegalMarkdown } from "@hooks/useLegalMarkdown.ts";
 import styles from "./GcuPage.module.css";
 
 export default function GcuPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
   const { data: userDetails, refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { gcuVersion } = useFrontendProperties();
 
-  const [gcuMarkdown, setGcuMarkdown] = useState<string>("");
+  const gcuMarkdown = useLegalMarkdown("gcu");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const bottomRef = useRef(null);
-
-  useEffect(() => {
-    const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-    const lang = i18n.language?.split("-")[0] ?? "en";
-    const brand = (getProperty("releaseBrand") || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const fetchMd = (path: string) =>
-      fetch(`${base}${path}`, { cache: "no-cache" })
-        .then((r) => (r.ok ? r.text() : null))
-        .then((text) => (text && !text.toLowerCase().includes("<!doctype") ? text : null))
-        .catch(() => null);
-
-    const candidates = brand
-      ? [`/contrib/${brand}/gcu.${lang}.md`, `/contrib/${brand}/gcu.md`, `/gcu.${lang}.md`, `/gcu.md`]
-      : [`/gcu.${lang}.md`, `/gcu.md`];
-
-    candidates
-      .reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
-      .then((text) => {
-        if (text) setGcuMarkdown(text);
-      });
-  }, [i18n.language]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -70,10 +45,9 @@ export default function GcuPage() {
           setHasReachedBottom(false);
         }
       },
-      {
-        root: null,
-        threshold: 1.0,
-      },
+      // Any overlap counts: Firefox's fractional positions keep a full-visibility
+      // threshold from ever tripping on a 1px sentinel.
+      { threshold: 0 },
     );
 
     if (bottomRef.current) {
@@ -93,7 +67,7 @@ export default function GcuPage() {
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
       <div className={styles.gcuContent}>
         <MarkdownRenderer text={gcuMarkdown} />
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className={styles.gcuEnd} />
       </div>
       <div className={styles.gcuActions}>
         {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (

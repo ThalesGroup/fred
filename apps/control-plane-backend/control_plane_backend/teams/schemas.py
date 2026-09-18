@@ -6,7 +6,7 @@ from typing import Literal
 
 from fred_core import JoiningMode, RelationType, TeamPermission, TeamVisibility
 from fred_core.common import TeamId
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from control_plane_backend.scheduler.policies.policy_models import (
     _validate_optional_duration,
@@ -35,6 +35,13 @@ class TeamAdminConstraintError(Exception):
 
     def __init__(self, detail: str):
         super().__init__(detail)
+
+
+class TeamAdminCharterDisabledError(Exception):
+    """Raised when accepting the charter while no charter version is configured."""
+
+    def __init__(self) -> None:
+        super().__init__("team_admin_charter_disabled")
 
 
 class TeamMemberRoleNotHeldError(Exception):
@@ -201,6 +208,7 @@ class TeamWithPermissions(Team):
 
 class UserTeamRelation(str, Enum):
     TEAM_ADMIN = RelationType.TEAM_ADMIN.value
+    PENDING_TEAM_ADMIN = RelationType.PENDING_TEAM_ADMIN.value
     TEAM_EDITOR = RelationType.TEAM_EDITOR.value
     TEAM_ANALYST = RelationType.TEAM_ANALYST.value
     TEAM_MEMBER = RelationType.TEAM_MEMBER.value
@@ -250,9 +258,39 @@ class RescueTeamAdminRequest(BaseModel):
     user_id: str = Field(min_length=1)
 
 
+class SetDefaultTeamsForNewUsersRequest(BaseModel):
+    """`PUT /admin/platform/default-teams`: the whole list; `[]` clears it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team_ids: list[TeamId]
+
+
+class DefaultTeamForNewUsers(BaseModel):
+    """One of the teams every new user joins on first GCU acceptance."""
+
+    team_id: TeamId
+    name: str
+
+
+class TeamAdminCharterAcceptance(BaseModel):
+    """When the caller accepted the configured team administrator charter version."""
+
+    accepted_at: datetime
+
+
 class AddTeamMemberRequest(BaseModel):
     user_id: str
     relation: UserTeamRelation
+
+    @field_validator("relation")
+    @classmethod
+    def _refuse_pending_team_admin(cls, relation: UserTeamRelation) -> UserTeamRelation:
+        if relation == UserTeamRelation.PENDING_TEAM_ADMIN:
+            raise ValueError(
+                "pending_team_admin is set by the server: grant team_admin"
+            )
+        return relation
 
 
 class GrantTeamMemberRoleRequest(BaseModel):
@@ -261,6 +299,15 @@ class GrantTeamMemberRoleRequest(BaseModel):
     `POST /teams/{team_id}/members/{user_id}/roles`."""
 
     relation: UserTeamRelation
+
+    @field_validator("relation")
+    @classmethod
+    def _refuse_pending_team_admin(cls, relation: UserTeamRelation) -> UserTeamRelation:
+        if relation == UserTeamRelation.PENDING_TEAM_ADMIN:
+            raise ValueError(
+                "pending_team_admin is set by the server: grant team_admin"
+            )
+        return relation
 
 
 class UpdateTeamRequest(BaseModel):

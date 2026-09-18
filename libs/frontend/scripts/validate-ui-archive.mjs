@@ -17,6 +17,12 @@ import {
 } from "./archive-safety.mjs";
 import { TOKEN_SOURCE_PATHS, UI_FONT_SOURCE } from "./package-inputs.mjs";
 import { run } from "./process.mjs";
+import {
+  assertExpectedManifest,
+  isLocalDependencyReference,
+  loadReleaseContract,
+  packageContract,
+} from "./release-contract.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -30,11 +36,20 @@ export const expectedUiArchiveFiles = [
   "dist/index.js",
   "dist/styles.css",
   "dist/types/.generated/src/rework/components/shared/atoms/Button/Button.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Checkbox/Checkbox.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Chip/Chip.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/Icon/Icon.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/IconButton/IconButton.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/MenuItem/MenuItem.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/Spinner/Spinner.d.ts",
   "dist/types/.generated/src/rework/components/shared/atoms/TextInput/TextInput.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Tooltip/Tooltip.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Dialog/DialogPrimitive.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Menu/Menu.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Select/Select.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/Portal.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Type.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/viewport.d.ts",
   "dist/types/src/index.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",
   "package.json",
@@ -112,11 +127,9 @@ async function assertRelativeReferences(
       );
     } else {
       const candidates = [
-        resolved,
         resolved.replace(/\.(?:tsx?|jsx?|mjs|cjs)$/, ".d.ts"),
         `${resolved}.d.ts`,
-        `${resolved}.js`,
-      ];
+      ].filter((candidate) => candidate.endsWith(".d.ts"));
       const present = await Promise.all(candidates.map(isRegularFile));
       assert(
         present.some(Boolean),
@@ -125,7 +138,7 @@ async function assertRelativeReferences(
     }
   }
   for (const forbidden of [
-    /@(?:shared|rework)\b/,
+    /@(?:shared|rework|models)\b/,
     /(?:workspace|file|link):/,
     /\/Users\//,
     /apps\/frontend/,
@@ -266,7 +279,12 @@ async function validateCss(packageRoot) {
   return { css, assets };
 }
 
-export async function validateUiArchive(archivePath) {
+export async function validateUiArchive(
+  archivePath,
+  { contract: selectedContract } = {},
+) {
+  const contract = selectedContract ?? (await loadReleaseContract());
+  const expectedPackage = packageContract(contract, "ui");
   const temporary = await mkdtemp(path.join(os.tmpdir(), "fred-ui-archive-"));
   try {
     const { stdout } = await run("tar", ["-tzf", path.resolve(archivePath)]);
@@ -284,7 +302,7 @@ export async function validateUiArchive(archivePath) {
     const manifest = JSON.parse(
       await readFile(path.join(packageRoot, "package.json"), "utf8"),
     );
-    assert.equal(manifest.name, "@fred/ui");
+    assert.equal(manifest.name, expectedPackage.name);
     assert.notEqual(
       manifest.private,
       true,
@@ -321,15 +339,14 @@ export async function validateUiArchive(archivePath) {
     ]) {
       for (const version of Object.values(fields ?? {}))
         assert(
-          !/^(?:file:|workspace:|link:)/.test(String(version)),
+          !isLocalDependencyReference(String(version)),
           "local dependency protocol",
         );
     }
-    assert.deepEqual(manifest.peerDependencies, {
-      "@fred/design-tokens": "0.0.0-development",
-      react: "^19.2.4",
-      "react-dom": "^19.2.4",
-    });
+    assert.deepEqual(
+      manifest.peerDependencies,
+      expectedPackage.expectedManifest.peerDependencies,
+    );
 
     const js = await assertRelativeReferences(
       packageRoot,
@@ -338,6 +355,9 @@ export async function validateUiArchive(archivePath) {
     );
     for (const forbidden of [
       "customAgent",
+      "react-i18next",
+      "OptionModel",
+      "Aucune option disponible",
       "material-symbols-rounded",
       "material-symbols-sharp",
       "/images/icons/",
@@ -354,10 +374,10 @@ export async function validateUiArchive(archivePath) {
         "declaration",
       );
       assert(
-        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType)\b|customAgent|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
+        !/\b(?:IconCategory|IconType|CustomIconType|isCustomIcon|toIconType|OptionModel)\b|customAgent|react-i18next|material-symbols-(?:rounded|sharp)|\/images\/icons\//.test(
           declaration,
         ),
-        `${file} contains application-only icon declarations`,
+        `${file} contains application-only declarations`,
       );
     }
     const { assets } = await validateCss(packageRoot);
@@ -459,6 +479,7 @@ export async function validateUiArchive(archivePath) {
       "build evidence and declared glyph inventory differ",
     );
     assert.match(js, /from\s+"react\/jsx-runtime"/);
+    assertExpectedManifest(manifest, expectedPackage);
     return {
       archive: path.resolve(archivePath),
       package: `${manifest.name}@${manifest.version}`,

@@ -17,9 +17,9 @@
 .chatListItems {
   display: flex;
   flex-direction: column;
-  /* Tiles carry their own hover and selected backgrounds, so touching edges
-   * read as one block. The gap is what separates them as distinct rows. */
-  gap: var(--spacing-xs);
+  /* No gap: the rows read as one list. Each tile keeps its own padding and
+   * min-height, so they stay distinct without space between them — and their
+   * hover and selected backgrounds only ever land on one row at a time. */
   padding: 0 var(--spacing-xs) var(--spacing-xs);
   overflow-y: auto;
 }

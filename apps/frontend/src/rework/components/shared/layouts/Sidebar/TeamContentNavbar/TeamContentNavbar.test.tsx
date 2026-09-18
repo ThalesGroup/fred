@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ReactNode } from "react";
+import { act, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +23,13 @@ const h = vi.hoisted(() => ({
   applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
     data?: { items: Array<Record<string, unknown>> };
+    isError: boolean;
+  },
+  refetchKnowledgeBases: vi.fn(),
+  knowledgeBasesQuery: vi.fn(),
+  canUseKnowledgeBases: true,
+  knowledgeBases: { currentData: undefined, isError: false } as {
+    currentData?: { definition_id: string; name: string; description: string }[];
     isError: boolean;
   },
   wikiEnabled: undefined as boolean | undefined,
@@ -60,7 +69,11 @@ vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
   }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
-  useTeamCapabilities: () => ({ canUpdateAgents: false, canUpdateInfo: false }),
+  useTeamCapabilities: () => ({
+    canUpdateAgents: false,
+    canUpdateInfo: false,
+    canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
+  }),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
@@ -70,6 +83,10 @@ vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useKnowledgeBaseDefinitionsQuery: (args: unknown, options: unknown) => {
+    h.knowledgeBasesQuery(args, options);
+    return { ...h.knowledgeBases, refetch: h.refetchKnowledgeBases };
+  },
   useWikiAvailabilityQuery: () => ({
     data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
   }),
@@ -198,5 +215,86 @@ describe("TeamContentNavbar — the team avatar", () => {
     h.isPersonalTeam = true;
     h.defaultTeamAvatarFile = "acme-team-avatar.svg";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("acme-team-avatar.svg");
+  });
+});
+
+describe("TeamContentNavbar — knowledge bases and beta badges", () => {
+  beforeEach(() => {
+    h.canUseKnowledgeBases = true;
+    h.knowledgeBases = { currentData: undefined, isError: false };
+    h.wikiEnabled = true;
+  });
+
+  it("shows enabled definitions even before any instance is created, with beta after each label", () => {
+    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    for (const [route, label] of [
+      ["knowledge-bases", "knowledgeBases"],
+      ["wiki", "wiki"],
+    ]) {
+      const entry = html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
+      expect(entry).toBeDefined();
+      expect(entry).toContain("aria-label=");
+      expect(entry!.indexOf("aria-label=")).toBeGreaterThan(entry!.indexOf(`rework.sidebar.team.menu.${label}`));
+    }
+  });
+
+  it.each([
+    { currentData: undefined, isError: false },
+    { currentData: undefined, isError: true },
+    { currentData: [], isError: false },
+  ])("hides knowledge bases when unavailable: %j", (result) => {
+    h.knowledgeBases = result;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("keeps the last known definitions when a refresh fails", () => {
+    h.knowledgeBases = {
+      currentData: [{ definition_id: "source", name: "Source", description: "" }],
+      isError: true,
+    };
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/knowledge-bases");
+  });
+
+  it("requires team permission even with cached enabled definitions", () => {
+    h.canUseKnowledgeBases = false;
+    h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/team/team-1/knowledge-bases");
+  });
+});
+
+describe("TeamContentNavbar — cross-session knowledge base availability", () => {
+  beforeEach(() => {
+    h.canUseKnowledgeBases = true;
+    h.knowledgeBases = { currentData: undefined, isError: false };
+    h.refetchKnowledgeBases.mockClear();
+  });
+
+  it("polls and refreshes on focus, cleaning up when permission is removed or the menu unmounts", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<TeamContentNavbar />));
+      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1" },
+        { skip: false, pollingInterval: 60_000, refetchOnMountOrArgChange: 60 },
+      );
+      window.dispatchEvent(new Event("focus"));
+      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+      h.canUseKnowledgeBases = false;
+      await act(async () => root.render(<TeamContentNavbar />));
+      expect(h.knowledgeBasesQuery).toHaveBeenLastCalledWith(
+        { teamId: "team-1" },
+        { skip: true, pollingInterval: 0, refetchOnMountOrArgChange: 60 },
+      );
+      window.dispatchEvent(new Event("focus"));
+      expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+      h.canUseKnowledgeBases = true;
+      await act(async () => root.render(<TeamContentNavbar />));
+    } finally {
+      await act(async () => root.unmount());
+    }
+    window.dispatchEvent(new Event("focus"));
+    expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
   });
 });

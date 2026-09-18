@@ -98,6 +98,7 @@ class RelationType(str, Enum):
     # during the second implementation pass). team_admin and team_editor are
     # orthogonal, not hierarchical (REBAC.md "hard cross-write rule").
     TEAM_ADMIN = "team_admin"
+    PENDING_TEAM_ADMIN = "pending_team_admin"
     TEAM_EDITOR = "team_editor"
     TEAM_ANALYST = "team_analyst"
     TEAM_MEMBER = "team_member"
@@ -170,6 +171,12 @@ class TeamPermission(str, Enum):
     # separate from CAN_READ (which admits public non-members) and from the
     # agent-specific permission above.
     CAN_USE_TEAM_APPLICATIONS = "can_use_team_applications"
+
+    # The team's Knowledge Bases and the folders they fill. Separate from
+    # CAN_READ for the same reason as the two above: a PUBLIC team carries
+    # `public`, and a source's declared fields say what it expects and which
+    # values are secret.
+    CAN_USE_TEAM_KNOWLEDGE_BASES = "can_use_team_knowledge_bases"
 
     # Box-entry gate for the team's filesystem (`/teams/{id}/...`). Separate from
     # CAN_READ on purpose: a PUBLIC team carries `public`, so CAN_READ would let
@@ -309,6 +316,17 @@ class AppPermission(str, Enum):
     CAN_MANAGE = "can_manage"
 
 
+class KnowledgeBaseDefinitionPermission(str, Enum):
+    """Actions allowed on one configured Knowledge Base definition.
+
+    The target is always ``knowledge_base_definition:<definition_id>``, and the
+    ``can_use`` subject is the TEAM — never the user.
+    """
+
+    CAN_USE = "can_use"
+    CAN_MANAGE = "can_manage"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
@@ -318,6 +336,7 @@ RebacPermission = (
     | OrganizationPermission
     | CapabilityPermission
     | AppPermission
+    | KnowledgeBaseDefinitionPermission
 )
 
 
@@ -344,6 +363,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.CAPABILITY
     if isinstance(permission, AppPermission):
         return Resource.APP
+    if isinstance(permission, KnowledgeBaseDefinitionPermission):
+        return Resource.KNOWLEDGE_BASE_DEFINITION
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
@@ -911,7 +932,7 @@ class RebacEngine(ABC):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,

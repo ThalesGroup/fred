@@ -24,6 +24,14 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
+    client_id: str | None = Field(
+        default=None,
+        description=(
+            "The token's authorized party (`azp`). Set for a client-credentials "
+            "identity, so a caller can be checked against one exact client "
+            "rather than a broad service role."
+        ),
+    )
 
     def __repr_args__(self):
         # Directly identifying data must never reach a log line, and an
@@ -42,6 +50,10 @@ class KeycloakUser(BaseModel):
 # control-plane, and the evaluation worker). Identity marker, not a ReBAC relation:
 # nothing is stored in OpenFGA for it.
 SERVICE_AGENT_ROLE = "service_agent"
+
+# The `azp` a mock user carries when authentication is disabled, so routes
+# gated on an exact client stay reachable in local development.
+LOCAL_DEV_CLIENT_ID = "local-dev"
 
 
 def is_service_agent(user: KeycloakUser) -> bool:
