@@ -36,6 +36,7 @@ from knowledge_flow_backend.features.library_sync.structures import (
     DocumentWritten,
     InvalidSourceRequest,
     LibrarySourceVersion,
+    LibrarySynchronizedBy,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,6 +159,31 @@ class LibrarySyncController:
             user: KeycloakUser = Depends(require_sync_client),
         ) -> LibrarySourceVersion:
             return LibrarySourceVersion(source_version=await self.service.read_source_version(user, library_id))
+
+        @router.put(
+            "/libraries/{library_id}/synchronized-by",
+            tags=["Library synchronization"],
+            summary="Record which machine fills this library",
+            description=(
+                "Marks the library as filled by a machine, which is what stops people from "
+                "changing what it holds: no upload, no document added or removed, no folder "
+                "created inside it, no rename. Deleting it stays available to whoever may "
+                "delete a folder. The reference is qualified — 'knowledge_base:<id>' — and "
+                "opaque: Fred acts on its presence, never on what it names. Recording the "
+                "same machine again is not a change, so a retry is safe; recording a "
+                "different one is refused rather than applied."
+            ),
+        )
+        async def record_synchronized_by(
+            library_id: str,
+            body: LibrarySynchronizedBy,
+            user: KeycloakUser = Depends(require_sync_client),
+        ) -> LibrarySynchronizedBy:
+            try:
+                recorded = await self.service.record_synchronized_by(user, library_id, body.synchronized_by)
+            except InvalidSourceRequest as exc:
+                raise HTTPException(status_code=400, detail={"code": exc.code, "message": exc.message})
+            return LibrarySynchronizedBy(synchronized_by=recorded)
 
         @router.put(
             "/libraries/{library_id}/source-version",

@@ -7,13 +7,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import {
+  loadReleaseContract,
+  workspaceRoot,
+} from "../scripts/release-contract.mjs";
 import {
   releaseContractDigest,
   sha512Integrity,
 } from "../scripts/release-evidence.mjs";
 import {
   assertInstalledRegistryPackage,
+  applicableHostGate,
   assertProvenanceIdentity,
   buildRegistryConsumers,
   provenanceIdentityFromStatement,
@@ -23,13 +27,28 @@ import {
   verifyNpmPackageProvenance,
   verifyProvenanceAttestation,
   verifyRegistryTooling,
+  verificationEvidenceKind,
 } from "../scripts/registry-verifier.mjs";
 import { run } from "../scripts/process.mjs";
+import { signedPublishingProvenance } from "./helpers/signed-provenance.mjs";
 
 const fixtureContract = await loadReleaseContract();
+const selectedContract = await loadReleaseContract(
+  path.join(workspaceRoot, "release/proposed-release-contract.json"),
+);
 const verifierCli = fileURLToPath(
   new URL("../scripts/registry-verifier.mjs", import.meta.url),
 );
+
+test("unbound generic checks remain tooling evidence and host gate reflects applicability", () => {
+  assert.equal(
+    verificationEvidenceKind(false),
+    "controlled-selected-registry-tooling",
+  );
+  assert.equal(verificationEvidenceKind(true), "public-registry-verification");
+  assert.equal(applicableHostGate(["designTokens", "ui"]), "not-applicable");
+  assert.equal(applicableHostGate(["iframeSdk"]), true);
+});
 
 test("generic verifier loads in a fresh process and rejects retired CLI options", () => {
   const load = spawnSync(
@@ -86,34 +105,6 @@ function expected(
   };
 }
 
-function confirmContract(contract) {
-  contract.state = "maintainer-confirmed";
-  contract.distTag = "next";
-  contract.expectedProvenance.repository =
-    "https://github.com/example/release-test";
-  contract.expectedProvenance.workflow =
-    "https://github.com/example/release-test/.github/workflows/release.yml@refs/heads/main";
-  contract.maintainerApproval = {
-    scopeOwner: "fred-oss",
-    owners: {
-      packageApi: "test-package-api-owner",
-      sdkProtocol: "test-sdk-protocol-owner",
-      release: "test-release-owner",
-      npmPublishing: "test-npm-publishing-owner",
-    },
-    bootstrapIdentity: "test-bootstrap-identity",
-    bootstrapAuthorityVerified: true,
-    registryAccess: "public",
-    publishingPolicy: "staged",
-  };
-  for (const entry of Object.values(contract.packages))
-    entry.version = "0.1.0-alpha.1";
-  contract.packages.ui.expectedManifest.peerDependencies[
-    contract.packages.designTokens.name
-  ] = "^0.1.0-alpha.1";
-  return contract;
-}
-
 const gates = {
   archives: { validated: true, reusedPackedBytes: true },
   consumers: { designTokens: {}, ui: {}, iframeSdk: {} },
@@ -140,8 +131,7 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   const archivePath = path.join(root, filename);
   await writeFile(archivePath, "npm metadata fixture archive");
   const integrity = await sha512Integrity(archivePath);
-  const provenanceUrl =
-    "https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@0.1.0-alpha.1";
+  const provenanceUrl = `https://registry.npmjs.org/-/npm/v1/attestations/%40fred-oss%2fui@${selected.version}`;
   const metadata = {
     name: selected.name,
     version: selected.version,
@@ -218,6 +208,8 @@ test("uses npm's dist.attestations.url metadata path for provenance", async (con
   const identity = expected("ui", integrity);
   const [workflowLocation, workflowRef] = identity.workflow.split("@");
   const statement = {
+    _type: "https://in-toto.io/Statement/v1",
+    predicateType: "https://slsa.dev/provenance/v1",
     subject: [{ digest: { sha512: integrity.slice("sha512-".length) } }],
     predicate: {
       buildDefinition: {
@@ -571,6 +563,106 @@ test("extracts identity from an in-toto SLSA statement", () => {
   );
 });
 
+test("cryptographically covered ordinary invocation identifies its exact run and attempt", () => {
+  const identity = expected("iframeSdk", "sha512-fixture", selectedContract);
+  const statement = {
+    subject: [{ digest: { sha512: "fixture" } }],
+    predicate: {
+      buildDefinition: {
+        externalParameters: {
+          workflow: {
+            repository: identity.repository,
+            path: ".github/workflows/Publish-frontend-packages.yml",
+            ref: "refs/heads/swift",
+          },
+        },
+        resolvedDependencies: [
+          {
+            uri: `git+${identity.repository}@refs/heads/swift`,
+            digest: { gitCommit: identity.sourceCommit },
+          },
+        ],
+      },
+      runDetails: {
+        metadata: {
+          invocationId: `${identity.repository}/actions/runs/71/attempts/2`,
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    provenanceIdentityFromStatement(statement, identity.repository),
+    {
+      ...identity,
+      invocationRepository: identity.repository,
+      runId: "71",
+      runAttempt: "2",
+    },
+  );
+  for (const invocationId of [
+    `${identity.repository}/actions/runs/71/attempts/2?other=1`,
+    "https://github.com/OtherOrg/fred/actions/runs/71/attempts/2",
+    [`${identity.repository}/actions/runs/71/attempts/2`],
+  ]) {
+    statement.predicate.runDetails.metadata.invocationId = invocationId;
+    assert.throws(
+      () => provenanceIdentityFromStatement(statement, identity.repository),
+      /invocation (ID is malformed|repository differs)/,
+    );
+  }
+});
+
+test("multiple SLSA provenance entries cannot provide ambiguous invocation attribution", async () => {
+  const entry = {
+    predicateType: "https://slsa.dev/provenance/v1",
+    bundle: {
+      dsseEnvelope: {
+        payloadType: "application/vnd.in-toto+json",
+        payload: Buffer.from("{}").toString("base64"),
+      },
+    },
+  };
+  await assert.rejects(
+    verifyProvenanceAttestation(
+      { attestations: [entry, entry] },
+      {
+        expectedWorkflow: selectedContract.expectedProvenance.workflow,
+        expectedRepository: selectedContract.expectedProvenance.repository,
+        certificateIssuer:
+          selectedContract.expectedProvenance.certificateIssuer,
+        verifyBundle: async () => {},
+      },
+    ),
+    /exactly one SLSA provenance/,
+  );
+});
+
+test("a signed non-SLSA statement cannot be relabeled as SLSA outside the signed bytes", async () => {
+  const options = {
+    artifactDigest: "sha512-fixture",
+    repository: selectedContract.expectedProvenance.repository,
+    sourceCommit: "fixture-source-commit",
+    workflow: selectedContract.expectedProvenance.workflow,
+    runId: "71",
+    runAttempt: "2",
+    certificateIssuer: selectedContract.expectedProvenance.certificateIssuer,
+  };
+  await assert.rejects(
+    signedPublishingProvenance({
+      ...options,
+      signedPredicateType: "https://example.invalid/not-slsa",
+    }),
+    /signed SLSA predicate differs/,
+  );
+  await assert.rejects(
+    signedPublishingProvenance({
+      ...options,
+      signedStatementType: "https://example.invalid/NotStatement",
+    }),
+    /signed in-toto statement type differs/,
+  );
+});
+
 test("selects the source commit only from the expected repository dependency", () => {
   const identity = expected();
   const statement = {
@@ -622,6 +714,8 @@ test("validly signed provenance still fails every wrong expected identity", asyn
     );
     const digest = identity.artifactDigest.slice("sha512-".length);
     const statement = {
+      _type: "https://in-toto.io/Statement/v1",
+      predicateType: "https://slsa.dev/provenance/v1",
       subject: [{ digest: { sha512: digest } }],
       predicate: {
         buildDefinition: {
@@ -777,7 +871,7 @@ test("controlled registry orchestration cannot use fixture evidence as public pr
 });
 
 test("controlled registry orchestration verifies identity before consumers", async (context) => {
-  const contract = confirmContract(structuredClone(fixtureContract));
+  const contract = structuredClone(selectedContract);
   const root = await mkdtemp(path.join(os.tmpdir(), "fred-registry-tooling-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const coordinates = {};
@@ -848,8 +942,420 @@ test("controlled registry orchestration verifies identity before consumers", asy
   assert.equal(result.kind, "registry-verifier-tooling");
 });
 
+test("selected registry tooling verifies SDK alone and UI with an independently reviewed token", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-selected-registry-tooling-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  for (const selectedIds of [["iframeSdk"], ["ui"]]) {
+    const archives = [];
+    const coordinates = {};
+    const paths = {};
+    for (const role of selectedIds) {
+      const archivePath = path.join(root, `${role}-selected.tgz`);
+      await writeFile(archivePath, `${role} controlled selected archive`);
+      archives.push({ role, path: archivePath });
+      paths[role] = archivePath;
+      coordinates[role] =
+        `${contract.packages[role].name}@${contract.packages[role].version}`;
+    }
+    const evidence = await createCandidateEvidence({
+      contract,
+      archives,
+      sourceCommit: "f".repeat(40),
+      producerToolchain: contract.releaseToolchain,
+      applicationToolchain,
+      gates,
+      approved: true,
+    });
+    const resolvedRoles = [];
+    const result = await verifyRegistryTooling({
+      contract,
+      evidence,
+      coordinates,
+      selectedIds,
+      ledger,
+      resolvePackage: async ({ role, candidate }) => {
+        resolvedRoles.push(role);
+        return {
+          role,
+          integrity: candidate.integrity,
+          archivePath: paths[role] ?? paths.ui,
+        };
+      },
+      verifyPackageSignature: async ({ role }, { expectedProvenance }) => ({
+        cryptographicallyVerified: true,
+        identity: {
+          ...expectedProvenance,
+          ...(role === "designTokens"
+            ? { sourceCommit: ledger.baselines[0].expected.sourceCommit }
+            : {}),
+        },
+      }),
+      installConsumers: async ({ selectedIds: members, compatibilityOnly }) => {
+        assert.deepEqual(members, selectedIds);
+        assert.deepEqual(
+          compatibilityOnly,
+          selectedIds.includes("ui") ? ["designTokens"] : [],
+        );
+      },
+    });
+    assert.deepEqual(
+      resolvedRoles,
+      selectedIds.includes("ui") ? ["ui", "designTokens"] : ["iframeSdk"],
+    );
+    assert.deepEqual(result.selectedIds, selectedIds);
+    assert.equal(
+      result.packages.designTokens?.compatibilityOnly,
+      selectedIds.includes("ui") ? true : undefined,
+    );
+  }
+});
+
+test("UI-only registry resolution validates an exact compatibility-token peer graph", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const baseline = ledger.baselines.find(
+    ({ memberId }) => memberId === "designTokens",
+  );
+  const baselineVersion = baseline.coordinate.slice(
+    baseline.coordinate.lastIndexOf("@") + 1,
+  );
+  const contract = structuredClone(selectedContract);
+  contract.packages.designTokens.version = "0.1.0-alpha.2";
+  const root = await mkdtemp(path.join(os.tmpdir(), "fred-ui-registry-graph-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "ui-selected.tgz");
+  await writeFile(archivePath, "controlled UI registry bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "ui", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const coordinate = evidence.packages.ui.coordinate;
+  const tokenName = contract.packages.designTokens.name;
+  const uiName = contract.packages.ui.name;
+  const metadata = {
+    name: uiName,
+    version: contract.packages.ui.version,
+    dist: {
+      integrity: evidence.packages.ui.integrity,
+      attestations: {
+        url: `${contract.registry}-/npm/v1/attestations/${encodeURIComponent(coordinate)}`,
+      },
+    },
+  };
+  let observedDependencies;
+  let graphFault;
+  const runCommand = async (_command, args) => {
+    if (args[0] === "pack")
+      return {
+        stdout: JSON.stringify([{ filename: path.basename(archivePath) }]),
+      };
+    if (args.includes("--package-lock-only")) {
+      const manifest = JSON.parse(
+        await readFile(path.join(root, "package.json"), "utf8"),
+      );
+      observedDependencies = manifest.dependencies;
+      await writeFile(
+        path.join(root, "package-lock.json"),
+        `${JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            "": { dependencies: manifest.dependencies },
+            [`node_modules/${uiName}`]: {
+              version: contract.packages.ui.version,
+              resolved: `${contract.registry}@fred-oss/ui/-/ui.tgz`,
+              integrity: evidence.packages.ui.integrity,
+              peerDependencies:
+                contract.packages.ui.expectedManifest.peerDependencies,
+            },
+            [`node_modules/${tokenName}`]: {
+              version: graphFault?.version ?? baselineVersion,
+              resolved:
+                graphFault?.resolved ??
+                `${contract.registry}@fred-oss/design-tokens/-/design-tokens.tgz`,
+              integrity: graphFault?.integrity ?? baseline.expected.integrity,
+            },
+          },
+        })}\n`,
+      );
+    }
+    return { stdout: "" };
+  };
+  let consumersInstalled = false;
+  const options = {
+    contract,
+    evidence,
+    coordinates: { ui: coordinate },
+    selectedIds: ["ui"],
+    ledger,
+    resolvePackage: async (options) =>
+      options.role === "ui"
+        ? resolveNpmRegistryPackage({
+            ...options,
+            root,
+            runCommand,
+            fetchMetadata: async () => metadata,
+            waitForPackageVisibility: async () => metadata,
+          })
+        : {
+            role: "designTokens",
+            coordinate: baseline.coordinate,
+            integrity: baseline.expected.integrity,
+            archivePath,
+          },
+    verifyPackageSignature: async (
+      _registryPackage,
+      { expectedProvenance },
+    ) => ({
+      cryptographicallyVerified: true,
+      identity: expectedProvenance,
+    }),
+    installConsumers: async () => {
+      consumersInstalled = true;
+    },
+  };
+  const result = await verifyRegistryTooling(options);
+  assert.equal(observedDependencies[uiName], contract.packages.ui.version);
+  assert.equal(observedDependencies[tokenName], baselineVersion);
+  const lockfile = JSON.parse(
+    await readFile(path.join(root, "package-lock.json"), "utf8"),
+  );
+  assert.equal(
+    lockfile.packages[`node_modules/${uiName}`].peerDependencies[tokenName],
+    contract.packages.ui.expectedManifest.peerDependencies[tokenName],
+  );
+  assert.notEqual(baselineVersion, contract.packages.designTokens.version);
+  assert.equal(result.packages.designTokens.compatibilityOnly, true);
+  assert.equal(consumersInstalled, true);
+  for (const [fault, message] of [
+    [
+      { version: contract.packages.designTokens.version },
+      /cached registry|lock version differs/,
+    ],
+    [{ integrity: "sha512-incorrect" }, /registry integrity differs/],
+    [
+      { resolved: "https://registry.example/design-tokens.tgz" },
+      /unexpected registry/,
+    ],
+    [
+      { resolved: "file:/tmp/design-tokens.tgz" },
+      /unexpected registry|local fallback/,
+    ],
+  ]) {
+    graphFault = fault;
+    consumersInstalled = false;
+    await assert.rejects(verifyRegistryTooling(options), message);
+    assert.equal(consumersInstalled, false);
+  }
+});
+
+test("retained attempts bind a later actual publishing commit without rewriting candidate identity", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const {
+    candidateRecordFromEvidence,
+    publishingAttemptModel,
+    releaseRecordDigest,
+  } = await import("../scripts/release-record.mjs");
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-actual-publisher-registry-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "iframeSdk.tgz");
+  await writeFile(archivePath, "controlled SDK bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "iframeSdk", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const candidate = await candidateRecordFromEvidence({
+    evidence,
+    contract,
+    ledger: await loadCompatibilityLedger(),
+    selectedIds: ["iframeSdk"],
+    archivePaths: { iframeSdk: archivePath },
+  });
+  const attempt = publishingAttemptModel({
+    candidate,
+    candidateArtifact: {
+      artifactId: 51,
+      runId: "61",
+      runAttempt: "1",
+      sourceCommit: "f".repeat(40),
+      zipSha256: "a".repeat(64),
+      recordDigest: releaseRecordDigest(candidate),
+    },
+    execution: {
+      repository: "ThalesGroup/fred",
+      workflow: contract.workflowFilename,
+      sourceCommit: "a".repeat(40),
+      runId: "71",
+      runAttempt: "2",
+      signerIssuer: contract.expectedProvenance.certificateIssuer,
+    },
+  });
+  const laterAttempt = publishingAttemptModel({
+    candidate,
+    candidateArtifact: attempt.candidateArtifact,
+    execution: { ...attempt.execution, runId: "72", runAttempt: "1" },
+  });
+  const coordinates = { iframeSdk: evidence.packages.iframeSdk.coordinate };
+  const options = {
+    contract,
+    evidence,
+    coordinates,
+    selectedIds: ["iframeSdk"],
+    publicationAttempts: [{ record: attempt }, { record: laterAttempt }],
+    resolvePackage: async ({ candidate: expected }) => ({
+      role: "iframeSdk",
+      integrity: expected.integrity,
+      archivePath,
+    }),
+    verifyPackageSignature: async () =>
+      signedPublishingProvenance({
+        artifactDigest: evidence.packages.iframeSdk.integrity,
+        repository: contract.expectedProvenance.repository,
+        sourceCommit: laterAttempt.execution.sourceCommit,
+        workflow: contract.expectedProvenance.workflow,
+        runId: laterAttempt.execution.runId,
+        runAttempt: laterAttempt.execution.runAttempt,
+        certificateIssuer: contract.expectedProvenance.certificateIssuer,
+      }),
+    installConsumers: async () => {},
+  };
+  const result = await verifyRegistryTooling(options);
+  assert.equal(
+    result.packages.iframeSdk.attemptDigest,
+    releaseRecordDigest(laterAttempt),
+  );
+  assert.equal(
+    result.packages.iframeSdk.provenance.sourceCommit,
+    "a".repeat(40),
+  );
+  assert.equal(evidence.sourceCommit, "f".repeat(40));
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      verifyPackageSignature: async () =>
+        signedPublishingProvenance({
+          artifactDigest: evidence.packages.iframeSdk.integrity,
+          repository: contract.expectedProvenance.repository,
+          sourceCommit: "b".repeat(40),
+          workflow: contract.expectedProvenance.workflow,
+          runId: laterAttempt.execution.runId,
+          runAttempt: laterAttempt.execution.runAttempt,
+          certificateIssuer: contract.expectedProvenance.certificateIssuer,
+        }),
+      installConsumers: async () =>
+        assert.fail("wrong provenance cannot reach consumers"),
+    }),
+    /does not match any retained actual publishing execution/,
+  );
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      verifyPackageSignature: async () =>
+        signedPublishingProvenance({
+          artifactDigest: evidence.packages.iframeSdk.integrity,
+          repository: contract.expectedProvenance.repository,
+          sourceCommit: laterAttempt.execution.sourceCommit,
+          workflow: contract.expectedProvenance.workflow,
+          runId: "73",
+          runAttempt: laterAttempt.execution.runAttempt,
+          certificateIssuer: contract.expectedProvenance.certificateIssuer,
+        }),
+      installConsumers: async () =>
+        assert.fail("wrong invocation cannot reach consumers"),
+    }),
+    /does not match any retained actual publishing execution/,
+  );
+  await assert.rejects(
+    verifyRegistryTooling({
+      ...options,
+      publicationAttempts: [{ record: laterAttempt }, { record: laterAttempt }],
+      installConsumers: async () =>
+        assert.fail("ambiguous attribution cannot reach consumers"),
+    }),
+    /attribution is ambiguous/,
+  );
+});
+
+test("UI-only registry tooling rejects missing baseline and wrong validly signed baseline identity", async (context) => {
+  const { createCandidateEvidence } =
+    await import("../scripts/release-evidence.mjs");
+  const { loadCompatibilityLedger } =
+    await import("../scripts/compatibility-baselines.mjs");
+  const ledger = await loadCompatibilityLedger();
+  const contract = structuredClone(selectedContract);
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-wrong-baseline-registry-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const archivePath = path.join(root, "ui.tgz");
+  await writeFile(archivePath, "controlled UI bytes");
+  const evidence = await createCandidateEvidence({
+    contract,
+    archives: [{ role: "ui", path: archivePath }],
+    sourceCommit: "f".repeat(40),
+    producerToolchain: contract.releaseToolchain,
+    applicationToolchain,
+    gates,
+    approved: true,
+  });
+  const coordinates = {
+    ui: `${contract.packages.ui.name}@${contract.packages.ui.version}`,
+  };
+  const options = {
+    contract,
+    evidence,
+    coordinates,
+    selectedIds: ["ui"],
+    resolvePackage: async ({ role, candidate }) => ({
+      role,
+      integrity: candidate.integrity,
+      archivePath,
+    }),
+    verifyPackageSignature: async ({ role }, { expectedProvenance }) => ({
+      cryptographicallyVerified: true,
+      identity:
+        role === "designTokens"
+          ? { ...expectedProvenance, sourceCommit: "0".repeat(40) }
+          : expectedProvenance,
+    }),
+    installConsumers: async () =>
+      assert.fail("wrong baseline must fail before consumers"),
+  };
+  await assert.rejects(verifyRegistryTooling(options), /compatibility ledger/);
+  await assert.rejects(
+    verifyRegistryTooling({ ...options, ledger }),
+    /provenance sourceCommit differs/,
+  );
+});
+
 test("registry consumer tooling builds three clean exact-version fixtures", async () => {
-  const contract = confirmContract(structuredClone(fixtureContract));
+  const contract = structuredClone(selectedContract);
   const packages = Object.fromEntries(
     Object.entries(contract.packages).map(([role, value]) => [
       role,

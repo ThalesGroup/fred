@@ -18,15 +18,11 @@ interface BetaBadgeProps {
   label?: string;
 }
 
-/** Marks a feature still open to change — pair with `Tooltip` at the call
- *  site to explain why, since this atom carries no feature-specific text. */
+/** Compact status label for features still open to change. */
 export function BetaBadge({ label = "Beta" }: BetaBadgeProps) {
   return (
     <span className={styles.badge} aria-label={label}>
-      <span className="material-symbols-outlined" aria-hidden>
-        science
-      </span>
-      <span className={styles.label}>{label}</span>
+      {label}
     </span>
   );
 }

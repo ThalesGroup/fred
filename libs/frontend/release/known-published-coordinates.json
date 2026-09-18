@@ -1,0 +1,27 @@
+{
+  "$schema": "./known-published-coordinates.schema.json",
+  "schemaVersion": 1,
+  "historicalVerification": {
+    "runId": "34890367123",
+    "runAttempt": "1",
+    "artifactId": 10365859307,
+    "artifactZipSha256": "9d3ba17c4016fd194c64527cb10f95d6c711e5963a37b7cf95386d23620981b4"
+  },
+  "packages": [
+    {
+      "coordinate": "@fred-oss/design-tokens@0.1.0-alpha.1",
+      "integrity": "sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==",
+      "publicationCommit": "f49f2439d54b44f7739c5bd7fca3f789e0e528d6"
+    },
+    {
+      "coordinate": "@fred-oss/ui@0.1.0-alpha.1",
+      "integrity": "sha512-+BmE1ASoIDN8HYDugYCd8gzykHcspH7LxQuM5m4HjQWMoVErR99L1OU+bcp2ICN1AkvUoOwfNbtpU9eFp5ln8A==",
+      "publicationCommit": "a1fedc661c9ec1846b5333aa4e546af0f0810033"
+    },
+    {
+      "coordinate": "@fred-oss/iframe-sdk@0.1.0-alpha.1",
+      "integrity": "sha512-FG0y07SN6I+iNzKxJGMC1RYeJeGHCitbRBob7jr7iGMW5AcMt1pfoIJm//UK/cMq0E1QC2sE+hWpF2VsPwsz6w==",
+      "publicationCommit": "a1fedc661c9ec1846b5333aa4e546af0f0810033"
+    }
+  ]
+}

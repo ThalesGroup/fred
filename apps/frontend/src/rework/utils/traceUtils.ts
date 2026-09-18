@@ -20,6 +20,7 @@ import type {
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
+import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -564,7 +565,19 @@ function isRedundantToolUseThought(m: ChatMessage): boolean {
 // Pairs tool_call + tool_result by call_id; everything else is solo.
 // Deduplicates tool_call messages sharing the same call_id (keeps first occurrence).
 export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
-  const trace = messages.filter((m) => isTraceChannel(m.channel) && !isRedundantToolUseThought(m));
+  const failedCallIds = failedToolCallIds(messages);
+  const representedTodoCallIds = new Set<string>();
+  for (const message of messages) {
+    const snapshot = parseWriteTodosSnapshot(message);
+    if (snapshot?.callId && !failedCallIds.has(snapshot.callId)) representedTodoCallIds.add(snapshot.callId);
+  }
+
+  const trace = messages.filter((m) => {
+    if (!isTraceChannel(m.channel) || isRedundantToolUseThought(m)) return false;
+    const todoSnapshot = parseWriteTodosSnapshot(m);
+    if (todoSnapshot && representedTodoCallIds.has(todoSnapshot.callId)) return false;
+    return !isToolResult(m) || !representedTodoCallIds.has(toolResultId(m));
+  });
 
   // Remove duplicate tool_call messages for the same call_id (e.g. from stream replay)
   const seenCallIds = new Set<string>();

@@ -406,6 +406,7 @@ async def _no_search_users(*_a: Any, **_k: Any) -> list[Any]:
 
 def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDependencies:
     config = MagicMock()
+    config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
     config.app.default_team_max_resources_storage_size = 5368709120
     store = TeamMetadataStore(engine)
@@ -415,6 +416,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         scheduler_backend=cast(Any, SchedulerBackend.MEMORY),
         get_team_metadata_store=lambda: store,
         get_default_team_store=cast(Any, object),
+        get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, object),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),

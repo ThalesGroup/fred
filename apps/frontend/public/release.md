@@ -1,3 +1,63 @@
+**v2.2.1** — 2026-09-16
+
+- **Summary**
+
+  Teams can now use a governed wiki and scheduled Knowledge Bases to build
+  shared knowledge over time. Admins get default teams and responsibility
+  checks, while everyday work improves with Office previews, a clearer prompt
+  editor, richer chat panels and month-to-month analytics.
+
+- **Features**
+
+  - Teams can keep a shared wiki with pages, history, restore, human approval for agent edits and agent-readable team rules (#2576)
+  - Teams can add scheduled Knowledge Bases that mirror source documents into their own read-only libraries (#2645)
+  - Team admins must accept a responsibilities charter before their admin rights take effect (#2658)
+  - Platform admins can assign default teams for every new user without relying on built-in identity-provider groups (#2649)
+  - Deep agents now run through the Deep runtime with human approval support and the capabilities they selected (#2227)
+  - The prompt editor highlights Markdown and XML, offers copy-to-clipboard, and protects platform-owned prompt blocks (#2578, #2608)
+  - Chat side panels now share one launcher rail for attachments, prompt library, reasoning, debug data and capability viewers (#2558, #2675)
+  - Word, ODT and PowerPoint documents can open in the native preview tab, converted to cached PDFs on demand (#2581)
+  - Analytics can step day, week, month and custom periods backward and forward from a sticky header (#2670)
+  - Deployments can apply a custom frontend theme archive at startup without rebuilding the Fred frontend image (#2521)
+  - Fred frontend packages now have independent release archives, provenance checks and publishing records (#2630)
+
+- **Improvements**
+
+  - First-party application backends can authorize Fred team and application access through a fail-closed SDK (#2542)
+  - The admin features and teams pages avoid per-team authorization and user lookups that made large deployments slow (#2631)
+  - Bulk document uploads are grouped and concurrency-limited so large drops no longer overwhelm authorization checks (#2547)
+  - Reopening a conversation waits for its history and restores only the side panel the user actually left open (#2647)
+  - The full reasoning panel can show complete reasoning or hide restated passages while preserving new facts and code (#2672)
+  - The Resources usage counters load only when their panel is opened, avoiding unnecessary corpus scans (#2621)
+  - The in-app help center now matches the current product navigation, roles, formats and privacy wording (#2570)
+  - The frontend UI package adds shared dialog, menu, select, tooltip and chip primitives for extension authors (#2697)
+
+- **Security**
+
+  - Provider tool errors are sanitized before they reach ReAct agent output (#2568)
+  - Model profiles that share a provider model now keep separate capability identities, so teams enable the intended profile (#2629)
+  - Routine dependency updates: micromatch, tmp (#2587)
+
+- **Bug Fixes**
+
+  - Agents are now explicitly told how to continue reading long documents page by page (#2514)
+  - Removing documents from a nested Corpus folder no longer moves that folder back to the root (#2632)
+  - Knowledge Base folders are separated from human-managed folders in Resources (#2687)
+  - Knowledge Base navigation refreshes across browser sessions and keeps its last good state after a transient refresh error (#2685)
+  - An unlabelled fenced code block now renders as a block instead of as inline text (#2613)
+  - Excel ingestion no longer fails when a workbook contains a chart that cannot be read (#2591)
+  - The team header now shows the deployment default avatar, matching cards and search results (#2636)
+  - Gateway model rows in the admin console show their display name, not just the shared wire model name (#2629)
+  - The HTML artifact preview opens correctly on first load in Chromium (#2652)
+  - Firefox users can scroll to the end of the GCU and accept it (#2655)
+
+- **Deployment note**
+
+  Additive migrations create the wiki, Knowledge Base, default-team and team-admin
+  charter tables, and remove the retired shared task tables. Knowledge Bases,
+  frontend theming and independent frontend packages are opt-in; existing
+  deployments can upgrade without enabling them immediately.
+
 **v2.2.0** — 2026-09-04
 
 - **Summary**

@@ -126,6 +126,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
     },
+    // Accepting the charter turns the caller's pending_team_admin relations into
+    // team_admin, so every team projection must be read again.
+    acceptTeamAdminCharterControlPlaneV1TeamAdminCharterPost: {
+      invalidatesTags: ["ControlPlaneTeam"],
+    },
+    // Read again by the same acceptance, alongside the team projections.
+    getTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGet: {
+      providesTags: ["ControlPlaneTeam"],
+    },
     // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
     // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
@@ -370,6 +379,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
     // route needs no team — so it invalidates the whole type rather than one
     // team's list: the alternative is passing a team id the API never asked for.
+    listKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
     listKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneKnowledgeBase" as const, id: `LIST-${arg.teamId}` }],
     },
@@ -649,4 +661,7 @@ export const {
   useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
     useRestoreWikiRevisionMutation,
   useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
+  // Team administrator charter acceptance.
+  useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
+  useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
 } = enhancedControlPlaneApi;

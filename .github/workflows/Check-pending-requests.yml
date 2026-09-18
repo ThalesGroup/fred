@@ -23,15 +23,9 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       frontend-packages: ${{ steps.changes.outputs.frontend-packages }}
       agentic: ${{ steps.changes.outputs.agentic }}
-      knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
       deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
-      fred-core: ${{ steps.changes.outputs.fred-core }}
-      control-plane: ${{ steps.changes.outputs.control-plane }}
-      fred-sdk: ${{ steps.changes.outputs.fred-sdk }}
-      fred-runtime: ${{ steps.changes.outputs.fred-runtime }}
-      fred-agents: ${{ steps.changes.outputs.fred-agents }}
-      platform-ops: ${{ steps.changes.outputs.platform-ops }}
-      html-artifact: ${{ steps.changes.outputs.html-artifact }}
+      python-modules: ${{ steps.matrices.outputs.python-modules }}
+      openapi-drift: ${{ steps.matrices.outputs.openapi-drift }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,6 +63,22 @@ jobs:
               - 'apps/frontend/src/rework/components/shared/atoms/IconButton/IconButton.module.scss'
               - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.tsx'
               - 'apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/Checkbox/Checkbox.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Checkbox/Checkbox.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Chip/Chip.module.css'
+              - 'apps/frontend/src/rework/components/shared/atoms/Tooltip/Tooltip.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/Tooltip/Tooltip.module.scss'
+              - 'apps/frontend/src/rework/components/shared/atoms/MenuItem/MenuItem.tsx'
+              - 'apps/frontend/src/rework/components/shared/atoms/MenuItem/MenuItem.module.scss'
+              - 'apps/frontend/src/rework/components/shared/molecules/Menu/Menu.tsx'
+              - 'apps/frontend/src/rework/components/shared/molecules/Menu/Menu.module.scss'
+              - 'apps/frontend/src/rework/components/shared/molecules/Select/Select.tsx'
+              - 'apps/frontend/src/rework/components/shared/molecules/Select/Select.module.scss'
+              - 'apps/frontend/src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx'
+              - 'apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css'
+              - 'apps/frontend/src/rework/components/shared/utils/Portal.tsx'
+              - 'apps/frontend/src/rework/components/shared/utils/viewport.ts'
               - 'apps/frontend/src/index.scss'
               - 'apps/frontend/src/styles/index.css'
               - 'apps/frontend/src/assets/fonts/Geist.woff2'
@@ -87,6 +97,9 @@ jobs:
               - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx'
               - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.test.tsx'
               - 'apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.sdk-integration.test.tsx'
+              - 'apps/frontend/src/app/ApplicationContextStruct.tsx'
+              - 'apps/frontend/src/app/ApplicationContextProvider.tsx'
+              - 'apps/frontend/src/i18n.ts'
               - 'LICENSE'
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
@@ -112,26 +125,93 @@ jobs:
               - 'libs/fred-capability-platform-ops/**'
             html-artifact:
               - 'libs/fred-capability-html-artifact/**'
+            # Shared CI and Python tooling: a change runs every matrix entry.
+            ci:
+              - '.github/workflows/Check-pending-requests.yml'
+              - '.github/actions/setup-python-env/**'
+              - 'ruff.toml'
+              - 'scripts/makefiles/**'
+            runtime-client:
+              - 'apps/frontend/src/slices/runtime/**'
+            knowledge-flow-client:
+              - 'apps/frontend/src/slices/knowledgeFlow/**'
+            control-plane-client:
+              - 'apps/frontend/src/slices/controlPlane/**'
+            openapi-codegen:
+              - 'apps/frontend/Makefile'
+              - 'apps/frontend/package.json'
+              - 'apps/frontend/package-lock.json'
+              - 'apps/frontend/.prettierrc'
+              - 'scripts/generate_openapi.py'
 
-  # Job to run code quality checks on the entire repository
+      # A skipped matrix entry still waits for a runner, so only affected entries
+      # enter the matrices. Triggers list a module's own filter and its editable path dependencies.
+      - name: Build the matrices
+        id: matrices
+        env:
+          CHANGED: ${{ steps.changes.outputs.changes }}
+        run: |
+          set -euo pipefail
+          affected() {
+            jq -c --argjson changed "$CHANGED" '
+              if any($changed[]; . == "ci") then map(del(.triggers))
+              else [.[] | select(any(.triggers[]; IN($changed[]))) | del(.triggers)]
+              end' "$1"
+          }
+
+          cat > "$RUNNER_TEMP/python-modules.json" <<'JSON'
+          [
+            {"name": "fred-core", "directory": "libs/fred-core", "needs-pandoc": false, "integration-target": "test-integration",
+             "triggers": ["fred-core"]},
+            {"name": "knowledge-flow-backend", "directory": "apps/knowledge-flow-backend", "needs-pandoc": true, "integration-target": "",
+             "triggers": ["knowledge-flow", "fred-core"]},
+            {"name": "control-plane-backend", "directory": "apps/control-plane-backend", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["control-plane", "fred-core", "fred-sdk"]},
+            {"name": "fred-sdk", "directory": "libs/fred-sdk", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["fred-sdk", "fred-core"]},
+            {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["fred-runtime", "fred-sdk", "fred-core"]},
+            {"name": "fred-agents", "directory": "apps/fred-agents", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["fred-agents", "platform-ops", "html-artifact", "fred-runtime", "fred-sdk", "fred-core"]},
+            {"name": "fred-capability-platform-ops", "directory": "libs/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core"]},
+            {"name": "fred-capability-html-artifact", "directory": "libs/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core"]}
+          ]
+          JSON
+
+          # A generated client drifts when its backend or the codegen changes, not on any frontend edit.
+          cat > "$RUNNER_TEMP/openapi-drift.json" <<'JSON'
+          [
+            {"name": "runtime", "backend-directory": "libs/fred-runtime", "make-target": "update-runtime-api",
+             "slice-path": "apps/frontend/src/slices/runtime/runtimeOpenApi.ts",
+             "triggers": ["openapi-codegen", "runtime-client", "fred-runtime", "fred-sdk", "fred-core"]},
+            {"name": "knowledge-flow", "backend-directory": "apps/knowledge-flow-backend", "make-target": "update-knowledge-flow-api",
+             "slice-path": "apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts",
+             "triggers": ["openapi-codegen", "knowledge-flow-client", "knowledge-flow", "fred-core"]},
+            {"name": "control-plane", "backend-directory": "apps/control-plane-backend", "make-target": "update-control-plane-api",
+             "slice-path": "apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts",
+             "triggers": ["openapi-codegen", "control-plane-client", "control-plane", "fred-core", "fred-sdk"]}
+          ]
+          JSON
+
+          # Assigned first, so a jq failure stops the step instead of emitting an empty list.
+          python_modules=$(affected "$RUNNER_TEMP/python-modules.json")
+          openapi_drift=$(affected "$RUNNER_TEMP/openapi-drift.json")
+          {
+            echo "python-modules=$python_modules"
+            echo "openapi-drift=$openapi_drift"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # Job to run code quality checks on the affected Python modules
   code-quality:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.html-artifact == 'true'
+    if: needs.detect-changes.outputs.python-modules != '[]'
     strategy:
       fail-fast: false
       matrix:
-        directory:
-          [
-            apps/knowledge-flow-backend,
-            libs/fred-core,
-            apps/control-plane-backend,
-            libs/fred-sdk,
-            libs/fred-runtime,
-            apps/fred-agents,
-            libs/fred-capability-platform-ops,
-            libs/fred-capability-html-artifact,
-          ]
+        module: ${{ fromJSON(needs.detect-changes.outputs.python-modules) }}
         check:
           - lint
           - format
@@ -139,44 +219,21 @@ jobs:
           - sast
           # - detect-secret # todo: baseline not working, fix it and re enable this check
           - type-check
-        # The ${{ }} wrapper is what makes should-run a real boolean: an
-        # unwrapped expression stays a string, and every non-empty string is
-        # true to `if:`. Conditions mirror each module's path dependencies.
-        include:
-          - directory: apps/knowledge-flow-backend
-            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-core
-            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: apps/control-plane-backend
-            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
-          - directory: libs/fred-sdk
-            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-runtime
-            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: apps/fred-agents
-            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-capability-platform-ops
-            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - directory: libs/fred-capability-html-artifact
-            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-    name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
+    name: Code Quality - ${{ matrix.module.directory }} - ${{ matrix.check }}
 
     steps:
       - uses: actions/checkout@v4
-        if: ${{ matrix.should-run }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python environment
-        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
-          working-directory: ${{ matrix.directory }}
+          working-directory: ${{ matrix.module.directory }}
 
       - name: Run ${{ matrix.check }}
-        if: ${{ matrix.should-run }}
         run: |
-          cd ${{ matrix.directory }}/
+          cd ${{ matrix.module.directory }}/
           make ${{ matrix.check }}
         env:
           UV: uv
@@ -184,87 +241,40 @@ jobs:
   backend-tests:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.html-artifact == 'true'
+    if: needs.detect-changes.outputs.python-modules != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: fred-core
-            directory: libs/fred-core
-            unit-target: test
-            # Authorization is enforced by the OpenFGA schema, so the ReBAC
-            # rules are only really covered by resolving them against a live
-            # server; the target starts and stops it via docker compose.
-            integration-target: test-integration
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: knowledge-flow-backend
-            directory: apps/knowledge-flow-backend
-            unit-target: test
-            needs-pandoc: true
-            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: control-plane-backend
-            directory: apps/control-plane-backend
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' }}
-          - name: fred-sdk
-            directory: libs/fred-sdk
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: fred-runtime
-            directory: libs/fred-runtime
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: fred-agents
-            directory: apps/fred-agents
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: fred-capability-platform-ops
-            directory: libs/fred-capability-platform-ops
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.platform-ops == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
-          - name: fred-capability-html-artifact
-            directory: libs/fred-capability-html-artifact
-            unit-target: test
-            needs-pandoc: false
-            should-run: ${{ needs.detect-changes.outputs.html-artifact == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
+        include: ${{ fromJSON(needs.detect-changes.outputs.python-modules) }}
     name: Backend Tests - ${{ matrix.name }}
 
     steps:
       - name: Checkout code
-        if: ${{ matrix.should-run }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Install system dependencies
-        if: ${{ matrix.should-run && matrix.needs-pandoc }}
+        if: ${{ matrix.needs-pandoc }}
         run: |
           sudo apt-get update -qq
-          if [ "${{ matrix.needs-pandoc }}" = "true" ]; then
-            sudo apt-get install -y --no-install-recommends pandoc
-          fi
+          sudo apt-get install -y --no-install-recommends pandoc
 
       - name: Setup Python environment
-        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.directory }}
 
       - name: Run unit tests
-        if: ${{ matrix.should-run }}
-        run: make ${{ matrix.unit-target }}
+        run: make test
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
 
+      # fred-core only: ReBAC rules are only really covered against a live OpenFGA,
+      # which the target starts and stops via docker compose.
       - name: Run integration tests
-        if: ${{ matrix.should-run && matrix.integration-target != '' }}
+        if: ${{ matrix.integration-target != '' }}
         timeout-minutes: 15
         run: make ${{ matrix.integration-target }}
         working-directory: ${{ matrix.directory }}
@@ -531,7 +541,7 @@ jobs:
   fred-agents-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.fred-agents == 'true' || needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'fred-agents')
 
     steps:
       - name: Checkout code
@@ -553,7 +563,7 @@ jobs:
   knowledge-flow-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'knowledge-flow-backend')
 
     steps:
       - name: Checkout code
@@ -580,7 +590,7 @@ jobs:
   control-plane-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'control-plane-backend')
 
     steps:
       - name: Checkout code
@@ -603,57 +613,37 @@ jobs:
           cd apps/control-plane-backend/
           timeout 30s make run || true
 
-  # Job to check OpenAPI spec drift when backends or frontend change
+  # Job to check OpenAPI spec drift when a backend or its generated client changes
   openapi-drift-check:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    if: needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true'
+    if: needs.detect-changes.outputs.openapi-drift != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: runtime
-            backend-directory: libs/fred-runtime
-            make-target: update-runtime-api
-            slice-path: apps/frontend/src/slices/runtime/runtimeOpenApi.ts
-            should-run: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
-          - name: knowledge-flow
-            backend-directory: apps/knowledge-flow-backend
-            make-target: update-knowledge-flow-api
-            slice-path: apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
-            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
-          - name: control-plane
-            backend-directory: apps/control-plane-backend
-            make-target: update-control-plane-api
-            slice-path: apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
-            should-run: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
+        include: ${{ fromJSON(needs.detect-changes.outputs.openapi-drift) }}
     name: OpenAPI Drift - ${{ matrix.name }}
 
     steps:
       - name: Checkout code
-        if: ${{ matrix.should-run }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Node.js
-        if: ${{ matrix.should-run }}
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.0"
 
       - name: Setup backend dependencies
-        if: ${{ matrix.should-run }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.backend-directory }}
 
       - name: Backup current slice
-        if: ${{ matrix.should-run }}
         run: cp -f ${{ matrix.slice-path }} /tmp/openapi-backup.ts 2>/dev/null || true
 
       - name: Regenerate OpenAPI slice
-        if: ${{ matrix.should-run }}
         run: |
           cd apps/frontend/
           make ${{ matrix.make-target }}
@@ -661,7 +651,6 @@ jobs:
           UV: uv
 
       - name: Check for drift
-        if: ${{ matrix.should-run }}
         run: |
           if ! diff -q /tmp/openapi-backup.ts ${{ matrix.slice-path }} > /dev/null 2>&1; then
             echo "--- diff (committed vs freshly generated) ---"

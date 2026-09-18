@@ -42,6 +42,7 @@ from fred_sdk.knowledge_base._workflow import (
 )
 from fred_sdk.knowledge_base.client import ControlPlaneClient
 from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.documents import declare_library_synchronized
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 from fred_sdk.knowledge_base.routing import task_queue_for
 
@@ -65,7 +66,11 @@ def build_workflow_runner() -> SandboxedWorkflowRunner:
     )
 
 
-def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneClient):
+def _build_activity(
+    knowledge_base: KnowledgeBase,
+    control_plane: ControlPlaneClient,
+    configuration: PodConfiguration,
+):
     handler = knowledge_base.resolve_handler()
 
     @activity.defn(name=SYNCHRONIZE_ACTIVITY)
@@ -74,6 +79,14 @@ def _build_activity(knowledge_base: KnowledgeBase, control_plane: ControlPlaneCl
             payload.definition_id,
             payload.instance_id,
             run_id,
+        )
+        # Before the handler, not after: a run that fails halfway still filled
+        # part of the library, and people should not have been able to edit it
+        # in the meantime. Idempotent, so every later run changes nothing.
+        await declare_library_synchronized(
+            configuration,
+            library_id=context.library_id,
+            instance_id=context.instance_id,
         )
         result = await handler(context)
         # Nothing but the outcome travels back: Fred runs the engine, so a second
@@ -97,7 +110,7 @@ async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) 
             client,
             task_queue=task_queue,
             workflows=[SynchronizeWorkflow],
-            activities=[_build_activity(knowledge_base, control_plane)],
+            activities=[_build_activity(knowledge_base, control_plane, configuration)],
             workflow_runner=build_workflow_runner(),
         ):
             await asyncio.Event().wait()

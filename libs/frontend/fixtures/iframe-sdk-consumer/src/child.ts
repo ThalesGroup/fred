@@ -9,6 +9,8 @@ interface ChildHarness {
   connected: Promise<FredApplicationContext>;
   connectionError: string | null;
   routes: string[];
+  contexts: FredApplicationContext[];
+  stopContext(): void;
   navigate(path: string): void;
   openChat(sessionId?: string): void;
   request(
@@ -50,11 +52,14 @@ const client = createFredApplicationClient({
       : undefined,
 });
 const routes: string[] = [];
+const contexts: FredApplicationContext[] = [];
+let stopContext = () => {};
 let connectionError: string | null = null;
 const connected = client.connect();
 void connected
   .then(() => {
     client.onRoute(({ subPath }) => routes.push(subPath));
+    stopContext = client.onContext((context) => contexts.push(context));
     const status = document.querySelector("#status");
     if (status) status.textContent = "Connected";
   })
@@ -86,6 +91,8 @@ window.__fredChild = {
     return connectionError;
   },
   routes,
+  contexts,
+  stopContext: () => stopContext(),
   navigate: (path) => client.navigate(path),
   openChat: (sessionId) => client.openChat(sessionId),
   request,

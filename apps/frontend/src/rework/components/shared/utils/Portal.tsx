@@ -15,34 +15,49 @@
 import { useEffect, useState, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+const portalOwners = new WeakMap<HTMLElement, { count: number; created: boolean }>();
+
+/** Prefer the originating consumer-owned theme root; legacy FRED callers retain body portals. */
+export function uiPortalRoot(anchor: Element | null): HTMLElement {
+  return (anchor?.closest(".fred-ui") as HTMLElement | null) ?? document.body;
+}
+
 interface PortalProps {
   children: ReactNode;
   id?: string;
+  root?: HTMLElement | null;
 }
 
-export const Portal = ({ children, id = "portal-root" }: PortalProps) => {
+export const Portal = ({ children, id = "portal-root", root }: PortalProps) => {
   const [container, setContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    let portalElement = document.getElementById(id);
+    const host = root ?? document.body;
+    let portalElement = [...host.children].find((child) => child.id === id) as HTMLElement | undefined;
     let created = false;
 
     if (!portalElement) {
       portalElement = document.createElement("div");
       portalElement.id = id;
       portalElement.setAttribute("data-portal-container", "true");
-      document.body.appendChild(portalElement);
+      host.appendChild(portalElement);
       created = true;
     }
+
+    const ownership = portalOwners.get(portalElement) ?? { count: 0, created };
+    ownership.count += 1;
+    portalOwners.set(portalElement, ownership);
 
     setContainer(portalElement);
 
     return () => {
-      if (created && portalElement?.parentNode) {
-        portalElement.parentNode.removeChild(portalElement);
+      ownership.count -= 1;
+      if (ownership.count === 0) {
+        portalOwners.delete(portalElement);
+        if (ownership.created && portalElement.parentNode) portalElement.remove();
       }
     };
-  }, [id]);
+  }, [id, root]);
 
   if (!container) return null;
 

@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile, realpath } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import {
+  readFile as readFileAsync,
+  realpath as realpathAsync,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertInventoryWorkspaces,
+  loadPackageInventory,
+  validatePackageInventory,
+} from "./release-inventory.mjs";
+import { assertDocumentSchema } from "./schema-validation.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const workspaceRoot = path.resolve(scriptDirectory, "..");
@@ -9,7 +19,13 @@ export const developmentContractPath = path.join(
   workspaceRoot,
   "release/development-fixture-contract.json",
 );
-export const packageRoles = ["designTokens", "ui", "iframeSdk"];
+export const inventoryPath = path.join(
+  workspaceRoot,
+  "release/package-inventory.json",
+);
+export const packageRoles = validatePackageInventory(
+  JSON.parse(readFileSync(inventoryPath, "utf8")),
+).members.map(({ id }) => id);
 export const releaseStates = ["proposed", "fixture", "maintainer-confirmed"];
 
 const exactVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -34,6 +50,27 @@ function exactKeys(value, expected, label) {
   );
 }
 
+function assertManifestExports(exportsMap, label) {
+  assert(isObject(exportsMap), `${label} exports must be an object`);
+  for (const [exportName, target] of Object.entries(exportsMap)) {
+    assert(
+      exportName === "." || exportName.startsWith("./"),
+      `${label} export name is invalid`,
+    );
+    const targets =
+      typeof target === "string" ? [target] : Object.values(target ?? {});
+    assert(targets.length > 0, `${label} export target is missing`);
+    for (const value of targets)
+      assert(
+        typeof value === "string" &&
+          value.startsWith("./dist/") &&
+          !value.split("/").includes("..") &&
+          !/[?#]/.test(value),
+        `${label} export target escapes packaged dist`,
+      );
+  }
+}
+
 export function validateReleaseContract(contract) {
   assert(isObject(contract), "release contract must be an object");
   exactKeys(
@@ -45,15 +82,30 @@ export function validateReleaseContract(contract) {
       "registry",
       "distTag",
       "releaseToolchain",
+      "applicationToolchain",
+      "sourceBranch",
+      "workflowFilename",
+      "publishingEnvironment",
+      "approvedBaselineDigest",
       "maintainerApproval",
       "expectedProvenance",
       "packages",
+      "inventory",
     ],
     "release contract",
   );
+  assertDocumentSchema(
+    Object.fromEntries(
+      Object.entries(contract).filter(
+        ([field]) => !["inventory", "packages"].includes(field),
+      ),
+    ),
+    path.join(workspaceRoot, "release/release-contract.schema.json"),
+    "release policy",
+  );
   assert.equal(
     contract.schemaVersion,
-    1,
+    2,
     "unsupported release contract schema",
   );
   assert(
@@ -68,8 +120,33 @@ export function validateReleaseContract(contract) {
     "release registry must not contain a path",
   );
   assert(/^[a-z][a-z0-9._-]*$/.test(contract.distTag), "invalid dist-tag");
+  assert(
+    /^[a-z][a-z0-9._/-]*$/.test(contract.sourceBranch),
+    "invalid source branch",
+  );
+  assert(
+    /^[A-Za-z0-9_-]+\.yml$/.test(contract.workflowFilename),
+    "invalid workflow filename",
+  );
+  assert(
+    typeof contract.publishingEnvironment === "string" &&
+      contract.publishingEnvironment.length > 0,
+    "publishing environment is required",
+  );
+  assert(
+    /^[a-f0-9]{64}$/.test(contract.approvedBaselineDigest),
+    "approved baseline digest invalid",
+  );
   exactKeys(contract.releaseToolchain, ["node", "npm"], "release toolchain");
-  for (const [name, value] of Object.entries(contract.releaseToolchain)) {
+  exactKeys(
+    contract.applicationToolchain,
+    ["node", "npm"],
+    "application toolchain",
+  );
+  for (const [name, value] of [
+    ...Object.entries(contract.releaseToolchain),
+    ...Object.entries(contract.applicationToolchain),
+  ]) {
     assert(
       exactToolVersionPattern.test(value),
       `${name} must be an exact version`,
@@ -102,6 +179,31 @@ export function validateReleaseContract(contract) {
     assert(value === null || (typeof value === "string" && value.length > 0));
   }
   if (contract.state === "maintainer-confirmed") {
+    assert.equal(
+      contract.registry,
+      "https://registry.npmjs.org/",
+      "confirmed registry differs from policy",
+    );
+    assert.equal(
+      contract.distTag,
+      "next",
+      "confirmed dist-tag differs from policy",
+    );
+    assert.equal(
+      contract.sourceBranch,
+      "swift",
+      "confirmed branch must be swift",
+    );
+    assert.equal(
+      contract.workflowFilename,
+      "Publish-frontend-packages.yml",
+      "confirmed workflow filename differs",
+    );
+    assert.equal(
+      contract.publishingEnvironment,
+      "npm-publish",
+      "confirmed environment differs",
+    );
     assert(
       contract.expectedProvenance.repository,
       "confirmed repository is required",
@@ -126,6 +228,11 @@ export function validateReleaseContract(contract) {
       "confirmed workflow must be the GitHub certificate identity URI",
     );
     assert.equal(
+      contract.expectedProvenance.workflow,
+      `${contract.expectedProvenance.repository}/.github/workflows/${contract.workflowFilename}@refs/heads/${contract.sourceBranch}`,
+      "workflow identity differs from release policy",
+    );
+    assert.equal(
       contract.expectedProvenance.certificateIssuer,
       "https://token.actions.githubusercontent.com",
       "confirmed certificate issuer must be GitHub Actions OIDC",
@@ -133,6 +240,11 @@ export function validateReleaseContract(contract) {
     assert(
       contract.maintainerApproval.scopeOwner,
       "confirmed scope owner is required",
+    );
+    assert.equal(
+      contract.maintainerApproval.scopeOwner,
+      "fred-oss",
+      "confirmed scope differs from policy",
     );
     for (const [role, owner] of Object.entries(
       contract.maintainerApproval.owners,
@@ -173,10 +285,12 @@ export function validateReleaseContract(contract) {
       "fixture dist-tag cannot confirm a release contract",
     );
   }
-  exactKeys(contract.packages, packageRoles, "release packages");
+  validatePackageInventory(contract.inventory);
+  const registeredRoles = contract.inventory.members.map(({ id }) => id);
+  exactKeys(contract.packages, registeredRoles, "release packages");
   const workspaces = new Set();
   const names = new Set();
-  for (const role of packageRoles) {
+  for (const role of registeredRoles) {
     const entry = contract.packages[role];
     exactKeys(
       entry,
@@ -199,6 +313,11 @@ export function validateReleaseContract(contract) {
       isObject(entry.expectedManifest),
       `${role} expectedManifest must be an object`,
     );
+    assert.equal(
+      entry.workspace,
+      contract.inventory.members.find(({ id }) => id === role).workspace,
+      `${role} workspace differs from inventory`,
+    );
     assert(
       !workspaces.has(entry.workspace),
       `duplicate workspace ${entry.workspace}`,
@@ -209,20 +328,20 @@ export function validateReleaseContract(contract) {
   }
   if (contract.maintainerApproval.bootstrapAuthorityVerified) {
     const expectedScope = `@${contract.maintainerApproval.scopeOwner}/`;
-    for (const role of packageRoles)
+    for (const role of registeredRoles)
       assert(
         contract.packages[role].name.startsWith(expectedScope),
         `${role} package must belong to the verified npm scope ${expectedScope}`,
       );
   }
   if (contract.state === "maintainer-confirmed")
-    for (const role of packageRoles)
+    for (const role of registeredRoles)
       assert(
         !/development/i.test(contract.packages[role].version),
         `${role} fixture version cannot confirm a release contract`,
       );
   const requiredManifestFields = {
-    designTokens: [
+    "design-tokens": [
       "description",
       "license",
       "type",
@@ -250,7 +369,7 @@ export function validateReleaseContract(contract) {
       "peerDependencies",
       "publishConfig",
     ],
-    iframeSdk: [
+    "iframe-sdk": [
       "description",
       "license",
       "type",
@@ -265,13 +384,21 @@ export function validateReleaseContract(contract) {
       "publishConfig",
     ],
   };
-  for (const role of packageRoles) {
+  for (const role of registeredRoles) {
+    const profile = contract.inventory.members.find(
+      ({ id }) => id === role,
+    ).validator;
+    assert(
+      requiredManifestFields[profile],
+      `${role} profile lacks a reviewed archive validator`,
+    );
     const manifest = contract.packages[role].expectedManifest;
-    for (const field of requiredManifestFields[role])
+    for (const field of requiredManifestFields[profile])
       assert(
         field in manifest,
         `${role} expectedManifest.${field} is required`,
       );
+    assertManifestExports(manifest.exports, role);
     assertPublishedDependencyReferences(manifest);
     assert.deepEqual(
       manifest.publishConfig,
@@ -283,12 +410,25 @@ export function validateReleaseContract(contract) {
       },
       `${role} publishConfig differs from release policy`,
     );
+    if (contract.state === "maintainer-confirmed") {
+      assert.equal(
+        manifest.repository?.url,
+        `git+${contract.expectedProvenance.repository}.git`,
+        `${role} repository differs from release policy`,
+      );
+      assert.equal(
+        manifest.repository?.directory,
+        `libs/frontend/${contract.packages[role].workspace}`,
+        `${role} repository directory differs from inventory`,
+      );
+    }
   }
   const token = contract.packages.designTokens;
-  assert(
-    contract.packages.ui.expectedManifest.peerDependencies?.[token.name],
-    "UI expected manifest must declare the selected design-token peer",
-  );
+  if (token && contract.packages.ui)
+    assert(
+      contract.packages.ui.expectedManifest.peerDependencies?.[token.name],
+      "UI expected manifest must declare the selected design-token peer",
+    );
   return contract;
 }
 
@@ -319,15 +459,56 @@ export function assertMaintainerConfirmed(contract) {
 
 export async function loadReleaseContract(
   contractPath = developmentContractPath,
+  {
+    root = workspaceRoot,
+    inventoryFile = path.join(root, "release/package-inventory.json"),
+  } = {},
 ) {
-  return validateReleaseContract(
-    JSON.parse(await readFile(path.resolve(contractPath), "utf8")),
+  const policy = JSON.parse(
+    await readFileAsync(path.resolve(contractPath), "utf8"),
   );
+  const inventory = await loadPackageInventory(inventoryFile);
+  const rootManifest = JSON.parse(
+    await readFileAsync(path.join(root, "package.json"), "utf8"),
+  );
+  await assertInventoryWorkspaces(inventory, rootManifest, root);
+  const packages = {};
+  for (const { id, workspace } of inventory.members) {
+    const manifest = JSON.parse(
+      await readFileAsync(path.join(root, workspace, "package.json"), "utf8"),
+    );
+    assert.notEqual(
+      manifest.private,
+      true,
+      `${id} registered release member must not be private`,
+    );
+    packages[id] = {
+      workspace,
+      name: manifest.name,
+      version: manifest.version,
+      expectedManifest: Object.fromEntries(
+        Object.entries(manifest).filter(
+          ([field]) =>
+            ![
+              "name",
+              "version",
+              "private",
+              "scripts",
+              "devDependencies",
+            ].includes(field),
+        ),
+      ),
+    };
+  }
+  return validateReleaseContract({ ...policy, inventory, packages });
 }
 
 export function packageContract(contract, role) {
   validateReleaseContract(contract);
-  assert(packageRoles.includes(role), `unknown package role ${role}`);
+  assert(
+    contract.inventory.members.some(({ id }) => id === role),
+    `unknown package role ${role}`,
+  );
   return contract.packages[role];
 }
 
@@ -409,8 +590,8 @@ export async function assertProducerLockfile({
     true,
     "producer workspace root must remain private",
   );
-  const expectedWorkspaces = packageRoles.map(
-    (role) => contract.packages[role].workspace,
+  const expectedWorkspaces = contract.inventory.members.map(
+    ({ id }) => contract.packages[id].workspace,
   );
   assert.deepEqual(
     rootManifest.workspaces,
@@ -424,7 +605,7 @@ export async function assertProducerLockfile({
   );
 
   const expectedLinks = new Map();
-  for (const role of packageRoles) {
+  for (const role of contract.inventory.members.map(({ id }) => id)) {
     const expected = contract.packages[role];
     const workspaceEntry = lockfile.packages?.[expected.workspace];
     assert.equal(
@@ -442,8 +623,8 @@ export async function assertProducerLockfile({
     const link = lockfile.packages?.[lockPath];
     assert.equal(link?.link, true, `${lockPath} must be npm workspace link`);
     assertContainedRelative(link.resolved, expected.workspace, lockPath);
-    const targetReal = await realpath(path.join(root, link.resolved));
-    const rootReal = await realpath(root);
+    const targetReal = await realpathAsync(path.join(root, link.resolved));
+    const rootReal = await realpathAsync(root);
     const relative = path.relative(rootReal, targetReal);
     assert(
       relative && !relative.startsWith("..") && !path.isAbsolute(relative),

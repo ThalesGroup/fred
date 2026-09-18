@@ -35,9 +35,12 @@ function clone(value) {
 function confirm(changed) {
   changed.state = "maintainer-confirmed";
   changed.distTag = "next";
-  changed.expectedProvenance.repository = "https://github.com/example/fred";
+  changed.sourceBranch = "swift";
+  changed.workflowFilename = "Publish-frontend-packages.yml";
+  changed.publishingEnvironment = "npm-publish";
+  changed.expectedProvenance.repository = "https://github.com/ThalesGroup/fred";
   changed.expectedProvenance.workflow =
-    "https://github.com/example/fred/.github/workflows/release.yml@refs/heads/main";
+    "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift";
   changed.maintainerApproval = {
     scopeOwner: "fred-oss",
     owners: {
@@ -51,11 +54,6 @@ function confirm(changed) {
     registryAccess: "public",
     publishingPolicy: "staged",
   };
-  for (const entry of Object.values(changed.packages))
-    entry.version = "0.1.0-alpha.1";
-  changed.packages.ui.expectedManifest.peerDependencies[
-    changed.packages.designTokens.name
-  ] = "^0.1.0-alpha.1";
 }
 
 test("loads the explicit development fixture contract", () => {
@@ -183,7 +181,7 @@ test("verified bootstrap authority is bound to the selected npm scope", () => {
   changed.maintainerApproval.scopeOwner = "another-organization";
   assert.throws(
     () => validateReleaseContract(changed),
-    /package must belong to the verified npm scope @another-organization\//,
+    /confirmed scope differs from policy/,
   );
 });
 
@@ -348,7 +346,7 @@ test("rejects a declared producer member whose real target escapes", async (cont
 test("enforces exact registry coordinates and release toolchain", () => {
   assert.doesNotThrow(() =>
     assertExactRegistryCoordinate(
-      "@fred-oss/ui@0.1.0-alpha.1",
+      `${contract.packages.ui.name}@${contract.packages.ui.version}`,
       contract.packages.ui,
     ),
   );

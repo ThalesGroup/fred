@@ -55,7 +55,7 @@ class FakeRebacEngine(RebacEngine):
         self._permitted = permitted
         self._denied_permissions = denied_permissions or set()
         self.received_subject: RebacReference | None = None
-        self.received_permission: RebacPermission | None = None
+        self.received_permission: RebacPermission | RelationType | None = None
         self.received_resource_type: Resource | None = None
         self.received_contextual_relations: list[Relation] = []
         self.checked: list[tuple[RebacReference, RebacPermission, RebacReference]] = []
@@ -97,7 +97,7 @@ class FakeRebacEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,

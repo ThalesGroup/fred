@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -48,16 +48,127 @@ test("candidate generation packs and verifies each selected archive once", async
   const calls = [];
   const result = await buildReleaseCandidate({
     contract,
-    sourceCommit: "fixture-commit",
+    sourceCommit: "f".repeat(40),
     clean: true,
     producerToolchain: expectedToolchain,
     applicationToolchain,
     runGates: async () => gates,
     packers: await packerFixture(context, calls),
   });
-  assert.deepEqual(calls, ["designTokens", "iframeSdk", "ui"]);
+  assert.deepEqual(calls, ["designTokens", "ui", "iframeSdk"]);
   assert.equal(result.archives.length, 3);
   assert.equal(result.evidence.kind, "fixture-candidate-evidence");
+  assert.equal(result.record.kind, "candidate");
+  assert.equal(result.record.readiness, "fixture");
+  assert.deepEqual(
+    result.record.selected.map(({ id }) => id),
+    ["designTokens", "ui", "iframeSdk"],
+  );
+});
+
+test("SDK-only, tokens-only, UI-only and combined candidates pack only selected members", async (context) => {
+  const contract = await loadReleaseContract();
+  for (const [selection, expected, compatible] of [
+    ["iframeSdk", ["iframeSdk"], []],
+    ["designTokens", ["designTokens"], []],
+    ["ui", ["ui"], ["designTokens"]],
+    ["ui,designTokens", ["designTokens", "ui"], []],
+  ]) {
+    const calls = [];
+    const result = await buildReleaseCandidate({
+      contract,
+      selection,
+      sourceCommit: "f".repeat(40),
+      clean: true,
+      producerToolchain: expectedToolchain,
+      applicationToolchain,
+      runGates: async () => gates,
+      packers: await packerFixture(context, calls),
+    });
+    assert.deepEqual(calls, expected);
+    assert.deepEqual(Object.keys(result.evidence.packages), expected);
+    assert.deepEqual(
+      result.record.selected.map(({ id }) => id),
+      expected,
+    );
+    assert.deepEqual(
+      result.record.compatibilityOnly.map(({ id }) => id),
+      compatible,
+    );
+  }
+});
+
+test("future SDK-only fixture coordinate never creates token/UI candidates", async (context) => {
+  const contract = await loadReleaseContract();
+  contract.packages.iframeSdk.version = "0.1.1-alpha.1";
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "fred-future-sdk-changelog-"),
+  );
+  context.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, "iframe-sdk"));
+  await writeFile(
+    path.join(root, "iframe-sdk/CHANGELOG.md"),
+    "## 0.1.1-alpha.1\nReview: approved\nChanges: Disposable SDK-only validation fixture.\n",
+  );
+  const calls = [];
+  const result = await buildReleaseCandidate({
+    contract,
+    selection: "iframeSdk",
+    root,
+    sourceCommit: "f".repeat(40),
+    clean: true,
+    producerToolchain: expectedToolchain,
+    applicationToolchain,
+    runGates: async () => gates,
+    packers: await packerFixture(context, calls),
+  });
+  assert.deepEqual(calls, ["iframeSdk"]);
+  assert.equal(
+    result.record.selected[0].coordinate,
+    "@fred-oss/iframe-sdk@0.1.1-alpha.1",
+  );
+  assert.equal(result.record.readiness, "fixture");
+});
+
+test("incompatible UI token peer and invalid selections fail before packing", async (context) => {
+  const contract = await loadReleaseContract();
+  const calls = [];
+  const packers = await packerFixture(context, calls);
+  for (const selection of [
+    "",
+    "ui,ui",
+    "unknown",
+    "@fred/frontend-packages-workspace",
+  ])
+    await assert.rejects(
+      buildReleaseCandidate({
+        contract,
+        selection,
+        sourceCommit: "f".repeat(40),
+        clean: true,
+        producerToolchain: expectedToolchain,
+        applicationToolchain,
+        runGates: async () => gates,
+        packers,
+      }),
+    );
+  contract.packages.ui.expectedManifest.peerDependencies[
+    contract.packages.designTokens.name
+  ] = "^2.0.0";
+  await assert.rejects(
+    buildReleaseCandidate({
+      contract,
+      selection: "ui",
+      sourceCommit: "f".repeat(40),
+      clean: true,
+      producerToolchain: expectedToolchain,
+      applicationToolchain,
+      runGates: async () => gates,
+      packers,
+    }),
+    /do not satisfy UI peer/,
+  );
+  assert.deepEqual(calls, []);
 });
 
 test("candidate generation fails before packing for dirty, drifted, or unconfirmed input", async (context) => {

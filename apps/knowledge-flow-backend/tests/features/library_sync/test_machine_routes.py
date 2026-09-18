@@ -78,6 +78,7 @@ def _client(sync: SimpleNamespace, user: KeycloakUser | None = None) -> TestClie
         ("/libraries/{library_id}/documents", "DELETE"),
         ("/libraries/{library_id}/source-version", "GET"),
         ("/libraries/{library_id}/source-version", "PUT"),
+        ("/libraries/{library_id}/synchronized-by", "PUT"),
     ],
 )
 def test_machine_routes_use_jwt_without_human_admission(sync: SimpleNamespace, path: str, method: str) -> None:

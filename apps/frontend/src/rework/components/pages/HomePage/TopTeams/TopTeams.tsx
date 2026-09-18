@@ -26,7 +26,7 @@ import RankedList, { type RankedItem } from "../RankedList/RankedList.tsx";
 import styles from "./TopTeams.module.scss";
 
 const TOP_N = 5;
-const ROLE_ORDER = ["team_admin", "team_editor", "team_analyst", "team_member"] as const;
+const ROLE_ORDER = ["team_admin", "pending_team_admin", "team_editor", "team_analyst", "team_member"] as const;
 
 interface TopTeamsProps {
   period: HomePeriod;

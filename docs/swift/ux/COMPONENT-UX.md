@@ -84,7 +84,10 @@ _(none)_
 **Status:** `Functional`
 
 Portaled listbox with virtual focus (DOM focus stays on the trigger,
-`aria-activedescendant` tracks the highlighted option).
+`aria-activedescendant` tracks the highlighted option). Options use a generic
+value type and unique key; `emptyMessage` overrides the default empty wording.
+The menu portals into the nearest consumer-owned `.fred-ui` root when present,
+or retains the legacy FRED body portal.
 
 **Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
 the same token `TextInput` uses, so a `Select` and a text field placed in one
@@ -94,11 +97,38 @@ theme (both resolve to `cold-grey-80`) but dimmer in the dark one
 dark-theme users. `--outline-muted` remains correct for containers and
 dividers; form controls take `--outline-retreat`.
 
-**Naming the trigger.** A visible `label` names it through `htmlFor`. Where a
+**Naming the trigger.** A visible `label` names it through `aria-labelledby`. Where a
 toolbar has no room for one, pass `ariaLabel` instead — without either, the
 button falls back to its own content and a screen reader announces the current
 value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
 over `label`, so pass one or the other.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `Dialog`, `Chip`, `Tooltip`, and `Checkbox` shared atoms (UI Extension 1)
+
+**Locations:** `src/rework/components/shared/molecules/Dialog/DialogPrimitive.tsx`,
+`src/rework/components/shared/atoms/Chip/Chip.tsx`,
+`src/rework/components/shared/atoms/Tooltip/Tooltip.tsx`, and
+`src/rework/components/shared/atoms/Checkbox/Checkbox.tsx`.
+**Status:** `Functional`
+
+The action-oriented Dialog primitive now owns initial focus, Tab containment,
+Escape/scrim dismissal, and focus restoration. `Dialog.tsx` remains a thin FRED
+wrapper supplying its translated Cancel default; neutral callers supply their
+own labels. Consumer-root portals inherit light/dark theme; the application
+without `.fred-ui` retains its body portal. An open Select gets the first Escape
+inside Dialog, and option selection does not confirm the Dialog.
+
+Removable Chip controls are named `Remove <label>` unless a caller supplies
+`removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
+placement but dismisses on Escape; the panel portals to the themed root where
+available. Checkbox preserves native input props, refs, checked and disabled
+behavior, and exposes indeterminate as a mixed state.
 
 #### Open UX issues
 
@@ -409,6 +439,46 @@ agents) so the decision is informed at the point it is made.
 
 ---
 
+### `AgentTodoPanel`
+
+**Location:** `src/rework/components/shared/molecules/AgentTodoPanel/AgentTodoPanel.tsx`
+**Status:** `Functional`
+
+Conversation-level projection of the latest valid Deep Agent `write_todos` snapshot. The panel is
+mounted by `ManagedChatPage` between the scrollable conversation and the composer, aligned to the
+composer's 720px content lane, so the current plan stays visible while messages scroll. The panel
+extends behind the higher-stacking composer by its corner radius plus one spacing step. Hovering
+`Tasks` highlights only that header; the backing surface never changes colour through the composer.
+
+The compact header shows `Tasks` plus the number of pending or in-progress items. Expanded content
+keeps all three states visible: pending uses an open circle, in-progress uses the primary-colour
+sync indicator, and completed uses a success check with muted struck text. The disclosure defaults
+open while work remains; an explicit choice is stored as one boolean per `session_id`. When no work
+remains, the panel disappears regardless of that preference. Todo text itself is never copied into
+browser storage: live and reloaded content both come from runtime-owned `session_history`.
+
+If the same exchange contains its final answer without an error or failed tool result while the last
+snapshot still marks the active item `in_progress`, the panel presents that item as completed. This
+does not depend on array position because the streaming reducer may reserve the final frame's slot
+before later tool events. Failed turns retain the unfinished status. If no pending item remains after
+successful settlement, the entire panel is removed instead of showing a redundant completed-state
+summary.
+
+The visible panel sits outside the conversation log, so a persistent visually hidden `role=status`
+region announces task contents, accessible statuses, remaining-count changes, and final completion.
+
+Only strict, supported snapshots leave the generic reasoning trace. A valid `write_todos` call and
+its non-failed matching result are represented here instead; malformed or explicitly failed calls
+stay in `ThoughtTrace` so a runtime, dependency, or execution failure remains diagnosable. A failed
+update also leaves the last successful snapshot in the panel. An explicit empty snapshot removes
+the panel. The panel does not read, write, or synchronize a workspace `TODO.md` file.
+
+#### Open UX issues
+
+_(none)_
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
@@ -686,6 +756,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `ToolResultRuntimeEvent.sources` (built via `select_citable_sources()`, which drops
   dataset-pointer chunks and low-relevance hits). Wiring per-call `sources` through
   `ToolResultPart` would need a new additive field end-to-end (backend schema + persistence
+
   - SSE consumption) — a reasonable fast-follow, not required for the current fix since
     `content` already carries enough to render useful citations.
 
@@ -967,10 +1038,10 @@ with `corner-shape: round`. A switch is a true pill, not a squircle.
 track height changes per size. Everything else derives from it, so both sizes
 keep the same proportions:
 
-| Size | Track | Handle off | Handle on |
-| --- | --- | --- | --- |
-| `medium` | 52×32 | 22px | 24px |
-| `small` | 39×24 | 16.5px | 18px |
+| Size     | Track | Handle off | Handle on |
+| -------- | ----- | ---------- | --------- |
+| `medium` | 52×32 | 22px       | 24px      |
+| `small`  | 39×24 | 16.5px     | 18px      |
 
 The handle is smaller when off on purpose. At equal size, the handle looks
 smaller on the filled "on" track than on the pale "off" one. It stays centered
@@ -2398,6 +2469,7 @@ generic `Dialog` primitive exists yet):
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
+
   - the rows `<ul>` (no column headers) once ≥1 candidate is pending, `2px`
     (`spacing-3xs`) gap between rows: name/username, a `TeamRoleChips` role
     selector (see below, `8px` gap between its own chips), and a
@@ -2481,6 +2553,16 @@ control in the app. Chip padding-left/right `spacing-s` (`12px`, was
 `spacing-xs`/`8px`). That geometry now lives in one `%pill` placeholder
 `@extend`ed by both the toggles and the baseline badge below, so the two
 cannot drift apart in the same row.
+
+**`TeamRoleChips`: pending admin nomination** (2026-09-15, #2658). A member
+holding `pending_team_admin` keeps the short "Admin" label on the admin chip,
+marked by `data-pending`: light orange `warning-container` /
+`on-warning-container` with a transparent border and a `schedule` clock icon,
+whatever the reader may administer. "Admin (pending)" moved to the tooltip and
+the accessible name: the longer label wrapped every pending row onto two lines.
+Toggling the chip cancels the nomination. In `TeamSettingsMembersTable` the role
+column is a fixed `23rem`, sized to that widest row, so the chips always fit on
+one line and the identifier/name columns truncate instead.
 
 **`TeamRoleChips`: a static `Member` badge and a description tooltip on
 every badge** (2026-08-17, #2383). Two complaints from team admins, one
@@ -2954,7 +3036,7 @@ _(none yet)_
 **Location:** `src/rework/components/shared/atoms/BetaBadge/BetaBadge.tsx`
 **Status:** `Functional`
 
-Non-interactive `science` icon + label pill, same shape as `RestrictedBadge` (`--tertiary-container`/`--on-tertiary-container` instead of the neutral surface tone, to read as "still open to change" rather than "access-restricted"). Carries no feature-specific copy itself — the caller supplies `label` and wraps it in the shared `Tooltip` atom to explain why a given feature is marked beta. First used on `TeamWikiPage`'s rail header (`rework.wiki.betaBadge.*`); shareable as-is for any other feature shipped for feedback ahead of a final design.
+Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; availability that is not yet known stays hidden. An enabled definition is sufficient even before an instance is created. Navigation follows definition enablement even when older instances remain; this does not delete them or change their API access. Availability refreshes every 60 seconds and on window focus, in addition to same-session admin cache invalidation; a failed refresh keeps the last known answer rather than making the entry flap. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
 #### Open UX issues
 

@@ -67,7 +67,7 @@ class _RecordingRebacEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -156,7 +156,7 @@ class _ContextualRelationsSpyEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -356,7 +356,7 @@ class _PersonalTeamAwareEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -674,7 +674,7 @@ class _InMemoryCountingRebacEngine(RebacEngine):
     async def lookup_resources(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_type: Resource,
         *,
         contextual_relations: Iterable[Relation] | None = None,

@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { chromium } from "@playwright/test";
+import { createServer as createViteServer } from "vite";
 
 import { workspaceRoot } from "./pack-design-tokens.mjs";
+import { loadReleaseContract } from "./release-contract.mjs";
+import { selectReleaseMembers, selectionOption } from "./release-selection.mjs";
 
 function optionValue(name) {
   const index = process.argv.indexOf(name);
@@ -133,25 +144,47 @@ export async function assertBrowserPrerequisites({
     workspaceRoot,
     "target/staged-consumers/iframe-sdk",
   ),
+  checks = ["tokens", "fonts", "ui", "iframeSdk"],
 } = {}) {
+  assert(
+    Array.isArray(checks) && checks.length > 0,
+    "browser checks are required",
+  );
+  assert.equal(new Set(checks).size, checks.length, "duplicate browser check");
+  for (const check of checks)
+    assert(
+      ["tokens", "fonts", "ui", "iframeSdk"].includes(check),
+      `unknown browser check ${check}`,
+    );
+  const selected = new Set(checks);
   await Promise.all([
-    stat(path.join(tokenOutput, "tokens-only.html")).catch(() => {
-      throw new Error(
-        "staged token consumer is missing; run npm run test:consumer first",
-      );
-    }),
-    stat(path.join(reactOutput, "index.html")).catch(() => {
-      throw new Error(
-        "staged React consumer is missing; run npm run test:consumer first",
-      );
-    }),
-    ...["index.html", "child.html", "attacker.html"].map((file) =>
-      stat(path.join(iframeSdkOutput, file)).catch(() => {
-        throw new Error(
-          "staged iframe SDK consumer is missing; run npm run test:consumer first",
-        );
-      }),
-    ),
+    ...(selected.has("tokens") || selected.has("fonts")
+      ? [
+          stat(path.join(tokenOutput, "tokens-only.html")).catch(() => {
+            throw new Error(
+              "staged token consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        ]
+      : []),
+    ...(selected.has("ui")
+      ? [
+          stat(path.join(reactOutput, "index.html")).catch(() => {
+            throw new Error(
+              "staged React consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        ]
+      : []),
+    ...(selected.has("iframeSdk")
+      ? ["index.html", "child.html", "attacker.html"].map((file) =>
+          stat(path.join(iframeSdkOutput, file)).catch(() => {
+            throw new Error(
+              "staged iframe SDK consumer is missing; run npm run test:consumer first",
+            );
+          }),
+        )
+      : []),
     stat(browserPath).catch(() => {
       throw new Error(
         "Playwright Chromium is missing; run npm run browser:install during provisioning",
@@ -348,6 +381,148 @@ async function verifyIframeSdk(
     assert.equal(admission.applicationOrigin, applicationOrigin);
     assert(admission.readyCount >= 2, "ready retry was not observed");
     assert.equal(admission.protocolVersion, "1");
+    assert.equal(new URL(child.url()).searchParams.get("theme"), "dark");
+    assert.equal(new URL(child.url()).searchParams.get("locale"), "fr");
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "en", 0],
+    );
+
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "en"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("light", "fr"),
+    );
+    await child.waitForFunction(() => window.__fredChild.contexts.length === 4);
+    assert.deepEqual(
+      await child.evaluate(() =>
+        window.__fredChild.contexts.map(({ theme, locale }) => [theme, locale]),
+      ),
+      [
+        ["dark", "en"],
+        ["light", "en"],
+        ["light", "fr"],
+        ["light", "fr"],
+      ],
+    );
+    const invalidContext = {
+      type: "fred:context",
+      protocolVersion: "1",
+      applicationId: "example",
+      context: {
+        team: { id: "team-1", name: "Team One", isPersonal: false },
+        route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+        locale: "en",
+        theme: "system",
+      },
+    };
+    await observation.page.evaluate(
+      (message) => window.__fredHost.sendRawContext(message),
+      invalidContext,
+    );
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendRawContext({
+        type: "fred:context",
+        protocolVersion: "1",
+        applicationId: "other",
+        context: {
+          team: { id: "team-1", name: "Team One", isPersonal: false },
+          route: { basePath: "/team/team-1/apps/example", subPath: "A" },
+          locale: "en",
+          theme: "dark",
+        },
+      }),
+    );
+    const validButMisattributedContext = {
+      ...invalidContext,
+      context: { ...invalidContext.context, theme: "dark" },
+    };
+    await attacker.evaluate(
+      (message) => window.__attack(message),
+      validButMisattributedContext,
+    );
+    await observation.page.evaluate(async () => {
+      const sibling = document.createElement("iframe");
+      sibling.name = "wrong-source";
+      sibling.srcdoc = "<!doctype html><title>Sibling</title>";
+      const loaded = new Promise((resolve) =>
+        sibling.addEventListener("load", resolve, { once: true }),
+      );
+      document.body.appendChild(sibling);
+      await loaded;
+    });
+    const wrongSource = observation.page
+      .frames()
+      .find((frame) => frame.name() === "wrong-source");
+    assert(wrongSource, "same-origin sibling frame is missing");
+    await child.evaluate(() => {
+      window.__fredWrongSourceObserved = 0;
+      window.addEventListener("message", (event) => {
+        if (
+          event.data?.type === "fred:context" &&
+          event.origin ===
+            new URLSearchParams(window.location.search).get("hostOrigin") &&
+          event.source !== window.parent
+        )
+          window.__fredWrongSourceObserved += 1;
+      });
+    });
+    await wrongSource.evaluate((message) => {
+      const application = parent.document.querySelector("#application");
+      application.contentWindow.postMessage(
+        message,
+        new URL(application.src).origin,
+      );
+    }, validButMisattributedContext);
+    await child.waitForFunction(() => window.__fredWrongSourceObserved === 1);
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["light", "fr", 4],
+    );
+    await child.evaluate(() => window.__fredChild.stopContext());
+    await child.evaluate(() => {
+      window.__fredContextIsolation = { errors: [], delivered: 0 };
+      globalThis.reportError = (error) =>
+        window.__fredContextIsolation.errors.push(error.message);
+      window.__fredChild.client.onContext(() => {
+        throw new Error("expected listener failure");
+      });
+      window.__fredChild.client.onContext(() => {
+        window.__fredContextIsolation.delivered += 1;
+      });
+    });
+    await observation.page.evaluate(() =>
+      window.__fredHost.sendContext("dark", "fr"),
+    );
+    await child.waitForFunction(
+      () => window.__fredContextIsolation?.delivered === 1,
+    );
+    assert.deepEqual(
+      await child.evaluate(() => window.__fredContextIsolation),
+      { errors: ["expected listener failure"], delivered: 1 },
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", 4],
+    );
 
     await observation.page.evaluate(() => window.__fredHost.sendRoute("A"));
     await child.evaluate(() => window.__fredChild.navigate("B"));
@@ -505,7 +680,7 @@ async function verifyIframeSdk(
     assert.match(rejectedConnections.deadline, /deadline/i);
 
     await observation.page.evaluate(() => {
-      window.__fredHost.configureContext("valid", "team-2");
+      window.__fredHost.configureContext("valid", "team-2", "dark");
       window.__fredHost.replaceFrame();
     });
     ({ child } = await iframeHarness(observation.page));
@@ -514,6 +689,14 @@ async function verifyIframeSdk(
     assert.equal(
       await child.evaluate(() => window.__fredChild.client.context?.team.id),
       "team-2",
+    );
+    assert.deepEqual(
+      await child.evaluate(() => [
+        window.__fredChild.client.context?.theme,
+        window.__fredChild.client.context?.locale,
+        window.__fredChild.contexts.length,
+      ]),
+      ["dark", "en", 0],
     );
     assert.equal(
       await child.evaluate(() => window.__fredChild.capacity()),
@@ -679,62 +862,57 @@ async function verifyFonts(browser, origin) {
   }
 }
 
-async function verifyUi(browser, origin) {
+async function verifyUiTheme(browser, origin, theme) {
   const observation = await createObservedPage(browser, origin);
   try {
     await observation.page.goto(origin, { waitUntil: "networkidle" });
-    const themes = {};
-    for (const theme of ["light", "dark"]) {
-      themes[theme] = await observation.page.evaluate((selectedTheme) => {
-        document.documentElement.dataset.theme = selectedTheme;
-        const shell = getComputedStyle(document.querySelector("main"));
-        const snapshot = (selector) => {
-          const style = getComputedStyle(document.querySelector(selector));
-          return {
-            backgroundColor: style.backgroundColor,
-            borderColor: style.borderColor,
-            color: style.color,
-            fontFamily: style.fontFamily,
-            fontSize: style.fontSize,
-          };
-        };
+    const styles = await observation.page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+      const shell = getComputedStyle(document.querySelector("main"));
+      const snapshot = (selector) => {
+        const style = getComputedStyle(document.querySelector(selector));
         return {
-          shell: {
-            backgroundColor: shell.backgroundColor,
-            color: shell.color,
-          },
-          Button: snapshot(".consumer-button"),
-          IconButton: snapshot(".consumer-icon-button"),
-          Icon: snapshot('[role="img"]'),
-          TextInput: snapshot("#project-name"),
-          Spinner: snapshot('svg[role="status"]'),
+          backgroundColor: style.backgroundColor,
+          borderColor: style.borderColor,
+          color: style.color,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
         };
-      }, theme);
-    }
-    assert.deepEqual(themes.light.shell, {
-      backgroundColor: "rgb(251, 248, 255)",
-      color: "rgb(25, 27, 33)",
-    });
-    assert.deepEqual(themes.dark.shell, {
-      backgroundColor: "rgb(17, 19, 24)",
-      color: "rgb(240, 239, 250)",
-    });
+      };
+      return {
+        shell: {
+          backgroundColor: shell.backgroundColor,
+          color: shell.color,
+        },
+        Button: snapshot(".consumer-button"),
+        IconButton: snapshot(".consumer-icon-button"),
+        Icon: snapshot('[role="img"]'),
+        TextInput: snapshot("#project-name"),
+        Spinner: snapshot('svg[role="status"]'),
+        Select: snapshot('button[aria-label="Empty selection"]'),
+        Chip: snapshot('[data-tone="default"]'),
+        Checkbox: snapshot('input[aria-label="Accept terms"]'),
+      };
+    }, theme);
+    assert.deepEqual(
+      styles.shell,
+      theme === "light"
+        ? { backgroundColor: "rgb(251, 248, 255)", color: "rgb(25, 27, 33)" }
+        : { backgroundColor: "rgb(17, 19, 24)", color: "rgb(240, 239, 250)" },
+    );
     for (const component of [
       "Button",
       "IconButton",
       "Icon",
       "TextInput",
       "Spinner",
+      "Select",
+      "Chip",
+      "Checkbox",
     ]) {
       assert(
-        Object.values(themes.light[component]).every(Boolean) &&
-          Object.values(themes.dark[component]).every(Boolean),
+        Object.values(styles[component]).every(Boolean),
         `${component} lacks representative computed styles`,
-      );
-      assert.notDeepEqual(
-        themes.light[component],
-        themes.dark[component],
-        `${component} did not consume light/dark theme values`,
       );
     }
     const shellOwnership = await observation.page.evaluate(() => ({
@@ -875,6 +1053,190 @@ async function verifyUi(browser, origin) {
       value: await resetInput.inputValue(),
     };
 
+    const choose = observation.page.getByRole("button", {
+      name: "Choose option",
+    });
+    await choose.focus();
+    await observation.page.keyboard.press("ArrowDown");
+    assert.equal(await choose.getAttribute("aria-expanded"), "true");
+    const firstOptionId = await choose.getAttribute("aria-activedescendant");
+    assert(firstOptionId?.endsWith("-opt-team:alpha"));
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "First" })
+        .getAttribute("id"),
+      firstOptionId,
+    );
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "Unavailable" })
+        .getAttribute("aria-disabled"),
+      "true",
+    );
+    await observation.page.keyboard.press("ArrowDown");
+    const secondOptionId = await choose.getAttribute("aria-activedescendant");
+    assert(secondOptionId?.endsWith("-opt-team.alpha"));
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "Second" })
+        .getAttribute("id"),
+      secondOptionId,
+    );
+    await observation.page.keyboard.press("Enter");
+    assert((await choose.textContent()).startsWith("Second"));
+    const empty = observation.page.getByRole("button", {
+      name: "Empty selection",
+    });
+    await empty.click();
+    assert.equal(
+      await observation.page
+        .getByRole("status")
+        .filter({ hasText: "No choices available" })
+        .count(),
+      1,
+    );
+    await observation.page.keyboard.press("Escape");
+    const disabledSelect = observation.page.getByRole("button", {
+      name: "Disabled selection",
+    });
+    await disabledSelect.click();
+    assert.equal(
+      await observation.page
+        .getByRole("status")
+        .filter({ hasText: "No enabled choices" })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await observation.page
+        .getByRole("option", { name: "Unavailable" })
+        .getAttribute("aria-disabled"),
+      "true",
+    );
+    await observation.page.keyboard.press("Escape");
+
+    const remove = observation.page.getByRole("button", {
+      name: "Remove Draft",
+    });
+    await remove.click();
+    assert.equal(await remove.count(), 0);
+
+    const hint = observation.page.getByRole("button", { name: "Hint trigger" });
+    await hint.hover();
+    assert.equal(
+      await observation.page
+        .getByRole("tooltip", { name: "More details" })
+        .count(),
+      1,
+    );
+    await hint.focus();
+    await observation.page.keyboard.press("Escape");
+    await observation.page
+      .getByRole("tooltip", { name: "More details" })
+      .waitFor({ state: "hidden" });
+    assert.equal(
+      await observation.page
+        .getByRole("tooltip", { name: "More details" })
+        .count(),
+      0,
+    );
+
+    const checkbox = observation.page.getByRole("checkbox", {
+      name: "Accept terms",
+    });
+    await checkbox.focus();
+    await observation.page.keyboard.press("Space");
+    assert.equal(await checkbox.isChecked(), true);
+    assert.equal(
+      await observation.page
+        .getByRole("checkbox", { name: "Disabled choice" })
+        .isDisabled(),
+      true,
+    );
+    assert.equal(
+      await observation.page
+        .getByRole("checkbox", { name: "Partial choice" })
+        .getAttribute("aria-checked"),
+      "mixed",
+    );
+
+    const openDialog = observation.page.getByRole("button", {
+      name: "Open dialog",
+    });
+    await openDialog.focus();
+    await observation.page.keyboard.press("Enter");
+    const dialog = observation.page.getByRole("dialog", {
+      name: "Confirm choice",
+    });
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await dialog.count(), 1);
+    assert.equal(
+      await dialog.evaluate((element) => Boolean(element.closest(".fred-ui"))),
+      true,
+    );
+    const dialogSelect = dialog.getByRole("button", { name: "Dialog option" });
+    assert.equal(
+      await dialogSelect.evaluate(
+        (element) => element === document.activeElement,
+      ),
+      true,
+    );
+    const apply = dialog.getByRole("button", { name: "Apply" });
+    await apply.focus();
+    await observation.page.keyboard.press("Tab");
+    assert.equal(
+      await dialogSelect.evaluate(
+        (element) => element === document.activeElement,
+      ),
+      true,
+      "Dialog did not wrap Tab to its first control",
+    );
+    await observation.page.keyboard.press("Shift+Tab");
+    assert.equal(
+      await apply.evaluate((element) => element === document.activeElement),
+      true,
+      "Dialog did not wrap Shift+Tab to its last control",
+    );
+    await dialogSelect.focus();
+    await observation.page.keyboard.press("ArrowDown");
+    await observation.page.keyboard.press("Escape");
+    assert.equal(await dialogSelect.getAttribute("aria-expanded"), "false");
+    assert.equal(await dialog.count(), 1, "Select Escape dismissed its Dialog");
+    await observation.page.keyboard.press("ArrowDown");
+    await observation.page.keyboard.press("Enter");
+    assert.equal(
+      await dialog.count(),
+      1,
+      "Select option selection confirmed its Dialog",
+    );
+    const dialogTheme = await dialog.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      token: getComputedStyle(element).getPropertyValue("--on-surface").trim(),
+      rootToken: getComputedStyle(element.closest(".fred-ui"))
+        .getPropertyValue("--on-surface")
+        .trim(),
+    }));
+    assert.equal(dialogTheme.token, dialogTheme.rootToken);
+    const dialogHint = dialog.getByRole("button", { name: "Dialog hint" });
+    await dialogHint.hover();
+    const tooltipLayer = await observation.page
+      .getByRole("tooltip", { name: "Inside dialog" })
+      .evaluate((element) => ({
+        owned: Boolean(element.closest(".fred-ui")),
+        zIndex: Number(getComputedStyle(element).zIndex),
+        background: getComputedStyle(element).backgroundColor,
+      }));
+    assert.equal(tooltipLayer.owned, true);
+    assert(tooltipLayer.zIndex > 1300);
+    await observation.page.keyboard.press("Escape");
+    await observation.page.keyboard.press("Escape");
+    assert.equal(await dialog.count(), 0);
+    assert.equal(
+      await openDialog.evaluate(
+        (element) => element === document.activeElement,
+      ),
+      true,
+    );
     const tonalStates = {};
     for (const name of ["Surface tonal", "Retreat tonal"]) {
       const button = observation.page.getByRole("button", { name });
@@ -923,10 +1285,15 @@ async function verifyUi(browser, origin) {
     );
     assertLocalRequests(observation, origin);
     return {
-      themes,
+      theme,
+      styles,
       shellOwnership,
       iconButton: iconButtonEvidence,
       resetCounter,
+      extended: {
+        dialogTheme,
+        tooltipLayer,
+      },
       tonalStates,
       materialLoaded,
       fontRequests,
@@ -938,6 +1305,188 @@ async function verifyUi(browser, origin) {
   }
 }
 
+async function verifyUi(browser, origin) {
+  // Each theme starts from a fresh consumer browser context. Reusing one page
+  // after toggling data-theme would hide first-load portal and asset defects.
+  const light = await verifyUiTheme(browser, origin, "light");
+  const dark = await verifyUiTheme(browser, origin, "dark");
+  assert.notDeepEqual(light.styles.shell, dark.styles.shell);
+  for (const component of [
+    "Button",
+    "IconButton",
+    "Icon",
+    "TextInput",
+    "Spinner",
+    "Select",
+    "Chip",
+    "Checkbox",
+  ]) {
+    assert.notDeepEqual(
+      light.styles[component],
+      dark.styles[component],
+      `${component} did not consume light/dark theme values`,
+    );
+  }
+  assert.notEqual(
+    light.extended.dialogTheme.background,
+    dark.extended.dialogTheme.background,
+    "Dialog did not inherit alternate theme in a fresh context",
+  );
+  assert.notEqual(
+    light.extended.tooltipLayer.background,
+    dark.extended.tooltipLayer.background,
+    "Tooltip did not inherit alternate theme in a fresh context",
+  );
+  assert.deepEqual(light.shellOwnership, dark.shellOwnership);
+  return {
+    themes: { light: light.styles, dark: dark.styles },
+    contexts: { light, dark },
+    shellOwnership: light.shellOwnership,
+    requests: [...light.requests, ...dark.requests],
+    responses: [...light.responses, ...dark.responses],
+  };
+}
+
+async function verifyProductionHostDownload(browser) {
+  const frontendRoot = path.resolve(workspaceRoot, "../../apps/frontend");
+  const fixtureRoot = path.join(workspaceRoot, "fixtures/production-host");
+  const mocksPath = path.join(fixtureRoot, "application-download-mocks.tsx");
+  const mockedAliases = [
+    "react-i18next",
+    "react-router-dom",
+    "@shared/molecules/PageEmptyState/PageEmptyState.tsx",
+    "@rework/features/applications/applicationRequest.ts",
+    "@rework/features/applications/useTeamApplications.ts",
+  ];
+  const mockedImports = new Set([
+    "../../../../hooks/useSelectedTeam.ts",
+    "../../../../app/ApplicationContextProvider.tsx",
+    "../../../../slices/controlPlane/controlPlaneOpenApi.ts",
+  ]);
+  let vite;
+  let childServer;
+  let observation;
+  let downloadRoot;
+  try {
+    childServer = await startServer(
+      fixtureRoot,
+      "application-download-child.html",
+    );
+    vite = await createViteServer({
+      configFile: false,
+      root: fixtureRoot,
+      esbuild: { jsx: "automatic" },
+      plugins: [
+        {
+          name: "production-application-host-fixture",
+          enforce: "pre",
+          resolveId(source) {
+            if (mockedImports.has(source)) return mocksPath;
+          },
+        },
+      ],
+      resolve: {
+        alias: [
+          ...mockedAliases.map((find) => ({ find, replacement: mocksPath })),
+          {
+            find: "@rework",
+            replacement: path.join(frontendRoot, "src/rework"),
+          },
+          {
+            find: "react-dom",
+            replacement: path.join(frontendRoot, "node_modules/react-dom"),
+          },
+          {
+            find: "react",
+            replacement: path.join(frontendRoot, "node_modules/react"),
+          },
+        ],
+        dedupe: ["react", "react-dom"],
+      },
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        fs: { allow: [path.resolve(workspaceRoot, "../..")] },
+      },
+      optimizeDeps: {
+        noDiscovery: true,
+        include: ["react", "react-dom/client", "react/jsx-dev-runtime"],
+      },
+    });
+    await vite.listen();
+    const address = vite.httpServer?.address();
+    assert(address && typeof address === "object");
+    const hostOrigin = `http://127.0.0.1:${address.port}`;
+    assert.notEqual(hostOrigin, childServer.origin);
+    observation = await createObservedPage(browser, [
+      hostOrigin,
+      childServer.origin,
+    ]);
+    const pageErrors = [];
+    observation.page.on("pageerror", (error) => pageErrors.push(error.message));
+    const fixtureUrl = new URL("/application-download-host.html", hostOrigin);
+    fixtureUrl.searchParams.set("childOrigin", childServer.origin);
+    await observation.page.goto(fixtureUrl.href);
+    const frame = observation.page.locator("iframe");
+    try {
+      await frame.waitFor({ state: "attached", timeout: 10_000 });
+    } catch {
+      throw new Error(
+        `production host did not render an iframe: ${JSON.stringify({ pageErrors, body: await observation.page.locator("body").innerText(), responses: observation.responses })}`,
+      );
+    }
+    const sandbox = await frame.getAttribute("sandbox");
+    assert.equal(
+      new URL(await frame.getAttribute("src")).origin,
+      childServer.origin,
+    );
+    assert.deepEqual(sandbox?.split(" "), [
+      "allow-scripts",
+      "allow-same-origin",
+      "allow-forms",
+      "allow-popups",
+      "allow-downloads",
+    ]);
+    const child = observation.page.frameLocator("iframe");
+    const expectedContents = "# Hosted synthesis\n\nKnown Markdown bytes.\n";
+    const [download] = await Promise.all([
+      observation.page.waitForEvent("download", { timeout: 10_000 }),
+      child.locator("#download").click(),
+    ]);
+    assert.equal(download.suggestedFilename(), "synthesis.md");
+    downloadRoot = await mkdtemp(
+      path.join(workspaceRoot, "target/application-download-"),
+    );
+    const downloadedFile = path.join(downloadRoot, "synthesis.md");
+    await download.saveAs(downloadedFile);
+    assert.deepEqual(
+      await readFile(downloadedFile),
+      Buffer.from(expectedContents),
+    );
+    assertSuccessfulBrowserRequests(observation);
+    assert.deepEqual(pageErrors, [], "production host raised a browser error");
+    assert.deepEqual(
+      observation.blockedRequests,
+      [],
+      "browser attempted an external request",
+    );
+    return {
+      hostOrigin,
+      childOrigin: childServer.origin,
+      filename: download.suggestedFilename(),
+      content: expectedContents,
+      bytes: Buffer.byteLength(expectedContents),
+      externalRequests: 0,
+      productionComponent: "TeamApplicationHostPage.tsx",
+    };
+  } finally {
+    await observation?.context.close();
+    await vite?.close();
+    await childServer?.close();
+    if (downloadRoot) await rm(downloadRoot, { recursive: true, force: true });
+  }
+}
+
 export async function runBrowserSmoke({
   evidencePath,
   tokenOutput = path.join(workspaceRoot, "target/staged-consumers/tokens"),
@@ -946,12 +1495,15 @@ export async function runBrowserSmoke({
     workspaceRoot,
     "target/staged-consumers/iframe-sdk",
   ),
+  checks = ["tokens", "fonts", "ui", "iframeSdk"],
 } = {}) {
   await assertBrowserPrerequisites({
     tokenOutput,
     reactOutput,
     iframeSdkOutput,
+    checks,
   });
+  const selected = new Set(checks);
   let tokenServer;
   let reactServer;
   let iframeHostServer;
@@ -959,55 +1511,85 @@ export async function runBrowserSmoke({
   let iframeAttackerServer;
   let browser;
   try {
-    tokenServer = await startServer(tokenOutput);
-    reactServer = await startServer(reactOutput, "index.html");
-    iframeHostServer = await startServer(iframeSdkOutput, "index.html");
-    iframeChildServer = await startServer(iframeSdkOutput, "child.html");
-    iframeAttackerServer = await startServer(iframeSdkOutput, "attacker.html");
-    browser = await chromium.launch({ headless: true });
-    const [tokens, fonts, ui, rejectedFixtureOrigins, iframeSdk] =
-      await Promise.all([
-        verifyTokens(browser, tokenServer.origin),
-        verifyFonts(browser, tokenServer.origin),
-        verifyUi(browser, reactServer.origin),
-        verifyRejectedFixtureOrigins(
-          browser,
-          iframeHostServer.origin,
-          iframeChildServer.origin,
-          iframeAttackerServer.origin,
-        ),
-        verifyIframeSdk(
-          browser,
-          iframeHostServer.origin,
-          iframeChildServer.origin,
-          iframeAttackerServer.origin,
-        ),
-      ]);
-    for (const property of [
-      "documentOverflow",
-      "bodyOverflow",
-      "bodyUserSelect",
-      "outsideBoxSizing",
-    ])
-      assert.equal(
-        ui.shellOwnership[property],
-        tokens.shellOwnershipBeforeUiStyles[property],
-        `UI style import changed consumer-owned ${property}`,
+    if (selected.has("tokens") || selected.has("fonts"))
+      tokenServer = await startServer(tokenOutput);
+    if (selected.has("ui"))
+      reactServer = await startServer(reactOutput, "index.html");
+    if (selected.has("iframeSdk")) {
+      iframeHostServer = await startServer(iframeSdkOutput, "index.html");
+      iframeChildServer = await startServer(iframeSdkOutput, "child.html");
+      iframeAttackerServer = await startServer(
+        iframeSdkOutput,
+        "attacker.html",
       );
+    }
+    browser = await chromium.launch({ headless: true });
+    const [
+      tokens,
+      fonts,
+      ui,
+      rejectedFixtureOrigins,
+      iframeSdk,
+      productionHostDownload,
+    ] = await Promise.all([
+      selected.has("tokens")
+        ? verifyTokens(browser, tokenServer.origin)
+        : undefined,
+      selected.has("fonts")
+        ? verifyFonts(browser, tokenServer.origin)
+        : undefined,
+      selected.has("ui") ? verifyUi(browser, reactServer.origin) : undefined,
+      selected.has("iframeSdk")
+        ? verifyRejectedFixtureOrigins(
+            browser,
+            iframeHostServer.origin,
+            iframeChildServer.origin,
+            iframeAttackerServer.origin,
+          )
+        : undefined,
+      selected.has("iframeSdk")
+        ? verifyIframeSdk(
+            browser,
+            iframeHostServer.origin,
+            iframeChildServer.origin,
+            iframeAttackerServer.origin,
+          )
+        : undefined,
+      selected.has("iframeSdk")
+        ? verifyProductionHostDownload(browser)
+        : undefined,
+    ]);
+    if (tokens && ui)
+      for (const property of [
+        "documentOverflow",
+        "bodyOverflow",
+        "bodyUserSelect",
+        "outsideBoxSizing",
+      ])
+        assert.equal(
+          ui.shellOwnership[property],
+          tokens.shellOwnershipBeforeUiStyles[property],
+          `UI style import changed consumer-owned ${property}`,
+        );
     const evidence = {
       browser: "Playwright Chromium (pre-provisioned)",
       dependencyInstallations: 0,
       browserProvisioning: 0,
       externalRequests: 0,
-      tokensOnly: tokens,
-      fontsOptIn: fonts,
-      ui,
-      rejectedFixtureOrigins,
-      iframeSdk,
-      shellOwnershipComparison: {
-        beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,
-        afterUiStyles: ui.shellOwnership,
-      },
+      ...(tokens ? { tokensOnly: tokens } : {}),
+      ...(fonts ? { fontsOptIn: fonts } : {}),
+      ...(ui ? { ui } : {}),
+      ...(rejectedFixtureOrigins ? { rejectedFixtureOrigins } : {}),
+      ...(iframeSdk ? { iframeSdk } : {}),
+      ...(productionHostDownload ? { productionHostDownload } : {}),
+      ...(tokens && ui
+        ? {
+            shellOwnershipComparison: {
+              beforeUiStyles: tokens.shellOwnershipBeforeUiStyles,
+              afterUiStyles: ui.shellOwnership,
+            },
+          }
+        : {}),
     };
     if (evidencePath) {
       const resolvedEvidence = path.resolve(workspaceRoot, evidencePath);
@@ -1029,7 +1611,18 @@ export async function runBrowserSmoke({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const selectedIds = selectReleaseMembers(
+    await loadReleaseContract(),
+    selectionOption(),
+  );
+  const checks = [
+    ...(selectedIds.includes("designTokens") || selectedIds.includes("ui")
+      ? ["tokens", "fonts"]
+      : []),
+    ...(selectedIds.includes("ui") ? ["ui"] : []),
+    ...(selectedIds.includes("iframeSdk") ? ["iframeSdk"] : []),
+  ];
   process.stdout.write(
-    `${JSON.stringify(await runBrowserSmoke({ evidencePath: optionValue("--evidence") }), null, 2)}\n`,
+    `${JSON.stringify(await runBrowserSmoke({ evidencePath: optionValue("--evidence"), checks }), null, 2)}\n`,
   );
 }

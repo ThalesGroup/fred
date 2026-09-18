@@ -79,6 +79,8 @@ from control_plane_backend.teams.api import (
     register_exception_handlers as register_team_exception_handlers,
 )
 from control_plane_backend.teams.api import router as teams_router
+from control_plane_backend.teams.dependencies import build_team_service_dependencies
+from control_plane_backend.teams.service import reconcile_team_admin_charter_roles
 from control_plane_backend.users.api import (
     register_exception_handlers as register_user_exception_handlers,
 )
@@ -211,6 +213,30 @@ async def _seed_capability_registration_defaults(container) -> None:
         logger.exception("[capability-seeding] registration seeding failed")
 
 
+async def _reconcile_team_admin_charter_roles(container) -> None:
+    """Re-align team admin relations when the configured charter version changed.
+
+    Fail-closed like the organization edge repair: starting anyway would let
+    admins who have not accepted a new version keep their rights.
+    """
+    try:
+        moved = await reconcile_team_admin_charter_roles(
+            build_team_service_dependencies(container)
+        )
+    except Exception:
+        logger.exception(
+            "[team-admin-charter] failed to reconcile team admin relations with "
+            "the configured charter version - refusing to start."
+        )
+        raise
+    if moved:
+        logger.info(
+            "[team-admin-charter] moved %d team admin relation(s) to match the "
+            "configured charter version.",
+            moved,
+        )
+
+
 def create_app() -> FastAPI:
     configuration = load_configuration()
     env_file = get_loaded_env_file_path() or "<unset>"
@@ -238,6 +264,7 @@ def create_app() -> FastAPI:
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
         await _reconcile_team_organization_relations(container)
+        await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)
         try:
             yield

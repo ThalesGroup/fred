@@ -1,0 +1,43 @@
+{
+  "$schema": "./compatibility-baselines.schema.json",
+  "schemaVersion": 1,
+  "baselines": [
+    {
+      "id": "designTokens-alpha.1",
+      "memberId": "designTokens",
+      "coordinate": "@fred-oss/design-tokens@0.1.0-alpha.1",
+      "registry": "https://registry.npmjs.org/",
+      "expected": {
+        "integrity": "sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==",
+        "artifactDigest": "sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==",
+        "repository": "https://github.com/ThalesGroup/fred",
+        "sourceCommit": "f49f2439d54b44f7739c5bd7fca3f789e0e528d6",
+        "workflow": "https://github.com/ThalesGroup/fred/.github/workflows/Publish-frontend-packages.yml@refs/heads/swift",
+        "certificateIssuer": "https://token.actions.githubusercontent.com"
+      },
+      "sourceReviewed": true,
+      "verificationTrace": {
+        "runId": "34890367123",
+        "runAttempt": "1",
+        "sourceCommit": "97920a0ad2df4ec90829819c9174fee4dc798d17",
+        "artifactId": 10365859307,
+        "artifactName": "frontend-packages-public-registry-verification-97920a0ad2df4ec90829819c9174fee4dc798d17-34890367123-1",
+        "artifactApiDigest": "sha256:9d3ba17c4016fd194c64527cb10f95d6c711e5963a37b7cf95386d23620981b4",
+        "artifactZipSha256": "9d3ba17c4016fd194c64527cb10f95d6c711e5963a37b7cf95386d23620981b4",
+        "historicalEvidenceSha256": "aabbde2d1e1bf82cbb93d92a27a59a97a291ae3ee5915f51f49e46776f586c4f",
+        "runUrl": "https://github.com/ThalesGroup/fred/actions/runs/34890367123",
+        "verifiedAt": "2026-09-15",
+        "historicalGates": [
+          "exactRegistryArchives",
+          "npmSignatures",
+          "sigstoreProvenance",
+          "cleanRegistryConsumers",
+          "browserSmoke",
+          "productionHostCompatibility"
+        ],
+        "oneTimeRegistryBytesMatched": true,
+        "oneTimeSigstoreVerified": true
+      }
+    }
+  ]
+}

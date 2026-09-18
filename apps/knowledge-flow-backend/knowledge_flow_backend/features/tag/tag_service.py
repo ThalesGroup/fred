@@ -51,6 +51,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagWithPermissions,
     UserTagRelation,
 )
+from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized
 from knowledge_flow_backend.features.tag.tag_item_service import get_specific_tag_item_service
 from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
 
@@ -266,6 +267,11 @@ class TagService:
                     team_id=team_id,
                 )
 
+        if parent_tag is not None:
+            # A machine's folder tree is its source's shape, so a folder a person
+            # adds to it would be one the next run neither knows nor removes.
+            await refuse_if_synchronized(self._tag_store, parent_tag, user)
+
         await self._ensure_unique_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
@@ -321,6 +327,10 @@ class TagService:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
         tag = await self._tag_store.get_tag_by_id(tag_id)
+        # The one person-facing path that changes what a folder holds or is
+        # called — adding an item, removing one, renaming, moving. Deleting the
+        # folder does not come through here, and stays open on purpose.
+        await refuse_if_synchronized(self._tag_store, tag, user)
         item_service = get_specific_tag_item_service(tag.type)
 
         # Add / remove changed item ids

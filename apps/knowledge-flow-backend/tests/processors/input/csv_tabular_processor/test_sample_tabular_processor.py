@@ -47,18 +47,44 @@ def test_valid_csv():
     temp_path.unlink()
 
 
-def test_inspect_read_options_returns_first_supported_non_utf8_encoding():
+def test_normalize_duckdb_encoding_name_only_maps_native_aliases():
     processor = CsvTabularProcessor()
-    content = "ville;montant\nMálaga;10\nLyon;25\n"
-    with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".csv", encoding="latin1") as f:
-        f.write(content)
-        temp_path = Path(f.name)
+
+    assert processor.normalize_duckdb_encoding_name("utf8") == "utf-8"
+    assert processor.normalize_duckdb_encoding_name("iso-8859-1") == "latin-1"
+    assert processor.normalize_duckdb_encoding_name("cp1252") == "cp1252"
+    assert processor.normalize_duckdb_encoding_name("windows-1252") == "windows-1252"
+
+
+def test_inspect_read_options_transcodes_cp1252_before_duckdb(tmp_path, monkeypatch):
+    processor = CsvTabularProcessor()
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_bytes("ville;montant\nMálaga €;10\nLyon;25\n".encode("cp1252"))
+    validation_calls = []
+    validate_duckdb_read = CsvTabularProcessor._validate_duckdb_read
+
+    def record_validation(self, path, *, delimiter, encoding):
+        assert encoding == "utf-8"
+        validation_calls.append((path, delimiter, encoding))
+        validate_duckdb_read(self, path, delimiter=delimiter, encoding=encoding)
+
+    monkeypatch.setattr(CsvTabularProcessor, "_validate_duckdb_read", record_validation)
+
+    options = processor.inspect_read_options(csv_path)
+
+    assert options.delimiter == ";"
+    assert options.encoding == "utf-8"
+    assert options.source_path == csv_path.with_suffix(".csv.utf8")
+    assert validation_calls == [(options.source_path, ";", "utf-8")]
+
+    connection = duckdb.connect(database=":memory:")
     try:
-        options = processor.inspect_read_options(temp_path)
-        assert options.delimiter == ";"
-        assert options.encoding == "CP1252"
+        relation_sql = processor.build_duckdb_read_relation_sql(csv_path, options)
+        rows = connection.execute(f"SELECT * FROM {relation_sql}").fetchall()  # nosec B608
     finally:
-        temp_path.unlink()
+        connection.close()
+
+    assert rows == [("Málaga €", 10), ("Lyon", 25)]
 
 
 def test_render_markdown_preview_marks_truncation(tmp_path):

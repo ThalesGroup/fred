@@ -26,9 +26,11 @@ import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer"
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
+import { AgentTodoPanel } from "@shared/molecules/AgentTodoPanel/AgentTodoPanel";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
+import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
@@ -236,6 +238,27 @@ export default function ManagedChatPage() {
   const attachmentsCount = chat.persistedAttachments.length;
 
   const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
+  const todoSnapshot = useMemo(() => latestAgentTodoSnapshot(chat.messages), [chat.messages]);
+  const todoSnapshotSettled = useMemo(
+    () => (todoSnapshot ? isAgentTodoSnapshotSettled(chat.messages, todoSnapshot.callId) : false),
+    [chat.messages, todoSnapshot],
+  );
+  const presentedTodos = useMemo(
+    () => presentAgentTodos(todoSnapshot?.todos ?? [], todoSnapshotSettled),
+    [todoSnapshot, todoSnapshotSettled],
+  );
+  const todoRemainingCount = presentedTodos.filter((todo) => todo.status !== "completed").length;
+  const hasRemainingTodos = todoRemainingCount > 0;
+  const todoAnnouncement =
+    todoSnapshot === null
+      ? ""
+      : todoRemainingCount === 0
+        ? t("rework.agentTodoPanel.announcementComplete")
+        : [
+            t("rework.agentTodoPanel.remaining", { count: todoRemainingCount }),
+            ...presentedTodos.map((todo) => `${t(`rework.agentTodoPanel.status.${todo.status}`)}: ${todo.content}`),
+          ].join(". ");
+  const todoPanelSessionId = chat.sessionId ?? chat.messages[chat.messages.length - 1]?.session_id ?? null;
 
   // Keeps the running turn in view. The key changes when the conversation is
   // replaced or a new user turn starts — the two moments the view jumps to the
@@ -681,6 +704,16 @@ export default function ManagedChatPage() {
                     />
                   )}
                 </div>
+
+                <span className={styles.todoStatusAnnouncement} role="status" aria-live="polite" aria-atomic="true">
+                  {todoAnnouncement}
+                </span>
+
+                {todoPanelSessionId && todoSnapshot && hasRemainingTodos && (
+                  <div className={styles.todoPanelSlot}>
+                    <AgentTodoPanel sessionId={todoPanelSessionId} todos={presentedTodos} />
+                  </div>
+                )}
 
                 {!isInitialState && (
                   <div className={styles.inputOverlay}>

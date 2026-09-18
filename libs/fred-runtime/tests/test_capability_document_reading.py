@@ -156,6 +156,18 @@ def test_paginate_markdown_pages_and_signals_end() -> None:
     assert (last.text, last.next_offset) == ("ef", None)
 
 
+def test_paginate_markdown_folds_tiny_tail_into_current_page() -> None:
+    folded = paginate_markdown(
+        document_uid="d", full=("A" * 100) + ("B" * 10), offset=0, max_chars=100
+    )
+    assert (folded.text, folded.next_offset) == ("A" * 100 + "B" * 10, None)
+
+    paged = paginate_markdown(
+        document_uid="d", full=("A" * 100) + ("B" * 11), offset=0, max_chars=100
+    )
+    assert (paged.text, paged.next_offset) == ("A" * 100, 100)
+
+
 def test_paginate_markdown_clamps_bounds() -> None:
     # Negative offset starts at 0.
     assert (
@@ -235,6 +247,8 @@ async def test_read_document_returns_page_and_continuation() -> None:
     assert msg.content.startswith("AAAA")
     # The verbatim footer offers (not commands) continuation with the next offset.
     assert "More text remains" in msg.content
+    assert "You have NOT seen the whole document yet" in msg.content
+    assert "do not present this page as the complete document" in msg.content
     assert "offset=200" in msg.content
     # content_and_artifact: the same text must ride the artifact blocks too.
     assert msg.artifact.blocks[0].text == msg.content
