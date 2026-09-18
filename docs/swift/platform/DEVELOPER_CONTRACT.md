@@ -37,9 +37,7 @@ Debugger ports are unchanged.
 The reload workflow requires Uvicorn 0.35 or later: older versions add the
 whole working directory even when explicit watch directories are supplied.
 Fred agents installs `watchfiles` with its development dependencies so YAML
-reloads work. Verify the scopes and real file notifications without starting
-services: `apps/fred-agents/.venv/bin/python scripts/tests/test_python_run.py`
-from the repository root.
+reloads work.
 
 ## 2) Platform CLI Convention
 
