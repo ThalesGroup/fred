@@ -33,6 +33,7 @@ from collections.abc import Sequence
 from typing import Any, List, cast
 
 import pytest
+from conftest import ToolFriendlyFakeChatModel
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
@@ -67,7 +68,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolApprovalPolicy
 from langchain.agents import create_agent
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
@@ -1008,16 +1008,11 @@ async def test_returned_capability_error_marks_trace(
     assert span.attributes == {"status": "error", "error_type": error_type}
 
 
-class _ToolCallingModel(FakeMessagesListChatModel):
-    def bind_tools(self, tools: Any, **kwargs: Any) -> _ToolCallingModel:
-        return self
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("runtime", ["react", "deep"])
 async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
     tracer = _RecordingTracer()
-    model = _ToolCallingModel(
+    model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
                 content="",

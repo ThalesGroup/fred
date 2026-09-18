@@ -44,12 +44,7 @@ async def tool_span(
     attributes: Mapping[str, object],
     input_payload: Any = None,
 ) -> AsyncIterator[SpanPort | None]:
-    """
-    Wrap one tool call in a span parented to the turn's active agent span.
-
-    Yields the span (or None when tracing is off) so the caller can record its
-    own output; status, error type and `end()` are handled here.
-    """
+    """Yield a parented span for caller-owned output, then record status and end it."""
 
     if tracer is None:
         yield None
