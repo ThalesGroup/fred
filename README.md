@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>Build, run and operate multi-agent AI applications.</strong></p>
+<p align="center"><strong>Put your team to work with agents. On your data. Inside your walls.</strong></p>
 
 <p align="center">
   <a href="https://github.com/ThalesGroup/fred/releases/latest"><img alt="version" src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fgithub.com%2FThalesGroup%2Ffred%2Freleases.atom&search=code%2Fv%28%5B0-9.%5D%2B%29&replace=v%241&label=version&color=blue"></a>
@@ -14,28 +14,35 @@
   <a href="https://github.com/ThalesGroup/fred/actions/workflows/Check-migrations.yml"><img alt="alembic migrations" src="https://img.shields.io/github/actions/workflow/status/ThalesGroup/fred/Check-migrations.yml?branch=swift&label=alembic%20migrations"></a>
 </p>
 
-> **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
+Fred is an open-source platform for putting a **team** to work with AI agents on
+its own documents — with the identity, access control, audit and evaluation that
+regulated work actually requires, from a laptop to an air-gapped cluster.
 
-Two key references before diving in:
+The tools most people already know — Claude Code, Codex and the like — make one
+person remarkably effective. Fred is built for the case where that isn't enough:
+**the data can't leave, and the result has to belong to a team, not to an
+individual.**
 
-- [How do you test it?](docs/swift/TESTING.md) — clone, run, and know in five steps whether this checkout actually works
-- [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
-- [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
+A team, its corpus, then its agents — in that order. Governance sits underneath
+rather than bolted on top, because the AI Act, GDPR and your security team leave
+no other option.
 
-> **Testing or developing locally? Don't stop after starting the apps.** Every
-> tool and agent template is admin-gated by default now (CAPAB-01/CTRLP-14) —
-> right after provisioning the demo platform, every team has an empty
-> toolbox until an admin explicitly authorizes it. See
-> [`TESTING.md`](docs/swift/TESTING.md) steps 3–4.
+Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
+party can install the whole thing without us — that is deliberate.**
 
-Fred is a production-ready platform for building and operating multi-agent AI applications. It has two complementary faces:
+> **One exception to that, today:** Fred still depends on a library licensed under
+> the AGPL. It will be removed in an upcoming release, but until then the AGPL terms
+> may apply to deployments that use the affected component. Full detail, and the rest
+> of the dependency picture, in [Licensing Note](#licensing-note).
+
+## How Fred is structured
+
+Fred has two complementary faces:
 
 - **A hosted platform** — control plane, knowledge flow, chat frontend, auth, team access control, observability, and Kubernetes-ready deployment, all integrated and ready to use.
 - **An open agent model** — a typed SDK and lightweight runtime that let teams ship independent agent pods, registered with the platform and operated alongside it without forking the core.
 
-## How Fred is structured
-
-Fred is built around three platform applications and a publishable SDK stack:
+It is built around three platform applications and a publishable SDK stack:
 
 | Layer      | Package                                                     | Role                                                                                  |
 | ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -78,6 +85,17 @@ Contents:
 - [Contacts](#contacts)
 
 ## Getting started
+
+Two key references before diving in:
+
+- [How do you test it?](docs/swift/TESTING.md) — clone, run, and know in five steps whether this checkout actually works
+- [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
+- [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
+
+> **Testing or developing locally? Don't stop after starting the apps.** Every
+> tool and agent template is admin-gated by default — right after provisioning
+> the demo platform, every team has an empty toolbox until an admin explicitly
+> authorizes it. See [`TESTING.md`](docs/swift/TESTING.md) steps 3–4.
 
 To ensure a smooth first-time experience, Fred’s maintainers designed Dev Container/Native startup to require no additional external components (except, of course, to LLM APIs).
 
