@@ -57,9 +57,10 @@ from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import SecretStr
 
 
 def _binding() -> BoundRuntimeContext:
@@ -437,7 +438,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
     None
 ):
     payloads: list[dict[str, Any]] = []
-    serializer = ChatOpenAI(model="mistral-small", api_key="offline-test")
+    serializer = ChatOpenAI(model="mistral-small", api_key=SecretStr("offline-test"))
 
     class CapturePayload(AgentMiddleware):
         async def awrap_model_call(
@@ -530,7 +531,9 @@ async def test_deep_hygiene_keeps_long_history_below_character_budget() -> None:
         approval_policy=ToolApprovalPolicy(),
         available_tool_names=set(),
     )
-    messages = [HumanMessage(content=str(index)) for index in range(501)]
+    messages: list[AnyMessage] = [
+        HumanMessage(content=str(index)) for index in range(501)
+    ]
     seen: list[ModelRequest] = []
 
     async def handler(request: ModelRequest) -> ModelResponse:
