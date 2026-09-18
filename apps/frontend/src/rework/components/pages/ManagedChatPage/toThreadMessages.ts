@@ -33,6 +33,35 @@ function hitlRequestPart(m: ChatMessage): HitlRequestPart | undefined {
   return m.parts?.[0] as HitlRequestPart | undefined;
 }
 
+function hitlResponsePart(m: ChatMessage): HitlResponsePart | undefined {
+  return m.parts?.[0] as HitlResponsePart | undefined;
+}
+
+type HitlHistoryPair = {
+  request: ChatMessage;
+  response?: ChatMessage;
+};
+
+function pairHitlHistory(messages: ChatMessage[]): HitlHistoryPair[] {
+  const requests = messages.filter((m) => (m.channel as string) === "hitl_request");
+  const responses = messages.filter((m) => (m.channel as string) === "hitl_response");
+  const legacyResponses = responses.filter((candidate) => !hitlResponsePart(candidate)?.occurrence_id);
+  const responsesByOccurrence = new Map<string, ChatMessage>();
+  for (const response of responses) {
+    const occurrenceId = hitlResponsePart(response)?.occurrence_id;
+    if (occurrenceId && !responsesByOccurrence.has(occurrenceId)) {
+      responsesByOccurrence.set(occurrenceId, response);
+    }
+  }
+  let legacyResponseIndex = 0;
+
+  return requests.map((request) => {
+    const occurrenceId = hitlRequestPart(request)?.occurrence_id;
+    const response = occurrenceId ? responsesByOccurrence.get(occurrenceId) : legacyResponses[legacyResponseIndex++];
+    return { request, response };
+  });
+}
+
 // Groups messages by exchange_id, preserving first-appearance order — the exact
 // grouping `toThreadMessages` folds over. Shared so `reconstructPendingHitl`
 // (which needs only the LAST exchange) can never drift from that grouping.
@@ -74,10 +103,9 @@ export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaiting
   if (lastEid === undefined) return null;
   const lastMsgs = groups.get(lastEid)!;
 
-  const hitlReqMsg = lastMsgs.find((m) => (m.channel as string) === "hitl_request");
-  if (!hitlReqMsg) return null;
-  const hasResponse = lastMsgs.some((m) => (m.channel as string) === "hitl_response");
-  if (hasResponse) return null;
+  const pendingPair = pairHitlHistory(lastMsgs).find(({ response }) => response === undefined);
+  if (!pendingPair) return null;
+  const hitlReqMsg = pendingPair.request;
 
   const part = hitlRequestPart(hitlReqMsg);
   if (!part) return null;
@@ -93,6 +121,7 @@ export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaiting
       free_text: part.free_text ?? false,
       stage: part.stage ?? null,
       interrupt_id: part.interrupt_id ?? null,
+      occurrence_id: part.occurrence_id ?? null,
       checkpoint_id: part.checkpoint_id ?? null,
       pending_calls: (part.pending_calls ?? []).map((c) => ({
         tool_call_id: c.tool_call_id ?? "",
@@ -232,41 +261,37 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       });
     }
 
-    const hitlReqMsg = msgs.find((m) => (m.channel as string) === "hitl_request");
-    const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
-    // The trailing exchange's hitl_request with no matching response yet is a
-    // GATE STILL OPEN, not history — `reconstructPendingHitl` turns it into the
-    // live, interactive `pendingHitl` state instead (rendered by the caller at
-    // the bottom of the thread, in the same spot a fresh live pause would be).
-    // Rendering it here too would show it twice: once dead (this readonly
-    // card), once actionable.
-    const isOpenGate = isLast && !hitlRespMsg;
-    if (hitlReqMsg && !isOpenGate) {
-      const part = hitlRequestPart(hitlReqMsg);
-      result.push({
-        id: `${eid}:hitl_req`,
-        role: "hitl_request",
-        text: part?.question ?? "",
-        isStreaming: false,
-        traceMessages: [],
-        sources: [],
-        uiParts: [],
-        hitlChoices: part?.choices ?? [],
-        hitlTitle: part?.title,
-      });
-    }
+    for (const { request: hitlReqMsg, response: hitlRespMsg } of pairHitlHistory(msgs)) {
+      const requestPart = hitlRequestPart(hitlReqMsg);
+      const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
+      // An unanswered trailing request is live state reconstructed below the
+      // thread, not a second read-only copy of the same prompt.
+      if (!(isLast && !hitlRespMsg)) {
+        result.push({
+          id: `${eid}:hitl_req:${pairId}`,
+          role: "hitl_request",
+          text: requestPart?.question ?? "",
+          isStreaming: false,
+          traceMessages: [],
+          sources: [],
+          uiParts: [],
+          hitlChoices: requestPart?.choices ?? [],
+          hitlTitle: requestPart?.title,
+        });
+      }
 
-    if (hitlRespMsg) {
-      const part = hitlRespMsg.parts?.[0] as HitlResponsePart | undefined;
-      result.push({
-        id: `${eid}:hitl_resp`,
-        role: "hitl_response",
-        text: part?.label ?? part?.choice_id ?? "",
-        isStreaming: false,
-        traceMessages: [],
-        sources: [],
-        uiParts: [],
-      });
+      if (hitlRespMsg) {
+        const responsePart = hitlResponsePart(hitlRespMsg);
+        result.push({
+          id: `${eid}:hitl_resp:${pairId}`,
+          role: "hitl_response",
+          text: responsePart?.label ?? responsePart?.choice_id ?? responsePart?.text ?? "",
+          isStreaming: false,
+          traceMessages: [],
+          sources: [],
+          uiParts: [],
+        });
+      }
     }
 
     const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));

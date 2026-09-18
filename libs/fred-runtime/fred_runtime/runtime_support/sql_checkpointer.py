@@ -29,6 +29,8 @@ conversation continuity survive executor rebuilds and process boundaries.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import secrets
 import time
@@ -85,6 +87,20 @@ def _sync_checkpointer_error(method_name: str) -> RuntimeError:
         "FredSqlCheckpointer is async-only for Fred v2. "
         f"Synchronous method '{method_name}' was called unexpectedly."
     )
+
+
+_HITL_OCCURRENCE_CLAIM_PREFIX = "occurrence:v1:"
+
+
+def _hitl_claim_key(interrupt_id: str, occurrence_id: str | None) -> str:
+    """Return the existing bare key or a bounded per-occurrence digest key."""
+    if occurrence_id is None:
+        return interrupt_id
+    pair = json.dumps(
+        [interrupt_id, occurrence_id], ensure_ascii=True, separators=(",", ":")
+    ).encode()
+    digest = hashlib.sha256(pair).hexdigest()
+    return f"{_HITL_OCCURRENCE_CLAIM_PREFIX}{digest}"
 
 
 def _configurable(config: RunnableConfig) -> dict[str, Any]:
@@ -246,19 +262,11 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         # deliberately not alembic-tracked, keyed by thread_id so a full
         # thread erasure removes it too (see `adelete_thread`).
         #
-        # Key is (thread_id, checkpoint_ns, interrupt_id) — NOT the storage
-        # checkpoint_id: `interrupt_id` is LangGraph's own `Interrupt.id`, an
-        # xxh3-128 hash of the interrupted task's checkpoint namespace
-        # (`langgraph.types.Interrupt.from_ns`, `pregel/_algo.py`'s
-        # `namespace_hash`). This id is NOT universally occurrence-unique —
-        # two `interrupt()` calls within the SAME LangGraph task share it,
-        # matched by call order instead (`test_langgraph_interrupt_id_semantics.py`
-        # pins this against the installed LangGraph version). The narrower
-        # fact this key relies on is FRED-specific: `FredHitlMiddleware`
-        # has exactly one `interrupt()` call site, invoked at most once per
-        # task, so two DISTINCT FRED HITL occurrences always land in
-        # different tasks and always get different ids (proven by
-        # `test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids`).
+        # Key is (thread_id, checkpoint_ns, occurrence_key), stored in the
+        # existing `interrupt_id` column. Pauses without an occurrence retain
+        # their bare native id; tool pauses use a versioned fixed-length digest
+        # of the native id and stable tool-call id. This keeps sibling claims
+        # isolated without changing this self-initializing table's schema.
         # See RUNTIME-EXECUTION-CONTRACT.md §8.39 for the full identity model.
         #
         # `claim_token` fences every operation on a row: acquiring, starting,
@@ -723,6 +731,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         thread_id: str,
         checkpoint_ns: str,
         interrupt_id: str,
+        occurrence_id: str | None = None,
     ) -> str | None:
         """
         Atomically claim one HITL resume occurrence, returning an opaque
@@ -739,8 +748,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         - this claim is the durable, cross-replica arbiter: an
           `INSERT ... ON CONFLICT DO UPDATE ... WHERE <stale>` against
           `hitl_claim_table` has exactly one winner per (thread_id,
-          checkpoint_ns, interrupt_id) — every other caller gets `None` and
-          must reject the request
+          checkpoint_ns, occurrence key) — every other caller gets `None`
+          and must reject the request
 
         State machine — 'claimed' -> 'started' -> 'consumed':
         - this method mints a fresh `claim_token` and moves the row to
@@ -797,6 +806,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
           this as "already being resumed" and reject the request.
         """
         await self._ensure_tables()
+        claim_key = _hitl_claim_key(interrupt_id, occurrence_id)
         token = secrets.token_urlsafe(16)
         pool_wait_start = time.monotonic()
         async with self.store.begin() as conn:
@@ -807,7 +817,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             stmt = self._hitl_claim_insert(conn.dialect.name).values(
                 thread_id=thread_id,
                 checkpoint_ns=checkpoint_ns,
-                interrupt_id=interrupt_id,
+                interrupt_id=claim_key,
                 claim_token=token,
                 status=self._HITL_CLAIM_CLAIMED,
                 claimed_at=now,
@@ -842,6 +852,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         interrupt_id: str,
         claim_token: str,
+        occurrence_id: str | None = None,
     ) -> bool:
         """
         Confirm the caller still owns a 'claimed' occurrence and move it to
@@ -858,6 +869,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         transition that makes a long-running turn immune to lease expiry.
         """
         await self._ensure_tables()
+        claim_key = _hitl_claim_key(interrupt_id, occurrence_id)
         pool_wait_start = time.monotonic()
         async with self.store.begin() as conn:
             pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
@@ -868,7 +880,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     and_(
                         self.hitl_claim_table.c.thread_id == thread_id,
                         self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
-                        self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                        self.hitl_claim_table.c.interrupt_id == claim_key,
                         self.hitl_claim_table.c.claim_token == claim_token,
                         self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED,
                     )
@@ -891,6 +903,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         interrupt_id: str,
         claim_token: str,
+        occurrence_id: str | None = None,
     ) -> None:
         """
         Mark a 'started' occurrence terminally 'consumed' after a
@@ -900,6 +913,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         so a failed call here does not reopen the invariant. Fenced by
         `claim_token`, same as every other claim operation. Never raises.
         """
+        claim_key = _hitl_claim_key(interrupt_id, occurrence_id)
         try:
             await self._ensure_tables()
             async with self.store.begin() as conn:
@@ -909,7 +923,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         and_(
                             self.hitl_claim_table.c.thread_id == thread_id,
                             self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
-                            self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                            self.hitl_claim_table.c.interrupt_id == claim_key,
                             self.hitl_claim_table.c.claim_token == claim_token,
                         )
                     )
@@ -928,6 +942,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         interrupt_id: str,
         claim_token: str,
+        occurrence_id: str | None = None,
     ) -> None:
         """
         Best-effort release of a still-'claimed' (pre-start) occurrence,
@@ -939,6 +954,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         raises — a failed release just means the claim expires via the
         normal TTL instead of being freed immediately.
         """
+        claim_key = _hitl_claim_key(interrupt_id, occurrence_id)
         try:
             await self._ensure_tables()
             async with self.store.begin() as conn:
@@ -947,7 +963,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         and_(
                             self.hitl_claim_table.c.thread_id == thread_id,
                             self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
-                            self.hitl_claim_table.c.interrupt_id == interrupt_id,
+                            self.hitl_claim_table.c.interrupt_id == claim_key,
                             self.hitl_claim_table.c.claim_token == claim_token,
                             self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED,
                         )

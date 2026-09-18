@@ -255,17 +255,19 @@ class HumanInputRequest(FrozenModel):
     Use this model to represent business questions (choice, free text, or
     both). The UI renders this object directly.
 
-    Resume identity (#2216) — two distinct fields, never used as aliases
-    for each other:
+    Resume identity uses three distinct fields, never aliases for each other:
     - `checkpoint_id`: a real checkpointer-storage identifier. Populated
       only by the legacy Graph V2 runtime (`graph_runtime.py`), which
       validates it by exact lookup against a stored checkpoint.
     - `interrupt_id`: LangGraph's own `Interrupt.id` for this HITL
-      occurrence. Populated only by the ReAct V2 runtime
+      task. Populated only by the ReAct V2 runtime
       (`react_stream_adapter.py`). The frontend echoes it back verbatim on
       resume; the backend requires an exact match against the currently
       pending interrupt and threads it into LangGraph's targeted
       `Command(resume={interrupt_id: ...})` form.
+    - `occurrence_id`: one pause within an interrupt. A pause raised from a
+      tool call sets this to that call's `tool_call_id`, which is stable when
+      LangGraph replays the task on resume. Pauses outside tools omit it.
     """
 
     stage: str | None = None
@@ -276,6 +278,11 @@ class HumanInputRequest(FrozenModel):
     metadata: dict[str, JsonScalar] = Field(default_factory=dict)
     checkpoint_id: str | None = None
     interrupt_id: str | None = None
+    occurrence_id: str | None = Field(
+        default=None,
+        min_length=1,
+        exclude_if=lambda value: value is None,
+    )
     # Populated by the tool-approval gate (`build_tool_approval_request`);
     # empty for non-tool-approval human input (e.g. a plain business
     # question). See `PendingToolCall` for why this is a tuple, not one call.

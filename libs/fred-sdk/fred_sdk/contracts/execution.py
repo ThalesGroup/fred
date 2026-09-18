@@ -277,6 +277,15 @@ class RuntimeExecuteRequest(BaseModel):
             "checkpoint_id instead."
         ),
     )
+    occurrence_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Identifier of one HITL pause within a LangGraph interrupt. Echoed "
+            "back from HumanInputRequest.occurrence_id when present and valid "
+            "only on a resume request."
+        ),
+    )
 
     # HITL resume
     resume_payload: Any | None = Field(
@@ -352,9 +361,9 @@ class RuntimeExecuteRequest(BaseModel):
           interrupt_id can never also carry checkpoint_id, so the runtime's
           checkpoint lookup always falls through to "the thread's latest
           checkpoint" for a ReAct V2 resume.
-        - interrupt_id is only meaningful alongside resume_payload — it
-          identifies WHICH pending interrupt a resume answers, so it has no
-          purpose without a resume in flight.
+        - interrupt_id and occurrence_id are only meaningful alongside
+          resume_payload — they identify WHICH pending occurrence a resume
+          answers, so they have no purpose without a resume in flight.
         """
         has_instance = bool(self.agent_instance_id)
         has_template = bool(self.agent_id)
@@ -371,6 +380,10 @@ class RuntimeExecuteRequest(BaseModel):
             )
         if self.interrupt_id is not None and self.resume_payload is None:
             raise ValueError("interrupt_id is only valid together with resume_payload.")
+        if self.occurrence_id is not None and self.resume_payload is None:
+            raise ValueError(
+                "occurrence_id is only valid together with resume_payload."
+            )
         return self
 
     # ------------------------------------------------------------------
@@ -420,6 +433,8 @@ class RuntimeExecuteRequest(BaseModel):
             ctx["checkpoint_id"] = self.checkpoint_id
         if self.interrupt_id is not None:
             ctx["interrupt_id"] = self.interrupt_id
+        if self.occurrence_id is not None:
+            ctx["occurrence_id"] = self.occurrence_id
         user_id = self.effective_user_id()
         if user_id:
             ctx["user_id"] = user_id

@@ -472,6 +472,8 @@ export type RuntimeExecuteRequest = {
   interrupt_id?: string | null;
   /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
   invocation_turns?: ConversationTurn[];
+  /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
+  occurrence_id?: string | null;
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
   resume_payload?: any | null;
   /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
@@ -509,6 +511,7 @@ export type HumanInputRequest = {
   metadata?: {
     [key: string]: string | number | number | boolean | null;
   };
+  occurrence_id?: string | null;
   pending_calls?: PendingToolCall[];
   question?: string | null;
   stage?: string | null;
@@ -790,6 +793,7 @@ export type HitlRequestPart = {
   choices: HitlChoiceRecord[];
   free_text?: boolean;
   interrupt_id?: string | null;
+  occurrence_id?: string | null;
   pending_calls?: HitlPendingCallRecord[];
   question: string;
   stage?: string | null;
@@ -797,8 +801,10 @@ export type HitlRequestPart = {
   type?: "hitl_request";
 };
 export type HitlResponsePart = {
-  choice_id: string;
+  choice_id?: string | null;
   label?: string | null;
+  occurrence_id?: string | null;
+  text?: string | null;
   type?: "hitl_response";
 };
 export type ImageUrlPart = {

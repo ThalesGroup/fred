@@ -398,6 +398,7 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
                 # history too, or a page reload while this gate is still open
                 # can show a card but never actually answer it (#refresh-hitl).
                 "interrupt_id": "int-42",
+                "occurrence_id": "call-1",
                 "checkpoint_id": None,
                 "pending_calls": [
                     {
@@ -452,6 +453,7 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     # Resume identity survives too (#refresh-hitl) — without it, the frontend
     # can reconstruct a readable card after a reload but never resume it.
     assert hitl_part.interrupt_id == "int-42"
+    assert hitl_part.occurrence_id == "call-1"
     assert hitl_part.checkpoint_id is None
     assert len(hitl_part.pending_calls) == 1
     assert hitl_part.pending_calls[0].tool_call_id == "call-1"
@@ -463,6 +465,124 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
 
     assert messages[3].role == Role.assistant
     assert messages[3].channel == Channel.final
+
+
+def test_write_turn_history_records_choice_text_and_occurrence_separately() -> None:
+    from fred_core.history.history_schema import Channel, HitlResponsePart
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s-choice-comment",
+            user_id="alice",
+            request_message=None,
+            payloads=[],
+            history_store=store,
+            occurrence_id="tool-call-2",
+            resume_payload={
+                "answer": "proceed",
+                "choice_id": "proceed",
+                "text": "Use the reviewed values",
+            },
+        )
+    )
+
+    store.save.assert_awaited_once()
+    response = store.save.call_args.kwargs["messages"][0]
+    assert response.channel == Channel.hitl_response
+    part = response.parts[0]
+    assert isinstance(part, HitlResponsePart)
+    assert part.choice_id == "proceed"
+    assert part.text == "Use the reviewed values"
+    assert part.occurrence_id == "tool-call-2"
+
+
+def test_write_turn_history_records_new_free_text_without_choice_id() -> None:
+    from fred_core.history.history_schema import HitlResponsePart
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s-free-text",
+            user_id="alice",
+            request_message=None,
+            payloads=[],
+            history_store=store,
+            occurrence_id="tool-call-3",
+            resume_payload={"answer": "My typed answer"},
+        )
+    )
+
+    part = store.save.call_args.kwargs["messages"][0].parts[0]
+    assert isinstance(part, HitlResponsePart)
+    assert part.choice_id is None
+    assert part.text == "My typed answer"
+
+
+def test_write_turn_history_skips_a_pause_the_previous_run_already_surfaced() -> None:
+    """
+    A resumed run re-raises every sibling pause still waiting, so the same
+    ``awaiting_human`` event reaches history a second time. Writing it again
+    makes the reloaded conversation render that question — and its answer —
+    twice, because pairing binds one response to every row of its occurrence.
+    """
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    payloads = [
+        {
+            "kind": "awaiting_human",
+            "request": {"question": "Second?", "occurrence_id": "ask-2"},
+        },
+        {
+            "kind": "awaiting_human",
+            "request": {"question": "Third?", "occurrence_id": "ask-3"},
+        },
+    ]
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s-siblings",
+            user_id="alice",
+            request_message=None,
+            payloads=payloads,
+            history_store=store,
+            occurrence_id="ask-1",
+            resume_payload={"answer": "one"},
+            previously_pending_occurrence_ids=("ask-1", "ask-2"),
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    # The answer to ask-1, then only the pause this run raised for the first
+    # time — and no rank burned by the skipped one.
+    assert [m.channel for m in messages] == [
+        Channel.hitl_response,
+        Channel.hitl_request,
+    ]
+    assert messages[1].parts[0].occurrence_id == "ask-3"
+    assert [m.rank for m in messages] == [0, 1]
+
+
+def test_legacy_hitl_response_choice_id_remains_readable() -> None:
+    from fred_core.history.history_schema import HitlResponsePart
+
+    part = HitlResponsePart.model_validate(
+        {"type": "hitl_response", "choice_id": "legacy typed answer"}
+    )
+
+    assert part.choice_id == "legacy typed answer"
+    assert part.text is None
+    assert part.occurrence_id is None
 
 
 def test_write_turn_history_persists_reasoning_blocks() -> None:

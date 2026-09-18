@@ -304,6 +304,7 @@ class HitlRequestPart(BaseModel):
     choices: List[HitlChoiceRecord]
     free_text: bool = False
     interrupt_id: Optional[str] = None
+    occurrence_id: Optional[str] = None
     checkpoint_id: Optional[str] = None
     pending_calls: List[HitlPendingCallRecord] = Field(default_factory=list)
 
@@ -316,8 +317,8 @@ class HitlResponsePart(BaseModel):
     - the resume payload (which option was picked, or what text was typed) is
       the user's half of the HITL exchange; omitting it from history breaks
       audit trails and makes replay incomplete
-    - for free-text HITL gates, ``choice_id`` carries the typed text directly
-      (the runtime convention from ``choice_step``)
+    - free-form input is stored in ``text`` rather than overloading
+      ``choice_id``; old persisted rows remain readable as written
 
     How to use it:
     - one ``HitlResponsePart`` per HITL resume turn, stored in a
@@ -327,7 +328,9 @@ class HitlResponsePart(BaseModel):
     """
 
     type: Literal["hitl_response"] = "hitl_response"
-    choice_id: str
+    choice_id: Optional[str] = None
+    text: Optional[str] = None
+    occurrence_id: Optional[str] = None
     label: Optional[str] = None
 
 
@@ -569,6 +572,7 @@ def make_hitl_request(
     title: Optional[str] = None,
     free_text: bool = False,
     interrupt_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     checkpoint_id: Optional[str] = None,
     pending_calls: Optional[List[Dict[str, str]]] = None,
 ) -> ChatMessage:
@@ -623,6 +627,7 @@ def make_hitl_request(
                 choices=choice_records,
                 free_text=free_text,
                 interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
                 checkpoint_id=checkpoint_id,
                 pending_calls=pending_call_records,
             )
@@ -635,7 +640,9 @@ def make_hitl_response(
     exchange_id: str,
     rank: int,
     *,
-    choice_id: str,
+    choice_id: Optional[str] = None,
+    text: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     label: Optional[str] = None,
 ) -> ChatMessage:
     """
@@ -647,7 +654,9 @@ def make_hitl_response(
 
     How to use it:
     - call at the start of a HITL resume turn, before processing agent events
-    - ``choice_id`` is the raw id selected (or the typed text for free-text gates)
+    - ``choice_id`` is the selected option id when one exists
+    - ``text`` is the user's free-form answer or comment when one exists
+    - ``occurrence_id`` pairs the response with the exact request when present
     - ``label`` is denormalized from the matching choice when known
 
     Example:
@@ -660,5 +669,12 @@ def make_hitl_response(
         timestamp=datetime.now(timezone.utc),
         role=Role.user,
         channel=Channel.hitl_response,
-        parts=[HitlResponsePart(choice_id=choice_id, label=label)],
+        parts=[
+            HitlResponsePart(
+                choice_id=choice_id,
+                text=text,
+                occurrence_id=occurrence_id,
+                label=label,
+            )
+        ],
     )
