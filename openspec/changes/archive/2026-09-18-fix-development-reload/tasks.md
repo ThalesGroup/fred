@@ -9,4 +9,4 @@
 ## 2. Validation
 
 - [x] 2.1 Verify generated watch scopes and actual reload notifications for each backend without external services.
-- [ ] 2.2 Run root quality, relevant offline checks and independent review; record evidence and limitations.
+- [x] 2.2 Run root quality, relevant offline checks and independent review; record evidence and limitations.
