@@ -1312,7 +1312,7 @@
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
-      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver.",
+      "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
       "tooltip": {

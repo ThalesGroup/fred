@@ -1312,7 +1312,7 @@
       "edit": "Edit",
       "noDescription": "No description yet.",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
-      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it.",
+      "suspendedToggleLocked": "Suspended",
       "duplicate": "Duplicate",
       "delete": "Delete",
       "tooltip": {

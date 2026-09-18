@@ -27,6 +27,7 @@
 
 .agentCard {
   display: flex;
+  position: relative;
   flex-direction: column;
   justify-content: space-between;
   gap: var(--spacing-2xs);
@@ -105,8 +106,10 @@
   white-space: nowrap;
 }
 
-.catalogWarning {
-  margin: 0 var(--spacing-m);
+// A suspension already spells out what broke and how to fix it, so it reads as
+// a warning rather than an error — same banner treatment as a catalog warning.
+.catalogWarning,
+.suspensionWarning {
   border-radius: var(--radius-xs);
   background: var(--warning-container);
   padding: var(--spacing-2xs) var(--spacing-s);
@@ -114,15 +117,21 @@
   font: var(--font-body-small);
 }
 
-// #1975 (RFC §3.9): a platform-forced suspension reads as an error (blocking),
-// not a soft catalog warning — editors see it with the enable toggle locked.
-.suspensionWarning {
+.catalogWarning {
   margin: 0 var(--spacing-m);
-  border-radius: var(--radius-xs);
-  background: var(--error-container);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  color: var(--on-error-container);
-  font: var(--font-body-small);
+}
+
+// Floats over the card's bottom edge instead of joining the column flow, so a
+// suspension leaves the card's geometry identical to every other card. Click
+// through, so the more menu and the footer buttons underneath stay reachable.
+.suspensionWarning {
+  position: absolute;
+  right: var(--spacing-s);
+  bottom: var(--spacing-s);
+  left: var(--spacing-s);
+  z-index: 1;
+  pointer-events: none;
+  text-align: center;
 }
 
 .agentDescription {
