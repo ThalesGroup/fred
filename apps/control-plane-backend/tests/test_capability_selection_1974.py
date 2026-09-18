@@ -355,6 +355,48 @@ async def test_runtime_templates_quarantine_product_application_entries(
     )
 
 
+@pytest.mark.asyncio
+async def test_a_pod_predating_the_version_split_keeps_its_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Satellites upgrade on their own cycle, so a staggered fleet is normal.
+
+    An older pod sends `version` alone, where it meant both the schema version
+    and the one a human reads; without the ingest shim its capabilities lose
+    their version in the admin catalog until the last satellite is upgraded.
+    """
+
+    legacy = _DEMO_ENTRY.model_dump(mode="json")
+    legacy.pop("public_version", None)
+    payload = service._RuntimeTemplatePayload.model_validate(
+        {
+            "template_agent_id": "sample-agent",
+            "title": "Sample Agent",
+            "description": "Synthetic runtime template",
+            "kind": "assistant",
+            "available_capabilities": [
+                legacy,
+                legacy | {"id": "mcp_corp_drive", "public_version": None},
+            ],
+        }
+    )
+
+    async def _fake_fetch(
+        _base_url: str, include_non_public: bool = False
+    ) -> list[service._RuntimeTemplatePayload]:
+        return [payload]
+
+    monkeypatch.setattr(service, "_fetch_runtime_templates", _fake_fetch)
+
+    entries, _limit = await service._runtime_execution_metadata_for_source("http://pod")
+    by_id = {entry.id: entry for entry in entries}
+
+    assert by_id["demo_echo"].public_version == "0.1.0"
+    # An explicit null is the opposite instruction and survives: it is how a
+    # kind whose `version` is a schema constant publishes nothing.
+    assert by_id["mcp_corp_drive"].public_version is None
+
+
 # ---------------------------------------------------------------------------
 # Enrollment
 # ---------------------------------------------------------------------------

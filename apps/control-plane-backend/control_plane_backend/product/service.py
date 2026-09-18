@@ -656,6 +656,11 @@ async def _runtime_execution_metadata_for_source(
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
+            if "public_version" not in entry.model_fields_set:
+                # A pod predating the version split sends `version` alone,
+                # where it meant both. Drop this once no pod below 4.0.0 can
+                # register; an explicit null still publishes nothing.
+                entry = entry.model_copy(update={"public_version": entry.version})
             merged.setdefault(entry.id, entry)
     max_chat_input_chars = next(
         (
