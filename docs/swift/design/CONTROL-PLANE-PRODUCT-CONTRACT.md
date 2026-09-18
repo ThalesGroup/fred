@@ -2252,6 +2252,19 @@ template's declared defaults never rewrites a live agent. Whatever wins is
 round-tripped through the pod's `validate_config` as before, so the stored
 envelope still has exactly one producer.
 
+### Addendum — a template's name is translatable (2026-09-18)
+
+`AgentTemplateSummary` gains `display_name_by_lang: dict[str, str] | None`,
+mirrored from the pod's `title_by_lang` (`RUNTIME-EXECUTION-CONTRACT.md` §8.80,
+where the SDK field is `role_by_lang`). Absent language, or absent field, falls
+back to `display_name` — which stays mandatory and unchanged.
+
+Display only: nothing keys off it. `template_id` / `source_agent_id` remain the
+identity, so a translation never affects routing, enrollment or ReBAC. The
+frontend applies the fallback at all three sites that show a template name (the
+picker card, the form subtitle, the agent card's info tooltip), so one language
+never mixes names from two.
+
 ### Addendum — a template declares its reasoning defaults (2026-08-28, #2473)
 
 Both reasoning fields were settable **per agent instance only**: whoever filled

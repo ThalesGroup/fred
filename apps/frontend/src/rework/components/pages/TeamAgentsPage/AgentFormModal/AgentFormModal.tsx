@@ -433,8 +433,12 @@ export default function AgentFormModal({
       : t("rework.teams.formAgent.titleCreate", { agentsNicknameSingular });
 
   const teamLabel = teamName || t("rework.sidebar.team.userTeam");
+  const subtitleLang = i18n.language.split("-")[0];
   const subtitle = selectedTemplate
-    ? t("rework.teams.formAgent.subtitleWithTemplate", { team: teamLabel, template: selectedTemplate.display_name })
+    ? t("rework.teams.formAgent.subtitleWithTemplate", {
+        team: teamLabel,
+        template: selectedTemplate.display_name_by_lang?.[subtitleLang] ?? selectedTemplate.display_name,
+      })
     : t("rework.teams.formAgent.subtitle", { team: teamLabel });
 
   return (

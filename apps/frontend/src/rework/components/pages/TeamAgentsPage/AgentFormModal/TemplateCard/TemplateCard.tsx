@@ -25,6 +25,7 @@ type TemplateCardProps = {
 export function TemplateCard({ template, selected, onSelect }: TemplateCardProps) {
   const { i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
+  const displayName = template.display_name_by_lang?.[lang] ?? template.display_name;
   const description = template.description_by_lang?.[lang] ?? template.description;
   const unavailable = template.status === "unavailable";
   return (
@@ -36,7 +37,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
       onClick={onSelect}
       disabled={unavailable}
     >
-      <span className={styles.name}>{template.display_name}</span>
+      <span className={styles.name}>{displayName}</span>
       {description && <span className={styles.description}>{description}</span>}
       <div className={styles.cardFooter}>
         {template.category && <span className={styles.category}>{template.category}</span>}

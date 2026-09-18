@@ -1018,6 +1018,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
 class _AgentTemplateSummary(BaseModel):
     template_agent_id: str
     title: str
+    title_by_lang: dict[str, str] | None = None
     description: str
     description_by_lang: dict[str, str] | None = None
     kind: ExecutionCategory
@@ -4003,6 +4004,7 @@ def _build_agent_router(
             _AgentTemplateSummary(
                 template_agent_id=definition.agent_id,
                 title=definition.role,
+                title_by_lang=getattr(definition, "role_by_lang", None),
                 description=definition.description,
                 description_by_lang=getattr(definition, "description_by_lang", None),
                 kind=definition.execution_category,

@@ -164,6 +164,9 @@ class AgentTemplateSummary(BaseModel):
     source_runtime_id: str
     source_agent_id: str
     display_name: str
+    # Per-language template name, mirroring `description_by_lang`. Absent
+    # language (or absent field) falls back to `display_name`.
+    display_name_by_lang: dict[str, str] | None = None
     description: str
     description_by_lang: dict[str, str] | None = None
     category: str

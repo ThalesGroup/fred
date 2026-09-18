@@ -185,6 +185,7 @@ class _RuntimeTemplatePayload:
         *,
         template_agent_id: str,
         title: str,
+        title_by_lang: dict[str, str] | None = None,
         description: str,
         description_by_lang: dict[str, str] | None = None,
         kind: str,
@@ -197,6 +198,7 @@ class _RuntimeTemplatePayload:
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
+        self.title_by_lang = title_by_lang
         self.description = description
         self.description_by_lang = description_by_lang
         self.kind = kind
@@ -277,6 +279,7 @@ class _RuntimeTemplatePayload:
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
+            title_by_lang=data.get("title_by_lang") or None,
             description=data["description"],
             description_by_lang=data.get("description_by_lang") or None,
             kind=data["kind"],
@@ -1572,6 +1575,7 @@ async def list_agent_templates(
                     source_runtime_id=source.runtime_id,
                     source_agent_id=template.template_agent_id,
                     display_name=template.title,
+                    display_name_by_lang=template.title_by_lang,
                     description=template.description,
                     description_by_lang=template.description_by_lang,
                     category=template.kind,

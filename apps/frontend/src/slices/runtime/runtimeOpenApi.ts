@@ -1052,6 +1052,9 @@ export type AgentTemplateSummary = {
   supports_capabilities?: boolean;
   template_agent_id: string;
   title: string;
+  title_by_lang?: {
+    [key: string]: string;
+  } | null;
 };
 export type DemoAnalyzeResponse = {
   length: number;

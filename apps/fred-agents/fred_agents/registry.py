@@ -47,9 +47,10 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     Build the pod agent registry.
 
     Agent lineup:
-    - fred.github.assistant    General-purpose ReAct agent. Pure LLM baseline,
-                               no MCP by default. Admins equip it with catalog
-                               MCP servers via the control-plane agent form.
+    - fred.github.assistant    General-purpose ReAct agent. Ships the
+                               conversation-attachments pack and reasoning;
+                               admins equip it further with catalog MCP servers
+                               via the control-plane agent form.
                                First entry → default agent in fred-agents-cli.
     - fred.github.basic-knowledge-assistant  Pre-equipped knowledge ReAct agent.
                                Defaults to the capabilities of four packs (team
@@ -57,8 +58,8 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                generation) and configures them, so it answers
                                without the member ticking anything. Reasoning on
                                by default. Counterpart to fred.github.assistant:
-                               that one is the blank slate, this one is the
-                               ready-made.
+                               that one carries one pack and is specialised per
+                               instance, this one arrives ready-made.
     - fred.github.deep_assistant  General-purpose deep-agent (LangGraph planner)
                                counterpart to fred.github.assistant. No
                                filesystem MCP by default (DeepAgentRuntime's

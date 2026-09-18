@@ -5883,3 +5883,27 @@ config" — the pre-field behaviour.
 `libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record: OpenSpec
 capability `agent-template-defaults`
 (`openspec/changes/add-basic-knowledge-assistant-template/` until archived).
+
+### 8.80 ✅ `role_by_lang` — a template's NAME becomes translatable (2026-09-18)
+
+**A template could translate its description but never its name.**
+`AgentDefinition.description_by_lang` has long carried per-language
+descriptions, projected onto `_AgentTemplateSummary.description_by_lang` and
+rendered by the agent form's template picker. The name had no counterpart:
+`title=definition.role` is projected raw, so a French user read a translated
+description under an English name.
+
+**New optional field on `AgentDefinition`:** `role_by_lang: dict[str, str] |
+None` — language code → display name, same shape and fallback rule as
+`description_by_lang`. An absent language, or an absent field, falls back to
+`role`; a template may translate one, both or neither. `role` stays mandatory
+and remains the identity a pod advertises.
+
+Projected onto `_AgentTemplateSummary.title_by_lang` beside `title`, read
+through `getattr(definition, "role_by_lang", None)` so a pod predating this
+field serializes nothing rather than failing. Deliberately NOT added to
+`AgentInspection`: nothing renders that model's `role`, and a display-only
+field has no business widening the inspection surface.
+
+**Scope.** `libs/fred-sdk/fred_sdk/contracts/models.py`,
+`libs/fred-runtime/fred_runtime/app/agent_app.py`.

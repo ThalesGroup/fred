@@ -50,13 +50,6 @@ def test_is_registered_after_the_blank_slate() -> None:
     assert next(iter(registry)) == GENERAL_ASSISTANT_AGENT.agent_id
 
 
-def test_blank_slate_still_declares_no_defaults() -> None:
-    # #2429 removed defaults from the universal starting point on purpose.
-    # Shipping a pre-equipped sibling must not quietly undo that.
-    assert GENERAL_ASSISTANT_AGENT.default_mcp_servers == ()
-    assert GENERAL_ASSISTANT_AGENT.default_capabilities_config == {}
-
-
 def test_defaults_cover_the_four_packs() -> None:
     declared = {ref.id for ref in BASIC_KNOWLEDGE_ASSISTANT_AGENT.default_mcp_servers}
 

@@ -114,7 +114,8 @@ function extractApiErrorDetail(error: unknown): string | undefined {
  */
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.split("-")[0];
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { activeTeam } = useFrontendBootstrap();
@@ -501,7 +502,9 @@ export default function TeamAgentsPage() {
               <AgentCard
                 key={instance.agent_instance_id}
                 instance={instance}
-                templateDisplayName={template?.display_name || instance.template_id}
+                templateDisplayName={
+                  template?.display_name_by_lang?.[lang] || template?.display_name || instance.template_id
+                }
                 runtimeId={template?.source_runtime_id}
                 teamId={teamId}
                 canManageAgents={canManageAgents}

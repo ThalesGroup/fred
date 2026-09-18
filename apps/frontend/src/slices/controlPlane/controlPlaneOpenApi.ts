@@ -2934,6 +2934,9 @@ export type AgentTemplateSummary = {
   source_runtime_id: string;
   source_agent_id: string;
   display_name: string;
+  display_name_by_lang?: {
+    [key: string]: string;
+  } | null;
   description: string;
   description_by_lang?: {
     [key: string]: string;

@@ -933,6 +933,10 @@ class AgentDefinition(FrozenModel, ABC):
 
     agent_id: str = Field(..., min_length=1)
     role: str = Field(..., min_length=1)
+    # The name the agent form shows for this template, per language. Same shape
+    # and fallback rule as `description_by_lang`: an absent language falls back
+    # to `role`, so a template may translate one, both, or neither.
+    role_by_lang: Optional[Dict[str, str]] = None
     description: str = Field(..., min_length=1)
     description_by_lang: Optional[Dict[str, str]] = None
     tags: tuple[str, ...] = ()
