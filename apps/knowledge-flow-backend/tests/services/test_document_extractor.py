@@ -16,7 +16,7 @@
 `DocumentExtractor` (DOCREAD-01 Phase 2) — the exhaustive map-reduce that powers
 server-side extraction. Covers: parse/NONE handling, exhaustive concat +
 case-insensitive de-dupe across chunks (the whole point vs. the lossy
-summarizer), rate-limit detection, and the 429 retry/backoff that lets a
+summarizer) and the 429 retry/backoff that lets a
 throttling provider slow the map down instead of failing the turn.
 """
 
@@ -27,7 +27,6 @@ import pytest
 from knowledge_flow_backend.features.extract import extractor as extractor_mod
 from knowledge_flow_backend.features.extract.extractor import (
     DocumentExtractor,
-    _is_rate_limit,
     _pack_windows,
     _parse_items,
 )
@@ -90,11 +89,6 @@ def test_parse_items_strips_bullets_and_drops_none() -> None:
     assert _parse_items("- a\n* b\n1. c\n2) d") == ["a", "b", "c", "d"]
     assert _parse_items("NONE") == []
     assert _parse_items("  \n- keep\n\n") == ["keep"]
-
-
-def test_is_rate_limit_detects_shapes() -> None:
-    assert _is_rate_limit(_RateLimitError())[0] is True
-    assert _is_rate_limit(ValueError("boom"))[0] is False
 
 
 def test_pack_windows_reduces_call_count() -> None:

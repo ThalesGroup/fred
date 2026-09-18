@@ -42,6 +42,7 @@ from fred_runtime.react.middleware import (
     CheckpointHygieneMiddleware,
     DynamicPromptMiddleware,
     FredHitlMiddleware,
+    RateLimitRetryMiddleware,
     ToolObservabilityMiddleware,
     TracingKpiMiddleware,
     build_react_platform_middleware_frame,
@@ -378,6 +379,7 @@ def test_frame_order_is_fixed() -> None:
     assert [type(m) for m in frame] == [
         CheckpointHygieneMiddleware,
         DynamicPromptMiddleware,
+        RateLimitRetryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -385,8 +387,8 @@ def test_frame_order_is_fixed() -> None:
 
 
 def test_frame_reserves_the_capability_slot() -> None:
-    """The capability block (#1973) is inserted between DynamicPrompt and
-    TracingKpi — capability authors never position themselves manually."""
+    """The capability block is inserted between DynamicPrompt and the retry
+    loop — capability authors never position themselves manually."""
 
     capability = _DummyCapabilityMiddleware()
     frame = _frame(capability_middleware=[capability])
@@ -394,6 +396,7 @@ def test_frame_reserves_the_capability_slot() -> None:
         CheckpointHygieneMiddleware,
         DynamicPromptMiddleware,
         _DummyCapabilityMiddleware,
+        RateLimitRetryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,

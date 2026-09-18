@@ -36,6 +36,7 @@ import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding, FredHitlMiddleware
+from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -82,6 +83,7 @@ def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled()
         available_tool_names=set(deep_mod._FILESYSTEM_TOOL_NAMES),
     )
     assert [type(m) for m in middleware] == [
+        RateLimitRetryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -100,13 +102,14 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
         approval_policy=ToolApprovalPolicy(),
         available_tool_names=set(),
     )
-    assert type(middleware[0]) is TracingKpiMiddleware
-    assert type(middleware[1]) is ToolObservabilityMiddleware
-    assert type(middleware[2]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[3:])
+    assert type(middleware[0]) is RateLimitRetryMiddleware
+    assert type(middleware[1]) is TracingKpiMiddleware
+    assert type(middleware[2]) is ToolObservabilityMiddleware
+    assert type(middleware[3]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[4:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 3 + 7
+    assert len(middleware) == 4 + 7
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
@@ -148,9 +151,10 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
         capability_block=capability_block,
     )
     assert middleware[0] is marker
-    assert type(middleware[1]) is TracingKpiMiddleware
-    assert type(middleware[2]) is ToolObservabilityMiddleware
-    assert type(middleware[3]) is FredHitlMiddleware
+    assert type(middleware[1]) is RateLimitRetryMiddleware
+    assert type(middleware[2]) is TracingKpiMiddleware
+    assert type(middleware[3]) is ToolObservabilityMiddleware
+    assert type(middleware[4]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -270,8 +274,9 @@ async def test_deep_build_executor_wires_observability_middleware(
     # The fake tool pipeline resolves no tools, so the filesystem guard
     # clause also fires — this test only cares that observability leads.
     wired = captured["middleware"]
-    assert type(wired[0]) is TracingKpiMiddleware
-    assert type(wired[1]) is ToolObservabilityMiddleware
+    assert type(wired[0]) is RateLimitRetryMiddleware
+    assert type(wired[1]) is TracingKpiMiddleware
+    assert type(wired[2]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio
