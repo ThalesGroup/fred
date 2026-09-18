@@ -5931,5 +5931,4 @@ malformed or nonfinite hints use normal backoff. Each detected throttle emits
 `model_name` and `status` are already in `PROMETHEUS_ALLOWED_LABELS`, so the counter
 is exported to Prometheus/Grafana; no new label cardinality is introduced.
 
-The scoped behavioral requirements are in the `provider-rate-limit-retries`
-OpenSpec change/spec. Concurrency admission and retry UI remain separate work.
+Concurrency admission and retry UI remain separate work.
