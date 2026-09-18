@@ -27,6 +27,9 @@ depend on it and are tracked separately.
 - [x] 2.4 Preserve `occurrence_id` through interrupt parsing in the stream adapter.
 - [x] 2.5 Persist `occurrence_id` and the answer text from the resume payload into
       history instead of deriving a `choice_id` string from it.
+- [x] 2.6 Return the pending occurrences from the admission gate and skip persisting a
+      pause a previous run already surfaced, so a sibling re-raised by a resume keeps
+      one history row.
 
 ## 3. Frontend
 

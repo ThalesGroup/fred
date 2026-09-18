@@ -2323,6 +2323,27 @@ replay and for execution shapes where several pauses share one native id. The
 real compiled-agent test verifies that each injected `tool_call_id` survives
 every replay unchanged.
 
+**Amendment (2026-09-18) — one question, one history row.** Each interrupting
+LangGraph task yields its own `updates` event, so a turn raising several tool
+pauses surfaces all of them in that run, and every later resume re-raises the
+siblings still waiting. Writing one `hitl_request` row per emission therefore
+recorded the same question again on each resume of the exchange — which
+`_resolve_exchange_id` deliberately reuses — and history pairing binds one
+response to every row carrying its occurrence, so a reloaded conversation
+rendered that question and its answer twice. The admission gate (layer 2)
+already reads which occurrences were pending before the run: it now returns
+them, `_authorize_and_resolve` stamps them on the internal request, and
+`_write_turn_history` skips an `awaiting_human` whose occurrence is among them.
+A pause raised for the first time during a resumed run is absent from that set
+and is persisted normally. No extra I/O — the set comes from the checkpoint read
+the gate already performs.
+
+Known limitation of that skip: the turn's history write is fire-and-forget, so
+when it fails the re-emission no longer accidentally repairs the missing
+`hitl_request` row, and a reload can then no longer reconstruct an answerable
+prompt for that pause. Every other row of a failed write is already lost the
+same way; a durable fix belongs with history-write reliability, not here.
+
 **Guaranteed properties** (see `FredSqlCheckpointer.aclaim_hitl_resume`'s
 docstring for the authoritative version):
 

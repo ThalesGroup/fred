@@ -234,6 +234,16 @@ async def test_tool_pauses_keep_occurrence_identity_across_replay(tmp_path) -> N
         first_interrupts = _all_interrupt_objects(first_updates)
         assert len(first_interrupts) == 2
 
+        # Each interrupting task yields its own `updates` event, so parsing the
+        # run exactly as `react_runtime` does surfaces BOTH pauses — and the
+        # still-pending sibling is surfaced again by the resumed run below.
+        surfaced = [
+            request
+            for update in first_updates
+            if (request := extract_interrupt_request(update)) is not None
+        ]
+        assert [request.occurrence_id for request in surfaced] == ["ask-1", "ask-2"]
+
         first_requests = [
             extract_interrupt_request({"__interrupt__": (value,)})
             for value in first_interrupts

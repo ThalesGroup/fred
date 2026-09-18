@@ -957,6 +957,10 @@ class _AgentExecuteRequest(BaseModel):
             "TurnOptionsModel; the middleware receives only its own typed slice."
         ),
     )
+    # Server-derived, never caller-supplied: the occurrences already pending
+    # when this resume arrived, stamped by `_authorize_and_resolve` from the
+    # admission gate's own checkpoint read. See `_write_turn_history`.
+    previously_pending_occurrence_ids: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _require_message_or_resume(self) -> "_AgentExecuteRequest":
@@ -1844,11 +1848,14 @@ async def _authorize_and_resolve(
                 "access_token_expires_at": None,  # nosec B105
             }
         )
-    await _validate_session_checkpoint_access(request)
+    previously_pending_occurrence_ids = await _validate_session_checkpoint_access(
+        request
+    )
     await _enforce_session_ownership(request, authenticated_user, container)
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
     internal_req = _to_internal_request(request)
+    internal_req.previously_pending_occurrence_ids = previously_pending_occurrence_ids
     # Stamp the trusted service-agent verdict (never the caller-supplied
     # context) so per-tool-call re-authorization can mirror the bypass
     # `_authorize_execution_or_raise` already granted above (RFC EVAL-AUTH,
@@ -2034,7 +2041,7 @@ def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, 
 
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
-) -> None:
+) -> tuple[str, ...]:
     """
     Validate session/checkpoint consistency for resume-capable runtime requests.
 
@@ -2060,6 +2067,11 @@ async def _validate_session_checkpoint_access(
       validation and before target resolution
     - this helper is intentionally conservative: it only validates local
       session/checkpoint consistency that the runtime can prove itself
+
+    Returns the occurrence ids already pending on the resumed checkpoint —
+    the pauses an earlier run has therefore already surfaced and persisted.
+    `_write_turn_history` skips their re-emission so one question keeps one
+    history row. Every non-resume path returns an empty tuple.
 
     Example:
     - `await _validate_session_checkpoint_access(request)`
@@ -2094,7 +2106,7 @@ async def _validate_session_checkpoint_access(
         or request.resume_payload is not None
     )
     if not needs_checkpoint_validation:
-        return
+        return ()
 
     session_id = request.effective_session_id()
     if not session_id:
@@ -2106,7 +2118,7 @@ async def _validate_session_checkpoint_access(
 
     checkpointer = get_runtime_context().config.checkpointer
     if checkpointer is None:
-        return
+        return ()
 
     loaded = None
     for checkpoint_ns in _resume_checkpoint_namespaces(request):
@@ -2156,7 +2168,7 @@ async def _validate_session_checkpoint_access(
         )
 
     if request.resume_payload is None:
-        return
+        return ()
 
     if channel_values.get("runtime_kind") == "graph_v2":
         if channel_values.get("pending") is not True:
@@ -2175,7 +2187,7 @@ async def _validate_session_checkpoint_access(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="checkpoint_id does not match the pending checkpoint for this session.",
             )
-        return
+        return ()
 
     # Not the legacy Graph runtime (ReAct V2, or the fallback lookup landed on
     # some other non-graph_v2 checkpoint kind). #2216 P1: a checkpoint being
@@ -2204,6 +2216,12 @@ async def _validate_session_checkpoint_access(
             status_code=status.HTTP_409_CONFLICT,
             detail="occurrence_id does not match the pending HITL request for this session.",
         )
+
+    return tuple(
+        occurrence_id
+        for _, occurrence_id in pending_occurrences
+        if occurrence_id is not None
+    )
 
 
 @dataclass
@@ -2239,6 +2257,7 @@ async def _write_turn_history(
     exchange_id: str | None = None,
     resume_payload: Any | None = None,
     occurrence_id: str | None = None,
+    previously_pending_occurrence_ids: tuple[str, ...] = (),
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -2258,6 +2277,9 @@ async def _write_turn_history(
     - ``payloads`` is the list of ``dict`` produced by ``_iterate_runtime_event_payloads``
     - ``resume_payload`` is set for HITL resume turns; the user's choice is stored
       as a ``Channel.hitl_response`` row instead of a plain user text row
+    - ``previously_pending_occurrence_ids`` comes from the admission gate
+      (`_validate_session_checkpoint_access`): a resumed run re-raises every
+      sibling pause still waiting, and re-emitting one is not a new question
     - silently no-ops when ``session_id`` or ``history_store`` is absent
 
     Event-to-message mapping:
@@ -2471,6 +2493,15 @@ async def _write_turn_history(
             # AND a reload while the gate is still open can reconstruct a
             # working (not just readable) prompt.
             req = payload.get("request", {})
+            # A resumed run re-raises the siblings still waiting, so the same
+            # pause is emitted again. One question keeps one row: the run that
+            # first surfaced it already wrote it.
+            surfaced_occurrence_id = req.get("occurrence_id")
+            if (
+                surfaced_occurrence_id
+                and surfaced_occurrence_id in previously_pending_occurrence_ids
+            ):
+                continue
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
             raw_pending_calls = req.get("pending_calls") or []
@@ -2958,6 +2989,7 @@ async def _stream(
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
                     occurrence_id=request.occurrence_id,
+                    previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
                 )
             )
 
@@ -4793,6 +4825,7 @@ def _build_agent_router(
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
                     occurrence_id=request.occurrence_id,
+                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -4881,6 +4914,7 @@ def _build_agent_router(
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
                     occurrence_id=request.occurrence_id,
+                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                 )
         return _build_eval_trace(
             payloads=payloads,
