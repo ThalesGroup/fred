@@ -2217,6 +2217,145 @@ def _availability_deps(
 
 
 @pytest.mark.asyncio
+async def test_default_on_grant_revives_many_teams_with_one_pod_fetch_and_bounded_lookups(
+    monkeypatch,
+) -> None:
+    """A platform-wide grant revives every team holding a suspended dependent:
+    pod availability is fetched once, and team lookups run at most ten at once."""
+
+    import asyncio
+    from types import SimpleNamespace
+
+    import control_plane_backend.capabilities.impact as impact_mod
+    import control_plane_backend.product.service as product_service
+    from control_plane_backend.capabilities import service as capability_service
+
+    team_count = 25
+    dependents = []
+    for i in range(team_count):
+        record = _make_record(agent_instance_id=f"dep-{i}", team_id=f"team-{i}")
+        record.tuning = record.tuning.model_copy(
+            update={"selected_capability_ids": ["corp_drive"]}
+        )
+        record.suspension_reason = "capability_access_revoked"
+        dependents.append(record)
+    store = _FakeAgentInstanceStore(dependents)
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": _entry()}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        _FakeRebac(),
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    pod_fetches = 0
+
+    async def _counting_available(_deps):
+        nonlocal pod_fetches
+        pod_fetches += 1
+        return {"runtime-a": frozenset({"corp_drive"})}
+
+    in_flight = 0
+    max_in_flight = 0
+    looked_up: list[str] = []
+
+    async def _tracking_usable(_rebac, team_id):
+        nonlocal in_flight, max_in_flight
+        looked_up.append(str(team_id))
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return {"corp_drive"}
+
+    monkeypatch.setattr(
+        product_service, "_available_capability_ids_by_source", _counting_available
+    )
+    monkeypatch.setattr(impact_mod, "usable_capability_ids", _tracking_usable)
+
+    result = await capability_service.set_default_on(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        default_on=True,
+        deps=deps,
+    )
+
+    assert result.revived_instances == team_count
+    assert all(record.suspension_reason is None for record in dependents)
+    assert pod_fetches == 1
+    assert sorted(looked_up) == sorted(f"team-{i}" for i in range(team_count))
+    assert 1 < max_in_flight <= capability_service._REVIVE_TEAM_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_default_on_grant_looks_up_only_teams_with_a_suspended_dependent(
+    monkeypatch,
+) -> None:
+    """A running dependent needs no revive, so its team is never looked up; a
+    team that still may not use the capability keeps its suspension."""
+
+    from types import SimpleNamespace
+
+    import control_plane_backend.capabilities.impact as impact_mod
+    from control_plane_backend.capabilities import service as capability_service
+
+    def _dependent(team_id: str, *, suspended: bool):
+        record = _make_record(agent_instance_id=f"dep-{team_id}", team_id=team_id)
+        record.tuning = record.tuning.model_copy(
+            update={"selected_capability_ids": ["corp_drive"]}
+        )
+        if suspended:
+            record.suspension_reason = "capability_access_revoked"
+        return record
+
+    revivable = _dependent("team-ok", suspended=True)
+    opted_out = _dependent("team-out", suspended=True)
+    running = _dependent("team-running", suspended=False)
+    store = _FakeAgentInstanceStore([revivable, opted_out, running])
+
+    async def _fake_catalog(_deps):
+        return {"corp_drive": _entry()}
+
+    monkeypatch.setattr(
+        capability_service, "aggregate_capability_catalog", _fake_catalog
+    )
+    deps = _availability_deps(
+        monkeypatch,
+        store,
+        _FakeRebac(),
+        available_by_source={"runtime-a": frozenset({"corp_drive"})},
+        usable_ids={"corp_drive"},
+    )
+
+    looked_up: set[str] = set()
+
+    async def _usable(_rebac, team_id):
+        looked_up.add(str(team_id))
+        return set() if str(team_id) == "team-out" else {"corp_drive"}
+
+    monkeypatch.setattr(impact_mod, "usable_capability_ids", _usable)
+
+    result = await capability_service.set_default_on(
+        user=SimpleNamespace(uid="admin"),
+        capability_id="corp_drive",
+        default_on=True,
+        deps=deps,
+    )
+
+    assert looked_up == {"team-ok", "team-out"}
+    assert result.revived_instances == 1
+    assert revivable.suspension_reason is None
+    assert opted_out.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
 async def test_personal_scope_disabled_to_enabled_revives_suspended_dependents(
     monkeypatch,
 ) -> None:
