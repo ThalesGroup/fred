@@ -536,6 +536,7 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             model=model,
             tools=[perform_once],
             system_prompt="Do the task.",
+            subagent_middleware=[],
             middleware=middleware,
             checkpointer=InMemorySaver(),
         )

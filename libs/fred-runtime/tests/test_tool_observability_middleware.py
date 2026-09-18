@@ -33,13 +33,19 @@ from collections.abc import Sequence
 from typing import Any, List, cast
 
 import pytest
+from conftest import (
+    RecordingSpan as _RecordingSpan,
+)
+from conftest import (
+    RecordingTracer as _RecordingTracer,
+)
 from conftest import ToolFriendlyFakeChatModel
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
-from fred_core.portable import Span, Tracer
+from fred_core.portable import Span
 from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.deep.deep_runtime import (
@@ -765,48 +771,6 @@ def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> N
 # ---------------------------------------------------------------------------
 
 
-class _RecordingSpan(Span):
-    def __init__(self) -> None:
-        self.attributes: dict[str, object] = {}
-        self.ended = False
-        self.io: list[dict[str, object]] = []
-
-    def set_io(self, *, input: Any = None, output: Any = None) -> None:
-        self.io.append({"input": input, "output": output})
-
-    def set_attribute(self, key: str, value: object) -> None:
-        self.attributes[key] = value
-
-    def end(self) -> None:
-        self.ended = True
-
-
-class _RecordingTracer(Tracer):
-    def __init__(self, *, capture: bool = False) -> None:
-        self._capture = capture
-        self.spans: list[tuple[str, dict[str, object], _RecordingSpan]] = []
-        self.parents: list[Span | None] = []
-
-    @property
-    def captures_content(self) -> bool:
-        return self._capture
-
-    def start_span(
-        self,
-        name: str,
-        *,
-        context: object | None = None,
-        attributes: Any = None,
-        parent: Span | None = None,
-        **kwargs: object,
-    ) -> Span:
-        del context, kwargs
-        span = _RecordingSpan()
-        self.parents.append(parent)
-        self.spans.append((name, dict(attributes or {}), span))
-        return span
-
-
 def _self_traced_tool() -> BaseTool:
     """Shaped like what `ReActToolBinder` hands to `create_agent`."""
 
@@ -1041,6 +1005,7 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             tools=[],
             system_prompt="Use the tool.",
             checkpointer=None,
+            subagent_middleware=[],
             middleware=[carrier, *middleware],
         )
     else:
