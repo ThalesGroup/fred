@@ -5952,6 +5952,5 @@ not a universal token conversion. Recalibrate when models or traffic change.
 Oversized open turns retain the existing readable error and metric. Deep
 summarization and context-compaction redesign remain separate work.
 
-Behavioral scenarios live in the `model-input-hygiene` OpenSpec capability.
 Native `task` child composition is the next extraction layer; this parent-only
 change does not complete issues #2740 and #2741's native-child acceptance.
