@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CheckpointHygieneMiddleware — request-scoped model-input hygiene (#1972)."""
+"""CheckpointHygieneMiddleware — request-scoped model-input hygiene."""
 
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ from fred_runtime.support.tool_loop import (
     ChatTurnTooLargeError,
     collect_tool_outputs,
     sanitize_dangling_tool_calls,
+    strip_message_names,
     total_char_len,
     trim_to_char_budget,
     trim_to_human_boundary,
@@ -80,7 +81,9 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        messages = sanitize_dangling_tool_calls(list(request.messages))
+        messages = strip_message_names(
+            sanitize_dangling_tool_calls(list(request.messages))
+        )
         if self._max_history_messages is not None:
             trimmed = trim_to_human_boundary(messages, self._max_history_messages)
             logger.debug(
@@ -147,7 +150,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 # `ToolObservabilityMiddleware`) is what actually reaches
                 # Grafana, since this middleware has no paired latency timer
                 # to piggyback a `status` dim on. Whether
-                # `_V2_MAX_HISTORY_CHARS` (calibrated off one field incident,
+                # `MAX_HISTORY_CHARS` (calibrated off one field incident,
                 # #2350) is well-tuned is exactly what this counter is for —
                 # silent-by-default would hide that until a user complains
                 # again. Numbers/identifiers only in both: no message

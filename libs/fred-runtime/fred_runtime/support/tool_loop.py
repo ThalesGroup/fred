@@ -44,6 +44,11 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 logger = logging.getLogger(__name__)
 
 
+# Provider-agnostic guard calibrated against large tool outputs. Deep keeps
+# this size limit while leaving message-count compaction to its summarizer.
+MAX_HISTORY_CHARS = 200_000
+
+
 class ChatTurnTooLargeError(RuntimeError):
     """
     Raised when even the trimmed model-input window still exceeds the
@@ -63,6 +68,16 @@ class ChatTurnTooLargeError(RuntimeError):
             f"This turn's content ({actual_chars:,} characters) exceeds the "
             f"{limit_chars:,}-character model-input budget for this deployment."
         )
+
+
+def strip_message_names(messages: List[Any]) -> List[Any]:
+    """Remove provider-incompatible names from model input, preserving checkpoints."""
+    return [
+        message.model_copy(update={"name": None})
+        if getattr(message, "name", None) is not None
+        else message
+        for message in messages
+    ]
 
 
 def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:

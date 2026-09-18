@@ -49,11 +49,10 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import (
-    _V2_MAX_HISTORY_CHARS,
     _V2_MAX_HISTORY_MESSAGES,
     build_tool_loop_compiled_react_agent,
 )
-from fred_runtime.support.tool_loop import ChatTurnTooLargeError
+from fred_runtime.support.tool_loop import MAX_HISTORY_CHARS, ChatTurnTooLargeError
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -720,10 +719,10 @@ async def test_history_is_trimmed_by_char_budget() -> None:
     agent = _compile_agent(model, approval_enabled=False)
 
     # Few messages (far under `_V2_MAX_HISTORY_MESSAGES`), but each one large
-    # enough that the total blows past `_V2_MAX_HISTORY_CHARS` — the exact
+    # enough that the total blows past `MAX_HISTORY_CHARS` — the exact
     # shape of the field incident this guards against (a `write_document`
     # tool output ballooning input tokens while message count stayed ~60).
-    big = "x" * (_V2_MAX_HISTORY_CHARS // 3 + 1000)
+    big = "x" * (MAX_HISTORY_CHARS // 3 + 1000)
     history: list[BaseMessage] = [
         HumanMessage(f"q1 {big}"),
         AIMessage(content=f"a1 {big}"),
@@ -738,7 +737,7 @@ async def test_history_is_trimmed_by_char_budget() -> None:
     model_input = model.calls[0]
     non_system = [m for m in model_input if not isinstance(m, SystemMessage)]
     total_chars = sum(len(str(m.content)) for m in non_system)
-    assert total_chars <= _V2_MAX_HISTORY_CHARS
+    assert total_chars <= MAX_HISTORY_CHARS
     assert isinstance(non_system[0], HumanMessage)
     # The latest turn is always preserved.
     assert non_system[-1].content == "current question"
@@ -760,7 +759,7 @@ async def test_history_is_trimmed_by_char_budget_from_tool_call_arguments() -> N
     # counted, the trim MUST engage on the next turn (this is the regression
     # check — under the pre-fix code, an all-empty-`content` history like
     # this one measured as ~0 chars and the trim never engaged at all).
-    huge_doc = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    huge_doc = "x" * (MAX_HISTORY_CHARS + 20_000)
     model = RecordingModel(script=[AIMessage(content="ok")])
     agent = _compile_agent(model, approval_enabled=False)
 
@@ -809,14 +808,14 @@ async def test_current_turn_alone_over_char_budget_fails_cleanly() -> None:
     model = RecordingModel(script=[AIMessage(content="unreachable")])
     agent = _compile_agent(model, approval_enabled=False)
 
-    oversized = "x" * (_V2_MAX_HISTORY_CHARS + 1)
+    oversized = "x" * (MAX_HISTORY_CHARS + 1)
     history: list[BaseMessage] = [HumanMessage(oversized)]
 
     with pytest.raises(ChatTurnTooLargeError) as exc_info:
         await _drive(agent, {"messages": history}, "t-char-too-big")
 
-    assert exc_info.value.limit_chars == _V2_MAX_HISTORY_CHARS
-    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    assert exc_info.value.limit_chars == MAX_HISTORY_CHARS
+    assert exc_info.value.actual_chars > MAX_HISTORY_CHARS
     # Never echo the oversized content back.
     assert oversized not in str(exc_info.value)
     assert model.calls == []
@@ -836,7 +835,7 @@ async def test_oversized_reasoning_trace_is_budgeted_after_rehoming() -> None:
     model = RecordingModel(script=[AIMessage(content="unreachable")])
     agent = _compile_agent(model, approval_enabled=False)
 
-    huge_reasoning = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    huge_reasoning = "x" * (MAX_HISTORY_CHARS + 20_000)
     history: list[BaseMessage] = [
         HumanMessage("investigate the contract"),
         # Open-turn reasoning (after the last HumanMessage) — invisible to a
@@ -847,7 +846,7 @@ async def test_oversized_reasoning_trace_is_budgeted_after_rehoming() -> None:
     with pytest.raises(ChatTurnTooLargeError) as exc_info:
         await _drive(agent, {"messages": history}, "t-reasoning-too-big")
 
-    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    assert exc_info.value.actual_chars > MAX_HISTORY_CHARS
     assert model.calls == []
 
 
@@ -868,7 +867,7 @@ async def test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty()
     model = RecordingModel(script=[AIMessage(content="unreachable")])
     agent = _compile_agent(model, approval_enabled=False)
 
-    huge_result = "x" * (_V2_MAX_HISTORY_CHARS + 20_000)
+    huge_result = "x" * (MAX_HISTORY_CHARS + 20_000)
     history: list[BaseMessage] = [
         HumanMessage("search the corpus"),
         AIMessage(
@@ -881,7 +880,7 @@ async def test_oversized_trailing_tool_result_fails_cleanly_not_silently_empty()
     with pytest.raises(ChatTurnTooLargeError) as exc_info:
         await _drive(agent, {"messages": history}, "t-tool-result-too-big")
 
-    assert exc_info.value.actual_chars > _V2_MAX_HISTORY_CHARS
+    assert exc_info.value.actual_chars > MAX_HISTORY_CHARS
     assert model.calls == []
 
 
@@ -919,7 +918,7 @@ def _install_recording_kpi_writer() -> tuple[_RecordingKPIStore, KPIWriter]:
 async def test_current_turn_too_large_emits_a_kpi_counter() -> None:
     """
     `agent.turn_rejected_total` is the production signal for whether
-    `_V2_MAX_HISTORY_CHARS` is well-tuned (#2350) — same shape as the
+    `MAX_HISTORY_CHARS` is well-tuned (#2350) — same shape as the
     sibling `agent.tool_failed_total` counter in `ToolObservabilityMiddleware`
     (status/error_code/exception_type dims, `KPIActor(type="system")`), so it
     reaches Grafana through the same allow-listed labels without needing a
@@ -929,7 +928,7 @@ async def test_current_turn_too_large_emits_a_kpi_counter() -> None:
     model = RecordingModel(script=[AIMessage(content="unreachable")])
     agent = _compile_agent(model, approval_enabled=False, kpi=kpi)
 
-    oversized = "x" * (_V2_MAX_HISTORY_CHARS + 1)
+    oversized = "x" * (MAX_HISTORY_CHARS + 1)
     with pytest.raises(ChatTurnTooLargeError):
         await _drive(agent, {"messages": [HumanMessage(oversized)]}, "t-kpi")
 
