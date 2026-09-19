@@ -38,7 +38,12 @@ import pytest
 from conftest import ToolFriendlyFakeChatModel
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
-from fred_runtime.react.middleware.hitl import CapabilityHitlBinding, FredHitlMiddleware
+from fred_runtime.react.middleware.hitl import (
+    CapabilityHitlBinding,
+    DeepChildHitlMiddleware,
+    FredHitlMiddleware,
+    GatedToolCall,
+)
 from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
@@ -333,7 +338,7 @@ async def test_deep_build_executor_wires_capability_middleware(
     captured: dict[str, Any] = {}
 
     def _fake_compile(**kwargs: object) -> object:
-        captured["middleware"] = list(cast(list, kwargs["middleware"]))
+        captured.update(kwargs)
         return object()
 
     monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
@@ -355,6 +360,19 @@ async def test_deep_build_executor_wires_capability_middleware(
     await runtime.build_executor(_binding())
 
     assert marker in captured["middleware"]
+    assert marker in captured["subagent_middleware"]
+    parent_hygiene = next(
+        m for m in captured["middleware"] if isinstance(m, CheckpointHygieneMiddleware)
+    )
+    child_hygiene = next(
+        m
+        for m in captured["subagent_middleware"]
+        if isinstance(m, CheckpointHygieneMiddleware)
+    )
+    assert parent_hygiene is not child_hygiene
+    assert any(
+        isinstance(m, DeepChildHitlMiddleware) for m in captured["subagent_middleware"]
+    )
 
 
 @pytest.mark.asyncio
@@ -493,6 +511,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
             tools=[],
             system_prompt="Answer briefly.",
             checkpointer=InMemorySaver(),
+            subagent_middleware=[],
             middleware=middleware,
         ),
     )
@@ -575,3 +594,49 @@ async def test_deep_hygiene_removes_dangling_calls_without_changing_input() -> N
         handler,
     )
     assert [message.model_dump() for message in messages] == before
+
+
+@pytest.mark.asyncio
+async def test_native_child_hides_flat_and_function_tool_schemas() -> None:
+    gate = DeepChildHitlMiddleware(
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(
+            enabled=True, always_require_tools=("gated",)
+        ),
+        available_tool_names={"gated", "safe"},
+    )
+    request = ModelRequest(
+        model=ToolFriendlyFakeChatModel(responses=[]),
+        messages=[],
+        tools=[
+            {"name": "gated"},
+            {"type": "function", "function": {"name": "gated"}},
+            {"name": "safe"},
+        ],
+    )
+    captured = []
+
+    async def handler(value: ModelRequest) -> ModelResponse:
+        captured.append(value)
+        return ModelResponse(result=[AIMessage(content="done")])
+
+    await gate.awrap_model_call(request, handler)
+    assert captured[0].tools == [{"name": "safe"}]
+    assert len(request.tools) == 3
+    await gate.awrap_model_call(captured[0], handler)
+    assert captured[1] is captured[0]
+
+
+def test_native_child_missing_call_id_refuses_entire_batch() -> None:
+    gate = DeepChildHitlMiddleware(
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    assert gate._resolve_approval(
+        [
+            GatedToolCall(
+                tool_call_id=None, tool_name="gated", tool_args={}, question=None
+            )
+        ]
+    ) == {"jump_to": "model"}

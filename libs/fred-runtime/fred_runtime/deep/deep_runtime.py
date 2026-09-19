@@ -44,6 +44,7 @@ from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
+    DeepChildHitlMiddleware,
     FredHitlMiddleware,
 )
 from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
@@ -76,6 +77,16 @@ from fred_runtime.react.react_tool_binding import (
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 
 logger = logging.getLogger(__name__)
+
+_SUBAGENT_FRAMING = (
+    "You are running as a sub-agent: another instance of yourself delegated one "
+    "task to you. There is no user in this conversation and no one to ask. "
+    "Instructions about greeting a user, asking what to do next or offering "
+    "options do not apply here. Do not ask clarifying questions or delegate "
+    "further. Carry out the task as described, preserve its arguments, and make "
+    "reasonable assumptions where it is silent. Report any action requiring "
+    "human approval to the parent agent instead of attempting to bypass it."
+)
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",
@@ -146,6 +157,12 @@ class DeepAgentRuntime(ReActRuntime):
             available_tool_names.update(
                 tool.name for tool in capability_block.tools if tool.name
             )
+            available_tool_names.update(
+                tool.name
+                for entry in capability_block.middleware
+                for tool in getattr(entry, "tools", ())
+                if tool.name
+            )
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -192,6 +209,15 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
             ),
+            subagent_middleware=_build_deepagent_runtime_middleware(
+                tracer=self.services.tracer,
+                kpi=self.services.kpi_writer,
+                binding=binding,
+                approval_policy=policy.tool_approval,
+                available_tool_names=available_tool_names,
+                capability_block=capability_block,
+                child=True,
+            ),
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -208,6 +234,7 @@ def _create_compiled_deep_agent(
     system_prompt: str,
     checkpointer: Checkpointer,
     middleware: Sequence[AgentMiddleware],
+    subagent_middleware: Sequence[AgentMiddleware],
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -216,17 +243,23 @@ def _create_compiled_deep_agent(
             "DeepAgentRuntime requires the optional `deepagents` package."
         ) from exc
 
-    if checkpointer is None:
-        return cast(
-            _CompiledReActAgent,
-            create_deep_agent(
-                model=model,
-                tools=list(tools),
-                system_prompt=system_prompt,
-                middleware=list(middleware),
-            ),
-        )
+    from deepagents.middleware.subagents import (
+        DEFAULT_SUBAGENT_PROMPT,
+        GENERAL_PURPOSE_SUBAGENT,
+        SubAgent,
+    )
 
+    # Explicitly replace the library's general-purpose child, which otherwise
+    # has neither Fred's composed prompt nor its middleware frame.
+    subagent: SubAgent = {
+        "name": GENERAL_PURPOSE_SUBAGENT["name"],
+        "description": GENERAL_PURPOSE_SUBAGENT["description"],
+        "system_prompt": "\n\n".join(
+            (system_prompt, _SUBAGENT_FRAMING, DEFAULT_SUBAGENT_PROMPT)
+        ),
+        "tools": list(tools),
+        "middleware": list(subagent_middleware),
+    }
     return cast(
         _CompiledReActAgent,
         create_deep_agent(
@@ -234,6 +267,7 @@ def _create_compiled_deep_agent(
             tools=list(tools),
             system_prompt=system_prompt,
             middleware=list(middleware),
+            subagents=[subagent],
             checkpointer=checkpointer,
         ),
     )
@@ -267,6 +301,7 @@ def _build_deepagent_runtime_middleware(
     approval_policy: ToolApprovalPolicy,
     available_tool_names: set[str] | frozenset[str],
     capability_block: CapabilityAgentBlock | None = None,
+    child: bool = False,
 ) -> list[AgentMiddleware]:
     """Keep hygiene outermost and guard disabled tools before HITL runs.
 
@@ -289,7 +324,7 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
         ),
         ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
-        FredHitlMiddleware(
+        (DeepChildHitlMiddleware if child else FredHitlMiddleware)(
             binding=binding,
             approval_policy=approval_policy,
             available_tool_names=available_tool_names,
