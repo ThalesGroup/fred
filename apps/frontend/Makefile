@@ -61,15 +61,15 @@ check-node:
 
 
 # node_modules: install dependencies (reproducibly via `npm ci` when a lockfile
-# exists, otherwise `npm install`). Runs only when package.json is newer than
-# the installed tree, so repeated builds are fast.
-.PHONY: node_modules
-node_modules: check-node package.json
+# exists, otherwise `npm install`). A real file target, and check-node is
+# order-only, so the install runs when the manifests move — not on every build.
+node_modules: package.json $(wildcard package-lock.json) | check-node
 	@if [ -f package-lock.json ]; then \
 		npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
 	else \
 		npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
 	fi
+	@touch node_modules
 
 .PHONY: regen-lockfile
 regen-lockfile: check-node ## Regenerate package-lock.json from scratch inside a clean Node container
@@ -125,19 +125,19 @@ run: check-node node_modules ## Start the local Vite dev server on :5173 (HMR; p
 ##@ Code quality
 
 .PHONY: type-check
-type-check: node_modules ## Type-check with tsc (no files emitted)
+type-check: check-node node_modules ## Type-check with tsc (no files emitted)
 	npx tsc --noEmit
 
 .PHONY: format-check
-format-check: node_modules ## Check formatting with prettier (fails on unformatted files, writes nothing)
+format-check: check-node node_modules ## Check formatting with prettier (fails on unformatted files, writes nothing)
 	npx prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore . --check
 
 .PHONY: format-fix
-format-fix: node_modules ## Reformat the codebase in place with prettier
+format-fix: check-node node_modules ## Reformat the codebase in place with prettier
 	npx prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore . --write
 
 .PHONY: lint
-lint: node_modules ## Lint frontend source with ESLint
+lint: check-node node_modules ## Lint frontend source with ESLint
 	npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern "src/**/*.{ts,tsx}"
 
 # knip (unused-export/dependency detection) is not wired in yet; see the
