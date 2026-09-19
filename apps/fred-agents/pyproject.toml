@@ -30,6 +30,7 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  "watchfiles>=1.0",
 ]
 
 [build-system]
@@ -68,4 +69,5 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  "watchfiles>=1.0",
 ]

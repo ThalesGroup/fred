@@ -18,6 +18,27 @@ This document is code conventions, not a setup guide — for a runnable local st
 (infra, demo data, and the validation suite), start at
 [`docs/swift/TESTING.md`](../TESTING.md) instead.
 
+## Local reload and debugging
+
+From a backend directory, use `make rrun` or `make rrun-prod` for hot reload.
+These targets watch the app's Python package, importable packages in local
+`[tool.uv.sources]` paths, and the app's `config/` directory (including YAML).
+They exclude sibling tests, virtual environments and build outputs by watching
+package directories rather than entire project roots. Keep local dependencies
+in the existing inline `path = "..."` source format so Make can discover them.
+`rrun-prod` selects the production-like configuration for local development;
+deployed services and `make run-prod` do not enable the reloader.
+
+VS Code's **All Services PROD** tasks use these same Make targets. The Python
+launch configurations run a single worker without reload for stable breakpoints;
+restart the debug session after edits. Use the tasks when hot reload is needed.
+Debugger ports are unchanged.
+
+The reload workflow requires Uvicorn 0.35 or later: older versions add the
+whole working directory even when explicit watch directories are supplied.
+Fred agents installs `watchfiles` with its development dependencies so YAML
+reloads work.
+
 ## 2) Platform CLI Convention
 
 **Every Fred backend exposes `make cli`** — the primary tool for validating and operating the service from a terminal.
