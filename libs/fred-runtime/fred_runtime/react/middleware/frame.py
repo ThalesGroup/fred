@@ -34,6 +34,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .hitl import CapabilityHitlBinding, FredHitlMiddleware
+from .rate_limit_retry import RateLimitRetryMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
@@ -81,6 +82,10 @@ def build_react_platform_middleware_frame(
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
         # --- CAPABILITY BLOCK INSERTION SLOT (#1973, RFC §5.3) ---
         *capability_middleware,
+        # Just outside tracing on purpose: every retried attempt is then a real
+        # span and a real latency sample, while hygiene, prompt and capability
+        # middleware are computed once for the whole retried call.
+        RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

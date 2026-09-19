@@ -45,6 +45,7 @@ from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
     FredHitlMiddleware,
 )
+from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -279,6 +280,7 @@ def _build_deepagent_runtime_middleware(
     )
     middleware: list[AgentMiddleware] = [
         *(capability_block.middleware if capability_block is not None else ()),
+        RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

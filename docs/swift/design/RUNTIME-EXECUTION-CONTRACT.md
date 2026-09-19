@@ -5902,3 +5902,33 @@ labels are unchanged.
 
 Native-child middleware composition is a separate integration layer; this correction does not
 introduce custom delegation or a filesystem backend.
+
+### 8.81 Provider rate-limit retries (2026-09-18)
+
+ReAct and Deep **parent** model calls now share `RateLimitRetryMiddleware`,
+placed after capability wrappers and before `TracingKpiMiddleware`. Input
+preparation runs once per logical model call; each runtime attempt gets a span
+and latency sample. Only the model call is retried, so completed tools are not
+replayed. Native child graph wiring remains part of the later integration
+layer; this extraction does not complete issue #2535's child acceptance.
+
+The policy permits four total attempts and a 60-second retry scheduling window.
+It honors finite nonnegative numeric or HTTP-date `Retry-After` hints with
+jitter, otherwise using exponential jittered backoff (2-second base, 30-second
+cap). An unaffordable hint ends the call rather than retrying earlier than the
+provider requested. Scheduling is checked again after sleep; cancellation and
+non-429 errors propagate. Exhaustion raises a readable `ProviderRateLimitError`
+without the provider payload. The window bounds retry starts, not an in-flight
+request: existing `model/factory.py` explicit transport/request timeouts remain
+responsible for provider I/O. Configured SDK retries remain inside a runtime
+attempt; this does not claim a separate span for each SDK-internal HTTP retry.
+No profile settings change.
+
+`fred_core.model.rate_limit.is_rate_limit` is shared with Knowledge Flow's
+extraction map phase (§8.44). Explicit non-429 statuses override message fallback;
+malformed or nonfinite hints use normal backoff. Each detected throttle emits
+`llm.rate_limit_events_total` and a WARNING for backoff or ERROR for exhaustion.
+`model_name` and `status` are already in `PROMETHEUS_ALLOWED_LABELS`, so the counter
+is exported to Prometheus/Grafana; no new label cardinality is introduced.
+
+Concurrency admission and retry UI remain separate work.
