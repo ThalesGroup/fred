@@ -41,6 +41,7 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
     FredHitlMiddleware,
@@ -267,18 +268,19 @@ def _build_deepagent_runtime_middleware(
     available_tool_names: set[str] | frozenset[str],
     capability_block: CapabilityAgentBlock | None = None,
 ) -> list[AgentMiddleware]:
-    """
-    Assemble Deep's middleware list: capability stack, platform observability,
-    the HITL gate (capability-declared and operator-configured approval
-    alike), then the filesystem-tool guard — same relative order as
-    `build_react_platform_middleware_frame` (`after_model` hooks run in
-    REVERSE list order, so the filesystem guard still blocks a disabled call
-    before the human gate ever sees it). RUNTIME-EXECUTION-CONTRACT.md §8.77.
+    """Keep hygiene outermost and guard disabled tools before HITL runs.
+
+    After-model hooks run in reverse order; see the execution contract §8.77.
     """
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = (
         capability_block.hitl if capability_block is not None else None
     )
     middleware: list[AgentMiddleware] = [
+        CheckpointHygieneMiddleware(
+            max_history_messages=None,
+            binding=binding,
+            kpi=kpi,
+        ),
         *(capability_block.middleware if capability_block is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         TracingKpiMiddleware(
