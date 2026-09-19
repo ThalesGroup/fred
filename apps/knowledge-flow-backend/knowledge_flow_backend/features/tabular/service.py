@@ -19,6 +19,7 @@ import hashlib
 import logging
 import re
 import time
+from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -62,6 +63,17 @@ from knowledge_flow_backend.features.tabular.utils import quote_identifier, quot
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
+
+
+def forbidden_datasets_message(document_uids: Sequence[str]) -> str:
+    """Explain ambiguous ReBAC denials without disclosing document existence."""
+
+    return (
+        f"Not authorized to read datasets: {', '.join(document_uids)}. "
+        "These values are either not readable by you or not valid document uids - "
+        "call list_tabular_documents to get valid document_uid values "
+        "(a document uid is an opaque id, not a file name and not a SQL table alias)."
+    )
 
 
 @dataclass(frozen=True)
@@ -368,7 +380,7 @@ class TabularService:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
             if forbidden_uids:
-                raise PermissionError(f"Not authorized to read datasets: {', '.join(forbidden_uids)}")
+                raise PermissionError(forbidden_datasets_message(forbidden_uids))
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
         return [
@@ -399,7 +411,7 @@ class TabularService:
         """
 
         if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
-            raise PermissionError(f"Not authorized to read dataset '{document_uid}'")
+            raise PermissionError(forbidden_datasets_message([document_uid]))
         metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
             raise FileNotFoundError(f"Tabular document '{document_uid}' was not found")
@@ -977,7 +989,7 @@ class TabularService:
             return owned
 
         if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
-            raise PermissionError(f"Not authorized to read dataset '{document_uid}'")
+            raise PermissionError(forbidden_datasets_message([document_uid]))
         raise FileNotFoundError(f"Tabular dataset '{document_uid}' was not found")
 
     async def _select_query_datasets(
@@ -1021,7 +1033,7 @@ class TabularService:
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
             if forbidden_uids:
                 logger.warning("[TABULAR] user=%s requested forbidden datasets=%s", user.uid, forbidden_uids)
-                raise PermissionError(f"Not authorized to read datasets: {', '.join(forbidden_uids)}")
+                raise PermissionError(forbidden_datasets_message(forbidden_uids))
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
         return [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
