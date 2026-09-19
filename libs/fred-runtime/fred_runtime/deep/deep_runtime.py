@@ -284,7 +284,7 @@ def _build_deepagent_runtime_middleware(
             kpi=kpi,
             binding=binding,
         ),
-        ToolObservabilityMiddleware(kpi=kpi, binding=binding),
+        ToolObservabilityMiddleware(kpi=kpi, binding=binding, tracer=tracer),
         FredHitlMiddleware(
             binding=binding,
             approval_policy=approval_policy,

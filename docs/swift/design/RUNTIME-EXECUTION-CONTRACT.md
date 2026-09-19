@@ -5888,3 +5888,17 @@ need updating. No KPI preset, chart or manifest filtered on
 **Scope.** `libs/fred-runtime/fred_runtime/app/config.py`,
 `.../app/context.py`, `.../app/agent_app.py`, `.../runtime_context.py`,
 `apps/fred-agents/config/`, `deploy/charts/fred/values.yaml`.
+
+### 8.80 Capability-tool tracing (2026-09-18)
+
+ReAct and Deep tool observability creates spans for middleware-contributed tools.
+Binder-resolved tools carry an internal self-traced marker so the middleware does
+not duplicate their spans. Both paths share the same active-parent and terminal
+lifecycle: success, returned tool error, raised exception and cancellation end the
+span; nested execution attaches beneath the invoking tool and restores its parent.
+`v2.react.runtime_tool` is classified as a Langfuse tool observation. Arguments and
+returned content remain gated by `Tracer.captures_content`; KPI/audit payloads and
+labels are unchanged.
+
+Native-child middleware composition is a separate integration layer; this correction does not
+introduce custom delegation or a filesystem backend.

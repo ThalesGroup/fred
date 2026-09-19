@@ -505,3 +505,11 @@ def test_a_failure_to_end_is_swallowed_too() -> None:
 
     fake.observations[0].end = _boom  # type: ignore[method-assign]
     span.end()  # must not raise
+
+
+def test_runtime_tool_span_is_a_tool_observation() -> None:
+    tracer, fake = _tracer()
+    tracer.start_span(
+        "v2.react.runtime_tool", context=_context(), attributes={"tool_name": "search"}
+    )
+    assert fake.start_kwargs[0]["as_type"] == "tool"
