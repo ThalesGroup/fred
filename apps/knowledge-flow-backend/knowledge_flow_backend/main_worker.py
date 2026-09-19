@@ -134,6 +134,7 @@ async def main() -> None:
     try:
         await run_worker(
             configuration.scheduler.temporal,
+            roles=configuration.scheduler.worker_roles,
             max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
             max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
             pdf_render_ttl_days=configuration.app.pdf_render_ttl_days,

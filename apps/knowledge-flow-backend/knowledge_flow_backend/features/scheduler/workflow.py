@@ -39,7 +39,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import is_cancelled_exception
+from temporalio.exceptions import ApplicationError, is_cancelled_exception
 
 
 def _wf_get(item: Any, key: str, default=None):
@@ -101,6 +101,29 @@ def _wf_profile_value(file: Any) -> str | None:
     if isinstance(raw, (list, tuple)) and raw and all(isinstance(item, str) and len(item) == 1 for item in raw):
         return "".join(raw)
     return str(raw)
+
+
+def _wf_extraction_task_queue(file: Any) -> str:
+    """The queue carrying this document's extraction activity.
+
+    Resolved at submission from the file's profile and carried in the payload:
+    the workflow never reads deployment configuration, which would make it
+    non-deterministic. Missing means the submission side did not route this
+    document — failing beats parking the activity on the common queue, where
+    extraction is not registered and nothing would ever pick it up.
+
+    ApplicationError, not a plain exception: only a FailureError fails the
+    workflow. Anything else fails the workflow *task* and Temporal retries it
+    forever, leaving the document running with no terminal event to show for it.
+    """
+    queue = _wf_get(file, "extraction_task_queue", None)
+    if isinstance(queue, str) and queue.strip():
+        return queue
+    display_name = _wf_get(file, "display_name", None) or "unknown"
+    raise ApplicationError(
+        f"No extraction task queue on the payload for {display_name}; the submission did not route this document.",
+        non_retryable=True,
+    )
 
 
 def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
@@ -362,11 +385,16 @@ class PullInputProcess:
             Pass the file payload, user, metadata, optional profile, then the
             computed start-to-close and heartbeat timeouts in seconds.
         """
-        workflow.logger.info("[SCHEDULER] PullInputProcess")
+        task_queue = _wf_extraction_task_queue(file)
+        workflow.logger.info("[SCHEDULER] PullInputProcess on queue=%s", task_queue)
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "pull_input_process",
             args=[user, metadata, profile],
+            # The one hop off the common queue: extraction runs on the pods
+            # dedicated to this document's profile. Everything around it —
+            # metadata, progress events, indexing — stays where the workflow is.
+            task_queue=task_queue,
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
@@ -399,11 +427,16 @@ class PushInputProcess:
             Pass the file payload first, then the activity inputs and the
             computed timeout values in seconds.
         """
-        workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
+        task_queue = _wf_extraction_task_queue(file)
+        workflow.logger.info("[SCHEDULER] PushInputProcess: %s on queue=%s", input_file or "<resolve-on-worker>", task_queue)
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
             args=[user, metadata, input_file, profile],
+            # The one hop off the common queue: extraction runs on the pods
+            # dedicated to this document's profile. `input_file` is empty on this
+            # path, so the activity restores its input from shared storage.
+            task_queue=task_queue,
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),

@@ -24,7 +24,7 @@ from fred_core.scheduler import (
     resolve_scheduler_backend,
 )
 
-from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
+from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig, extraction_task_queue
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
@@ -59,7 +59,6 @@ class IngestionTaskService:
         self._processing_config = processing_config
         self._metadata_service = metadata_service
         self._client_provider = temporal_client_provider
-        self._task_queue: Optional[str] = None
         self._max_parallelism = max(1, int(max_parallelism))
 
         backend = resolve_scheduler_backend(scheduler_config.backend)
@@ -69,7 +68,6 @@ class IngestionTaskService:
             # Reuse the shared Temporal client provider if provided (preferred),
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
-            self._task_queue = scheduler_config.temporal.task_queue
             self._scheduler = TemporalScheduler(
                 scheduler_config,
                 self._metadata_service,
@@ -95,11 +93,15 @@ class IngestionTaskService:
             raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
 
         enriched_files: list[FileToProcess] = []
+        base_task_queue = self._scheduler_config.temporal.task_queue
         for file in files:
             normalized_profile = self._processing_config.normalize_profile(file.profile)
             profile_config = self._processing_config.get_profile_config(normalized_profile)
             with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
                 update={
+                    # Resolved per document, so one submission may freely mix profiles:
+                    # only the extraction activity leaves the common queue.
+                    "extraction_task_queue": extraction_task_queue(base_task_queue, normalized_profile),
                     "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
                     "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,
                     "retry_initial_interval_seconds": profile_config.retry_initial_interval_seconds,

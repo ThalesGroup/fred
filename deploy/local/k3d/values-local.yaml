@@ -500,7 +500,15 @@ applications:
       tag: "0.2"
     configuration:
       security:           *kf-security
-      scheduler:          *kf-scheduler
+      # One pod for the whole cluster, so it serves the four worker roles itself:
+      # one Temporal worker each, on the common queue and the three extraction
+      # queues. The chart's production values instead give each role its own
+      # deployment. Drop a role here and the documents routed to it wait on a
+      # queue nobody polls, indefinitely — an activity's start_to_close_timeout
+      # only starts counting once a worker has picked it up.
+      scheduler:
+        <<: *kf-scheduler
+        worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
       content_storage:    *kf-content-storage
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model

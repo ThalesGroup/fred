@@ -61,6 +61,10 @@ class FileToProcessWithoutUser(BaseModel):
 
 class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
+    # Set at submission from the file's profile, and read back by the workflow to
+    # route this document's extraction activity. Absent on the in-process paths
+    # that call the activities directly, which never reach a Temporal queue.
+    extraction_task_queue: Optional[str] = None
     input_activity_timeout_seconds: int = 3600
     heartbeat_timeout_seconds: int = 300
     retry_initial_interval_seconds: int = 30
