@@ -44,6 +44,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
     Dict,
@@ -57,7 +58,11 @@ from typing import (
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
-from .context import BoundRuntimeContext, ConversationTurn
+if TYPE_CHECKING:
+    # Method parameter annotations only, never Pydantic fields — `context`
+    # reaches fred_core.model and fred_core.store, which a Knowledge Base pod
+    # importing FieldSpec has no business installing.
+    from .context import BoundRuntimeContext, ConversationTurn
 
 # ---------------------------------------------------------------------------
 # Agent tuning and MCP types — canonical SDK home.
