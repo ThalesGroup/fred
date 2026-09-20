@@ -28,6 +28,9 @@ dependencies = [
     "opensearch-py==2.8.0",
     "pydantic>=2.5.2,<3.0.0",
     "python-dotenv>=1.0.1,<2.0.0",
+    # Imported directly by fred_core.kpi.model_impact_factors; declared here
+    # rather than leaning on fred-pod's own pyyaml, which it is free to drop.
+    "pyyaml>=6.0.1",
     "sqlalchemy>=2.0.42",
     "sqlparse>=0.6.0",
     "httpx>=0.28.1",
