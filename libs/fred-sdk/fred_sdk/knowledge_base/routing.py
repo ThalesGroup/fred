@@ -27,7 +27,7 @@ import.
 
 from __future__ import annotations
 
-from fred_core import knowledge_base_catalog_id
+from fred_pod.common.naming import knowledge_base_catalog_id
 
 from fred_sdk.knowledge_base._workflow import SYNCHRONIZE_WORKFLOW, SynchronizeInput
 

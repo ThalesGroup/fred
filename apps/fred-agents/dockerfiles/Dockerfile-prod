@@ -21,6 +21,7 @@ COPY apps/fred-agents/pyproject.toml apps/fred-agents/uv.lock* ./
 COPY apps/fred-agents/README.md ./
 COPY apps/fred-agents/fred_agents ./fred_agents
 COPY scripts/makefiles /workspace/scripts/makefiles
+COPY libs/fred-pod /workspace/libs/fred-pod
 COPY libs/fred-core /workspace/libs/fred-core
 COPY libs/fred-runtime /workspace/libs/fred-runtime
 COPY libs/fred-sdk /workspace/libs/fred-sdk
@@ -63,6 +64,7 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/pyproject.toml /workspace/apps/fred-agents/pyproject.toml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/README.md /workspace/apps/fred-agents/README.md
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/fred_agents /workspace/apps/fred-agents/fred_agents
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runtime
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk

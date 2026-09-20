@@ -17,7 +17,7 @@
 import re
 
 import pytest
-from fred_core.common.naming import (
+from fred_pod.common.naming import (
     CONTRIBUTED_NAME_PATTERN,
     PREFIX_PATTERN,
     InvalidContributedName,

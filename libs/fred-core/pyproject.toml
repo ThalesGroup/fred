@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "4.0.0"
+version = "4.1.0"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,6 +14,9 @@ classifiers = [
 ]
 urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
 dependencies = [
+    # The pod floor: configuration, identity, naming. Every name it holds is
+    # re-exported from here, so this library's own surface is unchanged.
+    "fred-pod>=4.1.0",
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still
     # admits versions vulnerable to the remediated CVEs. Pin the patched floor
@@ -23,7 +26,6 @@ dependencies = [
     "pyjwt>=2.10.1,<3.0.0",
     "psycopg[binary]>=3.1.0",
     "opensearch-py==2.8.0",
-    "pandas>=2.2.2,<3.0.0",
     "pydantic>=2.5.2,<3.0.0",
     "python-dotenv>=1.0.1,<2.0.0",
     "sqlalchemy>=2.0.42",
@@ -114,7 +116,6 @@ omit = [
   # OIDC / Keycloak HTTP clients: requires a live auth service
   "fred_core/security/oidc.py",
   "fred_core/security/outbound.py",
-  "fred_core/security/backend_to_backend_auth.py",
   # KPI infrastructure: process daemon and multi-backend writer require live sinks
   "fred_core/kpi/kpi_process.py",
   "fred_core/kpi/kpi_writer.py",
@@ -136,3 +137,8 @@ markers = [
   "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
 ]
 testpaths = ["fred_core/tests"]
+
+[tool.uv.sources]
+# Mono-repo development only. The published wheel resolves fred-pod from PyPI
+# via [project.dependencies].
+fred-pod = { path = "../fred-pod", editable = true }

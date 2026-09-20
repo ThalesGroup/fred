@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-from fred_core.common import (
+from fred_pod.common import (
     ConfigFiles,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
@@ -63,7 +63,7 @@ def test_load_configuration_with_config_files_tracks_loaded_paths(
     monkeypatch.delenv("CONFIG_FILE", raising=False)
 
     config_files = ConfigFiles(
-        logger=logging.getLogger("fred_core.tests.config_loader"),
+        logger=logging.getLogger("fred_pod.tests.config_loader"),
         default_env_file=str(env_file),
         default_config_file=str(config_file),
     )
@@ -92,7 +92,7 @@ def test_load_configuration_renders_banner_and_exits_on_error(
     monkeypatch.delenv("CONFIG_FILE", raising=False)
 
     config_files = ConfigFiles(
-        logger=logging.getLogger("fred_core.tests.config_loader"),
+        logger=logging.getLogger("fred_pod.tests.config_loader"),
         default_config_file=str(config_file),
     )
 

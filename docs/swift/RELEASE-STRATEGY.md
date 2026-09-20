@@ -143,6 +143,31 @@ or expected.
 
 ---
 
+## Publishing the Python libraries
+
+Release tags build the images and the chart only. The four shared libraries
+reach PyPI **by hand**, from each `libs/<lib>` directory:
+
+```bash
+export PYPI_TOKEN=...
+make publish-dry-run
+unzip -p target/dist/*.whl '*/METADATA' | grep Requires-Dist   # check the floors
+make publish
+```
+
+The order is **mandatory**: `fred-pod` → `fred-core` → `fred-sdk` →
+`fred-runtime`. Each one floors the ones below it at the same version, so a
+step published out of order resolves against a release that does not exist yet.
+Wait for `https://pypi.org/pypi/<name>/json` to show the new version before
+starting the next step — the index is not immediate.
+
+The five `fred-capability-*` libraries are not published. `fred-samples` builds
+its Knowledge Base images with `uv sync --no-sources`, i.e. straight from PyPI,
+so a version referenced there installs nothing until the whole sequence
+completes.
+
+---
+
 ## Branch lifecycle
 
 | Phase              | Action                                                          |

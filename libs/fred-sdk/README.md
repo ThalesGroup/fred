@@ -28,8 +28,13 @@ Infrastructure wiring (DB, MCP server, Keycloak, object store) belongs in `fred-
 ## Installation
 
 ```bash
-pip install fred-sdk
+pip install fred-sdk[agents]          # agent authoring
+pip install fred-sdk[knowledge-base]  # a Knowledge Base pod
 ```
+
+The base install carries only configuration, identity and the plain contract
+models, so a Knowledge Base pod never pulls in the agents platform; `[agents]`
+adds `fred-core`, langchain and langgraph on top.
 
 Requires Python 3.12.
 

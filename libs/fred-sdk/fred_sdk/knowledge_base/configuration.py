@@ -30,14 +30,14 @@ from __future__ import annotations
 
 import logging
 
-from fred_core.common import (
+from fred_pod.common import (
     ConfigFiles,
     TemporalSchedulerConfig,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )
-from fred_core.security.backend_to_backend_auth import M2MAuthConfig
-from fred_core.security.structure import M2MSecurity
+from fred_pod.security.backend_to_backend_auth import M2MAuthConfig
+from fred_pod.security.structure import M2MSecurity
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)

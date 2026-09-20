@@ -30,7 +30,7 @@ unfinished — and there is no second version of that fact to disagree with.
 from __future__ import annotations
 
 import httpx
-from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_pod.security.backend_to_backend_auth import M2MTokenProvider
 
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration

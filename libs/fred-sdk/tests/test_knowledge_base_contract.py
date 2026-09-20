@@ -694,7 +694,7 @@ def test_task_queue_separates_two_contributors_using_the_same_last_segment() -> 
 
 
 def test_task_queue_matches_the_catalog_id_control_plane_derives() -> None:
-    from fred_core import knowledge_base_catalog_id
+    from fred_pod.common.naming import knowledge_base_catalog_id
     from fred_sdk.knowledge_base.routing import task_queue_for
 
     assert task_queue_for("acme.kb.local-folder") == knowledge_base_catalog_id(
@@ -736,8 +736,8 @@ def test_a_pod_is_configured_the_way_every_fred_component_is() -> None:
     under the paths an operator already knows from every other Fred backend,
     parsed by the models fred-core owns rather than by a second set.
     """
-    from fred_core.common import TemporalSchedulerConfig
-    from fred_core.security.structure import M2MSecurity
+    from fred_pod.common import TemporalSchedulerConfig
+    from fred_pod.security.structure import M2MSecurity
     from fred_sdk.knowledge_base.configuration import PodConfiguration
 
     configuration = PodConfiguration.model_validate(_valid_configuration())

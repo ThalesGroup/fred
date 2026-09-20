@@ -87,7 +87,7 @@ authoritative inventory — which is exactly what a run's
 actionable during a partial pass.
 
 **The task queue is derived, never configured.** `routing.task_queue_for`
-builds it from the definition id using the same fred-core function the Control
+builds it from the definition id using the same fred-pod function the Control
 Plane uses, so the dispatching side and the worker cannot disagree by
 construction. `scheduler.temporal.task_queue` is ignored on purpose:
 configuring it would be the bug, because two sides disagreeing loses every run
@@ -251,9 +251,11 @@ object. Configuration is validated against the declared fields by the
 dispatching Control Plane, not by the pod.
 
 The pod is configured the way every other Fred component is: one
-`configuration.yaml` resolved from `$CONFIG_FILE`, the models fred-core already
+`configuration.yaml` resolved from `$CONFIG_FILE`, the models fred-pod already
 owns, the same keys under `security.m2m` and `scheduler.temporal`, environment
-variables carrying secrets only. There is no `security.user` block — a
+variables carrying secrets only. A Knowledge Base pod installs
+`fred-sdk[knowledge-base]`: fred-pod plus the workflow engine, none of the
+agents platform. There is no `security.user` block — a
 Knowledge Base pod serves no user, opens no inbound port and validates no user
 token.
 
