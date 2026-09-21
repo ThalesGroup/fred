@@ -171,7 +171,192 @@ in a Temporal payload. Nothing here needed changing; it needed verifying.
 - **Resource values are hypotheses.** CPU is derived from
   `docling_num_threads x ingestion_max_concurrent_activities`; memory is a
   guess, widest for the rich group. Batch 3 replaces them with measurements.
-- **A batch still blocks on its slowest document.** `_wf_run_parent_pipeline`
-  starts documents in batches of `max_parallelism` and waits for all of them, so
-  a rich document still delays the fast ones submitted alongside it. Unchanged
-  here on purpose — that is batch 2.
+- **A batch still blocks on its slowest document.** Resolved in batch 2 below.
+
+## Batch 2 decisions — document independence and robustness
+
+### Per-profile admission windows in the existing parent
+
+`_wf_run_parent_pipeline` replaces its fixed batches with one admission loop.
+It keeps a count of in-flight children per profile, starts the *first admissible*
+document rather than the head of the queue, and waits on `workflow.wait` — the
+SDK's deterministic variant — for a child to finish before admitting again.
+
+- **Individual bound**: `P = ingestion_workflow_parallelism` per profile.
+- **Total bound**: `T = P x the number of profiles present in the submission`.
+
+A fast document in position 10 therefore starts while three rich documents in
+positions 0-2 occupy the rich window, and a freed slot is reused on the next
+turn of the loop rather than at the end of a batch.
+
+A single shared window was rejected: it can be filled entirely by rich documents,
+which is the very starvation this batch removes. `T < sum(P)` was rejected too —
+it reintroduces cross-profile contention in the parent, which batch 1 removed
+from the pods. Contention belongs in the worker pools, where it is isolated by
+construction.
+
+Note the change of meaning: `ingestion_workflow_parallelism` becomes a per-profile
+ceiling, so one submission may hold up to 3P open children instead of P. The extra
+children wait in their profile's extraction queue, which is what that queue is for.
+
+### Per-document failure containment
+
+Each child runs inside a wrapper that catches its failure and returns an outcome,
+the shape `RevectorizeDocument` already uses. A failed document no longer aborts
+its siblings or the documents not yet admitted.
+
+Cancellation stays distinct: `asyncio.CancelledError` is a `BaseException` and so
+passes through `except Exception` untouched, and the Temporal-shaped cancellation
+is re-raised on `is_cancelled_exception`. Cancelling therefore still stops
+admission, while a failing document does not.
+
+It reaches the parent two ways, and both leave the loop the same way: a child
+reporting it, and the cancellation landing on the parent itself while it waits.
+The admission loop is therefore wrapped as a whole — on any way out that is not
+the loop finishing, the documents still running are cancelled and every outcome
+is collected. Collected because an unretrieved task exception is logged later as
+an unhandled error, on the very path already reporting the cancellation; and a
+second cancellation arriving during that collection is absorbed rather than
+allowed to leave it half-done, the first one being re-raised regardless.
+
+The documents in flight are held in a list, in admission order, and
+`workflow.wait`'s lists are kept as they come back. A set would be iterated in
+address order, and since everything this loop does with a child ends up as a
+Temporal command — starting it, cancelling it — a replay after a worker restart
+could not reproduce that order. `workflow.wait` exists in the SDK for exactly
+this reason; passing it a set would have given that back.
+
+The parent returns `{total, processed, failed}` instead of the constant
+`"success"`, and completes normally even when documents failed. It does not raise:
+a raising parent is indistinguishable from a crash or a cancellation, and it would
+not change any document's outcome. This matches `RevectorizeCorpusWorkflow` — the
+workflow completes, the task carries the verdict.
+
+Reconciliation is unchanged and already covers the remaining gap. A document whose
+terminal event could not be persisted stays pending; the parent completes; the
+sweeper (started in the API lifespan, 120s interval, 300s grace) reads
+`completed` and records "Execution finished without completing the task". A
+document whose event was persisted is already terminal and is left alone. The one
+residual false negative — a document that succeeded but whose terminal event never
+persisted — is reconciled to `failed`; bounded retries on the event activity make
+it unlikely, and removing it entirely would mean teaching the reconciler to read
+the workflow's return value, a new contract.
+
+Raising the event activity's attempts is safe because the write is idempotent in
+effect: `record_event` assigns `run.state` and `detail` absolutely rather than
+incrementally, the per-document counters are absolute with `total=1`, and
+`repair_document_after_terminal` is idempotent by construction. Only `seq`
+advances, so a duplicate reaches the SSE stream twice with identical content.
+
+### Execution budgets that exclude queue wait
+
+`schedule_to_close_timeout` includes the time an activity spends waiting in its
+queue; `start_to_close_timeout` does not. Metadata, indexing and progress events
+used the former, so a saturated queue consumed the budget meant for execution and
+the activity could fail without ever starting. They move to `start_to_close`,
+per attempt, with bounded attempts sized to the operation rather than inherited
+from the extraction profile.
+
+The trade-off is explicit: there is no longer a single ceiling over all attempts.
+The worst case becomes `attempts x per-attempt budget`, which is the intended
+reading — a heartbeat proves contact, not progress, so a per-attempt maximum has
+to stay.
+
+Permanent errors are expressed as `ApplicationError(non_retryable=True)` at the
+point they are detected, the idiom `raise_if_document_deleted` already uses, rather
+than by growing `retry_non_retryable_error_types` lists in configuration.
+
+This required narrowing one wrapper first: the input restore paths turned *any*
+exception into `FileNotFoundError`, so a transient object-store outage was
+indistinguishable from a genuinely missing file. A missing input is now permanent
+and anything else stays retryable.
+
+### Extraction runs in a killable local process
+
+Cooperative cancellation cannot stop an extraction. The only checkpoints in the
+codebase are in vector indexing, and the extractors expose no loop boundary to add
+one to: docling is a single `convert()` call per document and pymupdf4llm a single
+`to_markdown()`. Draining the thread under a bound does not fix it either — when
+the bound expires the thread is still running while its Temporal slot has been
+returned, so a new extraction starts on a pod that is still busy.
+
+Extraction therefore runs in a child process the activity can kill.
+
+**Boundary.** The narrowest existing one is the pipeline, not the service.
+`IngestionService.__init__` builds the content store and `MetadataService`, which
+pull in further services; the child must not construct it. `ProcessingPipelineManager`
+needs only the configuration and the processor classes — no store, no database, no
+object storage. The extraction body moves to `ProcessingPipelineManager.run_input`,
+called by `IngestionService.process_input` as before and by the child directly, so
+there is one implementation and no duplicated pipeline selection.
+
+The profile survives the boundary: the child re-enters `processing_profile_scope`,
+so the effective per-profile settings — extractor, OCR, docling threads,
+`process_images` — are the ones the processors read. Rich extraction's external
+calls (the vision model describing images) work because the child inherits the
+parent's environment. Nothing sensitive is passed as a command argument or logged.
+
+**What crosses.** To the child: input path, output directory, the document metadata
+as JSON and the profile name. From the child: an exit status and a structured error.
+The extraction's real output is the files it writes into the output directory, which
+parent and child already share — no result is marshalled.
+
+**Process creation.** `spawn`, not `fork`: forking a process that holds the Temporal
+worker's event loop, its gRPC client and a thread pool copies locks in unknown
+states. The cost is the child's interpreter start and imports, to be measured
+locally rather than guessed. No pool: a rich pod runs one extraction at a time, so
+a pool of one is not a pool, and a pool would bring back the cross-document state
+this boundary exists to remove.
+
+**Stopping.** The child leads its own process group, and the activity signals the
+group rather than the process, so descendants are covered without enumerating
+them. `SIGKILL` directly, with no `SIGTERM` grace period: extraction has nothing
+to flush — its output goes to a directory the parent is about to discard — so a
+polite shutdown would only delay the moment the CPU comes back. The group is
+signalled on the normal path too: a child that ended by itself, successfully or
+not, can have left a helper behind holding the pod.
+
+The activity waits for that — without blocking the event loop, there as much as
+during the extraction itself — and only then removes the temporary directory and
+releases its Temporal slot. That ordering is what removes the overlap: the slot
+is never free while the computation is not.
+
+The stop cannot be abandoned half-way. It runs as its own task behind a shield,
+so an activity cancelled *again* while it is already cancelling re-enters the
+wait instead of returning with the computation still running, and the supervisor
+returns only once that task is done — never leaving it to finish in the
+background.
+
+**When the stop cannot be confirmed.** Only an uninterruptible kernel operation
+survives `SIGKILL`, so a child still alive after the reap timeout means the pod
+is sick, not the document. The activity then fails with `ExtractionStopUnconfirmed`
+in place of whatever it was about to report — a success, a budget timeout, even a
+cancellation — because every one of those tells Temporal this worker is free to
+take the next extraction. Making the *worker* act on it (stop polling, or fail
+its liveness probe so the pod is replaced) would be a new worker-level policy and
+is deliberately not in this change.
+
+Temporal's own timeout is not part of this. An expiring `start_to_close_timeout`
+fails the attempt on the server; the worker learns of it through a heartbeat
+response, or not at all. The activity therefore enforces its own budget, derived
+from the profile's timeout minus the time already spent and minus a reserve for
+the shutdown itself, and the Temporal timeout goes back to being the backstop for
+a worker that has died. That budget has no floor: when nothing is left once the
+reserve is kept, the attempt is refused before a child exists, rather than
+starting an extraction it could only kill part-way through.
+
+`PR_SET_PDEATHSIG` covers the one case the activity cannot: the worker being
+`SIGKILL`ed, which runs no `finally`. It is best-effort and Linux-only, and it
+applies to the child alone — a descendant of the child is not covered by it,
+which is why the group signal remains the primary mechanism. Its own race is
+covered by the child comparing its parent against the identity it was started
+with, not against pid 1: the parent can die between the fork and the `prctl`
+call, and under a subreaper — or in a container whose pid 1 is the worker itself
+— a re-parented child never sees `getppid() == 1`.
+
+**Not claimed.** Across a network partition, two workers can hold the same
+activity attempt. Nothing here prevents that and nothing here makes it safe:
+both children extract the same document and write to the same shared-storage
+keys, so which output survives is decided by arrival order, and a reader in
+between can see one attempt's output mixed with the other's. Excluding it needs
+a lease or a fencing token on the document, which this change does not add.

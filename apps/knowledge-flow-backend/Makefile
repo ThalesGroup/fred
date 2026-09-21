@@ -71,6 +71,28 @@ run-worker: dev tools-check download-models ## Run an ingestion worker (requires
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
+# Per-role worker, for running the four groups as separate processes locally —
+# the only way to observe the memory isolation a single multi-role worker cannot
+# show. The configuration is derived into target/ from configuration_worker.yaml,
+# which is never modified: only the role, the metrics port (four processes would
+# otherwise fight over one) and the activity concurrency differ.
+ROLE ?= common
+_ROLE_CONFIG := $(CURDIR)/target/worker-roles/configuration_worker_$(ROLE).yaml
+
+.PHONY: run-worker-role
+run-worker-role: dev tools-check download-models ## Run one worker role (ROLE=common|fast|medium|rich)
+	@mkdir -p $(dir $(_ROLE_CONFIG))
+	$(PYTHON) $(CURDIR)/../../scripts/derive_worker_role_config.py \
+		--source $(CURDIR)/config/configuration_worker.yaml \
+		--role $(ROLE) \
+		--output $(_ROLE_CONFIG)
+	@echo "🚀 Running the $(ROLE) worker..."
+	PYTHONPATH=. \
+	LOG_LEVEL=$(LOG_LEVEL) \
+	ENV_FILE=$(ENV_FILE) \
+	CONFIG_FILE=$(_ROLE_CONFIG) \
+	$(PYTHON) $(PY_PACKAGE)/main_worker.py
+
 .PHONY: run-worker-docker
 run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
 	@echo "🚀 Running the worker in Docker..."

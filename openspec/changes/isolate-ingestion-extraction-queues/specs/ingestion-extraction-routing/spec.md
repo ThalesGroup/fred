@@ -191,3 +191,150 @@ where that is meaningful, without logging secrets or sensitive configuration.
 - **THEN** its logs name each role served, the queue polled for it, and the
   activity concurrency applied, and for the common role the workflow-task
   concurrency as well
+
+### Requirement: Documents are admitted per profile without blocking each other
+Knowledge Flow SHALL admit the documents of one submission through a bounded
+window per processing profile, so that a document of one profile can start while
+another profile's window is full. A freed slot MUST be reusable without waiting
+for the other documents in flight, and the number of open child workflows MUST
+stay within the announced per-profile and total bounds.
+
+#### Scenario: Cheap documents behind expensive ones
+- **WHEN** a submission places several `rich` documents before `fast` ones and the
+  rich window is full
+- **THEN** the `fast` documents are admitted and progress while the rich ones are
+  still running
+
+#### Scenario: A freed slot is reused immediately
+- **WHEN** one document of a profile finishes while others of that profile are
+  still waiting to be admitted
+- **THEN** the next document of that profile is admitted without waiting for the
+  documents of any other profile
+
+#### Scenario: Bounds are respected
+- **WHEN** a submission holds more documents of a profile than that profile's
+  window
+- **THEN** the number of children open for that profile never exceeds its window,
+  and the total never exceeds the sum of the windows of the profiles present
+
+### Requirement: One document's failure does not end the submission
+Knowledge Flow MUST contain a document's failure to that document: the other
+documents of the submission SHALL keep running and the ones not yet admitted
+SHALL still be admitted. The submission's result MUST carry how many documents
+succeeded and how many failed, and MUST NOT report success when documents failed.
+
+#### Scenario: A document fails mid-submission
+- **WHEN** one document of a submission fails permanently
+- **THEN** its own task reaches a terminal failed state, the other documents run
+  to completion, and the submission's result reports one failure
+
+#### Scenario: Cancellation is not a failure
+- **WHEN** a submission is cancelled
+- **THEN** no further document is admitted, and the outcome is reported as
+  cancelled rather than as a document failure
+
+#### Scenario: The submission itself is cancelled while documents are running
+- **WHEN** the cancellation reaches the parent workflow while it is waiting on
+  the documents it has admitted, rather than being reported by one of them
+- **THEN** no further document is admitted, the documents already running are
+  cancelled, and their outcomes are all collected before the cancellation
+  propagates
+
+#### Scenario: A terminal event that could not be persisted
+- **WHEN** a document's terminal event cannot be written after its bounded retries
+- **THEN** the document's task is left non-terminal and the existing reconciliation
+  drives it to a terminal state from the submission's executor status
+
+### Requirement: Execution budgets exclude queue waiting
+Knowledge Flow SHALL bound each ingestion activity by a per-attempt execution
+budget that does not include the time the activity waits in its queue, and SHALL
+bound the number of attempts per activity according to its nature.
+
+#### Scenario: A saturated queue does not consume the execution budget
+- **WHEN** an activity waits in its task queue longer than its execution budget
+  before a worker starts it
+- **THEN** the activity still receives its full execution budget once started
+
+#### Scenario: A permanent error is not retried
+- **WHEN** an activity fails with an error that retrying cannot resolve
+- **THEN** the attempt is not retried and the document reaches a terminal state
+
+#### Scenario: A missing input is told apart from a storage outage
+- **WHEN** an extraction cannot restore its input
+- **THEN** a genuinely absent input fails permanently while a transient storage
+  failure remains retryable
+
+### Requirement: Cancelling an extraction stops the computation
+Knowledge Flow MUST run each extraction in a child process it can terminate, and
+MUST NOT release the extraction's worker slot, remove its working directory, or
+report the activity finished until that process and its process group have been
+terminated and reaped.
+
+#### Scenario: Cancelling a running extraction
+- **WHEN** a running extraction is cancelled
+- **THEN** its child process and any descendant it started are terminated, their
+  termination is confirmed, and only then does the activity finish
+
+#### Scenario: A new extraction does not overlap an abandoned one
+- **WHEN** an extraction is cancelled and another is admitted on the same worker
+- **THEN** the new extraction starts only after the previous computation has
+  actually stopped
+
+#### Scenario: The local budget expires
+- **WHEN** an extraction exceeds the budget the activity derived for it
+- **THEN** the activity terminates the child process itself rather than relying on
+  the executor's timeout, and reports a timeout
+
+#### Scenario: The attempt has no budget left to give
+- **WHEN** the time left on an attempt, once the shutdown reserve is kept, is
+  zero or less
+- **THEN** the activity fails the attempt before creating a child process, rather
+  than starting an extraction it could only terminate part-way through
+
+#### Scenario: Cancellation during process start-up
+- **WHEN** an extraction is cancelled before its child process is fully installed
+- **THEN** no child process is left running
+
+#### Scenario: A second cancellation during the stop
+- **WHEN** the activity is cancelled again while it is already terminating its
+  child process
+- **THEN** the termination is carried through to the end rather than abandoned or
+  left to finish in the background, and the event loop stays responsive
+  throughout
+
+#### Scenario: The child ends by itself leaving a descendant
+- **WHEN** the child process finishes on its own, with a success or with an
+  error, having started a descendant that is still running
+- **THEN** that descendant is terminated too before the activity finishes
+
+#### Scenario: The termination cannot be confirmed
+- **WHEN** the child process, or something in its process group, is still alive
+  after the termination timeout
+- **THEN** the activity fails with an error that says the stop was not confirmed,
+  in place of the success, timeout or cancellation it was about to report, so
+  that no outcome states the worker is free for the next extraction
+
+#### Scenario: The worker is killed outright
+- **WHEN** the worker process is killed without running its shutdown path
+- **THEN** the extraction child process does not survive it
+
+#### Scenario: The child's parent died before the death signal was installed
+- **WHEN** the child process finds, at start-up, that its parent is not the
+  worker that started it
+- **THEN** it exits instead of running the extraction, whatever pid it has been
+  re-parented to
+
+### Requirement: The outcome of a killed extraction keeps its nature
+Knowledge Flow SHALL distinguish a permanent document error, a transient failure,
+a budget timeout, a cancellation and an abnormal process exit when extraction runs
+in a child process, and MUST NOT collapse them into one retryable failure.
+
+#### Scenario: A permanent error inside the child
+- **WHEN** the extraction fails inside the child with an error retrying cannot fix
+- **THEN** the activity reports it as permanent and it is not retried
+
+#### Scenario: The child dies abnormally
+- **WHEN** the child process is killed by the operating system rather than failing
+  in Python
+- **THEN** the activity reports an abnormal termination, distinct from a document
+  error and from a cancellation

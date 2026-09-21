@@ -33,6 +33,7 @@ Change this boundary only together with a Temporal integration test, since it
 alters runtime deserialization and the sandbox import set.
 """
 
+import asyncio
 import hashlib
 from datetime import timedelta
 from typing import Any
@@ -40,6 +41,50 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError, is_cancelled_exception
+
+# Budgets per attempt, never schedule-to-close: the latter counts the time an
+# activity spends queued, so a saturated queue used to consume the budget meant
+# for running it and the activity failed without ever starting. A heartbeat
+# proves contact, not progress, so a per-attempt maximum stays.
+# A push metadata lookup is a catalog read. The pull one downloads the whole
+# source file before it can read anything, so it is not the same operation and
+# does not get the same budget.
+_PUSH_METADATA_START_TO_CLOSE = timedelta(minutes=5)
+_PULL_METADATA_START_TO_CLOSE = timedelta(minutes=30)
+
+# The event write itself is tiny, but this activity also runs the terminal
+# document repair: on a cancellation that erases the document's content, vectors,
+# metadata and quota, which on a large document is not a 30-second job. Cutting it
+# short would retry the erasure from the start and never persist the terminal
+# event — the exact state this whole path exists to avoid.
+_EVENT_START_TO_CLOSE = timedelta(minutes=10)
+
+# Short operations get their own bounded policy rather than the profile's, which
+# is sized for a two-hour extraction and would retry a catalog lookup for hours.
+_SHORT_OPERATION_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=10),
+    maximum_attempts=3,
+)
+
+
+async def _wf_emit_event(args: list[Any]) -> None:
+    """Emit one progress or terminal task event.
+
+    Retried, unlike before: losing a document's terminal event to a brief
+    database blip left it running with nothing to show for it, and — on the
+    single attempt it used to get — took the whole submission down with it.
+    Safe to retry because the write is idempotent in effect: the event carries
+    absolute state and counters rather than increments, and the document repair
+    it triggers is idempotent by construction.
+    """
+    await workflow.execute_activity(
+        "emit_ingestion_task_event",
+        args=args,
+        start_to_close_timeout=_EVENT_START_TO_CLOSE,
+        retry_policy=_SHORT_OPERATION_RETRY,
+    )
 
 
 def _wf_get(item: Any, key: str, default=None):
@@ -275,47 +320,174 @@ def _wf_final_revectorize_state(*, failed: int, total: int) -> tuple[str, str | 
     return "failed", f"{failed} of {total} document(s) failed to re-vectorize"
 
 
+def _wf_admission_window(file: Any) -> str:
+    """The window a document is admitted through.
+
+    Its extraction queue, not its raw profile: the queue is what the documents
+    actually compete for, and it was derived at submission from the *normalized*
+    profile. Bucketing on the raw value instead would give a document carrying no
+    profile its own window while its extraction lands on the default profile's
+    queue — two windows onto one pool, admitting twice what the bound allows.
+    """
+    return _wf_get(file, "extraction_task_queue", None) or _wf_profile_value(file) or "unknown"
+
+
+async def _wf_stop_in_flight(tasks: list[Any]) -> None:
+    """Cancel the documents still running and collect every outcome.
+
+    A list, in admission order, never a set: cancelling a child emits a command,
+    and a set is iterated in address order, so a replay after a worker restart
+    would emit those commands in a different order than the history records.
+
+    Their results are read although nothing uses them: an unretrieved task
+    exception is logged later as an unhandled error, on the very path already
+    reporting the cancellation. A second cancellation landing here must not leave
+    that half-done, so it is absorbed and the collection re-entered — the caller
+    re-raises the first one regardless.
+    """
+    if not tasks:
+        return
+    for task in tasks:
+        task.cancel()
+    while True:
+        try:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return
+        except asyncio.CancelledError:
+            continue
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
     child_workflow_run,
     child_prefix: str,
-) -> str:
+) -> dict:
     """
     Orchestrate one parent ingestion workflow over its child file workflows.
 
-    Why this exists:
-    - Parent workflows own batch parallelism and final workflow-status updates
-      while child workflows stay focused on one document at a time.
+    Admission is bounded per processing profile, not globally. Each profile is
+    served by its own worker pool, so one shared window could be filled entirely
+    by rich documents and the fast ones behind them would wait for pods that were
+    never busy. The loop therefore admits the first document whose own profile
+    has room — not the head of the queue — and reuses a freed slot on the next
+    turn rather than at the end of a batch.
 
-    How to use:
-    - Pass the serialized pipeline definition plus the child workflow entrypoint.
-    - The helper starts children in bounded batches and leaves profile-specific
-      retry handling to the child workflows and activities.
+    Bounds: `max_parallelism` per profile, and that many times the number of
+    profiles present in this submission overall.
+
+    A document's failure is contained here: it is recorded and the remaining
+    documents keep being admitted. Cancellation is not — it stops admission and
+    takes the running documents with it, which is what tells the two apart. It
+    is handled the same way whether a child reports it or it lands on this
+    workflow itself while it waits.
     """
     pipeline_name = _wf_get(definition, "name", "unknown")
     files = _wf_get(definition, "files", []) or []
-    max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
-    workflow.logger.info("[SCHEDULER] Ingesting pipeline: %s", pipeline_name)
+    per_profile_limit = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
     workflow_id = workflow.info().workflow_id
 
-    for batch_start in range(0, len(files), max_parallelism):
-        batch = files[batch_start : batch_start + max_parallelism]
-        handles = []
-        for offset, file in enumerate(batch):
-            file_index = batch_start + offset
+    pending: list[tuple[int, Any]] = list(enumerate(files))
+    profiles_present = {_wf_admission_window(file) for _, file in pending}
+    workflow.logger.info(
+        "[SCHEDULER] Ingesting pipeline: %s (%d documents, %d per profile, %d profiles)",
+        pipeline_name,
+        len(files),
+        per_profile_limit,
+        len(profiles_present),
+    )
+
+    running: dict[str, int] = {profile: 0 for profile in profiles_present}
+    # A list, and `workflow.wait`'s lists are kept as they come back: everything
+    # this loop does with the children ends up as a Temporal command, and a set
+    # is iterated in address order, which no replay can reproduce.
+    in_flight: list[Any] = []
+    processed = 0
+    failed = 0
+
+    async def _run_one(file: Any, file_index: int, profile: str) -> bool:
+        """True when the document succeeded. Never raises for a document failure —
+        the child already emitted its own terminal event, and the siblings must
+        keep running."""
+        try:
             handle = await workflow.start_child_workflow(
                 child_workflow_run,
                 args=[workflow_id, file, file_index],
                 id=_wf_child_id(child_prefix, file, file_index),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
-            handles.append(handle)
-
-        for handle in handles:
             await handle
+            return True
+        except Exception as exc:
+            # Cancellation arrives wrapped in a Temporal error here, and must not
+            # be read as this document failing: it means the submission is being
+            # stopped, so admission has to stop with it. (asyncio.CancelledError
+            # is a BaseException and already passes through untouched.)
+            if is_cancelled_exception(exc):
+                raise
+            workflow.logger.warning(
+                "[SCHEDULER] Document %s failed; the submission continues: %s",
+                _wf_get(file, "display_name", None) or file_index,
+                exc,
+            )
+            return False
+        finally:
+            running[profile] -= 1
 
-    return "success"
+    try:
+        while pending or in_flight:
+            admitted_any = False
+            for item in list(pending):
+                file_index, file = item
+                profile = _wf_admission_window(file)
+                if running[profile] >= per_profile_limit:
+                    continue
+                running[profile] += 1
+                pending.remove(item)
+                in_flight.append(asyncio.create_task(_run_one(file, file_index, profile)))
+                admitted_any = True
+
+            if not in_flight:
+                # Nothing running and nothing admissible would spin forever; with
+                # per-profile windows and a positive limit this cannot happen, but a
+                # silent infinite loop is not a failure mode worth leaving open.
+                if not admitted_any and pending:
+                    raise ApplicationError("No document could be admitted and none is running.", non_retryable=True)
+                break
+
+            done, still_running = await workflow.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+            in_flight = still_running
+            cancellation: BaseException | None = None
+            for task in done:
+                processed += 1
+                try:
+                    if not task.result():
+                        failed += 1
+                except BaseException as exc:  # noqa: BLE001 - only cancellation reaches here
+                    # Every result is read even when one of them is a cancellation:
+                    # leaving a sibling's exception unretrieved logs it later as an
+                    # unhandled task error, on the very path already reporting a
+                    # cancellation. The cancellation is re-raised once they are all in.
+                    cancellation = cancellation or exc
+            if cancellation is not None:
+                raise cancellation
+    except BaseException:
+        # Two ways out of that loop that are not a document's business: a child
+        # reporting cancellation, and the submission being cancelled at the
+        # parent itself, in `workflow.wait`. Either way admission stops here and
+        # the children still running have to stop with it — nothing else would
+        # ever tally them.
+        await _wf_stop_in_flight(in_flight)
+        raise
+
+    if failed:
+        workflow.logger.warning("[SCHEDULER] Pipeline %s: %d of %d document(s) failed", pipeline_name, failed, processed)
+    # Completing rather than raising: each document already carries its own
+    # verdict on its own task, and a raising parent would be indistinguishable
+    # from a crash or a cancellation. Documents whose terminal event could not be
+    # persisted are driven terminal by the existing reconciliation, which reads
+    # this workflow's completed status.
+    return {"total": len(files), "processed": processed, "failed": failed}
 
 
 @workflow.defn
@@ -336,8 +508,11 @@ class CreatePullFileMetadata:
         return await workflow.execute_activity(
             "create_pull_file_metadata",
             args=[file],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=_wf_activity_retry_policy(file),
+            # Per attempt, so a queue this activity waited in does not eat the
+            # budget meant for running it. Longer than the push lookup: this one
+            # downloads the whole source file before it can read its metadata.
+            start_to_close_timeout=_PULL_METADATA_START_TO_CLOSE,
+            retry_policy=_SHORT_OPERATION_RETRY,
         )
 
 
@@ -358,8 +533,11 @@ class GetPushFileMetadata:
         return await workflow.execute_activity(
             "get_push_file_metadata",
             args=[file],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=_wf_activity_retry_policy(file),
+            # Per attempt, so a queue this activity waited in does not eat the
+            # budget meant for running it. Its own short policy, not the
+            # profile's: this is a catalog lookup, not a two-hour extraction.
+            start_to_close_timeout=_PUSH_METADATA_START_TO_CLOSE,
+            retry_policy=_SHORT_OPERATION_RETRY,
         )
 
 
@@ -464,7 +642,9 @@ class OutputProcess:
         await workflow.execute_activity(
             "output_process",
             args=[file, metadata, False],
-            schedule_to_close_timeout=timedelta(hours=1),
+            # Per attempt, not schedule-to-close: indexing is the longest stage
+            # and used to lose its budget to time spent queued behind others.
+            start_to_close_timeout=timedelta(hours=1),
             # Same heartbeat contract as the input activities: the activity now
             # heartbeats (`to_thread_with_heartbeat`), which is also how Temporal
             # delivers cancellation to it — without a heartbeating activity, a
@@ -523,12 +703,7 @@ class ProcessPullFile:
 
         try:
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name])
 
             workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
             metadata = await workflow.execute_child_workflow(
@@ -543,12 +718,7 @@ class ProcessPullFile:
                 # PullInputProcess nor OutputProcess reports intermediate progress,
                 # so a fixed fraction here would freeze the UI's progress ring for
                 # however long the real work takes instead of honestly spinning.
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name])
 
             metadata = await workflow.execute_child_workflow(
                 PullInputProcess.run,
@@ -572,21 +742,11 @@ class ProcessPullFile:
             workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
             final_uid = _wf_get(metadata, "document_uid") or document_uid
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name))
             raise
 
 
@@ -613,12 +773,7 @@ class ProcessPushFile:
 
         try:
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name])
 
             workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
             metadata = await workflow.execute_child_workflow(
@@ -633,12 +788,7 @@ class ProcessPushFile:
                 # PushInputProcess nor OutputProcess reports intermediate progress,
                 # so a fixed fraction here would freeze the UI's progress ring for
                 # however long the real work takes instead of honestly spinning.
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name])
 
             metadata = await workflow.execute_child_workflow(
                 PushInputProcess.run,
@@ -663,28 +813,18 @@ class ProcessPushFile:
             workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
             final_uid = _wf_get(metadata, "document_uid") or document_uid
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=[task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                await workflow.execute_activity(
-                    "emit_ingestion_task_event",
-                    args=_wf_file_terminal_event_args(exc, task_id, document_uid, display_name),
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
+                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name))
             raise
 
 
 @workflow.defn
 class ProcessPush:
     @workflow.run
-    async def run(self, definition: Any) -> str:
+    async def run(self, definition: Any) -> dict:
         files = _wf_get(definition, "files", []) or []
         has_pull, has_push = _wf_file_kind_summary(files)
         if has_pull:
@@ -701,7 +841,7 @@ class ProcessPush:
 @workflow.defn
 class ProcessPull:
     @workflow.run
-    async def run(self, definition: Any) -> str:
+    async def run(self, definition: Any) -> dict:
         files = _wf_get(definition, "files", []) or []
         has_pull, has_push = _wf_file_kind_summary(files)
         if has_push:
