@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -64,7 +64,12 @@ __all__ = [
     "build_mcp_capability",
     "register_mcp_capabilities",
 ]
-from fred_sdk.contracts.models import MCPServerConfiguration
+from fred_sdk.contracts.models import (
+    DocumentScopeControlParams,
+    MCPServerConfiguration,
+    RagScopeControlParams,
+    SearchPolicyControlParams,
+)
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
@@ -93,41 +98,11 @@ _OPT_RAG_SCOPE = "chat_options.search_rag_scope"
 _SEARCH_POLICIES = frozenset({"strict", "hybrid", "semantic"})
 _RAG_SCOPES = frozenset({"corpus_only", "hybrid", "general_only"})
 
-SearchPolicyName = Literal["strict", "hybrid", "semantic"]
-RagScopeName = Literal["corpus_only", "hybrid", "general_only"]
-
 
 def _as_bool(value: object) -> bool:
     """Strict boolean view of one stored config value (literal True only)."""
 
     return isinstance(value, bool) and value
-
-
-class DocumentScopeControlParams(BaseModel):
-    """
-    Params for the `document_scope` composer widget (#1976, RFC §3.3).
-
-    Reproduces the retired `EffectiveChatOptions` library/document affordance:
-    the picker shows libraries and/or documents, and `bound_library_ids` (when
-    set) pins the selection read-only — exactly the old `bound_library_ids`
-    semantics, now carried as widget params.
-    """
-
-    libraries: bool = False
-    documents: bool = False
-    bound_library_ids: list[str] | None = None
-
-
-class SearchPolicyControlParams(BaseModel):
-    """Params for the `search_policy` enum-row widget: its default value."""
-
-    default: SearchPolicyName = "hybrid"
-
-
-class RagScopeControlParams(BaseModel):
-    """Params for the `rag_scope` enum-row widget: its default value."""
-
-    default: RagScopeName = "hybrid"
 
 
 class McpServerConfig(BaseModel):

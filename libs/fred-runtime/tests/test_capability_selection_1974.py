@@ -38,13 +38,13 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from _tracer_capability import TracerEchoCapability, TracerEchoConfig
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     build_capability_agent_block,
     build_capability_contexts,
     resolve_stored_config,
 )
-from fred_runtime.capabilities.demo import DemoEchoCapability, DemoEchoConfig
 from fred_runtime.capabilities.errors import (
     CapabilityConfigInvalidError,
     UnknownCapabilityError,
@@ -174,13 +174,13 @@ def test_version_mismatch_runs_upgrade_hook_lazily() -> None:
 
 
 def test_default_upgrade_hook_validates_additive_old_shape() -> None:
-    # DemoEchoCapability does not override upgrade_config: the default is
+    # TracerEchoCapability does not override upgrade_config: the default is
     # plain StoredConfigModel validation, correct for additive changes.
     config = resolve_stored_config(
-        DemoEchoCapability(),
+        TracerEchoCapability(),
         {"schema_version": "0.0.1", "config": {"uppercase": True}},
     )
-    assert isinstance(config, DemoEchoConfig)
+    assert isinstance(config, TracerEchoConfig)
     assert config.uppercase is True
 
 
@@ -221,7 +221,7 @@ def test_malformed_envelope_raises_named_error() -> None:
 
 
 def test_no_selection_yields_no_contexts() -> None:
-    registry = _registry(DemoEchoCapability())
+    registry = _registry(TracerEchoCapability())
     for selected in (None, []):
         contexts = build_capability_contexts(
             registry,
@@ -234,20 +234,20 @@ def test_no_selection_yields_no_contexts() -> None:
 
 
 def test_exact_selection_builds_typed_contexts() -> None:
-    registry = _registry(DemoEchoCapability(), GreeterCapability())
+    registry = _registry(TracerEchoCapability(), GreeterCapability())
     contexts = build_capability_contexts(
         registry,
-        selected_capability_ids=["demo_echo", "greeter"],
+        selected_capability_ids=["tracer_echo", "greeter"],
         capability_config={
-            "demo_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}},
+            "tracer_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}},
             "greeter": {"schema_version": "1.0.0", "config": {"salutation": "yo"}},
         },
         identity=_identity(),
         services=RuntimeServices(),
     )
-    assert set(contexts) == {"demo_echo", "greeter"}
-    demo_config = contexts["demo_echo"].config
-    assert isinstance(demo_config, DemoEchoConfig)
+    assert set(contexts) == {"tracer_echo", "greeter"}
+    demo_config = contexts["tracer_echo"].config
+    assert isinstance(demo_config, TracerEchoConfig)
     assert demo_config.uppercase is True
     greeter_config = contexts["greeter"].config
     assert isinstance(greeter_config, GreeterConfigV2)
@@ -255,16 +255,16 @@ def test_exact_selection_builds_typed_contexts() -> None:
 
 
 def test_selected_capability_without_slice_gets_model_defaults() -> None:
-    registry = _registry(DemoEchoCapability())
+    registry = _registry(TracerEchoCapability())
     contexts = build_capability_contexts(
         registry,
-        selected_capability_ids=["demo_echo"],
+        selected_capability_ids=["tracer_echo"],
         capability_config={},
         identity=_identity(),
         services=RuntimeServices(),
     )
-    config = contexts["demo_echo"].config
-    assert isinstance(config, DemoEchoConfig)
+    config = contexts["tracer_echo"].config
+    assert isinstance(config, TracerEchoConfig)
     assert config.uppercase is False
 
 
@@ -302,7 +302,7 @@ def test_team_settings_default_to_empty_model_when_absent() -> None:
 
 
 def test_unknown_selected_capability_raises() -> None:
-    registry = _registry(DemoEchoCapability())
+    registry = _registry(TracerEchoCapability())
     with pytest.raises(UnknownCapabilityError, match="not_installed"):
         build_capability_contexts(
             registry,
@@ -314,12 +314,12 @@ def test_unknown_selected_capability_raises() -> None:
 
 
 def test_contexts_feed_the_agent_block() -> None:
-    registry = _registry(DemoEchoCapability())
+    registry = _registry(TracerEchoCapability())
     contexts = build_capability_contexts(
         registry,
-        selected_capability_ids=["demo_echo"],
+        selected_capability_ids=["tracer_echo"],
         capability_config={
-            "demo_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}}
+            "tracer_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}}
         },
         identity=_identity(),
         services=RuntimeServices(),
@@ -327,4 +327,4 @@ def test_contexts_feed_the_agent_block() -> None:
     block = build_capability_agent_block(registry, contexts)
     assert len(block.middleware) == 1
     tool_names = [tool.name for tool in block.middleware[0].tools]
-    assert tool_names == ["demo_echo"]
+    assert tool_names == ["tracer_echo"]

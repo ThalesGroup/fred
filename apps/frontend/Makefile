@@ -225,15 +225,6 @@ update-evaluation-api: check-node node_modules ## Regenerate the API client for 
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN
 # generated slice under features/capabilities/<id>/api/. Repo rule extends
 # verbatim: touched a capability router → regenerate that capability's slice.
-.PHONY: update-demo-echo-capability-api
-update-demo-echo-capability-api: check-node node_modules ## Regenerate the demo_echo capability client only
-	@echo "🔧 Dumping demo_echo capability OpenAPI document..."
-	cd ../../libs/fred-runtime && $(MAKE) --no-print-directory dev >/dev/null && \
-		.venv/bin/python -m fred_runtime dump-openapi demo_echo \
-		> ../../apps/frontend/src/rework/features/capabilities/demo_echo/api/openapi.json
-	@echo "🎯 Generating RTK Query hooks for demo_echo capability..."
-	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/demo_echo/api/demoEchoCapabilityOpenApiConfig.json
-
 # writable_document (#1905) is installed in the fred-agents pod (not fred-runtime),
 # so its OpenAPI dump must run from apps/fred-agents' venv — the same entry-point
 # discovery the pod uses at boot.

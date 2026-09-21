@@ -153,6 +153,53 @@ class FieldSpec(BaseModel):
     ui: UIHints = UIHints()
 
 
+# Params of the stock composer widgets `AgentCapability.chat_controls` emits
+# (RFC AGENT-CAPABILITY-RFC.md §3.3). They live beside `FieldSpec`/`UIHints` —
+# the agent-form half of the same UI contract — so a capability package
+# describes its whole UI surface with fred-sdk alone.
+
+SearchPolicyName: TypeAlias = Literal["strict", "hybrid", "semantic"]
+RagScopeName: TypeAlias = Literal["corpus_only", "hybrid", "general_only"]
+
+
+class DocumentScopeControlParams(BaseModel):
+    """
+    Params for the `document_scope` composer widget: which pickers to show,
+    and, when `bound_library_ids` is set, the library scope the selection is
+    pinned to, read-only.
+
+    Every emitter passes all three fields explicitly, so the defaults never
+    ship — they state the widget's own permissive resting state for anyone
+    parsing params back.
+    """
+
+    libraries: bool = True
+    documents: bool = True
+    bound_library_ids: list[str] | None = None
+
+
+class SearchPolicyControlParams(BaseModel):
+    """
+    Params for the `search_policy` enum-row widget: its default value.
+
+    The default is only what the composer opens on; the value the user then
+    picks travels on `RuntimeContext`, never in a capability's turn options.
+    """
+
+    default: SearchPolicyName = "hybrid"
+
+
+class RagScopeControlParams(BaseModel):
+    """
+    Params for the `rag_scope` enum-row widget: its default value.
+
+    Same split as `SearchPolicyControlParams` — default here, chosen value on
+    `RuntimeContext`.
+    """
+
+    default: RagScopeName = "hybrid"
+
+
 class ClientAuthMode(str, Enum):
     USER_TOKEN = "user_token"  # nosec B105
     NO_TOKEN = "no_token"  # nosec B105

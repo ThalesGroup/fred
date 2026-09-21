@@ -13,14 +13,15 @@
 # limitations under the License.
 
 """
-Capability boot invariant for the PPT-filler port (#1903).
+Capability boot invariants of the fred-agents pod.
 
 Why this test exists:
 - the pod boots by discovering installed `fred.capabilities` packages and then
   validating the registry once (`fred_runtime.capabilities.registry`); a broken
-  registration must fail startup loudly, so the happy-path boot for the three
-  capabilities this pod ships (`demo_echo`, `document_access`, `ppt_filler`)
-  is worth pinning as a fast, dependency-free unit test
+  registration must fail startup loudly, so a happy-path boot of two
+  representative capabilities (`document_access`, `ppt_filler`) is worth
+  pinning as a fast, dependency-free unit test, and the full set of ids the
+  installed packages provide is pinned at the end of this module
 - `ppt_filler` is the port's new arrival: it must contribute both its router
   (auto-mounted under `/capabilities/ppt_filler`) and its `PptPreviewPart`
   chat part (folded into the `UiPart` union at `validate()` time), and it must
@@ -32,38 +33,36 @@ entry-point discovery test is expected to find it (no skip guard).
 
 from __future__ import annotations
 
+from fred_capability_document_access import DocumentAccessCapability
 from fred_capability_ppt_filler.capability import PptFillerCapability
-from fred_runtime.capabilities.demo import DemoEchoCapability
-from fred_runtime.capabilities.document_access import DocumentAccessCapability
 from fred_runtime.capabilities.registry import CapabilityRegistry
 
 _PPT_PREVIEW_PART_KIND = "ppt_preview"
 
 
-def _registry_with_three() -> CapabilityRegistry:
-    """Register the three capabilities this pod ships, unvalidated."""
+def _registry_with_two() -> CapabilityRegistry:
+    """Register two of the capabilities this pod ships, unvalidated."""
 
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
     registry.register(DocumentAccessCapability())
     registry.register(PptFillerCapability())
     return registry
 
 
-def test_three_capabilities_register_and_validate() -> None:
-    registry = _registry_with_three()
+def test_two_capabilities_register_and_validate() -> None:
+    registry = _registry_with_two()
 
-    # An empty env must not trip `_validate_required_env`: none of the three
-    # shipped capabilities may declare a required env var (RFC §7.2), otherwise
-    # a bare pod boot would fail.
+    # An empty env must not trip `_validate_required_env`: no shipped
+    # capability may declare a required env var (RFC §7.2), otherwise a bare
+    # pod boot would fail.
     registry.validate({})
 
-    assert registry.ids() == ("demo_echo", "document_access", "ppt_filler")
+    assert registry.ids() == ("document_access", "ppt_filler")
     assert "ppt_filler" in registry
 
 
 def test_ppt_filler_contributes_router() -> None:
-    registry = _registry_with_three()
+    registry = _registry_with_two()
 
     router_ids = [cap_id for cap_id, _router in registry.routers()]
 
@@ -74,7 +73,7 @@ def test_ppt_filler_contributes_router() -> None:
 
 
 def test_ppt_filler_contributes_ppt_preview_chat_part() -> None:
-    registry = _registry_with_three()
+    registry = _registry_with_two()
 
     part_names = {part.__name__ for part in registry.chat_parts()}
 
@@ -84,7 +83,7 @@ def test_ppt_filler_contributes_ppt_preview_chat_part() -> None:
 def test_ppt_preview_part_folds_into_ui_part_union_on_validate() -> None:
     from fred_sdk.contracts.capability import chat_part_kind
 
-    registry = _registry_with_three()
+    registry = _registry_with_two()
     registry.validate({})
 
     ppt_preview_part = next(
@@ -104,3 +103,33 @@ def test_discover_finds_installed_ppt_filler() -> None:
 
     assert "ppt_filler" in discovered
     assert "ppt_filler" in registry
+
+
+# Every capability the pod ships today, by id — one entry per installed
+# capability package. fred-runtime contributes none: it ships the framework.
+# Pinned as a set so a package left out of the image (a missing Dockerfile
+# COPY, a stale editable install after a directory move) fails here instead
+# of silently shrinking an agent's tools.
+_SHIPPED_CAPABILITY_IDS = frozenset(
+    {
+        "document_access",
+        "document_summarize",
+        "document_verbatim",
+        "document_extract",
+        "document_similarity",
+        "document_label_search",
+        "html_artifact",
+        "platform_postgres",
+        "ppt_filler",
+        "team_wiki",
+        "writable_document",
+    }
+)
+
+
+def test_discover_finds_every_shipped_capability() -> None:
+    registry = CapabilityRegistry()
+
+    discovered = registry.discover()
+
+    assert set(discovered) == _SHIPPED_CAPABILITY_IDS

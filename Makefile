@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
 ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
@@ -225,7 +225,7 @@ SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 CP_DIR               := apps/control-plane-backend
 KF_DIR               := apps/knowledge-flow-backend
 RT_DIR               := libs/fred-runtime
-WD_DIR               := libs/fred-capability-writable-document
+WD_DIR               := libs/capabilities/fred-capability-writable-document
 CP_UV                := $(CP_DIR)/.venv/bin/uv
 KF_UV                := $(KF_DIR)/.venv/bin/uv
 RT_UV                := $(RT_DIR)/.venv/bin/uv

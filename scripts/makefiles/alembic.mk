@@ -28,7 +28,10 @@ db-history: dev ## show migration history
 
 ##@ Migration CI Checks
 
-MIGRATION_COMPOSE := $(CURDIR)/../../scripts/docker-compose.postgres.yml
+# Resolved from this .mk's own location, not $(CURDIR): the including project
+# may sit at any depth (apps/x, libs/x, libs/capabilities/x).
+_ALEMBIC_MK_DIR  := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+MIGRATION_COMPOSE := $(_ALEMBIC_MK_DIR)/../docker-compose.postgres.yml
 SQLITE_TEST_DB   := $(TARGET)/test_migrations.db
 PG_TEST_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 
