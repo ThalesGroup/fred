@@ -36,6 +36,7 @@ from knowledge_flow_backend.features.library_sync.structures import (
     DocumentAccepted,
     DocumentRemoved,
     InvalidSourceRequest,
+    LibraryDocuments,
     LibrarySourceVersion,
     LibrarySynchronizedBy,
     SynchronizationUnavailable,
@@ -57,7 +58,7 @@ async def require_sync_client(user: KeycloakUser = Depends(get_current_user_with
     return user
 
 
-def _bounded_failure(exc: Exception) -> HTTPException:
+def _bounded_failure(exc: Exception, *, code: str = "document_write_failed") -> HTTPException:
     """What a caller is told about a failure it did not cause.
 
     The kind of failure and nothing else. An exception's message is written for
@@ -68,7 +69,7 @@ def _bounded_failure(exc: Exception) -> HTTPException:
     """
     return HTTPException(
         status_code=500,
-        detail={"code": "document_write_failed", "failure": type(exc).__name__},
+        detail={"code": code, "failure": type(exc).__name__},
     )
 
 
@@ -152,6 +153,34 @@ class LibrarySyncController:
                 return await self.service.remove_document(user, library_id=library_id, source_key=source_key)
             except InvalidSourceRequest as exc:
                 raise HTTPException(status_code=400, detail={"code": exc.code, "message": exc.message})
+
+        @router.get(
+            "/libraries/{library_id}/documents",
+            tags=["Library synchronization"],
+            response_model=LibraryDocuments,
+            summary="List what a library holds under the caller's source keys, and where each write stands",
+            description=(
+                "Returns the documents written into this library by key, in key order, each with "
+                "the identifier Fred gave it, the version the caller last sent, and where its "
+                "ingestion stands. 'succeeded' is what a run reconciles against; 'in_progress' is "
+                "a write still owed its outcome; 'failed' is one the pipeline refused, which the "
+                "next write of that key takes again. A person's upload into the same library "
+                "carries no key and is not listed. The listing is bounded, and says so when it is "
+                "short of the whole library."
+            ),
+        )
+        async def list_documents(
+            library_id: str,
+            limit: Annotated[int, Query(ge=1, le=5000, description="At most this many documents, in key order.")] = 5000,
+            user: KeycloakUser = Depends(require_sync_client),
+        ) -> LibraryDocuments:
+            try:
+                return await self.service.list_documents(user, library_id=library_id, limit=limit)
+            except (AuthorizationError, HTTPException):
+                raise
+            except Exception as exc:
+                logger.exception("[LIBRARY SYNC] Read failed for library=%s", library_id)
+                raise _bounded_failure(exc, code="library_read_failed")
 
         @router.get(
             "/libraries/{library_id}/source-version",

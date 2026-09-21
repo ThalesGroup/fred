@@ -31,6 +31,7 @@ import pytest
 import pytest_asyncio
 from fastapi import BackgroundTasks, UploadFile
 from fred_core import AuthorizationError, KeycloakUser, RebacReference, RelationType, Resource, TagPermission
+from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.structure import SERVICE_AGENT_ROLE
 from fred_core.tasks.models import TaskState, TaskTarget
@@ -44,6 +45,7 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundEr
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
+from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 from knowledge_flow_backend.models.base import Base as KFBase
 from knowledge_flow_backend.models.task_models import TASK_TABLES
@@ -973,3 +975,153 @@ async def test_removing_a_keyed_document_that_sits_in_no_folder_still_removes_it
     assert outcome.removed is True
     assert await _metadata_store().get_metadata_by_source_key(lib.id, "orphan.md") is None
     assert await _metadata_store().get_metadata_by_uid("imported-orphan") is None
+
+
+# --------------------------------------------------------------------------
+# What the library holds, and where each write stands
+# --------------------------------------------------------------------------
+
+
+async def _write(service: LibrarySyncService, caller: KeycloakUser, lib: Tag, key: str, version: str | None = None):
+    return await service.write_document(caller, library_id=lib.id, path=key, source_key=key, document_version=version, source_tag="fred", upload=upload(name=key.rsplit("/", 1)[-1]))
+
+
+async def _record(document_uid: str, stages: dict[ProcessingStage, ProcessingStatus]) -> None:
+    """Move stages the way an activity does: read the row, mark it, persist in place."""
+    store = _metadata_store()
+    metadata = await store.get_metadata_by_uid(document_uid)
+    assert metadata is not None
+    for stage, status in stages.items():
+        metadata.set_stage_status(stage, status)
+    assert await store.update_metadata(metadata) is True
+
+
+async def _state_of(service: LibrarySyncService, caller: KeycloakUser, lib: Tag) -> str:
+    [item] = (await service.list_documents(caller, library_id=lib.id, limit=10)).items
+    return item.state
+
+
+@pytest.mark.asyncio
+async def test_a_library_lists_its_keyed_documents_in_key_order(tag_store):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    second = await _write(service, caller, lib, "specs/b.md", "etag-b")
+    first = await _write(service, caller, lib, "specs/a.md", "etag-a")
+
+    listing = await service.list_documents(caller, library_id=lib.id, limit=100)
+
+    assert [(d.source_key, d.document_uid, d.document_version) for d in listing.items] == [
+        ("specs/a.md", first.document_uid, "etag-a"),
+        ("specs/b.md", second.document_uid, "etag-b"),
+    ]
+    assert listing.truncated is False
+
+
+@pytest.mark.asyncio
+async def test_a_write_is_in_progress_until_the_pipeline_s_last_stage_lands(tag_store):
+    """Accepted is not done: the bytes are stored, a preview is halfway, vectors are the end."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    accepted = await _write(service, caller, lib, "readme.md")
+
+    assert await _state_of(service, caller, lib) == "in_progress"
+    await _record(accepted.document_uid, {ProcessingStage.PREVIEW_READY: ProcessingStatus.DONE})
+    assert await _state_of(service, caller, lib) == "in_progress"
+    await _record(accepted.document_uid, {ProcessingStage.VECTORIZED: ProcessingStatus.DONE})
+    assert await _state_of(service, caller, lib) == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_a_write_the_pipeline_lost_reads_failed(tag_store):
+    """The repair that closes a timed-out run's stages is what this listing then reads."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    accepted = await _write(service, caller, lib, "readme.md")
+    await _record(accepted.document_uid, {ProcessingStage.PREVIEW_READY: ProcessingStatus.IN_PROGRESS})
+
+    assert await mark_in_progress_stages_failed(accepted.document_uid, "Execution timed_out") is True
+
+    assert await _state_of(service, caller, lib) == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_rewritten_key_is_in_progress_again(tag_store):
+    """The previous run's stages do not carry over: new bytes are owed a new outcome."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    first = await _write(service, caller, lib, "readme.md", "etag-1")
+    await _record(first.document_uid, {ProcessingStage.PREVIEW_READY: ProcessingStatus.DONE, ProcessingStage.VECTORIZED: ProcessingStatus.DONE})
+    assert await _state_of(service, caller, lib) == "succeeded"
+
+    await _write(service, caller, lib, "readme.md", "etag-2")
+
+    [item] = (await service.list_documents(caller, library_id=lib.id, limit=10)).items
+    assert (item.document_uid, item.document_version, item.state) == (first.document_uid, "etag-2", "in_progress")
+
+
+@pytest.mark.asyncio
+async def test_a_person_s_upload_in_the_library_is_not_listed(tag_store):
+    """No key, so the caller could neither address it nor say whether it is in sync."""
+    from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
+
+    lib = library(tag_store)
+    await _metadata_store().save_metadata(
+        DocumentMetadata(
+            identity=Identity(document_name="notes.md", document_uid="uploaded-by-hand"),
+            source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred", pull_location=None),
+            tags=Tagging(tag_ids=[lib.id]),
+        )
+    )
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    await _write(service, caller, lib, "readme.md")
+
+    listing = await service.list_documents(caller, library_id=lib.id, limit=10)
+
+    assert [d.source_key for d in listing.items] == ["readme.md"]
+
+
+@pytest.mark.asyncio
+async def test_another_library_s_keys_are_not_listed(tag_store):
+    mine = library(tag_store, name="Mine")
+    theirs = library(tag_store, name="Theirs")
+    service = _service(GrantedLibraryRebac(tag_store, writable={mine.id, theirs.id}))
+    caller = pod()
+    kept = await _write(service, caller, mine, "readme.md", "mine")
+    await _write(service, caller, theirs, "readme.md", "theirs")
+
+    listing = await service.list_documents(caller, library_id=mine.id, limit=10)
+
+    assert [(d.document_uid, d.document_version) for d in listing.items] == [(kept.document_uid, "mine")]
+
+
+@pytest.mark.asyncio
+async def test_a_listing_is_bounded_and_says_when_it_is(tag_store):
+    """A run reconciling against part of a library must know it is a part."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    for key in ("a.md", "b.md", "c.md"):
+        await _write(service, caller, lib, key)
+
+    short = await service.list_documents(caller, library_id=lib.id, limit=2)
+    whole = await service.list_documents(caller, library_id=lib.id, limit=3)
+
+    assert ([d.source_key for d in short.items], short.truncated) == (["a.md", "b.md"], True)
+    assert ([d.source_key for d in whole.items], whole.truncated) == (["a.md", "b.md", "c.md"], False)
+
+
+@pytest.mark.asyncio
+async def test_listing_a_library_is_a_read_of_it(tag_store):
+    """A grant that reads the library lists it; one that holds nothing over it is refused."""
+    lib = library(tag_store)
+    reader = _service(GrantedLibraryRebac(tag_store, writable=set(), readable={lib.id}))
+    stranger = _service(GrantedLibraryRebac(tag_store, writable=set(), readable=set()))
+
+    assert (await reader.list_documents(pod(), library_id=lib.id, limit=10)).items == []
+    with pytest.raises(AuthorizationError):
+        await stranger.list_documents(pod(), library_id=lib.id, limit=10)

@@ -172,6 +172,17 @@ class BaseDocumentMetadataStore:
         """Return all metadata entries originating from a specific pull source."""
 
     @abstractmethod
+    async def list_by_source_library(
+        self,
+        source_library_id: str,
+        *,
+        limit: int,
+        session: AsyncSession | None = None,
+    ) -> List[DocumentMetadata]:
+        """The documents a synchronizing caller keyed into this library, in key
+        order and at most `limit` of them, so a reconciling read stays bounded."""
+
+    @abstractmethod
     async def save_metadata(
         self, metadata: DocumentMetadata, session: AsyncSession | None = None
     ) -> None:

@@ -159,3 +159,22 @@ async def test_updating_a_document_carries_its_key_forward(tmp_path):
     assert found is not None
     assert found.identity.document_uid == "doc-1"
     assert found.source.document_version == "etag-2"
+
+
+@pytest.mark.asyncio
+async def test_a_library_lists_its_keyed_documents_in_key_order_and_no_others(tmp_path):
+    """A keyless upload and another library's same key are both outside the page."""
+    store = PostgresDocumentMetadataStore(await _make_sqlite_engine(tmp_path))
+    await store.save_metadata(_doc("doc-b", library="lib-1", key="b.md", version="2"))
+    await store.save_metadata(_doc("doc-a", library="lib-1", key="a.md", version="1"))
+    await store.save_metadata(_doc("elsewhere", library="lib-2", key="a.md"))
+    await store.save_metadata(_doc("uploaded", title="a.md"))
+
+    page = await store.list_by_source_library("lib-1", limit=10)
+    first = await store.list_by_source_library("lib-1", limit=1)
+
+    assert [
+        (d.identity.document_uid, d.source.source_key, d.source.document_version)
+        for d in page
+    ] == [("doc-a", "a.md", "1"), ("doc-b", "b.md", "2")]
+    assert [d.identity.document_uid for d in first] == ["doc-a"]

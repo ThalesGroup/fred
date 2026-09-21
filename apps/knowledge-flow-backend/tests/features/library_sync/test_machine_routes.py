@@ -39,12 +39,15 @@ from knowledge_flow_backend.features.library_sync.controller import (
 )
 from knowledge_flow_backend.features.library_sync.structures import (
     DocumentAccepted,
+    LibraryDocument,
+    LibraryDocuments,
     LibrarySourceVersion,
     SynchronizationUnavailable,
 )
 
 SOURCE_VERSION_PATH = "/libraries/library/source-version"
 DOCUMENTS_PATH = "/libraries/library/documents"
+LISTING = LibraryDocuments(items=[LibraryDocument(source_key="specs/api.md", document_uid="doc-1", document_version="etag-1", state="succeeded")], truncated=False)
 
 
 class _RecordingService:
@@ -53,6 +56,7 @@ class _RecordingService:
     def __init__(self) -> None:
         self.seen: list[tuple[KeycloakUser, str]] = []
         self.writes: list[dict[str, object]] = []
+        self.listings: list[tuple[KeycloakUser, str, int]] = []
         self.unavailable = False
 
     async def read_source_version(self, user: KeycloakUser, library_id: str) -> str:
@@ -64,6 +68,10 @@ class _RecordingService:
             raise SynchronizationUnavailable("no scheduler is enabled")
         self.writes.append({"user": user, "library_id": library_id, "path": path, "source_key": source_key, "background_tasks": background_tasks})
         return DocumentAccepted(source_key=source_key, path=path, document_version=document_version, created=True, document_uid="doc-1", task_id="task-1")
+
+    async def list_documents(self, user: KeycloakUser, *, library_id: str, limit: int) -> LibraryDocuments:
+        self.listings.append((user, library_id, limit))
+        return LISTING
 
 
 @pytest.fixture
@@ -89,6 +97,7 @@ def _client(sync: SimpleNamespace, user: KeycloakUser | None = None) -> TestClie
     [
         ("/libraries/{library_id}/documents", "POST"),
         ("/libraries/{library_id}/documents", "DELETE"),
+        ("/libraries/{library_id}/documents", "GET"),
         ("/libraries/{library_id}/source-version", "GET"),
         ("/libraries/{library_id}/source-version", "PUT"),
         ("/libraries/{library_id}/synchronized-by", "PUT"),
@@ -149,6 +158,24 @@ def test_a_stack_that_cannot_schedule_says_so_instead_of_half_accepting(sync: Si
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "scheduling_unavailable"
     assert sync.service.writes == []
+
+
+def test_a_listing_comes_back_as_the_service_gave_it(sync: SimpleNamespace) -> None:
+    machine = _machine()
+    with _client(sync, machine) as client:
+        response = client.get(DOCUMENTS_PATH, params={"limit": 10})
+
+    assert response.status_code == 200
+    assert response.json() == LISTING.model_dump()
+    assert sync.service.listings == [(machine, "library", 10)]
+
+
+def test_a_listing_past_the_bound_is_refused_rather_than_trimmed(sync: SimpleNamespace) -> None:
+    with _client(sync, _machine()) as client:
+        response = client.get(DOCUMENTS_PATH, params={"limit": 5001})
+
+    assert response.status_code == 422
+    assert sync.service.listings == []
 
 
 def test_a_human_token_cannot_bypass_gcu_through_these_routes(

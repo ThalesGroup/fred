@@ -1103,6 +1103,11 @@ operations:
     required_permission: tag.update
   - service: knowledge-flow
     method: GET
+    path: /knowledge-flow/v1/libraries/{library_id}/documents
+    review_status: approved
+    required_permission: tag.read
+  - service: knowledge-flow
+    method: GET
     path: /knowledge-flow/v1/libraries/{library_id}/source-version
     review_status: approved
     required_permission: tag.read

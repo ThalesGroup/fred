@@ -46,7 +46,10 @@ from knowledge_flow_backend.features.library_sync.structures import (
     DocumentAccepted,
     DocumentRemoved,
     InvalidSourceRequest,
+    LibraryDocument,
+    LibraryDocuments,
     SynchronizationUnavailable,
+    document_state,
     split_document_path,
     validate_source_key,
     validate_synchronized_by,
@@ -245,6 +248,29 @@ class LibrarySyncService:
             await self._metadata_service.delete_document_and_artifacts_trusted(user.uid, existing.document_uid)
         logger.info("[LIBRARY SYNC] library=%s key=%s removed by=%s", library_id, source_key, user.uid)
         return DocumentRemoved(source_key=source_key, removed=True)
+
+    async def list_documents(self, user: KeycloakUser, *, library_id: str, limit: int) -> LibraryDocuments:
+        """What the library holds under the caller's keys, and where each write stands.
+
+        Only keyed documents: a person's upload into the same library has no
+        key, so the caller could neither address it nor tell whether it is in
+        sync. Bounded, and honest about it — a page short of the whole library
+        says so rather than passing for it.
+        """
+        await self._rebac.check_user_permission_or_raise(user, TagPermission.READ, library_id)
+        # One past the page: enough to know there is more, without counting it all.
+        rows = await self._metadata_store.list_by_source_library(library_id, limit=limit + 1)
+        items = [
+            LibraryDocument(
+                source_key=row.source.source_key,
+                document_uid=row.document_uid,
+                document_version=row.source.document_version,
+                state=document_state(row.processing),
+            )
+            for row in rows[:limit]
+            if row.source.source_key is not None
+        ]
+        return LibraryDocuments(items=items, truncated=len(rows) > limit)
 
     # ---------- the library's own source version ----------
 

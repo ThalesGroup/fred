@@ -16,14 +16,16 @@
 
 A source key and a version are the caller's vocabulary: bounded here, never
 interpreted. A path is not — it says where in the library the document goes, so
-it is checked until nothing but a location inside that library is left.
+it is checked until nothing but a location inside that library is left. Where a
+write stands is read off the pipeline's own stages, never recorded here.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import unquote
 
+from fred_core.documents.document_structures import Processing, ProcessingStage, ProcessingStatus
 from pydantic import BaseModel, Field
 
 # A source key is a name, not a document: generous enough for a deep repository
@@ -180,6 +182,50 @@ class DocumentRemoved(BaseModel):
     removed: bool = Field(
         ...,
         description="False when the library did not hold that key — not an error: a source that removes twice is still in sync.",
+    )
+
+
+DocumentState = Literal["succeeded", "in_progress", "failed"]
+
+# The pipeline's last word on a document is its output stage: a preview alone is
+# halfway there, and only vectors or an index are what a search reaches.
+_OUTPUT_STAGES = (ProcessingStage.VECTORIZED, ProcessingStage.SQL_INDEXED)
+
+
+def document_state(processing: Processing) -> DocumentState:
+    """Where a write stands, read off the stages the pipeline records.
+
+    Acceptance records the raw stage alone, and a rewrite starts over from it,
+    so neither is success: only an output stage done, with nothing failed or
+    still running, says the pipeline finished with this document.
+    """
+    stages = processing.stages
+    if ProcessingStatus.FAILED in stages.values():
+        return "failed"
+    if processing.is_fully_processed() and any(stages.get(stage) == ProcessingStatus.DONE for stage in _OUTPUT_STAGES):
+        return "succeeded"
+    return "in_progress"
+
+
+class LibraryDocument(BaseModel):
+    """One keyed document, and where the pipeline stands with it."""
+
+    source_key: str
+    document_uid: str
+    document_version: Optional[str] = None
+    state: DocumentState = Field(
+        ...,
+        description="Only 'succeeded' is something a run reconciles against; the other two are writes still owed an outcome, or refused one.",
+    )
+
+
+class LibraryDocuments(BaseModel):
+    """What a library holds under a caller's keys, in key order, bounded."""
+
+    items: list[LibraryDocument]
+    truncated: bool = Field(
+        ...,
+        description="More documents exist than the caller's limit: a run reconciling against this listing is not looking at the whole library.",
     )
 
 
