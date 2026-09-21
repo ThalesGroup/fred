@@ -47,7 +47,6 @@ import knowledge_flow_backend.features.metadata.service as metadata_service_modu
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
-from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed, on_reconciled_terminal
@@ -294,9 +293,9 @@ def kpi_writer(app_context) -> RecordingKpiWriter:
     return writer
 
 
-def _service(rebac: GrantedLibraryRebac) -> LibrarySyncService:
+def _service(rebac: GrantedLibraryRebac) -> service_module.LibrarySyncService:
     ApplicationContext.get_instance()._rebac_engine = rebac
-    return LibrarySyncService()
+    return service_module.LibrarySyncService()
 
 
 def _metadata_store():
@@ -996,7 +995,7 @@ async def test_removing_a_keyed_document_that_sits_in_no_folder_still_removes_it
 # --------------------------------------------------------------------------
 
 
-async def _write(service: LibrarySyncService, caller: KeycloakUser, lib: Tag, key: str, version: str | None = None):
+async def _write(service: service_module.LibrarySyncService, caller: KeycloakUser, lib: Tag, key: str, version: str | None = None):
     return await service.write_document(caller, library_id=lib.id, path=key, source_key=key, document_version=version, source_tag="fred", upload=upload(name=key.rsplit("/", 1)[-1]))
 
 
@@ -1010,7 +1009,7 @@ async def _record(document_uid: str, stages: dict[ProcessingStage, ProcessingSta
     assert await store.update_metadata(metadata) is True
 
 
-async def _state_of(service: LibrarySyncService, caller: KeycloakUser, lib: Tag) -> str:
+async def _state_of(service: service_module.LibrarySyncService, caller: KeycloakUser, lib: Tag) -> str:
     [item] = (await service.list_documents(caller, library_id=lib.id, limit=10)).items
     return item.state
 

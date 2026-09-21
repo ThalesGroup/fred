@@ -37,7 +37,6 @@ from fred_core.tasks.models import TaskState, TaskSummary
 
 import knowledge_flow_backend.features.tasks.controller as controller_module
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.tasks.controller import TasksController
 
 _NOW = datetime(2026, 9, 20, tzinfo=timezone.utc)
 _TASK_ID = "task-1"
@@ -88,9 +87,9 @@ def tasks(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
     service = _FakeTaskService(summary)
     monkeypatch.setattr(ApplicationContext, "get_task_service", lambda self: service)
-    monkeypatch.setattr(controller_module, "get_rebac_engine", lambda: _FakeRebac())
+    monkeypatch.setattr(controller_module, "get_rebac_engine", _FakeRebac)
     router = APIRouter()
-    TasksController(router)
+    controller_module.TasksController(router)
     return SimpleNamespace(router=router, service=service, summary=summary)
 
 
