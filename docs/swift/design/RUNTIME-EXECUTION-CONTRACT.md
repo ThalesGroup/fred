@@ -5932,3 +5932,21 @@ malformed or nonfinite hints use normal backoff. Each detected throttle emits
 is exported to Prometheus/Grafana; no new label cardinality is introduced.
 
 Concurrency admission and retry UI remain separate work.
+
+
+### 8.82 Model-input hygiene for Deep parents (2026-09-18)
+
+Deep parent calls now use Fred's shared request-only hygiene before capability
+wrappers and retries. Dangling tool exchanges are removed, open-turn reasoning is
+rehomed as text, and per-message names are removed from copied model inputs so
+OpenAI-compatible Mistral payloads omit unsupported `assistant.name`. Checkpoint
+history retains its original names, reasoning and tool messages. ReAct uses the
+same name sanitizer and retains its existing trimming policy.
+
+Deep applies neither message-count nor character trimming
+(`max_history_messages=None`, no `max_history_chars`): `create_deep_agent`
+already installs its summarization middleware, which owns context compaction.
+The 200,000-character guard stays ReAct-only.
+
+Native `task` child composition is the next extraction layer; this parent-only
+change does not complete issues #2740 and #2741's native-child acceptance.
