@@ -92,8 +92,41 @@ async def test_marks_in_progress_stages_failed(store):
     saved = stub.saved[0]
     assert saved.processing.stages[ProcessingStage.VECTORIZED] == ProcessingStatus.FAILED
     assert saved.processing.errors[ProcessingStage.VECTORIZED] == "Execution timed_out"
-    # A stage that already completed is never rewritten.
+    # A stage that already completed is never rewritten, and only the stuck one fails.
     assert saved.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
+    assert ProcessingStage.PREVIEW_READY not in saved.processing.stages
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_failed_before_any_activity_ran_fails_the_first_stage(store):
+    # Accepted, then the workflow timed out with no worker to pick it up: no stage
+    # was ever in progress, and the document must not read "processing" for ever.
+    stub = store(_doc("doc-1", {ProcessingStage.RAW_AVAILABLE: ProcessingStatus.DONE}))
+
+    assert await mark_in_progress_stages_failed("doc-1", "Execution timed_out") is True
+
+    saved = stub.saved[0]
+    assert saved.processing.stages[ProcessingStage.PREVIEW_READY] == ProcessingStatus.FAILED
+    assert saved.processing.errors[ProcessingStage.PREVIEW_READY] == "Execution timed_out"
+    assert saved.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
+
+
+@pytest.mark.asyncio
+async def test_a_document_the_pipeline_finished_is_left_alone(store):
+    # Every stage landed: the task's verdict is the workflow's, not the document's.
+    stub = store(
+        _doc(
+            "doc-1",
+            {
+                ProcessingStage.RAW_AVAILABLE: ProcessingStatus.DONE,
+                ProcessingStage.PREVIEW_READY: ProcessingStatus.DONE,
+                ProcessingStage.VECTORIZED: ProcessingStatus.DONE,
+            },
+        )
+    )
+
+    assert await mark_in_progress_stages_failed("doc-1", "Execution timed_out") is False
+    assert stub.saved == []
 
 
 @pytest.mark.asyncio
@@ -188,6 +221,8 @@ async def test_hook_deletes_document_on_cancellation(monkeypatch):
         (TaskState.failed, {"type": "document"}),
         (TaskState.cancelled, {"type": "user", "id": "u-1"}),
         (TaskState.cancelled, {"type": "document"}),
+        # A document whose task succeeded has nothing to repair.
+        (TaskState.succeeded, {"type": "document", "id": "doc-1"}),
     ],
 )
 async def test_hook_is_a_noop(monkeypatch, state, target):

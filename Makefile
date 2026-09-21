@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
 ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
@@ -184,6 +184,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
+	@echo "--- libs/fred-pod ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-pod/pyproject.toml
+	cd libs/fred-pod && uv lock
 	@echo "--- libs/fred-core ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
 	cd libs/fred-core && uv lock

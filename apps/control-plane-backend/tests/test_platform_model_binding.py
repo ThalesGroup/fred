@@ -67,12 +67,11 @@ from control_plane_backend.routing_policy.store import (
     StoredPlatformModelBinding,
 )
 from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
-from fred_core.common import PostgresStoreConfig
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
-from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.context import ModelBinding
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 pytestmark = pytest.mark.asyncio
 
@@ -91,28 +90,17 @@ def _user(*, uid: str = "admin-1") -> KeycloakUser:
 # ---------------------------------------------------------------------------
 
 
-async def _make_store(tmp_path) -> PlatformModelBindingStore:
-    from control_plane_backend.models.base import Base as ControlPlaneBase
-    from fred_core.models.base import Base as CoreBase
-
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(
-            sqlite_path=str(tmp_path / "platform_model_binding.sqlite3")
-        )
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
-        await conn.run_sync(ControlPlaneBase.metadata.create_all)
-    return PlatformModelBindingStore(engine=engine)
-
-
-async def test_get_omits_a_never_set_binding(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_get_omits_a_never_set_binding(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
     assert await store.get() is None
 
 
-async def test_set_then_get_round_trips(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_set_then_get_round_trips(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
 
     await store.set(
         binding=ModelBinding.model_validate(
@@ -134,8 +122,10 @@ async def test_set_then_get_round_trips(tmp_path) -> None:
     assert row.updated_at is not None
 
 
-async def test_second_set_upserts_in_place(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_second_set_upserts_in_place(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
 
     await store.set(
         binding=ModelBinding(provider="openai", name="gpt-4o"), updated_by="admin-1"
@@ -160,7 +150,7 @@ async def test_second_set_upserts_in_place(tmp_path) -> None:
 
 
 async def test_concurrent_first_set_from_unset_does_not_500_the_loser(
-    tmp_path,
+    control_plane_sql_engine: AsyncEngine,
 ) -> None:
     """Two callers racing `set()` while the binding is currently unset (two
     admins, or a client retrying a timed-out PUT) both see no existing row
@@ -172,7 +162,7 @@ async def test_concurrent_first_set_from_unset_does_not_500_the_loser(
 
     import asyncio
 
-    store = await _make_store(tmp_path)
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
 
     results = await asyncio.gather(
         store.set(
@@ -198,8 +188,10 @@ async def test_concurrent_first_set_from_unset_does_not_500_the_loser(
     assert row.binding.provider in {"openai", "anthropic"}
 
 
-async def test_delete_removes_the_row_and_get_omits_it_again(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_delete_removes_the_row_and_get_omits_it_again(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
     await store.set(
         binding=ModelBinding(provider="openai", name="gpt-4o"), updated_by="admin-1"
     )
@@ -210,8 +202,10 @@ async def test_delete_removes_the_row_and_get_omits_it_again(tmp_path) -> None:
     assert await store.get() is None
 
 
-async def test_delete_on_an_absent_row_returns_false_without_error(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_delete_on_an_absent_row_returns_false_without_error(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = PlatformModelBindingStore(engine=control_plane_sql_engine)
 
     deleted = await store.delete()
 
@@ -219,28 +213,19 @@ async def test_delete_on_an_absent_row_returns_false_without_error(tmp_path) -> 
 
 
 async def test_database_rejects_a_non_chat_row_even_bypassing_the_store(
-    tmp_path,
+    control_plane_sql_engine: AsyncEngine,
 ) -> None:
     """The CHECK constraint (not just the store's chat-only API surface) is
     the actual enforcement boundary: even a raw insert naming a different
     `model_capability` must fail at the database layer."""
 
-    from control_plane_backend.models.base import Base as ControlPlaneBase
     from control_plane_backend.models.platform_model_binding_models import (
         PlatformModelBindingRow,
     )
-    from fred_core.models.base import Base as CoreBase
     from sqlalchemy.exc import IntegrityError
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(
-            sqlite_path=str(tmp_path / "platform_model_binding_constraint.sqlite3")
-        )
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
-        await conn.run_sync(ControlPlaneBase.metadata.create_all)
+    engine = control_plane_sql_engine
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     with pytest.raises(IntegrityError):
@@ -279,7 +264,10 @@ CORRUPT_ROW_MATRIX: list[tuple[str, str, str]] = [
 
 @pytest.mark.parametrize("label,provider,settings_json", CORRUPT_ROW_MATRIX)
 async def test_get_raises_for_a_corrupt_row_inserted_by_bypassing_the_store(
-    tmp_path, label: str, provider: str, settings_json: str
+    control_plane_sql_engine: AsyncEngine,
+    label: str,
+    provider: str,
+    settings_json: str,
 ) -> None:
     """`PlatformModelBindingStore.get()` re-validates every row it reads
     through `ModelBinding` (`_binding_row_to_record`) — a row written by
@@ -291,21 +279,12 @@ async def test_get_raises_for_a_corrupt_row_inserted_by_bypassing_the_store(
     which covers the `model_capability` CHECK constraint rather than the
     `ModelBinding` shape."""
 
-    from control_plane_backend.models.base import Base as ControlPlaneBase
     from control_plane_backend.models.platform_model_binding_models import (
         PlatformModelBindingRow,
     )
-    from fred_core.models.base import Base as CoreBase
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(
-            sqlite_path=str(tmp_path / "platform_model_binding_corrupt.sqlite3")
-        )
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
-        await conn.run_sync(ControlPlaneBase.metadata.create_all)
+    engine = control_plane_sql_engine
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:

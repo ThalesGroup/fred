@@ -39,10 +39,10 @@ from control_plane_backend.routing_policy.schemas import (
 from control_plane_backend.routing_policy.service import resolve_effective_chat_model
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
 from fred_core import AuthorizationError, KeycloakUser, TeamPermission
-from fred_core.common import PostgresStoreConfig, TeamId
-from fred_core.sql import create_async_engine_from_config
+from fred_core.common import TeamId
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
 from fred_sdk.contracts.context import ModelBinding
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 def _user() -> KeycloakUser:
@@ -54,28 +54,19 @@ def _user() -> KeycloakUser:
 # ---------------------------------------------------------------------------
 
 
-async def _make_store(tmp_path) -> TeamRoutingPolicyStore:
-    from control_plane_backend.models.base import Base as ControlPlaneBase
-    from fred_core.models.base import Base as CoreBase
-
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(sqlite_path=str(tmp_path / "routing_policy.sqlite3"))
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
-        await conn.run_sync(ControlPlaneBase.metadata.create_all)
-    return TeamRoutingPolicyStore(engine=engine)
-
-
 @pytest.mark.asyncio
-async def test_get_returns_none_when_no_policy_stored(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_get_returns_none_when_no_policy_stored(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
     assert await store.get(team_id=TeamId("team-1")) is None
 
 
 @pytest.mark.asyncio
-async def test_upsert_then_get_round_trips(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_upsert_then_get_round_trips(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="default.chat.mistral",
@@ -92,8 +83,10 @@ async def test_upsert_then_get_round_trips(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_second_upsert_increments_version_and_replaces(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_second_upsert_increments_version_and_replaces(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="p1",
@@ -116,8 +109,10 @@ async def test_second_upsert_increments_version_and_replaces(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_upsert_is_scoped_per_team(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_upsert_is_scoped_per_team(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = TeamRoutingPolicyStore(engine=control_plane_sql_engine)
     await store.upsert(
         team_id=TeamId("team-1"),
         chat_default_profile_id="p1",

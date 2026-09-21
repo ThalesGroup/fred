@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,142 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Annotated, List, Literal, Union
+"""Security configuration models and the authenticated user.
 
-from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field
+Moved to `fred_pod.security.structure` so a pod can read its configuration without installing the
+agents platform. Re-exported here so existing imports keep working."""
 
+from fred_pod.security.structure import (
+    LOCAL_DEV_CLIENT_ID,
+    SERVICE_AGENT_ROLE,
+    KeycloakUser,
+    M2MSecurity,
+    OpenFgaRebacConfig,
+    RebacBaseConfig,
+    RebacConfiguration,
+    SecurityConfiguration,
+    UserSecurity,
+    is_service_agent,
+)
 
-class KeycloakUser(BaseModel):
-    """Represents an authenticated Keycloak user."""
-
-    uid: str
-    username: str
-    roles: list[str]
-    email: str | None = None
-    client_id: str | None = Field(
-        default=None,
-        description=(
-            "The token's authorized party (`azp`). Set for a client-credentials "
-            "identity, so a caller can be checked against one exact client "
-            "rather than a broad service role."
-        ),
-    )
-
-    def __repr_args__(self):
-        # Directly identifying data must never reach a log line, and an
-        # f-string/log call interpolating this model (or anything containing
-        # it) goes through repr — not model_dump() — so redacting here, not
-        # only at each log call site, is what actually closes the leak
-        # (docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7: "Directly
-        # identifying | user email, full name | Nowhere"). Explicit `.email`
-        # access for a genuine need (e.g. sending mail) is unaffected — this
-        # only changes str()/repr().
-        for name, value in super().__repr_args__():
-            yield (name, "<redacted>" if name == "email" and value else value)
-
-
-# Keycloak app role carried by backend service identities (agentic, knowledge-flow,
-# control-plane, and the evaluation worker). Identity marker, not a ReBAC relation:
-# nothing is stored in OpenFGA for it.
-SERVICE_AGENT_ROLE = "service_agent"
-
-# The `azp` a mock user carries when authentication is disabled, so routes
-# gated on an exact client stay reachable in local development.
-LOCAL_DEV_CLIENT_ID = "local-dev"
-
-
-def is_service_agent(user: KeycloakUser) -> bool:
-    """Return True when the caller is a service identity (holds ``service_agent``).
-
-    Identity predicate on the JWT (reads ``user.roles``) — not a ReBAC check.
-    Used by execution-authorization enforcement points (fred-runtime and the
-    control-plane) to recognize the evaluation worker for team ``can_read``,
-    scoped to the request ``team_id`` (RFC EVAL-AUTH, Solution A). No OpenFGA
-    tuple links the service to a team.
-    """
-    return SERVICE_AGENT_ROLE in (user.roles or [])
-
-
-class M2MSecurity(BaseModel):
-    """Configuration for machine-to-machine authentication."""
-
-    enabled: bool = True
-    realm_url: AnyUrl
-    client_id: str
-    audience: str | None = None
-    secret_env_var: str = "M2M_CLIENT_SECRET"
-
-
-class UserSecurity(BaseModel):
-    """Configuration for user authentication."""
-
-    enabled: bool = True
-    realm_url: AnyUrl
-    client_id: str
-
-
-class RebacBaseConfig(BaseModel):
-    enabled: bool = Field(
-        default=True,
-        description="To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-    )
-
-
-class OpenFgaRebacConfig(RebacBaseConfig):
-    """Configuration for an OpenFGA-backed relationship engine."""
-
-    type: Literal["openfga"] = "openfga"
-    api_url: AnyHttpUrl = Field(
-        ...,
-        description="Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-    )
-    store_name: str = Field(
-        default="fred", description="Name of the OpenFGA store to use"
-    )
-    authorization_model_id: str | None = Field(
-        default=None,
-        description="Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-    )
-    create_store_if_needed: bool = Field(
-        default=True,
-        description="Create the OpenFGA store if it does not already exist",
-    )
-    sync_schema_on_init: bool = Field(
-        default=True,
-        description="Synchronize the authorization model when creating the engine",
-    )
-    token_env_var: str = Field(
-        default="OPENFGA_API_TOKEN",
-        description="Environment variable that stores the OpenFGA API token",
-    )
-    timeout_millisec: int | None = Field(
-        default=5000,
-        description=(
-            "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a "
-            "stalled OpenFGA call fails fast with an error instead of hanging the request "
-            "indefinitely (set to None only to explicitly disable the timeout)."
-        ),
-    )
-    headers: dict[str, str] | None = Field(
-        default=None,
-        description="Static HTTP headers to send with each OpenFGA API request",
-    )
-
-
-RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]
-
-
-class SecurityConfiguration(BaseModel):
-    m2m: M2MSecurity
-    user: UserSecurity
-    authorized_origins: List[AnyHttpUrl] = []
-    rebac: RebacConfiguration | None = None
-    profile: Literal["c3"] | None = Field(
-        default=None,
-        description=(
-            "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT "
-            "issuer/audience validation, forbids no-security/mock-admin, and "
-            "requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) "
-            "— failing startup otherwise. The control-plane issues no signed grant."
-        ),
-    )
+__all__ = [
+    "LOCAL_DEV_CLIENT_ID",
+    "SERVICE_AGENT_ROLE",
+    "KeycloakUser",
+    "M2MSecurity",
+    "OpenFgaRebacConfig",
+    "RebacBaseConfig",
+    "RebacConfiguration",
+    "SecurityConfiguration",
+    "UserSecurity",
+    "is_service_agent",
+]

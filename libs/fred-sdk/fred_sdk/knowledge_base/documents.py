@@ -25,19 +25,22 @@ holds no store credential.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
+from typing import Literal
 
 import httpx
-from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_pod.security.backend_to_backend_auth import M2MTokenProvider
+from pydantic import BaseModel
 
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 
 logger = logging.getLogger(__name__)
 
-# Ingestion converts and indexes inline, so this is minutes, not the 30s a
-# Control Plane call gets.
-_TIMEOUT = httpx.Timeout(300.0, connect=10.0)
+# Fred extracts metadata, copies the file into its store and submits the task
+# before answering a write, so the read side outlasts a plain call's.
+_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=120.0, pool=10.0)
 
 # Declaring who fills a library writes one field, so it gets a call's timeout
 # rather than an ingestion's.
@@ -48,21 +51,75 @@ _DECLARE_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # this half, so nothing downstream depends on the spelling.
 _MACHINE_KIND = "knowledge_base"
 
+# Mirrors `TaskState.is_terminal` in fred_core: spelled out here because a pod
+# reads a task's state without installing the platform.
+_SUCCEEDED = "succeeded"
+_FAILED = "failed"
+_TERMINAL_STATES = (_SUCCEEDED, _FAILED, "cancelled")
 
-class DocumentPublishError(RuntimeError):
-    """One document could not be written. The run may continue without it."""
+# A poll answered with one of these says nothing about the task: the request
+# timed out at a proxy, or Fred asked to slow down. Polling on is the answer.
+_TRANSIENT_STATUSES = (408, 429)
 
 
-class DocumentRetractError(RuntimeError):
+class _RefusedError(RuntimeError):
+    """Fred answered with a status; kept on the error so 5xx and 4xx read apart."""
+
+    status_code: int = 0
+
+
+class DocumentPublishError(_RefusedError):
+    """Fred refused a write, or a read of what it holds. Names what and why."""
+
+
+class DocumentRetractError(_RefusedError):
     """One document could not be taken out of the library."""
 
 
+class DocumentWaitTimeout(RuntimeError):
+    """The wait ended before the ingestion did. The task itself keeps running."""
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__(f"{task_id}: still not terminal when the wait ended")
+        self.task_id = task_id
+
+
+class DocumentHandle(BaseModel):
+    """What Fred answered when it accepted a write: the ingestion to follow."""
+
+    task_id: str
+    document_uid: str
+    source_key: str
+    document_version: str | None = None
+    created: bool
+
+
+class DocumentOutcome(BaseModel):
+    """Where an accepted write stands. Terminal once Fred has stopped working."""
+
+    task_id: str
+    state: str
+    step: str | None = None
+    progress: float | None = None
+    error: str | None = None
+
+    @property
+    def terminal(self) -> bool:
+        return self.state in _TERMINAL_STATES
+
+    @property
+    def succeeded(self) -> bool:
+        return self.state == _SUCCEEDED
+
+
 def _raise_for(
-    response: httpx.Response, error: type[RuntimeError], subject: str
+    response: httpx.Response, error: type[_RefusedError], subject: str
 ) -> None:
     """The surface answers with an outcome, so a status is the whole story."""
     if response.status_code >= 400:
-        raise error(f"{subject}: {response.status_code} {response.text[:300]}")
+        refused = error(f"{subject}: {response.status_code} {response.text[:300]}")
+        refused.status_code = response.status_code
+        raise refused
 
 
 async def declare_library_synchronized(
@@ -114,7 +171,7 @@ async def declare_library_synchronized(
 
 
 class DocumentPublisher:
-    """Writes into one library, as the pod's own workload identity."""
+    """Writes into one library, and reads back what it holds, as the pod itself."""
 
     def __init__(
         self,
@@ -135,13 +192,21 @@ class DocumentPublisher:
         self._tokens = M2MTokenProvider(configuration.m2m)
 
     async def publish(
-        self, *, relative_path: str, content: bytes, version: str | None = None
-    ) -> None:
-        """Write one document, replacing what the same path held before.
+        self,
+        *,
+        relative_path: str,
+        content: bytes,
+        version: str | None = None,
+        profile: Literal["fast", "medium", "rich"] = "medium",
+    ) -> DocumentHandle:
+        """Hand one document to Fred, replacing what the same path held before.
 
-        The source key is the caller's own name for it — writing the same key
-        again updates that document, so nothing about Fred's own identifiers
-        ever has to be remembered here.
+        The write is accepted here and processed by Fred's ingestion pipeline
+        afterwards: the handle names the task to follow, and `wait` says whether
+        it landed. The source key is the caller's own name for it — writing the
+        same key again updates that document, so nothing about Fred's own
+        identifiers ever has to be remembered here.
+        `profile` selects ingestion processing and defaults to `medium`.
         """
         response = await self._client.post(
             f"{self._base_url}/libraries/{self._library_id}/documents",
@@ -157,11 +222,87 @@ class DocumentPublisher:
                 "path": relative_path,
                 "source_key": relative_path,
                 "source_tag": self._source_tag,
+                "profile": profile,
                 **({"document_version": version} if version else {}),
             },
             headers=await self._headers(),
         )
         _raise_for(response, DocumentPublishError, relative_path)
+        return DocumentHandle.model_validate(response.json())
+
+    async def outcome(self, task_id: str) -> DocumentOutcome:
+        """Where the ingestion behind a handle stands right now."""
+        response = await self._client.get(
+            f"{self._base_url}/tasks/{task_id}", headers=await self._headers()
+        )
+        _raise_for(response, DocumentPublishError, f"task {task_id}")
+        return DocumentOutcome.model_validate(response.json())
+
+    async def wait(
+        self,
+        task_id: str,
+        *,
+        timeout: float = 600.0,
+        poll_interval: float = 2.0,
+        max_poll_interval: float = 15.0,
+    ) -> DocumentOutcome:
+        """Follow one ingestion to its end, and return that end whatever it is.
+
+        A failed ingestion is an outcome, not a transport error, so it comes
+        back as a value. Only the watching is bounded: past `timeout` this
+        raises `DocumentWaitTimeout` and the task itself keeps running. A blip
+        on the way to Fred is not an answer either, so it does not end the wait.
+        Polls `poll_interval` apart at first, doubling up to `max_poll_interval`.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        interval = poll_interval
+        while True:
+            try:
+                outcome = await self.outcome(task_id)
+            except (httpx.TransportError, DocumentPublishError) as error:
+                # A refusal (4xx) is Fred's answer about this task; anything
+                # else says nothing about it, and it is still running.
+                if (
+                    isinstance(error, DocumentPublishError)
+                    and error.status_code < 500
+                    and error.status_code not in _TRANSIENT_STATUSES
+                ):
+                    raise
+                logger.debug("Poll of task %s failed, polling on: %s", task_id, error)
+            else:
+                if outcome.terminal:
+                    return outcome
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise DocumentWaitTimeout(task_id)
+            await asyncio.sleep(min(interval, remaining))
+            interval = min(interval * 2, max_poll_interval)
+
+    async def documents(self) -> dict[str, str | None]:
+        """What the library holds or is about to, by source key, with its version.
+
+        A failed write is left out so the next run writes that key again; one
+        still in flight is listed, so a version match on it is not a second write.
+        """
+        response = await self._client.get(
+            f"{self._base_url}/libraries/{self._library_id}/documents",
+            headers=await self._headers(),
+        )
+        _raise_for(response, DocumentPublishError, f"library {self._library_id}")
+        listing = response.json()
+        if listing.get("truncated"):
+            logger.warning(
+                "Fred listed only part of library %s; the inventory is incomplete",
+                self._library_id,
+            )
+        # A document without a source key cannot be addressed by this pod at
+        # all, so it is not part of what a run reconciles against.
+        return {
+            item["source_key"]: item.get("document_version")
+            for item in listing.get("items", [])
+            if item.get("state") != _FAILED and item.get("source_key")
+        }
 
     async def retract(self, *, relative_path: str) -> None:
         """Take one document out of the library, by the key it was written under.

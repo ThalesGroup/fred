@@ -23,6 +23,13 @@ The major bump is earned, not cosmetic: `fred-runtime` now requires
 `app.runtime_id`, and `fred-sdk` had already removed `GuardrailDefinition` — a
 public symbol dropped between two *minor* versions, which this corrects.
 
+**4.1.0 extends the same lockstep to a fourth library.** `fred-pod` holds the
+pod floor — configuration, identity, naming — that every component needs just
+to start, and `fred-core` moves out of `fred-sdk`'s base dependencies into a
+new `agents` extra. A Knowledge Base pod then installs `fred-sdk[knowledge-base]`
+and none of the agents platform; anything on the agent authoring surface
+declares `fred-sdk[agents]>=4.1.0`.
+
 ## Impact
 
 **Breaking at deploy time.** `app.runtime_id` is required with no default, so any

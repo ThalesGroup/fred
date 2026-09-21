@@ -5,7 +5,8 @@ Only decisions already taken. Anything still open lives in the RFC, not here.
 ## Lockstep versioning for the three libraries
 
 `fred-core`, `fred-sdk` and `fred-runtime` carry one version number and move
-together. Independent versioning is what produced seven consumers on seven
+together; from 4.1.0 `fred-pod` joins them as a fourth library under the same
+rule. Independent versioning is what produced seven consumers on seven
 different floors with no way to tell which combinations were ever tested.
 
 The cost is real and accepted: a bump in one library forces a bump in all three,

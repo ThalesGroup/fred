@@ -8,7 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
   "fred-core>=4.0.0",
-  "fred-sdk>=4.0.0",
+  "fred-sdk[agents]>=4.1.0",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
@@ -52,6 +52,7 @@ markers = ["integration: marks tests that require external services"]
 testpaths = ["tests"]
 
 [tool.uv.sources]
+fred-pod = { path = "../fred-pod", editable = true }
 # Local path overrides for mono-repo development only.
 # These are ignored when the package is built and published — the published
 # wheel resolves fred-core / fred-sdk from PyPI via [project.dependencies].

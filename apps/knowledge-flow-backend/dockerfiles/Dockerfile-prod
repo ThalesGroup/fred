@@ -30,6 +30,7 @@ COPY apps/knowledge-flow-backend/Makefile ./
 
 # Copy shared scripts and local lib dependency
 COPY scripts /workspace/scripts
+COPY libs/fred-pod /workspace/libs/fred-pod
 COPY libs/fred-core /workspace/libs/fred-core
 
 # Install dependencies using make
@@ -128,6 +129,7 @@ WORKDIR /app
 # `make dev` installs local projects in editable mode, so the runtime image
 # must keep the same source roots available under /workspace/...
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /workspace/apps/knowledge-flow-backend/pyproject.toml
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
 

@@ -16,6 +16,8 @@ This file is the state of the work. Nothing else tracks it.
 - [x] `fred-rags` root `run-*` targets repointed at `apps/`
 - [x] `site.fredlab.dev` used for site links across 4 repositories
 - [x] `live-observability-session` skill: metrics table corrected
+- [x] Publish `fred-core`, `fred-sdk`, `fred-runtime` 4.0.0 — 2026-09-18,
+      verified on PyPI
 
 ## Open
 
@@ -44,6 +46,12 @@ This file is the state of the work. Nothing else tracks it.
             three team pages; `FeaturesPage` can then group by runtime. No
             version is displayed until a real one exists.
 - [ ] `make code-quality` and `make test` green at the `fred` root on 4.0.0
+- [ ] **4.1.0 lockstep.** `fred-pod` joins as a fourth library and `fred-core`
+      moves behind `fred-sdk[agents]`, so a Knowledge Base pod stops installing
+      the agents platform. Publish in the mandatory order fred-pod → fred-core
+      → fred-sdk → fred-runtime (each floors the ones below it at the same
+      version). Agent-surface consumers declare `fred-sdk[agents]>=4.1.0`; a KB
+      pod declares `fred-sdk[knowledge-base]`.
 - [ ] **devops — pod configmaps.** Add `runtime_id` to
       `fred-deployment-factory/gcp-c1/argocd/fred-apps/templates/fred-agents-configmap.yaml`
       and `gcp-c1/helm/templates/fred-agents-configmap.yaml`. Without it the pod
@@ -53,9 +61,6 @@ This file is the state of the work. Nothing else tracks it.
       production what changes and in which order.
 - [ ] `rags-agents` — migrate `tessa` off `GuardrailDefinition` (removed by
       `0f2b45adf`). The pod does not start until this is done.
-- [ ] Publish `fred-core`, `fred-sdk`, `fred-runtime` 4.0.0. Until then
-      `rags-agents` and the evaluator only resolve 4.0.0 through the local
-      override.
 - [ ] `fred-samples`, `fred-website`, `fred-deployment-factory` — commits sit on
       `swift`; decide whether they move to `swift-satellites` like `fred` and
       `fred-rags`.

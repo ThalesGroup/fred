@@ -39,7 +39,7 @@ gap is outstanding work and is not a licence to log paths in new code.
 
 The shared helper used by backends is:
 
-- `fred_core.ConfigFiles`
+- `fred_pod.ConfigFiles` (re-exported as `fred_core.ConfigFiles`)
 
 This is intentionally opinionated so DevOps has one rule only for startup config across services.
 
@@ -174,7 +174,7 @@ declaration.
 
 **Where it holds today:** Knowledge Base definitions and agents, through
 `CONTRIBUTED_NAME_PATTERN` and `require_contributed_name`
-(`fred_core.common.naming`). Applications and capabilities each still carry
+(`fred_pod.common.naming`, re-exported by `fred_core.common.naming`). Applications and capabilities each still carry
 their own, older pattern — see Application Registration below for why the
 application one cannot simply adopt this. Do not read this section as
 describing every identifier in Fred; it describes the rule, and names the two

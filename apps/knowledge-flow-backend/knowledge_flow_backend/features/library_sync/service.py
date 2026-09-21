@@ -28,29 +28,37 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import UploadFile
+from fastapi import BackgroundTasks, UploadFile
 from fred_core import KeycloakUser, TagPermission
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.tasks.models import IngestionProcessingProfile as TaskProfile
+from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
+from fred_core.tasks.service import TaskService
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.ingestion.ingestion_controller import (
     cleanup_uploaded_temp_file,
+    resolve_tag_owners,
     uploadfile_to_path,
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.library_sync.structures import (
+    DocumentAccepted,
     DocumentRemoved,
-    DocumentWritten,
     InvalidSourceRequest,
+    LibraryDocument,
+    LibraryDocuments,
+    SynchronizationUnavailable,
+    document_state,
     split_document_path,
     validate_source_key,
     validate_synchronized_by,
     validate_version,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
-from knowledge_flow_backend.features.scheduler.activities import output_process
-from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
-from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcessWithoutUser
 from knowledge_flow_backend.features.tag.structure import Tag, TagCreate, TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
@@ -68,6 +76,17 @@ class LibrarySyncService:
         self._metadata_service = MetadataService()
         self._tag_service = TagService()
         self._ingestion_service = get_ingestion_service()
+        self._task_service: TaskService = context.get_task_service()
+        # Built as the upload surface builds its own, so both feed one pipeline.
+        config = context.get_config()
+        self._scheduler: IngestionTaskService | None = None
+        if config.scheduler.enabled:
+            self._scheduler = IngestionTaskService(
+                scheduler_config=config.scheduler,
+                processing_config=config.processing,
+                metadata_service=self._ingestion_service.metadata_service,
+                max_parallelism=config.scheduler.temporal.ingestion_workflow_parallelism,
+            )
 
     # ---------- documents ----------
 
@@ -81,14 +100,14 @@ class LibrarySyncService:
         document_version: Optional[str],
         source_tag: str,
         upload: UploadFile,
-    ) -> DocumentWritten:
+        profile: IngestionProcessingProfile = IngestionProcessingProfile.medium,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> DocumentAccepted:
         """Write one document, addressed by the caller's key.
 
-        Processing runs inline rather than being queued, so that the reply is an
-        outcome the caller can act on. A queue ticket would be the progress
-        stream again in another shape: it says the bytes were accepted, not that
-        the document is in the library, and a failure after it would leave a
-        half-built document behind with nobody listening.
+        The bytes are stored and the write is accepted; processing runs on the
+        pipeline every upload goes through, and the returned task is how the
+        caller follows it to an outcome.
         """
         # Authorization first: what a caller with no right over this library is
         # told must not depend on how well formed its request was.
@@ -97,19 +116,24 @@ class LibrarySyncService:
         source_key = validate_source_key(source_key)
         document_version = validate_version(document_version, label="A document version", code_prefix="document_version")
         folders, document_name = split_document_path(path)
+        if self._scheduler is None:
+            # Refused before a folder is made or a byte is read: a deployment
+            # that cannot process a document must not half-take it.
+            raise SynchronizationUnavailable("This deployment has no scheduler enabled, so it cannot process documents.")
 
         library = await self._tag_store.get_tag_by_id(library_id)
         folder_id = await self._resolve_folder(user, library, folders)
         existing = await self._metadata_store.get_metadata_by_source_key(library_id, source_key)
         if existing is not None:
             await self._refile(user, existing, folder_id)
+        owning_team_id = await self._owning_team_id(user, folder_id)
 
-        profile = ApplicationContext.get_instance().get_config().processing.default_profile
         # Both copy bytes — off the upload, then into the content store. On this
         # surface a whole source's worth of them arrives concurrently, so neither
         # runs on the event loop.
         input_file = await asyncio.to_thread(uploadfile_to_path, upload, filename=document_name)
         metadata: DocumentMetadata | None = None
+        task_id: str | None = None
         try:
             metadata = await self._ingestion_service.extract_metadata(
                 user,
@@ -135,43 +159,64 @@ class LibrarySyncService:
             await self._ingestion_service.save_metadata(user, metadata=metadata)
             if existing is not None:
                 await self._drop_previous_vectors(metadata.document_uid)
-            metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_file), profile=profile)
-            await output_process(
-                file=FileToProcess(
-                    document_uid=metadata.document_uid,
-                    external_path=None,
-                    source_tag=source_tag,
-                    tags=[folder_id],
-                    profile=profile,
-                    processed_by=user,
-                ),
-                metadata=metadata,
-                accept_memory_storage=True,
+
+            # The task comes first and is not optional: it is the only thing
+            # the caller gets back to follow the write with.
+            task = await self._task_service.start(
+                StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid], profile=TaskProfile(profile.value))),
+                created_by=user.uid,
+                team_id=owning_team_id,
+                target=TaskTarget(type="document", id=metadata.document_uid, label=document_name),
             )
-        except Exception:
+            task_id = task.task_id
+            _, handle = await self._scheduler.submit_documents(
+                user=user,
+                pipeline_name="library_sync",
+                files=[
+                    FileToProcessWithoutUser(
+                        source_tag=source_tag,
+                        tags=[folder_id],
+                        document_uid=metadata.document_uid,
+                        display_name=document_name,
+                        profile=profile,
+                        task_id=task_id,
+                    )
+                ],
+                background_tasks=background_tasks,
+            )
+            await self._bind_execution(task_id, handle.workflow_id)
+
+            logger.info(
+                "[LIBRARY SYNC] library=%s key=%s created=%s task=%s by=%s",
+                library_id,
+                source_key,
+                existing is None,
+                task_id,
+                user.uid,
+            )
+            return DocumentAccepted(
+                source_key=source_key,
+                path=path,
+                document_version=document_version,
+                created=existing is None,
+                document_uid=metadata.document_uid,
+                task_id=task_id,
+            )
+        except Exception as exc:
             if existing is None and metadata is not None:
                 # Nothing was there before this call, so nothing of it should
                 # survive the failure. An update is left alone on purpose:
                 # discarding it would destroy a document the caller asked to
                 # replace, not to remove, and its next write converges anyway.
                 await self._discard(user.uid, metadata.document_uid)
+            if task_id is not None:
+                # No workflow was ever started, so nothing else will ever end it.
+                await self._fail_task(task_id, f"Scheduling failed: {type(exc).__name__}")
             raise
         finally:
+            # The worker restores the input from the content store, so the
+            # upload's copy is done with the moment the write is answered.
             await asyncio.to_thread(cleanup_uploaded_temp_file, input_file)
-
-        logger.info(
-            "[LIBRARY SYNC] library=%s key=%s created=%s by=%s",
-            library_id,
-            source_key,
-            existing is None,
-            user.uid,
-        )
-        return DocumentWritten(
-            source_key=source_key,
-            path=path,
-            document_version=document_version,
-            created=existing is None,
-        )
 
     async def remove_document(self, user: KeycloakUser, *, library_id: str, source_key: str) -> DocumentRemoved:
         """Take one document out of the library, addressed by the same key.
@@ -204,6 +249,29 @@ class LibrarySyncService:
             await self._metadata_service.delete_document_and_artifacts_trusted(user.uid, existing.document_uid)
         logger.info("[LIBRARY SYNC] library=%s key=%s removed by=%s", library_id, source_key, user.uid)
         return DocumentRemoved(source_key=source_key, removed=True)
+
+    async def list_documents(self, user: KeycloakUser, *, library_id: str, limit: int) -> LibraryDocuments:
+        """What the library holds under the caller's keys, and where each write stands.
+
+        Only keyed documents: a person's upload into the same library has no
+        key, so the caller could neither address it nor tell whether it is in
+        sync. Bounded, and honest about it — a page short of the whole library
+        says so rather than passing for it.
+        """
+        await self._rebac.check_user_permission_or_raise(user, TagPermission.READ, library_id)
+        # One past the page: enough to know there is more, without counting it all.
+        rows = await self._metadata_store.list_by_source_library(library_id, limit=limit + 1)
+        items = [
+            LibraryDocument(
+                source_key=row.source.source_key,
+                document_uid=row.document_uid,
+                document_version=row.source.document_version,
+                state=document_state(row.processing),
+            )
+            for row in rows[:limit]
+            if row.source.source_key is not None
+        ]
+        return LibraryDocuments(items=items, truncated=len(rows) > limit)
 
     # ---------- the library's own source version ----------
 
@@ -251,6 +319,29 @@ class LibrarySyncService:
         return synchronized_by
 
     # ---------- internals ----------
+
+    async def _owning_team_id(self, user: KeycloakUser, folder_id: str) -> Optional[str]:
+        """The team a task for this folder is filed under; None for a personal space.
+
+        Resolved by the upload surface's own lookup, so a task from either
+        surface lands on the same team's activity page.
+        """
+        team_ids, _ = await resolve_tag_owners([folder_id], user)
+        return next(iter(team_ids)) if len(team_ids) == 1 else None
+
+    async def _bind_execution(self, task_id: str, workflow_id: str) -> None:
+        """Best-effort: the workflow runs either way, the binding only serves reconciliation."""
+        try:
+            await self._task_service.bind_execution(task_id, execution_id=workflow_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("[LIBRARY SYNC] Could not bind task %s to workflow %s", task_id, workflow_id, exc_info=True)
+
+    async def _fail_task(self, task_id: str, message: str) -> None:
+        """Best-effort: the failure the caller needs to see is the one being raised."""
+        try:
+            await self._task_service.fail_task(task_id, message)
+        except Exception:  # noqa: BLE001
+            logger.warning("[LIBRARY SYNC] Could not fail task %s after a scheduling failure", task_id, exc_info=True)
 
     async def _resolve_folder(self, user: KeycloakUser, library: Tag, folders: list[str]) -> str:
         """Walk the path inside the library, creating the folders that are missing.

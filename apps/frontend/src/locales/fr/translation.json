@@ -3320,6 +3320,8 @@
         "definitionsLoading": "Chargement…",
         "definitionsFailed": "Impossible de charger la liste",
         "zoneFred": "Fréquence d'exécution",
+        "scheduleExplanation": "Chaque exécution recherche les changements dans la source. Le traitement des documents peut se poursuivre après la synchronisation.",
+        "suspended": "Suspendre la synchronisation",
         "zoneSource": "Provenance des documents",
         "submit": "Créer",
         "created": "{{name}} créée",

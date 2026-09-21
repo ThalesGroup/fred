@@ -3320,6 +3320,8 @@
         "definitionsLoading": "Loading…",
         "definitionsFailed": "Could not load the list",
         "zoneFred": "How often it runs",
+        "scheduleExplanation": "Each run checks the source for changes. Document processing may continue after synchronization.",
+        "suspended": "Suspend synchronization",
         "zoneSource": "Where its documents come from",
         "submit": "Create",
         "created": "{{name}} created",

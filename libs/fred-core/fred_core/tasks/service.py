@@ -36,6 +36,7 @@ from fred_core.tasks.models import (
     TaskLogDetail,
     TaskLogEvent,
     TaskState,
+    TaskSummary,
     TaskTarget,
     needs_attention,
 )
@@ -169,6 +170,9 @@ class TaskService:
 
     async def get_run(self, task_id: str) -> TaskRunColumns | None:
         return await self.store.get_run(task_id)
+
+    async def get_task(self, task_id: str) -> TaskSummary | None:
+        return await self.store.get_task(task_id)
 
     async def replay(self, task_id: str, after_seq: int) -> list[TaskEvent]:
         return await self.store.replay_events(task_id, after_seq)

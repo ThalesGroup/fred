@@ -16,14 +16,16 @@
 
 A source key and a version are the caller's vocabulary: bounded here, never
 interpreted. A path is not — it says where in the library the document goes, so
-it is checked until nothing but a location inside that library is left.
+it is checked until nothing but a location inside that library is left. Where a
+write stands is read off the pipeline's own stages, never recorded here.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import unquote
 
+from fred_core.documents.document_structures import Processing, ProcessingStage, ProcessingStatus
 from pydantic import BaseModel, Field
 
 # A source key is a name, not a document: generous enough for a deep repository
@@ -46,6 +48,14 @@ class InvalidSourceRequest(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class SynchronizationUnavailable(Exception):
+    """This deployment has no scheduler, so it cannot process what it would accept.
+
+    Raised before anything is stored: a write refused whole is one the caller
+    retries later; a write half-taken is one it would have to reconcile.
+    """
 
 
 def _reject_control_characters(value: str, *, code: str, label: str) -> None:
@@ -148,11 +158,12 @@ def validate_synchronized_by(raw: str) -> str:
     return bounded
 
 
-class DocumentWritten(BaseModel):
-    """The outcome of one write: it happened, and to which of the caller's names.
+class DocumentAccepted(BaseModel):
+    """One write taken in: the bytes are stored and the document is queued.
 
-    No Fred-side identifier: a caller maintains its documents with the key it
-    chose and nothing else, which is the whole point of this surface.
+    The key stays the caller's only address for its document. The identifier
+    and the task are handles to follow this write to its outcome, not a second
+    naming scheme to maintain.
     """
 
     source_key: str
@@ -162,6 +173,8 @@ class DocumentWritten(BaseModel):
         ...,
         description="True when this key was new to the library, False when it updated the document already there.",
     )
+    document_uid: str = Field(..., description="Fred's identifier for the document this key now names.")
+    task_id: str = Field(..., description="The task processing this write; follow it for the outcome.")
 
 
 class DocumentRemoved(BaseModel):
@@ -169,6 +182,50 @@ class DocumentRemoved(BaseModel):
     removed: bool = Field(
         ...,
         description="False when the library did not hold that key — not an error: a source that removes twice is still in sync.",
+    )
+
+
+DocumentState = Literal["succeeded", "in_progress", "failed"]
+
+# The pipeline's last word on a document is its output stage: a preview alone is
+# halfway there, and only vectors or an index are what a search reaches.
+_OUTPUT_STAGES = (ProcessingStage.VECTORIZED, ProcessingStage.SQL_INDEXED)
+
+
+def document_state(processing: Processing) -> DocumentState:
+    """Where a write stands, read off the stages the pipeline records.
+
+    Acceptance records the raw stage alone, and a rewrite starts over from it,
+    so neither is success: only an output stage done, with nothing failed or
+    still running, says the pipeline finished with this document.
+    """
+    stages = processing.stages
+    if ProcessingStatus.FAILED in stages.values():
+        return "failed"
+    if processing.is_fully_processed() and any(stages.get(stage) == ProcessingStatus.DONE for stage in _OUTPUT_STAGES):
+        return "succeeded"
+    return "in_progress"
+
+
+class LibraryDocument(BaseModel):
+    """One keyed document, and where the pipeline stands with it."""
+
+    source_key: str
+    document_uid: str
+    document_version: Optional[str] = None
+    state: DocumentState = Field(
+        ...,
+        description="A run reconciles against 'succeeded' and 'in_progress' alike — a version match on an in-flight key is not a second write; 'failed' is a write the next write of that key takes again.",
+    )
+
+
+class LibraryDocuments(BaseModel):
+    """What a library holds under a caller's keys, in key order, bounded."""
+
+    items: list[LibraryDocument]
+    truncated: bool = Field(
+        ...,
+        description="More documents exist than the caller's limit: a run reconciling against this listing is not looking at the whole library.",
     )
 
 

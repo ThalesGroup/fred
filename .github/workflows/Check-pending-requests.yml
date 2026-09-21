@@ -111,6 +111,8 @@ jobs:
               - 'deploy/charts/**'
             knowledge-flow:
               - 'apps/knowledge-flow-backend/**'
+            fred-pod:
+              - 'libs/fred-pod/**'
             fred-core:
               - 'libs/fred-core/**'
             control-plane:
@@ -161,22 +163,24 @@ jobs:
 
           cat > "$RUNNER_TEMP/python-modules.json" <<'JSON'
           [
+            {"name": "fred-pod", "directory": "libs/fred-pod", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["fred-pod"]},
             {"name": "fred-core", "directory": "libs/fred-core", "needs-pandoc": false, "integration-target": "test-integration",
-             "triggers": ["fred-core"]},
+             "triggers": ["fred-core", "fred-pod"]},
             {"name": "knowledge-flow-backend", "directory": "apps/knowledge-flow-backend", "needs-pandoc": true, "integration-target": "",
-             "triggers": ["knowledge-flow", "fred-core"]},
+             "triggers": ["knowledge-flow", "fred-core", "fred-pod"]},
             {"name": "control-plane-backend", "directory": "apps/control-plane-backend", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["control-plane", "fred-core", "fred-sdk"]},
+             "triggers": ["control-plane", "fred-core", "fred-sdk", "fred-pod"]},
             {"name": "fred-sdk", "directory": "libs/fred-sdk", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-sdk", "fred-core"]},
+             "triggers": ["fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-runtime", "fred-sdk", "fred-core"]},
+             "triggers": ["fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-agents", "directory": "apps/fred-agents", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-agents", "platform-ops", "html-artifact", "fred-runtime", "fred-sdk", "fred-core"]},
+             "triggers": ["fred-agents", "platform-ops", "html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-platform-ops", "directory": "libs/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core"]},
+             "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-html-artifact", "directory": "libs/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core"]}
+             "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
           ]
           JSON
 
@@ -185,13 +189,13 @@ jobs:
           [
             {"name": "runtime", "backend-directory": "libs/fred-runtime", "make-target": "update-runtime-api",
              "slice-path": "apps/frontend/src/slices/runtime/runtimeOpenApi.ts",
-             "triggers": ["openapi-codegen", "runtime-client", "fred-runtime", "fred-sdk", "fred-core"]},
+             "triggers": ["openapi-codegen", "runtime-client", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "knowledge-flow", "backend-directory": "apps/knowledge-flow-backend", "make-target": "update-knowledge-flow-api",
              "slice-path": "apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts",
-             "triggers": ["openapi-codegen", "knowledge-flow-client", "knowledge-flow", "fred-core"]},
+             "triggers": ["openapi-codegen", "knowledge-flow-client", "knowledge-flow", "fred-core", "fred-pod"]},
             {"name": "control-plane", "backend-directory": "apps/control-plane-backend", "make-target": "update-control-plane-api",
              "slice-path": "apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts",
-             "triggers": ["openapi-codegen", "control-plane-client", "control-plane", "fred-core", "fred-sdk"]}
+             "triggers": ["openapi-codegen", "control-plane-client", "control-plane", "fred-core", "fred-sdk", "fred-pod"]}
           ]
           JSON
 

@@ -33,6 +33,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     SecurityConfiguration,
     UserSecurity,
+    is_service_agent,
 )
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
@@ -500,28 +501,10 @@ def decode_jwt(token: str) -> KeycloakUser:
     return user
 
 
-async def get_current_user(
-    token: str = Security(oauth2_scheme),
-    user_store: BaseUserStore = Depends(get_user_store),
-    configuration=Depends(get_config),
+async def _enforce_gcu(
+    user: KeycloakUser, user_store: BaseUserStore, configuration
 ) -> KeycloakUser:
-    """
-    Return the authenticated user and enforce persisted GCU acceptance when enabled.
-
-    Why this function exists:
-    - secured deployments must gate access on the configured GCU version
-    - no-security mode still needs a lightweight mock admin without requiring a
-      UUID-backed persisted user row
-
-    How to use it:
-    - use as the default dependency for endpoints that require a fully admitted
-      user; pair with `get_current_user_without_gcu()` for the `/gcu` acceptance
-      flow itself
-
-    Example:
-    - `user: KeycloakUser = Depends(get_current_user)`
-    """
-    user = await get_current_user_without_gcu(token)
+    """Refuse `user` unless the configured GCU version is persisted as accepted."""
     if configuration.app.gcu_version is None or not KEYCLOAK_ENABLED:
         return user
 
@@ -544,6 +527,45 @@ async def get_current_user(
     if accepted_gcu_version != configuration.app.gcu_version:
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user
+
+
+async def get_current_user(
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser:
+    """
+    Return the authenticated user and enforce persisted GCU acceptance when enabled.
+
+    Why this function exists:
+    - secured deployments must gate access on the configured GCU version
+    - no-security mode still needs a lightweight mock admin without requiring a
+      UUID-backed persisted user row
+
+    How to use it:
+    - use as the default dependency for endpoints that require a fully admitted
+      user; pair with `get_current_user_without_gcu()` for the `/gcu` acceptance
+      flow itself
+
+    Example:
+    - `user: KeycloakUser = Depends(get_current_user)`
+    """
+    user = await get_current_user_without_gcu(token)
+    return await _enforce_gcu(user, user_store, configuration)
+
+
+async def get_current_user_or_service(
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser:
+    """Admit a service identity without the GCU gate: a workload cannot accept
+    terms, so the human admission rule does not apply to it (ReBAC still does).
+    Any other caller goes through exactly `get_current_user`'s gate."""
+    user = await get_current_user_without_gcu(token)
+    if is_service_agent(user):
+        return user
+    return await _enforce_gcu(user, user_store, configuration)
 
 
 async def get_current_user_without_gcu(

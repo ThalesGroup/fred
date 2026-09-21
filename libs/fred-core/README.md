@@ -9,6 +9,9 @@ foundational building blocks that must stay consistent across services.
 - Storage and session primitives.
 - Security and access-control utilities (ReBAC helpers, Keycloak helpers).
 - Common runtime helpers (logging, KPI, scheduling utilities).
+- The pod floor — configuration files, identity, contributed-name rules — now
+  lives in [`fred-pod`](../fred-pod/README.md) and is re-exported from here, so
+  existing `fred_core` imports are unchanged.
 
 ## What it is not
 
@@ -21,28 +24,13 @@ foundational building blocks that must stay consistent across services.
 pip install fred-core
 ```
 
-## Usage (example)
-
-Fred backends import shared helpers from `fred_core` to keep configuration and
-behavior aligned:
-
-```python
-import logging
-
-from fred_core.common.config_files import ConfigFiles
-
-logger = logging.getLogger("fred")
-config_files = ConfigFiles(logger=logger)
-env_path = config_files.load_environment()
-yaml_path = config_files.resolve_config_file_path()
-```
-
 ## Notes
 
 `fred-core` is designed for internal Fred services and adapters. If you are
 building agents or workflows, you likely want `fred-sdk` instead. In most
-cases, end users should not install `fred-core` directly because it is pulled
-in transitively by `fred-sdk`.
+cases, end users should not install `fred-core` directly: `fred-sdk[agents]`
+pulls it in. A Knowledge Base pod wants `fred-pod` (via the lean `fred-sdk`
+base) and not this package at all.
 
 ## Development validation
 

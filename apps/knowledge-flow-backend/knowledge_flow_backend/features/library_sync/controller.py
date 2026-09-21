@@ -14,9 +14,10 @@
 
 """The REST surface a system that synchronizes a source writes through.
 
-Every route answers with an outcome. The upload surface streams progress and
-leaves success to be inferred from the absence of bad news, which is readable
-for a person watching a browser and unusable for a pod on a schedule.
+Every route answers with something a pod on a schedule can act on: an outcome,
+or a task to follow to one. The upload surface streams progress and leaves
+success to be inferred from the absence of bad news, which is readable for a
+person watching a browser and unusable for a machine.
 """
 
 from __future__ import annotations
@@ -24,19 +25,22 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fred_core import AuthorizationError, KeycloakUser, get_current_user_without_gcu
 from fred_core.security.structure import is_service_agent
 
 from knowledge_flow_backend.common.source_utils import UnknownSourceTagError
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import (
+    DocumentAccepted,
     DocumentRemoved,
-    DocumentWritten,
     InvalidSourceRequest,
+    LibraryDocuments,
     LibrarySourceVersion,
     LibrarySynchronizedBy,
+    SynchronizationUnavailable,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +59,7 @@ async def require_sync_client(user: KeycloakUser = Depends(get_current_user_with
     return user
 
 
-def _bounded_failure(exc: Exception) -> HTTPException:
+def _bounded_failure(exc: Exception, *, code: str = "document_write_failed") -> HTTPException:
     """What a caller is told about a failure it did not cause.
 
     The kind of failure and nothing else. An exception's message is written for
@@ -66,7 +70,7 @@ def _bounded_failure(exc: Exception) -> HTTPException:
     """
     return HTTPException(
         status_code=500,
-        detail={"code": "document_write_failed", "failure": type(exc).__name__},
+        detail={"code": code, "failure": type(exc).__name__},
     )
 
 
@@ -78,28 +82,35 @@ class LibrarySyncController:
 
         @router.post(
             "/libraries/{library_id}/documents",
+            status_code=202,
             tags=["Library synchronization"],
             summary="Write one document into a library, addressed by the caller's own source key",
             description=(
-                "Writes a document a system synchronizes from its own source. The source key "
-                "names the document inside the library and is the caller's alone: writing the "
-                "same key again updates that document in place, for ever, so a source watched "
-                "over months leaves one document per file rather than a version per run. "
+                "Accepts a document a system synchronizes from its own source and queues it on "
+                "the pipeline every upload goes through: the reply carries the document's "
+                "identifier and the task to follow to the outcome. The source key names the "
+                "document inside the library and is the caller's alone: writing the same key "
+                "again updates that document in place, for ever, so a source watched over "
+                "months leaves one document per file rather than a version per run. "
                 "The optional document version is whatever the source has — an etag, a content "
                 "hash, a revision — stored and returned, never interpreted. "
                 "Folders along the path are created as needed, authorized by the right to "
-                "write in the library."
+                "write in the library. A deployment with no scheduler refuses the write with "
+                "503 before storing anything."
             ),
+            responses={503: {"description": "A deployment with no scheduler refuses the write before storing anything."}},
         )
         async def write_document(
             library_id: str,
+            background_tasks: BackgroundTasks,
             file: Annotated[UploadFile, File(description="The document's bytes.")],
             path: Annotated[str, Form(description="Where the document goes inside the library, e.g. 'specs/api/openapi.md'.")],
             source_key: Annotated[str, Form(description="The caller's own name for this document, unique within the library.")],
             document_version: Annotated[Optional[str], Form(description="The source's version of this document. Opaque to Fred.")] = None,
             source_tag: Annotated[str, Form(description="Which configured document source this caller is.")] = "fred",
+            profile: Annotated[IngestionProcessingProfile, Form(description="Processing profile for this document; defaults to medium.")] = IngestionProcessingProfile.medium,
             user: KeycloakUser = Depends(require_sync_client),
-        ) -> DocumentWritten:
+        ) -> DocumentAccepted:
             try:
                 return await self.service.write_document(
                     user,
@@ -108,12 +119,16 @@ class LibrarySyncController:
                     source_key=source_key,
                     document_version=document_version,
                     source_tag=source_tag,
+                    profile=profile,
                     upload=file,
+                    background_tasks=background_tasks,
                 )
             except InvalidSourceRequest as exc:
                 raise HTTPException(status_code=400, detail={"code": exc.code, "message": exc.message})
             except UnknownSourceTagError as exc:
                 raise HTTPException(status_code=400, detail={"code": "unknown_source_tag", "message": str(exc)})
+            except SynchronizationUnavailable as exc:
+                raise HTTPException(status_code=503, detail={"code": "scheduling_unavailable", "message": str(exc)})
             except (AuthorizationError, HTTPException, TagAlreadyExistsError, TagNotFoundError):
                 # Each already has an answer of its own registered on the app;
                 # swallowing them into a 500 below would lose it.
@@ -142,6 +157,35 @@ class LibrarySyncController:
                 return await self.service.remove_document(user, library_id=library_id, source_key=source_key)
             except InvalidSourceRequest as exc:
                 raise HTTPException(status_code=400, detail={"code": exc.code, "message": exc.message})
+
+        @router.get(
+            "/libraries/{library_id}/documents",
+            tags=["Library synchronization"],
+            response_model=LibraryDocuments,
+            summary="List what a library holds under the caller's source keys, and where each write stands",
+            description=(
+                "Returns the documents written into this library by key, in key order, each with "
+                "the identifier Fred gave it, the version the caller last sent, and where its "
+                "ingestion stands. A run reconciles against 'succeeded' and 'in_progress' alike — "
+                "a version match on a write still owed its outcome is not a second write; 'failed' "
+                "is one the pipeline refused, which the next write of that key takes again. "
+                "A person's upload into the same library "
+                "carries no key and is not listed. The listing is bounded, and says so when it is "
+                "short of the whole library."
+            ),
+        )
+        async def list_documents(
+            library_id: str,
+            limit: Annotated[int, Query(ge=1, le=5000, description="At most this many documents, in key order.")] = 5000,
+            user: KeycloakUser = Depends(require_sync_client),
+        ) -> LibraryDocuments:
+            try:
+                return await self.service.list_documents(user, library_id=library_id, limit=limit)
+            except (AuthorizationError, HTTPException):
+                raise
+            except Exception as exc:
+                logger.exception("[LIBRARY SYNC] Read failed for library=%s", library_id)
+                raise _bounded_failure(exc, code="library_read_failed")
 
         @router.get(
             "/libraries/{library_id}/source-version",

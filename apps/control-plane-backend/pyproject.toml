@@ -18,7 +18,7 @@ dependencies = [
   # 3.10.1, not 3.10.0: the Knowledge Base catalog id and its authorization
   # reference land in 3.10.1, and this backend calls both.
   "fred-core>=4.0.0",
-  "fred-sdk>=4.0.0",
+  "fred-sdk[agents]>=4.1.0",
   "alembic>=1.18.4",
   # SQLAlchemy async engine requires greenlet at runtime.
   "greenlet>=3.4.0",
@@ -52,6 +52,7 @@ markers = [
 ]
 
 [tool.uv.sources]
+fred-pod = { path = "../../libs/fred-pod", editable = true }
 fred-core = { path = "../../libs/fred-core", editable = true }
 fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 

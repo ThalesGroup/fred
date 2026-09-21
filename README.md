@@ -660,7 +660,8 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 
 | Component    | Location              | Role                                                     |
 | ------------ | --------------------- | -------------------------------------------------------- |
-| fred-core    | `./libs/fred-core`    | Shared infrastructure — SQL, KPI, security, config       |
+| fred-pod     | [`./libs/fred-pod/README.md`](./libs/fred-pod/README.md) | Pod floor — configuration, identity, naming              |
+| fred-core    | `./libs/fred-core`    | Shared infrastructure — SQL, KPI, security               |
 | fred-sdk     | `./libs/fred-sdk`     | Agent authoring SDK — contracts, graph, tools, HITL      |
 | fred-runtime | `./libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
 

@@ -49,6 +49,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 | Choose standalone vs full-stack mode                  | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md)       |
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md)         |
 | Deploy Fred                                           | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md)     |
+| Publish the Python libraries to PyPI                  | [`RELEASE-STRATEGY.md`](RELEASE-STRATEGY.md#publishing-the-python-libraries) |
 | Write an agent with the SDK                           | [`authoring/`](#authoring--agent-sdk)                              |
 | Build distributable frontend packages                | [`../../libs/frontend/README.md`](../../libs/frontend/README.md)   |
 | See what the team is working on now                   | GitHub Issues/Milestones                                            |
