@@ -23,6 +23,8 @@ exactly the same gate.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
+from unittest.mock import AsyncMock, create_autospec
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,22 +32,19 @@ from fastapi import HTTPException
 
 from fred_core.security import oidc
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
+from fred_core.users.store import BaseUserStore
 
 _GCU_VERSION = "2026-01"
 
 
-class _RecordingUserStore:
-    """Records who was looked up; answers with the acceptance it was given."""
-
-    def __init__(self, accepted: str | None = None) -> None:
-        self._accepted = accepted
-        self.looked_up: list[UUID] = []
-
-    async def find_user_by_id(self, user_id: UUID) -> SimpleNamespace | None:
-        self.looked_up.append(user_id)
-        if self._accepted is None:
-            return None
-        return SimpleNamespace(gcuVersionAccepted=SimpleNamespace(value=self._accepted))
+def _user_store(accepted: str | None = None) -> BaseUserStore:
+    store = create_autospec(BaseUserStore, instance=True, spec_set=True)
+    store.find_user_by_id.return_value = (
+        SimpleNamespace(gcuVersionAccepted=SimpleNamespace(value=accepted))
+        if accepted is not None
+        else None
+    )
+    return store
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +55,11 @@ def _gcu_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def configuration() -> SimpleNamespace:
     return SimpleNamespace(app=SimpleNamespace(gcu_version=_GCU_VERSION))
+
+
+@pytest.fixture
+def bearer_token() -> str:
+    return uuid4().hex
 
 
 def _bearer_resolves_to(monkeypatch: pytest.MonkeyPatch, user: KeycloakUser) -> None:
@@ -77,26 +81,34 @@ def _human() -> KeycloakUser:
 
 
 @pytest.mark.asyncio
-async def test_a_service_passes_without_a_user_record(monkeypatch, configuration):
-    service, store = _service(), _RecordingUserStore()
+async def test_a_service_passes_without_a_user_record(
+    monkeypatch, configuration, bearer_token
+):
+    service, store = _service(), _user_store()
     _bearer_resolves_to(monkeypatch, service)
 
     admitted = await oidc.get_current_user_or_service(
-        token="t", user_store=store, configuration=configuration
+        token=bearer_token,
+        user_store=store,
+        configuration=configuration,
     )
 
     assert admitted is service
-    assert store.looked_up == []
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_still_refuses_a_service(monkeypatch, configuration):
-    service, store = _service(), _RecordingUserStore()
+async def test_get_current_user_still_refuses_a_service(
+    monkeypatch, configuration, bearer_token
+):
+    service, store = _service(), _user_store()
     _bearer_resolves_to(monkeypatch, service)
 
     with pytest.raises(HTTPException) as exc:
         await oidc.get_current_user(
-            token="t", user_store=store, configuration=configuration
+            token=bearer_token,
+            user_store=store,
+            configuration=configuration,
         )
 
     assert exc.value.status_code == 403
@@ -108,30 +120,38 @@ async def test_get_current_user_still_refuses_a_service(monkeypatch, configurati
 )
 @pytest.mark.asyncio
 async def test_a_human_without_accepted_gcu_is_refused(
-    monkeypatch, configuration, dependency
+    monkeypatch, configuration, dependency, bearer_token
 ):
-    human, store = _human(), _RecordingUserStore()
+    human, store = _human(), _user_store()
     _bearer_resolves_to(monkeypatch, human)
 
     with pytest.raises(HTTPException) as exc:
-        await dependency(token="t", user_store=store, configuration=configuration)
+        await dependency(
+            token=bearer_token,
+            user_store=store,
+            configuration=configuration,
+        )
 
     assert exc.value.status_code == 403
     assert exc.value.detail == "user_not_accept_gcu"
-    assert store.looked_up == [UUID(human.uid)]
+    cast(AsyncMock, store.find_user_by_id).assert_awaited_once_with(UUID(human.uid))
 
 
 @pytest.mark.parametrize(
     "dependency", [oidc.get_current_user, oidc.get_current_user_or_service]
 )
 @pytest.mark.asyncio
-async def test_a_human_with_accepted_gcu_passes(monkeypatch, configuration, dependency):
-    human, store = _human(), _RecordingUserStore(accepted=_GCU_VERSION)
+async def test_a_human_with_accepted_gcu_passes(
+    monkeypatch, configuration, dependency, bearer_token
+):
+    human, store = _human(), _user_store(accepted=_GCU_VERSION)
     _bearer_resolves_to(monkeypatch, human)
 
     admitted = await dependency(
-        token="t", user_store=store, configuration=configuration
+        token=bearer_token,
+        user_store=store,
+        configuration=configuration,
     )
 
     assert admitted is human
-    assert store.looked_up == [UUID(human.uid)]
+    cast(AsyncMock, store.find_user_by_id).assert_awaited_once_with(UUID(human.uid))

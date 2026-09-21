@@ -36,9 +36,8 @@ from control_plane_backend.capabilities.enablement import (
 )
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from fred_core import KeycloakUser
-from fred_core.common import PostgresStoreConfig
-from fred_core.sql import create_async_engine_from_config
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 THINKING_MODEL = "model__openai__mistral-small-latest"
 PLAIN_MODEL = "model__openai__gpt-4o"
@@ -48,40 +47,31 @@ def _user() -> KeycloakUser:
     return KeycloakUser(uid="admin-1", username="admin-1", roles=["admin"], email=None)
 
 
-async def _make_store(tmp_path) -> ModelReasoningStore:
-    from control_plane_backend.models.base import Base as ControlPlaneBase
-    from fred_core.models.base import Base as CoreBase
-
-    engine = create_async_engine_from_config(
-        PostgresStoreConfig(sqlite_path=str(tmp_path / "model_reasoning.sqlite3"))
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(CoreBase.metadata.create_all)
-        await conn.run_sync(ControlPlaneBase.metadata.create_all)
-    return ModelReasoningStore(engine=engine)
-
-
 # ---------------------------------------------------------------------------
 # Store — absent row = off (§5.6)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_no_stored_row_means_no_model_reasons(tmp_path) -> None:
+async def test_no_stored_row_means_no_model_reasons(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
     """§5.6 / §5.6.1 in one assertion.
 
     This empty set is what turns reasoning OFF on upgrade for a deployment that
     ran it through `models_catalog.yaml` alone — release-noted, not silent.
     """
 
-    store = await _make_store(tmp_path)
+    store = ModelReasoningStore(engine=control_plane_sql_engine)
 
     assert await store.list_enabled_model_ids() == set()
 
 
 @pytest.mark.asyncio
-async def test_enabling_then_disabling_round_trips(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_enabling_then_disabling_round_trips(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = ModelReasoningStore(engine=control_plane_sql_engine)
 
     await store.set_enabled(
         model_capability_id=THINKING_MODEL, reasoning_enabled=True, updated_by="admin-1"
@@ -100,8 +90,10 @@ async def test_enabling_then_disabling_round_trips(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_stored_false_is_indistinguishable_from_no_row(tmp_path) -> None:
-    store = await _make_store(tmp_path)
+async def test_a_stored_false_is_indistinguishable_from_no_row(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = ModelReasoningStore(engine=control_plane_sql_engine)
 
     await store.set_enabled(
         model_capability_id=PLAIN_MODEL, reasoning_enabled=False, updated_by="admin-1"
