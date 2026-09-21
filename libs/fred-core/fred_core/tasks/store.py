@@ -73,6 +73,26 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _summary_from_run(row: TaskRunColumns) -> TaskSummary:
+    return TaskSummary(
+        task_id=row.task_id,
+        kind=row.kind,
+        state=TaskState(row.state),
+        progress=row.progress,
+        step=row.step,
+        error=row.error,
+        target=TaskTarget(**row.target) if row.target else None,
+        created_by=row.created_by,
+        team_id=row.team_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        scheduled_for=row.scheduled_for,
+        detail=_parse_task_detail(row.kind, row.detail),
+        acknowledged_at=row.acknowledged_at,
+        acknowledged_by=row.acknowledged_by,
+    )
+
+
 class TaskNotFoundError(Exception):
     pass
 
@@ -180,6 +200,14 @@ class TaskStore:
         async with use_session(self._sessions, session) as s:
             return await s.get(self._run, task_id)
 
+    async def get_task(
+        self,
+        task_id: str,
+        session: AsyncSession | None = None,
+    ) -> TaskSummary | None:
+        run = await self.get_run(task_id, session=session)
+        return _summary_from_run(run) if run is not None else None
+
     async def set_execution(
         self,
         task_id: str,
@@ -283,26 +311,7 @@ class TaskStore:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(q)
             rows = result.scalars().all()
-        return [
-            TaskSummary(
-                task_id=row.task_id,
-                kind=row.kind,
-                state=TaskState(row.state),
-                progress=row.progress,
-                step=row.step,
-                error=row.error,
-                target=TaskTarget(**row.target) if row.target else None,
-                created_by=row.created_by,
-                team_id=row.team_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                scheduled_for=row.scheduled_for,
-                detail=_parse_task_detail(row.kind, row.detail),
-                acknowledged_at=row.acknowledged_at,
-                acknowledged_by=row.acknowledged_by,
-            )
-            for row in rows
-        ]
+        return [_summary_from_run(row) for row in rows]
 
     async def acknowledge(
         self,

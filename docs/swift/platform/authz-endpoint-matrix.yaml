@@ -1432,6 +1432,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tasks/{task_id}
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/tasks/{task_id}/ack
     review_status: pending_review
