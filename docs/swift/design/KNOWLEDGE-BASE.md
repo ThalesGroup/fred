@@ -50,9 +50,10 @@ Fred offers a Knowledge Base exactly three things:
 1. **Being run.** A cadence and a suspend switch. Not a calendar, not time
    zones — the narrow surface is deliberate.
 2. **Somewhere to write.** A library, plus a REST surface to write documents
-   into it addressed by the caller's own keys. This is an **offer, not a
-   contract**: a pod that keeps its own store leaves `knowledge_flow_url` out
-   of its configuration and never calls it.
+   into it addressed by the caller's own keys, and to read back what it holds
+   under them. This is an **offer, not a contract**: a pod that keeps its own
+   store leaves `knowledge_flow_url` out of its configuration and never calls
+   it.
 3. **An identity.** The pod's own workload identity, which is what makes both
    of the above safe. See §4.
 
@@ -85,6 +86,12 @@ boundary. An absence in a source proves a deletion only after a complete,
 authoritative inventory — which is exactly what a run's
 `reconciliation_complete` flag states — whereas an explicit tombstone stays
 actionable during a partial pass.
+
+**A write is accepted, then ingested like any upload.** The reply is an
+acceptance and a task, never an outcome; the pod follows the task and reads
+the library back to learn what landed. One pipeline, so a machine's document
+is never a second-class document, and the API process never carries
+ingestion work a worker exists to do.
 
 **The task queue is derived, never configured.** `routing.task_queue_for`
 builds it from the definition id using the same fred-pod function the Control
@@ -130,10 +137,11 @@ only and never reaches `TagPermission`. A pod therefore cannot touch a library
 it was not granted, whatever role its token carries.
 
 **A pod holds no store credential.** No OpenSearch, no object storage, no
-database. It talks REST to knowledge-flow, which does the storing, processing,
-permissioning and accounting through the same path a person's upload takes.
-An author writes no auth code and holds nothing worth stealing beyond the
-client secret.
+database. It talks REST to knowledge-flow, which stores, permissions and
+accounts for the document at the write, then processes it on the same task,
+workflow, queue and worker a person's upload goes through — nothing is
+converted or indexed in the API process. An author writes no auth code and
+holds nothing worth stealing beyond the client secret.
 
 **The blast radius, stated plainly.** There is one Keycloak client per
 *definition*, not per instance. A definition serving twelve teams accumulates
@@ -224,6 +232,26 @@ knowledge inside the library a third party imports.
 not the author asked for it. Deliberate — a run that fails halfway has still
 filled part of the library, and that part must not have been editable
 meanwhile — but it is Fred plumbing running in someone else's process.
+
+**Nothing arbitrates two writers of one key.** Two instances sharing a library
+— which nothing upstream should allow — race on the same key, and a retraction
+sent while that key is still processing is not refused.
+
+**A lost acknowledgement is a second write.** A pod that never sees the
+acceptance re-publishes the key on its next run. That converges, because the
+key is the same document, but the pipeline processes it twice.
+
+**A rewrite goes dark before it lands.** The previous revision's vectors are
+dropped when the new one is accepted, not when it is indexed, so search misses
+the document for as long as the queue makes it wait.
+
+**The listing stops at five thousand.** It says so with a `truncated` flag, and
+there is no page after it; a library larger than that cannot yet be inventoried
+through this surface.
+
+**Every task read reconciles against the workflow engine.** That is what keeps
+a dead workflow from reading as running for ever, and it means a tight poll
+loop on a task is a tight loop on Temporal.
 
 ---
 
