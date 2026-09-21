@@ -16,8 +16,8 @@
 
 A source is mirrored by a workload, never by a person: GCU admission has no
 record to check for a service account, and skipping it is only safe while a
-human token is refused outright. Admission is all that is exercised here — the
-service behind it has its own tests.
+human token is refused outright. Admission, and the shape of a write's answer,
+are all that is exercised here — the service behind them has its own tests.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from types import SimpleNamespace
 
 import fred_core.security.oidc as oidc
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, BackgroundTasks, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, get_current_user, get_current_user_without_gcu
@@ -37,9 +37,14 @@ from knowledge_flow_backend.features.library_sync.controller import (
     LibrarySyncController,
     require_sync_client,
 )
-from knowledge_flow_backend.features.library_sync.structures import LibrarySourceVersion
+from knowledge_flow_backend.features.library_sync.structures import (
+    DocumentAccepted,
+    LibrarySourceVersion,
+    SynchronizationUnavailable,
+)
 
 SOURCE_VERSION_PATH = "/libraries/library/source-version"
+DOCUMENTS_PATH = "/libraries/library/documents"
 
 
 class _RecordingService:
@@ -47,10 +52,18 @@ class _RecordingService:
 
     def __init__(self) -> None:
         self.seen: list[tuple[KeycloakUser, str]] = []
+        self.writes: list[dict[str, object]] = []
+        self.unavailable = False
 
     async def read_source_version(self, user: KeycloakUser, library_id: str) -> str:
         self.seen.append((user, library_id))
         return "revision-1"
+
+    async def write_document(self, user: KeycloakUser, *, library_id, path, source_key, document_version, source_tag, upload, background_tasks=None) -> DocumentAccepted:
+        if self.unavailable:
+            raise SynchronizationUnavailable("no scheduler is enabled")
+        self.writes.append({"user": user, "library_id": library_id, "path": path, "source_key": source_key, "background_tasks": background_tasks})
+        return DocumentAccepted(source_key=source_key, path=path, document_version=document_version, created=True, document_uid="doc-1", task_id="task-1")
 
 
 @pytest.fixture
@@ -99,6 +112,43 @@ def test_a_workload_reaches_the_service_without_a_user_record(
     assert response.status_code == 200
     assert response.json() == LibrarySourceVersion(source_version="revision-1").model_dump()
     assert sync.service.seen == [(machine, "library")]
+
+
+def _machine() -> KeycloakUser:
+    return KeycloakUser(uid="machine", username="sync", roles=[SERVICE_AGENT_ROLE], client_id="sync-client")
+
+
+def _post_document(client: TestClient):
+    return client.post(
+        DOCUMENTS_PATH,
+        data={"path": "specs/api.md", "source_key": "specs/api.md", "document_version": "etag-1"},
+        files={"file": ("api.md", b"# api\n", "text/markdown")},
+    )
+
+
+def test_a_write_is_accepted_with_a_task_to_follow(sync: SimpleNamespace) -> None:
+    """Accepted, not done: the pipeline the upload surface uses answers later, through the task."""
+    with _client(sync, _machine()) as client:
+        response = _post_document(client)
+
+    assert response.status_code == 202
+    expected = DocumentAccepted(source_key="specs/api.md", path="specs/api.md", document_version="etag-1", created=True, document_uid="doc-1", task_id="task-1")
+    assert response.json() == expected.model_dump()
+    [write] = sync.service.writes
+    assert (write["library_id"], write["path"], write["source_key"]) == ("library", "specs/api.md", "specs/api.md")
+    # The request's own background tasks reach the service, so a memory-backed
+    # pipeline runs after the answer instead of holding it.
+    assert isinstance(write["background_tasks"], BackgroundTasks)
+
+
+def test_a_stack_that_cannot_schedule_says_so_instead_of_half_accepting(sync: SimpleNamespace) -> None:
+    sync.service.unavailable = True
+    with _client(sync, _machine()) as client:
+        response = _post_document(client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "scheduling_unavailable"
+    assert sync.service.writes == []
 
 
 def test_a_human_token_cannot_bypass_gcu_through_these_routes(

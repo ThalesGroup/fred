@@ -22,21 +22,31 @@ properties, and the writer was filed as a person.
 from __future__ import annotations
 
 import io
+import pathlib
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import UploadFile
-from fred_core import AuthorizationError, KeycloakUser, Resource, TagPermission
+import pytest_asyncio
+from fastapi import BackgroundTasks, UploadFile
+from fred_core import AuthorizationError, KeycloakUser, RebacReference, RelationType, Resource, TagPermission
+from fred_core.scheduler import SchedulerBackend
 from fred_core.security.structure import SERVICE_AGENT_ROLE
+from fred_core.tasks.models import TaskState, TaskTarget
+from fred_core.tasks.service import TaskService
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import knowledge_flow_backend.features.library_sync.service as service_module
 import knowledge_flow_backend.features.metadata.service as metadata_service_module
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
-from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest
+from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
+from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
+from knowledge_flow_backend.models.base import Base as KFBase
+from knowledge_flow_backend.models.task_models import TASK_TABLES
 
 TEAM = "team-1"
 
@@ -129,6 +139,11 @@ class GrantedLibraryRebac:
         self.deleted_relations.append(relation)
 
     async def lookup_subjects(self, resource, relation, subject_type):
+        # A library and the folders under it are the team's: what ReBAC answers
+        # when asked who owns them, and what a task for them is filed under.
+        tag = self._store.tags.get(resource.id)
+        if tag is not None and relation == RelationType.OWNER and subject_type == Resource.TEAM:
+            return [RebacReference(type=Resource.TEAM, id=tag.owner_id)]
         return []
 
     async def lookup_user_resources(self, user, permission):
@@ -174,39 +189,41 @@ def upload(name: str = "readme.md", content: bytes = b"# hello\n") -> UploadFile
     return UploadFile(file=io.BytesIO(content), filename=name)
 
 
-class Processing:
-    """Stands in for the conversion and vectorization stages.
+class Scheduler:
+    """Stands in for the pipeline's front door, which the upload surface shares.
 
-    Those are the ingestion pipeline's, shared with the upload surface and
-    tested there. What is asserted here is what this surface owes them: the
-    document's row exists before either runs, or the first progress write would
-    find nothing to update and the document would be dropped mid-flight.
+    Conversion and vectorization are the pipeline's and tested there. What is
+    asserted here is what this surface owes it: one push file per write, whose
+    row already exists — the worker's first step reads it, and would find
+    nothing to process otherwise.
     """
 
     def __init__(self) -> None:
         self.fails = False
+        self.built: dict[str, object] = {}
+        self.submissions: list[SimpleNamespace] = []
         self.saw_rows: list[bool] = []
 
-    async def run(self, metadata):
+    def build(self, **kwargs) -> Scheduler:
+        self.built = kwargs
+        return self
+
+    async def submit_documents(self, *, user, pipeline_name, files, background_tasks=None):
         store = _metadata_store()
-        self.saw_rows.append(await store.get_metadata_by_uid(metadata.document_uid) is not None)
+        for file in files:
+            self.saw_rows.append(await store.get_metadata_by_uid(file.document_uid) is not None)
         if self.fails:
-            raise RuntimeError("conversion blew up at /srv/kf/tmp/xyz")
-        return metadata
+            raise RuntimeError("temporal unreachable at 10.0.0.1:7233")
+        self.submissions.append(SimpleNamespace(user=user, pipeline_name=pipeline_name, files=list(files), background_tasks=background_tasks))
+        return None, WorkflowHandle(workflow_id=f"wf-{len(self.submissions)}")
 
 
 @pytest.fixture
-def processing(monkeypatch) -> Processing:
-    stage = Processing()
-
-    async def _push_input_process(*, user, metadata, input_file, profile):
-        return await stage.run(metadata)
-
-    async def _output_process(*, file, metadata, accept_memory_storage=False):
-        return await stage.run(metadata)
-
-    monkeypatch.setattr("knowledge_flow_backend.features.library_sync.service.push_input_process", _push_input_process)
-    monkeypatch.setattr("knowledge_flow_backend.features.library_sync.service.output_process", _output_process)
+def scheduler(app_context, monkeypatch) -> Scheduler:
+    """Scheduling on, with this stand-in built where the pipeline client would be."""
+    stage = Scheduler()
+    monkeypatch.setattr(app_context.get_instance().get_config().scheduler, "enabled", True)
+    monkeypatch.setattr(service_module, "IngestionTaskService", stage.build)
     return stage
 
 
@@ -239,8 +256,20 @@ def storage_accounting(app_context, monkeypatch) -> None:
     monkeypatch.setattr(metadata_service_module, "get_user_store", lambda: _InertUserStore())
 
 
+@pytest_asyncio.fixture
+async def task_service(app_context, storage_accounting) -> TaskService:
+    """A real task ledger over the same inert engine, so a write's task can be read back."""
+    ctx = app_context.get_instance()
+    engine = ctx.get_pg_async_engine()
+    async with engine.begin() as connection:
+        await connection.run_sync(KFBase.metadata.create_all)
+    service = TaskService.build(engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY)
+    ctx._task_service_instance = service
+    return service
+
+
 @pytest.fixture
-def tag_store(app_context, processing, storage_accounting) -> InMemoryTagStore:
+def tag_store(app_context, scheduler, storage_accounting, task_service) -> InMemoryTagStore:
     ctx = app_context.get_instance()
     store = InMemoryTagStore()
     ctx._tag_store_instance = store
@@ -713,47 +742,160 @@ async def test_a_person_s_write_is_still_recorded_as_a_person_s(tag_store, kpi_w
 
 
 # --------------------------------------------------------------------------
-# A write that fails says so, and leaves nothing behind
+# A write is accepted onto the shared pipeline, with a task to follow
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_the_document_exists_before_anything_processes_it(tag_store, processing):
+async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_store, scheduler, task_service):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    background = BackgroundTasks()
+
+    accepted = await service.write_document(
+        caller,
+        library_id=lib.id,
+        path="specs/api.md",
+        source_key="specs/api.md",
+        document_version="etag-1",
+        source_tag="fred",
+        upload=upload(name="api.md"),
+        background_tasks=background,
+    )
+
+    document = await _metadata_store().get_metadata_by_source_key(lib.id, "specs/api.md")
+    assert document is not None
+    assert accepted.document_uid == document.document_uid
+    folder = next(tag for tag in tag_store.tags.values() if tag.full_path == "Mirror/specs")
+    profile = ApplicationContext.get_instance().get_config().processing.default_profile
+
+    [submission] = scheduler.submissions
+    assert (submission.user, submission.pipeline_name, submission.background_tasks) == (caller, "library_sync", background)
+    [file] = submission.files
+    assert (file.document_uid, file.tags, file.source_tag, file.profile, file.task_id, file.display_name) == (
+        document.document_uid,
+        [folder.id],
+        "fred",
+        profile,
+        accepted.task_id,
+        "api.md",
+    )
+
+    run = await task_service.get_run(accepted.task_id)
+    assert run is not None
+    assert (run.kind, TaskState(run.state), run.created_by, run.team_id, run.execution_id) == ("ingestion", TaskState.pending, caller.uid, TEAM, "wf-1")
+    assert run.target is not None
+    assert TaskTarget(**run.target) == TaskTarget(type="document", id=document.document_uid, label="api.md")
+
+
+@pytest.mark.asyncio
+async def test_the_pipeline_client_is_built_the_way_the_upload_surface_builds_it(tag_store, scheduler):
+    """Same configuration in, so the two surfaces cannot drift apart on parallelism or profiles."""
+    config = ApplicationContext.get_instance().get_config()
+
+    _service(GrantedLibraryRebac(tag_store))
+
+    assert scheduler.built["scheduler_config"] is config.scheduler
+    assert scheduler.built["processing_config"] is config.processing
+    assert scheduler.built["max_parallelism"] == config.scheduler.temporal.ingestion_workflow_parallelism
+
+
+@pytest.mark.asyncio
+async def test_the_document_exists_before_the_pipeline_is_asked_for_it(tag_store, scheduler):
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
 
-    assert processing.saw_rows == [True, True]
+    assert scheduler.saw_rows == [True]
 
 
 @pytest.mark.asyncio
-async def test_a_failed_first_write_leaves_the_library_as_it_was(tag_store, processing):
+@pytest.mark.parametrize("pipeline_refuses", [False, True])
+async def test_the_upload_s_copy_is_gone_once_the_write_is_answered(tag_store, scheduler, monkeypatch, pipeline_refuses):
+    """The worker restores the input from the content store; nothing waits on this file."""
+    written: list[pathlib.Path] = []
+    real_uploadfile_to_path = service_module.uploadfile_to_path
+
+    def _recording(upload_file, *, filename=None):
+        path = real_uploadfile_to_path(upload_file, filename=filename)
+        written.append(path)
+        return path
+
+    monkeypatch.setattr(service_module, "uploadfile_to_path", _recording)
+    scheduler.fails = pipeline_refuses
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
-    processing.fails = True
+
+    try:
+        await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
+    except RuntimeError:
+        assert pipeline_refuses
+
+    [path] = written
+    assert not path.parent.parent.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_stack_that_cannot_schedule_refuses_the_write_before_taking_anything(tag_store, scheduler, task_service, monkeypatch):
+    monkeypatch.setattr(ApplicationContext.get_instance().get_config().scheduler, "enabled", False)
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+
+    with pytest.raises(SynchronizationUnavailable):
+        await service.write_document(pod(), library_id=lib.id, path="specs/readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
+
+    assert await _metadata_store().get_all_metadata({}) == []
+    assert list(tag_store.tags) == [lib.id]
+    assert (await task_service.list_tasks()).tasks == []
+    assert scheduler.submissions == []
+
+
+# --------------------------------------------------------------------------
+# A write the pipeline refuses says so, and leaves nothing behind
+# --------------------------------------------------------------------------
+
+
+async def _failed_tasks(task_service: TaskService) -> list:
+    return [task for task in (await task_service.list_tasks()).tasks if task.state == TaskState.failed]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_first_write_leaves_the_library_as_it_was(tag_store, scheduler, task_service):
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    scheduler.fails = True
 
     with pytest.raises(RuntimeError):
         await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
 
     assert await _metadata_store().get_all_metadata({}) == []
     assert await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md") is None
+    # The task was created before the pipeline refused, so it is the one thing
+    # left to say the write did not happen — and it must not stay pending.
+    [failed] = await _failed_tasks(task_service)
+    assert failed.error == "Scheduling failed: RuntimeError"
+    assert len((await task_service.list_tasks()).tasks) == 1
 
 
 @pytest.mark.asyncio
-async def test_a_failed_rewrite_does_not_destroy_the_document_it_was_replacing(tag_store, processing):
+async def test_a_failed_rewrite_does_not_destroy_the_document_it_was_replacing(tag_store, scheduler, task_service):
     """The caller asked to replace a document, not to remove it; its next run converges."""
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="etag-1", source_tag="fred", upload=upload())
 
-    processing.fails = True
+    scheduler.fails = True
     with pytest.raises(RuntimeError):
         await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="etag-2", source_tag="fred", upload=upload())
 
     still_there = await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md")
     assert still_there is not None
+    [failed] = await _failed_tasks(task_service)
+    assert failed.error == "Scheduling failed: RuntimeError"
+    assert len((await task_service.list_tasks()).tasks) == 2
 
 
 # --------------------------------------------------------------------------
@@ -762,7 +904,7 @@ async def test_a_failed_rewrite_does_not_destroy_the_document_it_was_replacing(t
 
 
 @pytest.mark.asyncio
-async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_store, monkeypatch):
+async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_store, scheduler, monkeypatch):
     """A chunk's id comes from where it sits in the content.
 
     So a new revision's chunks land beside the old ones, not over them, and a
@@ -787,11 +929,17 @@ async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_
     # Nothing was there to replace, so nothing was dropped.
     assert dropped == []
 
-    await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="2", source_tag="fred", upload=upload())
+    second = await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="2", source_tag="fred", upload=upload())
 
     document = await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md")
     assert document is not None
     assert dropped == [document.identity.document_uid]
+    # The pipeline is asked for the same document again — not a second one —
+    # and each write is its own task.
+    submitted = [file.document_uid for submission in scheduler.submissions for file in submission.files]
+    assert submitted == [document.identity.document_uid, document.identity.document_uid]
+    assert second.document_uid == document.identity.document_uid
+    assert len({file.task_id for submission in scheduler.submissions for file in submission.files}) == 2
 
 
 @pytest.mark.asyncio

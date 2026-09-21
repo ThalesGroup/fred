@@ -48,6 +48,14 @@ class InvalidSourceRequest(Exception):
         self.message = message
 
 
+class SynchronizationUnavailable(Exception):
+    """This deployment has no scheduler, so it cannot process what it would accept.
+
+    Raised before anything is stored: a write refused whole is one the caller
+    retries later; a write half-taken is one it would have to reconcile.
+    """
+
+
 def _reject_control_characters(value: str, *, code: str, label: str) -> None:
     if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
         raise InvalidSourceRequest(code, f"{label} must not contain control characters.")
@@ -148,11 +156,12 @@ def validate_synchronized_by(raw: str) -> str:
     return bounded
 
 
-class DocumentWritten(BaseModel):
-    """The outcome of one write: it happened, and to which of the caller's names.
+class DocumentAccepted(BaseModel):
+    """One write taken in: the bytes are stored and the document is queued.
 
-    No Fred-side identifier: a caller maintains its documents with the key it
-    chose and nothing else, which is the whole point of this surface.
+    The key stays the caller's only address for its document. The identifier
+    and the task are handles to follow this write to its outcome, not a second
+    naming scheme to maintain.
     """
 
     source_key: str
@@ -162,6 +171,8 @@ class DocumentWritten(BaseModel):
         ...,
         description="True when this key was new to the library, False when it updated the document already there.",
     )
+    document_uid: str = Field(..., description="Fred's identifier for the document this key now names.")
+    task_id: str = Field(..., description="The task processing this write; follow it for the outcome.")
 
 
 class DocumentRemoved(BaseModel):

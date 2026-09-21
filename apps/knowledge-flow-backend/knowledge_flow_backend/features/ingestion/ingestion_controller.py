@@ -342,6 +342,69 @@ def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
         logger.warning("Failed to clean up temporary upload workdir: %s", temp_root, exc_info=True)
 
 
+async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
+    """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
+
+    Team ownership prefers ReBAC, falling back to team metadata by `tag.owner_id`;
+    a tag resolving to neither is personal. One path, so quota enforcement and
+    task `team_id` tagging agree on who owns a tag, whichever surface asks.
+    """
+    tag_store = ApplicationContext.get_instance().get_tag_store()
+    rebac = ApplicationContext.get_instance().get_rebac_engine()
+
+    team_ids: set[str] = set()
+    user_ids: set[str] = set()
+    for tag_id in tags:
+        tag = await tag_store.get_tag_by_id(tag_id)
+        if not tag or not tag.owner_id:
+            continue
+
+        resolved_for_tag: list[str] = []
+        try:
+            from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+
+            subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
+            if not isinstance(subjects, RebacDisabledResult) and subjects:
+                for sub in subjects:
+                    resolved_for_tag.append(sub.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                tag.id,
+                exc,
+            )
+
+        if not resolved_for_tag:
+            try:
+                engine = ApplicationContext.get_instance().get_pg_async_engine()
+                store = TeamMetadataStore(engine)
+                meta = await store.get_by_team_id(TeamId(tag.owner_id))
+                if meta is not None:
+                    resolved_for_tag.append(tag.owner_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                    tag.id,
+                    exc,
+                )
+
+        if resolved_for_tag:
+            for t_id in resolved_for_tag:
+                if t_id.startswith("personal-"):
+                    user_ids.add(t_id[len("personal-") :])
+                else:
+                    team_ids.add(t_id)
+        else:
+            owner_id = tag.owner_id
+            if owner_id == "personal" or owner_id is None:
+                owner_id = user.uid
+            elif owner_id.startswith("personal-"):
+                owner_id = owner_id[len("personal-") :]
+            user_ids.add(owner_id)
+
+    return team_ids, user_ids
+
+
 class IngestionController:
     """
     Controller for handling ingestion-related operations.
@@ -624,69 +687,7 @@ class IngestionController:
             content_store.delete_object(stored_object.key)
 
     async def _resolve_tag_owners(self, tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
-        """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
-
-        Team ownership prefers ReBAC (`lookup_subjects`), falling back to a team
-        metadata lookup by `tag.owner_id` when ReBAC is disabled or errors. A tag
-        that resolves to neither is treated as personal, owned by `user` if the
-        tag itself carries no resolvable owner. Shared by quota enforcement
-        (`_check_quota_before_upload`) and task `team_id` tagging
-        (`_stream_upload_process`) so both agree on tag ownership from one path.
-        """
-        tag_store = ApplicationContext.get_instance().get_tag_store()
-        rebac = ApplicationContext.get_instance().get_rebac_engine()
-
-        team_ids: set[str] = set()
-        user_ids: set[str] = set()
-        for tag_id in tags:
-            tag = await tag_store.get_tag_by_id(tag_id)
-            if not tag or not tag.owner_id:
-                continue
-
-            resolved_for_tag: list[str] = []
-            try:
-                from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-
-                subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
-                if not isinstance(subjects, RebacDisabledResult) and subjects:
-                    for sub in subjects:
-                        resolved_for_tag.append(sub.id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
-                    tag.id,
-                    exc,
-                )
-
-            if not resolved_for_tag:
-                try:
-                    engine = ApplicationContext.get_instance().get_pg_async_engine()
-                    store = TeamMetadataStore(engine)
-                    meta = await store.get_by_team_id(TeamId(tag.owner_id))
-                    if meta is not None:
-                        resolved_for_tag.append(tag.owner_id)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
-                        tag.id,
-                        exc,
-                    )
-
-            if resolved_for_tag:
-                for t_id in resolved_for_tag:
-                    if t_id.startswith("personal-"):
-                        user_ids.add(t_id[len("personal-") :])
-                    else:
-                        team_ids.add(t_id)
-            else:
-                owner_id = tag.owner_id
-                if owner_id == "personal" or owner_id is None:
-                    owner_id = user.uid
-                elif owner_id.startswith("personal-"):
-                    owner_id = owner_id[len("personal-") :]
-                user_ids.add(owner_id)
-
-        return team_ids, user_ids
+        return await resolve_tag_owners(tags, user)
 
     async def _evaluate_quota(
         self,
