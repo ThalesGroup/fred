@@ -298,7 +298,10 @@ for a working reference pod.
 keep them current: declare an identity and configuration fields, write one async
 handler, call `knowledge_base_main(kb)`. Fred supplies the destination library, a
 workload identity and a cadence; the handler owns discovery, replay-safe writes and
-explicit retractions — Fred never infers a deletion from absence. Install
+explicit retractions — Fred never infers a deletion from absence. `DocumentPublisher`
+is the shortcut for writing: a write is accepted at once and ingested by Fred
+afterwards, `wait` follows it to its end, and `documents()` reads back what the
+library holds so a run can reconcile against it. Install
 `fred-sdk[knowledge-base]`. Working declarations live in the `fred-samples`
 repository under `knowledge-bases/`.
 
@@ -315,8 +318,6 @@ releases.** Known limits today:
 - A run's fate is visible in the workflow engine only. Counters, summaries and
   issues a handler returns are not stored or displayed, and Fred offers no run
   history, manual trigger or worker-health check yet.
-- There is no inventory or checkpoint API, so a handler cannot ask Fred what it
-  already holds; a connector that loses its own state cannot reconcile deletions.
 - A relative path is the document key, so a rename reads as a delete plus an add.
 - Cadences are hourly, daily or weekly, with no immediate first run.
 
