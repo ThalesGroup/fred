@@ -58,7 +58,7 @@ class LocalFilesystem(BaseFilesystem):
             PermissionError: If the resolved path escapes the root directory.
         """
         final_path = (self.root / path).resolve()
-        if not str(final_path).startswith(str(self.root)):
+        if not final_path.is_relative_to(self.root):
             raise PermissionError(
                 f"Access outside of filesystem root is forbidden: '{path}'"
             )
@@ -152,6 +152,8 @@ class LocalFilesystem(BaseFilesystem):
             path (str): Path to delete.
         """
         full = self._resolve_path(path)
+        if full == self.root:
+            raise ValueError("Deleting the filesystem root is forbidden")
         if full.is_dir():
             shutil.rmtree(full, ignore_errors=True)
         else:

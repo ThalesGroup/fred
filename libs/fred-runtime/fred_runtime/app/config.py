@@ -64,7 +64,7 @@ Example `config/configuration.yaml`:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
 if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
@@ -296,6 +296,49 @@ class PodObservabilityConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class LocalRuntimeFilesystemConfig(BaseModel):
+    """Local-development object storage for Fred Runtime files."""
+
+    type: Literal["local"] = "local"
+    root: str = "~/.fred/pod/filesystem"
+
+
+class MinioRuntimeFilesystemConfig(BaseModel):
+    """MinIO or S3-compatible object storage for Fred Runtime files."""
+
+    type: Literal["minio"] = "minio"
+    endpoint: str
+    access_key: str
+    secret_key: str
+    bucket_name: str
+    secure: bool = False
+
+
+class GcsRuntimeFilesystemConfig(BaseModel):
+    """GCS object storage using Application Default Credentials."""
+
+    type: Literal["gcs"] = "gcs"
+    bucket_name: str
+    project_id: str | None = None
+
+
+class ConversationFilesystemQuotaConfig(BaseModel):
+    """Independent soft limits for runtime-owned conversation namespaces."""
+
+    scratchpad_max_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
+    scratchpad_max_files: int = Field(default=1_000, ge=1)
+    deep_max_bytes: int = Field(default=1024 * 1024 * 1024, ge=1)
+    deep_max_files: int = Field(default=10_000, ge=1)
+
+
+RuntimeFilesystemConfig = Annotated[
+    LocalRuntimeFilesystemConfig
+    | MinioRuntimeFilesystemConfig
+    | GcsRuntimeFilesystemConfig,
+    Field(discriminator="type"),
+]
+
+
 class PodStorageConfig(BaseModel):
     """
     Persistence backend settings for an agent pod.
@@ -309,6 +352,7 @@ class PodStorageConfig(BaseModel):
       local dev via sqlite_path, PostgreSQL in production via host/port/database)
     - `opensearch`: optional, for log forwarding in production
     - `log_store`: optional, for structured log persistence
+    - `filesystem`: one bucket/root for runtime-owned conversation files
     """
 
     postgres: PostgresStoreConfig = Field(
@@ -318,6 +362,12 @@ class PodStorageConfig(BaseModel):
     )
     opensearch: Optional[OpenSearchStoreConfig] = None
     log_store: Optional[LogStorageConfig] = None
+    filesystem: RuntimeFilesystemConfig = Field(
+        default_factory=LocalRuntimeFilesystemConfig
+    )
+    conversation_filesystem: ConversationFilesystemQuotaConfig = Field(
+        default_factory=ConversationFilesystemQuotaConfig
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import re
 import time
@@ -119,11 +120,15 @@ class GcsFilesystem(BaseFilesystem):
         """Read the full contents of an object as raw bytes."""
         resolved = self._resolve_path(path)
         logger.info("[GCS_READ] bucket=%s path=%s", self.bucket_name, resolved)
-        blob = self.bucket.blob(resolved)
-        try:
-            return blob.download_as_bytes()
-        except NotFound as e:
-            raise FileNotFoundError(f"Object not found: {path}") from e
+
+        def _read() -> bytes:
+            blob = self.bucket.blob(resolved)
+            try:
+                return blob.download_as_bytes()
+            except NotFound as e:
+                raise FileNotFoundError(f"Object not found: {path}") from e
+
+        return await asyncio.to_thread(_read)
 
     async def write(self, path: str, data: bytes | str) -> None:
         """
@@ -143,20 +148,21 @@ class GcsFilesystem(BaseFilesystem):
             len(data_bytes),
         )
 
-        parent = "/".join(full.rstrip("/").split("/")[:-1])
-        if parent:
-            children = list(
-                self.client.list_blobs(
-                    self.bucket_name, prefix=parent + "/", max_results=1
+        def _write() -> None:
+            parent = "/".join(full.rstrip("/").split("/")[:-1])
+            if parent:
+                children = list(
+                    self.client.list_blobs(
+                        self.bucket_name, prefix=parent + "/", max_results=1
+                    )
                 )
-            )
-            if not children:
-                raise FileNotFoundError(
-                    f"Parent path '{parent}' does not exist. Cannot write '{full}'."
-                )
+                if not children:
+                    raise FileNotFoundError(
+                        f"Parent path '{parent}' does not exist. Cannot write '{full}'."
+                    )
+            self.bucket.blob(full).upload_from_string(data_bytes)
 
-        blob = self.bucket.blob(full)
-        blob.upload_from_string(data_bytes)
+        await asyncio.to_thread(_write)
 
     async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
         """List files and inferred virtual directories under a prefix."""
@@ -168,7 +174,9 @@ class GcsFilesystem(BaseFilesystem):
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
         logger.info("[GCS_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
 
-        all_blobs = list(self.client.list_blobs(self.bucket_name, prefix=list_prefix))
+        all_blobs = await asyncio.to_thread(
+            lambda: list(self.client.list_blobs(self.bucket_name, prefix=list_prefix))
+        )
         results: List[FilesystemResourceInfoResult] = []
 
         for blob in all_blobs:
@@ -211,23 +219,25 @@ class GcsFilesystem(BaseFilesystem):
         contents (including the zero-byte marker), matching the MinIO backend.
         """
         resolved = self._resolve_path(path)
+        if not resolved.rstrip("/"):
+            raise ValueError("Deleting the filesystem root is forbidden")
         logger.info("[GCS_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
 
         prefix = resolved.rstrip("/") + "/"
-        for blob in list(self.client.list_blobs(self.bucket_name, prefix=prefix)):
-            try:
-                blob.delete()
-            except NotFound:
-                logger.warning("[GCS_DELETE] already gone: %s", blob.name)
 
-        # Delete the object itself and a possible directory marker. The marker in
-        # particular may simply never have existed, so NotFound here is routine,
-        # not warning-worthy.
-        for key in (resolved, prefix):
-            try:
-                self.bucket.blob(key).delete()
-            except NotFound:
-                logger.debug("[GCS_DELETE] already gone: %s", key)
+        def _delete() -> None:
+            for blob in list(self.client.list_blobs(self.bucket_name, prefix=prefix)):
+                try:
+                    blob.delete()
+                except NotFound:
+                    logger.warning("[GCS_DELETE] already gone: %s", blob.name)
+            for key in (resolved, prefix):
+                try:
+                    self.bucket.blob(key).delete()
+                except NotFound:
+                    logger.debug("[GCS_DELETE] already gone: %s", key)
+
+        await asyncio.to_thread(_delete)
 
     async def print_root_dir(self) -> str:
         """Return the logical root URI in ``gs://bucket/prefix`` form."""
@@ -242,19 +252,25 @@ class GcsFilesystem(BaseFilesystem):
         """
         dir_path = self._resolve_path(path).rstrip("/") + "/"
         logger.info("[GCS_MKDIR] bucket=%s path=%s", self.bucket_name, dir_path)
-        self.bucket.blob(dir_path).upload_from_string(b"")
+        await asyncio.to_thread(self.bucket.blob(dir_path).upload_from_string, b"")
 
     async def exists(self, path: str) -> bool:
         """Return True if the object exists or any object shares its prefix."""
         full = self._resolve_path(path)
-        if self.bucket.blob(full).exists():
-            return True
-        children = list(
-            self.client.list_blobs(
-                self.bucket_name, prefix=full.rstrip("/") + "/", max_results=1
+
+        def _exists() -> bool:
+            if self.bucket.blob(full).exists():
+                return True
+            children = list(
+                self.client.list_blobs(
+                    self.bucket_name,
+                    prefix=full.rstrip("/") + "/",
+                    max_results=1,
+                )
             )
-        )
-        return len(children) > 0
+            return len(children) > 0
+
+        return await asyncio.to_thread(_exists)
 
     async def cat(self, path: str) -> str:
         """Read an object and decode it as UTF-8."""
@@ -267,20 +283,33 @@ class GcsFilesystem(BaseFilesystem):
         exists at the exact key (directories are virtual, as in MinIO).
         """
         full = self._resolve_path(path)
-        blob = self.bucket.get_blob(full)
-        if blob is not None:
-            return FilesystemResourceInfoResult(
-                path=full,
-                size=blob.size,
-                type=FilesystemResourceInfo.FILE,
-                modified=blob.updated,
+
+        def _stat() -> FilesystemResourceInfoResult:
+            blob = self.bucket.get_blob(full)
+            if blob is not None and not full.endswith("/"):
+                return FilesystemResourceInfoResult(
+                    path=full,
+                    size=blob.size,
+                    type=FilesystemResourceInfo.FILE,
+                    modified=blob.updated,
+                )
+            children = list(
+                self.client.list_blobs(
+                    self.bucket_name,
+                    prefix=full.rstrip("/") + "/",
+                    max_results=1,
+                )
             )
-        return FilesystemResourceInfoResult(
-            path=full,
-            size=None,
-            type=FilesystemResourceInfo.DIRECTORY,
-            modified=None,
-        )
+            if children:
+                return FilesystemResourceInfoResult(
+                    path=full.rstrip("/"),
+                    size=None,
+                    type=FilesystemResourceInfo.DIRECTORY,
+                    modified=None,
+                )
+            raise FileNotFoundError(f"{path} not found")
+
+        return await asyncio.to_thread(_stat)
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
         """Search for a regex pattern across files under a prefix."""

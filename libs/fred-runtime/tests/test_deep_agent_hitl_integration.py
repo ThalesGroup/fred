@@ -37,6 +37,9 @@ from typing import Any, cast
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import RecordingSpan, RecordingTracer, ToolFriendlyFakeChatModel
+from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware import subagents as deep_subagents
+from deepagents.middleware.filesystem import FilesystemMiddleware
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
@@ -151,6 +154,7 @@ def _compile_deep_agent(
             capability_block=capability_block,
             child=True,
         ),
+        backend=deep_mod.RejectingBackend(),
     )
 
 
@@ -694,6 +698,7 @@ def _native_agent(
     model: _NativeModel,
     *,
     tools: list[Any],
+    backend: BackendProtocol | None = None,
     capability_hitl: dict[str, CapabilityHitlBinding] | None = None,
     approval_policy: ToolApprovalPolicy | None = None,
     tracer: RecordingTracer | None = None,
@@ -724,7 +729,75 @@ def _native_agent(
         checkpointer=InMemorySaver(),
         middleware=frame(),
         subagent_middleware=frame(child=True),
+        backend=backend if backend is not None else deep_mod.RejectingBackend(),
     )
+
+
+@pytest.mark.asyncio
+async def test_native_children_and_parent_share_live_conversation_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SharedNamespace:
+        content: str | None = None
+
+        async def exists(self, path: str) -> bool:
+            del path
+            return self.content is not None
+
+        async def write_text(self, path: str, content: str) -> None:
+            del path
+            self.content = content
+
+        async def read_text(self, path: str) -> str:
+            del path
+            assert self.content is not None
+            return self.content
+
+    child_backends: list[BackendProtocol] = []
+    original_create_sub_agent = deep_subagents.create_sub_agent
+
+    def capture_child_backend(*args: Any, **kwargs: Any) -> Any:
+        spec = args[0]
+        child_backends.extend(
+            middleware.backend
+            for middleware in spec["middleware"]
+            if isinstance(middleware, FilesystemMiddleware)
+            and isinstance(middleware.backend, BackendProtocol)
+        )
+        return original_create_sub_agent(*args, **kwargs)
+
+    monkeypatch.setattr(
+        deep_subagents, "create_sub_agent", capture_child_backend
+    )
+    model = _NativeModel(
+        responses=[],
+        scripts={"parent": [AIMessage(content="done")]},
+    )
+    namespace = SharedNamespace()
+    backend = deep_mod.CompositeBackend(
+        default=deep_mod.RejectingBackend(),
+        routes={
+            "/scratchpad/": deep_mod.ConversationNamespaceBackend(namespace),
+        },
+        artifacts_root="/.deep",
+    )
+    agent = _native_agent(model, tools=[], backend=backend)
+
+    assert agent is not None
+    assert child_backends
+    assert all(child_backend is backend for child_backend in child_backends)
+    child_write = await child_backends[0].awrite(
+        "/scratchpad/shared.md", "shared live"
+    )
+    parent_read = await backend.aread("/scratchpad/shared.md")
+    sibling_read = await child_backends[0].aread("/scratchpad/shared.md")
+
+    assert child_write.error is None
+    assert parent_read.file_data == {
+        "content": "shared live",
+        "encoding": "utf-8",
+    }
+    assert sibling_read.file_data == parent_read.file_data
 
 
 @pytest.mark.asyncio

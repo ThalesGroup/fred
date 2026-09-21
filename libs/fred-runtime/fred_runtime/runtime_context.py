@@ -179,6 +179,13 @@ class RuntimeConfig:
     # second block on every turn. Both are None when the pod shipped no file.
     default_platform_prompt: str | None = None
     platform_instructions: str | None = None
+    # Pod-lifetime fred-core BaseFilesystem. Typed Any here to preserve this
+    # module's adapter-facing dependency boundary, like checkpointer/history.
+    # Appended to preserve positional compatibility for external pod authors.
+    filesystem: Any | None = None
+    # Grouped code-default quotas for the two conversation filesystem namespaces.
+    # Typed Any to keep the runtime context independent from app config models.
+    conversation_filesystem_quotas: Any | None = None
 
 
 class RuntimeContext:

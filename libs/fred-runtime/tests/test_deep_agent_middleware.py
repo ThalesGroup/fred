@@ -59,6 +59,7 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
+from deepagents.backends import CompositeBackend
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
@@ -327,6 +328,50 @@ async def test_deep_build_executor_guards_unbound_execute_tool(
 
 
 @pytest.mark.asyncio
+async def test_deep_build_executor_mounts_standard_scratchpad_without_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    scratchpad = cast(Any, SimpleNamespace())
+    deep_namespace = cast(Any, SimpleNamespace())
+    conversation_filesystem = SimpleNamespace(
+        scratchpad=lambda: scratchpad,
+        namespace=lambda name: deep_namespace if name == ".deep" else scratchpad,
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(conversation_scratchpad=scratchpad),
+        conversation_filesystem=cast(Any, conversation_filesystem),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    backend = cast(CompositeBackend, captured["backend"])
+    assert isinstance(backend, CompositeBackend)
+    assert set(backend.routes) == {"/scratchpad/", "/.deep/"}
+    assert backend.artifacts_root == "/.deep"
+    assert backend.routes["/scratchpad/"]._namespace is scratchpad
+    assert backend.routes["/.deep/"]._namespace is deep_namespace
+    guards = [
+        middleware.tool_name
+        for middleware in cast(list[AgentMiddleware], captured["middleware"])
+        if type(middleware) is ToolCallLimitMiddleware
+    ]
+    assert guards == ["execute"]
+
+
+@pytest.mark.asyncio
 async def test_deep_build_executor_wires_capability_middleware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -513,6 +558,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
             checkpointer=InMemorySaver(),
             subagent_middleware=[],
             middleware=middleware,
+            backend=deep_mod.RejectingBackend(),
         ),
     )
     config = {"configurable": {"thread_id": "hygiene-parent"}}

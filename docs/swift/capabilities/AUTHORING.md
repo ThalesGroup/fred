@@ -100,6 +100,11 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For conversation-scoped text working files, use
+`ctx.services.conversation_scratchpad` (`ConversationScratchpadPort`): paths are scratchpad-relative
+and the runtime privately binds the conversation. It deliberately cannot select a bucket, another
+conversation, or Deep's internal `/.deep/` namespace. Fail loudly when the optional port is absent,
+as for every other runtime service.
 
 ---
 

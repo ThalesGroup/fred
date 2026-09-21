@@ -30,10 +30,13 @@ import logging
 from collections.abc import Collection, Mapping, Sequence
 from typing import cast
 
+from deepagents.backends import CompositeBackend
+from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware.filesystem import FilesystemPermission
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import ToolApprovalPolicy
-from fred_sdk.contracts.runtime import Executor, TracerPort
+from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
+from fred_sdk.contracts.runtime import Executor, RuntimeServices, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -41,6 +44,11 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_backend import (
+    ConversationNamespaceBackend,
+    RejectingBackend,
+)
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -97,6 +105,7 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "grep",
     "execute",
 )
+_SAFE_FILESYSTEM_TOOL_NAMES = frozenset(_FILESYSTEM_TOOL_NAMES) - {"execute"}
 
 
 class DeepAgentRuntime(ReActRuntime):
@@ -108,6 +117,21 @@ class DeepAgentRuntime(ReActRuntime):
     - same typed input/output and events as ReAct
     - deep-agent planner/runtime from `deepagents`
     """
+
+    def __init__(
+        self,
+        *,
+        definition: ReActAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+        conversation_filesystem: ConversationFilesystemService | None = None,
+    ) -> None:
+        super().__init__(
+            definition=definition,
+            services=services,
+            capability_block=capability_block,
+        )
+        self._conversation_filesystem = conversation_filesystem
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -163,6 +187,7 @@ class DeepAgentRuntime(ReActRuntime):
                 for tool in getattr(entry, "tools", ())
                 if tool.name
             )
+        available_tool_names.update(_SAFE_FILESYSTEM_TOOL_NAMES)
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -218,6 +243,7 @@ class DeepAgentRuntime(ReActRuntime):
                 capability_block=capability_block,
                 child=True,
             ),
+            backend=_build_conversation_backend(self._conversation_filesystem),
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -235,6 +261,7 @@ def _create_compiled_deep_agent(
     checkpointer: Checkpointer,
     middleware: Sequence[AgentMiddleware],
     subagent_middleware: Sequence[AgentMiddleware],
+    backend: BackendProtocol,
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -269,7 +296,33 @@ def _create_compiled_deep_agent(
             middleware=list(middleware),
             subagents=[subagent],
             checkpointer=checkpointer,
+            backend=backend,
+            permissions=[
+                FilesystemPermission(
+                    operations=["write"],
+                    paths=["/.deep/**"],
+                    mode="deny",
+                )
+            ],
         ),
+    )
+
+
+def _build_conversation_backend(
+    conversation_filesystem: ConversationFilesystemService | None,
+) -> CompositeBackend:
+    routes: dict[str, BackendProtocol] = {}
+    if conversation_filesystem is not None:
+        routes = {
+            "/scratchpad/": ConversationNamespaceBackend(
+                conversation_filesystem.scratchpad()
+            ),
+            "/.deep/": ConversationNamespaceBackend(
+                conversation_filesystem.namespace(".deep")
+            ),
+        }
+    return CompositeBackend(
+        default=RejectingBackend(), routes=routes, artifacts_root="/.deep"
     )
 
 

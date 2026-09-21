@@ -5784,13 +5784,19 @@ and an operator-configured `ToolApprovalPolicy` route through that one gate and 
 runtime has a second approval mechanism. `GraphRuntime` keeps its own separate HITL lifecycle and is
 unaffected.
 
-Deep passes no explicit `backend=` to `create_deep_agent`, so `deepagents`'s built-in filesystem
-tools default to its `StateBackend` — a conversation-scoped checkpoint filesystem, not a durable
-Workspace: content is checkpointed by Fred's SQL checkpointer and survives across turns of the same
-thread, but is not a separate object store and is not visible outside the thread. Each built-in tool
-name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact
-model-visible name is contributed by the agent's declared toolset or selected capability. Binding a
-partial filesystem surface never enables the remaining built-ins.
+Deep receives one explicit conversation-scoped `CompositeBackend`. Its rejecting default routes
+only `/scratchpad/` and `/.deep/` to a shared runtime object store; the parent and all native
+children use the same backend, so successful writes are visible without child-state merge and
+across later turns or runtime replicas. `/scratchpad/` is model-readable and writable. `/.deep/` is
+model-readable but model writes are rejected; trusted Deep middleware writes its internal artifacts
+there. The six safe built-ins (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) are
+standard runtime bindings even with no optional filesystem capability, while `execute` remains
+guarded and unavailable.
+
+Checkpoint-held files are not migrated and have no legacy read-through. An active conversation may
+therefore need to be restarted after rollout if it refers to an old checkpoint file. Checkpoint
+deletion remains part of erasure for old state; the object-store namespaces join the same recovery
+and purge lifecycle.
 
 `_TransportBackedReActExecutor` is shared unchanged by both runtimes; its per-exchange log line and
 `[V2][EXECUTOR] build start` line name the actual runtime class rather than hard-coding

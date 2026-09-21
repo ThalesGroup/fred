@@ -49,6 +49,7 @@ from fred_core.portable import Span
 from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.deep.deep_runtime import (
+    RejectingBackend,
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
 )
@@ -1007,6 +1008,7 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             checkpointer=None,
             subagent_middleware=[],
             middleware=[carrier, *middleware],
+            backend=RejectingBackend(),
         )
     else:
         agent = create_agent(

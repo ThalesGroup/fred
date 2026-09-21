@@ -82,3 +82,31 @@ async def test_local_filesystem_delete_and_empty_list_are_safe(
 
     assert await filesystem.exists("docs/readme.txt") is False
     assert await filesystem.list("unknown") == []
+
+
+@pytest.mark.asyncio
+async def test_local_filesystem_delete_recurses_without_deleting_root(
+    tmp_path: Path,
+) -> None:
+    filesystem = LocalFilesystem(str(tmp_path))
+    await filesystem.mkdir("conversation/nested")
+    await filesystem.write("conversation/nested/note.txt", "hello")
+
+    await filesystem.delete("conversation")
+
+    assert await filesystem.exists("conversation") is False
+    with pytest.raises(ValueError, match="filesystem root"):
+        await filesystem.delete("")
+
+
+@pytest.mark.asyncio
+async def test_local_filesystem_rejects_sibling_with_shared_root_prefix(
+    tmp_path: Path,
+) -> None:
+    filesystem = LocalFilesystem(str(tmp_path))
+    sibling = tmp_path.parent / f"{tmp_path.name}-sibling"
+
+    with pytest.raises(PermissionError, match="outside of filesystem root"):
+        await filesystem.mkdir(f"../{sibling.name}")
+
+    assert sibling.exists() is False

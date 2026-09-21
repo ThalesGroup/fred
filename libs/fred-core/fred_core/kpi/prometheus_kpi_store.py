@@ -57,6 +57,8 @@ logger = logging.getLogger(__name__)
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
 #   `runtime_stage` so a Grafana `runtime_stage` variable/query never mixes
 #   TURN-01's auth stages with Knowledge Flow's PDF pipeline stages.
+# - conversation_fs_namespace and conversation_fs_resource: the two runtime-owned
+#   namespaces and the two quota dimensions (bytes/files), both closed sets.
 PROMETHEUS_ALLOWED_LABELS = frozenset(
     {
         "tool_name",
@@ -81,6 +83,8 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "runtime_stage",
         "rebac_operation",
         "pdf_stage",
+        "conversation_fs_namespace",
+        "conversation_fs_resource",
     }
 )
 
