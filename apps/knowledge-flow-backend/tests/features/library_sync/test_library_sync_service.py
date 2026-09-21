@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import pathlib
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -34,8 +35,10 @@ from fred_core import AuthorizationError, KeycloakUser, RebacReference, Relation
 from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.structure import SERVICE_AGENT_ROLE
+from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import TaskState, TaskTarget
 from fred_core.tasks.service import TaskService
+from fred_core.tasks.workflow_control import ExecutionStatus
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import knowledge_flow_backend.features.library_sync.service as service_module
@@ -45,7 +48,7 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundEr
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
-from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed
+from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed, on_reconciled_terminal
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 from knowledge_flow_backend.models.base import Base as KFBase
 from knowledge_flow_backend.models.task_models import TASK_TABLES
@@ -830,10 +833,8 @@ async def test_the_upload_s_copy_is_gone_once_the_write_is_answered(tag_store, s
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
-    try:
+    with pytest.raises(RuntimeError) if pipeline_refuses else nullcontext():
         await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
-    except RuntimeError:
-        assert pipeline_refuses
 
     [path] = written
     assert not path.parent.parent.exists()
@@ -1043,6 +1044,28 @@ async def test_a_write_the_pipeline_lost_reads_failed(tag_store):
     await _record(accepted.document_uid, {ProcessingStage.PREVIEW_READY: ProcessingStatus.IN_PROGRESS})
 
     assert await mark_in_progress_stages_failed(accepted.document_uid, "Execution timed_out") is True
+
+    assert await _state_of(service, caller, lib) == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_write_no_worker_ever_picked_up_reads_failed(tag_store, task_service):
+    """Reconciliation, not an activity, ends a task the worker fleet never ran — the document must follow."""
+    lib = library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    caller = pod()
+    accepted = await _write(service, caller, lib, "readme.md")
+    assert await _state_of(service, caller, lib) == "in_progress"
+
+    class _TimedOut:
+        async def get_status(self, workflow_id):
+            return ExecutionStatus.timed_out
+
+        async def cancel(self, workflow_id):
+            return None
+
+    reconciler = TaskService(store=task_service.store, bus=MemoryEventBus(), control=_TimedOut(), on_reconciled_terminal=on_reconciled_terminal)
+    assert await reconciler.reconcile_task(accepted.task_id) is True
 
     assert await _state_of(service, caller, lib) == "failed"
 

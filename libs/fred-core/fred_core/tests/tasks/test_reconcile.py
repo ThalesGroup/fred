@@ -15,14 +15,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 import pytest_asyncio
 
-from fred_core.common import PostgresStoreConfig
+from fred_core.common import PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.sql import create_async_engine_from_config
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
@@ -78,12 +78,18 @@ async def test_noop_workflow_control_is_inert():
 
 @pytest.mark.asyncio
 async def test_temporal_workflow_control_maps_describe_status():
+    rpc_timeouts: list[timedelta | None] = []
+
     class _Handle:
         def __init__(self, name: str) -> None:
             self._name = name
 
-        async def describe(self):
+        async def describe(self, *, rpc_timeout: timedelta | None = None):
+            rpc_timeouts.append(rpc_timeout)
             return SimpleNamespace(status=SimpleNamespace(name=self._name))
+
+        async def cancel(self, *, rpc_timeout: timedelta | None = None) -> None:
+            rpc_timeouts.append(rpc_timeout)
 
     class _Client:
         def __init__(self, name: str) -> None:
@@ -93,6 +99,8 @@ async def test_temporal_workflow_control_maps_describe_status():
             return _Handle(self._name)
 
     class _Provider:
+        config = TemporalSchedulerConfig(rpc_timeout_seconds=7)
+
         def __init__(self, name: str | None, raises: bool = False) -> None:
             self._name = name
             self._raises = raises
@@ -106,9 +114,13 @@ async def test_temporal_workflow_control_maps_describe_status():
     assert await control.get_status("wf-1") == ExecutionStatus.timed_out
     control = TemporalWorkflowControl(cast(Any, _Provider("COMPLETED")))
     assert await control.get_status("wf-1") == ExecutionStatus.completed
+    await control.cancel("wf-1")
     # unreachable → None (never false-fail)
     control = TemporalWorkflowControl(cast(Any, _Provider(None, raises=True)))
     assert await control.get_status("wf-1") is None
+    # Every describe and cancel carries the configured deadline, so a stalled
+    # Temporal frontend fails one call instead of pinning every task read.
+    assert rpc_timeouts == [timedelta(seconds=7)] * 3
 
 
 # ── 3. end-to-end service reconciliation on SQLite ───────────────────────────

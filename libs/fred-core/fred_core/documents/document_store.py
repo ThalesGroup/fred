@@ -180,7 +180,8 @@ class BaseDocumentMetadataStore:
         session: AsyncSession | None = None,
     ) -> List[DocumentMetadata]:
         """The documents a synchronizing caller keyed into this library, in key
-        order and at most `limit` of them, so a reconciling read stays bounded."""
+        order and at most `limit` of them, so a reconciling read stays bounded.
+        Labels are not hydrated: the listing projects keys and stages."""
 
     @abstractmethod
     async def save_metadata(

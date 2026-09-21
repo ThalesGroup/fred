@@ -249,6 +249,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         limit: int,
         session: AsyncSession | None = None,
     ) -> List[DocumentMetadata]:
+        """Labels are not hydrated: this listing projects keys and stages."""
         async with use_session(self._sessions, session) as s:
             rows = (
                 (
@@ -264,9 +265,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 .scalars()
                 .all()
             )
-            docs = [self._from_row(row) for row in rows]
-            await self._hydrate_labels(docs, s)
-        return docs
+        return [self._from_row(row) for row in rows]
 
     async def get_metadata_by_source_key(
         self,

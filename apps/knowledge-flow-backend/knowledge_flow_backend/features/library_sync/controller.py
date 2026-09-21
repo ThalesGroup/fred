@@ -97,6 +97,7 @@ class LibrarySyncController:
                 "write in the library. A deployment with no scheduler refuses the write with "
                 "503 before storing anything."
             ),
+            responses={503: {"description": "A deployment with no scheduler refuses the write before storing anything."}},
         )
         async def write_document(
             library_id: str,
@@ -162,9 +163,10 @@ class LibrarySyncController:
             description=(
                 "Returns the documents written into this library by key, in key order, each with "
                 "the identifier Fred gave it, the version the caller last sent, and where its "
-                "ingestion stands. 'succeeded' is what a run reconciles against; 'in_progress' is "
-                "a write still owed its outcome; 'failed' is one the pipeline refused, which the "
-                "next write of that key takes again. A person's upload into the same library "
+                "ingestion stands. A run reconciles against 'succeeded' and 'in_progress' alike — "
+                "a version match on a write still owed its outcome is not a second write; 'failed' "
+                "is one the pipeline refused, which the next write of that key takes again. "
+                "A person's upload into the same library "
                 "carries no key and is not listed. The listing is bounded, and says so when it is "
                 "short of the whole library."
             ),

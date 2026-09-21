@@ -53,7 +53,12 @@ _MACHINE_KIND = "knowledge_base"
 # Mirrors `TaskState.is_terminal` in fred_core: spelled out here because a pod
 # reads a task's state without installing the platform.
 _SUCCEEDED = "succeeded"
-_TERMINAL_STATES = (_SUCCEEDED, "failed", "cancelled")
+_FAILED = "failed"
+_TERMINAL_STATES = (_SUCCEEDED, _FAILED, "cancelled")
+
+# A poll answered with one of these says nothing about the task: the request
+# timed out at a proxy, or Fred asked to slow down. Polling on is the answer.
+_TRANSIENT_STATUSES = (408, 429)
 
 
 class _RefusedError(RuntimeError):
@@ -226,7 +231,12 @@ class DocumentPublisher:
         return DocumentOutcome.model_validate(response.json())
 
     async def wait(
-        self, task_id: str, *, timeout: float = 600.0, poll_interval: float = 2.0
+        self,
+        task_id: str,
+        *,
+        timeout: float = 600.0,
+        poll_interval: float = 2.0,
+        max_poll_interval: float = 15.0,
     ) -> DocumentOutcome:
         """Follow one ingestion to its end, and return that end whatever it is.
 
@@ -234,16 +244,22 @@ class DocumentPublisher:
         back as a value. Only the watching is bounded: past `timeout` this
         raises `DocumentWaitTimeout` and the task itself keeps running. A blip
         on the way to Fred is not an answer either, so it does not end the wait.
+        Polls `poll_interval` apart at first, doubling up to `max_poll_interval`.
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
+        interval = poll_interval
         while True:
             try:
                 outcome = await self.outcome(task_id)
             except (httpx.TransportError, DocumentPublishError) as error:
                 # A refusal (4xx) is Fred's answer about this task; anything
                 # else says nothing about it, and it is still running.
-                if isinstance(error, DocumentPublishError) and error.status_code < 500:
+                if (
+                    isinstance(error, DocumentPublishError)
+                    and error.status_code < 500
+                    and error.status_code not in _TRANSIENT_STATUSES
+                ):
                     raise
                 logger.debug("Poll of task %s failed, polling on: %s", task_id, error)
             else:
@@ -252,13 +268,14 @@ class DocumentPublisher:
             remaining = deadline - loop.time()
             if remaining <= 0:
                 raise DocumentWaitTimeout(task_id)
-            await asyncio.sleep(min(poll_interval, remaining))
+            await asyncio.sleep(min(interval, remaining))
+            interval = min(interval * 2, max_poll_interval)
 
     async def documents(self) -> dict[str, str | None]:
-        """What the library holds, by source key, with the version each carries.
+        """What the library holds or is about to, by source key, with its version.
 
-        Only documents whose ingestion ended well are listed: one still in
-        flight or failed is nothing a run can reconcile against.
+        A failed write is left out so the next run writes that key again; one
+        still in flight is listed, so a version match on it is not a second write.
         """
         response = await self._client.get(
             f"{self._base_url}/libraries/{self._library_id}/documents",
@@ -276,7 +293,7 @@ class DocumentPublisher:
         return {
             item["source_key"]: item.get("document_version")
             for item in listing.get("items", [])
-            if item.get("state") == _SUCCEEDED and item.get("source_key")
+            if item.get("state") != _FAILED and item.get("source_key")
         }
 
     async def retract(self, *, relative_path: str) -> None:

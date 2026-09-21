@@ -2207,7 +2207,7 @@ export type LibraryDocument = {
   source_key: string;
   document_uid: string;
   document_version?: string | null;
-  /** Only 'succeeded' is something a run reconciles against; the other two are writes still owed an outcome, or refused one. */
+  /** A run reconciles against 'succeeded' and 'in_progress' alike — a version match on an in-flight key is not a second write; 'failed' is a write the next write of that key takes again. */
   state: "succeeded" | "in_progress" | "failed";
 };
 export type LibraryDocuments = {

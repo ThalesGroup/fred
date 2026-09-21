@@ -215,7 +215,7 @@ class LibraryDocument(BaseModel):
     document_version: Optional[str] = None
     state: DocumentState = Field(
         ...,
-        description="Only 'succeeded' is something a run reconciles against; the other two are writes still owed an outcome, or refused one.",
+        description="A run reconciles against 'succeeded' and 'in_progress' alike — a version match on an in-flight key is not a second write; 'failed' is a write the next write of that key takes again.",
     )
 
 

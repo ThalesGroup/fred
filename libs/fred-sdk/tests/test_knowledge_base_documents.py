@@ -16,8 +16,8 @@
 
 A write is accepted before it is ingested, so the publisher hands out a task to
 follow rather than a verdict. What matters most here: a failed ingestion comes
-back as a value, a wait that runs out never cancels the task, and only what
-actually landed is listed as held.
+back as a value, a wait that runs out never cancels the task, and a failed write
+is the only one not listed as held — so it is written again.
 """
 
 from __future__ import annotations
@@ -248,6 +248,43 @@ def test_a_blip_on_the_way_to_fred_does_not_end_the_wait(monkeypatch):
     assert len(fred.calls) == 4
 
 
+@pytest.mark.parametrize("status", [408, 429])
+def test_a_timeout_or_a_throttle_on_the_way_is_not_an_answer_about_the_task(
+    monkeypatch, status
+):
+    fred = _Fred().answers(
+        "GET",
+        (status, "later"),
+        (200, _summary("running")),
+        (200, _summary("succeeded")),
+    )
+    publisher = _publisher(fred, monkeypatch)
+
+    outcome = asyncio.run(publisher.wait(TASK, poll_interval=0.001))
+
+    assert outcome.succeeded is True
+    assert len(fred.calls) == 3
+
+
+def test_a_long_ingestion_is_asked_about_less_and_less_often(monkeypatch):
+    """Each poll waits twice as long as the last, up to the cap."""
+    slept: list[float] = []
+
+    async def _record(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr(documents_module.asyncio, "sleep", _record)
+    fred = _Fred().answers(
+        "GET", *([(200, _summary("running"))] * 5), (200, _summary("succeeded"))
+    )
+    publisher = _publisher(fred, monkeypatch)
+
+    outcome = asyncio.run(publisher.wait(TASK, poll_interval=2))
+
+    assert outcome.succeeded is True
+    assert slept == [2, 4, 8, 15, 15]
+
+
 def test_a_refused_poll_ends_the_wait_at_once(monkeypatch):
     """A 4xx is Fred's answer about this task, so there is nothing to wait for."""
     fred = _Fred().answers("GET", (404, "no such task"))
@@ -286,7 +323,8 @@ def test_an_unknown_task_names_itself_and_the_status(monkeypatch):
         asyncio.run(publisher.outcome(TASK))
 
 
-def test_only_what_landed_is_held(monkeypatch):
+def test_what_landed_or_is_landing_is_held_and_a_failure_is_not(monkeypatch):
+    """An in-flight write is not written twice; a failed one is, by its absence."""
     fred = _Fred().answers(
         "GET",
         (
@@ -327,7 +365,7 @@ def test_only_what_landed_is_held(monkeypatch):
     held = asyncio.run(publisher.documents())
 
     assert fred.calls[0][:2] == ("GET", f"{BASE}/libraries/{LIBRARY}/documents")
-    assert held == {"docs/a.md": "etag-1", "docs/b.md": None}
+    assert held == {"docs/a.md": "etag-1", "docs/b.md": None, "docs/c.md": "etag-3"}
 
 
 def test_a_refused_inventory_names_the_library(monkeypatch):
