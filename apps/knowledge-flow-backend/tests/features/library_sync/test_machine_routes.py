@@ -63,10 +63,10 @@ class _RecordingService:
         self.seen.append((user, library_id))
         return "revision-1"
 
-    async def write_document(self, user: KeycloakUser, *, library_id, path, source_key, document_version, source_tag, upload, background_tasks=None) -> DocumentAccepted:
+    async def write_document(self, user: KeycloakUser, *, library_id, path, source_key, document_version, source_tag, profile, upload, background_tasks=None) -> DocumentAccepted:
         if self.unavailable:
             raise SynchronizationUnavailable("no scheduler is enabled")
-        self.writes.append({"user": user, "library_id": library_id, "path": path, "source_key": source_key, "background_tasks": background_tasks})
+        self.writes.append({"user": user, "library_id": library_id, "path": path, "source_key": source_key, "profile": profile, "background_tasks": background_tasks})
         return DocumentAccepted(source_key=source_key, path=path, document_version=document_version, created=True, document_uid="doc-1", task_id="task-1")
 
     async def list_documents(self, user: KeycloakUser, *, library_id: str, limit: int) -> LibraryDocuments:
@@ -127,27 +127,37 @@ def _machine() -> KeycloakUser:
     return KeycloakUser(uid="machine", username="sync", roles=[SERVICE_AGENT_ROLE], client_id="sync-client")
 
 
-def _post_document(client: TestClient):
+def _post_document(client: TestClient, profile: str | None = None):
     return client.post(
         DOCUMENTS_PATH,
-        data={"path": "specs/api.md", "source_key": "specs/api.md", "document_version": "etag-1"},
+        data={"path": "specs/api.md", "source_key": "specs/api.md", "document_version": "etag-1", **({"profile": profile} if profile is not None else {})},
         files={"file": ("api.md", b"# api\n", "text/markdown")},
     )
 
 
-def test_a_write_is_accepted_with_a_task_to_follow(sync: SimpleNamespace) -> None:
+@pytest.mark.parametrize("profile", [None, "fast", "medium", "rich"])
+def test_a_write_is_accepted_with_a_task_to_follow(sync: SimpleNamespace, profile: str | None) -> None:
     """Accepted, not done: the pipeline the upload surface uses answers later, through the task."""
     with _client(sync, _machine()) as client:
-        response = _post_document(client)
+        response = _post_document(client, profile)
 
     assert response.status_code == 202
     expected = DocumentAccepted(source_key="specs/api.md", path="specs/api.md", document_version="etag-1", created=True, document_uid="doc-1", task_id="task-1")
     assert response.json() == expected.model_dump()
     [write] = sync.service.writes
+    assert write["profile"] == (profile or "medium")
     assert (write["library_id"], write["path"], write["source_key"]) == ("library", "specs/api.md", "specs/api.md")
     # The request's own background tasks reach the service, so a memory-backed
     # pipeline runs after the answer instead of holding it.
     assert isinstance(write["background_tasks"], BackgroundTasks)
+
+
+def test_an_invalid_profile_is_rejected_before_the_service(sync: SimpleNamespace) -> None:
+    with _client(sync, _machine()) as client:
+        response = _post_document(client, "turbo")
+
+    assert response.status_code == 422
+    assert sync.service.writes == []
 
 
 def test_a_stack_that_cannot_schedule_says_so_instead_of_half_accepting(sync: SimpleNamespace) -> None:

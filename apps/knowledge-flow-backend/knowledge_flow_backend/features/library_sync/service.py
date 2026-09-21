@@ -36,6 +36,7 @@ from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, 
 from fred_core.tasks.service import TaskService
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.ingestion.ingestion_controller import (
     cleanup_uploaded_temp_file,
     resolve_tag_owners,
@@ -99,6 +100,7 @@ class LibrarySyncService:
         document_version: Optional[str],
         source_tag: str,
         upload: UploadFile,
+        profile: IngestionProcessingProfile = IngestionProcessingProfile.medium,
         background_tasks: BackgroundTasks | None = None,
     ) -> DocumentAccepted:
         """Write one document, addressed by the caller's key.
@@ -126,7 +128,6 @@ class LibrarySyncService:
             await self._refile(user, existing, folder_id)
         owning_team_id = await self._owning_team_id(user, folder_id)
 
-        profile = ApplicationContext.get_instance().get_config().processing.default_profile
         # Both copy bytes — off the upload, then into the content store. On this
         # surface a whole source's worth of them arrives concurrently, so neither
         # runs on the event loop.

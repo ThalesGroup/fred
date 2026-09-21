@@ -27,8 +27,8 @@ from typing import Any
 
 import httpx
 import pytest
-from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base import documents as documents_module
+from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import (
     DocumentHandle,
     DocumentPublisher,
@@ -141,12 +141,18 @@ def _publisher(fred: _Fred, monkeypatch: pytest.MonkeyPatch) -> DocumentPublishe
     return DocumentPublisher(_configuration(), library_id=LIBRARY, source_tag="fred")
 
 
-def test_a_write_is_handed_over_and_answered_with_what_to_follow(monkeypatch):
+@pytest.mark.parametrize("profile", [None, "fast", "medium", "rich"])
+def test_a_write_is_handed_over_and_answered_with_what_to_follow(monkeypatch, profile):
     fred = _Fred().answers("POST", (202, ACCEPTED))
     publisher = _publisher(fred, monkeypatch)
 
     handle = asyncio.run(
-        publisher.publish(relative_path="docs/a.md", content=b"# A", version="etag-1")
+        publisher.publish(
+            relative_path="docs/a.md",
+            content=b"# A",
+            version="etag-1",
+            **({"profile": profile} if profile is not None else {}),
+        )
     )
 
     method, url, kwargs = fred.calls[0]
@@ -158,6 +164,7 @@ def test_a_write_is_handed_over_and_answered_with_what_to_follow(monkeypatch):
         "source_key": "docs/a.md",
         "source_tag": "fred",
         "document_version": "etag-1",
+        "profile": profile or "medium",
     }
     assert handle == DocumentHandle(
         task_id=TASK,

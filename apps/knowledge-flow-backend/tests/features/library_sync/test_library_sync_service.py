@@ -26,6 +26,7 @@ import pathlib
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -44,6 +45,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import knowledge_flow_backend.features.library_sync.service as service_module
 import knowledge_flow_backend.features.metadata.service as metadata_service_module
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
@@ -752,9 +754,16 @@ async def test_a_person_s_write_is_still_recorded_as_a_person_s(tag_store, kpi_w
 
 
 @pytest.mark.asyncio
-async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_store, scheduler, task_service):
+@pytest.mark.parametrize("profile", [None, *IngestionProcessingProfile])
+async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_store, scheduler, task_service, monkeypatch, profile):
     lib = library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    config = ApplicationContext.get_instance().get_config()
+    monkeypatch.setattr(config.processing, "default_profile", IngestionProcessingProfile.fast)
+    extract = AsyncMock(wraps=service._ingestion_service.extract_metadata)
+    monkeypatch.setattr(service._ingestion_service, "extract_metadata", extract)
+    start = AsyncMock(wraps=task_service.start)
+    monkeypatch.setattr(task_service, "start", start)
     caller = pod()
     background = BackgroundTasks()
 
@@ -767,13 +776,17 @@ async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_
         source_tag="fred",
         upload=upload(name="api.md"),
         background_tasks=background,
+        **({"profile": profile} if profile is not None else {}),
     )
 
     document = await _metadata_store().get_metadata_by_source_key(lib.id, "specs/api.md")
     assert document is not None
     assert accepted.document_uid == document.document_uid
     folder = next(tag for tag in tag_store.tags.values() if tag.full_path == "Mirror/specs")
-    profile = ApplicationContext.get_instance().get_config().processing.default_profile
+    expected_profile = profile or IngestionProcessingProfile.medium
+    assert extract.call_args.kwargs["profile"] == expected_profile
+    assert start.call_args.args[0].params.profile.value == expected_profile.value
+    assert config.processing.default_profile == IngestionProcessingProfile.fast
 
     [submission] = scheduler.submissions
     assert (submission.user, submission.pipeline_name, submission.background_tasks) == (caller, "library_sync", background)
@@ -782,7 +795,7 @@ async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_
         document.document_uid,
         [folder.id],
         "fred",
-        profile,
+        expected_profile,
         accepted.task_id,
         "api.md",
     )

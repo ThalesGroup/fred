@@ -93,6 +93,11 @@ the library back to learn what landed. One pipeline, so a machine's document
 is never a second-class document, and the API process never carries
 ingestion work a worker exists to do.
 
+The document POST accepts an optional multipart `profile`: `fast`, `medium`, or
+`rich`. `DocumentPublisher.publish(..., profile="rich")` forwards this choice.
+Omitting it uses `medium` for KB writes, independently of the global processing
+default used by UI uploads. Invalid REST profile values return HTTP 422.
+
 **The task queue is derived, never configured.** `routing.task_queue_for`
 builds it from the definition id using the same fred-pod function the Control
 Plane uses, so the dispatching side and the worker cannot disagree by

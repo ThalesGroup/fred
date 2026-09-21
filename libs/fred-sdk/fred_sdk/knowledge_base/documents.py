@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
+from typing import Literal
 
 import httpx
 from fred_pod.security.backend_to_backend_auth import M2MTokenProvider
@@ -191,7 +192,12 @@ class DocumentPublisher:
         self._tokens = M2MTokenProvider(configuration.m2m)
 
     async def publish(
-        self, *, relative_path: str, content: bytes, version: str | None = None
+        self,
+        *,
+        relative_path: str,
+        content: bytes,
+        version: str | None = None,
+        profile: Literal["fast", "medium", "rich"] = "medium",
     ) -> DocumentHandle:
         """Hand one document to Fred, replacing what the same path held before.
 
@@ -200,6 +206,7 @@ class DocumentPublisher:
         it landed. The source key is the caller's own name for it — writing the
         same key again updates that document, so nothing about Fred's own
         identifiers ever has to be remembered here.
+        `profile` selects ingestion processing and defaults to `medium`.
         """
         response = await self._client.post(
             f"{self._base_url}/libraries/{self._library_id}/documents",
@@ -215,6 +222,7 @@ class DocumentPublisher:
                 "path": relative_path,
                 "source_key": relative_path,
                 "source_tag": self._source_tag,
+                "profile": profile,
                 **({"document_version": version} if version else {}),
             },
             headers=await self._headers(),

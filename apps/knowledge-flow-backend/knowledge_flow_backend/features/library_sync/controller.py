@@ -30,6 +30,7 @@ from fred_core import AuthorizationError, KeycloakUser, get_current_user_without
 from fred_core.security.structure import is_service_agent
 
 from knowledge_flow_backend.common.source_utils import UnknownSourceTagError
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import (
@@ -107,6 +108,7 @@ class LibrarySyncController:
             source_key: Annotated[str, Form(description="The caller's own name for this document, unique within the library.")],
             document_version: Annotated[Optional[str], Form(description="The source's version of this document. Opaque to Fred.")] = None,
             source_tag: Annotated[str, Form(description="Which configured document source this caller is.")] = "fred",
+            profile: Annotated[IngestionProcessingProfile, Form(description="Processing profile for this document; defaults to medium.")] = IngestionProcessingProfile.medium,
             user: KeycloakUser = Depends(require_sync_client),
         ) -> DocumentAccepted:
             try:
@@ -117,6 +119,7 @@ class LibrarySyncController:
                     source_key=source_key,
                     document_version=document_version,
                     source_tag=source_tag,
+                    profile=profile,
                     upload=file,
                     background_tasks=background_tasks,
                 )

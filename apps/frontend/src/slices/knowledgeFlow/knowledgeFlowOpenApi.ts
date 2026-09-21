@@ -2186,6 +2186,7 @@ export type DocumentAccepted = {
   /** The task processing this write; follow it for the outcome. */
   task_id: string;
 };
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
   /** The document's bytes. */
   file: string;
@@ -2197,6 +2198,8 @@ export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
   document_version?: string | null;
   /** Which configured document source this caller is. */
   source_tag?: string;
+  /** Processing profile for this document; defaults to medium. */
+  profile?: IngestionProcessingProfile;
 };
 export type DocumentRemoved = {
   source_key: string;
@@ -2748,7 +2751,6 @@ export type ProcessDocumentsResponse = {
   workflow_id: string;
   run_id?: string | null;
 };
-export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
