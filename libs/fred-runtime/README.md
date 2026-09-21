@@ -190,6 +190,10 @@ pip install fred-runtime
 pip install fred-runtime[app]
 ```
 
+`fred-runtime` depends on `fred-sdk[agents]`, so an agent pod installs nothing
+else to get the authoring surface. A Knowledge Base pod installs
+`fred-sdk[knowledge-base]` instead and never needs `fred-runtime`.
+
 Requires Python 3.12.
 
 ---
@@ -248,6 +252,7 @@ See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a working re
 
 | Package        | PyPI                                           | Role                                                                          |
 | -------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `fred-pod`     | [pypi](https://pypi.org/project/fred-pod/)     | Pod floor — configuration, identity, naming                                   |
 | `fred-core`    | [pypi](https://pypi.org/project/fred-core/)    | Pure utilities — logging, model factories, embeddings, portable observability |
 | `fred-sdk`     | [pypi](https://pypi.org/project/fred-sdk/)     | Agent authoring — ReAct, Graph, tool contracts                                |
 | `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | This package                                                                  |

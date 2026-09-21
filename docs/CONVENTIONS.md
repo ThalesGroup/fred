@@ -10,7 +10,7 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
 - **Minimal scope.** Implement exactly what the task requires. No refactors, no
   "while I'm here" cleanups, no abstraction for hypothetical future use.
 - **Shared code first.** Before writing a new utility, check whether it exists in
-  `fred-core`, `fred-sdk`, or the shared frontend design system. Duplicate code is
+  `fred-pod`, `fred-core`, `fred-sdk`, or the shared frontend design system. Duplicate code is
   a defect.
 - **Fewer lines over more lines.** If two approaches produce the same result, choose
   the shorter one.

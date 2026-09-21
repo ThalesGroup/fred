@@ -68,6 +68,7 @@ from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.logs.opensearch_log_store import OpenSearchLogStore
 from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
 from fred_core.model.models import ModelProvider
+from fred_core.model.rate_limit import is_rate_limit
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
@@ -90,6 +91,7 @@ from fred_core.security.models import (
 from fred_core.security.oidc import (
     decode_jwt,
     get_current_user,
+    get_current_user_or_service,
     get_current_user_without_gcu,
     get_keycloak_client_id,
     get_keycloak_url,
@@ -182,6 +184,7 @@ __all__ = [
     "LogStorageConfig",
     "InMemoryLogStorageConfig",
     "get_current_user",
+    "get_current_user_or_service",
     "get_current_user_without_gcu",
     "decode_jwt",
     "initialize_user_security",
@@ -215,6 +218,7 @@ __all__ = [
     "get_structured_chain",
     "get_embeddings",
     "ModelProvider",
+    "is_rate_limit",
     "BaseSessionStore",
     "PostgresSessionStore",
     "SessionSchema",

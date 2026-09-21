@@ -4,10 +4,12 @@ import asyncio
 import pathlib
 import shutil
 import tempfile
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
 import yaml
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 _CONFIG_SOURCE = (
     pathlib.Path(__file__).resolve().parents[1] / "config" / "configuration_test.yaml"
@@ -140,6 +142,28 @@ def _setup_test_schema() -> None:
         await engine.dispose()
 
     asyncio.run(_create_all())
+
+
+@pytest_asyncio.fixture
+async def control_plane_sql_engine(
+    tmp_path: pathlib.Path,
+) -> AsyncIterator[AsyncEngine]:
+    """Isolated schema; close SQLite connections before the test loop ends."""
+    from control_plane_backend.models.base import Base as CPBase
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as FredCoreBase
+    from fred_core.sql import create_async_engine_from_config
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "control_plane.sqlite3"))
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(FredCoreBase.metadata.create_all)
+            await conn.run_sync(CPBase.metadata.create_all)
+        yield engine
+    finally:
+        await engine.dispose()
 
 
 @pytest.fixture(autouse=True)

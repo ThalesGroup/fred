@@ -41,8 +41,8 @@ import random
 import re
 import time
 from dataclasses import dataclass
-from typing import Optional
 
+from fred_core import is_rate_limit
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -81,31 +81,6 @@ class ExtractionResult:
     item_count: int
     chunks_processed: int
     truncated: bool
-
-
-def _is_rate_limit(exc: Exception) -> tuple[bool, Optional[float]]:
-    """Best-effort detection of a provider rate-limit (429), plus a Retry-After
-    hint in seconds when the provider supplied one.
-
-    Providers surface 429 in different shapes through LangChain, so we probe a
-    status code, the exception type name, and the message text rather than
-    importing any one provider's error class.
-    """
-
-    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
-    name = type(exc).__name__.lower()
-    msg = str(exc).lower()
-    is_rl = status == 429 or "ratelimit" in name or "rate limit" in msg or "rate_limited" in msg or "429" in msg
-    retry_after: Optional[float] = None
-    headers = getattr(getattr(exc, "response", None), "headers", None)
-    if headers:
-        raw = headers.get("Retry-After") or headers.get("retry-after")
-        if raw:
-            try:
-                retry_after = float(raw)
-            except (TypeError, ValueError):
-                retry_after = None
-    return is_rl, retry_after
 
 
 def _parse_items(raw: str) -> list[str]:
@@ -190,7 +165,7 @@ class DocumentExtractor:
                     text = content if isinstance(content, str) else str(content)
                     return _parse_items(text)
                 except Exception as exc:  # noqa: BLE001 — see below
-                    is_rl, retry_after = _is_rate_limit(exc)
+                    is_rl, retry_after = is_rate_limit(exc)
                     if is_rl and attempt < _MAX_RETRIES:
                         delay = retry_after if retry_after is not None else min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2**attempt))
                         # Jitter avoids a thundering herd of retried chunks all

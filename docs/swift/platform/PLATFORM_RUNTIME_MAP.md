@@ -59,7 +59,7 @@ When adding new behavior, decide with these rules:
 2. **Document ingestion/indexing pipeline?** Put it in **Knowledge Flow** (API + Temporal if async/batch).
 3. **Agent execution, SSE streaming, HITL, checkpoints?** New agent definitions go in `apps/fred-agents`; execution framework changes go in `libs/fred-runtime`.
 4. **Policy-driven scheduled lifecycle action?** Put it in **Control Plane Temporal**.
-5. **Cross-backend shared primitive?** Put it in **fred-core** (only if truly shared, stable, and minimal).
+5. **Cross-backend shared primitive?** Put it in **fred-core** (only if truly shared, stable, and minimal). If it is a primitive every pod needs just to read its configuration, authenticate or name what it owns, it belongs one level down, in **fred-pod** (libs/fred-pod/README.md).
 6. **New runtime contract type (execution identity, authorization, events)?** Put it in **fred-sdk** (`libs/fred-sdk/fred_sdk/contracts/`).
 
 ## 4) CLI Convention (Same Pattern Across Apps)

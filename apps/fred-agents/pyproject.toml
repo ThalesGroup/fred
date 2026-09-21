@@ -8,7 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
   "fred-core>=4.0.0",
-  "fred-sdk>=4.0.0",
+  "fred-sdk[agents]>=4.1.0",
   "fred-runtime[app]>=4.0.0",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
@@ -30,6 +30,7 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  "watchfiles>=1.0",
 ]
 
 [build-system]
@@ -49,6 +50,7 @@ markers = ["integration: marks tests that require external services"]
 testpaths = ["tests"]
 
 [tool.uv.sources]
+fred-pod = { path = "../../libs/fred-pod", editable = true }
 fred-core = { path = "../../libs/fred-core", editable = true }
 fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-runtime = { path = "../../libs/fred-runtime", editable = true }
@@ -68,4 +70,5 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  "watchfiles>=1.0",
 ]

@@ -5888,3 +5888,85 @@ need updating. No KPI preset, chart or manifest filtered on
 **Scope.** `libs/fred-runtime/fred_runtime/app/config.py`,
 `.../app/context.py`, `.../app/agent_app.py`, `.../runtime_context.py`,
 `apps/fred-agents/config/`, `deploy/charts/fred/values.yaml`.
+
+### 8.80 Capability-tool tracing (2026-09-18)
+
+ReAct and Deep tool observability creates spans for middleware-contributed tools.
+Binder-resolved tools carry an internal self-traced marker so the middleware does
+not duplicate their spans. Both paths share the same active-parent and terminal
+lifecycle: success, returned tool error, raised exception and cancellation end the
+span; nested execution attaches beneath the invoking tool and restores its parent.
+`v2.react.runtime_tool` is classified as a Langfuse tool observation. Arguments and
+returned content remain gated by `Tracer.captures_content`; KPI/audit payloads and
+labels are unchanged.
+
+Native-child middleware composition is a separate integration layer; this correction does not
+introduce custom delegation or a filesystem backend.
+
+### 8.81 Provider rate-limit retries (2026-09-18)
+
+ReAct and Deep **parent** model calls now share `RateLimitRetryMiddleware`,
+placed after capability wrappers and before `TracingKpiMiddleware`. Input
+preparation runs once per logical model call; each runtime attempt gets a span
+and latency sample. Only the model call is retried, so completed tools are not
+replayed. Native child graph wiring remains part of the later integration
+layer; this extraction does not complete issue #2535's child acceptance.
+
+The policy permits four total attempts and a 60-second retry scheduling window.
+It honors finite nonnegative numeric or HTTP-date `Retry-After` hints with
+jitter, otherwise using exponential jittered backoff (2-second base, 30-second
+cap). An unaffordable hint ends the call rather than retrying earlier than the
+provider requested. Scheduling is checked again after sleep; cancellation and
+non-429 errors propagate. Exhaustion raises a readable `ProviderRateLimitError`
+without the provider payload. The window bounds retry starts, not an in-flight
+request: existing `model/factory.py` explicit transport/request timeouts remain
+responsible for provider I/O. Configured SDK retries remain inside a runtime
+attempt; this does not claim a separate span for each SDK-internal HTTP retry.
+No profile settings change.
+
+`fred_core.model.rate_limit.is_rate_limit` is shared with Knowledge Flow's
+extraction map phase (§8.44). Explicit non-429 statuses override message fallback;
+malformed or nonfinite hints use normal backoff. Each detected throttle emits
+`llm.rate_limit_events_total` and a WARNING for backoff or ERROR for exhaustion.
+`model_name` and `status` are already in `PROMETHEUS_ALLOWED_LABELS`, so the counter
+is exported to Prometheus/Grafana; no new label cardinality is introduced.
+
+Concurrency admission and retry UI remain separate work.
+
+
+### 8.82 Model-input hygiene for Deep parents (2026-09-18)
+
+Deep parent calls now use Fred's shared request-only hygiene before capability
+wrappers and retries. Dangling tool exchanges are removed, open-turn reasoning is
+rehomed as text, and per-message names are removed from copied model inputs so
+OpenAI-compatible Mistral payloads omit unsupported `assistant.name`. Checkpoint
+history retains its original names, reasoning and tool messages. ReAct uses the
+same name sanitizer and retains its existing trimming policy.
+
+Deep applies neither message-count nor character trimming
+(`max_history_messages=None`, no `max_history_chars`): `create_deep_agent`
+already installs its summarization middleware, which owns context compaction.
+The 200,000-character guard stays ReAct-only.
+
+Native `task` child composition is the next extraction layer; this parent-only
+change does not complete issues #2740 and #2741's native-child acceptance.
+
+### 8.83 Native Deep child integration (2026-09-18)
+
+Deep explicitly configures the native general-purpose `task` child with the Fred-composed
+instance prompt, delegation framing and the parent's resolved tools and selected capability
+middleware. Its graph gets separate Fred hygiene, retry, model/tool observability and
+filesystem guard instances. Middleware-contributed tool names participate in availability
+checks; this does not select or lift any filesystem backend.
+
+The child reuses Fred's approval decisions: unconditional gates are hidden from model
+requests, and emitted gated calls receive error tool results without a human interrupt.
+Conditional predicates still apply per call and fail closed when they raise. Ungated calls
+in a mixed batch can execute; an unanswerable gated call without an ID skips the batch.
+Parents retain the existing Fred approval/resume contract. Child model and tool spans nest
+under the invoking task tool span, with request-local tracing context across concurrent
+children. Retries and input hygiene use the same policies as their parent frame.
+
+This integration does not restore custom `run_subagent` execution, add invocation-depth runtime fields, inject
+storage backends or implement compaction. Filesystem/backend work remains a separate slice;
+these tests do not establish durable workspace or replica-safe storage behavior.

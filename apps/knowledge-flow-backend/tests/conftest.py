@@ -117,6 +117,13 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
     async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
         return [doc.model_copy(deep=True) for doc in self._items.values() if doc.source_tag == source_tag]
 
+    async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
+        keyed = sorted(
+            (doc for doc in self._items.values() if doc.source.source_library_id == source_library_id),
+            key=lambda doc: doc.source.source_key or "",
+        )
+        return [doc.model_copy(deep=True) for doc in keyed[:limit]]
+
     async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         self._items[metadata.document_uid] = metadata.model_copy(deep=True)
 

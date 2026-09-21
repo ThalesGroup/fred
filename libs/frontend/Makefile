@@ -8,13 +8,27 @@ RELEASE_VALIDATION_ROOT ?= target/release-validation
 RELEASE_SELECTION ?=
 SELECTION_ARGS = $(if $(filter command line,$(origin RELEASE_SELECTION)),--select "$(RELEASE_SELECTION)",$(if $(RELEASE_SELECTION),--select "$(RELEASE_SELECTION)",))
 
-.PHONY: help install build lint format-check code-quality format-fix code-quality-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify clean
+# Every target below that shells out to npm needs the installed tree; only
+# `help` and `clean` run on Node builtins alone. Declaring the dependency once
+# here is what keeps a fresh clone from failing with "eslint: not found".
+NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify
+
+.PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS)
+
+$(NPM_TARGETS): node_modules
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Install the lockfile-pinned producer dependencies
+# Real file target, not .PHONY: make reruns `npm ci` only when the manifests are
+# newer than the tree, so the install is automatic once and a no-op afterwards.
+node_modules: package.json package-lock.json
 	npm ci
+	@touch node_modules
+
+install: ## Reinstall the lockfile-pinned producer dependencies from scratch
+	npm ci
+	@touch node_modules
 
 build: ## Generate all frontend packages from canonical FRED inputs
 	npm run build

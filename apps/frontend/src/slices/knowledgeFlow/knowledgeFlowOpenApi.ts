@@ -27,6 +27,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTaskKnowledgeFlowV1TasksTaskIdGet: build.query<
+      GetTaskKnowledgeFlowV1TasksTaskIdGetApiResponse,
+      GetTaskKnowledgeFlowV1TasksTaskIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks/${queryArg.taskId}` }),
+    }),
     streamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGet: build.query<
       StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse,
       StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiArg
@@ -330,6 +336,17 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
         params: {
           source_key: queryArg.sourceKey,
+        },
+      }),
+    }),
+    listDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGet: build.query<
+      ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiResponse,
+      ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/libraries/${queryArg.libraryId}/documents`,
+        params: {
+          limit: queryArg.limit,
         },
       }),
     }),
@@ -1056,6 +1073,10 @@ export type ListTasksKnowledgeFlowV1TasksGetApiArg = {
   kind?: string | null;
   state?: string | null;
 };
+export type GetTaskKnowledgeFlowV1TasksTaskIdGetApiResponse = /** status 200 Successful Response */ TaskSummary;
+export type GetTaskKnowledgeFlowV1TasksTaskIdGetApiArg = {
+  taskId: string;
+};
 export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
 export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiArg = {
   taskId: string;
@@ -1243,7 +1264,7 @@ export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg 
   storageKey?: string | null;
 };
 export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiResponse =
-  /** status 200 Successful Response */ DocumentWritten;
+  /** status 202 Successful Response */ DocumentAccepted;
 export type WriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostApiArg = {
   libraryId: string;
   bodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost: BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost;
@@ -1254,6 +1275,13 @@ export type RemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteApiArg
   libraryId: string;
   /** The key the document was written under. */
   sourceKey: string;
+};
+export type ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiResponse =
+  /** status 200 Successful Response */ LibraryDocuments;
+export type ListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetApiArg = {
+  libraryId: string;
+  /** At most this many documents, in key order. */
+  limit?: number;
 };
 export type ReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetApiResponse =
   /** status 200 Successful Response */ LibrarySourceVersion;
@@ -2147,13 +2175,18 @@ export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
   /** Logical scope label, default 'session' */
   scope?: string;
 };
-export type DocumentWritten = {
+export type DocumentAccepted = {
   source_key: string;
   path: string;
   document_version?: string | null;
   /** True when this key was new to the library, False when it updated the document already there. */
   created: boolean;
+  /** Fred's identifier for the document this key now names. */
+  document_uid: string;
+  /** The task processing this write; follow it for the outcome. */
+  task_id: string;
 };
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
   /** The document's bytes. */
   file: string;
@@ -2165,11 +2198,25 @@ export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
   document_version?: string | null;
   /** Which configured document source this caller is. */
   source_tag?: string;
+  /** Processing profile for this document; defaults to medium. */
+  profile?: IngestionProcessingProfile;
 };
 export type DocumentRemoved = {
   source_key: string;
   /** False when the library did not hold that key — not an error: a source that removes twice is still in sync. */
   removed: boolean;
+};
+export type LibraryDocument = {
+  source_key: string;
+  document_uid: string;
+  document_version?: string | null;
+  /** A run reconciles against 'succeeded' and 'in_progress' alike — a version match on an in-flight key is not a second write; 'failed' is a write the next write of that key takes again. */
+  state: "succeeded" | "in_progress" | "failed";
+};
+export type LibraryDocuments = {
+  items: LibraryDocument[];
+  /** More documents exist than the caller's limit: a run reconciling against this listing is not looking at the whole library. */
+  truncated: boolean;
 };
 export type LibrarySourceVersion = {
   source_version?: string | null;
@@ -2704,7 +2751,6 @@ export type ProcessDocumentsResponse = {
   workflow_id: string;
   run_id?: string | null;
 };
-export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -2740,6 +2786,8 @@ export const {
   useLazyReadyKnowledgeFlowV1ReadyGetQuery,
   useListTasksKnowledgeFlowV1TasksGetQuery,
   useLazyListTasksKnowledgeFlowV1TasksGetQuery,
+  useGetTaskKnowledgeFlowV1TasksTaskIdGetQuery,
+  useLazyGetTaskKnowledgeFlowV1TasksTaskIdGetQuery,
   useStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
@@ -2792,6 +2840,8 @@ export const {
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
   useWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostMutation,
   useRemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteMutation,
+  useListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetQuery,
+  useLazyListDocumentsKnowledgeFlowV1LibrariesLibraryIdDocumentsGetQuery,
   useReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
   useLazyReadSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionGetQuery,
   useRecordSourceVersionKnowledgeFlowV1LibrariesLibraryIdSourceVersionPutMutation,

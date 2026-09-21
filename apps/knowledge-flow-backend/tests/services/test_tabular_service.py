@@ -263,6 +263,9 @@ class _TrackingMetadataStore(BaseMetadataStore):
     async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
         return await self._delegate.list_by_source_tag(source_tag, session=session)
 
+    async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
+        return await self._delegate.list_by_source_library(source_library_id, limit=limit, session=session)
+
     async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         await self._delegate.save_metadata(metadata, session=session)
 
@@ -720,6 +723,55 @@ async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_a
                 dataset_uids=["doc-hidden"],
             ),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("denied_uid", ["sales.csv", "sales_alias", "doc-hidden"])
+async def test_tabular_service_denial_points_a_wrong_identifier_at_the_listing_tool(tmp_path, metadata_store, denied_uid):
+    """Wrong identifiers must point agents to real UIDs without leaking existence."""
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-hidden",
+        file_name="hidden.csv",
+        content="city,amount\nLyon,20\n",
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac({"doc-sales"})
+
+    with pytest.raises(PermissionError) as query_error:
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(
+                sql="SELECT 1",
+                dataset_uids=[denied_uid],
+            ),
+        )
+    assert denied_uid in str(query_error.value)
+    assert "not valid document uids" in str(query_error.value)
+    assert "not a file name and not a SQL table alias" in str(query_error.value)
+    assert "list_tabular_documents" in str(query_error.value)
+
+    with pytest.raises(PermissionError, match="list_tabular_documents"):
+        await service.describe_documents(_user(), [denied_uid])
+
+    with pytest.raises(PermissionError, match="list_tabular_documents"):
+        await service.get_document_markdown(_user(), denied_uid)
+
+    with pytest.raises(PermissionError, match="list_tabular_documents"):
+        await service._get_dataset_or_raise(user=_user(), document_uid=denied_uid)
 
 
 @pytest.mark.asyncio

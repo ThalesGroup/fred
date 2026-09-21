@@ -8,7 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
   "fred-core>=4.0.0",
-  "fred-sdk>=4.0.0",
+  "fred-sdk[agents]>=4.1.0",
   # fred-runtime supplies the pod config loader the store + Alembic env read to
   # build their async engine (`load_agent_pod_config().storage.postgres`).
   "fred-runtime>=4.0.0",
@@ -58,6 +58,7 @@ markers = ["integration: marks tests that require external services"]
 testpaths = ["tests"]
 
 [tool.uv.sources]
+fred-pod = { path = "../fred-pod", editable = true }
 # Local path overrides for mono-repo development only.
 # These are ignored when the package is built and published — the published
 # wheel resolves fred-core / fred-sdk / fred-runtime from PyPI via

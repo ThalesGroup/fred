@@ -10,7 +10,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.139.0",
   "python-multipart>=0.0.32,<1.0.0",
-  "uvicorn[standard]>=0.30.6,<0.35.0",
+  "uvicorn[standard]>=0.35,<0.36",
   "PyYAML==6.0.1",
   "python-dotenv>=1.0.1,<2.0.0",
   "pydantic>=2.10.0,<3.0.0",
@@ -18,7 +18,7 @@ dependencies = [
   # 3.10.1, not 3.10.0: the Knowledge Base catalog id and its authorization
   # reference land in 3.10.1, and this backend calls both.
   "fred-core>=4.0.0",
-  "fred-sdk>=4.0.0",
+  "fred-sdk[agents]>=4.1.0",
   "alembic>=1.18.4",
   # SQLAlchemy async engine requires greenlet at runtime.
   "greenlet>=3.4.0",
@@ -52,6 +52,7 @@ markers = [
 ]
 
 [tool.uv.sources]
+fred-pod = { path = "../../libs/fred-pod", editable = true }
 fred-core = { path = "../../libs/fred-core", editable = true }
 fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 

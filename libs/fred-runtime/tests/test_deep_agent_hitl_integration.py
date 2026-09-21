@@ -31,14 +31,17 @@ gated tool of the same name (design.md D3).
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
+from conftest import RecordingSpan, RecordingTracer, ToolFriendlyFakeChatModel
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
-from fred_sdk.contracts.capability import HitlSpec
+from fred_runtime.react.react_tracing import active_agent_span
+from fred_sdk.contracts.capability import HitlSpec, ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -52,13 +55,15 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     RuntimeServices,
 )
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
-from pydantic import Field
+from pydantic import Field, SecretStr
 
 
 @tool
@@ -137,6 +142,15 @@ def _compile_deep_agent(
         system_prompt="You send emails when asked.",
         checkpointer=cast(Checkpointer, InMemorySaver()),
         middleware=middleware,
+        subagent_middleware=deep_mod._build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=_binding(),
+            approval_policy=approval_policy or ToolApprovalPolicy(),
+            available_tool_names=available_tool_names,
+            capability_block=capability_block,
+            child=True,
+        ),
     )
 
 
@@ -611,3 +625,417 @@ async def test_deep_hitl_transport_level_cancel_executes_the_tool_zero_times() -
         e for e in resumed_events if type(e).__name__ == "ToolResultRuntimeEvent"
     ]
     assert len(tool_results) == 0
+
+
+class _NativeModel(ToolFriendlyFakeChatModel):
+    """Route scripted replies by task input so concurrent children are deterministic."""
+
+    scripts: dict[str, list[AIMessage]]
+    requests: list[list[BaseMessage]] = Field(default_factory=list)
+    bound_names: list[set[str]] = Field(default_factory=list)
+    fail_after_tool: bool = False
+    failed: bool = False
+    pause_model: asyncio.Event | None = None
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> _NativeModel:
+        self.bound_names.append({tool.name for tool in tools})
+        return self
+
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.requests.append(list(messages))
+        key = next(
+            str(message.content)
+            for message in messages
+            if isinstance(message, HumanMessage)
+        )
+        if self.pause_model is not None and key != "parent":
+            self.pause_model.set()
+            await asyncio.Future()
+        if (
+            self.fail_after_tool
+            and key != "parent"
+            and any(isinstance(m, ToolMessage) for m in messages)
+            and not self.failed
+        ):
+            self.failed = True
+            raise _NativeRateLimited()
+        index = sum(isinstance(message, AIMessage) for message in messages)
+        return ChatResult(
+            generations=[ChatGeneration(message=self.scripts[key][index])]
+        )
+
+
+class _NativeRateLimited(Exception):
+    status_code = 429
+    headers = {"Retry-After": "0"}
+
+
+def _delegation(*children: str) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            _tool_call(
+                "task",
+                {"description": child, "subagent_type": "general-purpose"},
+                f"task-{child}",
+            )
+            for child in children
+        ],
+    )
+
+
+def _native_agent(
+    model: _NativeModel,
+    *,
+    tools: list[Any],
+    capability_hitl: dict[str, CapabilityHitlBinding] | None = None,
+    approval_policy: ToolApprovalPolicy | None = None,
+    tracer: RecordingTracer | None = None,
+) -> Any:
+    carrier = ToolCarrierMiddleware(tools, capability_id="scoped-test")
+    block = CapabilityAgentBlock(
+        middleware=(carrier,),
+        tools=tuple(tools),
+        hitl=capability_hitl or {},
+        mcp_prompt_groups=(),
+    )
+
+    def frame(*, child: bool = False) -> list[AgentMiddleware]:
+        return deep_mod._build_deepagent_runtime_middleware(
+            tracer=tracer,
+            kpi=None,
+            binding=_binding(),
+            approval_policy=approval_policy or ToolApprovalPolicy(),
+            available_tool_names={tool.name for tool in tools},
+            capability_block=block,
+            child=child,
+        )
+
+    return deep_mod._create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="INSTANCE INSTRUCTIONS: use only the selected scope.",
+        checkpointer=InMemorySaver(),
+        middleware=frame(),
+        subagent_middleware=frame(child=True),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "gate", ["operator", "required", "conditional", "raising", "false"]
+)
+async def test_native_child_approval_never_waits_or_bypasses(gate: str) -> None:
+    executions: list[str] = []
+
+    @tool
+    def sensitive(value: str) -> str:
+        """Perform a scoped action."""
+        executions.append(value)
+        return value
+
+    @tool
+    def harmless() -> str:
+        """Read public information."""
+        executions.append("harmless")
+        return "safe"
+
+    def condition(_request: Any) -> bool:
+        if gate == "raising":
+            raise ValueError("invalid policy input")
+        return gate == "conditional"
+
+    binding = CapabilityHitlBinding(
+        spec=HitlSpec(tool="sensitive", require=gate == "required", when=condition),
+        context=cast(Any, None),
+    )
+    model = _NativeModel(
+        responses=[],
+        scripts={
+            "parent": [_delegation("child"), AIMessage(content="parent done")],
+            "child": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call("sensitive", {"value": "secret"}, "sensitive-call"),
+                        _tool_call("harmless", {}, "safe-call"),
+                    ],
+                ),
+                AIMessage(content="child done"),
+            ],
+        },
+    )
+    agent = _native_agent(
+        model,
+        tools=[sensitive, harmless],
+        capability_hitl={"sensitive": binding},
+        approval_policy=ToolApprovalPolicy(
+            enabled=gate == "operator", always_require_tools=("sensitive",)
+        ),
+    )
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage(content="parent")]},
+        {"configurable": {"thread_id": gate}},
+    )
+    assert "__interrupt__" not in result
+    assert result["messages"][-1].content == "parent done"
+    assert sorted(executions) == (
+        ["harmless", "secret"] if gate == "false" else ["harmless"]
+    )
+    child_requests = [
+        messages
+        for messages in model.requests
+        if any(isinstance(m, HumanMessage) and m.content == "child" for m in messages)
+    ]
+    assert "INSTANCE INSTRUCTIONS" in str(child_requests[0][0].content)
+    assert "There is no user" in str(child_requests[0][0].content)
+    results = [
+        m
+        for m in child_requests[-1]
+        if isinstance(m, ToolMessage) and m.tool_call_id == "sensitive-call"
+    ]
+    assert len(results) == 1
+    assert results[0].status == ("success" if gate == "false" else "error")
+    if gate in {"operator", "required"}:
+        assert "sensitive" not in model.bound_names[1]
+    assert "harmless" in model.bound_names[1]
+    assert "task" not in model.bound_names[1]
+
+
+@pytest.mark.asyncio
+async def test_native_child_cannot_execute_disabled_filesystem_tools() -> None:
+    model = _NativeModel(
+        responses=[],
+        scripts={
+            "parent": [_delegation("child"), AIMessage(content="parent done")],
+            "child": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call(
+                            "write_file",
+                            {"file_path": "/blocked.txt", "content": "blocked"},
+                            "blocked",
+                        )
+                    ],
+                ),
+                AIMessage(content="refused"),
+            ],
+        },
+    )
+    agent = _native_agent(model, tools=[])
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage(content="parent")]},
+        {"configurable": {"thread_id": "blocked"}},
+    )
+    assert not result.get("files")
+    child_results = [
+        m
+        for messages in model.requests
+        for m in messages
+        if isinstance(m, ToolMessage) and m.tool_call_id == "blocked"
+    ]
+    assert child_results and all(
+        "limit" in str(m.content).lower() for m in child_results
+    )
+
+
+@pytest.mark.asyncio
+async def test_native_child_retry_hygiene_does_not_replay_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executions = 0
+
+    @tool
+    def increment() -> str:
+        """Perform one side effect."""
+        nonlocal executions
+        executions += 1
+        return "incremented"
+
+    async def no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "fred_runtime.react.middleware.rate_limit_retry.asyncio.sleep", no_sleep
+    )
+    model = _NativeModel(
+        responses=[],
+        fail_after_tool=True,
+        scripts={
+            "parent": [_delegation("child"), AIMessage(content="done")],
+            "child": [
+                AIMessage(
+                    content="",
+                    name="named-child",
+                    tool_calls=[_tool_call("increment", {}, "once")],
+                ),
+                AIMessage(content="child done"),
+            ],
+        },
+    )
+    tracer = RecordingTracer(capture=True)
+    agent = _native_agent(model, tools=[increment], tracer=tracer)
+    await agent.ainvoke(
+        {"messages": [HumanMessage(content="parent")]},
+        {"configurable": {"thread_id": "retry"}},
+    )
+    assert executions == 1
+    assert model.failed
+    assert len(model.requests) == 5
+    serializer = ChatOpenAI(model="unused", api_key=SecretStr("unused"))
+    replay_requests = [
+        messages
+        for messages in model.requests
+        if any(
+            isinstance(m, ToolMessage) and m.tool_call_id == "once" for m in messages
+        )
+    ]
+    assert len(replay_requests) == 2
+    for messages in replay_requests:
+        payload = serializer._get_request_payload(messages)
+        assert all(
+            "name" not in message
+            for message in payload["messages"]
+            if message["role"] == "assistant"
+        )
+    assert all(span.ended for _, _, span in tracer.spans)
+    assert (
+        sum(span.attributes.get("status") == "error" for _, _, span in tracer.spans)
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_native_parallel_children_keep_trace_context_and_close_spans(
+    cancel: bool,
+) -> None:
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    observed: dict[str, object] = {}
+
+    @tool
+    async def rendezvous(label: str) -> str:
+        """Wait until both child tasks overlap."""
+        observed[label] = active_agent_span.get()
+        if len(observed) == 2:
+            both_started.set()
+        await release.wait()
+        assert active_agent_span.get() is observed[label]
+        return label
+
+    model = _NativeModel(
+        responses=[],
+        scripts={
+            "parent": [_delegation("left", "right"), AIMessage(content="done")],
+            **{
+                label: [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            _tool_call("rendezvous", {"label": label}, f"call-{label}")
+                        ],
+                    ),
+                    AIMessage(content=label),
+                ]
+                for label in ("left", "right")
+            },
+        },
+    )
+    tracer = RecordingTracer(capture=True)
+    root = RecordingSpan()
+    token = active_agent_span.set(root)
+    try:
+        agent = _native_agent(model, tools=[rendezvous], tracer=tracer)
+        run = asyncio.create_task(
+            agent.ainvoke(
+                {"messages": [HumanMessage(content="parent")]},
+                {"configurable": {"thread_id": f"parallel-{cancel}"}},
+            )
+        )
+        await asyncio.wait_for(both_started.wait(), timeout=10)
+        assert active_agent_span.get() is root
+        assert observed["left"] is not observed["right"]
+        if cancel:
+            run.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run
+        else:
+            release.set()
+            await run
+        task_spans = [
+            span for _, attrs, span in tracer.spans if attrs.get("tool_name") == "task"
+        ]
+        assert len(task_spans) == 2
+        for label in ("left", "right"):
+            tool_span = observed[label]
+            index = next(
+                i for i, (_, _, span) in enumerate(tracer.spans) if span is tool_span
+            )
+            assert tracer.parents[index] in task_spans
+            parent = tracer.parents[index]
+            assert parent is not None
+            assert any(
+                label in str(item.get("input"))
+                for item in cast(RecordingSpan, parent).io
+            )
+        assert all(span.ended for _, _, span in tracer.spans)
+        assert active_agent_span.get() is root
+        if cancel:
+            assert all(
+                cast(RecordingSpan, span).attributes["status"] == "cancelled"
+                for span in observed.values()
+            )
+            assert all(span.attributes["status"] == "cancelled" for span in task_spans)
+    finally:
+        active_agent_span.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_native_child_model_cancellation_propagates_and_closes_spans() -> None:
+    started = asyncio.Event()
+    model = _NativeModel(
+        responses=[],
+        pause_model=started,
+        scripts={
+            "parent": [_delegation("child")],
+            "child": [],
+        },
+    )
+    tracer = RecordingTracer()
+    root = RecordingSpan()
+    token = active_agent_span.set(root)
+    try:
+        agent = _native_agent(model, tools=[], tracer=tracer)
+        run = asyncio.create_task(
+            agent.ainvoke(
+                {"messages": [HumanMessage(content="parent")]},
+                {"configurable": {"thread_id": "model-cancel"}},
+            )
+        )
+        try:
+            await asyncio.wait_for(started.wait(), timeout=10)
+            run.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run
+        finally:
+            if not run.done():
+                run.cancel()
+                await asyncio.gather(run, return_exceptions=True)
+        assert active_agent_span.get() is root
+        assert len(tracer.spans) == 3  # Parent model, task tool, child model.
+        assert all(span.ended for _, _, span in tracer.spans)
+        task_span = next(
+            span for _, attrs, span in tracer.spans if attrs.get("tool_name") == "task"
+        )
+        assert task_span.attributes["status"] == "cancelled"
+        assert tracer.parents[-1] is task_span
+    finally:
+        active_agent_span.reset(token)

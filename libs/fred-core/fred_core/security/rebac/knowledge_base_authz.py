@@ -38,7 +38,14 @@ from fred_core.security.rebac.rebac_engine import (
     team_subject_and_context,
 )
 
-KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX = "kb__"
+# Naming, not authorization: these three are pure string work every pod needs,
+# so they live in fred-pod and are re-exported here for the call sites that
+# already reach for them through the authorization module.
+from fred_pod.common.naming import (
+    KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
+    knowledge_base_catalog_id,
+    knowledge_base_name_from_catalog_id,
+)
 
 __all__ = [
     "KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX",
@@ -49,33 +56,6 @@ __all__ = [
     "knowledge_base_name_from_catalog_id",
     "usable_knowledge_base_ids",
 ]
-
-
-def knowledge_base_catalog_id(name: str) -> str:
-    """Return the key this definition takes in the shared administration catalog.
-
-    The catalog is one flat dictionary shared with capabilities, agents and
-    applications, so each kind reserves a prefix and no two kinds can collide in
-    it. That prefix is an internal key, never part of the contributed name — see
-    `fred_core.common.naming`.
-    """
-
-    return f"{KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX}{name}"
-
-
-def knowledge_base_name_from_catalog_id(catalog_id: str) -> str:
-    """Return the contributed name a catalog key carries.
-
-    A removal, not a split: the name keeps whatever depth its contributor chose,
-    and nothing here has to guess where a prefix ends.
-    """
-
-    if not catalog_id.startswith(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX):
-        raise ValueError(f"Not a Knowledge Base catalog id: {catalog_id!r}")
-    name = catalog_id[len(KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX) :]
-    if not name:
-        raise ValueError(f"Knowledge Base catalog id carries no name: {catalog_id!r}")
-    return name
 
 
 def knowledge_base_definition_ref(name: str) -> RebacReference:

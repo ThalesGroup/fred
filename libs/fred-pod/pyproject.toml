@@ -1,0 +1,84 @@
+[project]
+name = "fred-pod"
+version = "4.1.0"
+description = "What a Fred component needs to be a pod: configuration, identity, naming."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: OS Independent",
+]
+urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com/ThalesGroup/fred" }
+
+# Four packages, and the list is the point of this distribution. A pod whose
+# job is one PROPFIND and a few GETs installs these and nothing else. Adding a
+# fifth is a decision, not an accident — that is what a separate distribution
+# buys over an extra.
+dependencies = [
+    "pydantic>=2.5.2,<3.0.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "pyyaml>=6.0.1",
+    "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_pod*"]
+
+[tool.setuptools.package-data]
+"fred_pod" = ["py.typed"]
+
+[project.optional-dependencies]
+dev = [
+    "bandit>=1.8.6",
+    "basedpyright==1.31.0",
+    "detect-secrets>=1.5.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=6.2.1",
+    "pytest-socket>=0.7.0",
+    # <0.16 with the rest of the monorepo: 0.16 turns on pyupgrade rules by
+    # default, and moving to it is a repo-wide reformat, not a side effect here.
+    "ruff>=0.12.5,<0.16",
+]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.6",
+    "basedpyright==1.31.0",
+    "detect-secrets>=1.5.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=6.2.1",
+    "pytest-socket>=0.7.0",
+    # <0.16 with the rest of the monorepo: 0.16 turns on pyupgrade rules by
+    # default, and moving to it is a repo-wide reformat, not a side effect here.
+    "ruff>=0.12.5,<0.16",
+]
+
+[tool.coverage.run]
+source = ["fred_pod"]
+omit = [
+  # Token acquisition against a live Keycloak; exercised by the pods, not here.
+  "fred_pod/security/backend_to_backend_auth.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+markers = ["integration: marks tests that require external services"]
+testpaths = ["tests"]
+asyncio_mode = "auto"

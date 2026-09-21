@@ -38,6 +38,10 @@ class TemporalClientProvider:
         self._client: Optional[Client] = None
         self._lock = asyncio.Lock()
 
+    @property
+    def config(self) -> TemporalSchedulerConfig:
+        return self._config
+
     async def get_client(self) -> Client:
         """
         Lazy singleton connection. Safe under concurrent calls.

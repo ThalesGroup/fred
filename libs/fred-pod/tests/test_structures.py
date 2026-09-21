@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import pytest
-from fred_core.common import OpenSearchStoreConfig
+from fred_pod.common import OpenSearchStoreConfig
 from pydantic import ValidationError
 
 

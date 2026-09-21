@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import re
@@ -233,8 +234,9 @@ class IngestionService:
         processor = pipeline.get_input_processor(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
 
-        # Step 1: run processor
-        metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+        # Step 1: run processor — off the loop, since it hashes the whole file twice
+        # and opens PDF/DOCX, which would stall every other request meanwhile.
+        metadata = await asyncio.to_thread(processor.process_metadata, file_path, tags=tags, source_tag=source_tag)
         # Stamped once, here, regardless of file type — not delegated to any
         # per-processor extract_file_metadata(), which only ever sees the
         # file's own embedded metadata, never who is uploading it.

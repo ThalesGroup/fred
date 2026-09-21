@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from fred_core import (
     KeycloakUser,
     get_current_user,
+    get_current_user_or_service,
 )
 from fred_core.tasks.authz import (
     authorize_task_access,
@@ -15,7 +16,7 @@ from fred_core.tasks.authz import (
     authorize_task_stream,
     list_tasks_scoped,
 )
-from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse
+from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse, TaskSummary
 from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError
@@ -61,6 +62,31 @@ class TasksController:
             state: str | None = Query(default=None),
         ) -> TaskListResponse:
             return await list_tasks_scoped(self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state)
+
+        @router.get(
+            "/tasks/{task_id}",
+            tags=["Tasks"],
+            response_model=TaskSummary,
+            summary="Read one task's current state",
+        )
+        async def get_task(
+            task_id: str,
+            user: KeycloakUser = Depends(get_current_user_or_service),
+        ) -> TaskSummary:
+            run = await self._service.get_run(task_id)
+            if run is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            await authorize_task_access(user, run, get_rebac_engine())
+            # Same read-time reconcile as the SSE stream, so a task whose
+            # workflow died is not read as running forever.
+            try:
+                await self._service.reconcile_task(task_id)
+            except Exception:
+                logger.warning("[TASKS] read-time reconcile failed for task_id=%s", task_id, exc_info=True)
+            summary = await self._service.get_task(task_id)
+            if summary is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            return summary
 
         @router.get(
             "/tasks/{task_id}/events",

@@ -5,11 +5,11 @@
   "reportUnreachable": "warning",
   "venvPath": ".",
   "venv": ".venv",
-  "extraPaths": ["../fred-core", "../fred-sdk"],
+  "extraPaths": ["../fred-pod", "../fred-core", "../fred-sdk"],
   "executionEnvironments": [
     {
       "root": ".",
-      "extraPaths": ["../fred-core", "../fred-sdk"]
+      "extraPaths": ["../fred-pod", "../fred-core", "../fred-sdk"]
     }
   ]
 }
