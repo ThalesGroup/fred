@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,7 +35,9 @@ from fred_sdk.contracts.runtime import (
     PendingToolCall,
 )
 from langchain.agents.middleware import AgentMiddleware, AgentState
-from langchain.agents.middleware.types import hook_config
+from langchain.agents.middleware.types import ModelRequest, ModelResponse, hook_config
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
@@ -478,6 +480,11 @@ class FredHitlMiddleware(AgentMiddleware):
         # so a partial per-call answer was never meaningful even before this.
         if not gated:
             return None
+        return self._resolve_approval(gated)
+
+    def _resolve_approval(
+        self, gated: Sequence[GatedToolCall]
+    ) -> dict[str, Any] | None:
         request = build_tool_approval_request(binding=self._binding, calls=gated)
         decision = interrupt(request.model_dump(mode="json"))
         if _is_cancelled_human_decision(decision):
@@ -485,3 +492,55 @@ class FredHitlMiddleware(AgentMiddleware):
             # let the model replan.
             return {"jump_to": "model"}
         return None
+
+
+class DeepChildHitlMiddleware(FredHitlMiddleware):
+    """Native children reuse the gate but cannot open a human approval wait."""
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        def visible(tool: BaseTool | dict[str, Any]) -> bool:
+            if isinstance(tool, BaseTool):
+                name = tool.name
+            else:
+                function = tool.get("function")
+                name = (
+                    function.get("name")
+                    if isinstance(function, dict)
+                    else tool.get("name")
+                )
+            if not name:
+                return True
+            bound = self._capability_hitl.get(name)
+            return not (
+                self._requires_human_approval(name)
+                or (bound is not None and bound.spec.require)
+            )
+
+        kept = [tool for tool in request.tools if visible(tool)]
+        if len(kept) != len(request.tools):
+            request = request.override(tools=kept)
+        return await handler(request)
+
+    def _resolve_approval(self, gated: Sequence[GatedToolCall]) -> dict[str, Any]:
+        # A result prevents execution of that call while allowing ungated calls
+        # in the same batch. Without a call ID, fail closed on the whole batch.
+        if not all(call.tool_call_id for call in gated):
+            return {"jump_to": "model"}
+        return {
+            "messages": [
+                ToolMessage(
+                    content=(
+                        "This tool requires human approval, which is unavailable in a "
+                        "delegated task. Ask the parent agent to run it directly."
+                    ),
+                    tool_call_id=call.tool_call_id or "",
+                    name=call.tool_name,
+                    status="error",
+                )
+                for call in gated
+            ]
+        }

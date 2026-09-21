@@ -5950,3 +5950,23 @@ The 200,000-character guard stays ReAct-only.
 
 Native `task` child composition is the next extraction layer; this parent-only
 change does not complete issues #2740 and #2741's native-child acceptance.
+
+### 8.83 Native Deep child integration (2026-09-18)
+
+Deep explicitly configures the native general-purpose `task` child with the Fred-composed
+instance prompt, delegation framing and the parent's resolved tools and selected capability
+middleware. Its graph gets separate Fred hygiene, retry, model/tool observability and
+filesystem guard instances. Middleware-contributed tool names participate in availability
+checks; this does not select or lift any filesystem backend.
+
+The child reuses Fred's approval decisions: unconditional gates are hidden from model
+requests, and emitted gated calls receive error tool results without a human interrupt.
+Conditional predicates still apply per call and fail closed when they raise. Ungated calls
+in a mixed batch can execute; an unanswerable gated call without an ID skips the batch.
+Parents retain the existing Fred approval/resume contract. Child model and tool spans nest
+under the invoking task tool span, with request-local tracing context across concurrent
+children. Retries and input hygiene use the same policies as their parent frame.
+
+This integration does not restore custom `run_subagent` execution, add invocation-depth runtime fields, inject
+storage backends or implement compaction. Filesystem/backend work remains a separate slice;
+these tests do not establish durable workspace or replica-safe storage behavior.
