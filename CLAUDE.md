@@ -5,6 +5,50 @@ _how to work_ in this repository. Human developers start with `docs/swift/README
 
 ---
 
+## Local collaboration agreement — webdav checkout (2026-09-21)
+
+Explicit developer instructions for this checkout, until the developer changes
+them. These override the default workflow below, including OpenSpec and GitHub
+planning/PR requirements.
+
+- Work locally on the current branch. Do not create issues, branches, worktrees,
+  PRs, commits or pushes without a request. Preserve existing local changes.
+- OpenSpec is suspended here: existing specs/changes may describe choices the
+  developer has NOT approved. Do not treat them as decisions or create/update/
+  archive OpenSpec artifacts. Resume only when explicitly agreed.
+- Keep changes small and explain them in French. Ask before expanding scope,
+  lengthy investigations, dependency installation or extra automation. Complete
+  the agreed change without repeatedly asking for the same authorization.
+- Announce checks before executing them. The developer currently owns
+  `make code-quality` and `make test`; do not run these or other tests unless
+  execution is agreed. Reading code and diffs is fine. Report unverified changes
+  honestly; never turn a small fix into a broad test campaign.
+- Keep secret detection active in CI. For mocked authentication tests, prefer
+  generated dummy values over hardcoded credentials and avoid adding `nosec`
+  exceptions when the fixture can remove the false positive.
+- Fred checkout: `~/Fred/features/webdav`. Companion samples:
+  `~/Fred/fred-samples`, currently `knowledge-bases/webdav` (KB pod and test
+  server). Inspect the actual SDK editable path before assuming which code runs.
+- For live sessions use the personal `fred` skill at
+  `~/.codex/skills/fred/SKILL.md`. The developer starts Docker Compose and drives
+  the UI; Codex starts only agreed applications and observes all their logs.
+  Start with logs, add KPI work later only on request. Check each component's
+  Makefile and `config/.env`/YAML without exposing secrets. APIs/frontend use
+  `make run`; the two Fred workers use `make run-worker`.
+- A stop instruction cancels pending starts/restarts. Verify processes and ports
+  after stopping; state whether samples and Docker infrastructure remain running.
+  Never infer permission to restart from an earlier request after cancellation.
+- Review ingestion together from Knowledge Flow REST endpoints through shared
+  services and SDK to the KB pod. Explain unclear names and boundaries first;
+  agree on small corrections. The agreed KB ingestion profile choices are
+  `fast`, `medium`, `rich`, with `medium` when omitted.
+
+Process IDs, log locations, readiness and failures are session observations,
+not durable facts: recheck them on resumption. Keep these instructions current
+when the developer changes the agreement, rather than accumulating stale rules.
+
+---
+
 ## Prime directive — extend, do not duplicate
 
 Before writing any spec, RFC, type, or document: check whether it already exists.
