@@ -174,8 +174,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
       providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
     },
+    // Every space it deleted from, not just the inactive list: the team sidebar
+    // reads `LIST-<teamId>`, so without these the cleanup leaves ghost rows a
+    // user can still click (landing on an empty conversation) until the list's
+    // own 30s poll catches up. The single-session delete above already does it.
     postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
-      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: "INACTIVE" },
+        ...[...new Set(arg.bulkDeleteSessionsRequest.sessions.map((s) => s.team_id))].map((teamId) => ({
+          type: "ControlPlaneSession" as const,
+          id: `LIST-${teamId}`,
+        })),
+      ],
     },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
