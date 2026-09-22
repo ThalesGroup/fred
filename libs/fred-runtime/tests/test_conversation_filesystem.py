@@ -356,6 +356,29 @@ async def test_delete_and_purge_release_accounted_quota() -> None:
 
 
 @pytest.mark.asyncio
+async def test_purge_deletes_without_recounting_namespace_first() -> None:
+    class _CountingFilesystem(_MemoryFilesystem):
+        def __init__(self) -> None:
+            super().__init__()
+            self.list_calls = 0
+
+        async def list(self, prefix: str = "") -> list[FilesystemResourceInfoResult]:
+            self.list_calls += 1
+            return await super().list(prefix)
+
+    storage = _CountingFilesystem()
+    storage.files = {
+        "conversations/conversation-a/scratchpad/existing.md": b"existing"
+    }
+    scratchpad = ConversationFilesystemService(storage, "conversation-a").scratchpad()
+
+    await scratchpad.purge()  # type: ignore[attr-defined]
+
+    assert storage.list_calls == 0
+    assert storage.files == {}
+
+
+@pytest.mark.asyncio
 async def test_same_process_mutations_are_serialized_before_quota_check() -> None:
     storage = _MemoryFilesystem()
     service = ConversationFilesystemService(
@@ -439,7 +462,46 @@ async def test_quota_observability_has_only_bounded_content_free_fields(
         if record.getMessage() == "Conversation filesystem namespace usage"
     )
     assert usage == {
+        "conversation_id": "private-conversation",
         "namespace": "scratchpad",
         "usage_bytes": 0,
         "usage_files": 0,
     }
+    rejection = next(
+        record.conversation_filesystem
+        for record in caplog.records
+        if record.getMessage() == "Conversation filesystem quota rejected mutation"
+    )
+    assert rejection["conversation_id"] == "private-conversation"
+
+
+@pytest.mark.asyncio
+async def test_storage_failure_log_has_safe_operation_context(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class _FailingFilesystem(_MemoryFilesystem):
+        async def write(self, path: str, data: bytes | str) -> None:
+            del path, data
+            raise RuntimeError("provider credential and private-content")
+
+    scratchpad = ConversationFilesystemService(
+        _FailingFilesystem(), "private-conversation"
+    ).scratchpad()
+
+    with caplog.at_level("WARNING"), pytest.raises(ConversationScratchpadStorageError):
+        await scratchpad.write_text("private-path.md", "private-content")
+
+    failure = next(
+        record.conversation_filesystem
+        for record in caplog.records
+        if record.getMessage() == "Conversation filesystem storage operation failed"
+    )
+    assert failure == {
+        "conversation_id": "private-conversation",
+        "operation": "write",
+        "namespace": "scratchpad",
+        "error_category": "RuntimeError",
+    }
+    assert "private-content" not in caplog.text
+    assert "private-path.md" not in caplog.text
+    assert "provider credential" not in caplog.text

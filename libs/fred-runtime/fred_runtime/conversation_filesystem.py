@@ -21,6 +21,7 @@ import logging
 import re
 import threading
 import weakref
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -55,6 +56,23 @@ class ConversationFilesystemQuotaSettings(Protocol):
     scratchpad_max_files: int
     deep_max_bytes: int
     deep_max_files: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationTextFileMetadata:
+    """Stable runtime metadata for one file in a conversation namespace."""
+
+    path: str
+    size: int
+
+
+class ConversationTextNamespacePort(ConversationScratchpadPort):
+    """Runtime-only view that also exposes object-list metadata."""
+
+    @abstractmethod
+    async def list_metadata(
+        self, path: str = ""
+    ) -> tuple[ConversationTextFileMetadata, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -111,7 +129,7 @@ class ConversationFilesystemService:
 
     def namespace(
         self, namespace: ConversationFilesystemNamespace
-    ) -> _ConversationTextNamespace:
+    ) -> ConversationTextNamespacePort:
         """Return a trusted runtime view for one code-owned namespace."""
         if namespace == "scratchpad":
             quota = _NamespaceQuota(
@@ -132,7 +150,7 @@ class ConversationFilesystemService:
         )
 
 
-class _ConversationTextNamespace(ConversationScratchpadPort):
+class _ConversationTextNamespace(ConversationTextNamespacePort):
     def __init__(
         self,
         filesystem: BaseFilesystem,
@@ -143,6 +161,7 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
         kpi: BaseKPIWriter | None,
     ) -> None:
         self._filesystem = filesystem
+        self._conversation_id = session_id
         self._namespace = namespace
         self._prefix = f"conversations/{session_id}/{namespace}/"
         self._quota = quota
@@ -162,7 +181,7 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
                 "Scratchpad file does not exist"
             ) from exc
         except Exception as exc:
-            raise _storage_error() from exc
+            raise self._storage_error("read", exc) from exc
         try:
             return content.decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -176,18 +195,20 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
         async with self._lock:
             await self._ensure_accounting()
             self._check_write_quota(relative_path, len(encoded))
-            await self._write_encoded(relative_path, encoded)
+            await self._write_encoded(relative_path, encoded, operation="write")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
 
-    async def _write_encoded(self, relative_path: str, encoded: bytes) -> None:
+    async def _write_encoded(
+        self, relative_path: str, encoded: bytes, *, operation: str
+    ) -> None:
         physical_path = self._physical_path(relative_path)
         try:
             await self._filesystem.mkdir(str(PurePosixPath(physical_path).parent))
             await self._filesystem.write(physical_path, encoded)
         except Exception as exc:
-            raise _storage_error() from exc
+            raise self._storage_error(operation, exc) from exc
 
     async def edit_text(
         self,
@@ -213,36 +234,50 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
             )
             encoded = _encode_text(updated)
             self._check_write_quota(relative_path, len(encoded))
-            await self._write_encoded(relative_path, encoded)
+            await self._write_encoded(relative_path, encoded, operation="edit")
             assert self._accounting.sizes is not None
             self._accounting.sizes[relative_path] = len(encoded)
             self._emit_usage()
             return match_count
 
     async def list(self, path: str = "") -> tuple[str, ...]:
+        return tuple(metadata.path for metadata in await self.list_metadata(path))
+
+    async def list_metadata(
+        self, path: str = ""
+    ) -> tuple[ConversationTextFileMetadata, ...]:
         relative_path = _normalize_path(path, allow_root=True)
         physical_prefix = self._prefix
         if relative_path:
             physical_prefix += f"{relative_path}/"
         try:
             entries = await self._filesystem.list(physical_prefix)
+            metadata = []
+            for entry in entries:
+                if (
+                    entry.type != FilesystemResourceInfo.FILE
+                    or not entry.path.startswith(self._prefix)
+                    or entry.path == physical_prefix.rstrip("/")
+                ):
+                    continue
+                if entry.size is None:
+                    raise ValueError("Filesystem listing omitted file size")
+                metadata.append(
+                    ConversationTextFileMetadata(
+                        path=entry.path.removeprefix(self._prefix),
+                        size=entry.size,
+                    )
+                )
         except Exception as exc:
-            raise _storage_error() from exc
-        return tuple(
-            sorted(
-                entry.path.removeprefix(self._prefix)
-                for entry in entries
-                if entry.path.startswith(self._prefix)
-                and entry.path != physical_prefix.rstrip("/")
-            )
-        )
+            raise self._storage_error("list", exc) from exc
+        return tuple(sorted(metadata, key=lambda entry: entry.path))
 
     async def exists(self, path: str) -> bool:
         relative_path = _normalize_path(path)
         try:
             return await self._filesystem.exists(self._physical_path(relative_path))
         except Exception as exc:
-            raise _storage_error() from exc
+            raise self._storage_error("exists", exc) from exc
 
     async def delete(self, path: str) -> None:
         relative_path = _normalize_path(path)
@@ -254,13 +289,12 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
                 self._forget_path(relative_path)
                 return
             except Exception as exc:
-                raise _storage_error() from exc
+                raise self._storage_error("delete", exc) from exc
             self._forget_path(relative_path)
 
     async def purge(self) -> None:
         """Idempotently remove this entire code-owned namespace."""
         async with self._lock:
-            await self._ensure_accounting()
             try:
                 await self._filesystem.delete(self._prefix.rstrip("/"))
             except FileNotFoundError:
@@ -268,7 +302,7 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
                 self._emit_usage()
                 return
             except Exception as exc:
-                raise _storage_error() from exc
+                raise self._storage_error("purge", exc) from exc
             self._accounting.sizes = {}
             self._emit_usage()
 
@@ -302,7 +336,7 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
                     size = len(await self._filesystem.read(entry.path))
                 sizes[entry.path.removeprefix(self._prefix)] = size
         except Exception as exc:
-            raise _storage_error() from exc
+            raise self._storage_error("recount", exc) from exc
         self._accounting.sizes = sizes
         self._emit_usage()
 
@@ -321,6 +355,7 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
             "Conversation filesystem quota rejected mutation",
             extra={
                 "conversation_filesystem": {
+                    "conversation_id": self._conversation_id,
                     "namespace": self._namespace,
                     "resource": resource,
                     "limit": limit,
@@ -353,12 +388,29 @@ class _ConversationTextNamespace(ConversationScratchpadPort):
             "Conversation filesystem namespace usage",
             extra={
                 "conversation_filesystem": {
+                    "conversation_id": self._conversation_id,
                     "namespace": self._namespace,
                     "usage_bytes": sum(self._accounting.sizes.values()),
                     "usage_files": len(self._accounting.sizes),
                 }
             },
         )
+
+    def _storage_error(
+        self, operation: str, error: Exception
+    ) -> ConversationScratchpadStorageError:
+        _LOGGER.warning(
+            "Conversation filesystem storage operation failed",
+            extra={
+                "conversation_filesystem": {
+                    "conversation_id": self._conversation_id,
+                    "operation": operation,
+                    "namespace": self._namespace,
+                    "error_category": type(error).__name__,
+                }
+            },
+        )
+        return ConversationScratchpadStorageError("Shared scratchpad storage failed")
 
 
 def _normalize_path(path: str, *, allow_root: bool = False) -> str:
@@ -399,10 +451,6 @@ def _encode_text(content: str) -> bytes:
         raise ConversationScratchpadUnsupportedContentError(
             "Scratchpad supports UTF-8 text only"
         ) from exc
-
-
-def _storage_error() -> ConversationScratchpadStorageError:
-    return ConversationScratchpadStorageError("Shared scratchpad storage failed")
 
 
 def _namespace_accounting(

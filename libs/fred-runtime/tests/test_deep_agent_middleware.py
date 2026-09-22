@@ -60,6 +60,7 @@ from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from deepagents.backends import CompositeBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
@@ -151,6 +152,47 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
 
 class _MarkerMiddleware(AgentMiddleware):
     pass
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_rejects_capability_filesystem_middleware(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiled = False
+
+    def _fake_compile(**kwargs: object) -> object:
+        del kwargs
+        nonlocal compiled
+        compiled = True
+        return object()
+
+    capability_block = CapabilityAgentBlock(
+        middleware=(FilesystemMiddleware(backend=deep_mod.RejectingBackend()),),
+        hitl={},
+        tools=(),
+        mcp_prompt_groups=(),
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=capability_block,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "capability middleware.*FilesystemMiddleware.*"
+            "conversation filesystem backend"
+        ),
+    ):
+        await runtime.build_executor(_binding())
+
+    assert not compiled
 
 
 def test_middleware_places_capability_middleware_before_observability() -> None:

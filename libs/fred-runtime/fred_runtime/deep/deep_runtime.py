@@ -32,7 +32,7 @@ from typing import cast
 
 from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
-from deepagents.middleware.filesystem import FilesystemPermission
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
@@ -46,6 +46,7 @@ from langgraph.types import Checkpointer
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_backend import (
+    ConversationCompositeBackend,
     ConversationNamespaceBackend,
     RejectingBackend,
 )
@@ -160,6 +161,7 @@ class DeepAgentRuntime(ReActRuntime):
                 "DeepAgentRuntime does not support per-turn tool-call limits in this minimal version."
             )
         capability_block = self._capability_block
+        _reject_capability_filesystem_middleware(capability_block)
 
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
@@ -315,15 +317,31 @@ def _build_conversation_backend(
     if conversation_filesystem is not None:
         routes = {
             "/scratchpad/": ConversationNamespaceBackend(
-                conversation_filesystem.scratchpad()
+                conversation_filesystem.namespace("scratchpad")
             ),
             "/.deep/": ConversationNamespaceBackend(
                 conversation_filesystem.namespace(".deep")
             ),
         }
-    return CompositeBackend(
+    return ConversationCompositeBackend(
         default=RejectingBackend(), routes=routes, artifacts_root="/.deep"
     )
+
+
+def _reject_capability_filesystem_middleware(
+    capability_block: CapabilityAgentBlock | None,
+) -> None:
+    if capability_block is None:
+        return
+    if any(
+        isinstance(middleware, FilesystemMiddleware)
+        for middleware in capability_block.middleware
+    ):
+        raise RuntimeError(
+            "Deep capability middleware must not provide FilesystemMiddleware; "
+            "use the runtime conversation filesystem backend through the standard "
+            "/scratchpad/ mount instead."
+        )
 
 
 def _unavailable_filesystem_tool_names(

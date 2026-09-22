@@ -3225,6 +3225,14 @@ def _build_erasure_deps(
     `team_wiki_store` is the WIKI-05 addition; defaults to a fake that rejects
     nothing rather than `None`, since that step now runs unconditionally.
     """
+    runtime_http_client: Any = None
+
+    def _get_runtime_http_client() -> Any:
+        nonlocal runtime_http_client
+        if runtime_http_client is None:
+            runtime_http_client = httpx.AsyncClient(timeout=15.0)
+        return runtime_http_client
+
     return ProductServiceDependencies(
         configuration=configuration,  # type: ignore[arg-type]
         team_dependencies=None,  # type: ignore[arg-type]
@@ -3249,6 +3257,7 @@ def _build_erasure_deps(
         get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
         get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_runtime_http_client=_get_runtime_http_client,
     )
 
 
@@ -3337,6 +3346,10 @@ def _make_runtime_client(
     class _RuntimeClient:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.timeout = kwargs.get("timeout")
+            self.calls = calls
+            self.history_error = history_error
+            self.checkpoint_error = checkpoint_error
+            self.filesystem_failure = filesystem_failure
 
         async def __aenter__(self) -> "_RuntimeClient":
             return self
@@ -3345,27 +3358,27 @@ def _make_runtime_client(
             return None
 
         async def delete(self, url: str, *, headers: dict[str, str]) -> httpx.Response:
-            calls.append((url, headers))
+            self.calls.append((url, headers))
             request = httpx.Request("DELETE", url, headers=headers)
             if "/agents/checkpoints/" in url:
-                if checkpoint_error:
+                if self.checkpoint_error:
                     return httpx.Response(502, text="boom", request=request)
                 return httpx.Response(
                     200, json={"deleted": checkpoint_deleted}, request=request
                 )
             if url.endswith("/filesystem"):
-                if filesystem_failure == "http":
+                if self.filesystem_failure == "http":
                     return httpx.Response(502, text="boom", request=request)
-                if filesystem_failure == "network":
+                if self.filesystem_failure == "network":
                     raise httpx.ConnectError("runtime unavailable", request=request)
-                if filesystem_failure == "malformed":
+                if self.filesystem_failure == "malformed":
                     return httpx.Response(200, text="not-json", request=request)
                 return httpx.Response(
                     200,
-                    json={"purged": filesystem_failure != "false"},
+                    json={"purged": self.filesystem_failure != "false"},
                     request=request,
                 )
-            if history_error:
+            if self.history_error:
                 return httpx.Response(502, text="boom", request=request)
             return httpx.Response(
                 200, json={"deleted": history_deleted}, request=request
@@ -3764,10 +3777,9 @@ async def test_erase_session_filesystem_failure_retains_history_and_retries(
     ]
 
     second_calls: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        _make_runtime_client(second_calls),
-    )
+    runtime_client = deps.get_runtime_http_client()
+    runtime_client.calls = second_calls  # type: ignore[attr-defined]
+    runtime_client.filesystem_failure = None  # type: ignore[attr-defined]
     second = await service.erase_session(
         team_id=TeamId("personal"),
         session_id="session-1",
@@ -3847,10 +3859,8 @@ async def test_erase_session_partial_failure_converges_on_retry(
     # Attempt 2 — the runtime is healthy again. Because the row survived, the
     # retry re-resolves the runtime, every store converges, and metadata is
     # finally deleted.
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        _make_runtime_client([]),
-    )
+    runtime_client = deps.get_runtime_http_client()
+    runtime_client.history_error = False  # type: ignore[attr-defined]
     second = await service.erase_session(
         team_id=TeamId("personal"),
         session_id="session-1",

@@ -119,7 +119,7 @@ class GcsFilesystem(BaseFilesystem):
     async def read(self, path: str) -> bytes:
         """Read the full contents of an object as raw bytes."""
         resolved = self._resolve_path(path)
-        logger.info("[GCS_READ] bucket=%s path=%s", self.bucket_name, resolved)
+        logger.info("[GCS_READ] bucket=%s", self.bucket_name)
 
         def _read() -> bytes:
             blob = self.bucket.blob(resolved)
@@ -142,9 +142,8 @@ class GcsFilesystem(BaseFilesystem):
         data_bytes = data.encode("utf-8") if isinstance(data, str) else data
 
         logger.info(
-            "[GCS_WRITE] bucket=%s path=%s bytes=%d",
+            "[GCS_WRITE] bucket=%s bytes=%d",
             self.bucket_name,
-            full,
             len(data_bytes),
         )
 
@@ -172,7 +171,7 @@ class GcsFilesystem(BaseFilesystem):
         # slash so listings stay inside the directory boundary; an empty prefix
         # (whole-bucket listing) is preserved as-is.
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
-        logger.info("[GCS_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
+        logger.info("[GCS_LIST] bucket=%s", self.bucket_name)
 
         all_blobs = await asyncio.to_thread(
             lambda: list(self.client.list_blobs(self.bucket_name, prefix=list_prefix))
@@ -221,7 +220,7 @@ class GcsFilesystem(BaseFilesystem):
         resolved = self._resolve_path(path)
         if not resolved.rstrip("/"):
             raise ValueError("Deleting the filesystem root is forbidden")
-        logger.info("[GCS_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
+        logger.info("[GCS_DELETE] bucket=%s", self.bucket_name)
 
         prefix = resolved.rstrip("/") + "/"
 
@@ -230,12 +229,12 @@ class GcsFilesystem(BaseFilesystem):
                 try:
                     blob.delete()
                 except NotFound:
-                    logger.warning("[GCS_DELETE] already gone: %s", blob.name)
+                    logger.warning("[GCS_DELETE] object already gone")
             for key in (resolved, prefix):
                 try:
                     self.bucket.blob(key).delete()
                 except NotFound:
-                    logger.debug("[GCS_DELETE] already gone: %s", key)
+                    logger.debug("[GCS_DELETE] marker already gone")
 
         await asyncio.to_thread(_delete)
 
@@ -251,7 +250,7 @@ class GcsFilesystem(BaseFilesystem):
         :meth:`write` (same convention as the MinIO backend).
         """
         dir_path = self._resolve_path(path).rstrip("/") + "/"
-        logger.info("[GCS_MKDIR] bucket=%s path=%s", self.bucket_name, dir_path)
+        logger.info("[GCS_MKDIR] bucket=%s", self.bucket_name)
         await asyncio.to_thread(self.bucket.blob(dir_path).upload_from_string, b"")
 
     async def exists(self, path: str) -> bool:

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,28 @@ async def test_local_runtime_filesystem_round_trips_text(tmp_path: Path) -> None
     assert isinstance(filesystem, LocalFilesystem)
     await filesystem.write("note.txt", "hello")
     assert await filesystem.cat("note.txt") == "hello"
+
+
+@pytest.mark.asyncio
+async def test_local_runtime_filesystem_initializes_outside_event_loop_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fred_runtime.app import filesystem_factory
+
+    event_loop_thread = threading.get_ident()
+    local_filesystem = filesystem_factory.LocalFilesystem
+
+    def _build(*, root: str) -> LocalFilesystem:
+        assert threading.get_ident() != event_loop_thread
+        return local_filesystem(root=root)
+
+    monkeypatch.setattr(filesystem_factory, "LocalFilesystem", _build)
+
+    filesystem = await build_runtime_filesystem(
+        _config({"type": "local", "root": str(tmp_path)}).storage.filesystem
+    )
+
+    assert isinstance(filesystem, LocalFilesystem)
 
 
 @pytest.mark.asyncio

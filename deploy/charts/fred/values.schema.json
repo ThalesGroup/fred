@@ -1323,7 +1323,7 @@
                   "additionalProperties": false
                 },
                 "storage": {
-                  "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence",
+                  "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence\n- `filesystem`: one bucket/root for runtime-owned conversation files",
                   "properties": {
                     "postgres": {
                       "properties": {
@@ -1613,6 +1613,144 @@
                       ],
                       "default": null,
                       "title": "Log Store"
+                    },
+                    "filesystem": {
+                      "discriminator": {
+                        "mapping": {
+                          "gcs": "#/$defs/GcsRuntimeFilesystemConfig",
+                          "local": "#/$defs/LocalRuntimeFilesystemConfig",
+                          "minio": "#/$defs/MinioRuntimeFilesystemConfig"
+                        },
+                        "propertyName": "type"
+                      },
+                      "oneOf": [
+                        {
+                          "description": "Local-development object storage for Fred Runtime files.",
+                          "properties": {
+                            "type": {
+                              "const": "local",
+                              "default": "local",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "root": {
+                              "default": "~/.fred/pod/filesystem",
+                              "title": "Root",
+                              "type": "string"
+                            }
+                          },
+                          "title": "LocalRuntimeFilesystemConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "MinIO or S3-compatible object storage for Fred Runtime files.",
+                          "properties": {
+                            "type": {
+                              "const": "minio",
+                              "default": "minio",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "title": "Endpoint",
+                              "type": "string"
+                            },
+                            "access_key": {
+                              "title": "Access Key",
+                              "type": "string"
+                            },
+                            "secret_key": {
+                              "title": "Secret Key",
+                              "type": "string"
+                            },
+                            "bucket_name": {
+                              "title": "Bucket Name",
+                              "type": "string"
+                            },
+                            "secure": {
+                              "default": false,
+                              "title": "Secure",
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "endpoint",
+                            "access_key",
+                            "secret_key",
+                            "bucket_name"
+                          ],
+                          "title": "MinioRuntimeFilesystemConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "GCS object storage using Application Default Credentials.",
+                          "properties": {
+                            "type": {
+                              "const": "gcs",
+                              "default": "gcs",
+                              "title": "Type",
+                              "type": "string"
+                            },
+                            "bucket_name": {
+                              "title": "Bucket Name",
+                              "type": "string"
+                            },
+                            "project_id": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "title": "Project Id"
+                            }
+                          },
+                          "required": [
+                            "bucket_name"
+                          ],
+                          "title": "GcsRuntimeFilesystemConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        }
+                      ],
+                      "title": "Filesystem"
+                    },
+                    "conversation_filesystem": {
+                      "description": "Independent soft limits for runtime-owned conversation namespaces.",
+                      "properties": {
+                        "scratchpad_max_bytes": {
+                          "default": 104857600,
+                          "minimum": 1,
+                          "title": "Scratchpad Max Bytes",
+                          "type": "integer"
+                        },
+                        "scratchpad_max_files": {
+                          "default": 1000,
+                          "minimum": 1,
+                          "title": "Scratchpad Max Files",
+                          "type": "integer"
+                        },
+                        "deep_max_bytes": {
+                          "default": 1073741824,
+                          "minimum": 1,
+                          "title": "Deep Max Bytes",
+                          "type": "integer"
+                        },
+                        "deep_max_files": {
+                          "default": 10000,
+                          "minimum": 1,
+                          "title": "Deep Max Files",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "ConversationFilesystemQuotaConfig",
+                      "type": "object",
+                      "additionalProperties": false
                     }
                   },
                   "title": "PodStorageConfig",

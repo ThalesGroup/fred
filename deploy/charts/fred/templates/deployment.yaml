@@ -5,6 +5,13 @@
 {{- $persistenceEnabled := .root.Values.global.persistence.enabled }}   # we will use it in a loop
 {{- $applicationName := .app.applicationName }}                         # we will use it in a loop
 {{- $isFrontend := eq .app.applicationName "frontend" }}
+{{- $isFredAgents := eq .app.applicationName "fred-agents" }}
+{{- $replicaCount := .app.replicaCount | default 1 | int }}
+{{- $configuration := .app.configuration | default dict }}
+{{- $runtimeFilesystemType := dig "storage" "filesystem" "type" "local" $configuration }}
+{{- if and $isFredAgents (gt $replicaCount 1) (eq $runtimeFilesystemType "local") }}
+{{- fail "applications.fred-agents.configuration.storage.filesystem must select a shared backend (gcs or minio) when replicaCount is greater than 1" }}
+{{- end }}
 {{- /* The control-plane flag is the sole chart input; its derived frontend env is emitted after env/extraEnvVars so it remains authoritative. */}}
 {{- $controlPlane := (index .root.Values.applications "control-plane-backend") | default dict }}
 {{- $enableApplications := dig "configuration" "platform" "frontend" "feature_flags" "enableApplications" false $controlPlane }}
@@ -17,7 +24,7 @@ metadata:
   labels:
     app: {{ .app.applicationName }}
 spec:
-  replicas: {{ .app.replicaCount | default 1 }}
+  replicas: {{ $replicaCount }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

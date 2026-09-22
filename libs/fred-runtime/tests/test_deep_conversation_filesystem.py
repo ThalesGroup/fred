@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 import pytest
 from fred_core.filesystem.structures import (
@@ -64,11 +65,40 @@ class _MemoryFilesystem:
         return path in self.files
 
 
+class _ConcurrentReadFilesystem(_MemoryFilesystem):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self._overlap = asyncio.Event()
+
+    async def read(self, path: str) -> bytes:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        if self.in_flight >= 2:
+            self._overlap.set()
+        try:
+            await asyncio.wait_for(self._overlap.wait(), timeout=1)
+            return await super().read(path)
+        finally:
+            self.in_flight -= 1
+
+
+class _ReadCountingFilesystem(_MemoryFilesystem):
+    def __init__(self) -> None:
+        super().__init__()
+        self.read_count = 0
+
+    async def read(self, path: str) -> bytes:
+        self.read_count += 1
+        return await super().read(path)
+
+
 @pytest.mark.asyncio
 async def test_backend_round_trips_and_lists_conversation_text() -> None:
     namespace = ConversationFilesystemService(
         _MemoryFilesystem(), "conversation-a"
-    ).scratchpad()
+    ).namespace("scratchpad")
     backend = ConversationNamespaceBackend(namespace)
 
     write = await backend.awrite("/research/notes.md", "first\nsecond")
@@ -89,13 +119,13 @@ async def test_backend_round_trips_and_lists_conversation_text() -> None:
 async def test_fresh_backends_share_one_conversation_and_isolate_another() -> None:
     storage = _MemoryFilesystem()
     first = ConversationNamespaceBackend(
-        ConversationFilesystemService(storage, "conversation-a").scratchpad()
+        ConversationFilesystemService(storage, "conversation-a").namespace("scratchpad")
     )
     fresh = ConversationNamespaceBackend(
-        ConversationFilesystemService(storage, "conversation-a").scratchpad()
+        ConversationFilesystemService(storage, "conversation-a").namespace("scratchpad")
     )
     isolated = ConversationNamespaceBackend(
-        ConversationFilesystemService(storage, "conversation-b").scratchpad()
+        ConversationFilesystemService(storage, "conversation-b").namespace("scratchpad")
     )
 
     assert (await first.awrite("/notes.md", "durable")).error is None
@@ -113,7 +143,7 @@ async def test_fresh_backends_share_one_conversation_and_isolate_another() -> No
 async def test_backend_edits_globs_and_greps_with_deep_results() -> None:
     namespace = ConversationFilesystemService(
         _MemoryFilesystem(), "conversation-a"
-    ).scratchpad()
+    ).namespace("scratchpad")
     backend = ConversationNamespaceBackend(namespace)
     await namespace.write_text("research/one.md", "needle and needle")
     await namespace.write_text("research/two.txt", "needle elsewhere")
@@ -146,6 +176,47 @@ async def test_backend_edits_globs_and_greps_with_deep_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_backend_lists_and_globs_from_storage_metadata_without_reads() -> None:
+    storage = _ReadCountingFilesystem()
+    namespace = ConversationFilesystemService(
+        storage, "conversation-a"
+    ).namespace("scratchpad")
+    backend = ConversationNamespaceBackend(namespace)
+    await namespace.write_text("research/notes.md", "café")
+    await namespace.write_text("research/raw.txt", "ignored")
+
+    listing = await backend.als("/research")
+    globbed = await backend.aglob("**/*.md", path="/")
+
+    assert listing.entries == [
+        {"path": "/research/notes.md", "is_dir": False, "size": 5},
+        {"path": "/research/raw.txt", "is_dir": False, "size": 7},
+    ]
+    assert globbed.matches == [
+        {"path": "/research/notes.md", "is_dir": False, "size": 5}
+    ]
+    assert storage.read_count == 0
+
+
+@pytest.mark.asyncio
+async def test_backend_grep_bounds_parallel_reads() -> None:
+    storage = _ConcurrentReadFilesystem()
+    namespace = ConversationFilesystemService(storage, "conversation-a").namespace(
+        "scratchpad"
+    )
+    backend = ConversationNamespaceBackend(namespace)
+    for index in range(40):
+        await namespace.write_text(f"notes/{index:02}.md", f"needle {index:02}")
+
+    result = await backend.agrep("needle", path="/", glob="*.md")
+    paths = [match["path"] for match in result.matches or []]
+
+    assert result.error is None
+    assert paths == [f"/notes/{index:02}.md" for index in range(40)]
+    assert 2 <= storage.max_in_flight <= 16
+
+
+@pytest.mark.asyncio
 async def test_backends_translate_storage_and_unmounted_path_failures() -> None:
     class _FailingFilesystem(_MemoryFilesystem):
         async def read(self, path: str) -> bytes:
@@ -154,7 +225,9 @@ async def test_backends_translate_storage_and_unmounted_path_failures() -> None:
 
     storage = _FailingFilesystem()
     storage.files["conversations/conversation-a/scratchpad/notes.md"] = b"unreadable"
-    namespace = ConversationFilesystemService(storage, "conversation-a").scratchpad()
+    namespace = ConversationFilesystemService(storage, "conversation-a").namespace(
+        "scratchpad"
+    )
     backend = ConversationNamespaceBackend(namespace)
     rejecting = RejectingBackend()
 

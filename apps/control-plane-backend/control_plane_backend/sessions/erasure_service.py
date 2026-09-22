@@ -47,9 +47,6 @@ STORE_CONVERSATION_FILESYSTEM = "runtime_conversation_filesystem"
 STORE_HISTORY = "runtime_history"
 STORE_WIKI_PROPOSALS = "wiki_proposals"
 
-# Per-runtime-call timeout, matching the Knowledge Flow cleanup helper.
-_RUNTIME_TIMEOUT_SECONDS = 15.0
-
 
 class StoreErasureResult(BaseModel):
     """Outcome of erasing one store for one conversation."""
@@ -391,10 +388,9 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/checkpoints/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
-                response = await client.delete(
-                    url, headers={"Authorization": authorization}
-                )
+            response = await self._deps.get_runtime_http_client().delete(
+                url, headers={"Authorization": authorization}
+            )
             response.raise_for_status()
             deleted = int(response.json().get("deleted", 0))
             return StoreErasureResult(
@@ -433,10 +429,9 @@ class ConversationErasureService:
         """Purge both conversation filesystem namespaces on the owning runtime."""
         url = f"{base_url.rstrip('/')}/agents/sessions/{session_id}/filesystem"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
-                response = await client.delete(
-                    url, headers={"Authorization": authorization}
-                )
+            response = await self._deps.get_runtime_http_client().delete(
+                url, headers={"Authorization": authorization}
+            )
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict) or payload.get("purged") is not True:
@@ -464,10 +459,7 @@ class ConversationErasureService:
             return StoreErasureResult(
                 store=STORE_CONVERSATION_FILESYSTEM,
                 ok=False,
-                error=(
-                    "runtime conversation filesystem delete request failed: "
-                    f"{exc}"
-                ),
+                error=(f"runtime conversation filesystem delete request failed: {exc}"),
             )
         except (ValueError, TypeError) as exc:
             return StoreErasureResult(
@@ -493,10 +485,9 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/sessions/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
-                response = await client.delete(
-                    url, headers={"Authorization": authorization}
-                )
+            response = await self._deps.get_runtime_http_client().delete(
+                url, headers={"Authorization": authorization}
+            )
             response.raise_for_status()
             deleted = int(response.json().get("deleted", 0))
             return StoreErasureResult(

@@ -161,6 +161,11 @@ storage:
     project_id: my-project # optional when ADC resolves the project
 ```
 
+The Fred Helm chart keeps its one-replica development default on local storage and rejects a
+`fred-agents` deployment with more than one replica while that backend is selected. On GKE, set
+`<RUNTIME_FILES_BUCKET>` in `deploy/charts/fred/values-gcp.yaml`; its `fred-agents` service-account
+annotation uses Workload Identity, so no service-account key is mounted or written to the ConfigMap.
+
 For MinIO/S3-compatible storage, select `type: minio` and provide `endpoint`, `access_key`,
 `secret_key`, `bucket_name`, and `secure`. Local development may select `type: local` and `root`;
 local storage is not replica-safe and is not a production deployment profile.

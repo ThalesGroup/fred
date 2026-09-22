@@ -16,8 +16,12 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import PurePosixPath
+from typing import TypeVar
 
+from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import (
     BackendProtocol,
     EditResult,
@@ -35,30 +39,37 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadError,
     ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
-    ConversationScratchpadPort,
     ConversationScratchpadQuotaExceededError,
     ConversationScratchpadStorageError,
     ConversationScratchpadUnsupportedContentError,
 )
+from fred_runtime.conversation_filesystem import (
+    ConversationTextFileMetadata,
+    ConversationTextNamespacePort,
+)
 
 _UNMOUNTED_PATH_ERROR = "Path is outside mounted conversation filesystems"
+_MAX_CONCURRENT_READS = 16
+
+_InputT = TypeVar("_InputT")
+_ResultT = TypeVar("_ResultT")
 
 
 class ConversationNamespaceBackend(BackendProtocol):
     """Adapt one already-scoped conversation namespace to Deep's backend API."""
 
-    def __init__(self, namespace: ConversationScratchpadPort) -> None:
+    def __init__(self, namespace: ConversationTextNamespacePort) -> None:
         self._namespace = namespace
 
     async def als(self, path: str) -> LsResult:
         try:
             relative_directory = _relative_path(path, allow_root=True)
-            descendants = await self._namespace.list(relative_directory)
+            descendants = await self._namespace.list_metadata(relative_directory)
             prefix = f"{relative_directory}/" if relative_directory else ""
             entries: dict[str, FileInfo] = {}
 
             for descendant in descendants:
-                relative = descendant.removeprefix(prefix)
+                relative = descendant.path.removeprefix(prefix)
                 first, separator, _rest = relative.partition("/")
                 if not first:
                     continue
@@ -71,7 +82,7 @@ class ConversationNamespaceBackend(BackendProtocol):
                         "size": 0,
                     }
                     continue
-                entries[entry_path] = await self._file_info(entry_relative)
+                entries[entry_path] = self._file_info(descendant)
 
             return LsResult(
                 entries=sorted(entries.values(), key=lambda entry: entry["path"])
@@ -134,11 +145,12 @@ class ConversationNamespaceBackend(BackendProtocol):
         try:
             relative_directory = _relative_path(path or "/", allow_root=True)
             prefix = f"{relative_directory}/" if relative_directory else ""
-            matches: list[FileInfo] = []
-            for descendant in await self._namespace.list(relative_directory):
-                candidate = descendant.removeprefix(prefix)
-                if PurePosixPath(candidate).match(pattern):
-                    matches.append(await self._file_info(descendant))
+            descendants = [
+                descendant
+                for descendant in await self._namespace.list_metadata(relative_directory)
+                if PurePosixPath(descendant.path.removeprefix(prefix)).match(pattern)
+            ]
+            matches = [self._file_info(descendant) for descendant in descendants]
             return GlobResult(matches=matches)
         except ConversationScratchpadError as exc:
             return GlobResult(error=_error_message(exc))
@@ -151,12 +163,15 @@ class ConversationNamespaceBackend(BackendProtocol):
     ) -> GrepResult:
         try:
             relative_directory = _relative_path(path or "/", allow_root=True)
-            matches: list[GrepMatch] = []
-            for descendant in await self._namespace.list(relative_directory):
-                if glob and not PurePosixPath(descendant).match(glob):
-                    continue
+            descendants = [
+                descendant
+                for descendant in await self._namespace.list(relative_directory)
+                if not glob or PurePosixPath(descendant).match(glob)
+            ]
+
+            async def grep_file(descendant: str) -> list[GrepMatch]:
                 content = await self._namespace.read_text(descendant)
-                matches.extend(
+                return [
                     {
                         "path": f"/{descendant}",
                         "line": line_number,
@@ -164,18 +179,35 @@ class ConversationNamespaceBackend(BackendProtocol):
                     }
                     for line_number, line in enumerate(content.split("\n"), 1)
                     if pattern in line
-                )
+                ]
+
+            per_file_matches = await _bounded_gather(descendants, grep_file)
+            matches = [match for file_matches in per_file_matches for match in file_matches]
             return GrepResult(matches=matches)
         except ConversationScratchpadError as exc:
             return GrepResult(error=_error_message(exc))
 
-    async def _file_info(self, relative_path: str) -> FileInfo:
-        content = await self._namespace.read_text(relative_path)
+    @staticmethod
+    def _file_info(metadata: ConversationTextFileMetadata) -> FileInfo:
         return {
-            "path": f"/{relative_path}",
+            "path": f"/{metadata.path}",
             "is_dir": False,
-            "size": len(content.encode("utf-8")),
+            "size": metadata.size,
         }
+
+
+async def _bounded_gather(
+    items: Iterable[_InputT],
+    operation: Callable[[_InputT], Awaitable[_ResultT]],
+) -> list[_ResultT]:
+    """Run independent storage reads concurrently without flooding the provider."""
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_READS)
+
+    async def run(item: _InputT) -> _ResultT:
+        async with semaphore:
+            return await operation(item)
+
+    return list(await asyncio.gather(*(run(item) for item in items)))
 
 
 class RejectingBackend(BackendProtocol):
@@ -219,6 +251,56 @@ class RejectingBackend(BackendProtocol):
     ) -> GrepResult:
         del pattern, path, glob
         return GrepResult(error=_UNMOUNTED_PATH_ERROR)
+
+
+class ConversationCompositeBackend(CompositeBackend):
+    """Composite that searches only Fred's explicit conversation mounts."""
+
+    async def aglob(
+        self, pattern: str, path: str | None = None
+    ) -> GlobResult:
+        if path not in (None, "/"):
+            if not any(path.startswith(prefix) for prefix in self.routes):
+                return GlobResult(error=_UNMOUNTED_PATH_ERROR)
+            return await super().aglob(pattern, path)
+
+        matches: list[FileInfo] = []
+        for prefix, backend in self.routes.items():
+            result = await backend.aglob(pattern, "/")
+            if result.error:
+                return result
+            matches.extend(
+                {**match, "path": _mount_path(prefix, match["path"])}
+                for match in result.matches or []
+            )
+        matches.sort(key=lambda match: match["path"])
+        return GlobResult(matches=matches)
+
+    async def agrep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+    ) -> GrepResult:
+        if path not in (None, "/"):
+            if not any(path.startswith(prefix) for prefix in self.routes):
+                return GrepResult(error=_UNMOUNTED_PATH_ERROR)
+            return await super().agrep(pattern, path, glob)
+
+        matches: list[GrepMatch] = []
+        for prefix, backend in self.routes.items():
+            result = await backend.agrep(pattern, "/", glob)
+            if result.error:
+                return result
+            matches.extend(
+                {**match, "path": _mount_path(prefix, match["path"])}
+                for match in result.matches or []
+            )
+        return GrepResult(matches=matches)
+
+
+def _mount_path(prefix: str, path: str) -> str:
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
 
 
 def _error_message(error: ConversationScratchpadError) -> str:

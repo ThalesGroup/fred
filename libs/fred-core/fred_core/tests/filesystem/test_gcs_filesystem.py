@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -200,6 +201,17 @@ async def test_read_does_not_block_the_event_loop(gcs_fs, monkeypatch):
 
     assert await gcs_fs.read("note.txt") == b"hello"
     assert heartbeat.done()
+
+
+@pytest.mark.asyncio
+async def test_read_info_log_does_not_expose_object_key(gcs_fs, caplog):
+    gcs_fs.bucket.blob("conversations/session/private.txt").upload_from_string(b"x")
+
+    with caplog.at_level(logging.INFO):
+        await gcs_fs.read("conversations/session/private.txt")
+
+    assert "conversations/session/private.txt" not in caplog.text
+    assert "[GCS_READ] bucket=test-bucket" in caplog.text
 
 
 @pytest.mark.asyncio

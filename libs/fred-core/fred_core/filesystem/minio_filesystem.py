@@ -131,7 +131,7 @@ class MinioFilesystem(BaseFilesystem):
             bytes: The full content of the object.
         """
         resolved = self._resolve_path(path)
-        logger.info("[MINIO_READ] bucket=%s path=%s", self.bucket_name, resolved)
+        logger.info("[MINIO_READ] bucket=%s", self.bucket_name)
 
         def _read() -> bytes:
             try:
@@ -166,9 +166,8 @@ class MinioFilesystem(BaseFilesystem):
             data_bytes = data
 
         logger.info(
-            "[MINIO_WRITE] bucket=%s path=%s bytes=%d",
+            "[MINIO_WRITE] bucket=%s bytes=%d",
             self.bucket_name,
-            full,
             len(data_bytes),
         )
 
@@ -210,7 +209,7 @@ class MinioFilesystem(BaseFilesystem):
         # prefix with a slash so listings stay inside the directory boundary; an
         # empty prefix (whole-bucket listing) is preserved as-is.
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
-        logger.info("[MINIO_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
+        logger.info("[MINIO_LIST] bucket=%s", self.bucket_name)
 
         all_objects = await asyncio.to_thread(
             lambda: list(
@@ -270,7 +269,7 @@ class MinioFilesystem(BaseFilesystem):
         resolved = self._resolve_path(path)
         if not resolved.rstrip("/"):
             raise ValueError("Deleting the filesystem root is forbidden")
-        logger.info("[MINIO_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
+        logger.info("[MINIO_DELETE] bucket=%s", self.bucket_name)
         # Recursive by design: delete everything under the prefix (a folder and its contents),
         # then the object / directory marker itself — so a folder is removed whether empty or full.
         prefix = resolved.rstrip("/") + "/"
@@ -284,10 +283,16 @@ class MinioFilesystem(BaseFilesystem):
                 if obj.object_name is not None
             ]
             if to_remove:
-                for error in self.client.remove_objects(self.bucket_name, to_remove):
+                errors = list(
+                    self.client.remove_objects(self.bucket_name, to_remove)
+                )
+                for error in errors:
                     logger.warning(
-                        "[MINIO_DELETE] failed to remove an object: %s", error
+                        "[MINIO_DELETE] object removal failed error_category=%s",
+                        type(error).__name__,
                     )
+                if errors:
+                    raise RuntimeError("Failed to delete MinIO objects")
             self.client.remove_object(self.bucket_name, resolved)
             self.client.remove_object(self.bucket_name, prefix)
 
@@ -314,7 +319,7 @@ class MinioFilesystem(BaseFilesystem):
 
         # Ensure path ends with a slash
         dir_path = self._resolve_path(path).rstrip("/") + "/"
-        logger.info("[MINIO_MKDIR] bucket=%s path=%s", self.bucket_name, dir_path)
+        logger.info("[MINIO_MKDIR] bucket=%s", self.bucket_name)
 
         await asyncio.to_thread(
             self.client.put_object,
@@ -340,9 +345,7 @@ class MinioFilesystem(BaseFilesystem):
 
         def _exists() -> bool:
             try:
-                logger.info(
-                    "[MINIO_EXISTS] stat bucket=%s path=%s", self.bucket_name, full
-                )
+                logger.info("[MINIO_EXISTS] stat bucket=%s", self.bucket_name)
                 self.client.stat_object(self.bucket_name, full)
                 return True
             except Exception:
@@ -354,9 +357,8 @@ class MinioFilesystem(BaseFilesystem):
                     )
                 )
                 logger.info(
-                    "[MINIO_EXISTS] list bucket=%s prefix=%s count=%d",
+                    "[MINIO_EXISTS] list bucket=%s count=%d",
                     self.bucket_name,
-                    full.rstrip("/") + "/",
                     len(objs),
                 )
                 return len(objs) > 0
@@ -394,9 +396,7 @@ class MinioFilesystem(BaseFilesystem):
 
         def _stat() -> FilesystemResourceInfoResult:
             try:
-                logger.info(
-                    "[MINIO_STAT] file bucket=%s path=%s", self.bucket_name, full
-                )
+                logger.info("[MINIO_STAT] file bucket=%s", self.bucket_name)
                 obj = self.client.stat_object(self.bucket_name, full)
                 if not full.endswith("/"):
                     return FilesystemResourceInfoResult(

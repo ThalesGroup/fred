@@ -81,7 +81,6 @@ class _ScriptedModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        print("AGENERATE", len(self.script), [type(message).__name__ for message in messages])
         return self._generate(messages, stop, run_manager, **kwargs)
 
 

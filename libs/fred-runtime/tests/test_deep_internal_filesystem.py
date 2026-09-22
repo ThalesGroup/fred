@@ -124,3 +124,43 @@ async def test_trusted_backend_routes_deep_artifacts_to_persistent_namespace() -
         await internal.read_text("large_tool_results/tool-call")
         == "trusted middleware content"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("root", [None, "/"])
+async def test_root_search_aggregates_only_mounted_namespaces(
+    root: str | None,
+) -> None:
+    filesystem = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+    await filesystem.scratchpad().write_text("notes/shared.md", "shared needle")
+    await filesystem.namespace(".deep").write_text(
+        "large_tool_results/result.md", "internal needle"
+    )
+    backend = _build_conversation_backend(filesystem)
+
+    globbed = await backend.aglob("**/*.md", path=root)
+    grepped = await backend.agrep("needle", path=root, glob="*.md")
+
+    assert globbed.error is None
+    assert [match["path"] for match in globbed.matches or []] == [
+        "/.deep/large_tool_results/result.md",
+        "/scratchpad/notes/shared.md",
+    ]
+    assert grepped.error is None
+    assert [match["path"] for match in grepped.matches or []] == [
+        "/scratchpad/notes/shared.md",
+        "/.deep/large_tool_results/result.md",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_a_path_outside_mounted_namespaces() -> None:
+    backend = _build_conversation_backend(
+        ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+    )
+
+    globbed = await backend.aglob("**/*", path="/outside/")
+    grepped = await backend.agrep("needle", path="/outside/")
+
+    assert globbed.error == "Path is outside mounted conversation filesystems"
+    assert grepped.error == globbed.error

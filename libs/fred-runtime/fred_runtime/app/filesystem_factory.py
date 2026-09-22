@@ -36,7 +36,7 @@ async def build_runtime_filesystem(
 ) -> BaseFilesystem:
     """Build one filesystem without blocking startup's event loop on cloud SDKs."""
     if isinstance(config, LocalRuntimeFilesystemConfig):
-        return LocalFilesystem(root=config.root)
+        return await asyncio.to_thread(LocalFilesystem, root=config.root)
     if isinstance(config, MinioRuntimeFilesystemConfig):
         return await asyncio.to_thread(
             MinioFilesystem,

@@ -20,7 +20,9 @@ download exhausted the pool and later reads failed with a generic download error
 """
 
 import asyncio
+import logging
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -100,6 +102,19 @@ async def test_read_does_not_block_the_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_read_info_log_does_not_expose_object_key(caplog):
+    resp = MagicMock()
+    resp.read.return_value = b"private"
+    fs = _fs_with_response(resp)
+
+    with caplog.at_level(logging.INFO):
+        await fs.read("conversations/session/private.txt")
+
+    assert "conversations/session/private.txt" not in caplog.text
+    assert "[MINIO_READ] bucket=bucket" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_delete_rejects_bucket_root():
     fs = MinioFilesystem.__new__(MinioFilesystem)
     fs.bucket_name = "bucket"
@@ -110,3 +125,20 @@ async def test_delete_rejects_bucket_root():
         await fs.delete("")
 
     fs.client.remove_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_propagates_recursive_object_failure():
+    fs = MinioFilesystem.__new__(MinioFilesystem)
+    fs.bucket_name = "bucket"
+    fs.prefix = None
+    fs.client = MagicMock()
+    fs.client.list_objects.return_value = [
+        SimpleNamespace(object_name="conversation/note.txt")
+    ]
+    fs.client.remove_objects.return_value = iter(
+        [SimpleNamespace(object_name="conversation/note.txt")]
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to delete MinIO objects"):
+        await fs.delete("conversation")
