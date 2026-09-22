@@ -25,6 +25,7 @@ from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import (
     BackendProtocol,
     EditResult,
+    FileData,
     FileInfo,
     GlobResult,
     GrepMatch,
@@ -43,6 +44,7 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadStorageError,
     ConversationScratchpadUnsupportedContentError,
 )
+
 from fred_runtime.conversation_filesystem import (
     ConversationTextFileMetadata,
     ConversationTextNamespacePort,
@@ -98,7 +100,7 @@ class ConversationNamespaceBackend(BackendProtocol):
     ) -> ReadResult:
         try:
             content = await self._namespace.read_text(_relative_path(file_path))
-            file_data = {"content": content, "encoding": "utf-8"}
+            file_data: FileData = {"content": content, "encoding": "utf-8"}
             sliced = slice_read_response(file_data, offset, limit)
             if isinstance(sliced, ReadResult):
                 return sliced
@@ -139,15 +141,15 @@ class ConversationNamespaceBackend(BackendProtocol):
         except ConversationScratchpadError as exc:
             return EditResult(error=_error_message(exc))
 
-    async def aglob(
-        self, pattern: str, path: str | None = None
-    ) -> GlobResult:
+    async def aglob(self, pattern: str, path: str | None = None) -> GlobResult:
         try:
             relative_directory = _relative_path(path or "/", allow_root=True)
             prefix = f"{relative_directory}/" if relative_directory else ""
             descendants = [
                 descendant
-                for descendant in await self._namespace.list_metadata(relative_directory)
+                for descendant in await self._namespace.list_metadata(
+                    relative_directory
+                )
                 if PurePosixPath(descendant.path.removeprefix(prefix)).match(pattern)
             ]
             matches = [self._file_info(descendant) for descendant in descendants]
@@ -182,7 +184,9 @@ class ConversationNamespaceBackend(BackendProtocol):
                 ]
 
             per_file_matches = await _bounded_gather(descendants, grep_file)
-            matches = [match for file_matches in per_file_matches for match in file_matches]
+            matches = [
+                match for file_matches in per_file_matches for match in file_matches
+            ]
             return GrepResult(matches=matches)
         except ConversationScratchpadError as exc:
             return GrepResult(error=_error_message(exc))
@@ -237,9 +241,7 @@ class RejectingBackend(BackendProtocol):
         del file_path, old_string, new_string, replace_all
         return EditResult(error=_UNMOUNTED_PATH_ERROR)
 
-    async def aglob(
-        self, pattern: str, path: str | None = None
-    ) -> GlobResult:
+    async def aglob(self, pattern: str, path: str | None = None) -> GlobResult:
         del pattern, path
         return GlobResult(error=_UNMOUNTED_PATH_ERROR)
 
@@ -256,9 +258,7 @@ class RejectingBackend(BackendProtocol):
 class ConversationCompositeBackend(CompositeBackend):
     """Composite that searches only Fred's explicit conversation mounts."""
 
-    async def aglob(
-        self, pattern: str, path: str | None = None
-    ) -> GlobResult:
+    async def aglob(self, pattern: str, path: str | None = None) -> GlobResult:
         if path not in (None, "/"):
             if not any(path.startswith(prefix) for prefix in self.routes):
                 return GlobResult(error=_UNMOUNTED_PATH_ERROR)

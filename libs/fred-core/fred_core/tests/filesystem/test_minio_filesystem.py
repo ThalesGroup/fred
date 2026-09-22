@@ -70,7 +70,9 @@ async def test_read_releases_connection_even_on_error():
 @pytest.mark.asyncio
 async def test_read_translates_missing_object_to_file_not_found():
     fs = _fs_with_response(MagicMock())
-    fs.client.get_object.side_effect = S3Error(
+    client = MagicMock()
+    fs.client = client
+    client.get_object.side_effect = S3Error(
         MagicMock(),
         code="NoSuchKey",
         message="The specified key does not exist",

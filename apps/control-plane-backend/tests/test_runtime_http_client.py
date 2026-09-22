@@ -54,4 +54,4 @@ async def test_runtime_http_client_is_reused_and_closed(
 
     await context.shutdown()
 
-    assert first.closed is True
+    assert created[0].closed is True

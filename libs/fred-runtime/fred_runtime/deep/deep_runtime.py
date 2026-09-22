@@ -106,7 +106,9 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "grep",
     "execute",
 )
-_SAFE_FILESYSTEM_TOOL_NAMES = frozenset(_FILESYSTEM_TOOL_NAMES) - {"execute"}
+_SAFE_FILESYSTEM_TOOL_NAMES: frozenset[str] = frozenset(
+    name for name in _FILESYSTEM_TOOL_NAMES if name != "execute"
+)
 
 
 class DeepAgentRuntime(ReActRuntime):

@@ -593,8 +593,7 @@ class ConversationScratchpadQuotaExceededError(ConversationScratchpadError):
         self.limit = limit
         self.attempted = attempted
         super().__init__(
-            f"Conversation filesystem {resource} quota exceeded "
-            f"({attempted} > {limit})"
+            f"Conversation filesystem {resource} quota exceeded ({attempted} > {limit})"
         )
 
 

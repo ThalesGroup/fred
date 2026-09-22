@@ -36,6 +36,7 @@ from fred_runtime.app.config import AgentPodConfig
 
 if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
+
     from fred_runtime.app.platform_sql import PlatformSqlAdapter
 
 logger = logging.getLogger(__name__)

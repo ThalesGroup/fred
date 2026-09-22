@@ -773,9 +773,7 @@ async def test_native_children_and_parent_share_live_conversation_backend(
         )
         return original_create_sub_agent(*args, **kwargs)
 
-    monkeypatch.setattr(
-        deep_subagents, "create_sub_agent", capture_child_backend
-    )
+    monkeypatch.setattr(deep_subagents, "create_sub_agent", capture_child_backend)
     model = _NativeModel(
         responses=[],
         scripts={"parent": [AIMessage(content="done")]},
@@ -784,7 +782,7 @@ async def test_native_children_and_parent_share_live_conversation_backend(
     backend = deep_mod.CompositeBackend(
         default=deep_mod.RejectingBackend(),
         routes={
-            "/scratchpad/": deep_mod.ConversationNamespaceBackend(namespace),
+            "/scratchpad/": deep_mod.ConversationNamespaceBackend(cast(Any, namespace)),
         },
         artifacts_root="/.deep",
     )
@@ -793,9 +791,7 @@ async def test_native_children_and_parent_share_live_conversation_backend(
     assert agent is not None
     assert child_backends
     assert all(child_backend is backend for child_backend in child_backends)
-    child_write = await child_backends[0].awrite(
-        "/scratchpad/shared.md", "shared live"
-    )
+    child_write = await child_backends[0].awrite("/scratchpad/shared.md", "shared live")
     parent_read = await backend.aread("/scratchpad/shared.md")
     sibling_read = await child_backends[0].aread("/scratchpad/shared.md")
 

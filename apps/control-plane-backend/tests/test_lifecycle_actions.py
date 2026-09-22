@@ -211,9 +211,7 @@ async def test_recovery_window_erases_filesystem_only_when_due_and_records_resul
                 session_id="session-window",
                 stores=[
                     StoreErasureResult(store=STORE_CHECKPOINT, ok=True),
-                    StoreErasureResult(
-                        store=STORE_CONVERSATION_FILESYSTEM, ok=True
-                    ),
+                    StoreErasureResult(store=STORE_CONVERSATION_FILESYSTEM, ok=True),
                     StoreErasureResult(store=STORE_HISTORY, ok=True),
                 ],
             )

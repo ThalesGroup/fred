@@ -36,6 +36,8 @@ from typing import Any, cast
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import CompositeBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
@@ -59,8 +61,6 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
-from deepagents.backends import CompositeBackend
-from deepagents.middleware.filesystem import FilesystemMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
@@ -167,7 +167,12 @@ async def test_deep_build_executor_rejects_capability_filesystem_middleware(
         return object()
 
     capability_block = CapabilityAgentBlock(
-        middleware=(FilesystemMiddleware(backend=deep_mod.RejectingBackend()),),
+        middleware=(
+            cast(
+                AgentMiddleware,
+                FilesystemMiddleware(backend=deep_mod.RejectingBackend()),
+            ),
+        ),
         hitl={},
         tools=(),
         mcp_prompt_groups=(),
@@ -403,8 +408,20 @@ async def test_deep_build_executor_mounts_standard_scratchpad_without_capability
     assert isinstance(backend, CompositeBackend)
     assert set(backend.routes) == {"/scratchpad/", "/.deep/"}
     assert backend.artifacts_root == "/.deep"
-    assert backend.routes["/scratchpad/"]._namespace is scratchpad
-    assert backend.routes["/.deep/"]._namespace is deep_namespace
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.routes["/scratchpad/"],
+        )._namespace
+        is scratchpad
+    )
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.routes["/.deep/"],
+        )._namespace
+        is deep_namespace
+    )
     guards = [
         middleware.tool_name
         for middleware in cast(list[AgentMiddleware], captured["middleware"])

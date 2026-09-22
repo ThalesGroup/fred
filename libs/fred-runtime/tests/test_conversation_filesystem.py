@@ -23,16 +23,16 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfoResult,
 )
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_sdk.contracts.runtime import ConversationScratchpadFileNotFoundError
+from fred_runtime.app import ConversationFilesystemQuotaConfig
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_sdk.contracts.runtime import (
     ConversationScratchpadEditConflictError,
+    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadQuotaExceededError,
     ConversationScratchpadStorageError,
     ConversationScratchpadUnsupportedContentError,
 )
-from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.app import ConversationFilesystemQuotaConfig
 
 
 class _MemoryFilesystem:
@@ -279,9 +279,7 @@ async def test_scratchpad_rejects_file_count_quota_before_mutating_storage() -> 
     assert error.value.resource == "files"
     assert error.value.limit == 1
     assert error.value.attempted == 2
-    assert storage.files == {
-        "conversations/conversation-a/scratchpad/one.md": b"1"
-    }
+    assert storage.files == {"conversations/conversation-a/scratchpad/one.md": b"1"}
 
 
 @pytest.mark.asyncio
@@ -302,9 +300,7 @@ async def test_one_file_can_consume_all_remaining_byte_budget() -> None:
 @pytest.mark.asyncio
 async def test_first_mutation_recounts_existing_storage() -> None:
     storage = _MemoryFilesystem()
-    storage.files = {
-        "conversations/conversation-a/scratchpad/existing.md": b"12345"
-    }
+    storage.files = {"conversations/conversation-a/scratchpad/existing.md": b"12345"}
     scratchpad = ConversationFilesystemService(
         storage,
         "conversation-a",
@@ -367,9 +363,7 @@ async def test_purge_deletes_without_recounting_namespace_first() -> None:
             return await super().list(prefix)
 
     storage = _CountingFilesystem()
-    storage.files = {
-        "conversations/conversation-a/scratchpad/existing.md": b"existing"
-    }
+    storage.files = {"conversations/conversation-a/scratchpad/existing.md": b"existing"}
     scratchpad = ConversationFilesystemService(storage, "conversation-a").scratchpad()
 
     await scratchpad.purge()  # type: ignore[attr-defined]
@@ -400,7 +394,13 @@ async def test_same_process_mutations_are_serialized_before_quota_check() -> Non
     )
 
     assert sum(result is None for result in results) == 1
-    assert sum(isinstance(result, ConversationScratchpadQuotaExceededError) for result in results) == 1
+    assert (
+        sum(
+            isinstance(result, ConversationScratchpadQuotaExceededError)
+            for result in results
+        )
+        == 1
+    )
     assert len(storage.files) == 1
 
 
@@ -437,8 +437,9 @@ async def test_quota_observability_has_only_bounded_content_free_fields(
         kpi=kpi,
     ).scratchpad()
 
-    with caplog.at_level("INFO"), pytest.raises(
-        ConversationScratchpadQuotaExceededError
+    with (
+        caplog.at_level("INFO"),
+        pytest.raises(ConversationScratchpadQuotaExceededError),
     ):
         await scratchpad.write_text("private-path.md", "private-content")
 
@@ -451,13 +452,17 @@ async def test_quota_observability_has_only_bounded_content_free_fields(
             },
         )
     ]
-    assert all("private-content" not in record.getMessage() for record in caplog.records)
-    assert all("private-path.md" not in record.getMessage() for record in caplog.records)
+    assert all(
+        "private-content" not in record.getMessage() for record in caplog.records
+    )
+    assert all(
+        "private-path.md" not in record.getMessage() for record in caplog.records
+    )
     assert all(
         "private-conversation" not in record.getMessage() for record in caplog.records
     )
     usage = next(
-        record.conversation_filesystem
+        getattr(record, "conversation_filesystem")
         for record in caplog.records
         if record.getMessage() == "Conversation filesystem namespace usage"
     )
@@ -468,7 +473,7 @@ async def test_quota_observability_has_only_bounded_content_free_fields(
         "usage_files": 0,
     }
     rejection = next(
-        record.conversation_filesystem
+        getattr(record, "conversation_filesystem")
         for record in caplog.records
         if record.getMessage() == "Conversation filesystem quota rejected mutation"
     )
@@ -492,7 +497,7 @@ async def test_storage_failure_log_has_safe_operation_context(
         await scratchpad.write_text("private-path.md", "private-content")
 
     failure = next(
-        record.conversation_filesystem
+        getattr(record, "conversation_filesystem")
         for record in caplog.records
         if record.getMessage() == "Conversation filesystem storage operation failed"
     )

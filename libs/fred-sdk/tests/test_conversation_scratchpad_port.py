@@ -20,7 +20,9 @@ from typing import get_type_hints
 from fred_sdk.contracts.runtime import ConversationScratchpadPort, RuntimeServices
 
 
-def test_runtime_services_exposes_only_conversation_bound_scratchpad_operations() -> None:
+def test_runtime_services_exposes_only_conversation_bound_scratchpad_operations() -> (
+    None
+):
     method_names = {
         "read_text",
         "write_text",
@@ -35,7 +37,9 @@ def test_runtime_services_exposes_only_conversation_bound_scratchpad_operations(
     )
     assert method_names <= set(ConversationScratchpadPort.__abstractmethods__)
     for method_name in method_names:
-        parameters = signature(getattr(ConversationScratchpadPort, method_name)).parameters
+        parameters = signature(
+            getattr(ConversationScratchpadPort, method_name)
+        ).parameters
         assert "session_id" not in parameters
         assert "namespace" not in parameters
         assert "bucket" not in parameters

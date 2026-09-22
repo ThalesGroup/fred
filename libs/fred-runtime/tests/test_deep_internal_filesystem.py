@@ -31,7 +31,6 @@ from fred_runtime.deep.deep_runtime import (
     _build_conversation_backend,
 )
 from langchain_core.messages import ToolMessage
-from langchain_core.tools import BaseTool
 
 
 class _MemoryFilesystem:
@@ -78,18 +77,16 @@ async def test_model_write_and_edit_permissions_preserve_deep_internal_file() ->
     middleware = FilesystemMiddleware(
         backend=backend,
         _permissions=[
-            FilesystemPermission(
-                operations=["write"], paths=["/.deep/**"], mode="deny"
-            )
+            FilesystemPermission(operations=["write"], paths=["/.deep/**"], mode="deny")
         ],
     )
     tools = {entry.name: entry for entry in middleware.tools}
     runtime = cast(Any, SimpleNamespace(tool_call_id="model-filesystem-call"))
 
-    write = await cast(BaseTool, tools["write_file"]).coroutine(
+    write = await cast(Any, tools["write_file"]).coroutine(
         file_path="/.deep/artifact.txt", content="overwritten", runtime=runtime
     )
-    edit = await cast(BaseTool, tools["edit_file"]).coroutine(
+    edit = await cast(Any, tools["edit_file"]).coroutine(
         file_path="/.deep/artifact.txt",
         old_string="original",
         new_string="edited",

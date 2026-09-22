@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
+import string
 import threading
 import weakref
 from abc import abstractmethod
@@ -26,7 +26,10 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfo
+from fred_core.filesystem.structures import (
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.runtime import (
     ConversationScratchpadEditConflictError,
@@ -43,7 +46,8 @@ if TYPE_CHECKING:
 
 ConversationFilesystemNamespace = Literal["scratchpad", ".deep"]
 
-_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@+-]*\Z")
+_SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
+_SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:@+-")
 _LOGGER = logging.getLogger(__name__)
 _LOCK_REGISTRY_GUARD = threading.Lock()
 _STATES_BY_FILESYSTEM: weakref.WeakKeyDictionary[
@@ -52,10 +56,41 @@ _STATES_BY_FILESYSTEM: weakref.WeakKeyDictionary[
 
 
 class ConversationFilesystemQuotaSettings(Protocol):
-    scratchpad_max_bytes: int
-    scratchpad_max_files: int
-    deep_max_bytes: int
-    deep_max_files: int
+    @property
+    def scratchpad_max_bytes(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def scratchpad_max_files(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def deep_max_bytes(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def deep_max_files(self) -> int:
+        raise NotImplementedError
+
+
+class _ConversationFilesystemStorage(Protocol):
+    async def read(self, path: str) -> bytes:
+        raise NotImplementedError
+
+    async def write(self, path: str, data: bytes | str) -> None:
+        raise NotImplementedError
+
+    async def list(self, prefix: str = "") -> list[FilesystemResourceInfoResult]:
+        raise NotImplementedError
+
+    async def delete(self, path: str) -> None:
+        raise NotImplementedError
+
+    async def mkdir(self, path: str) -> None:
+        raise NotImplementedError
+
+    async def exists(self, path: str) -> bool:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +107,13 @@ class ConversationTextNamespacePort(ConversationScratchpadPort):
     @abstractmethod
     async def list_metadata(
         self, path: str = ""
-    ) -> tuple[ConversationTextFileMetadata, ...]: ...
+    ) -> tuple[ConversationTextFileMetadata, ...]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def purge(self) -> None:
+        """Remove the complete trusted runtime namespace."""
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -108,13 +149,13 @@ class ConversationFilesystemService:
 
     def __init__(
         self,
-        filesystem: BaseFilesystem,
+        filesystem: _ConversationFilesystemStorage,
         session_id: str,
         *,
         quotas: ConversationFilesystemQuotaSettings = _DEFAULT_QUOTAS,
         kpi: BaseKPIWriter | None = None,
     ) -> None:
-        if not _SAFE_SESSION_ID.fullmatch(session_id) or session_id in {".", ".."}:
+        if not _is_safe_session_id(session_id):
             raise ConversationScratchpadInvalidPathError(
                 "Conversation identifier must be one safe path segment"
             )
@@ -153,7 +194,7 @@ class ConversationFilesystemService:
 class _ConversationTextNamespace(ConversationTextNamespacePort):
     def __init__(
         self,
-        filesystem: BaseFilesystem,
+        filesystem: _ConversationFilesystemStorage,
         session_id: str,
         namespace: ConversationFilesystemNamespace,
         *,
@@ -229,9 +270,7 @@ class _ConversationTextNamespace(ConversationTextNamespacePort):
                 raise ConversationScratchpadEditConflictError(
                     "Expected text does not uniquely match the latest scratchpad content"
                 )
-            updated = current.replace(
-                old_text, new_text, -1 if replace_all else 1
-            )
+            updated = current.replace(old_text, new_text, -1 if replace_all else 1)
             encoded = _encode_text(updated)
             self._check_write_quota(relative_path, len(encoded))
             await self._write_encoded(relative_path, encoded, operation="edit")
@@ -344,7 +383,9 @@ class _ConversationTextNamespace(ConversationTextNamespacePort):
         assert self._accounting.sizes is not None
         old_size = self._accounting.sizes.get(relative_path)
         attempted_files = len(self._accounting.sizes) + (old_size is None)
-        attempted_bytes = sum(self._accounting.sizes.values()) - (old_size or 0) + new_size
+        attempted_bytes = (
+            sum(self._accounting.sizes.values()) - (old_size or 0) + new_size
+        )
         if attempted_files > self._quota.max_files:
             self._reject_quota("files", self._quota.max_files, attempted_files)
         if attempted_bytes > self._quota.max_bytes:
@@ -453,8 +494,17 @@ def _encode_text(content: str) -> bytes:
         ) from exc
 
 
+def _is_safe_session_id(session_id: str) -> bool:
+    return (
+        isinstance(session_id, str)
+        and session_id not in {"", ".", ".."}
+        and session_id[0] in _SAFE_SESSION_ID_FIRST_CHARACTERS
+        and all(character in _SAFE_SESSION_ID_CHARACTERS for character in session_id)
+    )
+
+
 def _namespace_accounting(
-    filesystem: BaseFilesystem, prefix: str
+    filesystem: _ConversationFilesystemStorage, prefix: str
 ) -> _NamespaceAccounting:
     with _LOCK_REGISTRY_GUARD:
         states = _STATES_BY_FILESYSTEM.setdefault(filesystem, {})

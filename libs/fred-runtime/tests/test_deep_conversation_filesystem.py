@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+
 import pytest
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
@@ -178,9 +179,9 @@ async def test_backend_edits_globs_and_greps_with_deep_results() -> None:
 @pytest.mark.asyncio
 async def test_backend_lists_and_globs_from_storage_metadata_without_reads() -> None:
     storage = _ReadCountingFilesystem()
-    namespace = ConversationFilesystemService(
-        storage, "conversation-a"
-    ).namespace("scratchpad")
+    namespace = ConversationFilesystemService(storage, "conversation-a").namespace(
+        "scratchpad"
+    )
     backend = ConversationNamespaceBackend(namespace)
     await namespace.write_text("research/notes.md", "café")
     await namespace.write_text("research/raw.txt", "ignored")

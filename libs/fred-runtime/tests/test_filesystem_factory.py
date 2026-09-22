@@ -86,7 +86,10 @@ def test_conversation_filesystem_quotas_allow_partial_and_complete_overrides() -
     )
 
     assert partial.storage.conversation_filesystem.scratchpad_max_files == 7
-    assert partial.storage.conversation_filesystem.scratchpad_max_bytes == 100 * 1024 * 1024
+    assert (
+        partial.storage.conversation_filesystem.scratchpad_max_bytes
+        == 100 * 1024 * 1024
+    )
     assert partial.storage.conversation_filesystem.deep_max_bytes == 1024 * 1024 * 1024
     assert partial.storage.conversation_filesystem.deep_max_files == 10_000
     assert complete.storage.conversation_filesystem.model_dump() == {

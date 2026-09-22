@@ -31,7 +31,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-import fred_runtime.runtime_context as runtime_context_module
 from conftest import (
     StaticChatModelFactory,
     ToolFriendlyFakeChatModel,
@@ -59,9 +58,8 @@ from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.runtime_context import RuntimeConfig
+from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
-from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -863,10 +861,14 @@ def test_delete_session_filesystem_rejects_a_different_session_owner(
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Access denied."}
-    history_store.session_belongs_to_user.assert_awaited_once_with("session-bob", "alice")
+    history_store.session_belongs_to_user.assert_awaited_once_with(
+        "session-bob", "alice"
+    )
 
 
-def test_delete_session_filesystem_reports_storage_failures(monkeypatch, tmp_path) -> None:
+def test_delete_session_filesystem_reports_storage_failures(
+    monkeypatch, tmp_path
+) -> None:
     """Storage faults stay visible to the lifecycle caller instead of falling back."""
 
     class _FailingFilesystem:
@@ -894,11 +896,13 @@ def test_delete_session_filesystem_reports_storage_failures(monkeypatch, tmp_pat
             lambda: FredRuntimeContext(
                 RuntimeConfig(
                     knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
-                    filesystem=_FailingFilesystem(),
+                    filesystem=cast(Any, _FailingFilesystem()),
                 )
             ),
         )
-        response = client.delete("/pod/v1/agents/sessions/session-filesystem/filesystem")
+        response = client.delete(
+            "/pod/v1/agents/sessions/session-filesystem/filesystem"
+        )
 
     assert response.status_code == 503
     assert response.json() == {
@@ -3066,10 +3070,12 @@ async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_i
     runtime_context = FredRuntimeContext(
         RuntimeConfig(
             knowledge_flow_url="http://knowledge-flow.invalid",
-            filesystem=storage,
+            filesystem=cast(Any, storage),
         )
     )
-    monkeypatch.setattr(runtime_context_module, "_RUNTIME_CONTEXT", runtime_context)
+    monkeypatch.setattr(
+        "fred_runtime.runtime_context._RUNTIME_CONTEXT", runtime_context
+    )
 
     def _binding(
         *, trusted_session_id: str | None, request_id: str

@@ -39,7 +39,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
 
-
 _SAFE_FILESYSTEM_TOOLS = {
     "ls",
     "read_file",

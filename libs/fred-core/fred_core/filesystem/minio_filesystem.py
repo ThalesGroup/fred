@@ -283,9 +283,7 @@ class MinioFilesystem(BaseFilesystem):
                 if obj.object_name is not None
             ]
             if to_remove:
-                errors = list(
-                    self.client.remove_objects(self.bucket_name, to_remove)
-                )
+                errors = list(self.client.remove_objects(self.bucket_name, to_remove))
                 for error in errors:
                     logger.warning(
                         "[MINIO_DELETE] object removal failed error_category=%s",
@@ -405,8 +403,9 @@ class MinioFilesystem(BaseFilesystem):
                         type=FilesystemResourceInfo.FILE,
                         modified=obj.last_modified,
                     )
-            except Exception:
-                pass
+            except S3Error as exc:
+                if exc.code not in {"NoSuchKey", "NoSuchObject", "NotFound"}:
+                    raise
 
             prefix = full.rstrip("/") + "/"
             children = list(

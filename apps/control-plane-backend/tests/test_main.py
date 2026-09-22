@@ -3754,9 +3754,7 @@ async def test_erase_session_filesystem_failure_retains_history_and_retries(
     first_calls: list[tuple[str, dict[str, str]]] = []
     monkeypatch.setattr(
         "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        _make_runtime_client(
-            first_calls, filesystem_failure=filesystem_failure
-        ),
+        _make_runtime_client(first_calls, filesystem_failure=filesystem_failure),
     )
     first = await service.erase_session(
         team_id=TeamId("personal"),
@@ -4030,7 +4028,11 @@ async def test_erase_session_survives_agent_instance_deletion(
 
     # The runtime WAS resolved (from the session's stored source_runtime_id)
     # and its checkpoint/history WERE actually purged — not just skipped.
-    assert len(runtime_calls) == 2
+    assert [url for url, _headers in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
     by_store = {r.store: r for r in receipt.stores}
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
@@ -5026,9 +5028,7 @@ async def test_erase_session_skips_history_when_checkpoint_fails(
     assert by_store["runtime_checkpoint"].ok is False
     # Filesystem and history were recorded as skipped, not attempted.
     assert by_store["runtime_conversation_filesystem"].ok is False
-    assert "skipped" in (
-        by_store["runtime_conversation_filesystem"].error or ""
-    )
+    assert "skipped" in (by_store["runtime_conversation_filesystem"].error or "")
     assert by_store["runtime_history"].ok is False
     assert "skipped" in (by_store["runtime_history"].error or "")
     # The runtime only saw the checkpoint DELETE — later stores were never called.
