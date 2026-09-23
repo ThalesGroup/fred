@@ -1895,7 +1895,7 @@
         "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
-        "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
+        "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
         "download": "Download",
         "includeInSearch": "Include in search",
         "manageLabels": "Manage labels",
@@ -1907,8 +1907,7 @@
         "refresh": "Refresh this view",
         "rename": "Rename",
         "reprocess": "Reprocess",
-        "searchable": "Exclude from search",
-        "stopIngestion": "Stop ingestion"
+        "searchable": "Exclude from search"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
@@ -1921,9 +1920,7 @@
         "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
-        "shareTitle": "Copy to Team space",
-        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
-        "stopIngestionTitle": "Stop ingestion"
+        "shareTitle": "Copy to Team space"
       },
       "errorTooltip": {
         "reported": "Reported by the pipeline",
@@ -2051,9 +2048,7 @@
         "downloadEmpty": "The selected folders contain no documents to download",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
-        "processStarted": "Processing started",
-        "stopIngestionError": "Could not stop the ingestion",
-        "stopIngestionRequested": "Ingestion stop requested"
+        "processStarted": "Processing started"
       },
       "pageTitlePersonal": "Your personal resources",
       "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."

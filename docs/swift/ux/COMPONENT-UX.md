@@ -4842,3 +4842,11 @@ Three additions, all made for the rail and all useful beyond it:
   moment of an alt-tab was still open on return and — its own leave event
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
+
+
+### Ingestion actions — 2026-09-23
+
+`DocumentWorkspace` offers no user cancellation while ingestion is pending or
+running. Delete remains disabled until the task settles; its tooltip explains
+that ingestion is active. A durable terminal event refreshes document state and
+quota. Cancellation scope and cleanup are deferred to a separate design.
