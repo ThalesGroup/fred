@@ -3,6 +3,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
+  user-select: text;
 }
 
 /* Phase badge + source + duration row */
@@ -34,10 +35,60 @@
   font: var(--font-label-small);
 }
 
+.statusBadge {
+  border-radius: var(--radius-s);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  font: var(--font-label-small);
+}
+
+.statusBadge[data-status="success"] {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+
+.statusBadge[data-status="failure"] {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.statusBadge[data-status="running"] {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.latencyBadge {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-highest);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-label-small);
+}
+
 .detailTitle {
   margin: 0;
   color: var(--on-surface);
   font: var(--font-body-medium-emphasized);
+}
+
+.toolSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-2xs);
+}
+
+.sectionLabel {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-large);
 }
 
 /* Rendered reasoning markdown — a slightly raised card (the drawer sits on
@@ -79,6 +130,8 @@
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-error-container);
   font: var(--font-body-medium);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Turn-crash error message: same error-container look, but the raw message can

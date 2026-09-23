@@ -41,7 +41,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry, pendingToolCallIds);
-  const label = entryLabel(entry);
+  const label = entryLabel(entry, (key) => t(key));
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";

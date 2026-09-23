@@ -560,6 +560,9 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
+    "copied": "Copied",
+    "copy": "Copy",
+    "copyCode": "Copy code",
     "delete": "Delete",
     "description": "Description",
     "edit": "Edit",
@@ -1559,6 +1562,7 @@
       "cancelledByUser": "cancelled by the user",
       "details": "Details",
       "errorCopied": "Error message copied to clipboard",
+      "executionTime": "Execution time: {{duration}}",
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
       "openReasoning": "Open the full reasoning",
@@ -1567,12 +1571,22 @@
       "rows_other": "{{count}} rows",
       "running": "running…",
       "show": "Show the agent's reasoning and tool calls",
+      "sqlQuery": "Query:",
+      "sqlResponse": "Response:",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
       "summaryReasoning": "Reasoning {{duration}}",
       "summaryTools_one": "{{count}} tool",
       "summaryTools_other": "{{count}} tools",
-      "thinking": "Thinking…"
+      "thinking": "Thinking…",
+      "toolStatus": {
+        "failure": "Failed",
+        "running": "Running",
+        "success": "Success"
+      },
+      "toolLabels": {
+        "readQuery": "Reading query"
+      }
     },
     "collapse": "Collapse",
     "create": "Create",

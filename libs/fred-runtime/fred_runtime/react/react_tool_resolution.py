@@ -54,9 +54,11 @@ from fred_sdk.support.builtins import (
     BuiltinToolSpec,
     get_builtin_tool_spec,
 )
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
 
 from .react_tool_rendering import (
@@ -523,7 +525,38 @@ class ReActRuntimeToolResolver:
         async def _invoke(
             payload: dict[str, object],
         ) -> tuple[str, ToolInvocationResult | None]:
-            raw_result = await runtime_tool.ainvoke(payload)
+            # LangChain deliberately drops the artifact when a
+            # ``content_and_artifact`` tool is invoked with a plain mapping.
+            # Invoke through its public ToolCall shape so the result remains a
+            # ToolMessage and Fred can preserve the typed failure signal.
+            if runtime_tool.response_format == "content_and_artifact":
+                raw_result = await runtime_tool.ainvoke(
+                    {
+                        "type": "tool_call",
+                        "id": f"fred-runtime-provider-{tool_name}",
+                        "name": tool_name,
+                        "args": payload,
+                    }
+                )
+            else:
+                raw_result = await runtime_tool.ainvoke(payload)
+            if isinstance(raw_result, ToolMessage):
+                artifact = normalize_runtime_provider_artifact(
+                    raw_result.artifact,
+                    trusted_error_blocks=isinstance(runtime_tool, ContextAwareTool),
+                )
+                if raw_result.status == "error" and artifact is None:
+                    artifact = normalize_runtime_provider_artifact(
+                        ToolInvocationResult(tool_ref=tool_name, is_error=True)
+                    )
+                if artifact is not None and artifact.is_error:
+                    return (render_tool_result(artifact), artifact)
+                rendered_content = stringify_tool_output(raw_result.content).strip()
+                if rendered_content:
+                    return (rendered_content, artifact)
+                if artifact is not None:
+                    return (render_tool_result(artifact), artifact)
+                return (stringify_tool_output(raw_result.content), None)
             if isinstance(raw_result, ToolInvocationResult):
                 artifact = normalize_runtime_provider_artifact(raw_result)
                 assert artifact is not None
