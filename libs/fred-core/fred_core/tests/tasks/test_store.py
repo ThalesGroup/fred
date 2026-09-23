@@ -126,4 +126,6 @@ async def test_notification_failure_does_not_change_durable_success(
     service = TaskService(store, UnavailableBus(), NoopWorkflowControl())
     assert await service.record(_event(TaskState.succeeded)) is True
     assert await service.record(_event(TaskState.failed)) is False
-    assert (await service.get_task("t1")).state == TaskState.succeeded
+    task = await service.get_task("t1")
+    assert task is not None
+    assert task.state == TaskState.succeeded

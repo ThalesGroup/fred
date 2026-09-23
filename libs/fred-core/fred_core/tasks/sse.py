@@ -17,9 +17,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
+from typing import TYPE_CHECKING, AsyncGenerator, AsyncIterator, Awaitable, Callable
 
-from fred_core.tasks.models import TaskState
+from fred_core.tasks.models import TaskEvent, TaskState
 
 if TYPE_CHECKING:
     from fred_core.tasks.service import TaskService
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 HEARTBEAT_INTERVAL = 30
 
 
-async def with_heartbeat(source: AsyncIterator[str]) -> AsyncIterator[str]:
+async def with_heartbeat(source: AsyncIterator[str]) -> AsyncGenerator[str, None]:
     """Interleave SSE heartbeat comments while waiting for the next event."""
     source_iter = source.__aiter__()
 
@@ -111,7 +111,7 @@ async def task_event_stream(
 
     # Attach the listener first; anything published from here on is buffered.
     subscription = await service.bus.open_subscription(task_id)
-    pending_event: asyncio.Task | None = None
+    pending_event: asyncio.Future[TaskEvent] | None = None
     try:
         last_seq = after_seq
         for event in await service.replay(task_id, after_seq=after_seq):
@@ -140,7 +140,7 @@ async def task_event_stream(
             return
 
         live = subscription.__aiter__()
-        pending_event = asyncio.create_task(anext(live))
+        pending_event = asyncio.ensure_future(anext(live))
         while not await is_disconnected():
             done, _ = await asyncio.wait({pending_event}, timeout=HEARTBEAT_INTERVAL)
             if not done:
@@ -160,7 +160,7 @@ async def task_event_stream(
                 yield _sse_frame(live_event.seq, live_event.model_dump_json())
                 if live_event.state.is_terminal:
                     return
-            pending_event = asyncio.create_task(anext(live))
+            pending_event = asyncio.ensure_future(anext(live))
     finally:
         if pending_event is not None:
             pending_event.cancel()

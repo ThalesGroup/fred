@@ -202,7 +202,7 @@ def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid:
             reason += f" ({cause.type.name})"
     else:
         reason = str(cause).strip() or "No failure details were reported."
-    phase = {"uploading": "document preparation", "processing": "content extraction", "indexing": "indexing", "done": "completion reporting"}.get(step)
+    phase = {"uploading": "document preparation", "processing": "content extraction", "indexing": "indexing", "done": "completion reporting"}.get(step or "")
     heading = f"Ingestion failed at the {phase} step." if phase else "Ingestion failed."
     error_str = f"{heading} {'Configured attempts exhausted. ' if exhausted else ''}{reason[:1500]}"
     return [task_id, "failed", step, None, error_str, 0, 1, 1, document_uid, display_name]

@@ -21,12 +21,13 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 import pytest
 
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import IngestionTaskEvent, TaskState
+from fred_core.tasks.service import TaskService
 from fred_core.tasks.sse import task_event_stream
 
 _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
@@ -91,7 +92,7 @@ async def test_terminal_event_raced_during_replay_is_still_delivered() -> None:
     frames = [
         frame
         async for frame in task_event_stream(
-            service,  # type: ignore[arg-type]
+            cast(TaskService, service),
             "task-1",
             after_seq=-1,
             is_disconnected=_never_disconnected,
@@ -125,7 +126,7 @@ async def test_live_events_are_deduped_against_replay_by_seq() -> None:
     frames = [
         frame
         async for frame in task_event_stream(
-            service,  # type: ignore[arg-type]
+            cast(TaskService, service),
             "task-1",
             after_seq=-1,
             is_disconnected=_never_disconnected,
@@ -145,7 +146,10 @@ async def test_idle_stream_recovers_terminal_event_without_notification(monkeypa
     bus = MemoryEventBus()
     service = _FakeService(bus, replay_events=[_event(1)], run_state=TaskState.running)
     stream = task_event_stream(
-        service, "task-1", after_seq=0, is_disconnected=_never_disconnected
+        cast(TaskService, service),
+        "task-1",
+        after_seq=0,
+        is_disconnected=_never_disconnected,
     )
     assert "id: 1" in await anext(stream)
     service._replay_events.append(_event(2, TaskState.failed))
@@ -169,7 +173,10 @@ async def test_terminal_commit_after_replay_is_recovered_without_notification():
     frames = [
         frame
         async for frame in task_event_stream(
-            service, "task-1", after_seq=0, is_disconnected=_never_disconnected
+            cast(TaskService, service),
+            "task-1",
+            after_seq=0,
+            is_disconnected=_never_disconnected,
         )
     ]
     assert len(frames) == 2
