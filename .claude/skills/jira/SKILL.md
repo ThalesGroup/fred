@@ -24,9 +24,11 @@ Otherwise skip it.
    (`sandbox_permissions="require_escalated"`). Repository rules allow the read-only
    commands without a prompt; mutations may still require approval. Other agents can run
    the commands normally.
-1. **Sign your analysis.** An internal note you post starts with a first line naming the
-   agent: `**Claude Code first analysis**` (Codex → `**Codex first analysis**`). A reader
-   must never mistake it for a human teammate's conclusion.
+1. **Sign agent-authored analysis.** An internal investigation note posted without human
+   authorship starts with a first line naming the agent: `**Claude Code first analysis**`
+   (Codex → `**Codex first analysis**`). A reader must never mistake it for a human
+   teammate's conclusion. The developer-reviewed PO note in the feature workflow is the
+   developer's message and does not carry this signature.
 2. **Never post a public comment without the developer approving the exact text.** Public
    means the reporter gets an email. Show them the draft, wait for a yes, then post.
 4. **Open every draft the developer must review in VS Code.** Write it to a Markdown file
@@ -148,10 +150,25 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
 ### Feature / improvement
 
 The question is not *how* to build it — it is **how big is it**. Estimate the effort, the
-rough delay, and the impact on existing code and contracts. Keep the internal note short:
-a few lines and a size, not a design.
+rough delay, and the impact on existing code and contracts. The final internal note is a
+message from the developer to the PO, not an autonomous agent analysis. Keep it short: a
+few lines and a size, not a design.
 
-Then hand it to the PO:
+1. Draft the proposed PO note as Markdown in the scratchpad. Do not add an agent signature.
+2. Open it in VS Code with `code <file>` and tell the developer to edit it into the message
+   they want to send. Stop here until the developer says their edit is finished.
+3. Re-read the file. Review factual claims, sizing, commitments, links, tone, and whether
+   the note gives the PO enough context to decide. The developer's edits are authoritative:
+   do not silently rewrite their judgement or voice.
+4. If a substantive point looks wrong, ambiguous, or risky, explain the specific concern
+   and ask the developer to confirm or revise it. Re-read after any further edit. If the
+   only remaining issues are spelling or obvious typographical errors, correct them in the
+   file without another approval round.
+5. Post the reviewed file as the internal note with `jira.py comment <KEY> -F <file>`, then
+   hand the ticket to the PO. The developer's completion signal plus this review is the
+   approval to post; do not ask them to approve the unchanged text a second time.
+
+PO handoff:
 
 ```bash
 acli jira workitem assign --key PRISM-68 --assignee 5f74d957ac3a2d006fd7b5ab   # Arnaud BARTHOLOME
