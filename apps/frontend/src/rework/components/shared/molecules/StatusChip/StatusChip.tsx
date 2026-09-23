@@ -77,8 +77,7 @@ const ICON_SIZE = 12;
  * pipeline stage with the message the backend persisted in `processing.errors`
  * (`mark_stage_error`, document_structures.py). The data is already in the
  * browse response every row renders from — no click, no menu entry, no modal.
- * Stage keys are shown as-is: they are backend pipeline identifiers
- * (preview/vector/sql/…), useful verbatim in a support ticket.
+ * Prefer the final task explanation; stage errors are a fallback when it is absent.
  */
 export function StatusChip({
   status,
@@ -150,26 +149,25 @@ export function StatusChip({
     </span>
   );
 
-  const errorEntries = status === "failed" ? Object.entries(errors ?? {}) : [];
   const reportedError = status === "failed" ? taskError?.trim() : undefined;
-  // A stage message is more precise than the task's, so it is not repeated when
-  // it already says the same thing.
-  const showReportedError = reportedError && !errorEntries.some(([, message]) => message.trim() === reportedError);
+  // The final workflow message includes the cause and retry outcome. Stage
+  // errors can repeat that cause or retain an earlier failed attempt.
+  const errorEntries = status === "failed" && !reportedError ? Object.entries(errors ?? {}) : [];
+  const stageLabel = (stage: string) => t(`rework.resources.errorTooltip.stages.${stage}`, { defaultValue: stage });
   if (status !== "failed") return chip;
 
-  const fallback =
-    errorEntries.length === 0 && !showReportedError ? t("rework.resources.errorTooltip.noDetails") : null;
+  const fallback = errorEntries.length === 0 && !reportedError ? t("rework.resources.errorTooltip.noDetails") : null;
   const reference = documentUid ? t("rework.resources.errorTooltip.documentReference", { id: documentUid }) : null;
   const copyText = [
     ...(reference ? [reference] : []),
     ...(fallback ? [fallback] : []),
-    ...errorEntries.map(([stage, message]) => `${stage}: ${message}`),
-    ...(showReportedError ? [reportedError] : []),
+    ...errorEntries.map(([stage, message]) => `${stageLabel(stage)} (${stage}): ${message}`),
+    ...(reportedError ? [reportedError] : []),
   ].join("\n");
 
   return (
     <DetailPanel title={t("rework.resources.status.failed")} copyText={copyText} chip={chip}>
-      {showReportedError && (
+      {reportedError && (
         <div className={styles.errorEntry}>
           <span className={styles.errorStage}>{t("rework.resources.errorTooltip.reported")}</span>
           <span className={styles.errorMessage}>{reportedError}</span>
@@ -181,9 +179,9 @@ export function StatusChip({
         <dl className={styles.errorTooltip}>
           {errorEntries.map(([stage, message]) => (
             <div key={stage} className={styles.errorEntry}>
-              {/* The raw key alone ("preview", "vector") reads as jargon —
-                  labelling it as a pipeline stage tells the user what failed. */}
-              <dt className={styles.errorStage}>{t("rework.resources.errorTooltip.stage", { stage })}</dt>
+              <dt className={styles.errorStage}>
+                {t("rework.resources.errorTooltip.stage", { stage: stageLabel(stage) })}
+              </dt>
               <dd className={styles.errorMessage}>{message}</dd>
             </div>
           ))}

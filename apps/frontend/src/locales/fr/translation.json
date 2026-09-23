@@ -1926,7 +1926,13 @@
         "noDetails": "Le traitement a échoué sans détail disponible. Transmettez la référence du document au support.",
         "documentReference": "Document : {{id}}",
         "reported": "Signalé par le traitement",
-        "stage": "Étape : {{stage}}"
+        "stage": "Étape : {{stage}}",
+        "stages": {
+          "raw": "Stockage du fichier",
+          "preview": "Extraction du contenu",
+          "vector": "Indexation pour la recherche",
+          "sql": "Indexation des données structurées"
+        }
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",

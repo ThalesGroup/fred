@@ -1926,7 +1926,13 @@
         "noDetails": "Processing failed without further details. Share the document reference with support.",
         "documentReference": "Document: {{id}}",
         "reported": "Reported by the pipeline",
-        "stage": "Stage: {{stage}}"
+        "stage": "Stage: {{stage}}",
+        "stages": {
+          "raw": "File storage",
+          "preview": "Content extraction",
+          "vector": "Search indexing",
+          "sql": "Structured data indexing"
+        }
       },
       "empty": {
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",

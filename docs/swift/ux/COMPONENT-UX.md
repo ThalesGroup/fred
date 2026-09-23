@@ -4057,14 +4057,17 @@ more"), but **copy always writes the full list** — copying is exactly when the
 whole thing is wanted.
 
 A document's panel also carries the message the ingestion **task** reported,
-under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+under "Reported by the pipeline", instead of repeating per-stage `processing.errors`.
 A run killed before any pipeline stage started (worker saturation, a Temporal
 `TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
 with an empty panel while the message sat on the task — visible only in the task
 popover, which is not mounted for most users. The parent workflow already pulls
 it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
 rollup already fetches it with the task history, so this is a wiring change, not
-a new source. It is skipped when a stage message already says the same thing.
+a new source. Per-stage errors are the fallback when the final task explanation
+is absent. Their stage names are translated (for example, `preview` becomes
+"Content extraction"); copied fallback details retain the technical stage keys
+for support. The document reference remains available.
 
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
