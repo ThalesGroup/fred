@@ -108,6 +108,19 @@ def _child_that_fails_permanently(_request, pipe, _parent_pid) -> None:
     os._exit(1)
 
 
+def _child_with_a_long_error(_request, pipe, _parent_pid) -> None:
+    extraction_process._send_outcome(pipe, {"error": "Failure: " + "é" * 100_000, "permanent": True})
+    os._exit(1)
+
+
+@pytest.mark.asyncio
+async def test_a_long_error_is_reported_without_blocking_child_exit(tmp_path) -> None:
+    with pytest.raises(ExtractionProcessError, match="Failure:") as caught:
+        await _supervise(_child_with_a_long_error, tmp_path, budget_seconds=5.0)
+    assert caught.value.permanent is True
+    assert len(str(caught.value).encode("utf-8")) <= 2048
+
+
 def _child_that_is_killed(_request, _pipe, _parent_pid) -> None:
     # Reports nothing at all, exactly like a process the OOM killer takes.
     os.kill(os.getpid(), signal.SIGKILL)

@@ -165,9 +165,8 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
         if request.config_file:
             os.environ["CONFIG_FILE"] = request.config_file
         ApplicationContext(load_configuration())
-        # A pipeline manager, never an IngestionService: the latter builds the
-        # content store and the metadata service, which this process must not
-        # open a connection for.
+        # Build only the input pipeline. Individual processors may still open
+        # their own services (for example, table storage for spreadsheets).
         manager = ProcessingPipelineManager.create_with_default(ApplicationContext.get_instance())
         manager.run_input(
             input_path=pathlib.Path(request.input_path),
@@ -184,6 +183,10 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
 
 def _send_outcome(result_pipe: Connection, outcome: dict[str, Any]) -> None:
     try:
+        # The parent reads after the child exits. Keep the sole message below
+        # the pipe capacity so a long exception cannot block the child's exit.
+        if outcome.get("error"):
+            outcome = {**outcome, "error": str(outcome["error"]).encode("utf-8", errors="replace")[:2048].decode("utf-8", errors="ignore")}
         result_pipe.send(outcome)
         result_pipe.close()
     except Exception:  # noqa: BLE001
@@ -277,6 +280,8 @@ async def run_extraction_in_process(
         # the slot while the computation still holds the pod.
         stopped, cancelled_meanwhile = await _stop_without_abandoning(process, group)
         parent_conn.close()
+        if stopped:
+            process.close()
         _raise_what_the_stop_demands(stopped, cancelled_meanwhile and not isinstance(exc, asyncio.CancelledError))
         raise
 
@@ -286,7 +291,8 @@ async def run_extraction_in_process(
     outcome = _read_outcome(parent_conn)
     parent_conn.close()
     exit_code = process.exitcode
-    process.close()
+    if stopped:
+        process.close()
     _raise_what_the_stop_demands(stopped, cancelled_meanwhile)
 
     if outcome is None:
@@ -551,6 +557,13 @@ async def extract_document(
             ),
             heartbeat=_heartbeat,
         )
+    except ExtractionStopUnconfirmed:
+        # Do not unwind the activity: that would delete working files and free
+        # a slot while the extraction may still be using both.
+        try:
+            logger.critical("[EXTRACTION] document_uid=%s termination unconfirmed; exiting worker", metadata.document_uid, exc_info=True)
+        finally:
+            os._exit(1)
     except ExtractionProcessError as exc:
         # Keep the five outcomes apart at the Temporal boundary. A permanent
         # document error must not be retried — the next attempt reads the same
