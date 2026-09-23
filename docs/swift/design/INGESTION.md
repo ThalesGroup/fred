@@ -218,8 +218,10 @@ fault-injection validation.
 
 **Before production sign-off:** validate worker loss, indexing retries, deadline
 exhaustion and resource sizing. Recovery after fail-stop, orphan descendants and
-overlapping writes after network partitions remain to validate. Per-image OCR/VLM
-metrics are currently lost in the child process; spawn overhead remains to measure.
+overlapping writes after network partitions remain to validate. Spawn overhead remains to measure.
+Per-image OCR/VLM timings return through a bounded, nonblocking local datagram channel
+to the worker's KPI writer (including Prometheus). Completed timings survive ordinary
+extraction errors; a full channel drops metrics, and a killed in-progress timer cannot emit.
 **Drain ingestion before deploying this branch**; old in-flight histories are
 outside its scope. User cancellation and its cleanup semantics require a separate
 design and are not acceptance criteria for this delivery.

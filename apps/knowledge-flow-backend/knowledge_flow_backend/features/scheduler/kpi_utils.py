@@ -14,8 +14,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import socket
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from fred_core.kpi import Dims
@@ -324,3 +330,53 @@ def emit_temporal_workflow_status_kpi(
             workflow_id,
             exc,
         )
+
+
+# Scoped to one extraction child; the worker emits through its own KPI writer.
+extraction_kpi_socket: ContextVar[socket.socket | None] = ContextVar("extraction_kpi_socket", default=None)
+_MAX_KPI_BYTES = 4096
+
+
+@contextmanager
+def extraction_kpi_timer(name: str, dims: Dims) -> Iterator[None]:
+    """Forward completed timings without depending on a child Temporal context."""
+    started = time.perf_counter()
+    status = "ok"
+    try:
+        yield
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
+    except BaseException:
+        status = "error"
+        raise
+    finally:
+        try:
+            sender = extraction_kpi_socket.get()
+            if sender is not None:
+                payload = json.dumps({"name": name, "dims": {**dims, "status": status}, "value": (time.perf_counter() - started) * 1000}).encode()
+                if len(payload) > _MAX_KPI_BYTES:
+                    raise ValueError("Extraction KPI exceeds the datagram size limit")
+                # Nonblocking datagrams cannot leave a partial frame on worker loss.
+                sender.send(payload)
+        except Exception:
+            logger.warning("[EXTRACTION][KPI] Dropping timing %s", name, exc_info=True)
+
+
+def drain_extraction_kpis(receiver: socket.socket) -> None:
+    """Drain a bounded batch; telemetry must not starve supervision heartbeats."""
+    for _ in range(256):
+        try:
+            payload = receiver.recv(_MAX_KPI_BYTES)
+        except BlockingIOError:
+            return
+        except OSError:
+            logger.warning("[EXTRACTION][KPI] Could not receive timings", exc_info=True)
+            return
+        try:
+            from knowledge_flow_backend.application_context import ApplicationContext
+
+            metric = json.loads(payload)
+            ApplicationContext.get_instance().get_kpi_writer().emit(name=metric["name"], type="timer", unit="ms", value=metric["value"], dims=metric["dims"], actor=build_temporal_activity_kpi_actor())
+        except Exception:
+            logger.warning("[EXTRACTION][KPI] Could not emit timing", exc_info=True)

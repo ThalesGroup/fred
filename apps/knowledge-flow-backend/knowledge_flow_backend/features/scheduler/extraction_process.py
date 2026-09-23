@@ -39,9 +39,11 @@ import multiprocessing
 import os
 import pathlib
 import signal
+import socket
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from typing import Any
@@ -223,7 +225,55 @@ class _ChildGroup:
             self.pgid = _own_process_group(self._pid)
 
 
+def _child_with_kpis(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, sender: socket.socket, target: Callable[..., None]) -> None:
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+
+    sender.setblocking(False)
+    token = extraction_kpi_socket.set(sender)
+    try:
+        target(request, result_pipe, parent_pid)
+    finally:
+        extraction_kpi_socket.reset(token)
+        sender.close()
+
+
 async def run_extraction_in_process(
+    *,
+    request: ExtractionRequest,
+    budget_seconds: float,
+    heartbeat: Callable[[], None],
+    target: Callable[..., None] = _child_main,
+    start_method: str = "spawn",
+) -> None:
+    from knowledge_flow_backend.features.scheduler.kpi_utils import drain_extraction_kpis
+
+    # Separate bounded datagrams keep telemetry independent of the outcome pipe.
+    # The parent's writer owns all sinks, including the scraped Prometheus registry.
+    try:
+        receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+    except OSError:
+        logger.warning("[EXTRACTION][KPI] Could not create telemetry channel", exc_info=True)
+        return await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=target, start_method=start_method)
+    with receiver, sender:
+        receiver.setblocking(False)
+
+        def heartbeat_with_kpis() -> None:
+            heartbeat()
+            drain_extraction_kpis(receiver)
+
+        try:
+            await _run_extraction_in_process(
+                request=request,
+                budget_seconds=budget_seconds,
+                heartbeat=heartbeat_with_kpis,
+                target=partial(_child_with_kpis, sender=sender, target=target),
+                start_method=start_method,
+            )
+        finally:
+            drain_extraction_kpis(receiver)
+
+
+async def _run_extraction_in_process(
     *,
     request: ExtractionRequest,
     budget_seconds: float,

@@ -537,3 +537,51 @@ def test_settled_errors_are_permanent(exc) -> None:
 @pytest.mark.parametrize("exc", [ConnectionError("minio down"), TimeoutError("slow"), MemoryError(), OSError("disk")])
 def test_transient_errors_stay_retryable(exc) -> None:
     assert _is_permanent(exc) is False
+
+
+# This target must be importable by spawn: no inherited Temporal context/writer.
+def _child_with_pdf_timings(request, pipe, _parent_pid) -> None:
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_timer
+
+    os.setsid()
+    failed = request.profile == "rich"
+    try:
+        with extraction_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
+            with extraction_kpi_timer("knowledge_flow.pdf.image_description_latency_ms", {"pdf_stage": "image_description", "model_name": "test-vision"}):
+                if failed:
+                    raise ValueError("image description failed")
+    except ValueError:
+        extraction_process._send_outcome(pipe, {"error": "image description failed", "permanent": True})
+        os._exit(1)
+    extraction_process._send_outcome(pipe, {"error": None, "permanent": False})
+    os._exit(0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed", [False, True])
+async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_path, monkeypatch, failed):
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    writer = Mock()
+    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: SimpleNamespace(get_kpi_writer=lambda: writer))
+    request = replace(_request(tmp_path), profile="rich" if failed else "medium")
+    try:
+        await run_extraction_in_process(request=request, budget_seconds=30, heartbeat=lambda: None, target=_child_with_pdf_timings, start_method="spawn")
+    except ExtractionProcessError as exc:
+        assert failed and exc.permanent
+    else:
+        assert not failed
+    events = [call.kwargs for call in writer.emit.call_args_list]
+    assert [event["name"] for event in events] == ["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"]
+    for event in events:
+        assert event["type"] == "timer"
+        assert event["unit"] == "ms"
+        assert event["value"] >= 0
+        assert event["actor"].type == "system"
+        assert event["dims"]["status"] == ("error" if failed else "ok")
+    assert events[0]["dims"]["model_name"] == "test-vision"
+    assert events[1]["dims"]["file_type"] == "pdf"
