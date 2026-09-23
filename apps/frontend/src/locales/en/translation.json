@@ -292,6 +292,11 @@
       "form": {
         "uploadTemplate": "Upload a .pptx template",
         "replaceTemplate": "Replace the template",
+        "downloadTemplate": "Download template",
+        "downloadTemplateHint": "Downloads the template saved for this agent.",
+        "downloadTemplateUnavailable": "No template is saved for this agent yet.",
+        "downloadFailed": "The template could not be downloaded.",
+        "downloadMissing": "The template file is missing for this agent. Upload it again.",
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",

@@ -292,6 +292,11 @@
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",
+        "downloadTemplate": "Télécharger le modèle",
+        "downloadTemplateHint": "Télécharge le modèle enregistré pour cet agent.",
+        "downloadTemplateUnavailable": "Aucun modèle enregistré pour cet agent.",
+        "downloadFailed": "Le modèle n'a pas pu être téléchargé.",
+        "downloadMissing": "Le fichier du modèle est introuvable pour cet agent. Téléversez-le à nouveau.",
         "uploadAria": "Fichier de modèle PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",

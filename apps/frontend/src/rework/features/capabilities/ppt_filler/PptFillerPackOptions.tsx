@@ -29,11 +29,16 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { PptTemplateDownloadButton } from "./PptTemplateDownloadButton";
 import { usePptTemplateAnalysis } from "./usePptTemplateAnalysis";
 import styles from "./PptFillerPackOptions.module.css";
 
 interface PptFillerPackOptionsProps {
   disabled: boolean;
+  teamId?: string;
+  /** Absent while the agent is being created — nothing is stored to download. */
+  agentInstanceId?: string;
+  agentDisplayName?: string;
   configValues: Record<string, unknown>;
   assetFiles: Record<string, File | undefined>;
   onAssetFileChange: (slotKey: string, file: File | null) => void;
@@ -42,6 +47,9 @@ interface PptFillerPackOptionsProps {
 
 export function PptFillerPackOptions({
   disabled,
+  teamId,
+  agentInstanceId,
+  agentDisplayName,
   configValues,
   assetFiles,
   onAssetFileChange,
@@ -129,6 +137,14 @@ export function PptFillerPackOptions({
             />
           )
         )}
+
+        <PptTemplateDownloadButton
+          teamId={teamId}
+          agentInstanceId={agentInstanceId}
+          agentDisplayName={agentDisplayName}
+          hasPersistedTemplate={hasPersistedTemplate}
+          disabled={disabled}
+        />
       </div>
 
       <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="noopener noreferrer">
