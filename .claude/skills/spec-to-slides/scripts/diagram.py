@@ -217,7 +217,8 @@ def seq(spec):
 def main():
     kind, path = sys.argv[1], sys.argv[2]
     caption = sys.argv[sys.argv.index("--caption") + 1] if "--caption" in sys.argv else "CAPTION"
-    spec = json.load(open(path, encoding="utf-8"))
+    with open(path, encoding="utf-8") as file:
+        spec = json.load(file)
     svg, legend = flow(spec) if kind == "flow" else seq(spec)
     print(f'<figure class="diagram" style="margin:0;min-height:0;display:flex;flex-direction:column;gap:10px;flex:1">'
           f'<div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:{T["panel"]};border:1px solid {T["rule"]};padding:14px 18px;box-sizing:border-box">{svg}</div>'
