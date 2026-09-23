@@ -220,6 +220,16 @@ def emit_temporal_activity_result_kpis(
     info = activity.info()
     duration_ms = max(0.0, (time.perf_counter() - started_at_monotonic) * 1000.0)
     error_code = _temporal_exception_code(exc)
+    logger.info(
+        "[INGESTION ATTEMPT] workflow=%s activity=%s queue=%s attempt=%s status=%s duration_ms=%.0f error_code=%s",
+        info.workflow_id,
+        info.activity_type,
+        info.task_queue,
+        info.attempt,
+        status,
+        duration_ms,
+        error_code,
+    )
     dims: Dims = {
         "phase": phase,
         "status": status,

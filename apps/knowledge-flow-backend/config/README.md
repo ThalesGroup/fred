@@ -118,3 +118,38 @@ Guidance:
 - For a Temporal test, the API must also use `scheduler.backend: temporal` and the same namespace, base queue and shared stores as the workers. The standalone memory/local-storage API configuration is not suitable for this test.
 
 ---
+
+## Ingestion timeouts and retries
+
+Set these under `processing.profiles.fast`, `.medium` or `.rich` in the **API's**
+configuration. The API snapshots them when submitting a document; existing runs
+keep their original policy. These settings apply to the Temporal scheduler.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `push_metadata_activity_timeout` | `5m` | Uploaded-document metadata lookup, per attempt |
+| `pull_metadata_activity_timeout` | `30m` | Source download and metadata creation, per attempt |
+| `input_activity_timeout` | `1h` | Extraction, per attempt |
+| `output_activity_timeout` | `1h` | Indexing, per attempt |
+| `activity_heartbeat_timeout` | `5m` | Maximum silence between extraction/indexing heartbeats; can fail an attempt earlier |
+| `retry_maximum_attempts` | `6` | Maximum attempts **per stage**, including the first; `1` disables retries |
+| `retry_initial_interval` | `30s` | Delay before the first retry |
+| `retry_backoff_coefficient` | `2.0` | Multiplier for successive retry delays |
+| `retry_maximum_interval` | `10m` | Maximum delay between attempts |
+| `retry_non_retryable_error_types` | `[]` | Additional application error types that fail without retry |
+
+Defaults are model defaults; a deployment's YAML may override them. The same
+retry policy applies to metadata, extraction and indexing. Progress-event writes
+have a separate short internal retry policy. Explicitly non-retryable failures
+can end a stage before its attempt count is exhausted.
+
+Example: with a `2m` stage timeout, `3` attempts and retry delays `10s`, `20s`,
+that stage has at most `6m30s` of attempt time plus backoff. **This is not a
+wall-clock completion guarantee:** queue waiting, workflow scheduling and terminal
+event persistence are outside that calculation. There is no overall document
+budget; a queue without consumers can wait indefinitely.
+
+Inspect `[INGESTION POLICY]` in common-worker logs for the submitted policy and
+Temporal activity history for effective attempts, errors and timeouts. Outcome
+logs tagged `[INGESTION ATTEMPT]` supplement that history where instrumented;
+a killed worker cannot emit its final log.

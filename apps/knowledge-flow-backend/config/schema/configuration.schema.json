@@ -1796,9 +1796,27 @@
           "title": "Input Activity Timeout",
           "type": "string"
         },
+        "push_metadata_activity_timeout": {
+          "default": "5m",
+          "description": "Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.",
+          "title": "Push Metadata Activity Timeout",
+          "type": "string"
+        },
+        "pull_metadata_activity_timeout": {
+          "default": "30m",
+          "description": "Per-attempt timeout for source download and metadata creation; excludes queue wait.",
+          "title": "Pull Metadata Activity Timeout",
+          "type": "string"
+        },
+        "output_activity_timeout": {
+          "default": "1h",
+          "description": "Per-attempt timeout for indexing; excludes queue wait.",
+          "title": "Output Activity Timeout",
+          "type": "string"
+        },
         "activity_heartbeat_timeout": {
           "default": "5m",
-          "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
+          "description": "Temporal heartbeat timeout for extraction and indexing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
           "title": "Activity Heartbeat Timeout",
           "type": "string"
         },

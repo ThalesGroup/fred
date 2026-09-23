@@ -389,9 +389,13 @@ class ProcessingConfig(BaseModel):
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
         )
+        push_metadata_activity_timeout: str = Field(default="5m", description="Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.")
+        pull_metadata_activity_timeout: str = Field(default="30m", description="Per-attempt timeout for source download and metadata creation; excludes queue wait.")
+        output_activity_timeout: str = Field(default="1h", description="Per-attempt timeout for indexing; excludes queue wait.")
+
         activity_heartbeat_timeout: str = Field(
             default="5m",
-            description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
+            description="Temporal heartbeat timeout for extraction and indexing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
         )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
@@ -427,6 +431,12 @@ class ProcessingConfig(BaseModel):
             default_factory=list,
             description="Temporal application error types that should fail fast for this profile without retry.",
         )
+
+        @field_validator("push_metadata_activity_timeout", "pull_metadata_activity_timeout", "output_activity_timeout", mode="before")
+        @classmethod
+        def _normalize_stage_timeout(cls, value: object) -> str:
+            seconds = parse_duration_seconds(value, field_name="processing.profiles.*.stage_activity_timeout")
+            return f"{seconds}s"
 
         @property
         def retry_initial_interval_seconds(self) -> int:

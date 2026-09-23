@@ -43,16 +43,6 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError, is_cancelled_exception
 
-# Budgets per attempt, never schedule-to-close: the latter counts the time an
-# activity spends queued, so a saturated queue used to consume the budget meant
-# for running it and the activity failed without ever starting. A heartbeat
-# proves contact, not progress, so a per-attempt maximum stays.
-# A push metadata lookup is a catalog read. The pull one downloads the whole
-# source file before it can read anything, so it is not the same operation and
-# does not get the same budget.
-_PUSH_METADATA_START_TO_CLOSE = timedelta(minutes=5)
-_PULL_METADATA_START_TO_CLOSE = timedelta(minutes=30)
-
 # The event write itself is tiny, but this activity also runs the terminal
 # document repair: on a cancellation that erases the document's content, vectors,
 # metadata and quota, which on a large document is not a 30-second job. Cutting it
@@ -60,8 +50,7 @@ _PULL_METADATA_START_TO_CLOSE = timedelta(minutes=30)
 # event — the exact state this whole path exists to avoid.
 _EVENT_START_TO_CLOSE = timedelta(minutes=10)
 
-# Short operations get their own bounded policy rather than the profile's, which
-# is sized for a two-hour extraction and would retry a catalog lookup for hours.
+# Progress persistence has its own short retry policy; data stages use the profile.
 _SHORT_OPERATION_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     backoff_coefficient=2.0,
@@ -274,6 +263,27 @@ def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
         maximum_interval=timedelta(seconds=maximum_interval_seconds),
         maximum_attempts=maximum_attempts,
         non_retryable_error_types=[str(error_type) for error_type in non_retryable_error_types if str(error_type).strip()],
+    )
+
+
+def _wf_log_policy(file: Any) -> None:
+    workflow.logger.info(
+        "[INGESTION POLICY] task=%s document=%s profile=%s extraction_queue=%s "
+        "metadata_attempt_s=%s extraction_attempt_s=%s output_attempt_s=%s "
+        "attempts=%s retry_initial_s=%s retry_backoff=%s retry_max_s=%s heartbeat_s=%s non_retryable_types=%s",
+        _wf_get(file, "task_id"),
+        _wf_document_uid(file),
+        _wf_profile_value(file),
+        _wf_get(file, "extraction_task_queue"),
+        _wf_get(file, "pull_metadata_activity_timeout_seconds" if _wf_is_pull(file) else "push_metadata_activity_timeout_seconds"),
+        _wf_get(file, "input_activity_timeout_seconds"),
+        _wf_get(file, "output_activity_timeout_seconds"),
+        _wf_get(file, "retry_maximum_attempts"),
+        _wf_get(file, "retry_initial_interval_seconds"),
+        _wf_get(file, "retry_backoff_coefficient"),
+        _wf_get(file, "retry_maximum_interval_seconds"),
+        _wf_get(file, "heartbeat_timeout_seconds"),
+        _wf_get(file, "retry_non_retryable_error_types"),
     )
 
 
@@ -515,8 +525,8 @@ class CreatePullFileMetadata:
             # Per attempt, so a queue this activity waited in does not eat the
             # budget meant for running it. Longer than the push lookup: this one
             # downloads the whole source file before it can read its metadata.
-            start_to_close_timeout=_PULL_METADATA_START_TO_CLOSE,
-            retry_policy=_SHORT_OPERATION_RETRY,
+            start_to_close_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "pull_metadata_activity_timeout_seconds"), default_seconds=1800)),
+            retry_policy=_wf_activity_retry_policy(file),
         )
 
 
@@ -537,11 +547,9 @@ class GetPushFileMetadata:
         return await workflow.execute_activity(
             "get_push_file_metadata",
             args=[file],
-            # Per attempt, so a queue this activity waited in does not eat the
-            # budget meant for running it. Its own short policy, not the
-            # profile's: this is a catalog lookup, not a two-hour extraction.
-            start_to_close_timeout=_PUSH_METADATA_START_TO_CLOSE,
-            retry_policy=_SHORT_OPERATION_RETRY,
+            # Queue waiting does not consume the per-attempt execution budget.
+            start_to_close_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "push_metadata_activity_timeout_seconds"), default_seconds=300)),
+            retry_policy=_wf_activity_retry_policy(file),
         )
 
 
@@ -648,14 +656,14 @@ class OutputProcess:
             args=[file, metadata, False],
             # Per attempt, not schedule-to-close: indexing is the longest stage
             # and used to lose its budget to time spent queued behind others.
-            start_to_close_timeout=timedelta(hours=1),
+            start_to_close_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "output_activity_timeout_seconds"))),
             # Same heartbeat contract as the input activities: the activity now
             # heartbeats (`to_thread_with_heartbeat`), which is also how Temporal
             # delivers cancellation to it — without a heartbeating activity, a
             # user's cancel never reached the vectorization stage and it ran to
             # completion for a deleted document (#2315). The timeout additionally
             # frees the slot when a worker dies mid-output.
-            heartbeat_timeout=timedelta(seconds=300),
+            heartbeat_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300)),
             retry_policy=_wf_activity_retry_policy(file),
             # WAIT, not the default TRY_CANCEL: with TRY_CANCEL the workflow
             # resumed (and its compensation purged the document's artifacts)
@@ -704,6 +712,7 @@ class ProcessPullFile:
 
         task_id: str | None = _wf_get(file, "task_id")
         document_uid: str | None = _wf_document_uid(file)
+        _wf_log_policy(file)
 
         try:
             if task_id:
@@ -774,6 +783,7 @@ class ProcessPushFile:
 
         task_id: str | None = _wf_get(file, "task_id")
         document_uid: str | None = _wf_get(file, "document_uid")
+        _wf_log_policy(file)
 
         try:
             if task_id:

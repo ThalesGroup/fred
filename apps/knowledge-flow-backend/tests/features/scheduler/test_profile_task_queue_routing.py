@@ -257,3 +257,43 @@ def test_an_unrouted_document_fails_instead_of_falling_back(payload) -> None:
     with pytest.raises(ApplicationError, match="did not route this document") as raised:
         _wf_extraction_task_queue({**payload, "display_name": "report.pdf"})
     assert raised.value.non_retryable is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stage,timeout_key,timeout_seconds",
+    [
+        ("GetPushFileMetadata", "push_metadata_activity_timeout_seconds", 17),
+        ("CreatePullFileMetadata", "pull_metadata_activity_timeout_seconds", 29),
+        ("OutputProcess", "output_activity_timeout_seconds", 43),
+    ],
+)
+async def test_data_stage_obeys_serialized_timeout_and_retry_policy(stage, timeout_key, timeout_seconds):
+    from datetime import timedelta
+
+    payload = {
+        timeout_key: timeout_seconds,
+        "retry_initial_interval_seconds": 2,
+        "retry_maximum_interval_seconds": 7,
+        "retry_backoff_coefficient": 1.5,
+        "retry_maximum_attempts": 4,
+        "heartbeat_timeout_seconds": 13,
+    }
+    calls, intercept = _capture_activities()
+    with intercept:
+        runner = getattr(workflow_module, stage)()
+        if stage == "OutputProcess":
+            await runner.run(payload, {})
+        else:
+            await runner.run(payload)
+    assert len(calls) == 1
+    options = calls[0][1]
+    assert options["start_to_close_timeout"] == timedelta(seconds=timeout_seconds)
+    assert "schedule_to_close_timeout" not in options
+    policy = options["retry_policy"]
+    assert policy.maximum_attempts == 4
+    assert policy.initial_interval == timedelta(seconds=2)
+    assert policy.maximum_interval == timedelta(seconds=7)
+    assert policy.backoff_coefficient == 1.5
+    if stage == "OutputProcess":
+        assert options["heartbeat_timeout"] == timedelta(seconds=13)

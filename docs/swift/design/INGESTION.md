@@ -95,21 +95,47 @@ Measure pod **and extraction-child** memory; the parent worker's memory alone mi
 ## Robustness and current limits
 
 Stage deadlines bound **execution per attempt**, not time waiting in a queue.
-Retries are bounded; their combined elapsed time can exceed one attempt's deadline.
-A missing consumer can leave a document waiting indefinitely.
+Metadata preparation, extraction and indexing use the selected profile's retry
+policy. `retry_maximum_attempts` includes the first attempt; errors explicitly
+classified as non-retryable fail immediately. See the
+[configuration guide](../../../apps/knowledge-flow-backend/config/README.md#ingestion-timeouts-and-retries)
+for the fields and defaults.
 
-Extraction runs in a spawned child process. The parent heartbeats, and cancellation
-or the local deadline triggers process-group cleanup. Heartbeats report contact,
-not useful progress; they neither stop computation nor prevent overlapping attempts.
-A failed document does not stop its siblings; cancellation stops new admission.
+There is **no overall document deadline**. Queue waits, workflow scheduling and
+progress persistence add time beyond the activity attempts and retry delays.
+A missing consumer can leave a document waiting indefinitely. Configuration is
+copied into the submitted payload: changing YAML does not alter existing runs.
+`[INGESTION POLICY]` logs that payload's effective policy once per document;
+`[INGESTION ATTEMPT]` logs outcomes where the activity KPI helper is called.
+Temporal history remains authoritative for retries, timeouts and worker loss.
 
-**Before production sign-off:** validate cancellation, worker loss, indexing retries,
-deadlines and resource sizing. Unconfirmed child termination forces the worker
-to exit rather than release its activity slot or delete working files. Recovery
-after that exit, orphan descendants and overlapping writes after network partitions
-remain to validate. Per-image OCR/VLM metrics are currently lost in the child process;
-spawn overhead and short metadata retries still need review. **Drain ingestion
-before deploying this branch**; old in-flight histories are outside its scope.
+A document succeeds only after indexing completes and its terminal task event is
+persisted. An exhausted or non-retryable failure produces a failed task; its
+siblings continue. If the parent ends without a document's terminal event,
+task reconciliation reports failure rather than inventing success.
+
+**User cancellation is deferred.** The document menu has no Stop ingestion action;
+the task cancellation endpoint rejects ingestion tasks with HTTP 409 after the
+normal authorization check. Deletion stays disabled while ingestion is active.
+Technical cancellation for deadlines and worker shutdown remains internal.
+
+Extraction runs in a spawned child process. The parent heartbeats, and technical
+cancellation or the local deadline triggers process-group cleanup. Heartbeats
+report contact, not useful progress; they neither stop computation nor prevent
+overlapping attempts. Unconfirmed child termination forces the worker to exit
+rather than release its activity slot or delete working files.
+
+A Temporal timeout ends an attempt logically; it does not guarantee immediate
+physical termination of an indexing thread. Timeout/retry overlap still needs
+fault-injection validation.
+
+**Before production sign-off:** validate worker loss, indexing retries, deadline
+exhaustion and resource sizing. Recovery after fail-stop, orphan descendants and
+overlapping writes after network partitions remain to validate. Per-image OCR/VLM
+metrics are currently lost in the child process; spawn overhead remains to measure.
+**Drain ingestion before deploying this branch**; old in-flight histories are
+outside its scope. User cancellation and its cleanup semantics require a separate
+design and are not acceptance criteria for this delivery.
 
 Local evidence (2026-09-21): **11 PDFs completed — 5 fast, 4 medium, 2 rich**.
 Logs confirmed profile routing, one rich extraction at a time, fast/medium finishing
@@ -118,5 +144,6 @@ not a single mixed-profile admission test or a Kubernetes load test.
 
 The Control Plane lifecycle worker is separate. Folder deletion currently runs
 in the Knowledge Flow API and can block resource browsing during bulk deletion.
-Remaining acceptance scenarios are tracked in the
-[OpenSpec change](../../../openspec/changes/isolate-ingestion-extraction-queues/tasks.md).
+The existing [OpenSpec change](../../../openspec/changes/isolate-ingestion-extraction-queues/tasks.md)
+is frozen under the local collaboration agreement; its cancellation scenarios
+do not describe the scope of this delivery.

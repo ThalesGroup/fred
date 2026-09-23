@@ -65,6 +65,9 @@ class FileToProcess(FileToProcessWithoutUser):
     # route this document's extraction activity. Absent on the in-process paths
     # that call the activities directly, which never reach a Temporal queue.
     extraction_task_queue: Optional[str] = None
+    push_metadata_activity_timeout_seconds: int = 300
+    pull_metadata_activity_timeout_seconds: int = 1800
+    output_activity_timeout_seconds: int = 3600
     input_activity_timeout_seconds: int = 3600
     heartbeat_timeout_seconds: int = 300
     retry_initial_interval_seconds: int = 30
