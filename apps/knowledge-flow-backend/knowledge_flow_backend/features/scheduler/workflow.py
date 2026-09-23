@@ -35,6 +35,7 @@ alters runtime deserialization and the sandbox import set.
 
 import asyncio
 import hashlib
+from collections import deque
 from datetime import timedelta
 from typing import Any
 
@@ -387,17 +388,18 @@ async def _wf_run_parent_pipeline(
     per_profile_limit = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
     workflow_id = workflow.info().workflow_id
 
-    pending: list[tuple[int, Any]] = list(enumerate(files))
-    profiles_present = {_wf_admission_window(file) for _, file in pending}
+    pending: dict[str, deque[tuple[int, Any]]] = {}
+    for index, file in enumerate(files):
+        pending.setdefault(_wf_admission_window(file), deque()).append((index, file))
     workflow.logger.info(
         "[SCHEDULER] Ingesting pipeline: %s (%d documents, %d per profile, %d profiles)",
         pipeline_name,
         len(files),
         per_profile_limit,
-        len(profiles_present),
+        len(pending),
     )
 
-    running: dict[str, int] = {profile: 0 for profile in profiles_present}
+    running: dict[str, int] = {profile: 0 for profile in pending}
     # A list, and `workflow.wait`'s lists are kept as they come back: everything
     # this loop does with the children ends up as a Temporal command, and a set
     # is iterated in address order, which no replay can reproduce.
@@ -436,22 +438,24 @@ async def _wf_run_parent_pipeline(
 
     try:
         while pending or in_flight:
-            admitted_any = False
-            for item in list(pending):
-                file_index, file = item
-                profile = _wf_admission_window(file)
-                if running[profile] >= per_profile_limit:
-                    continue
+            while True:
+                eligible = [profile for profile in pending if running[profile] < per_profile_limit]
+                if not eligible:
+                    break
+                # Compare at most three queue heads, preserving submission order
+                # among admissible documents without rescanning the whole lot.
+                profile = min(eligible, key=lambda key: pending[key][0][0])
+                file_index, file = pending[profile].popleft()
+                if not pending[profile]:
+                    del pending[profile]
                 running[profile] += 1
-                pending.remove(item)
                 in_flight.append(asyncio.create_task(_run_one(file, file_index, profile)))
-                admitted_any = True
 
             if not in_flight:
                 # Nothing running and nothing admissible would spin forever; with
                 # per-profile windows and a positive limit this cannot happen, but a
                 # silent infinite loop is not a failure mode worth leaving open.
-                if not admitted_any and pending:
+                if pending:
                     raise ApplicationError("No document could be admitted and none is running.", non_retryable=True)
                 break
 
