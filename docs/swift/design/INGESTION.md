@@ -54,7 +54,8 @@ one extracting and two waiting. This is not a global submission limit.
 | --- | --- | --- |
 | Everyday local development | One process serves all four roles/queues | Simple setup; profiles share resources |
 | Local isolation test | Four processes, one role each | Verify routing and concurrency on one machine |
-| Kubernetes | Four deployments, one role per deployment | Independent replicas, CPU and RAM per profile |
+| Compact Kubernetes | One deployment/pod serves all four roles | Small installation; shared CPU, RAM and failure boundary |
+| Isolated Kubernetes | Four deployments, one role per deployment | Independent replicas, CPU and RAM per profile |
 
 Docker Compose supplies infrastructure; the API and workers still need to be
 started. The memory scheduler does not exercise Temporal. See the
@@ -68,6 +69,78 @@ there. Temporal carries references, not document bytes.
 Helm extraction deployments inherit common settings through `inheritFrom`;
 **the API is configured separately**. The chart checks that all four roles have
 consumers. The k3d variant uses one worker serving all roles.
+
+Choose one of these **topology overlays**, merged after your environment values
+(`helm template fred deploy/charts/fred -f <environment.yaml> -f <topology.yaml>`).
+They do not replace your Temporal, authentication, images or shared-storage
+configuration. Both `enabled` and `deployment.enabled` must be true to run a worker.
+
+Compact (`topology.yaml`):
+
+```yaml
+applications:
+  knowledge-flow-worker:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 1
+    configuration:
+      scheduler:
+        worker_roles: [common, extraction-fast, extraction-medium, extraction-rich]
+        temporal:
+          ingestion_max_concurrent_activities: 1
+  knowledge-flow-worker-extraction-fast:
+    enabled: false
+  knowledge-flow-worker-extraction-medium:
+    enabled: false
+  knowledge-flow-worker-extraction-rich:
+    enabled: false
+```
+
+Isolated (`topology.yaml`):
+
+```yaml
+applications:
+  knowledge-flow-worker:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 1
+    configuration:
+      scheduler:
+        worker_roles: [common]
+  knowledge-flow-worker-extraction-fast:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 1
+  knowledge-flow-worker-extraction-medium:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 1
+  knowledge-flow-worker-extraction-rich:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 1
+```
+
+The isolated overlay retains the chart's extraction role lists and concurrency
+limits. One replica per role is sufficient to consume all queues; three replicas
+are not required. Override replicas and resources according to your workload.
+
+`worker_roles` selects queues and registered work; `replicaCount` selects the
+number of pods; `ingestion_max_concurrent_activities` applies **per role per pod**.
+In compact mode, a limit of 1 permits up to 4 activities at once, including up to
+3 extractions. Size the common deployment's resources for those extractions;
+the compact example is not a memory guarantee. A rich extraction shares the
+same failure boundary with the other roles. k3d uses one all-role pod but retains
+its local concurrency of 3 per role (up to 12 activities), not the conservative
+limit of 1 in this example.
+
+Drain active ingestions before changing queue routing or moving between these
+topologies. Keep API/worker connection and storage settings aligned as above.
 
 **Scaling example:** two rich replicas with one slot each permit two simultaneous
 rich extractions on the same queue. Increasing RAM helps a large PDF fit;

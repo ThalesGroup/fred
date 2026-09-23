@@ -494,6 +494,7 @@ applications:
   # ===========================================================================
   knowledge-flow-worker:
     enabled: true
+    replicaCount: 1 # Compact local topology: one pod serves all four roles.
     deployment:
       enabled: true
     image:

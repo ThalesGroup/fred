@@ -1408,14 +1408,29 @@ applications:
       FRED_POSTGRES_PASSWORD: ""
 
   # ── 3.4 Knowledge Flow Workers (Temporal) ──────────────────────────
-  # Four deployments, one per worker role, all running the same program and the same
-  # image. `knowledge-flow-worker` runs every ingestion workflow plus every activity
+  # The isolated layout below defines four deployments, all running the same
+  # program and image. `knowledge-flow-worker` runs every workflow and activity
   # but extraction; each `-extraction-<profile>` deployment runs nothing but the two
   # extraction activities for its profile, on its own queue. That is what keeps a
   # slow rich document from holding the activity slots a fast one needs.
   #
-  # Enable them together. A profile whose extraction queue has no deployment polling
-  # it strands its documents indefinitely: an activity nobody polls is never started,
+  # Choose a topology in your environment overlay (copyable examples in
+  # docs/swift/design/INGESTION.md, "What DevOps deploys"):
+  # - Compact: enable only knowledge-flow-worker, set replicaCount: 1 and
+  #   configuration.scheduler.worker_roles:
+  #     ["common", "extraction-fast", "extraction-medium", "extraction-rich"].
+  #   Keep all three extraction deployments disabled. Set per-role activity
+  #   concurrency conservatively: 1 still permits 4 activities across 4 roles.
+  #   All roles share the pod's CPU/RAM and failure boundary; size resources for
+  #   extraction too, not just the lightweight common activities.
+  # - Isolated: enable all four deployments and keep their role lists below.
+  #   Scale replicaCount/resources independently; the values are starting points,
+  #   not minimum replica requirements or measured production sizing.
+  # A role chooses queues/registrations; replicaCount chooses pods;
+  # ingestion_max_concurrent_activities limits activities PER ROLE PER POD.
+  #
+  # In isolated mode, enable them together. A profile whose queue has no consumer
+  # strands its documents indefinitely: an activity nobody polls is never started,
   # and start_to_close_timeout only runs once an activity has started. The chart
   # refuses to render rather than let that ship.
   #
@@ -1427,7 +1442,7 @@ applications:
     configurationFileName: configuration.yaml
     deployment:
       enabled: false
-    replicaCount: 3 # 3 temporal workers
+    replicaCount: 3 # Common-role replicas in isolated mode; use 1 for compact mode.
     statefulset:
       enabled: false
     job:
@@ -1632,8 +1647,8 @@ applications:
   # separate application and inherits nothing from them: an overlay retuning
   # ingestion configures the API too. See the note above x-kf-scheduler.
   #
-  # Enable them together with knowledge-flow-worker: the chart refuses to render
-  # when the enabled workers do not cover the four roles between them.
+  # Enable these for isolated mode; leave them disabled for compact mode.
+  # The chart refuses to render when enabled workers do not cover all four roles.
   #
   # One extraction per rich pod bounds what a single document may take. It is not an
   # OOM guarantee: a large enough PDF still exhausts the pod on its own.
