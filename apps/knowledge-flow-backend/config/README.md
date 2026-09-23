@@ -1,70 +1,21 @@
 # Configuration Guide for Knowledge Flow Backend
 
-This folder contains all the configuration files needed to run the Knowledge Flow backend in different environments.
+This folder contains the Knowledge Flow runtime configurations.
+The [ingestion architecture](../../../docs/swift/design/INGESTION.md) defines the
+worker roles, queue routing and shared-storage requirements.
 
-## TL;DR – Which file do I use?
+## Choose the execution mode
 
-Two run-time profiles only — no other variant is maintained:
+| File | Use |
+| --- | --- |
+| `configuration.yaml` | Default local API configuration; inspect its actual stores and scheduler before using it for a test |
+| `configuration_prod.yaml` | Deployment-style API settings; infrastructure endpoints and credentials must match your environment |
+| `configuration_worker.yaml` | Configuration used by `make run-worker`; the worker entrypoint starts no API |
+| `configuration_test.yaml` | Test configuration |
 
-| Config File                 | Purpose                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| `configuration.yaml`         | ✅ Standalone dev mode: SQLite/local storage, Chroma in-process vector store. No external services required. |
-| `configuration_prod.yaml`    | 🛠️ Deployment-representative: PostgreSQL, MinIO, OpenSearch (metadata, vectors, KPI/logs). Requires Docker Compose (or equivalent) to be running. |
-
-Two more files exist for other processes, not as alternate ways to run the API server:
-
-| Config File                  | Purpose                                                              |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `configuration_test.yaml`    | Used by the pytest suite (`make test`) — infrastructure-free.        |
-| `configuration_worker.yaml`  | Runs the backend as a **Temporal worker** only, no FastAPI server.   |
-
----
-
-## Details
-
-### `configuration.yaml`
-
-- Default for local development.
-- Uses local disk storage and an in-process Chroma vector store.
-- **No data persistence** — restarting the app will wipe everything.
-
-> Good for quick tests, debugging, and development without external dependencies.
-
----
-
-### `configuration_prod.yaml`
-
-- Deployment-representative configuration.
-- Uses:
-  - 🗄️ **PostgreSQL** for metadata/resources/tags.
-  - 🗃️ **MinIO** for file storage.
-  - 🔍 **OpenSearch** for the vector index, KPI, and (when `storage.log_store.type: opensearch`) generic application logs.
-- Requires Docker Compose (or external services) to be running.
-- Recommended for realistic local tests before a deployment.
-
----
-
-### `configuration_test.yaml`
-
-- Used exclusively by the pytest suite (`make test`).
-- Kept infrastructure-free so tests don't depend on a running stack.
-
----
-
-### `configuration_worker.yaml`
-
-- Runs the backend as a **Temporal worker** only.
-- No FastAPI server.
-- Use this when running the ingestion workers separately from the API.
-
----
-
-### `configuration.yaml`
-
-- Default entrypoint used by the app.
-- Just an alias — by default it points to `configuration_dev.yaml`, but you can switch it.
-
----
+A filename does not select the execution engine: `scheduler.backend` does.
+Local storage/SQLite data can persist across restarts; “local” does not mean disposable.
+The default configuration is a real YAML file, not an alias to `configuration_dev.yaml`.
 
 ## Environment Variables
 
@@ -156,10 +107,14 @@ Guidance:
 
 ---
 
-## Tips
+## Start locally
 
-- To run in **dev mode**, nothing external is needed — just launch the app.
-- To run in **prod mode**, make sure you start the required services (e.g., via `docker-compose up`).
-- To run the **worker**, use the appropriate entrypoint and make sure Temporal is reachable.
+- Start the infrastructure required by your selected configuration first.
+- API: `make run`, or `CONFIG_FILE=/path/to/config.yaml make run` to select a configuration.
+- Local mode may still need authentication services and remote model access; inspect the configuration rather than assuming an infrastructure-free setup.
+- `make run-worker` starts one process; with the default `scheduler.worker_roles`, it serves all four ingestion roles.
+- For separate processes, run `make run-worker-role ROLE=common`, then the same command with `fast`, `medium` and `rich`. Role configurations are derived under `target/worker-roles/`; metrics ports are 9112–9115.
+- These commands may prepare dependencies and download missing models. Docker Compose supplies infrastructure, not the worker processes started by these commands.
+- For a Temporal test, the API must also use `scheduler.backend: temporal` and the same namespace, base queue and shared stores as the workers. The standalone memory/local-storage API configuration is not suitable for this test.
 
 ---

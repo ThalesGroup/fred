@@ -16,6 +16,9 @@ MCP (Model Composition and Prompting) endpoints to serve structured knowledge to
 
 ---
 
+For Temporal roles, queues and the document lifecycle, see the
+[ingestion architecture](../../docs/swift/design/INGESTION.md).
+
 ## What It Does
 
 Knowledge Flow provides two primary services:
@@ -59,7 +62,7 @@ To learn how to:
 
 For shared startup config and policy conventions across all Fred backends, read:
 
-- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/swift/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../../docs/swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 
 Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as Agentic and Control Plane.
 
