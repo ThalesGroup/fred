@@ -226,6 +226,12 @@ async def run_worker(
         pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
             nightly expiry Schedule (0 removes it).
     """
+    from knowledge_flow_backend.features.scheduler.fault_injection import read_ingestion_fault
+
+    fault = read_ingestion_fault()
+    if fault is not None:
+        logger.warning("[SIMULATED INGESTION FAULT] worker started with %s", fault)
+
     active_roles = list(roles) if roles else [IngestionWorkerRole.common]
     workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
     activity_concurrency = max(1, int(max_concurrent_activities))

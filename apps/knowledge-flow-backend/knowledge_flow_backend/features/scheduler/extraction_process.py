@@ -535,6 +535,10 @@ async def extract_document(
         await in_process_fallback()
         return
 
+    from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
+
+    await inject_ingestion_fault(stage="extraction", document_name=metadata.document_name, document_uid=metadata.document_uid)
+
     request = ExtractionRequest(
         input_path=str(input_path),
         output_dir=str(output_dir),

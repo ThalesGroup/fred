@@ -153,3 +153,68 @@ Inspect `[INGESTION POLICY]` in common-worker logs for the submitted policy and
 Temporal activity history for effective attempts, errors and timeouts. Outcome
 logs tagged `[INGESTION ATTEMPT]` supplement that history where instrumented;
 a killed worker cannot emit its final log.
+
+## Manual fault injection for ingestion
+
+These hooks are disabled unless `FRED_INGESTION_FAULT` is set on the worker.
+They only run inside the Temporal push/pull extraction activities and the normal
+indexing activity. Direct API/in-memory processing and trusted maintenance are
+excluded. Invalid enabled configuration prevents worker startup.
+
+From `apps/knowledge-flow-backend`, start the worker with:
+
+```bash
+FRED_INGESTION_FAULT=activity_error \
+FRED_INGESTION_FAULT_STAGE=extraction \
+FRED_INGESTION_FAULT_FILE=demo-failure.pdf \
+FRED_INGESTION_FAULT_DELAY_SECONDS=180 \
+FRED_INGESTION_FAULT_ATTEMPTS=1 \
+make run-worker
+```
+
+Then upload **demo-failure.pdf** through the UI. At the extraction hook, the first
+attempt waits three minutes with heartbeats, then raises a retryable
+`SimulatedIngestionFailure`. Later attempts run normally, subject to the profile's
+retry policy. The activity's configured timeout must leave enough time for this
+wait, otherwise a real timeout occurs before the simulated error.
+
+| Variable | Values / behavior |
+| --- | --- |
+| `FRED_INGESTION_FAULT` | `activity_error`, `non_retryable_error`, `worker_crash`, `delay`; unset/empty disables injection |
+| `FRED_INGESTION_FAULT_STAGE` | Required: `extraction` or `indexing` |
+| `FRED_INGESTION_FAULT_FILE` | Required: exact original document filename, case-sensitive, no directory or wildcard matching |
+| `FRED_INGESTION_FAULT_DELAY_SECONDS` | Seconds to wait at the hook, default `0` |
+| `FRED_INGESTION_FAULT_ATTEMPTS` | Temporal activity attempt numbers, e.g. `1` (default), `1,2`, or `all` |
+
+Change only the mode/selector to exercise these cases:
+
+- **Transient failure then recovery:** `activity_error`, attempts `1`.
+- **Retry exhaustion:** `activity_error`, attempts `all`; Temporal still applies
+  the configured finite maximum number of attempts.
+- **Immediate final failure after the wait:** `non_retryable_error`; no retry.
+- **Worker loss:** `worker_crash`; exits the worker process abruptly with code 86.
+  Restart the worker to let Temporal resume eligible work. With attempts `1`, the
+  next attempt passes the hook even after restart. Other activities in the same
+  process are interrupted too; a single local worker may serve all four roles.
+- **Real execution timeout:** `delay`, with a wait longer than the configured
+  per-attempt timeout. For example, set the API profile's
+  `input_activity_timeout: 2m`, restart/reload the API configuration, submit a
+  **new** extraction with a `180` second injected wait. Existing submissions keep
+  their original policy. The hook keeps heartbeating (normally every five seconds),
+  so keep the heartbeat timeout above that cadence to isolate execution timeout.
+  If the wait completes first, `delay` simply continues normal processing.
+
+The wait begins when the hook is reached, not when the upload is submitted.
+Extraction pauses **before spawning its child**, indexing **before processing any
+output batches**. These scenarios do not test orphaned running extractors or
+partially written indexes. Filename selection matches every document with that
+name; use a distinct test filename. Attempt numbers belong to each activity,
+not a process-local counter; a new ingestion starts again at attempt 1.
+
+Run the configured worker on the targeted stage's queue. With multiple replicas,
+a hook applies only when an equipped worker receives the activity; configure all
+consumers of that test queue for repeatable results. Startup and trigger logs carry
+`[SIMULATED INGESTION FAULT]`. Activity failures explicitly say they are simulated;
+a process crash is observed as worker loss/timeout, not a returned application error.
+Stop that worker and relaunch without these variables to disable the hooks. Keep
+this configuration in the test launch command rather than shared deployment YAML.

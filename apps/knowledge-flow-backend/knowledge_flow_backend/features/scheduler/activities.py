@@ -152,6 +152,10 @@ async def _output_process_impl(
                         non_retryable=True,
                     )
 
+            from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
+
+            await inject_ingestion_fault(stage="indexing", document_name=metadata.document_name, document_uid=metadata.document_uid)
+
             # Proceed with the output processing (vectorization / SQL indexing —
             # the longest-running, most expensive stage; see the comment above).
             metadata = await to_thread_with_heartbeat(
