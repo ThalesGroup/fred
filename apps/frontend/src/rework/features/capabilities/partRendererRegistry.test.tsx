@@ -59,8 +59,7 @@ describe("partRendererRegistry (#1977)", () => {
     warn.mockRestore();
   });
 
-  it("resolves the real plugin index: demo_echo contributes demo_card", () => {
-    expect(rendererForPartKind("demo_card")).toBeDefined();
+  it("resolves the real plugin index: the frozen base parts are always present", () => {
     expect(rendererForPartKind("link")).toBeDefined();
     expect(rendererForPartKind("geo")).toBeDefined();
     expect(rendererForPartKind("nope")).toBeUndefined();

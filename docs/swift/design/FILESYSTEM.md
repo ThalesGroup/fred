@@ -229,7 +229,7 @@ carries no access semantics, and never becomes a ReBAC object.
 
 **Agent exposure.** Label search reaches agents through one place only: the
 `document_label_search` capability's `list_documents_by_label` tool
-(`fred-runtime/capabilities/document_label_search/`, `ADMIN_GATED`, paginated,
+(`libs/capabilities/fred-capability-documents/`, `ADMIN_GATED`, paginated,
 backed by `MetadataService.get_documents_with_label`). It is deliberately not
 wired into `CorpusTreeService`/`list_document_tree` (`DEFAULT_ON`, no label
 filtering — see `RUNTIME-EXECUTION-CONTRACT.md §8.47`) or into `/fs`: a team

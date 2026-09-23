@@ -21,6 +21,7 @@ from fred_pod.common.config_loader import (
     TConfig,
     get_config,
     load_configuration_with_config_files,
+    load_postgres_config,
     parse_yaml_mapping_file,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "TConfig",
     "get_config",
     "load_configuration_with_config_files",
+    "load_postgres_config",
     "parse_yaml_mapping_file",
 ]

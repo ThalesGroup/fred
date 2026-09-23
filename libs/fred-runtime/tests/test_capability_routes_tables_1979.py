@@ -20,20 +20,24 @@ Covers:
   `/capabilities/{id}` and callable, and its ingress-relative base URL is
   advertised on the template catalog (`route_base_url`)
 - table hygiene is enforced at pod boot: `cap_<id>_` prefix and no foreign keys
-- the migration runner discovers a capability's own Alembic tree and applies it
-  under a per-capability version table
+- the migration runner reports a capability's own Alembic tree, and applies
+  the runtime tree — including the revision that drops the retired demo
+  capability's tables, both on a database that held them and on one that never
+  did. Per-capability tree EXECUTION is NOT covered here: fred-runtime ships no
+  capability with a tree any more, and nothing else exercises
+  `run_all_migrations()`'s discovery loop — a known gap, not a claim.
 - the per-capability OpenAPI dump yields only that capability's routes/schemas
 """
 
 from __future__ import annotations
 
 import pytest
+from _tracer_capability import TracerEchoCapability, install_tracer_entry_point
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
 from fred_runtime.capabilities import CapabilityRegistry
-from fred_runtime.capabilities.demo import DemoEchoCapability
 from fred_runtime.capabilities.errors import CapabilityTableHygieneError
 from fred_runtime.capabilities.openapi_dump import dump_capability_openapi
 from fred_runtime.migrations import run_all_migrations
@@ -55,6 +59,7 @@ from test_agent_app import _build_test_config, _EchoAgent
 
 
 def _client(tmp_path, monkeypatch) -> TestClient:
+    install_tracer_entry_point(monkeypatch)
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -82,7 +87,7 @@ def test_capability_router_auto_mounted_and_callable(tmp_path, monkeypatch) -> N
     client = _client(tmp_path, monkeypatch)
     try:
         response = client.post(
-            "/pod/v1/capabilities/demo_echo/analyze", json={"text": "hi"}
+            "/pod/v1/capabilities/tracer_echo/analyze", json={"text": "hi"}
         )
         assert response.status_code == 200, response.text
         assert response.json() == {"original": "hi", "transformed": "HI", "length": 2}
@@ -96,7 +101,7 @@ def test_catalog_advertises_route_base_url(tmp_path, monkeypatch) -> None:
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200, response.text
         entry = response.json()[0]["available_capabilities"][0]
-        assert entry["route_base_url"] == "/pod/v1/capabilities/demo_echo"
+        assert entry["route_base_url"] == "/pod/v1/capabilities/tracer_echo"
     finally:
         client.__exit__(None, None, None)
 
@@ -178,7 +183,7 @@ def test_table_hygiene_rejects_foreign_key() -> None:
 
 def test_demo_tables_pass_hygiene() -> None:
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
+    registry.register(TracerEchoCapability())
     registry.validate({})  # must not raise
 
 
@@ -187,15 +192,27 @@ def test_demo_tables_pass_hygiene() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_migration_locations_include_demo() -> None:
+def test_migration_locations_report_declaring_capabilities_only() -> None:
+    class _WithTree(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="withtree", version="0.1.0", name="k", description="k", icon="i"
+        )
+        ConfigModel = EmptyModel
+
+        @classmethod
+        def migrations_location(cls) -> str:
+            return "/somewhere/withtree_migrations"
+
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
+    registry.register(_WithTree())
+    registry.register(TracerEchoCapability())
+
     locations = dict(registry.migration_locations())
-    assert "demo_echo" in locations
-    assert locations["demo_echo"].endswith("demo_migrations")
+
+    assert locations == {"withtree": "/somewhere/withtree_migrations"}
 
 
-def test_run_all_migrations_creates_per_capability_version_table(
+def test_run_all_migrations_applies_runtime_tree_and_drops_retired_demo(
     tmp_path, monkeypatch
 ) -> None:
     import sqlite3
@@ -204,7 +221,6 @@ def test_run_all_migrations_creates_per_capability_version_table(
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
     upgraded = run_all_migrations()
     assert upgraded[0] == "fred-runtime"
-    assert "demo_echo" in upgraded
 
     conn = sqlite3.connect(db_path)
     try:
@@ -214,11 +230,47 @@ def test_run_all_migrations_creates_per_capability_version_table(
         }
     finally:
         conn.close()
-    # fred-runtime's own version table, the demo capability's OWN version table,
-    # and the demo capability's owned table.
     assert "alembic_version_runtime" in tables
-    assert "cap_demo_echo_alembic_version" in tables
-    assert "cap_demo_echo_notes" in tables
+    # Idempotence half: this database never held them in the first place.
+    assert "cap_demo_echo_alembic_version" not in tables
+    assert "cap_demo_echo_notes" not in tables
+
+
+def test_run_all_migrations_drops_demo_tables_a_pod_actually_has(
+    tmp_path, monkeypatch
+) -> None:
+    """The half that matters in production: a pod that DID run the retired demo
+    tree holds both tables, and the revision must remove them. Asserting their
+    absence on a virgin database proves nothing — an empty `upgrade()` or a
+    misspelled table name would pass it."""
+
+    import sqlite3
+
+    db_path = tmp_path / "seeded.db"
+    seeded = sqlite3.connect(db_path)
+    try:
+        seeded.execute("create table cap_demo_echo_notes (id text primary key)")
+        seeded.execute("create table cap_demo_echo_alembic_version (version_num text)")
+        seeded.execute(
+            "insert into cap_demo_echo_alembic_version values ('d1e2m0a0b0c0')"
+        )
+        seeded.commit()
+    finally:
+        seeded.close()
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    run_all_migrations()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute("select name from sqlite_master where type='table'")
+        }
+    finally:
+        conn.close()
+    assert "cap_demo_echo_notes" not in tables
+    assert "cap_demo_echo_alembic_version" not in tables
 
 
 # ---------------------------------------------------------------------------
@@ -227,11 +279,11 @@ def test_run_all_migrations_creates_per_capability_version_table(
 
 
 def test_dump_capability_openapi_is_isolated() -> None:
-    document = dump_capability_openapi(DemoEchoCapability())
+    document = dump_capability_openapi(TracerEchoCapability())
     assert list(document["paths"]) == ["/analyze"]
     schemas = document["components"]["schemas"]
-    assert "DemoAnalyzeRequest" in schemas
-    assert "DemoAnalyzeResponse" in schemas
+    assert "TracerAnalyzeRequest" in schemas
+    assert "TracerAnalyzeResponse" in schemas
 
 
 def test_dump_capability_openapi_without_router_raises() -> None:
