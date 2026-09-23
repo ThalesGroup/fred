@@ -32,10 +32,12 @@ import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
  * Generic over the frame shape: chat passes its `AnyRuntimeEvent` union, the
  * pipeline path uses the default `Record<string, unknown>`.
  */
-export async function* parseSseFrames<T = Record<string, unknown>>(
+export type SseRecord<T> = { data: T; id: number | null };
+
+export async function* parseSseRecords<T = Record<string, unknown>>(
   body: ReadableStream<Uint8Array>,
   onParseError?: (raw: string) => void,
-): AsyncGenerator<T> {
+): AsyncGenerator<SseRecord<T>> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -48,10 +50,15 @@ export async function* parseSseFrames<T = Record<string, unknown>>(
       buf = blocks.pop() ?? "";
       for (const block of blocks) {
         const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
+        const idLine = block.split("\n").find((l) => l.startsWith("id:"));
         const raw = dataLine?.slice(6).trim();
         if (!raw || raw === "[DONE]") continue;
         try {
-          yield JSON.parse(raw) as T;
+          const parsedId = idLine === undefined ? null : Number(idLine.slice(3).trim());
+          yield {
+            data: JSON.parse(raw) as T,
+            id: parsedId !== null && Number.isSafeInteger(parsedId) && parsedId >= 0 ? parsedId : null,
+          };
         } catch {
           onParseError?.(raw);
         }
@@ -59,6 +66,15 @@ export async function* parseSseFrames<T = Record<string, unknown>>(
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+export async function* parseSseFrames<T = Record<string, unknown>>(
+  body: ReadableStream<Uint8Array>,
+  onParseError?: (raw: string) => void,
+): AsyncGenerator<T> {
+  for await (const record of parseSseRecords<T>(body, onParseError)) {
+    yield record.data;
   }
 }
 

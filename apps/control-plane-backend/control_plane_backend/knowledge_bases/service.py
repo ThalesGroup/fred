@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fred_core import KeycloakUser, prefix_covers
+from fred_core import KeycloakUser, get_delegation_config, prefix_covers
 from fred_core.scheduler import Schedule
 from fred_core.security.rebac.knowledge_base_authz import (
     can_team_use_knowledge_base,
@@ -87,7 +87,11 @@ async def publish_definition(
     # The local-dev client is admitted here and ONLY here — a targeted
     # allowance, so that authentication being disabled never turns every local
     # caller into a service identity platform-wide.
-    if not is_service_agent(user) and user.client_id != LOCAL_DEV_CLIENT_ID:
+    if (
+        not get_delegation_config().enabled
+        and not is_service_agent(user)
+        and user.client_id != LOCAL_DEV_CLIENT_ID
+    ):
         raise KnowledgeBaseClientMismatch(
             "Publishing requires a service identity, not a user session"
         )

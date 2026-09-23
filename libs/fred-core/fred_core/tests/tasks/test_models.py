@@ -19,12 +19,16 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from fred_core.tasks.agent_run import AgentRunAdmissionRecord
 from fred_core.tasks.models import (
+    AgentRunDetail,
+    AgentRunTaskEvent,
     IngestionDetail,
     IngestionTaskEvent,
     MigrationDetail,
     MigrationResult,
     MigrationTaskEvent,
+    StartAgentRunRequest,
     StartIngestionRequest,
     StartTaskRequest,
     TaskEvent,
@@ -93,6 +97,46 @@ def test_log_task_event_round_trips() -> None:
     parsed = _EVENT_ADAPTER.validate_python(event.model_dump())
     assert isinstance(parsed, TaskLogEvent)
     assert parsed.detail.level == "warn"
+
+
+def test_agent_run_event_round_trips_without_payload_content() -> None:
+    event = AgentRunTaskEvent(
+        task_id="synthetic-task",
+        state=TaskState.failed,
+        seq=1,
+        timestamp=_NOW,
+        detail=AgentRunDetail(mode="background", reason="authority_lost"),
+    )
+    parsed = _EVENT_ADAPTER.validate_python(event.model_dump())
+    assert isinstance(parsed, AgentRunTaskEvent)
+    assert parsed.detail is not None and parsed.detail.reason == "authority_lost"
+
+
+def test_agent_run_admission_rejects_credentials_and_naive_time() -> None:
+    payload = {
+        "person_id": "person",
+        "team_id": "team",
+        "runtime_id": "runtime",
+        "agent_instance_id": "instance",
+        "agent_id": "agent",
+        "prompt": "synthetic prompt",
+        "created_by": "creator",
+        "created_at": _NOW,
+        "run_id": "run",
+        "budget": {"wall_clock_seconds": 30, "max_concurrent_children": 1},
+        "access_token": "must-not-persist",  # nosec B105 - protocol metadata or synthetic fixture
+    }
+    with pytest.raises(ValidationError):
+        AgentRunAdmissionRecord.model_validate(payload)
+    payload.pop("access_token")
+    payload["created_at"] = datetime(2026, 6, 4)
+    with pytest.raises(ValidationError):
+        AgentRunAdmissionRecord.model_validate(payload)
+
+
+def test_agent_run_start_request_is_part_of_discriminated_union() -> None:
+    parsed = _REQUEST_ADAPTER.validate_python({"kind": "agent_run"})
+    assert isinstance(parsed, StartAgentRunRequest)
 
 
 def test_ingestion_task_event_with_target_round_trips() -> None:

@@ -129,7 +129,9 @@ class TeamMetadataStore:
         self._sessions = make_session_factory(engine)
 
     @asynccontextmanager
-    async def advisory_lock(self, key: str) -> AsyncIterator[None]:
+    async def advisory_lock(
+        self, key: str, *, session: AsyncSession | None = None
+    ) -> AsyncIterator[AsyncSession]:
         """Hold a Postgres transaction-scoped advisory lock for `key` for the
         duration of the `async with` block.
 
@@ -140,18 +142,23 @@ class TeamMetadataStore:
         (across replicas, not just this process — an `asyncio.Lock` would only
         cover one) closes that race without needing OpenFGA itself to support it.
 
+        The yielded session lets protected SQL writes share the lock's transaction
+        without requesting another pooled connection. Pass it to nested locks to
+        acquire additional keys on that same transaction, in a consistent order.
+        A supplied session's caller owns its transaction and the lock lifetime.
+
         The lock auto-releases when the backing transaction commits or rolls
         back — no explicit unlock, nothing can leak it on a crash. No-op on
         non-Postgres dialects (e.g. SQLite in tests): a single-process test
         run has no cross-replica race to close.
         """
-        async with self._sessions() as s, s.begin():
+        async with use_session(self._sessions, session) as s:
             if self._engine.dialect.name == "postgresql":
                 await s.execute(
                     text("SELECT pg_advisory_xact_lock(:key)"),
                     {"key": advisory_lock_key(key)},
                 )
-            yield
+            yield s
 
     async def get_by_team_ids(
         self,

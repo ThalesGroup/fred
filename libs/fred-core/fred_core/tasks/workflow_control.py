@@ -83,7 +83,9 @@ _TEMPORAL_STATUS_BY_NAME: dict[str, ExecutionStatus] = {
 class WorkflowControl(Protocol):
     """Observe/cancel the execution backing a task, by workflow id."""
 
-    async def get_status(self, workflow_id: str) -> ExecutionStatus | None:
+    async def get_status(
+        self, workflow_id: str, *, identifier_free: bool = False
+    ) -> ExecutionStatus | None:
         """Return the workflow's status, or ``None`` if it cannot be determined."""
         ...
 
@@ -99,7 +101,9 @@ class NoopWorkflowControl:
     ``cancel`` is a no-op.
     """
 
-    async def get_status(self, workflow_id: str) -> ExecutionStatus | None:
+    async def get_status(
+        self, workflow_id: str, *, identifier_free: bool = False
+    ) -> ExecutionStatus | None:
         return None
 
     async def cancel(self, workflow_id: str) -> None:
@@ -126,17 +130,22 @@ class TemporalWorkflowControl:
         seconds = client_provider.config.rpc_timeout_seconds
         self._rpc_timeout = timedelta(seconds=seconds) if seconds else None
 
-    async def get_status(self, workflow_id: str) -> ExecutionStatus | None:
+    async def get_status(
+        self, workflow_id: str, *, identifier_free: bool = False
+    ) -> ExecutionStatus | None:
         try:
             client = await self._client_provider.get_client()
             handle = client.get_workflow_handle(workflow_id)
             description = await handle.describe(rpc_timeout=self._rpc_timeout)
         except Exception:
-            logger.warning(
-                "[TemporalWorkflowControl] could not describe workflow_id=%s",
-                workflow_id,
-                exc_info=True,
-            )
+            if identifier_free:
+                logger.warning("[TemporalWorkflowControl] agent_run status unavailable")
+            else:
+                logger.warning(
+                    "[TemporalWorkflowControl] could not describe workflow_id=%s",
+                    workflow_id,
+                    exc_info=True,
+                )
             return None
         status = getattr(description, "status", None)
         name = getattr(status, "name", None)

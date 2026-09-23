@@ -49,6 +49,7 @@ fred_pod/
 │   └── config_loader.py   loading and validating it into a Pydantic model
 └── security/
     ├── structure.py                security configuration models, KeycloakUser
+    ├── delegation.py               the security.delegation configuration block
     └── backend_to_backend_auth.py  M2M token provider and httpx auth
 ```
 

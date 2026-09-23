@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Awaitable, Callable
+from typing import AbstractSet, Awaitable, Callable
 
 import httpx
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 
+from fred_runtime.common.outbound_credentials import OutboundCredentialProvider
 from fred_runtime.common.structures import (
     TokenRefreshCallback,
     resolve_refresh_result,
@@ -19,8 +20,64 @@ from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
 )
+from fred_runtime.runtime_support.authority import AuthorityLostError
 
 logger = logging.getLogger(__name__)
+
+# A receiver's refusal of the run's authority. Anything else is a transport or
+# tool fault and keeps its existing handling.
+AUTHORITY_REFUSED_STATUSES = (401, 403)
+
+
+class DelegatedAuthorityInterceptor:
+    """Intercepts MCP tool calls made under delegation.
+
+    Two jobs: put a current workload bearer on every call, so a connection that
+    outlives one token keeps working; and end the run when a receiver refuses
+    this run's authority, rather than asking again with another credential.
+    """
+
+    def __init__(
+        self,
+        provider: OutboundCredentialProvider,
+        *,
+        delegated_server_ids: AbstractSet[str],
+    ):
+        self._provider = provider
+        self._delegated_server_ids = frozenset(delegated_server_ids)
+
+    async def __call__(
+        self,
+        request: MCPToolCallRequest,
+        handler: Callable[[MCPToolCallRequest], Awaitable],
+    ):
+        if request.server_name not in self._delegated_server_ids:
+            return await handler(request)
+
+        credentials = await self._provider.credentials()
+        headers = dict(request.headers or {})
+        if credentials.authorization:
+            headers["Authorization"] = credentials.authorization
+        call = request.override(headers=headers)
+
+        try:
+            return await handler(call)
+        except Exception as e:  # noqa: BLE001
+            http_err: httpx.HTTPStatusError | None = unwrap_httpx_status_error(e)
+            status = (
+                http_err.response.status_code
+                if http_err is not None and http_err.response is not None
+                else None
+            )
+            if status not in AUTHORITY_REFUSED_STATUSES:
+                raise
+            logger.error(
+                "[MCP] event=tool_call outcome=stopped reason=authority_refused status=%s",
+                status,
+            )
+            # `from None` on purpose: the receiver's body must not reach a
+            # traceback, an event or the transcript.
+            raise AuthorityLostError() from None
 
 
 class ExpiredTokenRetryInterceptor:
@@ -47,25 +104,20 @@ class ExpiredTokenRetryInterceptor:
                 raise
 
             logger.warning(
-                "[MCP][%s] 401 expired token detected for tool=%s. Refreshing and retrying once.",
-                request.server_name,
-                request.name,
+                "[MCP] event=tool_call outcome=retrying reason=expired_token"
             )
 
             try:
                 new_token = await resolve_refresh_result(self._refresh(), self)
-            except Exception as refresh_err:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 logger.error(
-                    "[MCP][%s] Token refresh failed; not retrying: %s",
-                    request.server_name,
-                    refresh_err,
+                    "[MCP] event=token_refresh outcome=failed reason=refresh_error"
                 )
                 raise
 
             if not new_token:
                 logger.error(
-                    "[MCP][%s] Token refresh returned empty token; aborting retry.",
-                    request.server_name,
+                    "[MCP] event=token_refresh outcome=failed reason=empty_token"
                 )
                 raise
 
@@ -75,11 +127,6 @@ class ExpiredTokenRetryInterceptor:
 
             try:
                 return await handler(retry_req)
-            except Exception as e2:  # noqa: BLE001
-                logger.error(
-                    "[MCP][%s] Retry after refresh failed for tool=%s: %s",
-                    request.server_name,
-                    request.name,
-                    e2,
-                )
+            except Exception:  # noqa: BLE001
+                logger.error("[MCP] event=tool_call outcome=failed reason=retry_failed")
                 raise

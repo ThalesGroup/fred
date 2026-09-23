@@ -808,6 +808,22 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
     assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
 
 
+def test_the_configured_refresh_cooldown_reaches_the_built_client() -> None:
+    """A cooldown an operator tunes has to govern the client that refreshes.
+
+    Left unplumbed it falls back to the built-in default, so the key reads as
+    honoured while changing nothing.
+    """
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    configured = _valid_configuration()
+    configured["security"]["m2m"]["refresh_failure_cooldown_seconds"] = 12.5
+
+    configuration = PodConfiguration.model_validate(configured)
+
+    assert configuration.m2m.refresh_failure_cooldown_seconds == 12.5
+
+
 def test_a_missing_configuration_file_is_its_own_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

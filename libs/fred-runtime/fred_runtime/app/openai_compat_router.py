@@ -45,13 +45,13 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncIterator, Mapping
-from typing import Any, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
-from fred_core import AuthorizationError, KeycloakUser, TeamPermission
+from fred_core import AssertedUser, AuthorizationError, KeycloakUser, TeamPermission
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
@@ -61,9 +61,12 @@ from fred_sdk.contracts.openai_compat import (
 )
 
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
 
 from .agent_app import (
+    _admit_run_credentials,
     _AgentExecuteRequest,
+    _finish_admitted_run,
     _iterate_runtime_event_payloads,
     _resolve_agent_instance,
 )
@@ -99,8 +102,15 @@ def create_openai_compat_router(
     from fred_core.security.oidc import get_current_user
 
     def _user_with_auth(
-        user: KeycloakUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(get_current_user),
     ) -> KeycloakUser | None:
+        # This surface admits runs too, so it refuses an asserted person for the
+        # same reason the execute routes do: a run needs the person's own token.
+        if isinstance(user, AssertedUser):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="requires_own_credential",
+            )
         return user
 
     def _user_noop() -> KeycloakUser | None:
@@ -223,6 +233,21 @@ def create_openai_compat_router(
         # Identity from the validated JWT, never the body (F-B parity).
         effective_user_id = authenticated_user.uid if authenticated_user else None
 
+        container = get_pod_container_from_app(http_request.app)
+        # The same admission every other execution surface goes through: under
+        # delegation this writes the run record and gives the turn a provider,
+        # so no call made for a chat completion carries the person's bearer.
+        admitted_at = time.monotonic()
+        credentials = _admit_run_credentials(
+            container,
+            authenticated_user,
+            agent_id=request.model,
+            agent_instance_id=None,
+            team_id=team_id,
+            started_at=time.time(),
+            started_monotonic=admitted_at,
+        )
+
         context: dict[str, Any] = {"session_id": session_id}
         if team_id:
             context["team_id"] = team_id
@@ -235,38 +260,82 @@ def create_openai_compat_router(
             context=context or None,
         )
 
-        target = await _resolve_agent_instance(
-            request=fred_request,
-            registry=registry,
-            access_token=access_token,
-            control_plane_url=get_runtime_context().config.control_plane_url,
-            http_client=get_pod_container_from_app(
-                http_request.app
-            ).get_control_plane_http_client(),
-        )
+        try:
+            target = await _resolve_agent_instance(
+                request=fred_request,
+                registry=registry,
+                access_token=access_token,
+                control_plane_url=get_runtime_context().config.control_plane_url,
+                http_client=container.get_control_plane_http_client(),
+                team_id=team_id,
+                credentials=credentials,
+            )
+        except BaseException as exc:
+            await _finish_admitted_run(credentials, "failed", None)
+            if isinstance(exc, RunStopError):
+                raise HTTPException(
+                    status_code=403 if isinstance(exc, AuthorityLostError) else 503,
+                    detail=exc.reason,
+                ) from None
+            raise
+        target.credential_provider = credentials
+        target.run_started_at = admitted_at
 
         completion_id = f"chatcmpl-{uuid4().hex}"
         created = int(time.time())
         model = request.model
 
         async def openai_stream() -> AsyncIterator[str]:
-            try:
-                async for event in _iterate_runtime_event_payloads(
+            iterator = cast(
+                AsyncGenerator[dict[str, Any], None],
+                _iterate_runtime_event_payloads(
                     target.definition,
                     fred_request,
-                    access_token=access_token,
+                    access_token=(
+                        None
+                        if credentials is not None and credentials.delegated
+                        else access_token
+                    ),
                     team_id=target.team_id,
                     registry=registry,
-                ):
+                    tuning=target.tuning,
+                    team_settings=target.team_settings,
+                    reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+                    platform_chat_model_binding=target.platform_chat_model_binding,
+                    platform_prompt=target.platform_prompt,
+                    credential_provider=target.credential_provider,
+                    owns_run_record=True,
+                    run_limits=target.run_limits,
+                    run_started_at=target.run_started_at,
+                ),
+            )
+            try:
+                async for event in iterator:
                     chunk = fred_event_to_openai_chunk(
                         event, completion_id, model, created
                     )
                     if chunk is not None:
                         yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
             except Exception:
-                logger.exception("[openai-compat] streaming error for model=%s", model)
+                if credentials is not None and credentials.delegated:
+                    logger.error(
+                        "event=delegated_stream outcome=failed reason=execution_failed"
+                    )
+                else:
+                    logger.exception(
+                        "[openai-compat] streaming error for model=%s", model
+                    )
             finally:
-                yield "data: [DONE]\n\n"
+                try:
+                    await iterator.aclose()
+                except Exception:
+                    if credentials is not None and credentials.delegated:
+                        logger.error(
+                            "event=delegated_stream outcome=failed reason=cleanup_failed"
+                        )
+                        raise RuntimeError("Delegated stream cleanup failed.") from None
+                    raise
+            yield "data: [DONE]\n\n"
 
         return StreamingResponse(openai_stream(), media_type="text/event-stream")
 

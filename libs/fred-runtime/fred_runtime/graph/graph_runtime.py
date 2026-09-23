@@ -28,6 +28,7 @@ orchestration, streaming events, checkpoints, and resume behavior.
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import json
 import logging
@@ -40,6 +41,7 @@ from typing import Any, Protocol, cast
 
 from fred_core.history.history_schema import coerce_finish_reason
 from fred_core.portable import MetricsProvider
+from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -95,6 +97,8 @@ from pydantic import BaseModel, ValidationError
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.capabilities.errors import CapabilityAssemblyError
+from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.authority import RunStopError
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
@@ -104,6 +108,7 @@ from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
 )
+from fred_runtime.runtime_support.run_budget import RunScope, terminal_stop_event
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_messages,
     serialize_model_output,
@@ -794,13 +799,22 @@ class _GraphNodeExecutionContext:
                 if span is not None:
                     span.set_attribute("status", "error" if reported_error else "ok")
                 return normalized
+            except RunStopError:
+                # No tool-result event for a stopped run: the run ends on its
+                # terminal event, and a result row here would carry the stop out
+                # to the transcript the run is not allowed to reach.
+                if span is not None:
+                    span.set_attribute("status", "error")
+                raise
             except Exception as exc:
                 self._events.append(
                     ToolResultRuntimeEvent(
                         sequence=0,
                         call_id=call_id,
                         tool_name=tool_name,
-                        content=str(exc),
+                        # A client error quotes the request URL, and under
+                        # delegation that URL names the person the run acts for.
+                        content=scrub_grant_text(str(exc)),
                         is_error=True,
                         latency_ms=_elapsed_ms_since(started_at),
                     )
@@ -904,13 +918,20 @@ class _GraphNodeExecutionContext:
                     and not result.is_error
                     and result.structured is None
                 ):
-                    logger.warning(
-                        "invoke_agent(%s): could not coerce output to %s after %d "
-                        "attempt(s); returning structured=None",
-                        agent_id,
-                        output_schema.__name__,
-                        max_attempts,
-                    )
+                    if delegation_enabled():
+                        logger.warning(
+                            "invoke_agent: output coercion failed after %d attempt(s); "
+                            "returning structured=None",
+                            max_attempts,
+                        )
+                    else:
+                        logger.warning(
+                            "invoke_agent(%s): could not coerce output to %s after %d "
+                            "attempt(s); returning structured=None",
+                            agent_id,
+                            output_schema.__name__,
+                            max_attempts,
+                        )
                 if result.is_error:
                     kpi_dims["status"] = "error"
                     if span is not None:
@@ -1149,25 +1170,51 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             # same event loop; the queue is unbounded so it never blocks.
             queue.put_nowait(event)
 
+        # The run's scope is opened here, before the task is created, so the
+        # executing task and everything it starts inherit the same ceiling.
+        run_scope_ctx = RunScope.open(agent_id=self._definition.agent_id)
+        run_scope = run_scope_ctx.__enter__()
         execute_task = asyncio.create_task(
             self._execute(input_model=input_model, config=config, emit_event=_put)
         )
+        # The graph runs in a task of its own, so it outlives an abandoned
+        # stream unless the run owns it: registered here, cancelled below.
+        run_scope.register_child(cast(asyncio.Task[object], execute_task))
 
         # Signal end-of-stream via sentinel once the task finishes (normal or error).
         # _execute() already emits a FinalRuntimeEvent on error when emit_event is set,
         # so by the time the sentinel arrives all events are already in the queue.
         execute_task.add_done_callback(lambda _: queue.put_nowait(None))
 
-        while True:
-            event = await queue.get()
-            if event is None:
-                break
-            yield _resequence_event(event, sequence)
-            sequence += 1
+        try:
+            while True:
+                try:
+                    event = await run_scope.next_queued(queue)
+                except RunStopError as stop_error:
+                    # The budget elapsed while the graph was still working: the
+                    # graph and every child go with it, and the run ends on the
+                    # reason rather than on whatever it was in the middle of.
+                    execute_task.cancel()
+                    run_scope.cancel_children()
+                    await asyncio.gather(execute_task, return_exceptions=True)
+                    yield terminal_stop_event(stop_error, sequence=sequence)
+                    return
+                if event is None:
+                    break
+                yield _resequence_event(event, sequence)
+                sequence += 1
 
-        # Re-raise any exception that escaped _execute's own error handler.
-        if not execute_task.cancelled():
-            execute_task.result()
+            # Re-raise any exception that escaped _execute's own error handler.
+            if not execute_task.cancelled():
+                execute_task.result()
+        finally:
+            # A consumer that walks away (a closed SSE connection) must not
+            # leave the graph running to completion behind it. Cancelling a
+            # task that already finished is a no-op.
+            execute_task.cancel()
+            run_scope.cancel_descendants()
+            await asyncio.gather(execute_task, return_exceptions=True)
+            run_scope_ctx.__exit__(None, None, None)
 
     async def _execute(
         self,
@@ -1183,26 +1230,49 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         )
         checkpoint_key = self._checkpoint_key(config)
         steps = 0
-        try:
-            return await self._execute_loop(
-                state=state,
-                node_id=node_id,
-                resume_payload=resume_payload,
-                checkpoint_key=checkpoint_key,
-                steps=steps,
-                config=config,
-                emit_event=emit_event,
-            )
-        except Exception as exc:
-            logger.exception(
-                "[V2][GRAPH] Unhandled exception in graph agent=%s",
-                self._definition.agent_id,
-            )
-            error_content = f"An error occurred: {exc}"
-            if emit_event is not None:
-                emit_event(FinalRuntimeEvent(sequence=0, content=error_content))
-                return GraphExecutionOutput(content=error_content)
-            raise
+        with RunScope.open(agent_id=self._definition.agent_id) as run_scope:
+            try:
+                return await self._execute_loop(
+                    state=state,
+                    node_id=node_id,
+                    resume_payload=resume_payload,
+                    checkpoint_key=checkpoint_key,
+                    steps=steps,
+                    config=config,
+                    emit_event=emit_event,
+                )
+            except RunStopError as stop_error:
+                # The platform ended this run. Children are cancelled, nothing is
+                # retried, and the terminal event is built from the reason alone —
+                # the upstream text is never logged, emitted or checkpointed.
+                run_scope.record_stop(stop_error)
+                run_scope.cancel_descendants()
+                logger.warning(
+                    "[V2][GRAPH] event=run_stopped outcome=stopped reason=%s",
+                    stop_error.reason,
+                )
+                if emit_event is not None:
+                    emit_event(terminal_stop_event(stop_error))
+                    # No output: a stopped run has no answer, and the platform
+                    # sentence belongs on the terminal event, not in a transcript.
+                    return self._definition.output_model().model_construct()
+                raise
+            except Exception as exc:
+                if delegation_enabled():
+                    logger.error(
+                        "[V2][GRAPH] event=execution_error outcome=failed "
+                        "reason=unhandled_exception"
+                    )
+                else:
+                    logger.exception(
+                        "[V2][GRAPH] Unhandled exception in graph agent=%s",
+                        self._definition.agent_id,
+                    )
+                error_content = f"An error occurred: {scrub_grant_text(str(exc))}"
+                if emit_event is not None:
+                    emit_event(FinalRuntimeEvent(sequence=0, content=error_content))
+                    return GraphExecutionOutput(content=error_content)
+                raise
 
     async def _execute_loop(
         self,
@@ -1215,7 +1285,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         config: ExecutionConfig,
         emit_event: Callable[[RuntimeEvent], None] | None,
     ) -> BaseModel:
+        run_scope = RunScope.current()
         while node_id is not None:
+            # A child that lost authority ends this run too: it stops here,
+            # before the next node makes the run's next call.
+            if run_scope is not None:
+                run_scope.raise_if_stopped()
             if steps >= config.max_steps:
                 raise RuntimeError(
                     f"Graph execution exceeded max_steps={config.max_steps}."
@@ -1295,6 +1370,16 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                     raise RuntimeError(
                         "Graph execution is awaiting human input. Use stream() to surface the request."
                     ) from interrupt
+                except RunStopError as stop_error:
+                    # A stopped run has no fallback node: `on_error` routing
+                    # would retry under an authority the platform has given up,
+                    # and would put the failure text into state and the prompt.
+                    if node_span is not None:
+                        node_span.set_attribute("status", "error")
+                    # Named on the phase sample too, so a stopped run is not
+                    # read back as a node that merely took its time.
+                    kpi_dims["error_code"] = stop_error.reason
+                    raise
                 except Exception as node_exc:
                     if node_span is not None:
                         node_span.set_attribute("status", "error")
@@ -1303,15 +1388,25 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                         # Graceful error recovery: merge 'node_error' into state,
                         # emit a structured event, and continue at the declared
                         # fallback node instead of crashing the whole execution.
-                        error_message = str(node_exc).strip() or type(node_exc).__name__
-
-                        logger.warning(
-                            "[V2][GRAPH] Node %r raised; routing to on_error=%r. agent=%s error=%s",
-                            node_id,
-                            on_error_target,
-                            self._definition.agent_id,
-                            error_message,
+                        error_message = (
+                            scrub_grant_text(str(node_exc)).strip()
+                            or type(node_exc).__name__
                         )
+
+                        if delegation_enabled():
+                            logger.warning(
+                                "[V2][GRAPH] event=node_error outcome=recovered "
+                                "reason=handler_failed",
+                            )
+                        else:
+                            logger.warning(
+                                "[V2][GRAPH] Node %r raised; routing to "
+                                "on_error=%r. agent=%s error=%s",
+                                node_id,
+                                on_error_target,
+                                self._definition.agent_id,
+                                error_message,
+                            )
                         if emit_event is not None:
                             emit_event(
                                 NodeErrorRuntimeEvent(
@@ -1410,14 +1505,15 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         emit_event: Callable[[RuntimeEvent], None] | None,
     ) -> BaseModel:
         """
-        Execute a set of member nodes concurrently via asyncio.gather.
+        Execute a set of member nodes as children of the run.
 
         Why this exists:
         - fan-out/fan-in parallelism lets IO-bound nodes (tool calls, resource
           fetches) run simultaneously instead of sequentially, which reduces
           latency proportionally to the number of parallel members
-        - gather is used instead of threads because all operations are async-
-          native; no thread overhead, no GIL contention
+        - members run through the run's scope, so no more than the configured
+          concurrent-child bound are in flight at once and none is left running
+          when one of them fails or the run is stopped
 
         Constraints:
         - member nodes must not call invoke_model (no LLM streaming in parallel;
@@ -1490,7 +1586,16 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             self._thought_records.extend(node_context.thought_records)
             return result.state_update
 
-        updates_list = await asyncio.gather(*[_run_member(m) for m in members])
+        # Members are the run's children: never more of them in flight than the
+        # configured bound, and none left running once one of them fails or the
+        # run is stopped. A scope of its own here would hand the group a second
+        # full budget, so the run's own scope is required.
+        run_scope = RunScope.current()
+        if run_scope is None:
+            raise RuntimeError("Graph parallel execution requires an open run scope.")
+        updates_list = await run_scope.run_children(
+            [functools.partial(_run_member, member) for member in members]
+        )
 
         # Merge all updates into state in declaration order (last-writer-wins).
         merged = state

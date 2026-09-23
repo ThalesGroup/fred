@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fred_core.common import TeamId
+from fred_core.scheduler import Schedule
+from fred_core.tasks.agent_run import AgentRunScope
+from fred_sdk.contracts import RuntimeStopReason
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
 from fred_sdk.contracts.context import ModelBinding
 from fred_sdk.contracts.models import TuningValue
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
@@ -974,3 +977,54 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
     # the block, and the two are NOT interchangeable.
     platform_prompt: str | None = None
+
+
+class RegisterAgentRunRequest(BaseModel):
+    agent_instance_id: str | None = Field(default=None, min_length=1, max_length=256)
+    agent_id: str | None = Field(default=None, min_length=1, max_length=256)
+    team_id: TeamId | None = None
+    started_at: datetime
+    run_ceiling_seconds: float = Field(default=900.0, gt=0, allow_inf_nan=False)
+    mode: Literal["attended", "background"] = "attended"
+    origin_caller: str | None = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _valid_target_and_time(self) -> RegisterAgentRunRequest:
+        if (self.agent_instance_id is None) == (self.agent_id is None):
+            raise ValueError("exactly one agent target is required")
+        if self.agent_instance_id is not None and self.team_id is None:
+            raise ValueError("team_id is required for managed execution")
+        if self.started_at.tzinfo is None or self.started_at.utcoffset() is None:
+            raise ValueError("started_at must include a UTC offset")
+        self.started_at = self.started_at.astimezone(UTC)
+        return self
+
+
+class RegisterAgentRunResponse(BaseModel):
+    run_id: str
+    run_ceiling_seconds: float
+    binding: ManagedAgentRuntimeBinding | None
+
+
+class EndAgentRunRequest(BaseModel):
+    outcome: Literal["succeeded", "failed", "cancelled"]
+    reason: RuntimeStopReason | None = None
+
+
+class StartAgentRunTaskRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=100_000)
+    scope: AgentRunScope = Field(default_factory=AgentRunScope)
+
+
+class CreateAgentRunScheduleRequest(StartAgentRunTaskRequest):
+    schedule: Schedule
+    enabled: Literal[True]
+
+
+class AgentRunScheduleSummary(BaseModel):
+    schedule_id: str
+    team_id: TeamId
+    agent_instance_id: str
+    schedule: Schedule
+    created_by: str
+    created_at: datetime

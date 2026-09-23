@@ -28,6 +28,7 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
+    StandingAuthorizationError,
     TagPermission,
     TeamMetadataStore,
     get_user_store,
@@ -140,6 +141,9 @@ class MetadataService:
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+
+        except StandingAuthorizationError:
+            raise
 
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")

@@ -52,6 +52,7 @@ from fred_core.documents.document_structures import (
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
+from fred_core.security.delegation import get_delegation_config
 from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -172,7 +173,7 @@ async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None
     """
     for tag_id in tags:
         await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-    if not tags or is_service_agent(user):
+    if not tags or (is_service_agent(user) and not get_delegation_config().enabled):
         return
 
     tag_store = ApplicationContext.get_instance().get_tag_store()

@@ -23,21 +23,23 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
+from typing import Any, Protocol
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import (
-    get_config,
-    get_current_user,
-    initialize_user_security,
-    log_setup,
-)
+from fred_core import get_config, initialize_user_security, log_setup
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
+from fred_core.security.mcp_delegation import (
+    declare_delegation_parameters,
+    mcp_mount_auth,
+    strip_grant_tool_fields,
+)
+from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
 from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -104,6 +106,20 @@ def _norm_origin(o) -> str:
 _RESPONSES_HEADING = "\n\n### Responses:"
 
 
+class _StandingContext(Protocol):
+    def get_rebac_engine(self) -> Any: ...
+
+
+async def _require_delegation_standing(context: _StandingContext, *, enabled: bool) -> None:
+    """Fail startup when delegated identity cannot enforce account standing."""
+    if not enabled:
+        return
+    rebac = context.get_rebac_engine()
+    await rebac.validate_standing_model()
+    if not await rebac.is_standing_seed_ready():
+        raise ValueError("Account standing is not ready.")
+
+
 def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
     """
     Strip the `### Responses:` block from every tool description of `mcp` (#2412).
@@ -135,7 +151,7 @@ def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
     for tool in mcp.tools:
         if tool.description:
             tool.description = tool.description.split(_RESPONSES_HEADING, 1)[0].rstrip()
-    return mcp
+    return strip_grant_tool_fields(mcp)
 
 
 def create_app() -> FastAPI:
@@ -171,6 +187,10 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        await _require_delegation_standing(
+            application_context,
+            enabled=configuration.security.delegation.enabled,
+        )
         # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
         # owned by the Alembic trees alone (see models/table_ownership.py and
         # DATABASE_MIGRATIONS.md §"Table ownership across trees"). A
@@ -277,7 +297,10 @@ def create_app() -> FastAPI:
     # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
     attach_app(app)
 
-    router = APIRouter(prefix=configuration.app.base_url)
+    router = APIRouter(
+        prefix=configuration.app.base_url,
+        dependencies=[Depends(declare_delegation_parameters)],
+    )
 
     MonitoringController(router, application_context)
 
@@ -349,7 +372,8 @@ def create_app() -> FastAPI:
     app.include_router(router)
     mcp_prefix = "/knowledge-flow/v1"
 
-    auth_cfg: AuthConfig = AuthConfig(dependencies=[Depends(get_current_user)])
+    def _mcp_auth() -> AuthConfig:
+        return AuthConfig(dependencies=[Depends(mcp_mount_auth)])
 
     # #2412: no MCP tool description carries response documentation any more. Two
     # steps, both landed 2026-08-28:
@@ -369,12 +393,12 @@ def create_app() -> FastAPI:
     # field genuinely needs explaining, put the sentence in the route's docstring —
     # that is the part that reaches the model.
     mcp_reports = _without_response_docs(
-        FastApiMCP(
+        DelegatedFastApiMCP(
             app,
             name="Knowledge Flow Reports MCP",
             description="Create Markdown-first reports and get downloadable artifacts.",
             include_tags=["Reports"],  # ← export only these routes as tools
-            auth_config=auth_cfg,
+            auth_config=_mcp_auth(),
         )
     )
     mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
@@ -382,12 +406,12 @@ def create_app() -> FastAPI:
     # Optional MCP servers: they export only the tagged routes above.
     if configuration.mcp.opensearch_ops_enabled:
         mcp_opensearch_ops = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow OpenSearch Ops MCP",
                 description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
                 include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         # Mount via HTTP at a clear, versioned path:
@@ -399,12 +423,12 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.prometheus_ops_enabled:
         mcp_prometheus_ops = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Prometheus Ops MCP",
                 description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
                 include_tags=["Prometheus"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         mcp_mount_path = f"{mcp_prefix}/mcp-prometheus-ops"
@@ -415,7 +439,7 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.tabular_enabled:
         mcp_tabular = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Tabular MCP",
                 description=(
@@ -431,7 +455,7 @@ def create_app() -> FastAPI:
                     "every table of the workbook). No write operations are available."
                 ),
                 include_tags=["Tabular"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
@@ -440,7 +464,7 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.text_enabled:
         mcp_text = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Text MCP",
                 description=(
@@ -450,7 +474,7 @@ def create_app() -> FastAPI:
                     "It supports queries by text embedding rather than keyword match."
                 ),
                 include_tags=["Vector Search"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
@@ -459,12 +483,12 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.templates_enabled:
         mcp_template = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Text MCP",
                 description="MCP server for Knowledge Flow Text",
                 include_tags=["Templates", "Prompts"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
@@ -473,7 +497,7 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.resources_enabled:
         mcp_resources = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Resources MCP",
                 description=(
@@ -483,7 +507,7 @@ def create_app() -> FastAPI:
                     "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
                 ),
                 include_tags=["Resources", "Tags"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
         mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
@@ -492,7 +516,7 @@ def create_app() -> FastAPI:
 
     if configuration.mcp.filesystem_enabled:
         mcp_fs = _without_response_docs(
-            FastApiMCP(
+            DelegatedFastApiMCP(
                 app,
                 name="Knowledge Flow Filesystem MCP",
                 description=(
@@ -504,7 +528,7 @@ def create_app() -> FastAPI:
                     "inspect logs, or navigate structured file-based resources during workflow execution."
                 ),
                 include_tags=["Filesystem"],
-                auth_config=auth_cfg,
+                auth_config=_mcp_auth(),
             )
         )
 
@@ -514,12 +538,12 @@ def create_app() -> FastAPI:
 
     # Corpus manager MCP (mock; exports the HTTP-tagged routes to MCP clients)
     mcp_corpus = _without_response_docs(
-        FastApiMCP(
+        DelegatedFastApiMCP(
             app,
             name="Knowledge Flow Corpus MCP",
             description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
             include_tags=["CorpusManager"],
-            auth_config=auth_cfg,
+            auth_config=_mcp_auth(),
         )
     )
     mcp_corpus.mount_http(mount_path=f"{mcp_prefix}/mcp-corpus")

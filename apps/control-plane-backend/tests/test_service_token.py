@@ -52,6 +52,22 @@ def test_service_token_provider_is_built_from_control_plane_sa(
     assert ctx.get_service_token_provider() is provider
 
 
+def test_service_token_provider_carries_the_configured_refresh_cooldown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tuned cooldown reaches the client it is meant to govern, so the setting
+    is not silently inert here."""
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    config = load_configuration()
+    config.security.m2m = config.security.m2m.model_copy(
+        update={"refresh_failure_cooldown_seconds": 12.5}
+    )
+
+    provider = ApplicationContext(config).get_service_token_provider()
+
+    assert provider.cfg.refresh_failure_cooldown_seconds == 12.5
+
+
 @pytest.mark.asyncio
 async def test_get_service_bearer_formats_bearer(
     monkeypatch: pytest.MonkeyPatch,

@@ -50,6 +50,7 @@ def handle_exception(e: Exception) -> HTTPException | Exception:
     "/mcp/reports/write",
     summary="Create a simple report (Markdown canonical) and return URLs",
     response_model=WriteReportResponse,
+    operation_id="write_report",
 )
 async def write_report(
     req: WriteReportRequest,

@@ -3135,6 +3135,7 @@ async def prepare_execution(
     deps: ProductServiceDependencies,
     authorization: str | None = None,
     agent_model_override: str | None = None,
+    model_override_authorized: bool = False,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3316,7 +3317,7 @@ async def prepare_execution(
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
     if agent_model_override is not None:
-        if not is_service_agent(user):
+        if not model_override_authorized and not is_service_agent(user):
             raise ExecutionPreparationError(
                 "agent_model_override is only honored for the evaluator's "
                 "service identity.",

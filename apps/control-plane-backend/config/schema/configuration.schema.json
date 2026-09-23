@@ -39,6 +39,18 @@
           "default": null,
           "title": "Gcu Version"
         },
+        "agent_run_default_ceiling_seconds": {
+          "default": 900.0,
+          "exclusiveMinimum": 0,
+          "title": "Agent Run Default Ceiling Seconds",
+          "type": "number"
+        },
+        "agent_run_max_concurrent_children": {
+          "default": 4,
+          "minimum": 1,
+          "title": "Agent Run Max Concurrent Children",
+          "type": "integer"
+        },
         "team_admin_charter_version": {
           "anyOf": [
             {
@@ -172,6 +184,30 @@
       "title": "ApplicationSourceConfig",
       "type": "object"
     },
+    "CallerPolicy": {
+      "additionalProperties": false,
+      "description": "One receiver-owned workload identity trusted to delegate.",
+      "properties": {
+        "client_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Client Id",
+          "type": "string"
+        },
+        "subject": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "subject"
+      ],
+      "title": "CallerPolicy",
+      "type": "object"
+    },
     "CapabilitiesConfig": {
       "description": "Deployment policy for agent-capability team scoping (CAPAB-01 / #1980).\n\nRFC AGENT-CAPABILITY \u00a78.3. Security-sensitive operators can start every\ncapability admin-gated (`default_policy: explicit`) instead of honoring the\n`manifest.team_scope: default_on` seeds.\n\nThe personal-space class position is now pure FGA runtime state, admin-\ntoggleable via `PUT /admin/capabilities/{id}/personal-scope` (RFC \u00a78.4,\namended 2026-07-16 \u2014 the former `personal_defaults` config-seeding list is\nwithdrawn).",
       "properties": {
@@ -187,6 +223,34 @@
         }
       },
       "title": "CapabilitiesConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "DelegationConfig": {
+      "description": "`security.delegation` block. Off by default; enabling requires an allow-list.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "allowed_callers": {
+          "description": "Client ids of the workloads allowed to speak for a person.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Callers",
+          "type": "array"
+        },
+        "caller_policies": {
+          "items": {
+            "$ref": "#/$defs/CallerPolicy"
+          },
+          "title": "Caller Policies",
+          "type": "array"
+        }
+      },
+      "title": "DelegationConfig",
       "type": "object",
       "additionalProperties": false
     },
@@ -557,6 +621,13 @@
           "default": "M2M_CLIENT_SECRET",
           "title": "Secret Env Var",
           "type": "string"
+        },
+        "refresh_failure_cooldown_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Refresh Failure Cooldown Seconds",
+          "type": "number"
         }
       },
       "required": [
@@ -1057,6 +1128,45 @@
           "default": null,
           "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
           "title": "Ingress Prefix"
+        },
+        "workload_client_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workload Client Id"
+        },
+        "workload_subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workload Subject"
+        },
+        "agent_task_queue": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Task Queue"
         }
       },
       "required": [
@@ -1102,6 +1212,9 @@
         },
         "user": {
           "$ref": "#/$defs/UserSecurity"
+        },
+        "delegation": {
+          "$ref": "#/$defs/DelegationConfig"
         },
         "authorized_origins": {
           "default": [],

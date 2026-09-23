@@ -473,6 +473,53 @@ Important consequence:
 - A `platform_admin` user can still be denied team operations when they are not an explicit team relation holder for that team.
 - A team's first `team_admin` is set once, at team creation, by the bootstrap endpoint — not by post-install scripts guessing at ownership.
 
+### Account standing — `active`, `suspended` and `standing_ready`
+
+Fred owns account standing through three relations on `organization:fred`:
+
+- `active: [user:*] but not suspended` — the stored everyone entry
+  `organization:fred#active@user:*` puts every authenticated person in good
+  standing, service identities checked as people included, unless suspended.
+- `suspended: [user]` — a person Fred has removed.
+- `standing_ready: [organization]` — the marker that the everyone entry is written.
+
+**Writers.** At every start with delegation on, the control plane validates the
+selected model, then writes the everyone entry and the marker, and does not start
+without them. `DELETE /users/{user_id}` is the only Fred operation that removes
+standing: it writes `suspended` before deleting the identity-provider account, and
+the ban survives the relation cleanup (see
+[`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#deleting-a-person-removes-their-standing-first-2026-09-23)).
+While control-plane delegation is off it writes no ban; the deleted person has no
+identity-provider account left.
+Generic writes and deletes of the three relations are refused, and user tokens and
+delegation grants never write them, so a caller cannot assert its own standing.
+
+**Enforcement.** Delegation turns the check on, with no separate switch; a service
+whose relationship engine would not enforce — no OpenFGA, or either OIDC half
+disabled — does not start. While delegation is on, every authorization decision
+whose subject is a person also requires `active`, ordinary signed-in requests
+included; team-subject checks are unaffected. Standing that cannot be established
+is refused, and a store that cannot answer is reported as unavailable. A ban
+applies from the person's next authorization decision; work already authorized is
+not interrupted.
+
+**Identity provider.** Standing never follows identity-provider account state.
+Disabling or deleting an account there ends interactive access when the token
+expires; delegated agents and scheduled runs continue until the person is deleted
+in Fred.
+
+**Activation and rollback.** Standing needs OpenFGA 1.10 or later: every start
+rewrites the everyone entry and the marker, and a retried delete rewrites the ban,
+relying on the server ignoring duplicate writes. Publish and select a model
+carrying these relations on every participating reader and writer, then enable
+delegation at the control plane, and only then at the readers. Every service, the control plane included,
+validates the selected model at startup while its delegation is on and refuses an
+incompatible one; a reader also refuses to start ("Account standing is not
+ready.") until the marker exists. Rollback reverses the order: disable delegation
+before pointing any service back at an older model. The model and tuples already
+written may stay; with delegation off no decision consults them, so a retained ban
+has no effect.
+
 ## Configuration
 
 Here is the minimal configuration to enable ReBAC (Agentic/Knowledge Flow):

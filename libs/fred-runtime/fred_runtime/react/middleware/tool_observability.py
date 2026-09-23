@@ -43,17 +43,17 @@ Semantics preserved from `ContextAwareTool` (do not drift from these):
   node — and therefore this middleware — ever runs, so a refusal never
   produces a `"started"` event (a proposal is not an action, see
   `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`)
-- never log tool arguments, tool results, or any raw content here — only
-  identifiers and bounded outcome/error fields
+- application and audit logs contain only bounded event, outcome and reason
+  fields; identifiers remain confined to the existing KPI contract
 
 MCP failures preserve the same no-orphan guarantee: `ContextAwareTool._run` /
-`_arun` still returns formatted text for the model instead of re-raising, but
-since #2733 it pairs that text with an `is_error=True` artifact. The artifact
-is the structured signal this middleware, the runtime trace and KPI/audit use;
-raw provider text still cannot become generic user-facing error content. The
-one curated exception is Knowledge Flow `read_query` HTTP 400: its already
-redacted engine detail crosses in a Fred artifact so the SQL trace can explain
-the failed query without exposing HTTP transport details.
+`_arun` returns formatted text for the model instead of re-raising, paired with
+an `is_error=True` artifact; only a run stop is re-raised, since it ends the
+run. The artifact is the structured signal this middleware, the runtime trace
+and KPI/audit use; raw provider text still cannot become generic user-facing
+error content. The one curated exception is Knowledge Flow `read_query` HTTP
+400: its already redacted engine detail crosses in a Fred artifact so the SQL
+trace can explain the failed query without exposing HTTP transport details.
 
 How to use:
 - always part of the frame, positioned next to `TracingKpiMiddleware` (see
@@ -81,7 +81,10 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import RunStopError
+from fred_runtime.runtime_support.run_budget import RunScope
 
 from ..react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
 from ..react_tracing import RUNTIME_TOOL_SPAN_NAME, tool_span
@@ -288,7 +291,21 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             else nullcontext()
         )
 
-        emit_audit_log("agent.tool.invocation.started", **base_dims)
+        # A run that has already lost its authority makes no further outbound
+        # call, including the sibling calls of a round already in flight.
+        run_scope = RunScope.current()
+        if run_scope is not None:
+            run_scope.raise_if_stopped()
+
+        confined = delegation_enabled()
+        if confined:
+            emit_audit_log(
+                "agent.tool.invocation.started",
+                outcome="started",
+                reason="tool_invocation",
+            )
+        else:
+            emit_audit_log("agent.tool.invocation.started", **base_dims)
         with timer_ctx as kpi_dims:
             try:
                 await self._reverify_team_authorization(
@@ -305,9 +322,18 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 # outcome (distinct from "failed", see
                 # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5) and
                 # re-raise so asyncio's cancellation semantics stay intact.
-                emit_audit_log(
-                    "agent.tool.invocation.completed", outcome="cancelled", **base_dims
-                )
+                if confined:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="cancelled",
+                        reason="cancelled",
+                    )
+                else:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="cancelled",
+                        **base_dims,
+                    )
                 raise
             except Exception as e:
                 if kpi_dims is not None:
@@ -325,16 +351,38 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                         },
                         actor=KPIActor(type="system"),
                     )
-                logger.exception(
-                    "[TOOL][%s] Tool execution failed (captured)", tool_name
-                )
-                emit_audit_log(
-                    "agent.tool.invocation.completed",
-                    outcome="failed",
-                    error_code=type(e).__name__,
-                    exception_type=type(e).__name__,
-                    **base_dims,
-                )
+                if isinstance(e, RunStopError):
+                    # Reason only: `logger.exception` would print the traceback
+                    # and the chained upstream error with it, which is how a
+                    # receiver's response body ends up in the pod's logs.
+                    logger.warning(
+                        "[TOOL] event=tool_call outcome=stopped reason=%s", e.reason
+                    )
+                    reason = e.reason
+                elif confined:
+                    reason = type(e).__name__
+                    logger.error(
+                        "[TOOL] event=tool_call outcome=failed reason=%s", reason
+                    )
+                else:
+                    reason = type(e).__name__
+                    logger.exception(
+                        "[TOOL][%s] Tool execution failed (captured)", tool_name
+                    )
+                if confined:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="failed",
+                        reason=reason,
+                    )
+                else:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="failed",
+                        error_code=type(e).__name__,
+                        exception_type=type(e).__name__,
+                        **base_dims,
+                    )
                 raise
             else:
                 # A `Command` has no `.status` — LangGraph already ran the
@@ -403,19 +451,33 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                             },
                             actor=KPIActor(type="system"),
                         )
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="failed",
-                        error_code=error_code,
-                        exception_type="none",
-                        **base_dims,
-                    )
+                    if confined:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="failed",
+                            reason=error_code,
+                        )
+                    else:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="failed",
+                            error_code=error_code,
+                            exception_type="none",
+                            **base_dims,
+                        )
                 else:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="succeeded",
-                        **base_dims,
-                    )
+                    if confined:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="succeeded",
+                            reason="tool_completed",
+                        )
+                    else:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="succeeded",
+                            **base_dims,
+                        )
                 return result
 
 

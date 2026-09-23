@@ -21,6 +21,7 @@ import logging
 import re
 import threading
 from typing import Any, Optional
+from urllib.parse import unquote_plus
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 from fred_core.logs.log_structures import LogCategory
@@ -210,6 +211,46 @@ def _sanitize_sensitive_query_params(value: str) -> str:
     return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
 
 
+_DELEGATION_QUERY_NAMES = frozenset({"person", "run", "agent"})
+_DELEGATION_PATH_RE = re.compile(
+    r"/(?:agent-runs/[^/?]+/end|internal/agent-run-(?:tasks/[^/?]+/events|"
+    r"schedules/[^/?]+/occurrences)|teams/[^/?]+/agent-instances/[^/?]+/"
+    r"(?:tasks|task-schedules(?:/[^/?]+)?)|tasks/[^/?]+/(?:cancel|events))(?:[/?]|$)"
+)
+
+
+def _strip_delegation_query(value: str) -> tuple[str, bool]:
+    """Remove canonical grant pairs while preserving other pairs and their order."""
+
+    query_at = value.find("?")
+    if query_at < 0:
+        return value, False
+    fragment_at = value.find("#", query_at)
+    end = len(value) if fragment_at < 0 else fragment_at
+    pairs = value[query_at + 1 : end].split("&")
+    kept: list[str] = []
+    found = False
+    for pair in pairs:
+        encoded_name = pair.partition("=")[0]
+        if unquote_plus(encoded_name).casefold() in _DELEGATION_QUERY_NAMES:
+            found = True
+        elif pair:
+            kept.append(pair)
+    if not found:
+        return value, False
+    query = f"?{'&'.join(kept)}" if kept else ""
+    fragment = value[end:] if fragment_at >= 0 else ""
+    return f"{value[:query_at]}{query}{fragment}", True
+
+
+def _delegation_enabled() -> bool:
+    # Local import avoids coupling logging module import order to security/audit
+    # initialization, which itself imports the logging package.
+    from fred_core.security.delegation import get_delegation_config
+
+    return get_delegation_config().enabled
+
+
 class UvicornSensitiveQueryFilter(logging.Filter):
     """
     Redact sensitive query parameter values from uvicorn log records.
@@ -223,17 +264,62 @@ class UvicornSensitiveQueryFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        delegation_enabled = _delegation_enabled()
+        delegated_request = False
+        feature_path = False
         if isinstance(record.msg, str):
             record.msg = _sanitize_sensitive_query_params(record.msg)
+            if delegation_enabled:
+                record.msg, found = _strip_delegation_query(record.msg)
+                delegated_request |= found
+                feature_path |= _DELEGATION_PATH_RE.search(record.msg) is not None
 
         if isinstance(record.args, tuple):
             sanitized_args: list[object] = []
             for arg in record.args:
                 if isinstance(arg, str):
-                    sanitized_args.append(_sanitize_sensitive_query_params(arg))
+                    sanitized = _sanitize_sensitive_query_params(arg)
+                    if delegation_enabled:
+                        sanitized, found = _strip_delegation_query(sanitized)
+                        delegated_request |= found
+                        feature_path |= (
+                            _DELEGATION_PATH_RE.search(sanitized) is not None
+                        )
+                    sanitized_args.append(sanitized)
                 else:
                     sanitized_args.append(arg)
             record.args = tuple(sanitized_args)
+
+        if delegation_enabled and (delegated_request or feature_path):
+            method = None
+            status = None
+            if isinstance(record.args, tuple) and len(record.args) >= 5:
+                method = record.args[1]
+                status = record.args[4]
+                if method not in {
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "HEAD",
+                    "OPTIONS",
+                }:
+                    method = "OTHER"
+                if not isinstance(status, int) or not 100 <= status <= 599:
+                    status = None
+            record.msg = (
+                "access event=delegated_request outcome=completed method=%s status=%s"
+                if method is not None and status is not None
+                else "access event=delegated_request outcome=completed"
+            )
+            record.args = (
+                (method, status) if method is not None and status is not None else ()
+            )
+            record.__dict__.pop("message", None)
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
 
         return True
 

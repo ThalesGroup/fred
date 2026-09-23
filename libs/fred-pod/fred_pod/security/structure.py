@@ -12,9 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Annotated, List, Literal, Union
+from dataclasses import dataclass
+from typing import Annotated, List, Literal, Protocol, Union, runtime_checkable
 
-from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field, model_validator
+
+from fred_pod.security.delegation import DelegationConfig
+
+
+@runtime_checkable
+class Principal(Protocol):
+    """What a permission check needs from a caller, whichever kind it is.
+
+    Satisfied structurally by `KeycloakUser` and by the asserted principal a
+    delegation grant builds, so a receiver checks permissions the same way for both.
+    """
+
+    @property
+    def uid(self) -> str: ...
+
+    @property
+    def roles(self) -> list[str]: ...
+
+    @property
+    def client_id(self) -> str | None: ...
 
 
 class KeycloakUser(BaseModel):
@@ -32,6 +53,11 @@ class KeycloakUser(BaseModel):
             "rather than a broad service role."
         ),
     )
+    token_issuer: str | None = Field(default=None, exclude=True, repr=False)
+    token_audiences: frozenset[str] = Field(
+        default_factory=frozenset, exclude=True, repr=False
+    )
+    token_type: str | None = Field(default=None, exclude=True, repr=False)
 
     def __repr_args__(self):
         # Directly identifying data must never reach a log line, and an
@@ -56,16 +82,25 @@ SERVICE_AGENT_ROLE = "service_agent"
 LOCAL_DEV_CLIENT_ID = "local-dev"
 
 
-def is_service_agent(user: KeycloakUser) -> bool:
+def is_service_agent(user: Principal) -> bool:
     """Return True when the caller is a service identity (holds ``service_agent``).
 
     Identity predicate on the JWT (reads ``user.roles``) — not a ReBAC check.
     Used by execution-authorization enforcement points (fred-runtime and the
     control-plane) to recognize the evaluation worker for team ``can_read``,
     scoped to the request ``team_id`` (RFC EVAL-AUTH, Solution A). No OpenFGA
-    tuple links the service to a team.
+    tuple links the service to a team. A principal asserted through a delegation
+    grant carries no roles at all, so this is always False for one.
     """
     return SERVICE_AGENT_ROLE in (user.roles or [])
+
+
+@dataclass(frozen=True, slots=True)
+class PrincipalContext:
+    """The bearer-authenticated caller and the person authorization acts on."""
+
+    caller: KeycloakUser
+    subject: Principal
 
 
 class M2MSecurity(BaseModel):
@@ -76,6 +111,9 @@ class M2MSecurity(BaseModel):
     client_id: str
     audience: str | None = None
     secret_env_var: str = "M2M_CLIENT_SECRET"
+    refresh_failure_cooldown_seconds: float = Field(
+        default=5.0, gt=0, le=60, allow_inf_nan=False
+    )
 
 
 class UserSecurity(BaseModel):
@@ -116,6 +154,17 @@ class OpenFgaRebacConfig(RebacBaseConfig):
         default=True,
         description="Synchronize the authorization model when creating the engine",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_the_former_key(cls, data: object) -> object:
+        # Ignored, the former key would leave the check off without a word.
+        if isinstance(data, dict) and "standing_gate_enabled" in data:
+            raise ValueError(
+                "standing_gate_enabled was removed; enabling delegation enforces standing"
+            )
+        return data
+
     token_env_var: str = Field(
         default="OPENFGA_API_TOKEN",
         description="Environment variable that stores the OpenFGA API token",
@@ -140,6 +189,7 @@ RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="t
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
+    delegation: DelegationConfig = Field(default_factory=DelegationConfig)
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None
     profile: Literal["c3"] | None = Field(

@@ -275,6 +275,25 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/applications` }),
     }),
+    registerAgentRun: build.mutation<RegisterAgentRunApiResponse, RegisterAgentRunApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/agent-runs`,
+        method: "POST",
+        body: queryArg.registerAgentRunRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    endAgentRun: build.mutation<EndAgentRunApiResponse, EndAgentRunApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/agent-runs/${queryArg.runId}/end`,
+        method: "POST",
+        body: queryArg.endAgentRunRequest,
+      }),
+    }),
     getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: build.query<
       GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse,
       GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg
@@ -616,18 +635,23 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
           method: "POST",
+          params: {
+            person: queryArg.person,
+            run: queryArg.run,
+            agent: queryArg.agent,
+          },
         }),
       }),
-    postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
-    >({
+    prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
           agent_model_override: queryArg.agentModelOverride,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
         },
       }),
     }),
@@ -710,9 +734,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
-    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
+    publishKnowledgeBaseDefinition: build.mutation<
+      PublishKnowledgeBaseDefinitionApiResponse,
+      PublishKnowledgeBaseDefinitionApiArg
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
@@ -778,15 +802,11 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    getKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGet:
-      build.query<
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse,
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
-        }),
+    getKnowledgeBaseRunContext: build.query<GetKnowledgeBaseRunContextApiResponse, GetKnowledgeBaseRunContextApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
       }),
+    }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -1003,6 +1023,48 @@ const injectedRtkApi = api.injectEndpoints({
       GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
+    }),
+    startAgentRunTask: build.mutation<StartAgentRunTaskApiResponse, StartAgentRunTaskApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/tasks`,
+        method: "POST",
+        body: queryArg.startAgentRunTaskRequest,
+      }),
+    }),
+    createAgentRunSchedule: build.mutation<CreateAgentRunScheduleApiResponse, CreateAgentRunScheduleApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/task-schedules`,
+        method: "POST",
+        body: queryArg.createAgentRunScheduleRequest,
+      }),
+    }),
+    listAgentRunSchedules: build.query<ListAgentRunSchedulesApiResponse, ListAgentRunSchedulesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/task-schedules`,
+      }),
+    }),
+    deleteAgentRunSchedule: build.mutation<DeleteAgentRunScheduleApiResponse, DeleteAgentRunScheduleApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/task-schedules/${queryArg.scheduleId}`,
+        method: "DELETE",
+      }),
+    }),
+    recordAgentRunTaskEvent: build.mutation<RecordAgentRunTaskEventApiResponse, RecordAgentRunTaskEventApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/agent-run-tasks/${queryArg.taskId}/events`,
+        method: "POST",
+        body: queryArg.agentRunEventReport,
+      }),
+    }),
+    createAgentRunScheduleOccurrence: build.mutation<
+      CreateAgentRunScheduleOccurrenceApiResponse,
+      CreateAgentRunScheduleOccurrenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/agent-run-schedules/${queryArg.scheduleId}/occurrences`,
+        method: "POST",
+        body: queryArg.scheduledAgentRunOccurrenceRequest,
+      }),
     }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
@@ -1643,6 +1705,18 @@ export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiRespon
 export type GetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetApiArg = {
   teamId: string;
 };
+export type RegisterAgentRunApiResponse = /** status 201 Successful Response */ RegisterAgentRunResponse;
+export type RegisterAgentRunApiArg = {
+  person: string;
+  run: string;
+  agent: string;
+  registerAgentRunRequest: RegisterAgentRunRequest;
+};
+export type EndAgentRunApiResponse = unknown;
+export type EndAgentRunApiArg = {
+  runId: string;
+  endAgentRunRequest: EndAgentRunRequest;
+};
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
   /** status 200 Successful Response */ FrontendBootstrap;
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
@@ -1870,14 +1944,19 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     teamId: string;
     runtimeId: string;
     agentId: string;
+    person?: string | null;
+    run?: string | null;
+    agent?: string | null;
   };
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
-  /** status 200 Successful Response */ ExecutionPreparation;
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
+export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
+export type PrepareAgentExecutionApiArg = {
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
   agentModelOverride?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
 };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
@@ -1927,9 +2006,9 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
+export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+export type PublishKnowledgeBaseDefinitionApiArg = {
   name: string;
   knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
 };
@@ -1963,14 +2042,12 @@ export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInst
 export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
   instanceId: string;
 };
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse =
-  /** status 200 Successful Response */ KnowledgeBaseRunContext;
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg =
-  {
-    definitionId: string;
-    instanceId: string;
-    runId: string;
-  };
+export type GetKnowledgeBaseRunContextApiResponse = /** status 200 Successful Response */ KnowledgeBaseRunContext;
+export type GetKnowledgeBaseRunContextApiArg = {
+  definitionId: string;
+  instanceId: string;
+  runId: string;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -2113,6 +2190,40 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type StartAgentRunTaskApiResponse = /** status 202 Successful Response */ StartTaskResponse;
+export type StartAgentRunTaskApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  startAgentRunTaskRequest: StartAgentRunTaskRequest;
+};
+export type CreateAgentRunScheduleApiResponse = /** status 201 Successful Response */ AgentRunScheduleSummary;
+export type CreateAgentRunScheduleApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  createAgentRunScheduleRequest: CreateAgentRunScheduleRequest;
+};
+export type ListAgentRunSchedulesApiResponse = /** status 200 Successful Response */ AgentRunScheduleSummary[];
+export type ListAgentRunSchedulesApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type DeleteAgentRunScheduleApiResponse = unknown;
+export type DeleteAgentRunScheduleApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  scheduleId: string;
+};
+export type RecordAgentRunTaskEventApiResponse = unknown;
+export type RecordAgentRunTaskEventApiArg = {
+  taskId: string;
+  agentRunEventReport: AgentRunEventReport;
+};
+export type CreateAgentRunScheduleOccurrenceApiResponse =
+  /** status 200 Successful Response */ ScheduledAgentRunOccurrence;
+export type CreateAgentRunScheduleOccurrenceApiArg = {
+  scheduleId: string;
+  scheduledAgentRunOccurrenceRequest: ScheduledAgentRunOccurrenceRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -2125,6 +2236,9 @@ export type StartTaskControlPlaneV1TasksPostApiArg = {
     | ({
         kind: "migration";
       } & StartMigrationRequest)
+    | ({
+        kind: "agent_run";
+      } & StartAgentRunRequest)
     | ({
         kind: "erasure";
       } & StartErasureRequest);
@@ -2726,6 +2840,146 @@ export type ApplicationList = {
   schema_version: "1";
   items: ApplicationSummary[];
 };
+export type ManagedAgentUiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  widget?: string | null;
+  visible_when?: string | null;
+  advanced?: boolean;
+};
+export type ManagedAgentFieldSpec = {
+  key: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  required?: boolean;
+  default?: any | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?: string | null;
+  ui?: ManagedAgentUiHints;
+};
+export type ManagedAgentTuning = {
+  role: string;
+  description: string;
+  /** User-authored statement of the intended use case for this agent instance (purpose, target users/impacted parties, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Defaults to '' so pre-#2105 rows without this key in their stored tuning_json still deserialize; the product-facing requiredness is enforced by the API layer (CreateAgentInstanceRequest and the agent form), not by this default. */
+  usage_statement?: string;
+  tags?: string[];
+  fields?: ManagedAgentFieldSpec[];
+  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
+    
+    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
+  reasoning_enabled?: boolean;
+  /** When this agent offers reasoning, does a NEW conversation start with the composer toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control; the user can still flip it off per question — this decides where the switch starts, never where it stays.
+    
+    Meaningless unless `reasoning_enabled` is True: with the offer off no control is emitted at all, so no default can apply. The value is kept rather than reset in that case, so an author who turns the offer back on recovers their choice.
+    
+    Defaults to False, matching the hardcoded default this field replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured reasoning re-issuing duplicate tool calls on this stack, so starting ON is an opt-in an author makes deliberately. */
+  reasoning_default_on?: boolean;
+  /** Optional managed-run wall-clock ceiling. When unset, admission uses the runtime deployment default. */
+  run_ceiling_seconds?: number | null;
+  /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
+  selected_capability_ids?: string[] | null;
+  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
+  capability_config?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  /** User-set agent tuning values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
+export type ManagedAgentRuntimeBinding = {
+  agent_instance_id: string;
+  template_agent_id: string;
+  display_name: string;
+  owner_scope?: "team";
+  owner_user_id?: string | null;
+  owner_team_id: string;
+  enabled?: boolean;
+  tuning: ManagedAgentTuning;
+  team_capability_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  reasoning_enabled_model_ids?: string[];
+  platform_chat_model_binding?: ModelBinding | null;
+  platform_prompt?: string | null;
+};
+export type RegisterAgentRunResponse = {
+  run_id: string;
+  run_ceiling_seconds: number;
+  binding: ManagedAgentRuntimeBinding | null;
+};
+export type RegisterAgentRunRequest = {
+  agent_instance_id?: string | null;
+  agent_id?: string | null;
+  team_id?: string | null;
+  started_at: string;
+  run_ceiling_seconds?: number;
+  mode?: "attended" | "background";
+  origin_caller?: string | null;
+};
+export type RuntimeStopReason =
+  | "authority_lost"
+  | "run_ceiling_reached"
+  | "child_limit_reached"
+  | "cancelled"
+  | "delegation_unavailable";
+export type EndAgentRunRequest = {
+  outcome: "succeeded" | "failed" | "cancelled";
+  reason?: RuntimeStopReason | null;
+};
 export type FrontendFeatureFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
@@ -2796,38 +3050,6 @@ export type FrontendConfig = {
   root_bootstrap_required: boolean;
   /** Deployer-configured global announcement banner, from `platform.frontend.info_banner`. `None` when the deployment configures none — the frontend then renders nothing. Deliberately on this public pre-auth surface, not the authenticated `FrontendBootstrap`: the banner shows on every page, including the GCU-acceptance and root-bootstrap screens, which render before `/frontend/bootstrap` can succeed. Carries only deployer-authored announcement content — never anything sensitive. */
   info_banner?: InfoBanner | null;
-};
-export type ManagedAgentUiHints = {
-  multiline?: boolean;
-  max_lines?: number;
-  placeholder?: string | null;
-  markdown?: boolean;
-  textarea?: boolean;
-  group?: string | null;
-  hide?: boolean;
-  widget?: string | null;
-  visible_when?: string | null;
-  advanced?: boolean;
-};
-export type ManagedAgentFieldSpec = {
-  key: string;
-  type: string;
-  title: string;
-  description?: string | null;
-  description_by_lang?: {
-    [key: string]: string;
-  } | null;
-  required?: boolean;
-  default?: any | null;
-  default_by_lang?: {
-    [key: string]: string;
-  } | null;
-  enum?: string[] | null;
-  min?: number | null;
-  max?: number | null;
-  pattern?: string | null;
-  item_type?: string | null;
-  ui?: ManagedAgentUiHints;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -3230,88 +3452,6 @@ export type CreatePromptCategoryRequest = {
 };
 export type UpdatePromptCategoryRequest = {
   name: string;
-};
-export type ManagedAgentTuning = {
-  role: string;
-  description: string;
-  /** User-authored statement of the intended use case for this agent instance (purpose, target users/impacted parties, data handled, outputs, error impact) — used to screen for platform/organization risk (#2105). Defaults to '' so pre-#2105 rows without this key in their stored tuning_json still deserialize; the product-facing requiredness is enforced by the API layer (CreateAgentInstanceRequest and the agent form), not by this default. */
-  usage_statement?: string;
-  tags?: string[];
-  fields?: ManagedAgentFieldSpec[];
-  /** Does this agent OFFER per-question reasoning (REASON-01 level 3, `MODEL-REASONING-ENABLEMENT-RFC.md` §6)? A first-class agent property, deliberately NOT a capability: reasoning is a property of how the model is called, not a tool the agent can use, so it belongs next to role/description rather than in the tool picker.
-    
-    True only means the chat composer OFFERS the toggle — it never turns reasoning on by itself. The user still has to flip it per question (level 4, default off), and a platform admin still has to have enabled the model's reasoning (level 2, a ceiling). */
-  reasoning_enabled?: boolean;
-  /** When this agent offers reasoning, does a NEW conversation start with the composer toggle already ON (REASON-01 Amendment B)? Seeds `params.default` on the emitted `reasoning_toggle` control; the user can still flip it off per question — this decides where the switch starts, never where it stays.
-    
-    Meaningless unless `reasoning_enabled` is True: with the offer off no control is emitted at all, so no default can apply. The value is kept rather than reset in that case, so an author who turns the offer back on recovers their choice.
-    
-    Defaults to False, matching the hardcoded default this field replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured reasoning re-issuing duplicate tool calls on this stack, so starting ON is an opt-in an author makes deliberately. */
-  reasoning_default_on?: boolean;
-  /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
-  selected_capability_ids?: string[] | null;
-  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
-  capability_config?: {
-    [key: string]: {
-      [key: string]: any;
-    };
-  };
-  /** User-set agent tuning values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
-  values?: {
-    [key: string]:
-      | string
-      | number
-      | number
-      | boolean
-      | (string | number | number | boolean)[]
-      | {
-          [key: string]: string | number | number | boolean;
-        };
-  };
-};
-export type ModelBindingSettings = {
-  base_url?: string | null;
-  azure_endpoint?: string | null;
-  azure_openai_api_version?: string | null;
-  azure_ad_client_id?: string | null;
-  azure_ad_client_scope?: string | null;
-  azure_apim_base_url?: string | null;
-  azure_apim_resource_path?: string | null;
-  azure_tenant_id?: string | null;
-  project?: string | null;
-  location?: string | null;
-  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
-  temperature?: number | null;
-  max_tokens?: number | null;
-  top_p?: number | null;
-  max_retries?: number | null;
-  streaming?: boolean | null;
-  stream_usage?: boolean | null;
-  request_timeout?: number | null;
-  reasoning_effort?: string | null;
-};
-export type ModelBinding = {
-  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
-  name: string;
-  settings?: ModelBindingSettings;
-};
-export type ManagedAgentRuntimeBinding = {
-  agent_instance_id: string;
-  template_agent_id: string;
-  display_name: string;
-  owner_scope?: "team";
-  owner_user_id?: string | null;
-  owner_team_id: string;
-  enabled?: boolean;
-  tuning: ManagedAgentTuning;
-  team_capability_settings?: {
-    [key: string]: {
-      [key: string]: any;
-    };
-  };
-  reasoning_enabled_model_ids?: string[];
-  platform_chat_model_binding?: ModelBinding | null;
-  platform_prompt?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -3789,6 +3929,77 @@ export type PlatformInstructions = {
 export type StartTaskResponse = {
   task_id: string;
 };
+export type AgentRunScope = {
+  document_ids?: string[];
+  library_ids?: string[];
+};
+export type StartAgentRunTaskRequest = {
+  prompt: string;
+  scope?: AgentRunScope;
+};
+export type AgentRunScheduleSummary = {
+  schedule_id: string;
+  team_id: string;
+  agent_instance_id: string;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  created_by: string;
+  created_at: string;
+};
+export type CreateAgentRunScheduleRequest = {
+  prompt: string;
+  scope?: AgentRunScope;
+  schedule: {
+    type: "interval";
+  } & IntervalSchedule;
+  enabled: true;
+};
+export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+export type AgentRunEventReport = {
+  state: TaskState;
+  seq?: number;
+  reason?:
+    | (
+        | "completed"
+        | "authority_lost"
+        | "registration_failed"
+        | "delegation_unavailable"
+        | "run_ceiling_reached"
+        | "child_limit_reached"
+        | "cancelled"
+        | "execution_failed"
+      )
+    | null;
+};
+export type AgentRunBudget = {
+  wall_clock_seconds: number;
+  max_concurrent_children: number;
+};
+export type AgentRunAdmissionRecord = {
+  person_id: string;
+  roles?: string[];
+  team_id: string;
+  runtime_id: string;
+  agent_instance_id: string;
+  agent_id: string;
+  prompt: string;
+  scope?: AgentRunScope;
+  mode?: "background";
+  created_by: string;
+  created_at: string;
+  run_id: string;
+  budget: AgentRunBudget;
+};
+export type ScheduledAgentRunOccurrence = {
+  task_id: string;
+  workflow_id: string;
+  record: AgentRunAdmissionRecord;
+};
+export type ScheduledAgentRunOccurrenceRequest = {
+  workflow_id: string;
+  run_id: string;
+};
 export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type StartIngestionParams = {
   resource_ids: string[];
@@ -3808,12 +4019,14 @@ export type StartEvaluationRequest = {
 export type StartMigrationRequest = {
   kind?: "migration";
 };
+export type StartAgentRunRequest = {
+  kind?: "agent_run";
+};
 export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
 export type StartErasureRequest = {
   kind?: "erasure";
   reason: ErasureReason;
 };
-export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
   type: string;
   id: string;
@@ -3848,6 +4061,21 @@ export type EvaluationDetail = {
   failed: number;
   execution_errors: number;
   scoring_errors: number;
+};
+export type AgentRunDetail = {
+  mode?: "background";
+  reason?:
+    | (
+        | "completed"
+        | "authority_lost"
+        | "registration_failed"
+        | "delegation_unavailable"
+        | "run_ceiling_reached"
+        | "child_limit_reached"
+        | "cancelled"
+        | "execution_failed"
+      )
+    | null;
 };
 export type TaskLogDetail = {
   level: "info" | "warn" | "error";
@@ -3900,7 +4128,7 @@ export type TaskSummary = {
   created_at: string;
   updated_at: string;
   scheduled_for?: string | null;
-  detail?: IngestionDetail | EvaluationDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
+  detail?: IngestionDetail | EvaluationDetail | AgentRunDetail | TaskLogDetail | MigrationDetail | ErasureDetail | null;
   acknowledged_at?: string | null;
   acknowledged_by?: string | null;
 };
@@ -4181,6 +4409,8 @@ export const {
   useRevokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDeleteMutation,
   useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
   useLazyGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery,
+  useRegisterAgentRunMutation,
+  useEndAgentRunMutation,
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
@@ -4236,7 +4466,7 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -4247,7 +4477,7 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
-  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
+  usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
@@ -4258,8 +4488,8 @@ export const {
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
-  useGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
-  useLazyGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
+  useGetKnowledgeBaseRunContextQuery,
+  useLazyGetKnowledgeBaseRunContextQuery,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
@@ -4298,6 +4528,13 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useStartAgentRunTaskMutation,
+  useCreateAgentRunScheduleMutation,
+  useListAgentRunSchedulesQuery,
+  useLazyListAgentRunSchedulesQuery,
+  useDeleteAgentRunScheduleMutation,
+  useRecordAgentRunTaskEventMutation,
+  useCreateAgentRunScheduleOccurrenceMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

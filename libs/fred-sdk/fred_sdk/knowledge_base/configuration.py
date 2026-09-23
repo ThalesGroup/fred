@@ -149,6 +149,7 @@ class PodConfiguration(BaseModel):
             keycloak_realm_url=str(self.security.m2m.realm_url).rstrip("/"),
             client_id=self.security.m2m.client_id,
             secret_env=self.security.m2m.secret_env_var,
+            refresh_failure_cooldown_seconds=self.security.m2m.refresh_failure_cooldown_seconds,
         )
 
     # ── loading ───────────────────────────────────────────────────────────────

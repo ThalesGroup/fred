@@ -64,3 +64,41 @@ async def test_new_team_defaults_to_private_invite_only(tmp_path: Path) -> None:
         assert fetched.visibility == TeamVisibility.PRIVATE
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_nested_admission_locks_share_transaction_and_rollback(
+    tmp_path: Path,
+) -> None:
+    """A lock holder must not need a second pooled connection for its writes."""
+    from sqlalchemy import text
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'lock-transaction.db'}",
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=0.1,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    store = TeamMetadataStore(engine)
+    try:
+        with pytest.raises(RuntimeError, match="abort admission"):
+            async with store.advisory_lock("standing") as session:
+                # Force the only connection to be checked out before nesting.
+                await session.execute(text("SELECT 1"))
+                async with store.advisory_lock("lifecycle", session=session) as nested:
+                    await store.create(
+                        TeamId("synthetic-rollback-team"), "Synthetic", session=nested
+                    )
+                raise RuntimeError("abort admission")
+        assert await store.get_by_team_id(TeamId("synthetic-rollback-team")) is None
+        async with store.advisory_lock("lifecycle") as session:
+            await store.create(
+                TeamId("synthetic-committed-team"), "Synthetic", session=session
+            )
+        assert (
+            await store.get_by_team_id(TeamId("synthetic-committed-team")) is not None
+        )
+    finally:
+        await engine.dispose()

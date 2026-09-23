@@ -19,15 +19,15 @@ import {
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  usePrepareAgentExecutionMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  useCreateTagKnowledgeFlowV1TagsPostMutation,
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useCreateTagMutation,
+  useDeleteTagMutation,
+  useLazyListTagsQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { awaitIngestion, streamAgentTurn, uploadDocument } from "./actions";
 import type { PipelineDeps, Scenario, StepReport } from "./types";
@@ -52,15 +52,14 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
   // alias has no tuple, so it fails closed with 403 (RUNTIME-07 rev. 2). Mirrors
   // what ManagedChatPage already sends from the bootstrap-resolved team id.
   const teamId = personalTeamId(KeyCloakService.GetUserId() ?? "");
-  const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
-  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
-  const [prepareExecution] =
-    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const [createTag] = useCreateTagMutation();
+  const [deleteTag] = useDeleteTagMutation();
+  const [prepareExecution] = usePrepareAgentExecutionMutation();
   const [listTemplates] = useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery();
   const [enrollInstance] = usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
   const [deleteInstance] =
     useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation();
-  const [listTags] = useLazyListAllTagsKnowledgeFlowV1TagsGetQuery();
+  const [listTags] = useLazyListTagsQuery();
   const [createPrompt] = usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation();
   const [deletePrompt] = useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation();
   const [postSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();

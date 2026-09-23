@@ -25,10 +25,20 @@ never on a broad service role.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fred_core import KeycloakUser, get_current_user, get_current_user_without_gcu
+from fred_core import (
+    AssertedUser,
+    KeycloakUser,
+    PrincipalContext,
+    TeamPermission,
+    get_current_user,
+    get_current_user_without_gcu,
+    get_delegation_config,
+    require_workload_caller,
+)
+from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError
 from fred_sdk.knowledge_base import (
     KNOWLEDGE_BASE_ID_PATTERN,
@@ -69,6 +79,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.teams.service import require_team_access
 
 router = APIRouter(tags=["Knowledge Bases"])
 
@@ -92,6 +103,7 @@ ProductDependencies = Annotated[
     "/knowledge-bases/definitions/{name}",
     response_model=KnowledgeBasePublicationResult,
     summary="Publish a Knowledge Base declaration from its own image.",
+    operation_id="publish_knowledge_base_definition",
 )
 async def put_knowledge_base_definition(
     name: Annotated[str, Path(min_length=1, pattern=KNOWLEDGE_BASE_ID_PATTERN)],
@@ -108,6 +120,8 @@ async def put_knowledge_base_definition(
     body because it is a claim the image makes about itself — a name alone
     cannot say how much of it its contributor owns.
     """
+    if get_delegation_config().enabled:
+        require_workload_caller(user)
     try:
         declaration = KnowledgeBaseDeclaration(
             id=name,
@@ -272,26 +286,49 @@ async def delete_knowledge_base_instance(
     "/knowledge-bases/definitions/{definition_id}/instances/{instance_id}"
     "/runs/{run_id}/context",
     response_model=KnowledgeBaseRunContext,
+    operation_id="get_knowledge_base_run_context",
     summary="One run's configuration, for the pod serving it.",
 )
 async def get_knowledge_base_run_context(
     definition_id: str,
     instance_id: str,
     run_id: str,
+    request: Request,
     deps: ProductDependencies,
     # Not `get_current_user`: the caller is a confidential client with no user
     # row, so persisted GCU acceptance would refuse it for ever.
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser | AssertedUser = Depends(get_current_user_without_gcu),
 ) -> KnowledgeBaseRunContext:
     """Authorized by the exact client this definition is bound to — never by a
     broad service role, since this is where a source's secrets are."""
     try:
-        return await build_run_context(
-            user=user,
+        caller = user
+        asserted: AssertedUser | None = None
+        if get_delegation_config().enabled:
+            context = getattr(request.state, "principal_context", None)
+            if not isinstance(context, PrincipalContext) or not isinstance(
+                context.subject, AssertedUser
+            ):
+                raise HTTPException(status_code=403, detail="delegated_grant_required")
+            require_workload_caller(context.caller)
+            if context.subject.run_id != run_id:
+                raise HTTPException(status_code=403, detail="run_target_mismatch")
+            caller = context.caller
+            asserted = context.subject
+        result = await build_run_context(
+            user=cast(KeycloakUser, caller),
             definition_id=definition_id,
             instance_id=instance_id,
             run_id=run_id,
             deps=deps,
         )
+        if get_delegation_config().enabled:
+            await require_team_access(
+                cast(KeycloakUser, asserted),
+                TeamId(result.team_id),
+                deps.team_dependencies,
+                [TeamPermission.CAN_USE_TEAM_KNOWLEDGE_BASES],
+            )
+        return result
     except (InstanceConfigurationInvalid, RunAccessDenied, RunNotFound) as exc:
         raise _map_error(exc) from exc

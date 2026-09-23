@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fred_core import KeycloakUser
+from fred_core.security.delegation import CallerPolicy, DelegationConfig, initialize_delegation
 from fred_core.security.structure import SERVICE_AGENT_ROLE
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
@@ -132,6 +133,26 @@ async def test_a_person_is_refused_inside_a_library(store):
 @pytest.mark.parametrize("tag_id", ["lib", "sub", "deep"])
 async def test_the_machine_itself_is_never_refused(store, tag_id):
     await refuse_if_synchronized_by_id(store, tag_id, machine_identity())
+
+
+@pytest.mark.asyncio
+async def test_service_role_does_not_bypass_folder_guard_during_delegation(store):
+    initialize_delegation(
+        DelegationConfig(
+            enabled=True,
+            caller_policies=[
+                CallerPolicy(
+                    client_id="runtime",
+                    subject="runtime-subject",
+                )
+            ],
+        )
+    )
+    try:
+        with pytest.raises(FolderIsSynchronized):
+            await refuse_if_synchronized_by_id(store, "deep", machine_identity())
+    finally:
+        initialize_delegation(DelegationConfig())
 
 
 @pytest.mark.asyncio

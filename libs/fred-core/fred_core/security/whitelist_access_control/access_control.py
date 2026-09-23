@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import FrozenSet
 
 from fred_core.common import ThreadSafeLRUCache
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, Principal
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,22 @@ def _normalize_email(value: str) -> str:
     return value.strip().lower()
 
 
+def _uid_entry(value: str) -> str:
+    return f"uid:{value.strip()}"
+
+
 def _parse_whitelist(raw: str) -> FrozenSet[str]:
     users: set[str] = set()
     for line in raw.splitlines():
         cleaned = line.strip()
         if not cleaned or cleaned.startswith("#"):
             continue
-        users.add(_normalize_email(cleaned))
+        if cleaned.lower().startswith("uid:"):
+            subject = cleaned.split(":", 1)[1].strip()
+            if subject:
+                users.add(_uid_entry(subject))
+        else:
+            users.add(_normalize_email(cleaned))
     return frozenset(users)
 
 
@@ -97,4 +106,11 @@ def is_email_whitelisted(email: str | None) -> bool:
 
 
 def is_user_whitelisted(user: KeycloakUser) -> bool:
-    return is_email_whitelisted(user.email)
+    users = retrieve_authorized_users()
+    return _uid_entry(user.uid) in users or is_email_whitelisted(user.email)
+
+
+def is_principal_whitelisted(user: Principal) -> bool:
+    if isinstance(user, KeycloakUser):
+        return is_user_whitelisted(user)
+    return _uid_entry(user.uid) in retrieve_authorized_users()

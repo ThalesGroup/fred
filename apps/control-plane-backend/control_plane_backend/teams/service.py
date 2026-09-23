@@ -28,6 +28,7 @@ from fred_core import (
     TeamPermission,
     TeamVisibility,
     create_keycloak_admin,
+    get_delegation_config,
     is_service_agent,
     team_organization_relation,
 )
@@ -2185,7 +2186,11 @@ async def _validate_team_and_check_permission(
     permissions_are_read_only = (
         set(permissions) <= SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS
     )
-    if is_service_agent(user) and permissions_are_read_only:
+    if (
+        not get_delegation_config().enabled
+        and is_service_agent(user)
+        and permissions_are_read_only
+    ):
         # Solution A (RFC EVAL-AUTH): recognize the evaluation worker's service
         # identity for team read, scoped to the request team_id, without any stored
         # OpenFGA relation. Write permissions are NOT in the allowed set, so mutating

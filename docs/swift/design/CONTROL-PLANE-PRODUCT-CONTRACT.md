@@ -8,13 +8,17 @@
 > `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
 > [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2 and §8.11.
 
-> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> The shared team check `_validate_team_and_check_permission` now recognizes a **service
+> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A;
+> scoped to non-delegated deployments 2026-09-19).** Where delegation is **not** enabled,
+> the shared team check `_validate_team_and_check_permission` recognizes a **service
 > identity** (`service_agent` role — the evaluation worker) for **read-only** team access
 > (`can_read`), **scoped to the request `team_id`**, without any OpenFGA tuple. A **write**
 > permission (e.g. `can_update_agents`) is NOT bypassed: it falls through to the normal
 > ReBAC check and is therefore denied (the worker holds no team relation). Regular users
 > are unchanged. This covers the `prepare-execution` path the async worker calls.
+> Where delegation **is** enabled, that identity is not recognized here and every
+> team permission is decided on the person the grant names — see the 2026-09-19
+> section below.
 
 This document is the authoritative design reference for the first
 control-plane product migration slice.
@@ -1138,8 +1142,12 @@ validates it against the team's `can_use`-enabled chat profiles (fails
 closed, 422, on an unknown or disabled profile) and overwrites this
 instance's entry in the returned `agent_profile_overrides` snapshot for
 **this call only** — never persisted, never visible via
-`GET …/routing-policy`. Restricted to the evaluator's M2M service identity
-(`is_service_agent`); rejected (403) for a regular user token. This sits at
+`GET …/routing-policy`. Where delegation is not enabled, restricted to the
+evaluator's M2M service identity (`is_service_agent`); rejected (403) for a
+regular user token. Under delegation the override is authorized on the
+allow-listed workload caller instead: the grant's subject is a person carrying
+no roles, so the decision is made on the bearer, not on a service role. This
+sits at
 the "team override" precedence level — a platform chat binding or pod
 static override still wins silently over it; `fred-agent-evaluator` detects
 that by comparing the requested override against the model that actually
@@ -4067,3 +4075,111 @@ Temporal cancellation. Other task kinds retain their existing behavior. The
 resource document menu no longer offers Stop ingestion. This delivery exposes
 success/failure completion; user cancellation and its cleanup semantics are
 deferred. See [INGESTION.md](INGESTION.md).
+
+## Delegated run lifecycle (2026-09-17)
+
+`POST /agent-runs` records a run and resolves its managed runtime binding in one
+operation. The existing runtime-binding GET stays read-only. Authentication uses
+the runtime's workload bearer and its configured client/subject identity binding;
+the asserted person must have standing and permission to use the team's agents.
+Person, run and acting agent come from the validated grant. The body selects one
+managed instance or direct template, admission start time, mode and default
+ceiling; a managed instance requires a team and supplies its stored ceiling
+override. The response returns the run ID, effective ceiling and managed binding.
+Direct development execution is supported outside the hardened profile, requires
+standing, and checks team permission when a team is present.
+
+`POST /agent-runs/{run_id}/end` accepts a terminal outcome and optional declared
+stop reason from the same verified reporting client and service-account subject.
+It can record completion after the person's standing is removed. It changes no
+identity, scope or execution permission. A matching repeated outcome succeeds,
+a conflicting outcome returns 409, and a missing or purged record returns 404.
+Registration and deletion share the account lifecycle lock; account deletion
+purges the person's records. Runtime callers do not retry registration or terminal
+reports and never recreate a record after a failed report.
+
+This registry retains lifecycle attribution for product operations. Receivers
+authorize their own requests without querying it. Concrete implementation and
+verification requirements live in the delegated-execution OpenSpec change.
+
+### Workload identity and person authorization (2026-09-18)
+
+Trusted workload client/service-account pairs can present user grants. The asserted
+person's standing, whitelist and ordinary action, resource and team permissions
+govern access. Caller-only lifecycle
+and publication APIs retain their workload and record/resource ownership checks.
+The runtime's explicit own-credential exceptions are listed in the foundation
+OpenSpec design and remain enforced; full user/agent parity is outside this step.
+
+## Delegated background tasks and schedules (2026-09-17)
+
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/tasks` requires current
+standing and permission to use the team's agents. The request supplies prompt and
+document/library scope; admission derives the person, team, managed binding,
+workload identity and execution budget. The durable admission contains no bearer
+or refresh token. The task uses the existing task list, event and cancel APIs,
+restricted to its owner or a team administrator with current standing.
+
+The same team/instance path exposes `POST`, `GET` and `DELETE /task-schedules`
+(`DELETE` includes `/{schedule_id}`). Creation requires explicit `enabled: true`.
+Each occurrence rechecks the creator's standing and permission and the current
+enabled runtime/instance binding before creating one durable task. Repeated
+occurrence requests return the same task and execution workflow; concurrent claims
+are serialized. A changed workload or runtime binding refuses the occurrence.
+
+The configured runtime worker executes each task through normal admission,
+registration, credential-provider and budget enforcement. Execution activities
+are not retried; bounded transport retries are permitted while claiming an
+occurrence, with authorization refusals terminal. Cancellation waits for activity
+and child cleanup. The internal occurrence and task-event endpoints accept only
+the recorded, verified workload client and service-account subject. A missing
+admission returns 404 without recreation; terminal reports are idempotent only
+when state and reason match, including `child_limit_reached`.
+
+Worker activation requires explicit scheduler configuration. Foreground reconnect
+never promotes a run into this background lane. Deployment enablement and complete
+system verification remain in the existing delegation changes.
+
+## Team access under delegation is decided on the person a grant names (2026-09-19)
+
+`_validate_team_and_check_permission` applies the read-only service-identity
+shortcut only where delegation is not enabled. Where delegation is enabled, every
+team permission it is asked for — read included — is decided by the ReBAC check on
+the acting subject, and that subject is the person a validated grant names. The
+asserted principal carries no roles, so the shortcut can never apply to it. A
+service bearer presenting no grant is not an asserted principal at all: it is
+refused like any other caller holding no relation to the team. A write permission
+is never shortcut, on either configuration.
+
+This governs every route reaching the shared team gate, `prepare-execution`
+included. The one-shot `agent_model_override` on that route follows the same
+split: under delegation it is authorized on the allow-listed workload caller
+rather than on the `service_agent` role, which the grant's subject never holds.
+
+## Deleting a person removes their standing first (2026-09-23)
+
+`DELETE /users/{user_id}` keeps its `can_administer_users` check and its 403 for
+the bootstrap root (§43). An id that names no single person — the wildcard `*`
+or any id containing `#` — returns 404 and changes nothing. Otherwise the route
+runs in this order:
+
+1. It resolves the identity-provider admin client. With identity administration
+   off it returns 503 and changes nothing.
+2. Under the agent-run lifecycle lock, which serializes it against run, task and
+   schedule admission: while delegation is on it writes the ban
+   (`organization:fred#suspended@user:<id>`); with ReBAC enabled it deletes the
+   person's other relations, the ban excepted; it purges the person's agent-run
+   records, background tasks and schedules. The relation cleanup reads only that
+   person's relations, so its cost grows with the person and not with the
+   relationship store.
+3. After that work commits, it deletes the identity-provider account. An account
+   the identity provider does not know returns 404, after the cleanup. Any other
+   failure propagates with the ban and the cleanup already in place.
+
+This route is the only Fred operation that removes standing; no suspend or
+reinstate route exists. While the control plane's delegation is off it writes no
+ban, and the deleted person has no identity-provider account left. A ban applies
+from the person's next authorization decision and does not interrupt work already
+authorized. Disabling or deleting an account directly in the identity provider
+changes no standing: see
+[`platform/REBAC.md` § Account standing](../platform/REBAC.md#account-standing--active-suspended-and-standing_ready).

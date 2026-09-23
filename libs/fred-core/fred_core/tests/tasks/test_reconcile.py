@@ -26,6 +26,8 @@ from fred_core.common import PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.sql import create_async_engine_from_config
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
+    AgentRunTaskEvent,
+    StartAgentRunRequest,
     StartIngestionParams,
     StartIngestionRequest,
     TaskState,
@@ -123,6 +125,27 @@ async def test_temporal_workflow_control_maps_describe_status():
     assert rpc_timeouts == [timedelta(seconds=7)] * 3
 
 
+@pytest.mark.asyncio
+async def test_agent_run_status_failure_log_has_no_identifier_or_upstream_text(caplog):
+    class _Provider:
+        config = TemporalSchedulerConfig(rpc_timeout_seconds=7)
+
+        async def get_client(self):
+            raise RuntimeError("SYNTHETIC-UPSTREAM-CANARY")
+
+    control = TemporalWorkflowControl(cast(Any, _Provider()))
+    with caplog.at_level("WARNING"):
+        assert (
+            await control.get_status(
+                "SYNTHETIC-WORKFLOW-ID-CANARY", identifier_free=True
+            )
+            is None
+        )
+    payload = " ".join(record.getMessage() for record in caplog.records)
+    assert "SYNTHETIC-WORKFLOW-ID-CANARY" not in payload
+    assert "SYNTHETIC-UPSTREAM-CANARY" not in payload
+
+
 # ── 3. end-to-end service reconciliation on SQLite ───────────────────────────
 
 
@@ -132,13 +155,16 @@ class _StubControl:
     def __init__(self, status_by_eid: dict[str, ExecutionStatus | None]) -> None:
         self.status_by_eid = status_by_eid
         self.calls: list[str] = []
+        self.cancel_calls: list[str] = []
 
-    async def get_status(self, workflow_id: str) -> ExecutionStatus | None:
+    async def get_status(
+        self, workflow_id: str, *, identifier_free: bool = False
+    ) -> ExecutionStatus | None:
         self.calls.append(workflow_id)
         return self.status_by_eid.get(workflow_id)
 
-    async def cancel(self, workflow_id: str) -> None:  # pragma: no cover - unused
-        return None
+    async def cancel(self, workflow_id: str) -> None:
+        self.cancel_calls.append(workflow_id)
 
 
 @pytest_asyncio.fixture
@@ -190,6 +216,260 @@ async def test_bind_execution_persists(tmp_path, build_service):
     run = await service.get_run(task_id)
     assert run is not None
     assert run.execution_id == "wf-1"
+
+
+@pytest.mark.asyncio
+async def test_agent_run_cancel_before_bind_survives_service_recovery(
+    tmp_path, build_service
+):
+    service, control = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+
+    await service.cancel(response.task_id)
+    cancelling = await service.get_run(response.task_id)
+    assert cancelling is not None
+    assert TaskState(cancelling.state) == TaskState.cancelling
+    assert cancelling.execution_id is None
+
+    recovered = TaskService(service.store, MemoryEventBus(), control)
+    await recovered.bind_execution(response.task_id, execution_id="wf-1")
+
+    bound = await recovered.get_run(response.task_id)
+    assert bound is not None
+    assert TaskState(bound.state) == TaskState.cancelling
+    assert bound.execution_id == "wf-1"
+    assert control.cancel_calls == ["wf-1"]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_bind_refreshes_stale_same_session_state(
+    tmp_path, build_service
+):
+    service, control = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+
+    async with service.store._sessions() as occurrence_session:
+        cached = await service.get_run(response.task_id, session=occurrence_session)
+        assert cached is not None
+        assert TaskState(cached.state) == TaskState.pending
+        await occurrence_session.commit()
+
+        await service.cancel(response.task_id)
+        assert TaskState(cached.state) == TaskState.pending
+
+        await service.bind_execution(
+            response.task_id,
+            execution_id="wf-1",
+            session=occurrence_session,
+        )
+        await occurrence_session.commit()
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+    assert run.execution_id == "wf-1"
+    assert control.cancel_calls == ["wf-1"]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_cancel_after_bind_cancels_the_bound_execution(
+    tmp_path, build_service
+):
+    service, control = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    await service.bind_execution(response.task_id, execution_id="wf-1")
+
+    await service.cancel(response.task_id)
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+    assert control.cancel_calls == ["wf-1"]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_queued_cancel_survives_delivery_failure_and_retries(
+    tmp_path, build_service
+):
+    service, control = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    await service.cancel(response.task_id)
+    attempts = 0
+
+    async def fail_once(workflow_id: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("synthetic cancellation transport failure")
+        control.cancel_calls.append(workflow_id)
+
+    control.cancel = fail_once  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="synthetic cancellation transport failure"):
+        await service.bind_execution(response.task_id, execution_id="wf-1")
+
+    after_failure = await service.get_run(response.task_id)
+    assert after_failure is not None
+    assert TaskState(after_failure.state) == TaskState.cancelling
+    assert after_failure.execution_id == "wf-1"
+
+    await service.cancel(response.task_id)
+    assert attempts == 2
+    assert control.cancel_calls == ["wf-1"]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_dispatch_failure_does_not_overwrite_queued_cancel(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    await service.cancel(response.task_id)
+
+    assert await service.fail_task(response.task_id, "dispatch failed") is False
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+
+
+@pytest.mark.asyncio
+async def test_agent_run_cancel_wins_after_submission_failure_reads_pending(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    read_pending = asyncio.Event()
+    resume_failure = asyncio.Event()
+    original_get_run = service.store.get_run
+    pause_once = True
+
+    async def paused_get_run(task_id: str, session=None):
+        nonlocal pause_once
+        run = await original_get_run(task_id, session=session)
+        if pause_once:
+            pause_once = False
+            read_pending.set()
+            await resume_failure.wait()
+        return run
+
+    service.store.get_run = paused_get_run  # type: ignore[method-assign]
+    failure = asyncio.create_task(
+        service.fail_task(response.task_id, "dispatch failed")
+    )
+    await read_pending.wait()
+    await service.cancel(response.task_id)
+    resume_failure.set()
+
+    assert await failure is False
+    run = await original_get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+
+
+@pytest.mark.asyncio
+async def test_agent_run_submission_failure_is_persisted_and_published(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+
+    assert await service.fail_task(response.task_id, "dispatch failed") is True
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.failed
+    assert run.error == "dispatch failed"
+    replayed = await service.replay(response.task_id, after_seq=-1)
+    assert len(replayed) == 1
+    assert replayed[0].state == TaskState.failed
+    assert replayed[0].detail is not None
+    assert replayed[0].detail.reason == "execution_failed"
+
+
+@pytest.mark.asyncio
+async def test_agent_run_nonterminal_event_cannot_overwrite_cancelling(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    await service.cancel(response.task_id)
+
+    await service.record(
+        AgentRunTaskEvent(
+            task_id=response.task_id,
+            state=TaskState.running,
+            seq=0,
+            timestamp=_NOW,
+        )
+    )
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+    replayed = await service.replay(response.task_id, after_seq=-1)
+    assert [event.state for event in replayed] == [
+        TaskState.cancelling,
+        TaskState.cancelling,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_event_refreshes_stale_same_session_state(
+    tmp_path, build_service
+):
+    service, _ = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+
+    async with service.store._sessions() as reporting_session:
+        cached = await service.get_run(response.task_id, session=reporting_session)
+        assert cached is not None
+        assert TaskState(cached.state) == TaskState.pending
+        await reporting_session.commit()
+
+        await service.cancel(response.task_id)
+        assert TaskState(cached.state) == TaskState.pending
+
+        _, effective_state = await service.store.record_event(
+            AgentRunTaskEvent(
+                task_id=response.task_id,
+                state=TaskState.running,
+                seq=0,
+                timestamp=_NOW,
+            ),
+            session=reporting_session,
+        )
+        await reporting_session.commit()
+
+    assert effective_state == TaskState.cancelling
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelling
+
+
+@pytest.mark.asyncio
+async def test_agent_run_terminal_state_wins_over_cancel_and_is_not_late_bound(
+    tmp_path, build_service
+):
+    service, control = await build_service(tmp_path, {})
+    response = await service.start(StartAgentRunRequest(), created_by="u1")
+    await service.cancel(response.task_id)
+    await service.record(
+        AgentRunTaskEvent(
+            task_id=response.task_id,
+            state=TaskState.cancelled,
+            seq=0,
+            timestamp=_NOW,
+        )
+    )
+
+    await service.bind_execution(response.task_id, execution_id="wf-1")
+
+    run = await service.get_run(response.task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelled
+    assert run.execution_id is None
+    assert control.cancel_calls == []
 
 
 @pytest.mark.asyncio

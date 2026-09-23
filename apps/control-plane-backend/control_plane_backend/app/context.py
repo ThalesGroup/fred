@@ -53,6 +53,8 @@ from control_plane_backend.knowledge_bases.instance_store import (
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import PlatformPromptStore
+from control_plane_backend.product.agent_run_store import AgentRunStore
+from control_plane_backend.product.agent_run_task_store import AgentRunTaskStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.routing_policy.store import (
@@ -90,6 +92,8 @@ class ApplicationContext:
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
+        self._agent_run_store: AgentRunStore | None = None
+        self._agent_run_task_store: AgentRunTaskStore | None = None
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
@@ -151,7 +155,8 @@ class ApplicationContext:
             )
         if self._temporal_client_provider is None:
             self._temporal_client_provider = TemporalClientProvider(
-                self.configuration.scheduler.temporal
+                self.configuration.scheduler.temporal,
+                log_connection_details=False,
             )
         return self._temporal_client_provider
 
@@ -324,6 +329,7 @@ class ApplicationContext:
                     keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                     client_id=m2m.client_id,
                     secret_env=m2m.secret_env_var,
+                    refresh_failure_cooldown_seconds=m2m.refresh_failure_cooldown_seconds,
                 )
             )
         return self._service_token_provider
@@ -345,6 +351,18 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._agent_instance_store
+
+    def get_agent_run_store(self) -> AgentRunStore:
+        if self._agent_run_store is None:
+            self._agent_run_store = AgentRunStore(engine=self.get_pg_async_engine())
+        return self._agent_run_store
+
+    def get_agent_run_task_store(self) -> AgentRunTaskStore:
+        if self._agent_run_task_store is None:
+            self._agent_run_task_store = AgentRunTaskStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._agent_run_task_store
 
     def get_team_capability_settings_store(self) -> TeamCapabilitySettingsStore:
         if self._team_capability_settings_store is None:

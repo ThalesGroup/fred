@@ -13,7 +13,13 @@
 // limitations under the License.
 
 import { describe, it, expect, vi } from "vitest";
-import { mergeContextPromptText, mergeReasoningActivation, mergeRoutingPolicy, parseSseFrames } from "./runtimeStream";
+import {
+  mergeContextPromptText,
+  mergeReasoningActivation,
+  mergeRoutingPolicy,
+  parseSseFrames,
+  parseSseRecords,
+} from "./runtimeStream";
 
 // Build a ReadableStream<Uint8Array> from string chunks, mirroring how a fetch
 // body delivers SSE bytes (chunk boundaries do not respect frame boundaries).
@@ -34,6 +40,11 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
 }
 
 describe("parseSseFrames", () => {
+  it("exposes numeric SSE ids without changing the legacy data-only parser", async () => {
+    const records = await collect(parseSseRecords(streamOf('id: 7\ndata: {"kind":"a"}\n\n')));
+    expect(records).toEqual([{ id: 7, data: { kind: "a" } }]);
+  });
+
   it("yields the parsed JSON of each data frame", async () => {
     const frames = await collect(parseSseFrames(streamOf('data: {"kind":"a"}\n\ndata: {"kind":"b"}\n\n')));
     expect(frames).toEqual([{ kind: "a" }, { kind: "b" }]);

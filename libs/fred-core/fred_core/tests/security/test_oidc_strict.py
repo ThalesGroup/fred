@@ -55,13 +55,23 @@ def _strict_keycloak(monkeypatch, _rsa_keypair):
     )
 
 
-def _token(priv_pem: bytes, *, iss: str, aud: str, sub: str = "u-1") -> str:
+def _token(
+    priv_pem: bytes,
+    *,
+    iss: str,
+    aud: str,
+    sub: str = "u-1",
+    azp: str = "caller",
+    typ: str = "Bearer",
+) -> str:
     return pyjwt.encode(
         {
             "iss": iss,
             "aud": aud,
             "sub": sub,
             "preferred_username": "alice",
+            "azp": azp,
+            "typ": typ,
             "exp": int(time.time()) + 3600,
         },
         priv_pem,
@@ -73,6 +83,13 @@ def test_strict_accepts_exact_issuer_and_audience(_rsa_keypair):
     priv_pem, _ = _rsa_keypair
     user = oidc.decode_jwt(_token(priv_pem, iss=_REALM, aud=_CLIENT))
     assert user.uid == "u-1"
+    assert user.client_id == "caller"
+    assert user.token_issuer == _REALM
+    assert user.token_audiences == frozenset({_CLIENT})
+    assert user.token_type == "Bearer"  # nosec B105 - protocol metadata or synthetic fixture
+    assert "token_issuer" not in user.model_dump()
+    assert "token_audiences" not in user.model_dump()
+    assert "token_type" not in user.model_dump()
 
 
 def test_strict_rejects_wrong_audience(_rsa_keypair):
@@ -99,6 +116,65 @@ def test_strict_rejects_issuer_prefix_attack(_rsa_keypair):
             _token(priv_pem, iss=_REALM + ".evil.com", aud=_CLIENT, sub="u-3")
         )
     assert exc.value.status_code == 401
+
+
+def test_strict_rejects_expired_token(_rsa_keypair):
+    priv_pem, _ = _rsa_keypair
+    token = pyjwt.encode(
+        {
+            "iss": _REALM,
+            "aud": _CLIENT,
+            "sub": "expired",
+            "exp": int(time.time()) - 1,
+        },
+        priv_pem,
+        algorithm="RS256",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_strict_rejects_untrusted_signing_key(_rsa_keypair):
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    other_private = other_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(other_private, iss=_REALM, aud=_CLIENT))
+
+    assert exc.value.status_code == 401
+
+
+def test_strict_rejects_an_unapproved_algorithm() -> None:
+    token = pyjwt.encode(
+        {
+            "iss": _REALM,
+            "aud": _CLIENT,
+            "sub": "wrong-algorithm",
+            "exp": int(time.time()) + 60,
+        },
+        "synthetic-signing-key-at-least-thirty-two-bytes",
+        algorithm="HS256",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_signed_id_token_retains_its_non_access_token_purpose(_rsa_keypair):
+    priv_pem, _ = _rsa_keypair
+
+    user = oidc.decode_jwt(_token(priv_pem, iss=_REALM, aud=_CLIENT, typ="ID"))
+
+    assert user.token_type == "ID"  # nosec B105 - protocol metadata or synthetic fixture
 
 
 def test_groups_claim_is_accepted_but_ignored(_rsa_keypair):

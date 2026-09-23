@@ -88,7 +88,7 @@ async def test_ingestion_terminal_outcome_cannot_be_overwritten(
 ):
     store = await build_store(tmp_path)
     await store.create(task_id="t1", kind="ingestion", created_by="u1")
-    assert await store.record_event(_event(terminal, "original")) == 1
+    assert await store.record_event(_event(terminal, "original")) == (1, terminal)
     assert await store.record_event(_event(TaskState.running)) is None
     assert await store.record_event(_event(TaskState.failed, "late failure")) is None
     summary = await store.get_task("t1")
@@ -101,10 +101,15 @@ async def test_ingestion_terminal_outcome_cannot_be_overwritten(
 async def test_concurrent_events_receive_distinct_sequences(tmp_path, build_store):
     store = await build_store(tmp_path)
     await store.create(task_id="t1", kind="ingestion", created_by="u1")
-    sequences = await asyncio.gather(
+    recorded = await asyncio.gather(
         *(store.record_event(_event(TaskState.running)) for _ in range(4))
     )
-    assert sorted(sequences) == [1, 2, 3, 4]
+    assert sorted(result[0] for result in recorded if result is not None) == [
+        1,
+        2,
+        3,
+        4,
+    ]
     assert [event.seq for event in await store.replay_events("t1", after_seq=0)] == [
         1,
         2,

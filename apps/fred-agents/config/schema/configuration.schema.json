@@ -1,5 +1,57 @@
 {
   "$defs": {
+    "CallerPolicy": {
+      "additionalProperties": false,
+      "description": "One receiver-owned workload identity trusted to delegate.",
+      "properties": {
+        "client_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Client Id",
+          "type": "string"
+        },
+        "subject": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "subject"
+      ],
+      "title": "CallerPolicy",
+      "type": "object"
+    },
+    "DelegationConfig": {
+      "description": "`security.delegation` block. Off by default; enabling requires an allow-list.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "allowed_callers": {
+          "description": "Client ids of the workloads allowed to speak for a person.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Callers",
+          "type": "array"
+        },
+        "caller_policies": {
+          "items": {
+            "$ref": "#/$defs/CallerPolicy"
+          },
+          "title": "Caller Policies",
+          "type": "array"
+        }
+      },
+      "title": "DelegationConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "InMemoryLogStorageConfig": {
       "properties": {
         "type": {
@@ -161,6 +213,13 @@
           "default": "M2M_CLIENT_SECRET",
           "title": "Secret Env Var",
           "type": "string"
+        },
+        "refresh_failure_cooldown_seconds": {
+          "default": 5.0,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Refresh Failure Cooldown Seconds",
+          "type": "number"
         }
       },
       "required": [
@@ -430,6 +489,52 @@
       "type": "object",
       "additionalProperties": false
     },
+    "PodExecutionConfig": {
+      "description": "Run-level limits for the two agent engines.\n\nWhy this section is not part of `ai.timeout`: those values bound one\noutbound call. These bound the whole run \u2014 every model call, tool call and\nchild it makes \u2014 and leave per-call timeouts exactly as configured.\n\nHow to use it:\n- lower `run_ceiling_seconds` on a deployment where a person is always\n  waiting; a run past its ceiling ends with reason `run_ceiling_reached`\n- pass both values to `runtime_support.run_budget.configure_run_limits()`\n  at pod startup; the same defaults apply until it is called\n\nExample:\n- `PodExecutionConfig(run_ceiling_seconds=600, max_concurrent_children=4)`",
+      "properties": {
+        "run_ceiling_seconds": {
+          "default": 900.0,
+          "description": "Wall-clock budget for one attended run, in seconds. Independent of the per-call timeouts in `ai.timeout`.",
+          "exclusiveMinimum": 0,
+          "title": "Run Ceiling Seconds",
+          "type": "number"
+        },
+        "max_concurrent_children": {
+          "default": 8,
+          "description": "Maximum number of children (child agents, team members, parallel graph members) one run may have in flight at once.",
+          "minimum": 1,
+          "title": "Max Concurrent Children",
+          "type": "integer"
+        },
+        "reconnect_grace_seconds": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "title": "Reconnect Grace Seconds",
+          "type": "number"
+        },
+        "replay_max_events": {
+          "default": 512,
+          "minimum": 1,
+          "title": "Replay Max Events",
+          "type": "integer"
+        },
+        "replay_max_bytes": {
+          "default": 2097152,
+          "minimum": 1024,
+          "title": "Replay Max Bytes",
+          "type": "integer"
+        },
+        "foreground_max_runs": {
+          "default": 128,
+          "minimum": 1,
+          "title": "Foreground Max Runs",
+          "type": "integer"
+        }
+      },
+      "title": "PodExecutionConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "PodObservabilityConfig": {
       "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
       "properties": {
@@ -474,6 +579,11 @@
         "enabled": {
           "default": false,
           "title": "Enabled",
+          "type": "boolean"
+        },
+        "agent_runs_enabled": {
+          "default": false,
+          "title": "Agent Runs Enabled",
           "type": "boolean"
         },
         "backend": {
@@ -773,6 +883,9 @@
         "user": {
           "$ref": "#/$defs/UserSecurity"
         },
+        "delegation": {
+          "$ref": "#/$defs/DelegationConfig"
+        },
         "authorized_origins": {
           "default": [],
           "items": {
@@ -964,6 +1077,9 @@
     },
     "ai": {
       "$ref": "#/$defs/PodAIConfig"
+    },
+    "execution": {
+      "$ref": "#/$defs/PodExecutionConfig"
     },
     "observability": {
       "$ref": "#/$defs/PodObservabilityConfig"

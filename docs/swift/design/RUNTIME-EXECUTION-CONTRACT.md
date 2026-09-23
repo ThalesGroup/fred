@@ -13,14 +13,17 @@
 RFC links in this document preserve decision history only. This design document
 is the current authority for implemented runtime behavior.
 
-> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> `_authorize_execution_or_raise` now recognizes a **service identity** (a caller holding
+> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A;
+> scoped to non-delegated deployments 2026-09-19).** Where delegation is **not** enabled,
+> `_authorize_execution_or_raise` recognizes a **service identity** (a caller holding
 > the `service_agent` app role — the evaluation worker) for managed execution **scoped to
 > the request `team_id`**, **without** consulting OpenFGA and **without** any stored tuple.
 > Legitimacy is anchored upstream at campaign creation. It stays team-scoped and
 > fail-closed: a missing `team_id` still returns 403; the decision is audited as
 > `service_agent_authorized`. Regular users are unchanged (per-request OpenFGA `can_read`).
-> Read-only by design — the worker never mutates a team.
+> Read-only by design — the worker never mutates a team. Where delegation **is**
+> enabled, that identity is refused and execution is authorized on the person the
+> grant names — see §8.89.
 
 > ✅ **Chat-context prompt injection — 2026-07-06 (PROMPT-08 / issue #1915).** The
 > runtime now folds `runtime_context.context_prompt_text` into the final system
@@ -60,6 +63,11 @@ is the current authority for implemented runtime behavior.
 > the ReBAC check for service-agent callers, mirroring the turn-start decision
 > instead of re-deriving a stricter one. Regular users are unaffected — the
 > least-privilege re-check still runs for every non-service-agent call.
+>
+> Scoped to non-delegated deployments (2026-09-19). A principal asserted through
+> a delegation grant carries no roles, so the stamp is never set for one and the
+> per-tool-call re-check always runs, on the person the grant names. The bypass
+> described above applies only to a caller presenting its own service token.
 
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
@@ -404,8 +412,10 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   relation; see the 2026-07-29 callout above) on
   `runtime_context.team_id`. A canonical personal space
   (`personal-<authenticated uid>`) uses intrinsic ownership by exact identity
-  comparison, and the evaluation worker's `service_agent` identity uses the
-  separately documented team-scoped bypass. Every other case fails closed.
+  comparison. Where delegation is not enabled, the evaluation worker's
+  `service_agent` identity uses the separately documented team-scoped bypass;
+  where delegation is enabled that identity is refused and the check runs on the
+  person the grant names (§8.89). Every other case fails closed.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -424,8 +434,9 @@ comparison, without an OpenFGA request. Another user's `personal-*` identifier
 and the bare `"personal"` alias deny. Other platform operations may still model
 personal teams in ReBAC as documented in
 [`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08);
-that does not change this turn-start fast path. `service_agent` callers are
-unaffected: their team-scoped, OpenFGA-free authorization is checked first.
+that does not change this turn-start fast path. Where delegation is not enabled,
+`service_agent` callers are unaffected: their team-scoped, OpenFGA-free
+authorization is checked first.
 
 **Architectural constraint (unchanged):**
 
@@ -6084,3 +6095,103 @@ statements:
   `tracer_echo`, living in the test tree: never packaged, never discovered,
   no migrations. A test fixture is what it always was; shipping it as a real
   entry point is what put a demo table in production databases.
+
+### 8.86 ✅ A stopped run is typed: `RuntimeErrorEvent.reason`, and every run has a ceiling (2026-09-17)
+
+`RuntimeErrorEvent` gains an optional `reason`: `authority_lost`,
+`run_ceiling_reached`, `child_limit_reached`, `cancelled`, `delegation_unavailable`. It is absent for an
+ordinary crash, so a consumer that ignores it is unchanged. When it is present,
+`message` is a bounded, platform-owned sentence chosen from the reason — never
+assembled from an upstream error.
+
+- Both engines end a run that raises a stop error on that event: children and
+  in-flight parallel work are cancelled, the call is not retried, the failure is
+  never converted into tool text for the model, and the engine's stream
+  completes instead of raising. Graph `on_error` routing does not apply to a
+  stopped run — a fallback node is a retry under an authority the platform has
+  already given up, and it puts the failure text into state and the next prompt.
+- On these paths no upstream error body reaches the transcript, the logs, the
+  traces, the checkpoints or the streamed events. The stop is logged by its
+  reason alone: an exception log would print the chained upstream error, and the
+  receiver's response body with it.
+- Every run has a wall-clock ceiling (`execution.run_ceiling_seconds`, default
+  900 s for attended runs) and a bound on concurrent children
+  (`execution.max_concurrent_children`, default 8), enforced in shared engine
+  code by one scope per run; a nested run joins its parent's scope rather than
+  opening a second budget. Past the budget the run ends with reason
+  `run_ceiling_reached` and its children are cancelled. Per-call timeouts
+  (`ai.timeout`) are unaffected: they bound one outbound call, never the run.
+- The child bound counts children in flight, including ancestors awaiting a
+  descendant. Nested work that cannot immediately acquire capacity stops with
+  `child_limit_reached` before spawning another child. Root siblings may queue.
+  Child stops cancel descendants while preserving ancestor consumers so the root
+  emits one terminal event; external cancellation emits no synthetic stop event.
+- `runtime_support.run_budget.configure_run_limits()` applies deployment defaults
+  at pod startup. Admission resolves an agent definition or managed tuning
+  override, then registration returns the authoritative effective ceiling used by
+  the run and its descendants. `set_agent_run_limits_resolver()` remains an
+  optional extension hook; it is not the managed-agent override path.
+- A capability tool that turns a failure into text re-raises a stop. The base
+  `RunStopError` and `unwrap_run_stop_error` live in `fred_sdk.contracts.runtime`
+  and the typed reasons subclass it in `runtime_support/authority.py`, so a
+  capability package needs no `fred-runtime` dependency.
+
+**Scope.** `libs/fred-sdk/fred_sdk/contracts/runtime.py`,
+`libs/fred-runtime/fred_runtime/runtime_support/run_budget.py`,
+`.../react/react_runtime.py`, `.../react/middleware/tool_observability.py`,
+`.../graph/graph_runtime.py`, `.../app/config.py`,
+`.../runtime_support/authority.py`. The generated runtime client gains the
+optional field and its enum and nothing else from this entry. Behavioral record:
+OpenSpec capability `delegated-execution-grant`.
+
+### 8.87 Foreground reconnect and managed execution bounds (2026-09-17)
+
+Managed execution requires `runtime_context.team_id` in the request schema.
+Direct template execution retains optional team context. Agent tuning can set a
+finite positive `run_ceiling_seconds`; otherwise the deployment default applies.
+Admission resolves the limit once, includes admission time, and records the same
+limit at registration. Children and reconnects retain that deadline.
+
+With delegation enabled, `POST /agents/execute/stream` accepts either an execution
+request or `{ "reconnect": { "run_id": "…", "after_sequence": 3 } }`. Mixed input
+is invalid. Initial responses expose `X-Fred-Run-Id`; SSE `id` equals the event's
+sequence. A reconnect presents the person's current bearer, passes owner,
+standing and team/agent checks, and attaches to the same execution with bounded
+ordered replay. It performs no new admission or tool execution.
+
+The default reconnect grace is 60 seconds. One attachment is permitted per run;
+an unauthorized request cannot extend grace or affect the owner. Unknown replica
+state returns 404, unavailable replay or competing attachment 409, and a known
+run cancelled after grace 410. The frontend retains the handle and cursor and
+never turns a rejected reconnect into a new execution. Runtime routing affinity
+and header exposure at the deployment gateway remain final integration work.
+
+### 8.88 Workload identity and person authorization (2026-09-18)
+
+Delegation receivers authenticate configured workload client/service-account pairs
+and authorize the asserted person using their current permissions. The plain
+`person`/`run`/`agent` parameters carry the admitted grant.
+
+Explicit own-credential guards remain on runtime history, checkpoints, diagnostics,
+capability configuration, OpenAI-compatible admission and foreground reconnect.
+The complete endpoint inventory is maintained in the delegated-execution-grant
+OpenSpec design. Native execute, evaluate and new stream admissions retain their
+existing delegated support. This change does not establish complete user/agent
+parity or alter reconnect ownership and single attachment.
+
+### 8.89 Execution under delegation is authorized on the person a grant names (2026-09-19)
+
+Where delegation is enabled, `_authorize_execution_or_raise` refuses a caller whose
+authenticated identity is a service identity, ahead of the direct and managed
+branches, with 403 `delegated_person_required`. Direct template execution, managed
+execution, evaluation and resume all funnel through that gate, so workload identity
+alone never admits a person's execution on the native execution surface.
+
+The principal a validated grant names carries no roles, so no service-role shortcut
+can fire for it. Managed execution then requires that person to hold
+`CAN_USE_TEAM_AGENTS` on `runtime_context.team_id`, and a missing team still fails
+closed (403). Direct template execution requires the person's current standing, and
+the same team permission whenever the request carries a team.
+
+Where delegation is not enabled, the team-scoped service-identity admission of
+2026-07-01 stands unchanged.

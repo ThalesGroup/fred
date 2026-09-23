@@ -43,6 +43,9 @@ class NoopRebacEngine(RebacEngine):
     async def _persist_relation(self, relation: Relation) -> str | None:
         return None
 
+    async def validate_standing_model(self) -> None:
+        raise RuntimeError("Standing authorization model is not available.")
+
     async def delete_relation(self, relation: Relation) -> str | None:
         return None
 
@@ -64,7 +67,7 @@ class NoopRebacEngine(RebacEngine):
     ) -> list[Relation] | RebacDisabledResult:
         return RebacDisabledResult()
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -106,10 +109,10 @@ class NoopRebacEngine(RebacEngine):
     ) -> list[Relation] | RebacDisabledResult:
         return RebacDisabledResult()
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,

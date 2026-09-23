@@ -38,8 +38,10 @@ def _user(uid: str = "u", roles: list[str] | None = None) -> KeycloakUser:
     return KeycloakUser(uid=uid, username=uid, email=None, roles=roles or [])
 
 
-def _run(*, created_by: str | None, team_id: str | None) -> Any:
-    return SimpleNamespace(created_by=created_by, team_id=team_id)
+def _run(
+    *, created_by: str | None, team_id: str | None, kind: str = "ingestion"
+) -> Any:
+    return SimpleNamespace(created_by=created_by, team_id=team_id, kind=kind)
 
 
 class _FakeRebac:
@@ -47,6 +49,10 @@ class _FakeRebac:
         self._platform = platform
         self._team_ok = team_ok
         self.team_checks: list[tuple[str, TeamPermission, str]] = []
+        self.standing_checks: list[str] = []
+
+    async def require_user_standing(self, user_id: str) -> None:
+        self.standing_checks.append(user_id)
 
     async def has_user_permission(
         self, user: KeycloakUser, permission: Any, resource_id: str, **_: Any
@@ -138,6 +144,28 @@ async def test_stream_team_non_reader_denied() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_run_creator_still_requires_standing() -> None:
+    rebac = _FakeRebac()
+    await authorize_task_access(
+        _user("alice"),
+        _run(created_by="alice", team_id="nb", kind="agent_run"),
+        cast(Any, rebac),
+    )
+    assert rebac.standing_checks == ["alice"]
+
+
+@pytest.mark.asyncio
+async def test_agent_run_team_view_requires_admin_permission() -> None:
+    rebac = _FakeRebac(team_ok=True)
+    await authorize_task_access(
+        _user("admin"),
+        _run(created_by="alice", team_id="nb", kind="agent_run"),
+        cast(Any, rebac),
+    )
+    assert rebac.team_checks == [("admin", TeamPermission.CAN_ADMINISTER_MEMBERS, "nb")]
+
+
+@pytest.mark.asyncio
 async def test_stream_no_team_non_platform_denied() -> None:
     rebac = _FakeRebac()
     with pytest.raises(HTTPException) as exc:
@@ -164,6 +192,7 @@ async def test_list_user_scope_needs_no_role_and_hides_terminal() -> None:
     )
     assert service.calls == [
         {"created_by": "alice", "kind": None, "state": None, "exclude_terminal": True}
+        | {"exclude_kind": "agent_run"}
     ]
 
 
@@ -221,7 +250,9 @@ async def test_list_team_scope_allows_team_reader() -> None:
         state=None,
     )
     assert rebac.team_checks == [("mgr", TeamPermission.CAN_READ_MEMEBERS, "nb")]
-    assert service.calls == [{"team_id": "nb", "kind": None, "state": None}]
+    assert service.calls == [
+        {"team_id": "nb", "kind": None, "state": None, "exclude_kind": "agent_run"}
+    ]
 
 
 @pytest.mark.asyncio

@@ -74,6 +74,7 @@ def _fs(client: _FakeClient | None = None) -> FredWorkspaceFs:
     )
     fs._settings = SimpleNamespace(team_id="acme")  # type: ignore[assignment]
     fs._workspace_client = client or _FakeClient()  # type: ignore[assignment]
+    fs._credentials = None  # type: ignore[assignment]
     return fs
 
 

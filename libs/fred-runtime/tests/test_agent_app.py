@@ -25,10 +25,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import fred_core.security.oidc as oidc_module
 import httpx
 import pytest
 from conftest import (
@@ -44,6 +47,9 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_core.security.delegation import DelegationConfig as CoreDelegationConfig
+from fred_core.security.delegation import get_delegation_config, initialize_delegation
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -55,10 +61,22 @@ from fred_core.users.store import postgres_user_store
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
+from fred_runtime.app.config import PodExecutionConfig
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
+from fred_runtime.common.outbound_credentials import (
+    RUN_RECORD_AGE_MARGIN_SECONDS,
+    DelegationRuntime,
+    RunRecord,
+    get_delegation_runtime,
+    set_delegation_runtime,
+)
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
+from fred_runtime.runtime_support.run_budget import (
+    configure_run_limits,
+    resolve_run_limits,
+)
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -269,6 +287,8 @@ def _build_test_config(
     metrics_backend: str = "logging",
     kpi_process_metrics_interval_sec: int = 0,
     max_chat_input_chars: int = 5_000,
+    user_security_enabled: bool = False,
+    delegation_allowed_callers: list[str] | None = None,
 ) -> AgentPodConfig:
     """
     Build an offline pod config for the authored-tool regression test.
@@ -305,11 +325,15 @@ def _build_test_config(
                     "client_id": "test-m2m",
                 },
                 "user": {
-                    "enabled": False,
+                    "enabled": user_security_enabled,
                     "realm_url": "http://localhost:8080/realms/fred",
                     "client_id": "test-user",
                 },
                 "authorized_origins": [],
+                "delegation": {
+                    "enabled": bool(delegation_allowed_callers),
+                    "allowed_callers": delegation_allowed_callers or [],
+                },
             },
             "ai": {
                 "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
@@ -371,6 +395,220 @@ def test_lifespan_identifies_this_pod_by_slug_in_logs_and_runtime_config(
         assert get_runtime_context().config.service_name == "test-pod"
 
     assert log_setup_calls == ["test-pod"]
+
+
+@pytest.fixture
+def _pod_run_limits() -> Iterator[None]:
+    """Run limits and the delegation runtime are pod-wide state; restore the
+    built-in defaults so a configured ceiling cannot leak into whatever test
+    runs next."""
+    yield
+    configure_run_limits()
+    set_delegation_runtime(None)
+
+
+def test_the_pod_configuration_sets_the_run_budget(
+    monkeypatch, tmp_path, _pod_run_limits
+) -> None:
+    """The ceiling and the child bound are deployment settings: a pod that
+    starts with them configured must run under them, not under the defaults."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    config = _build_test_config(tmp_path).model_copy(
+        update={
+            "execution": PodExecutionConfig(
+                run_ceiling_seconds=42.0, max_concurrent_children=2
+            )
+        }
+    )
+
+    create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=config,
+    )
+
+    limits = resolve_run_limits(None)
+    assert limits.wall_clock_seconds == 42.0
+    assert limits.max_concurrent_children == 2
+
+
+class _StaticWorkloadTokens(M2MTokenProvider):
+    """The pod's own bearer, already in hand: the real provider serves a cached
+    token and only talks to the realm when it has none."""
+
+    def __init__(self) -> None:
+        self.token = "workload-token"
+
+    async def get_token(self) -> str:
+        return self.token
+
+
+@pytest.fixture
+def _pod_inbound_security() -> Iterator[None]:
+    """Keycloak validation and grant acceptance are process-wide in the shared
+    library; restore both so a later test sees the offline defaults."""
+    keycloak_enabled = oidc_module.KEYCLOAK_ENABLED
+    acceptance = get_delegation_config()
+    yield
+    oidc_module.KEYCLOAK_ENABLED = keycloak_enabled
+    initialize_delegation(acceptance)
+    set_delegation_runtime(None)
+
+
+def _secured_pod(
+    monkeypatch,
+    tmp_path,
+    *,
+    caller_client_id: str,
+    enforces_standing: bool = True,
+    standing_seed_ready: bool = True,
+):
+    """A pod whose door is the shared user dependency, with the token decoded
+    locally and grant acceptance switched on the way a receiver has it."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(
+        oidc_module,
+        "decode_jwt",
+        lambda token: KeycloakUser(
+            uid="workload-caller",
+            username="workload-caller",
+            roles=["service_agent"],
+            client_id=caller_client_id,
+        ),
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "rebac_factory",
+        lambda *args, **kwargs: SimpleNamespace(
+            enforces_standing=enforces_standing,
+            enabled=True,
+            validate_standing_model=AsyncMock(),
+            is_standing_seed_ready=AsyncMock(return_value=standing_seed_ready),
+            require_user_standing=AsyncMock(),
+        ),
+    )
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(
+            tmp_path,
+            user_security_enabled=True,
+            delegation_allowed_callers=[caller_client_id],
+        ),
+    )
+    # Installed after construction, so a run that reached admission would leave
+    # a record to find.
+    delegation = DelegationRuntime(
+        config=CoreDelegationConfig(enabled=True, allowed_callers=[caller_client_id]),
+        token_provider=_StaticWorkloadTokens(),
+        workload_client_id=caller_client_id,
+    )
+    set_delegation_runtime(delegation)
+    return app, delegation
+
+
+def test_a_workload_without_a_trusted_identity_policy_is_refused(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    """A client name alone cannot authorize delegation."""
+    app, delegation = _secured_pod(monkeypatch, tmp_path, caller_client_id="caller-1")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            params={"person": "alice", "run": "run-1", "agent": "rags.sample.echo"},
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-asserted",
+            },
+            headers={"Authorization": "Bearer workload-bearer"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "delegation_not_allowed"
+    assert len(delegation.records) == 0
+
+
+def test_a_service_bearer_without_a_person_cannot_execute_under_delegation(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    """Workload identity alone cannot authorize a person's execution."""
+    app, _ = _secured_pod(monkeypatch, tmp_path, caller_client_id="caller-1")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-service-caller",
+            },
+            headers={"Authorization": "Bearer workload-bearer"},
+        )
+        admitted = [
+            dict(event)
+            for event in get_pod_container_from_app(app).audit_events_buffer
+            if event["audit_event"] == "delegated_run_admitted"
+        ]
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "delegated_person_required"
+    assert admitted == []
+
+
+def test_the_pod_configuration_bounds_how_long_a_run_record_lives(
+    monkeypatch, tmp_path, _pod_run_limits
+) -> None:
+    """A run that never reaches its end releases no record of its own, so the
+    configured ceiling is what decides when a later admission drops one."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    config = _build_test_config(tmp_path).model_copy(
+        update={"execution": PodExecutionConfig(run_ceiling_seconds=42.0)}
+    )
+
+    create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=config,
+    )
+
+    delegation = get_delegation_runtime()
+    assert delegation is not None
+    store = delegation.records
+    now = time.time()
+    store.put(
+        RunRecord(
+            run_id="abandoned",
+            person_id="person",
+            agent_id="agent",
+            started_at=now - (42.0 + RUN_RECORD_AGE_MARGIN_SECONDS + 1.0),
+        )
+    )
+    store.put(
+        RunRecord(
+            run_id="running",
+            person_id="person",
+            agent_id="agent",
+            started_at=now - 42.0,
+        )
+    )
+    store.put(RunRecord(run_id="admitted", person_id="person", agent_id="agent"))
+
+    assert store.get("abandoned") is None
+    assert store.get("running") is not None
 
 
 def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
@@ -4563,6 +4801,38 @@ def test_execute_rejects_checkpoint_id_and_interrupt_id_together(
     assert response.status_code == 422
 
 
+def test_execute_rejects_managed_request_without_team_before_resolution(
+    monkeypatch, tmp_path
+) -> None:
+    async def _unexpected_resolution(**kwargs):
+        raise AssertionError("invalid managed request reached instance resolution")
+
+    monkeypatch.setattr(
+        agent_app_module, "_resolve_agent_instance", _unexpected_resolution
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_instance_id": "instance-without-team",
+                "input": "hello",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_no_security_resolves_personal_team_before_iterate(
     monkeypatch, tmp_path
 ) -> None:
@@ -5629,12 +5899,9 @@ class _FakeRebacEngine:
         return None
 
 
-def _managed_request(team_id: str | None = "fredlab") -> RuntimeExecuteRequest:
+def _managed_request(team_id: str = "fredlab") -> RuntimeExecuteRequest:
     body: dict[str, object] = {"input": "hi", "agent_instance_id": "inst-1"}
-    ctx: dict[str, object] = {"user_id": "alice"}
-    if team_id is not None:
-        ctx["team_id"] = team_id
-    body["runtime_context"] = ctx
+    body["runtime_context"] = {"user_id": "alice", "team_id": team_id}
     return RuntimeExecuteRequest.model_validate(body)
 
 
@@ -5727,24 +5994,6 @@ async def test_authorize_skips_when_engine_disabled(
 
 
 @pytest.mark.asyncio
-async def test_authorize_denies_managed_without_team(
-    monkeypatch, minimal_config
-) -> None:
-    """Managed execution with ReBAC active but no team scope → 403 (F-D)."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id=None), _ALICE, container
-        )
-
-    assert exc.value.status_code == 403
-    assert engine.calls == []
-
-
-@pytest.mark.asyncio
 async def test_authorize_forbids_direct_agent_id_under_c3(
     monkeypatch, minimal_config
 ) -> None:
@@ -5805,26 +6054,6 @@ async def test_authorize_allows_service_agent_scoped_to_team(
         events = list(container.audit_events_buffer)
     assert events[-1]["audit_event"] == "service_agent_authorized"
     assert events[-1].get("team_id") == "fredlab"
-
-
-@pytest.mark.asyncio
-async def test_authorize_service_agent_still_requires_team(
-    monkeypatch, minimal_config
-) -> None:
-    """A service_agent without a team scope fails closed (403) — never global."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id=None), _WORKER, container
-        )
-
-    assert exc.value.status_code == 403
-    assert engine.calls == []
-
-    assert engine.calls == []
 
 
 _BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
@@ -6274,3 +6503,20 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 
     assert len(resolve_calls) == 1
     assert resolve_calls[0]["request_id"] == trace_id
+
+
+def test_delegation_refuses_to_start_before_standing_is_ready(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    """Before default standing is granted the store answers "not active" for
+    everyone, which would refuse every person rather than enforce anything."""
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="caller-1",
+        standing_seed_ready=False,
+    )
+
+    with pytest.raises(ValueError, match="not ready"):
+        with TestClient(app):
+            pass

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, get_delegation_config
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, is_service_agent
 from fred_sdk.knowledge_base.models import KnowledgeBaseRunContext
 
@@ -67,7 +67,11 @@ async def build_run_context(
     # A broad service role is not enough on its own: every backend workload
     # holds one, and the configuration behind this check is where a source's
     # secrets are.
-    if not is_service_agent(user) and user.client_id != LOCAL_DEV_CLIENT_ID:
+    if (
+        not get_delegation_config().enabled
+        and not is_service_agent(user)
+        and user.client_id != LOCAL_DEV_CLIENT_ID
+    ):
         raise RunAccessDenied(
             "Reading a run's configuration requires a service identity"
         )

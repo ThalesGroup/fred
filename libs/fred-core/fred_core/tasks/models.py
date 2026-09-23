@@ -106,6 +106,25 @@ class EvaluationDetail(BaseModel):
     scoring_errors: int
 
 
+AgentRunReason = Literal[
+    "completed",
+    "authority_lost",
+    "registration_failed",
+    "delegation_unavailable",
+    "run_ceiling_reached",
+    "child_limit_reached",
+    "cancelled",
+    "execution_failed",
+]
+
+
+class AgentRunDetail(BaseModel):
+    """Bounded background-run outcome; never carries prompt or model output."""
+
+    mode: Literal["background"] = "background"
+    reason: AgentRunReason | None = None
+
+
 # ── target descriptor (which object the task is working on) ──────────────────
 
 
@@ -143,6 +162,11 @@ class IngestionTaskEvent(_TaskEventBase):
 class EvaluationTaskEvent(_TaskEventBase):
     kind: Literal["evaluation"] = "evaluation"
     detail: EvaluationDetail | None = None
+
+
+class AgentRunTaskEvent(_TaskEventBase):
+    kind: Literal["agent_run"] = "agent_run"
+    detail: AgentRunDetail | None = None
 
 
 class TaskLogEvent(_TaskEventBase):
@@ -235,6 +259,7 @@ TaskEvent = Annotated[
     Union[
         IngestionTaskEvent,
         EvaluationTaskEvent,
+        AgentRunTaskEvent,
         TaskLogEvent,
         MigrationTaskEvent,
         ErasureTaskEvent,
@@ -269,6 +294,12 @@ class StartMigrationRequest(BaseModel):
     kind: Literal["migration"] = "migration"
 
 
+class StartAgentRunRequest(BaseModel):
+    """Starts an agent run whose immutable admission record is stored by its owner."""
+
+    kind: Literal["agent_run"] = "agent_run"
+
+
 class StartErasureRequest(BaseModel):
     kind: Literal["erasure"] = "erasure"
     reason: ErasureReason
@@ -279,6 +310,7 @@ StartTaskRequest = Annotated[
         StartIngestionRequest,
         StartEvaluationRequest,
         StartMigrationRequest,
+        StartAgentRunRequest,
         StartErasureRequest,
     ],
     Field(discriminator="kind"),
@@ -318,6 +350,7 @@ class TaskSummary(BaseModel):
     detail: (
         IngestionDetail
         | EvaluationDetail
+        | AgentRunDetail
         | TaskLogDetail
         | MigrationDetail
         | ErasureDetail

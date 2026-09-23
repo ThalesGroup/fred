@@ -1,6 +1,6 @@
 import logging
 import uuid as _uuid_mod
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Path, Query, Request, status
@@ -12,15 +12,20 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    RebacReference,
+    Resource,
     get_current_user,
     get_current_user_without_gcu,
 )
 from fred_core.common import personal_team_id
+from fred_core.scheduler import delete_schedule_if_exists
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.product.agent_run_store import AGENT_RUN_LIFECYCLE_LOCK
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -61,14 +66,15 @@ from control_plane_backend.users.schemas import (
     UserSummary,
 )
 from control_plane_backend.users.service import (
+    _get_keycloak_admin_for_user_operations,
+    find_user_details_by_id,
+    update_gcu_validation,
+)
+from control_plane_backend.users.service import (
     create_user as create_user_from_service,
 )
 from control_plane_backend.users.service import (
     delete_user as delete_user_from_service,
-)
-from control_plane_backend.users.service import (
-    find_user_details_by_id,
-    update_gcu_validation,
 )
 from control_plane_backend.users.service import (
     get_users_by_ids as get_users_by_ids_from_service,
@@ -76,6 +82,19 @@ from control_plane_backend.users.service import (
 from control_plane_backend.users.service import (
     list_users as list_users_from_service,
 )
+
+
+async def _purge_agent_run_work_for_person(
+    container: Any, person_id: str, *, session: AsyncSession | None = None
+) -> None:
+    store = container.get_agent_run_task_store()
+    schedules = await store.list_schedules_by_creator(person_id, session=session)
+    if schedules:
+        client = await container.get_temporal_client_provider().get_client()
+        for schedule in schedules:
+            await delete_schedule_if_exists(client, schedule.schedule_id)
+    await store.purge_person(person_id, session=session)
+
 
 router = APIRouter(tags=["Users"])
 logger = logging.getLogger(__name__)
@@ -348,9 +367,10 @@ async def create_user(
 @router.delete(
     "/users/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Temporary bootstrap endpoint to delete a user.",
+    summary="Delete a user and revoke their access.",
 )
 async def delete_user(
+    request: Request,
     user_id: Annotated[str, Path(min_length=1)],
     deps: UserDependencies,
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
@@ -369,21 +389,25 @@ async def delete_user(
     # population with no in-product recovery.
     if user_id == await bootstrap_store.get_completed_by():
         raise PlatformRoleRootProtectedError()
-    """
-    Delete a Keycloak user for temporary bootstrap and testing flows.
-
-    Why this endpoint exists:
-    - control-plane still needs one temporary cleanup surface for bootstrap
-      users created during local and migration flows
-
-    How to use it:
-    - call as an authenticated admin user with the Keycloak user id
-    - expect HTTP 404 when the target user does not exist
-
-    Example:
-    - `DELETE /control-plane/v1/users/user-123`
-    """
-    await delete_user_from_service(user, user_id, deps)
+    # "*" is the wildcard subject and "#" marks a userset: neither names a person.
+    if user_id == "*" or "#" in user_id:
+        raise UserNotFoundError(user_id)
+    admin = _get_keycloak_admin_for_user_operations(deps)
+    container = get_application_container(request)
+    lifecycle_store = container.get_agent_run_store()
+    metadata_store = container.get_team_metadata_store()
+    # The ban comes first and the identity-provider account last: a failure after
+    # the ban leaves the person refused, and a retry repeats the idempotent cleanup.
+    async with metadata_store.advisory_lock(AGENT_RUN_LIFECYCLE_LOCK) as session:
+        if rebac.enforces_standing:
+            await rebac.remove_user_standing(user_id)
+        if rebac.enabled:
+            await rebac.delete_all_relations_of_reference(
+                RebacReference(Resource.USER, user_id)
+            )
+        await lifecycle_store.purge_person(user_id, acquire_lock=False, session=session)
+        await _purge_agent_run_work_for_person(container, user_id, session=session)
+    await delete_user_from_service(admin, user_id)
 
 
 class UserDetails(BaseModel):

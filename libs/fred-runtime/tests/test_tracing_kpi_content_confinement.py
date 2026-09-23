@@ -27,6 +27,12 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
+import pytest
+from fred_core.security.delegation import DelegationConfig
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    set_delegation_runtime,
+)
 from fred_runtime.react.middleware import tracing_kpi as tracing_kpi_module
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
@@ -38,6 +44,21 @@ SECRET_QUESTION = (
 )
 SECRET_ANSWER = "your confidential account balance is one million dollars"  # pragma: allowlist secret
 SECRET_ARG_VALUE = "sk-super-secret-tool-argument-value"  # pragma: allowlist secret
+TOOL_NAME_CANARY = "customer-resource-lookup-canary"
+ARG_KEY_CANARY = "account_identifier_canary"
+
+
+@pytest.fixture(autouse=True)
+def _delegated_logging_context():
+    set_delegation_runtime(
+        DelegationRuntime(
+            config=DelegationConfig(enabled=True, allowed_callers=["runtime"])
+        )
+    )
+    try:
+        yield
+    finally:
+        set_delegation_runtime(None)
 
 
 def test_log_model_call_never_logs_message_content(caplog) -> None:
@@ -62,7 +83,11 @@ def test_log_model_response_never_logs_tool_args_or_answer_text(caplog) -> None:
             AIMessage(
                 content="",
                 tool_calls=[
-                    {"name": "lookup", "args": {"query": SECRET_ARG_VALUE}, "id": "1"}
+                    {
+                        "name": TOOL_NAME_CANARY,
+                        "args": {ARG_KEY_CANARY: SECRET_ARG_VALUE},
+                        "id": "1",
+                    }
                 ],
             )
         ]
@@ -75,9 +100,37 @@ def test_log_model_response_never_logs_tool_args_or_answer_text(caplog) -> None:
 
     assert caplog.records, "sanity: log lines were emitted"
     for record in caplog.records:
-        message = record.getMessage()
-        assert SECRET_ARG_VALUE not in message
-        assert SECRET_ANSWER not in message
+        emitted = repr({**record.__dict__, "message": record.getMessage()})
+        assert SECRET_ARG_VALUE not in emitted
+        assert SECRET_ANSWER not in emitted
+        assert TOOL_NAME_CANARY not in emitted
+        assert ARG_KEY_CANARY not in emitted
+
+
+def test_flag_off_preserves_legacy_tool_name_and_argument_key_logging(caplog) -> None:
+    set_delegation_runtime(None)
+    response = ModelResponse(
+        result=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": TOOL_NAME_CANARY,
+                        "args": {ARG_KEY_CANARY: SECRET_ARG_VALUE},
+                        "id": "1",
+                    }
+                ],
+            )
+        ]
+    )
+
+    with caplog.at_level(logging.INFO, logger=tracing_kpi_module.__name__):
+        TracingKpiMiddleware._log_model_response(response)
+
+    emitted = " ".join(record.getMessage() for record in caplog.records)
+    assert TOOL_NAME_CANARY in emitted
+    assert ARG_KEY_CANARY in emitted
+    assert SECRET_ARG_VALUE not in emitted
 
 
 def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:

@@ -40,9 +40,9 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
-  useCreateTagKnowledgeFlowV1TagsPostMutation,
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useCreateTagMutation,
+  useDeleteTagMutation,
+  useListTagsQuery,
   useListTasksKnowledgeFlowV1TasksGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation,
@@ -217,7 +217,7 @@ function DocumentWorkspace({
     data: tags,
     isLoading: tagsLoading,
     refetch: refetchTagsQuery,
-  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  } = useListTagsQuery({
     type: "document",
     ownerFilter,
     teamId: isPersonalTeam ? undefined : teamId,
@@ -388,8 +388,8 @@ function DocumentWorkspace({
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
-  const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
-  const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
+  const [deleteTag] = useDeleteTagMutation();
+  const [createTag] = useCreateTagMutation();
   // Direct retrievable mutation for the folder-aware "exclude from search" bulk
   // action (#2446): a folder's descendant documents are toggled one PUT each,
   // and unlike commands.toggleRetrievable this stays silent so a large subtree

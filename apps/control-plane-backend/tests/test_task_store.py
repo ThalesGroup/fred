@@ -16,8 +16,8 @@ from fred_core.tasks.models import (
     TaskState,
     TaskTarget,
 )
-from fred_core.tasks.store import TaskNotFoundError, TaskStore
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from fred_core.tasks.store import TaskAlreadyExistsError, TaskNotFoundError, TaskStore
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
 
@@ -42,6 +42,59 @@ async def test_task_store_create_and_get_run(tmp_path: Path) -> None:
         assert row.kind == "ingestion"
         assert row.state == TaskState.pending
         assert row.seq == 0
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_task_store_create_rolls_back_with_caller_owned_transaction(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_engine(tmp_path, "store_outer_rollback.sqlite3")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        store = TaskStore(engine, TASK_TABLES)
+        with pytest.raises(RuntimeError, match="synthetic outer failure"):
+            async with sessions.begin() as session:
+                await store.create(
+                    task_id="rolled-back",
+                    kind="agent_run",
+                    created_by="user-1",
+                    session=session,
+                )
+                raise RuntimeError("synthetic outer failure")
+
+        assert await store.get_run("rolled-back") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_task_store_duplicate_keeps_caller_transaction_usable(
+    tmp_path: Path,
+) -> None:
+    engine = await _make_engine(tmp_path, "store_duplicate_transaction.sqlite3")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        store = TaskStore(engine, TASK_TABLES)
+        await store.create(task_id="existing", kind="agent_run", created_by="user-1")
+
+        async with sessions.begin() as session:
+            with pytest.raises(TaskAlreadyExistsError):
+                await store.create(
+                    task_id="existing",
+                    kind="agent_run",
+                    created_by="user-1",
+                    session=session,
+                )
+            await store.create(
+                task_id="after-conflict",
+                kind="agent_run",
+                created_by="user-1",
+                session=session,
+            )
+
+        assert await store.get_run("after-conflict") is not None
     finally:
         await engine.dispose()
 
@@ -74,8 +127,11 @@ async def test_task_store_record_event_updates_run_and_appends_log(
             progress=0.3,
             step="copy_tables",
         )
-        assigned = await store.record_event(event)
+        recorded = await store.record_event(event)
+        assert recorded is not None
+        assigned, state = recorded
         assert assigned == 1
+        assert state == TaskState.running
 
         row = await store.get_run("t2")
         assert row is not None

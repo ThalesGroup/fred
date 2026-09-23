@@ -25,11 +25,13 @@ from typing import Iterable, Literal, Sequence
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_call_metric import call_metric
-from fred_core.security.models import Resource
+from fred_core.security.models import Resource, StandingAuthorizationError
 from fred_core.security.rebac.openfga_schema import (
     DEFAULT_SCHEMA,
 )
 from fred_core.security.rebac.rebac_engine import (
+    _STANDING_RELATIONS,
+    ORGANIZATION_ID,
     RebacEngine,
     RebacPermission,
     RebacReference,
@@ -58,8 +60,10 @@ from openfga_sdk.models.consistency_preference import ConsistencyPreference
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.fga_object import FgaObject
 from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+from openfga_sdk.models.relation_metadata import RelationMetadata
 from openfga_sdk.models.user import User
 from openfga_sdk.models.user_type_filter import UserTypeFilter
+from openfga_sdk.models.userset import Userset
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +77,63 @@ _MAX_TUPLES_PER_WRITE = 100
 # Exact-reference cleanup re-enumerates after each deleting pass; a bound stops
 # a reference that keeps gaining tuples from looping forever.
 _MAX_REFERENCE_CLEANUP_PASSES = 10
+
+_ORGANIZATION_OBJECT = f"{Resource.ORGANIZATION.value}:{ORGANIZATION_ID}"
+_STANDING_RELATION_NAMES = frozenset(relation.value for relation in _STANDING_RELATIONS)
+
+# Types that took a person directly in earlier models. OpenFGA reads and deletes
+# tuples of a type the current model lacks, so person cleanup still removes them.
+_RETIRED_PERSON_OBJECT_TYPES = ("group",)
+
+_USERSET_OPERATORS = (
+    "this",
+    "computed_userset",
+    "tuple_to_userset",
+    "union",
+    "intersection",
+    "difference",
+)
+
+
+def _userset_operator(userset: Userset) -> str | None:
+    """Name the one rewrite operator a model relation uses, or None if malformed."""
+    present = [
+        name for name in _USERSET_OPERATORS if getattr(userset, name, None) is not None
+    ]
+    return present[0] if len(present) == 1 else None
+
+
+def _direct_user_types(
+    relation_metadata: RelationMetadata,
+) -> list[tuple[str, str | None, bool, str | None]]:
+    """(type, userset relation, wildcard, condition) of each directly related type."""
+    return [
+        (
+            reference.type,
+            reference.relation or None,
+            reference.wildcard is not None,
+            reference.condition or None,
+        )
+        for reference in relation_metadata.directly_related_user_types or []
+    ]
+
+
+def _derive_person_object_types(schema: str) -> tuple[str, ...]:
+    """Object types with a relation accepting one person directly (no wildcard, no userset)."""
+    model = json.loads(schema)
+    return tuple(
+        definition["type"]
+        for definition in model.get("type_definitions") or []
+        if any(
+            reference.get("type") == Resource.USER.value
+            and not reference.get("relation")
+            and reference.get("wildcard") is None
+            for metadata in (
+                (definition.get("metadata") or {}).get("relations") or {}
+            ).values()
+            for reference in (metadata or {}).get("directly_related_user_types") or []
+        )
+    )
 
 
 class RebacCleanupIncomplete(RuntimeError):
@@ -101,6 +162,7 @@ class OpenFgaRebacEngine(RebacEngine):
     _config: OpenFgaRebacConfig
     _client_credentials: Credentials
     _schema: str
+    _person_object_types: tuple[str, ...]
     _authorization_model_id: str | None
     _cached_client: OpenFgaClient | None = None
 
@@ -111,7 +173,9 @@ class OpenFgaRebacEngine(RebacEngine):
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
         kpi_writer: BaseKPIWriter | None = None,
+        enforces_standing: bool = False,
     ) -> None:
+        self._enforces_standing = enforces_standing
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
@@ -126,9 +190,18 @@ class OpenFgaRebacEngine(RebacEngine):
 
         self._config = config
         self._schema = schema
+        self._person_object_types = tuple(
+            dict.fromkeys(
+                (*_derive_person_object_types(schema), *_RETIRED_PERSON_OBJECT_TYPES)
+            )
+        )
         self._authorization_model_id = config.authorization_model_id
         self._client_lock = asyncio.Lock()
         self._kpi = kpi_writer
+
+    @property
+    def enforces_standing(self) -> bool:
+        return self._enforces_standing
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Public RebacEngine methods
@@ -142,7 +215,10 @@ class OpenFgaRebacEngine(RebacEngine):
                 writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
             )
 
-            logger.debug("Adding relation %s", relation)
+            if self.enforces_standing:
+                logger.debug("event=authorization_write outcome=started reason=grant")
+            else:
+                logger.debug("Adding relation %s", relation)
 
             options = self._build_options()
             _ = await client.write(body, options)
@@ -152,6 +228,7 @@ class OpenFgaRebacEngine(RebacEngine):
         return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def delete_relation(self, relation: Relation) -> str | None:
+        self._reject_standing_write(relation)
         async with _rebac_timer(self._kpi, "write"):
             client = await self.get_client()
 
@@ -159,7 +236,10 @@ class OpenFgaRebacEngine(RebacEngine):
                 deletes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
             )
 
-            logger.debug("Deleting relation %s", relation)
+            if self.enforces_standing:
+                logger.debug("event=authorization_write outcome=started reason=remove")
+            else:
+                logger.debug("Deleting relation %s", relation)
 
             options = self._build_options()
             _ = await client.write(body, options)
@@ -179,8 +259,14 @@ class OpenFgaRebacEngine(RebacEngine):
         # Improvement on the delete api were added in their roadmap:
         # https://github.com/openfga/roadmap/issues/34
 
+        # "*" and a "#" userset never name one person, and OpenFGA reads "user:#x"
+        # as every person's tuples.
+        if reference.type == Resource.USER and (
+            not reference.id or reference.id == "*" or "#" in reference.id
+        ):
+            raise ValueError("Relationship cleanup takes one person id")
+
         async with _rebac_timer(self._kpi, "write"):
-            fga_id_to_delete = OpenFgaRebacEngine._reference_to_openfga_id(reference)
             client = await self.get_client()
 
             # The loop ends only on a re-read that finds nothing, so a
@@ -189,9 +275,7 @@ class OpenFgaRebacEngine(RebacEngine):
             deleted_total = 0
             converged = False
             for _ in range(_MAX_REFERENCE_CLEANUP_PASSES):
-                to_delete = await self._read_exact_reference_tuples(
-                    client, fga_id_to_delete
-                )
+                to_delete = await self._read_exact_reference_tuples(client, reference)
                 if not to_delete:
                     converged = True
                     break
@@ -221,17 +305,38 @@ class OpenFgaRebacEngine(RebacEngine):
         return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def _read_exact_reference_tuples(
-        self, client: OpenFgaClient, fga_id: str
+        self, client: OpenFgaClient, reference: RebacReference
     ) -> list[ClientTuple]:
         """Return every stored tuple naming this exact reference on either side.
 
         Higher-consistency reads avoid treating a stale empty result as completion.
+        Standing tuples are left out, so a deleted person's ban stays in place.
         """
 
-        found: list[ClientTuple] = []
-        body = ReadRequestTupleKey()
-        continuation_token: str | None = None
+        fga_id = OpenFgaRebacEngine._reference_to_openfga_id(reference)
+        if reference.type == Resource.USER:
+            # A person is never an object nor a userset in this model, so one read
+            # per type accepting them as a direct subject finds every tuple naming them.
+            bodies = [
+                ReadRequestTupleKey(user=fga_id, object=f"{object_type}:")
+                for object_type in self._person_object_types
+            ]
+        else:
+            bodies = [ReadRequestTupleKey()]
 
+        # The reads are independent; running them together shortens the time a
+        # caller holds its lock while OpenFGA answers.
+        parts = await asyncio.gather(
+            *(self._read_tuples_naming(client, body, fga_id) for body in bodies)
+        )
+        return [tup for part in parts for tup in part]
+
+    async def _read_tuples_naming(
+        self, client: OpenFgaClient, body: ReadRequestTupleKey, fga_id: str
+    ) -> list[ClientTuple]:
+        """Page through one Read and keep the non-standing tuples naming `fga_id`."""
+        found: list[ClientTuple] = []
+        continuation_token: str | None = None
         while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
             options = self._build_options(
                 consistency=ConsistencyPreference.HIGHER_CONSISTENCY
@@ -243,6 +348,11 @@ class OpenFgaRebacEngine(RebacEngine):
             continuation_token = res.continuation_token
 
             for tup in res.tuples:
+                if (
+                    tup.key.object == _ORGANIZATION_OBJECT
+                    and tup.key.relation in _STANDING_RELATION_NAMES
+                ):
+                    continue
                 if tup.key.user == fga_id or tup.key.object == fga_id:
                     found.append(
                         ClientTuple(
@@ -366,7 +476,7 @@ class OpenFgaRebacEngine(RebacEngine):
         )
         return await self._read_relations(body, consistency_token=consistency_token)
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -451,10 +561,10 @@ class OpenFgaRebacEngine(RebacEngine):
             response = await client.read(body, options)
             return len(response.tuples) > 0
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -463,12 +573,15 @@ class OpenFgaRebacEngine(RebacEngine):
         async with _rebac_timer(self._kpi, "check"):
             client = await self.get_client()
 
-            logger.debug(
-                "Checking permission %s for subject %s on resource %s",
-                permission,
-                subject,
-                resource,
-            )
+            if self.enforces_standing:
+                logger.debug("event=authorization_check outcome=started")
+            else:
+                logger.debug(
+                    "Checking permission %s for subject %s on resource %s",
+                    permission,
+                    subject,
+                    resource,
+                )
             body = ClientCheckRequest(
                 user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
                 relation=permission.value,
@@ -485,7 +598,7 @@ class OpenFgaRebacEngine(RebacEngine):
 
             return response.allowed
 
-    async def has_permissions(
+    async def _has_permissions_raw(
         self,
         subject: RebacReference,
         permissions: Sequence[RebacPermission],
@@ -509,47 +622,102 @@ class OpenFgaRebacEngine(RebacEngine):
         `False` or silently dropped/overwritten, so a partial or malformed
         OpenFGA response cannot be mistaken for "permission denied".
         """
-        permissions_list = list(permissions)
-        if not permissions_list:
+        return await self._batch_check_raw(
+            subject,
+            [(permission, resource) for permission in permissions],
+            contextual_relations=contextual_relations,
+            consistency_token=consistency_token,
+        )
+
+    async def _has_permissions_with_standing_raw(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> tuple[bool, list[bool]]:
+        results = await self._batch_check_raw(
+            subject,
+            [
+                (
+                    RelationType.ACTIVE,
+                    RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                ),
+                *((permission, resource) for permission in permissions),
+            ],
+            contextual_relations=contextual_relations,
+            consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+            standing_correlation_id="0",
+        )
+        return results[0], results[1:]
+
+    async def _batch_check_raw(
+        self,
+        subject: RebacReference,
+        checks_to_make: Sequence[tuple[RebacPermission | RelationType, RebacReference]],
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+        standing_correlation_id: str | None = None,
+    ) -> list[bool]:
+        if not checks_to_make:
             return []
 
         async with _rebac_timer(self._kpi, "check"):
-            client = await self.get_client()
+            # Establishing the client resolves the store, so the dependency
+            # can already be gone here -- the same unavailability the check
+            # below reports, not something the caller did.
+            try:
+                client = await self.get_client()
+            except Exception:
+                if standing_correlation_id is not None:
+                    raise StandingAuthorizationError(unavailable=True) from None
+                raise
 
             subject_id = OpenFgaRebacEngine._reference_to_openfga_id(subject)
-            object_id = OpenFgaRebacEngine._reference_to_openfga_id(resource)
             contextual_tuples = [
                 OpenFgaRebacEngine._relation_to_tuple(rel)
                 for rel in (contextual_relations or [])
             ] or None
 
-            logger.debug(
-                "BatchCheck %d permissions for subject %s on resource %s",
-                len(permissions_list),
-                subject,
-                resource,
-            )
+            if self.enforces_standing:
+                logger.debug("event=authorization_batch_check outcome=started")
+            else:
+                logger.debug(
+                    "BatchCheck %d permissions for subject %s",
+                    len(checks_to_make),
+                    subject,
+                )
 
             checks = [
                 ClientBatchCheckItem(
                     user=subject_id,
                     relation=permission.value,
-                    object=object_id,
+                    object=OpenFgaRebacEngine._reference_to_openfga_id(check_resource),
                     correlation_id=str(index),
                     contextual_tuples=contextual_tuples,
                 )
-                for index, permission in enumerate(permissions_list)
+                for index, (permission, check_resource) in enumerate(checks_to_make)
             ]
 
             options = self._build_options(consistency=consistency_token)
-            response = await client.batch_check(
-                ClientBatchCheckRequest(checks=checks), options
-            )
+            try:
+                response = await client.batch_check(
+                    ClientBatchCheckRequest(checks=checks), options
+                )
+            except Exception:
+                if standing_correlation_id is not None:
+                    raise StandingAuthorizationError(unavailable=True) from None
+                raise
 
-            expected_ids = {str(index) for index in range(len(permissions_list))}
+            expected_ids = {str(index) for index in range(len(checks_to_make))}
             allowed_by_correlation_id: dict[str, bool] = {}
             for single in response.result:
                 if single.error is not None:
+                    if single.correlation_id == standing_correlation_id:
+                        raise StandingAuthorizationError(unavailable=True) from None
                     raise RuntimeError(
                         "OpenFGA BatchCheck returned an error for "
                         f"correlation_id={single.correlation_id!r}: {single.error}"
@@ -569,13 +737,15 @@ class OpenFgaRebacEngine(RebacEngine):
 
             missing = expected_ids - allowed_by_correlation_id.keys()
             if missing:
+                if standing_correlation_id in missing:
+                    raise StandingAuthorizationError(unavailable=True) from None
                 raise RuntimeError(
                     f"OpenFGA BatchCheck response missing correlation_id(s): {sorted(missing)}"
                 )
 
             return [
                 allowed_by_correlation_id[str(index)]
-                for index in range(len(permissions_list))
+                for index in range(len(checks_to_make))
             ]
 
     async def list_direct_relations(
@@ -600,6 +770,113 @@ class OpenFgaRebacEngine(RebacEngine):
             else None,
         )
         return await self._read_relations(body, consistency_token=consistency_token)
+
+    async def validate_standing_model(self) -> None:
+        """Validate standing relations on the authorization model selected by this engine."""
+        try:
+            client = await self.get_client()
+            options: dict[str, object] = {}
+            if self._authorization_model_id:
+                options["authorization_model_id"] = self._authorization_model_id
+                response = await client.read_authorization_model(options)
+            else:
+                response = await client.read_latest_authorization_model()
+            model = response.authorization_model
+            if model is None:
+                raise ValueError
+            organization = next(
+                definition
+                for definition in model.type_definitions
+                if definition.type == Resource.ORGANIZATION.value
+            )
+            relations = organization.relations
+            metadata = organization.metadata.relations
+
+            # active: [user:*] but not suspended
+            active = relations[RelationType.ACTIVE.value]
+            if _userset_operator(active) != "difference":
+                raise ValueError
+            if _userset_operator(active.difference.base) != "this":
+                raise ValueError
+            subtract = active.difference.subtract
+            if _userset_operator(subtract) != "computed_userset":
+                raise ValueError
+            if subtract.computed_userset.object or (
+                subtract.computed_userset.relation != RelationType.SUSPENDED.value
+            ):
+                raise ValueError
+            if _direct_user_types(metadata[RelationType.ACTIVE.value]) != [
+                (Resource.USER.value, None, True, None)
+            ]:
+                raise ValueError
+
+            # suspended: [user]; standing_ready: [organization]
+            for relation_name, subject_type in (
+                (RelationType.SUSPENDED.value, Resource.USER.value),
+                (RelationType.STANDING_READY.value, Resource.ORGANIZATION.value),
+            ):
+                if _userset_operator(relations[relation_name]) != "this":
+                    raise ValueError
+                if _direct_user_types(metadata[relation_name]) != [
+                    (subject_type, None, False, None)
+                ]:
+                    raise ValueError
+            if not model.id:
+                raise ValueError
+            self._authorization_model_id = model.id
+        except Exception:
+            raise RuntimeError(
+                "Standing authorization model is not available."
+            ) from None
+
+    async def is_standing_seed_ready(self) -> bool:
+        return await self.has_direct_relation(
+            RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            RelationType.STANDING_READY,
+            RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            consistency_token=self.HIGHER_CONSISTENCY,
+        )
+
+    async def mark_standing_seed_ready(self) -> str | None:
+        return await self._write_standing_relation(
+            Relation(
+                subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                relation=RelationType.STANDING_READY,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            )
+        )
+
+    async def grant_default_standing(self) -> str | None:
+        return await self._write_standing_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.ACTIVE,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            )
+        )
+
+    async def remove_user_standing(self, user_id: str) -> str | None:
+        return await self._write_standing_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, user_id),
+                relation=RelationType.SUSPENDED,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            )
+        )
+
+    async def _write_standing_relation(self, relation: Relation) -> str:
+        """Write one lifecycle tuple without placing its person id in logs."""
+        async with _rebac_timer(self._kpi, "write"):
+            client = await self.get_client()
+            body = ClientWriteRequest(
+                writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
+            )
+            await client.write(body, self._build_options())
+            logger.debug(
+                "Standing lifecycle relation written (relation=%s)",
+                relation.relation.value,
+            )
+        return ConsistencyPreference.HIGHER_CONSISTENCY
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Client and initialization helpers
@@ -638,31 +915,40 @@ class OpenFgaRebacEngine(RebacEngine):
 
     async def sync_schema(self, fga_client_with_store: OpenFgaClient) -> str:
         started = time.monotonic()
-        logger.info(
-            "[REBAC] Syncing OpenFGA authorization model (store=%s)...",
-            self._config.store_name,
-        )
+        if self.enforces_standing:
+            logger.info("event=authorization_model_sync outcome=started")
+        else:
+            logger.info(
+                "[REBAC] Syncing OpenFGA authorization model (store=%s)...",
+                self._config.store_name,
+            )
         response = await fga_client_with_store.write_authorization_model(
             json.loads(self._schema)
         )
         self._authorization_model_id = response.authorization_model_id
-        logger.info(
-            "[REBAC] OpenFGA authorization model synced in %dms (model_id=%s)",
-            int((time.monotonic() - started) * 1000),
-            response.authorization_model_id,
-        )
+        if self.enforces_standing:
+            logger.info("event=authorization_model_sync outcome=succeeded")
+        else:
+            logger.info(
+                "[REBAC] OpenFGA authorization model synced in %dms (model_id=%s)",
+                int((time.monotonic() - started) * 1000),
+                response.authorization_model_id,
+            )
         return response.authorization_model_id
 
     async def _initialize_client_and_store(self) -> OpenFgaClient:
         """If needed, create store, sync schema, and return client."""
         # These calls go over the network to OpenFGA; log begin/end with durations so a
         # stalled step is obvious instead of a silent hang (timeout_millisec bounds it).
-        logger.info(
-            "[REBAC] Initializing OpenFGA engine (api_url=%s, store_name=%s, timeout_ms=%s)...",
-            self._config.api_url,
-            self._config.store_name,
-            self._config.timeout_millisec,
-        )
+        if self.enforces_standing:
+            logger.info("event=authorization_store_init outcome=started")
+        else:
+            logger.info(
+                "[REBAC] Initializing OpenFGA engine (api_url=%s, store_name=%s, timeout_ms=%s)...",
+                self._config.api_url,
+                self._config.store_name,
+                self._config.timeout_millisec,
+            )
         started = time.monotonic()
 
         # Try to retrieve store id
@@ -674,13 +960,19 @@ class OpenFgaRebacEngine(RebacEngine):
                 )
 
             # If it does not exist, create it
-            logger.info(
-                "[REBAC] OpenFGA store '%s' not found; creating it.",
-                self._config.store_name,
-            )
+            if self.enforces_standing:
+                logger.info("event=authorization_store_create outcome=started")
+            else:
+                logger.info(
+                    "[REBAC] OpenFGA store '%s' not found; creating it.",
+                    self._config.store_name,
+                )
             store_id = await self._create_store(self._config.store_name)
 
-        logger.info("[REBAC] OpenFGA store resolved (store_id=%s)", store_id)
+        if self.enforces_standing:
+            logger.info("event=authorization_store_init outcome=succeeded")
+        else:
+            logger.info("[REBAC] OpenFGA store resolved (store_id=%s)", store_id)
         client = self._create_client_with_store_id(store_id)
 
         # Sync the schema

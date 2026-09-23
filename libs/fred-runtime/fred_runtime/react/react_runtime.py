@@ -81,6 +81,9 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.authority import RunStopError
+from fred_runtime.runtime_support.run_budget import RunScope, terminal_stop_event
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
@@ -280,6 +283,23 @@ def _elapsed_ms_since(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
 
 
+async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
+    """Close the compiled agent's stream so in-flight parallel tool work is
+    cancelled with the run. A stream never built, or already unwound by its own
+    failure, closes with nothing to do, and a cleanup path must never raise over
+    the outcome it is cleaning up after."""
+
+    aclose = getattr(stream, "aclose", None)
+    if aclose is None:
+        return
+    try:
+        await aclose()
+    except Exception as exc:
+        # Class name only: the traceback here chains the upstream error whose
+        # body must not reach the pod's logs.
+        logger.debug("[V2][REACT] agent stream close failed: %s", type(exc).__name__)
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -317,12 +337,19 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> ReActOutput:
-        logger.info(
-            "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange agent_id=%s session_id=%s",
-            self._runtime_class_name,
-            self._binding.portable_context.agent_id or "unknown",
-            self._binding.portable_context.session_id,
-        )
+        if delegation_enabled():
+            logger.info(
+                "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange",
+                self._runtime_class_name,
+            )
+        else:
+            logger.info(
+                "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange "
+                "agent_id=%s session_id=%s",
+                self._runtime_class_name,
+                self._binding.portable_context.agent_id or "unknown",
+                self._binding.portable_context.session_id,
+            )
         span = None
         span_token = None
         if self._services.tracer is not None:
@@ -364,12 +391,19 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     async def stream(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> AsyncIterator[RuntimeEvent]:
-        logger.debug(
-            "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange agent_id=%s session_id=%s",
-            self._runtime_class_name,
-            self._binding.portable_context.agent_id or "unknown",
-            self._binding.portable_context.session_id,
-        )
+        if delegation_enabled():
+            logger.debug(
+                "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange",
+                self._runtime_class_name,
+            )
+        else:
+            logger.debug(
+                "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange "
+                "agent_id=%s session_id=%s",
+                self._runtime_class_name,
+                self._binding.portable_context.agent_id or "unknown",
+                self._binding.portable_context.session_id,
+            )
         span = None
         span_token = None
         if self._services.tracer is not None:
@@ -492,6 +526,45 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             model_native_thought_started_at = None
             return event
 
+        def _close_pending_tool_pairs() -> list[RuntimeEvent]:
+            """
+            Close every pending tool call / thought pair so neither the tool-call
+            row nor the thought row spins forever in the frontend. Content is
+            left empty on purpose: this runs on failure paths, where the only
+            text available is the failure's own.
+            """
+            nonlocal sequence
+
+            events: list[RuntimeEvent] = []
+            for call_id, thought_id in active_thought_ids.items():
+                events.append(
+                    ToolResultRuntimeEvent(
+                        sequence=sequence,
+                        call_id=call_id,
+                        content="",
+                        is_error=True,
+                    )
+                )
+                sequence += 1
+                thought_started_at = active_thought_started_at.get(call_id)
+                events.append(
+                    ThoughtEndEvent(
+                        sequence=sequence,
+                        thought_id=thought_id,
+                        conclusion="Error",
+                        duration_ms=_elapsed_ms_since(thought_started_at)
+                        if thought_started_at is not None
+                        else None,
+                    )
+                )
+                sequence += 1
+            active_thought_ids.clear()
+            active_thought_started_at.clear()
+            closed = _close_model_native_thought(conclusion="Error")
+            if closed is not None:
+                events.append(closed)
+            return events
+
         def observe_model_call(call_usage: dict[str, int] | None) -> None:
             """
             Track the context size across the turn's model calls (#2403).
@@ -508,13 +581,28 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
             context_tokens = (call_usage or {}).get("input_tokens")
 
-        phase_timer_ctx.__enter__()
+        # The timer hands back its dimensions so the turn can name its own
+        # outcome; a pod with no metrics provider hands back nothing.
+        phase_dims = phase_timer_ctx.__enter__()
+        # One scope per run, carrying the wall-clock ceiling and the children
+        # started under it. A nested run joins the scope already open rather
+        # than opening a second budget of its own.
+        run_scope_ctx = RunScope.open(agent_id=self._binding.portable_context.agent_id)
+        run_scope = run_scope_ctx.__enter__()
+        agent_stream: AsyncIterator[object] | None = None
         try:
-            async for raw_event in self._compiled_agent.astream(
+            # Built here rather than above: translating the input can raise, and
+            # by then the scope is open and owes the caller a close.
+            agent_stream = self._compiled_agent.astream(
                 _graph_input(input_model, config),
                 config=_to_runnable_config(config),
                 stream_mode=["messages", "updates"],
-            ):
+            )
+            while True:
+                try:
+                    raw_event = await run_scope.next_event(agent_stream)
+                except StopAsyncIteration:
+                    break
                 mode, update = _split_stream_event_mode(raw_event)
 
                 if mode == "messages":
@@ -608,11 +696,17 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             if not round_had_tool_success:
                                 last_tool_error = tool_result_content
                                 suppress_assistant_deltas = True
-                                logger.debug(
-                                    "[V2][REACT] tool error intercepted tool=%s — "
-                                    "suppressing LLM turn, surfacing error directly",
-                                    message.name,
-                                )
+                                if delegation_enabled():
+                                    logger.debug(
+                                        "[V2][REACT] tool error intercepted — "
+                                        "suppressing LLM turn, surfacing error directly"
+                                    )
+                                else:
+                                    logger.debug(
+                                        "[V2][REACT] tool error intercepted tool=%s — "
+                                        "suppressing LLM turn, surfacing error directly",
+                                        message.name,
+                                    )
                         else:
                             round_had_tool_success = True
                             if last_tool_error is not None:
@@ -793,45 +887,51 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         span.set_attribute("finish_reason", str(last_finish_reason))
                     if self._services.tracer.captures_content:
                         span.set_io(output=final_content)
+        except RunStopError as stop_error:
+            # The platform ended this run. Children and in-flight parallel work
+            # are cancelled, nothing is retried, and the terminal event is built
+            # from the reason alone so no upstream detail can ride out on it.
+            run_scope.record_stop(stop_error)
+            run_scope.cancel_descendants()
+            if phase_dims is not None:
+                # Otherwise the turn's phase sample reads as a healthy call that
+                # merely took a while — up to the whole ceiling.
+                phase_dims["status"] = "error"
+                phase_dims["error_code"] = stop_error.reason
+            await _aclose_agent_stream(agent_stream)
+            if span is not None:
+                span.set_attribute("status", "error")
+                span.set_attribute("error_type", type(stop_error).__name__)
+            logger.warning(
+                "[V2][REACT] event=run_stopped outcome=stopped reason=%s",
+                stop_error.reason,
+            )
+            for event in _close_pending_tool_pairs():
+                yield event
+            yield terminal_stop_event(stop_error, sequence=sequence)
         except Exception:
             # Mark the turn failed so the trace list shows it as an error
             # instead of a turn that merely produced no answer.
             if span is not None:
                 span.set_attribute("status", "error")
-            # Close every pending tool call / thought pair so neither the
-            # tool-call row nor the thought row spins forever in the frontend.
-            for call_id, thought_id in active_thought_ids.items():
-                yield ToolResultRuntimeEvent(
-                    sequence=sequence,
-                    call_id=call_id,
-                    content="",
-                    is_error=True,
-                )
-                sequence += 1
-                thought_started_at = active_thought_started_at.get(call_id)
-                yield ThoughtEndEvent(
-                    sequence=sequence,
-                    thought_id=thought_id,
-                    conclusion="Error",
-                    duration_ms=_elapsed_ms_since(thought_started_at)
-                    if thought_started_at is not None
-                    else None,
-                )
-                sequence += 1
-            active_thought_ids.clear()
-            active_thought_started_at.clear()
-            # Close an open model-native reasoning block so its accordion does not
-            # spin forever after a mid-stream failure.
-            closed = _close_model_native_thought(conclusion="Error")
-            if closed is not None:
-                yield closed
+            for event in _close_pending_tool_pairs():
+                yield event
             raise
         finally:
+            # Ending the run comes first, and no step here may be skipped
+            # because an earlier one failed: this block also runs when an
+            # abandoned stream is finalized from another context, where
+            # resetting a context variable raises.
+            run_scope_ctx.__exit__(None, None, None)
             phase_timer_ctx.__exit__(None, None, None)
             if span_token is not None:
-                active_agent_span.reset(span_token)
+                try:
+                    active_agent_span.reset(span_token)
+                except ValueError:
+                    logger.debug("[V2][REACT] span reset skipped: foreign context")
             if span is not None:
                 span.end()
+            await _aclose_agent_stream(agent_stream)
 
 
 class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
@@ -886,15 +986,22 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
-        logger.info(
-            "[AGENT VERSION] *** V2 BasicReAct/%s *** activated"
-            " agent_id=%s profile=%s session_id=%s tools=%s",
-            type(self).__name__,
-            self.definition.agent_id,
-            getattr(self.definition, "react_profile_id", "N/A"),
-            binding.portable_context.session_id,
-            [r.tool_ref for r in self.definition.declared_tool_refs],
-        )
+        if delegation_enabled():
+            logger.info(
+                "[AGENT VERSION] *** V2 BasicReAct/%s *** activated tools=%d",
+                type(self).__name__,
+                len(self.definition.declared_tool_refs),
+            )
+        else:
+            logger.info(
+                "[AGENT VERSION] *** V2 BasicReAct/%s *** activated"
+                " agent_id=%s profile=%s session_id=%s tools=%s",
+                type(self).__name__,
+                self.definition.agent_id,
+                getattr(self.definition, "react_profile_id", "N/A"),
+                binding.portable_context.session_id,
+                [r.tool_ref for r in self.definition.declared_tool_refs],
+            )
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -903,13 +1010,21 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             raise RuntimeError("ReActRuntime model is not initialized.")
 
         policy = self.definition.policy()
-        logger.debug(
-            "[V2][EXECUTOR] build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
-            type(self).__name__,
-            self.definition.agent_id,
-            [r.tool_ref for r in self.definition.declared_tool_refs],
-            self._toolset_key(),
-        )
+        if delegation_enabled():
+            logger.debug(
+                "[V2][EXECUTOR] build start runtime=%s declared_tools=%d",
+                type(self).__name__,
+                len(self.definition.declared_tool_refs),
+            )
+        else:
+            logger.debug(
+                "[V2][EXECUTOR] build start runtime=%s agent=%s "
+                "declared_tool_refs=%r toolset_key=%r",
+                type(self).__name__,
+                self.definition.agent_id,
+                [r.tool_ref for r in self.definition.declared_tool_refs],
+                self._toolset_key(),
+            )
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
             toolset_key=self._toolset_key(),
@@ -921,11 +1036,14 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        logger.debug(
-            "[V2][EXECUTOR] bound_tools=%d names=%r",
-            len(bound_tools),
-            [bt.tool.name for bt in bound_tools],
-        )
+        if delegation_enabled():
+            logger.debug("[V2][EXECUTOR] bound_tools=%d", len(bound_tools))
+        else:
+            logger.debug(
+                "[V2][EXECUTOR] bound_tools=%d names=%r",
+                len(bound_tools),
+                [bt.tool.name for bt in bound_tools],
+            )
         tuning_tokens = {
             k.replace(".", "_"): str(v)
             for k, v in self.definition.tuning_values.items()
@@ -960,11 +1078,14 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
-        logger.debug(
-            "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",
-            self.definition.agent_id,
-            len(system_prompt),
-        )
+        if delegation_enabled():
+            logger.debug("[LLM][SYSTEM PROMPT] total_len=%d", len(system_prompt))
+        else:
+            logger.debug(
+                "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",
+                self.definition.agent_id,
+                len(system_prompt),
+            )
         available_tool_names = {
             bound_tool.runtime_name
             for bound_tool in bound_tools

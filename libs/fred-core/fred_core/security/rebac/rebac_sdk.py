@@ -276,6 +276,13 @@ async def rebac_sdk_factory(
     engine = _rebac_factory(security_config, kpi_writer=writer)
     sdk = _RebacSdk(engine)
     await _cast(_InitializableRebacEngine, engine).get_client()
+    # Under delegation, a store without the standing marker refuses every
+    # person at request time; the receiver refuses to start instead, as the
+    # platform services do.
+    if security_config.delegation.enabled:
+        await engine.validate_standing_model()
+        if not await engine.is_standing_seed_ready():
+            raise ValueError("Account standing is not ready.")
     return sdk
 
 

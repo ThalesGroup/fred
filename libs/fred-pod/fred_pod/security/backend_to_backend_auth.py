@@ -15,13 +15,15 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import time
 import typing as t
+from collections.abc import Callable
 
 import httpx
 from httpx import Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # The shape httpx.ASGITransport accepts. Any ASGI application qualifies —
 # FastAPI is one — and naming it this way keeps FastAPI out of the pod floor.
@@ -54,6 +56,9 @@ class M2MAuthConfig(BaseModel):
     client_id: str
     secret_env: str
     scope: str | None = None
+    refresh_failure_cooldown_seconds: float = Field(
+        default=5.0, gt=0, le=60, allow_inf_nan=False
+    )
 
     @property
     def token_url(self) -> str:
@@ -67,29 +72,50 @@ class M2MTokenProvider:
     Thread-safe (async) and cheap to reuse across calls.
     """
 
-    def __init__(self, cfg: M2MAuthConfig):
+    def __init__(
+        self,
+        cfg: M2MAuthConfig,
+        *,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.cfg = cfg
         self._secret = os.getenv(cfg.secret_env, "")
         self._lock = asyncio.Lock()
         self._token: str | None = None
-        self._exp: int = 0  # epoch seconds
+        self._exp: float = 0  # epoch seconds
+        self._failure_deadline = 0.0
+        self._monotonic_clock = monotonic_clock
+        self._wall_clock = wall_clock
+        self._transport = transport
+
+    @staticmethod
+    def _refresh_error() -> RuntimeError:
+        return RuntimeError("Workload token refresh failed.")
+
+    def _raise_during_cooldown(self) -> None:
+        if self._monotonic_clock() < self._failure_deadline:
+            raise self._refresh_error()
 
     async def get_token(self) -> str:
-        now = int(time.time())
+        now = self._wall_clock()
         if self._token and now < self._exp - 30:
             return self._token
+        self._raise_during_cooldown()
 
         async with self._lock:
             # double-check inside lock
-            now = int(time.time())
+            now = self._wall_clock()
             if self._token and now < self._exp - 30:
                 return self._token
+            self._raise_during_cooldown()
 
             if not self._secret:
-                # Fail fast: missing secret will otherwise cause confusing 401s
-                raise RuntimeError(
-                    f"Missing Keycloak client secret in env: {self.cfg.secret_env}"
+                self._failure_deadline = (
+                    self._monotonic_clock() + self.cfg.refresh_failure_cooldown_seconds
                 )
+                raise self._refresh_error()
 
             form = {
                 "grant_type": "client_credentials",
@@ -99,19 +125,35 @@ class M2MTokenProvider:
             if self.cfg.scope:
                 form["scope"] = self.cfg.scope
 
-            async with httpx.AsyncClient(timeout=10.0) as c:
-                r = await c.post(self.cfg.token_url, data=form)
-                r.raise_for_status()
-                payload = r.json()
+            try:
+                async with httpx.AsyncClient(
+                    timeout=10.0, transport=self._transport
+                ) as c:
+                    r = await c.post(self.cfg.token_url, data=form)
+                    r.raise_for_status()
+                    payload = r.json()
 
-            token = payload.get("access_token")
-            expires_in = int(payload.get("expires_in", 60))
-
-            if not isinstance(token, str) or not token:
-                raise RuntimeError("Auth server did not return a valid access_token")
+                token = payload.get("access_token")
+                raw_expires_in = payload.get("expires_in", 60)
+                if not isinstance(token, str) or not token:
+                    raise ValueError
+                if isinstance(raw_expires_in, bool):
+                    raise ValueError
+                expires_in = float(raw_expires_in)
+                if not math.isfinite(expires_in) or expires_in <= 0:
+                    raise ValueError
+                expires_at = now + expires_in
+                if self._wall_clock() >= expires_at:
+                    raise ValueError
+            except Exception:
+                self._failure_deadline = (
+                    self._monotonic_clock() + self.cfg.refresh_failure_cooldown_seconds
+                )
+                raise self._refresh_error() from None
 
             self._token = token
-            self._exp = now + expires_in
+            self._exp = expires_at
+            self._failure_deadline = 0.0
 
             # Guarantee to the outside world that we return str
             assert self._token is not None

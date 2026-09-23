@@ -23,6 +23,7 @@ what keeps the rule in one place while the sites enforcing it are spread out.
 from __future__ import annotations
 
 from fred_core import KeycloakUser
+from fred_core.security.delegation import get_delegation_config
 from fred_core.security.structure import is_service_agent
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
@@ -68,7 +69,7 @@ async def refuse_if_synchronized(tag_store, tag: Tag, user: KeycloakUser) -> Non
     holding no right is still reported as holding no right and a refusal here
     tells a legitimate caller something they can act on.
     """
-    if is_service_agent(user):
+    if is_service_agent(user) and not get_delegation_config().enabled:
         return
     machine = await synchronizing_machine(tag_store, tag)
     if machine is not None:
@@ -77,7 +78,7 @@ async def refuse_if_synchronized(tag_store, tag: Tag, user: KeycloakUser) -> Non
 
 async def refuse_if_synchronized_by_id(tag_store, tag_id: str, user: KeycloakUser) -> None:
     """The same guard for a caller holding only the folder's id."""
-    if is_service_agent(user):
+    if is_service_agent(user) and not get_delegation_config().enabled:
         return
     try:
         tag = await tag_store.get_tag_by_id(tag_id)

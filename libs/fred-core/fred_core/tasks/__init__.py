@@ -12,9 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_core.tasks.agent_run import (
+    AgentRunAdmissionRecord,
+    AgentRunBudget,
+    AgentRunScope,
+    AgentRunWorkflowInputV1,
+    ScheduledAgentRunInputV1,
+    ScheduledAgentRunOccurrence,
+    ScheduledAgentRunOccurrenceRequest,
+)
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
     AcknowledgeTaskResponse,
+    AgentRunDetail,
+    AgentRunTaskEvent,
     ErasureDetail,
     ErasureReason,
     ErasureTaskEvent,
@@ -25,6 +36,7 @@ from fred_core.tasks.models import (
     IngestionTaskEvent,
     MigrationDetail,
     MigrationTaskEvent,
+    StartAgentRunRequest,
     StartErasureRequest,
     StartEvaluationParams,
     StartEvaluationRequest,
@@ -56,7 +68,7 @@ from fred_core.tasks.service import (
     run_reconcile_sweeper,
 )
 from fred_core.tasks.sse import HEARTBEAT_INTERVAL, task_event_stream, with_heartbeat
-from fred_core.tasks.store import TaskNotFoundError, TaskStore
+from fred_core.tasks.store import TaskAlreadyExistsError, TaskNotFoundError, TaskStore
 from fred_core.tasks.workflow_control import (
     ExecutionStatus,
     NoopWorkflowControl,
@@ -67,6 +79,15 @@ from fred_core.tasks.workflow_control import (
 __all__ = [
     # models
     "TaskState",
+    "AgentRunAdmissionRecord",
+    "AgentRunBudget",
+    "AgentRunScope",
+    "AgentRunWorkflowInputV1",
+    "ScheduledAgentRunInputV1",
+    "ScheduledAgentRunOccurrence",
+    "ScheduledAgentRunOccurrenceRequest",
+    "AgentRunDetail",
+    "AgentRunTaskEvent",
     "TaskTarget",
     "IngestionProcessingProfile",
     "TaskEvent",
@@ -86,6 +107,7 @@ __all__ = [
     "StartIngestionRequest",
     "StartMigrationRequest",
     "StartErasureRequest",
+    "StartAgentRunRequest",
     "StartIngestionParams",
     "StartEvaluationRequest",
     "StartEvaluationParams",
@@ -111,6 +133,7 @@ __all__ = [
     "ExecutionStatus",
     # store
     "TaskNotFoundError",
+    "TaskAlreadyExistsError",
     "TaskStore",
     # service
     "TaskService",

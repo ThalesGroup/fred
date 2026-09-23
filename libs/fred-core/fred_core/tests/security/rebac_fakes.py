@@ -58,7 +58,9 @@ class FakeRebacEngine(RebacEngine):
         self.received_permission: RebacPermission | RelationType | None = None
         self.received_resource_type: Resource | None = None
         self.received_contextual_relations: list[Relation] = []
-        self.checked: list[tuple[RebacReference, RebacPermission, RebacReference]] = []
+        self.checked: list[
+            tuple[RebacReference, RebacPermission | RelationType, RebacReference]
+        ] = []
         self.checked_contextual_relations: list[list[Relation]] = []
         # Consistency is a correctness argument for app admission, so a test has
         # to be able to assert the value each read requested, not only that a
@@ -94,7 +96,7 @@ class FakeRebacEngine(RebacEngine):
     ) -> list[Relation]:
         return []
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -125,10 +127,10 @@ class FakeRebacEngine(RebacEngine):
     ) -> list[RebacReference]:
         return []
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,

@@ -1496,3 +1496,43 @@ operations:
     path: /knowledge-flow/v1/vector/visual-evidence-artifact
     review_status: pending_review
     required_permission: pending_review
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/agent-runs
+    review_status: approved
+    required_permission: verified workload client/subject and asserted account standing plus team.can_use_team_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/agent-runs/{run_id}/end
+    review_status: approved
+    required_permission: verified workload identity and exact recorded reporter client/subject; existing run required
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/tasks
+    review_status: approved
+    required_permission: account standing and team.can_use_team_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/task-schedules
+    review_status: approved
+    required_permission: account standing and team.can_use_team_agents; explicit schedule opt-in
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/task-schedules
+    review_status: approved
+    required_permission: account standing and schedule owner or team.can_administer_members
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/task-schedules/{schedule_id}
+    review_status: approved
+    required_permission: account standing and schedule owner or team.can_administer_members
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/agent-run-tasks/{task_id}/events
+    review_status: approved
+    required_permission: verified workload identity and exact admitted reporter client/subject; existing task/admission required
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/agent-run-schedules/{schedule_id}/occurrences
+    review_status: approved
+    required_permission: verified workload identity and current configured reporter client/subject; creator standing and team.can_use_team_agents

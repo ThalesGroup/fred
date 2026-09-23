@@ -28,6 +28,10 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    agent_run_default_ceiling_seconds: float = Field(
+        default=900.0, gt=0, allow_inf_nan=False
+    )
+    agent_run_max_concurrent_children: int = Field(default=4, ge=1)
     team_admin_charter_version: str | None = Field(
         default=None,
         description=(
@@ -195,6 +199,9 @@ class RuntimeCatalogSourceConfig(BaseModel):
             "MUST NOT be a cluster-internal hostname or pod IP."
         ),
     )
+    workload_client_id: str | None = Field(default=None, min_length=1)
+    workload_subject: str | None = Field(default=None, min_length=1)
+    agent_task_queue: str | None = Field(default=None, min_length=1)
 
 
 class ManagedAgentUiHints(BaseModel):
@@ -287,6 +294,15 @@ class ManagedAgentTuning(BaseModel):
             "replaces: `AGENT-THINKING-API-RFC.md` Amendment C measured "
             "reasoning re-issuing duplicate tool calls on this stack, so "
             "starting ON is an opt-in an author makes deliberately."
+        ),
+    )
+    run_ceiling_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Optional managed-run wall-clock ceiling. When unset, admission uses "
+            "the runtime deployment default."
         ),
     )
 

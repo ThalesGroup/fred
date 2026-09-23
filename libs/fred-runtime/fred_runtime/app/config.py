@@ -195,6 +195,52 @@ class PodAIConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Execution section
+# ---------------------------------------------------------------------------
+
+
+class PodExecutionConfig(BaseModel):
+    """
+    Run-level limits for the two agent engines.
+
+    Why this section is not part of `ai.timeout`: those values bound one
+    outbound call. These bound the whole run — every model call, tool call and
+    child it makes — and leave per-call timeouts exactly as configured.
+
+    How to use it:
+    - lower `run_ceiling_seconds` on a deployment where a person is always
+      waiting; a run past its ceiling ends with reason `run_ceiling_reached`
+    - pass both values to `runtime_support.run_budget.configure_run_limits()`
+      at pod startup; the same defaults apply until it is called
+
+    Example:
+    - `PodExecutionConfig(run_ceiling_seconds=600, max_concurrent_children=4)`
+    """
+
+    run_ceiling_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Wall-clock budget for one attended run, in seconds. Independent of "
+            "the per-call timeouts in `ai.timeout`."
+        ),
+    )
+    max_concurrent_children: int = Field(
+        default=8,
+        ge=1,
+        description=(
+            "Maximum number of children (child agents, team members, parallel "
+            "graph members) one run may have in flight at once."
+        ),
+    )
+    reconnect_grace_seconds: float = Field(default=60.0, gt=0, allow_inf_nan=False)
+    replay_max_events: int = Field(default=512, ge=1)
+    replay_max_bytes: int = Field(default=2 * 1024 * 1024, ge=1024)
+    foreground_max_runs: int = Field(default=128, ge=1)
+
+
+# ---------------------------------------------------------------------------
 # Observability section
 # ---------------------------------------------------------------------------
 
@@ -331,6 +377,7 @@ class PodSchedulerConfig(BaseModel):
     """
 
     enabled: bool = False
+    agent_runs_enabled: bool = False
     backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
@@ -384,6 +431,7 @@ class AgentPodConfig(BaseModel):
     app: PodAppConfig
     security: SecurityConfiguration
     ai: PodAIConfig = Field(default_factory=PodAIConfig)
+    execution: PodExecutionConfig = Field(default_factory=PodExecutionConfig)
     observability: PodObservabilityConfig = Field(
         default_factory=PodObservabilityConfig
     )

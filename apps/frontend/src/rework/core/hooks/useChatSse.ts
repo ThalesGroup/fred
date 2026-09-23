@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from "uuid";
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePrepareAgentExecutionMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
@@ -44,7 +44,7 @@ import {
   mergeContextPromptText,
   mergeReasoningActivation,
   mergeRoutingPolicy,
-  parseSseFrames,
+  parseSseRecords,
 } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
@@ -189,6 +189,12 @@ type AnyRuntimeEvent =
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent);
 
+type RuntimeReconnectRequestBody = {
+  reconnect: { run_id: string; after_sequence?: number };
+};
+
+const MAX_RECONNECT_ATTEMPTS = 3;
+
 class RuntimeHttpError extends Error {
   constructor(
     readonly status: number,
@@ -307,8 +313,7 @@ export function useChatSse(
     flushPendingWrites,
   } = params;
 
-  const [prepareExecution] =
-    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const [prepareExecution] = usePrepareAgentExecutionMutation();
   const dispatch = useDispatch();
   const { i18n } = useTranslation();
 
@@ -356,6 +361,15 @@ export function useChatSse(
   // registry (plugin first, then the capability-agnostic stock kit).
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
   const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      preflightOwnerRef.current = null;
+    },
+    [],
+  );
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -710,37 +724,77 @@ export function useChatSse(
       // then failed mid-stream" — only the first may put the HITL prompt back.
       onAccepted?: () => void,
     ): Promise<void> => {
-      const url = new URL(executeStreamUrl, window.location.origin);
-      console.debug(
-        `[useChatSse] streamToMessages — resolved URL="${url.toString()}" signal.aborted=${signal.aborted}`,
-      );
-      const response = await fetch(url.toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-        signal,
-      });
-
-      console.debug(`[useChatSse] fetch response — status=${response.status} ok=${response.ok}`);
-      if (!response.ok) {
-        throw await runtimeHttpError(response);
-      }
-
-      if (!response.body) throw new Error("Empty response body from runtime");
-
-      onAccepted?.();
-
       const rankRef = { current: messagesRef.current.length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
+      const url = new URL(executeStreamUrl, window.location.origin);
+      let runId: string | null = null;
+      let lastSequence: number | null = null;
+      let reconnectAttempts = 0;
+      let requestBody: RuntimeExecuteRequest | RuntimeReconnectRequestBody = body;
+      let bearer = token;
 
-      const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
-        console.warn("[useChatSse] Failed to parse SSE frame:", raw),
-      );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      while (true) {
+        console.debug(
+          `[useChatSse] streamToMessages — resolved URL="${url.toString()}" signal.aborted=${signal.aborted}`,
+        );
+        let response: Response;
+        try {
+          response = await fetch(url.toString(), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${bearer}`,
+            },
+            body: JSON.stringify(requestBody),
+            signal,
+          });
+        } catch (error) {
+          if (signal.aborted || runId === null || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) throw error;
+          reconnectAttempts += 1;
+          await KeyCloakService.ensureFreshToken(TURN_TOKEN_HARD_FLOOR_S);
+          if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+          bearer = KeyCloakService.GetToken() ?? "";
+          continue;
+        }
+
+        console.debug(`[useChatSse] fetch response — status=${response.status} ok=${response.ok}`);
+        if (!response.ok) throw await runtimeHttpError(response);
+        if (!response.body) throw new Error("Empty response body from runtime");
+
+        if (runId === null) {
+          runId = response.headers?.get?.("X-Fred-Run-Id") ?? null;
+          onAccepted?.();
+        }
+
+        let terminal = false;
+        try {
+          const records = parseSseRecords<AnyRuntimeEvent>(response.body, (raw) =>
+            console.warn("[useChatSse] Failed to parse SSE frame:", raw),
+          );
+          for await (const record of records) {
+            if (record.id !== null && lastSequence !== null && record.id <= lastSequence) continue;
+            processEvent(record.data, { exchangeId, sessionId, rankRef, deltaRankRef });
+            if (record.id !== null) lastSequence = record.id;
+            terminal ||= record.data.kind === "final" || record.data.kind === "execution_error";
+          }
+        } catch (error) {
+          if (signal.aborted || runId === null || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) throw error;
+        }
+
+        if (terminal || runId === null) return;
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+          throw new Error("The stream could not be resumed.");
+        }
+        reconnectAttempts += 1;
+        await KeyCloakService.ensureFreshToken(TURN_TOKEN_HARD_FLOOR_S);
+        if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+        bearer = KeyCloakService.GetToken() ?? "";
+        requestBody = {
+          reconnect: {
+            run_id: runId,
+            ...(lastSequence === null ? {} : { after_sequence: lastSequence }),
+          },
+        };
       }
     },
     [processEvent],

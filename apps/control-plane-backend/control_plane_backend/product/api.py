@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import (
     APIRouter,
@@ -17,15 +17,27 @@ from fastapi import (
 from fastapi.responses import Response
 from fred_core import (
     ORGANIZATION_ID,
+    AssertedUser,
     KeycloakUser,
     OrganizationPermission,
     TeamPermission,
+    get_authenticated_caller,
     get_current_user,
+    get_delegation_config,
+    get_principal_context,
+    require_workload_caller,
 )
 from fred_core.common import TeamId
 from fred_core.kpi import runtime_stage_timer
+from fred_core.security.structure import PrincipalContext
 from pydantic import ValidationError
 
+from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.product.agent_run_store import (
+    AGENT_RUN_LIFECYCLE_LOCK,
+    AgentRunRecord,
+    AgentRunStore,
+)
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
@@ -40,6 +52,7 @@ from control_plane_backend.product.schemas import (
     CreatePromptRequest,
     CreateSessionAttachmentRequest,
     CreateSessionRequest,
+    EndAgentRunRequest,
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
@@ -56,6 +69,8 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    RegisterAgentRunRequest,
+    RegisterAgentRunResponse,
     RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
     SessionListItem,
@@ -117,6 +132,156 @@ ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
 ]
+
+
+def _get_agent_run_store(request: Request) -> AgentRunStore:
+    return get_application_container(request).get_agent_run_store()
+
+
+AgentRunStoreDependency = Annotated[AgentRunStore, Depends(_get_agent_run_store)]
+
+
+def _document_delegation_grant_query(
+    person: Annotated[str, Query()],
+    run: Annotated[str, Query()],
+    agent: Annotated[str, Query()],
+) -> None:
+    """Expose the query-only delegation grant in this route's public contract."""
+
+
+def _document_optional_delegation_grant_query(
+    person: Annotated[str | None, Query()] = None,
+    run: Annotated[str | None, Query()] = None,
+    agent: Annotated[str | None, Query()] = None,
+) -> None:
+    """The same grant on a route a person also reaches in their own right.
+
+    Required parameters would reject the interactive caller, who presents a token
+    and names nobody, so these stay optional.
+    """
+
+
+@router.post(
+    "/agent-runs",
+    operation_id="register_agent_run",
+    response_model=RegisterAgentRunResponse,
+    status_code=201,
+)
+async def register_agent_run(
+    body: RegisterAgentRunRequest,
+    deps: ProductDependencies,
+    store: AgentRunStoreDependency,
+    principals: PrincipalContext = Depends(get_principal_context),
+    _grant_query: Annotated[None, Depends(_document_delegation_grant_query)] = None,
+) -> RegisterAgentRunResponse:
+    if not isinstance(principals.subject, AssertedUser):
+        raise HTTPException(status_code=403, detail="delegated_grant_required")
+    grant = principals.subject
+    if body.agent_instance_id is not None:
+        if grant.agent_id != body.agent_instance_id:
+            raise HTTPException(status_code=403, detail="agent_target_mismatch")
+        if body.team_id is None:
+            raise HTTPException(status_code=422, detail="team_id_required")
+        team_id = await require_team_access(
+            cast(KeycloakUser, grant),
+            body.team_id,
+            deps.team_dependencies,
+            required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+        )
+        binding = await get_runtime_binding_for_team(
+            body.agent_instance_id, team_id, deps
+        )
+        if binding is None:
+            raise HTTPException(status_code=404, detail="Unknown agent instance.")
+        if not binding.enabled:
+            raise HTTPException(
+                status_code=409, detail="Managed agent instance is disabled."
+            )
+        stored_override = binding.tuning.run_ceiling_seconds
+        effective_ceiling = (
+            min(body.run_ceiling_seconds, stored_override or body.run_ceiling_seconds)
+            if body.mode == "background"
+            else stored_override or body.run_ceiling_seconds
+        )
+    else:
+        if deps.configuration.security.profile == "c3":
+            raise HTTPException(status_code=403, detail="direct_execution_not_allowed")
+        if grant.agent_id != body.agent_id:
+            raise HTTPException(status_code=403, detail="agent_target_mismatch")
+        binding = None
+        effective_ceiling = body.run_ceiling_seconds
+        team_id = body.team_id
+        if team_id is not None:
+            team_id = await require_team_access(
+                cast(KeycloakUser, grant),
+                team_id,
+                deps.team_dependencies,
+                required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+            )
+
+    caller = principals.caller
+    if caller.client_id is None:
+        raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
+    record = AgentRunRecord(
+        run_id=grant.run_id,
+        person_id=grant.uid,
+        team_id=str(team_id) if team_id is not None else None,
+        agent_id=grant.agent_id,
+        agent_instance_id=body.agent_instance_id,
+        reporter_client_id=caller.client_id,
+        reporter_subject=caller.uid,
+        origin_caller=body.origin_caller,
+        mode=body.mode,
+        started_at=body.started_at,
+        run_ceiling_seconds=effective_ceiling,
+    )
+    try:
+        async with deps.get_team_metadata_store().advisory_lock(
+            AGENT_RUN_LIFECYCLE_LOCK
+        ) as session:
+            await deps.team_dependencies.rebac.require_user_standing(grant.uid)
+            await store.create(record, acquire_lock=False, session=session)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="agent_run_exists") from exc
+    return RegisterAgentRunResponse(
+        run_id=grant.run_id,
+        run_ceiling_seconds=effective_ceiling,
+        binding=binding,
+    )
+
+
+@router.post(
+    "/agent-runs/{run_id}/end",
+    operation_id="end_agent_run",
+    status_code=204,
+)
+async def end_agent_run(
+    run_id: Annotated[str, Path(min_length=1, max_length=256)],
+    body: EndAgentRunRequest,
+    store: AgentRunStoreDependency,
+    caller: KeycloakUser = Depends(get_authenticated_caller),
+) -> None:
+    require_workload_caller(caller)
+    record = await store.get(run_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if (
+        caller.client_id != record.reporter_client_id
+        or caller.uid != record.reporter_subject
+    ):
+        raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
+    try:
+        ended = await store.end(
+            run_id=run_id,
+            outcome=body.outcome,
+            reason=body.reason.value if body.reason is not None else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409, detail="agent_run_terminal_conflict"
+        ) from exc
+    if ended is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
 
 
 @router.get(
@@ -1693,6 +1858,9 @@ async def post_prepare_runtime_agent_execution(
     agent_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    _grant_query: Annotated[
+        None, Depends(_document_optional_delegation_grant_query)
+    ] = None,
 ) -> RuntimeAgentExecutionPreparation:
     """
     Prepare an ingress-safe execution URL and short-lived grant for a direct
@@ -1715,6 +1883,7 @@ async def post_prepare_runtime_agent_execution(
     "/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution",
     response_model=ExecutionPreparation,
     response_model_exclude_none=True,
+    operation_id="prepare_agent_execution",
     summary="Prepare one authorized runtime execution context for one managed agent instance.",
 )
 async def post_prepare_execution(
@@ -1722,9 +1891,12 @@ async def post_prepare_execution(
     agent_instance_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     http_request: Request,
-    user: KeycloakUser = Depends(get_current_user),
+    principals: PrincipalContext | KeycloakUser = Depends(get_principal_context),
     session_id: str | None = None,
     agent_model_override: str | None = None,
+    _grant_query: Annotated[
+        None, Depends(_document_optional_delegation_grant_query)
+    ] = None,
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -1756,8 +1928,14 @@ async def post_prepare_execution(
     capability already required to list this team's agent instances in the
     first place (the natural next step in the same flow).
     """
+    principal_context = (
+        principals
+        if isinstance(principals, PrincipalContext)
+        else PrincipalContext(caller=principals, subject=principals)
+    )
+    user = principal_context.subject
     team_id = await require_team_access(
-        user,
+        cast(KeycloakUser, user),
         team_id,
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
@@ -1765,7 +1943,7 @@ async def post_prepare_execution(
 
     try:
         return await prepare_execution(
-            user=user,
+            user=cast(KeycloakUser, user),
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
@@ -1775,6 +1953,11 @@ async def post_prepare_execution(
             # round-trip on enroll/update.
             authorization=http_request.headers.get("Authorization"),
             agent_model_override=agent_model_override,
+            model_override_authorized=(
+                require_workload_caller(principal_context.caller) is not None
+                if agent_model_override is not None and get_delegation_config().enabled
+                else False
+            ),
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

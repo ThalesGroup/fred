@@ -203,6 +203,9 @@ class RagScopeControlParams(BaseModel):
 class ClientAuthMode(str, Enum):
     USER_TOKEN = "user_token"  # nosec B105
     NO_TOKEN = "no_token"  # nosec B105
+    # The workload's own bearer plus the delegation grant, carried outside tool
+    # arguments — the person's token is never forwarded to the server.
+    DELEGATED = "delegated"
 
 
 class TeamScopePolicy(str, Enum):
@@ -348,6 +351,12 @@ class StoredCapabilityConfig(BaseModel):
 class AgentTuning(BaseModel):
     """Runtime-editable tuning surface for one agent."""
 
+    run_ceiling_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        allow_inf_nan=False,
+        description="Maximum run duration in seconds; unset uses the deployment default.",
+    )
     role: str = Field(..., description="The agent's mandatory role for discovery.")
     description: str = Field(
         ..., description="The agent's mandatory description for the UI."
@@ -984,6 +993,7 @@ class AgentDefinition(FrozenModel, ABC):
     """
 
     agent_id: str = Field(..., min_length=1)
+    run_ceiling_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     role: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
     description_by_lang: Optional[Dict[str, str]] = None

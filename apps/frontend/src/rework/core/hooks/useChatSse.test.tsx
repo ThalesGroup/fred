@@ -84,7 +84,7 @@ vi.mock("../../../security/KeycloakService", () => ({
     // "GetTokenSecondsLeft is not a function" — the default is comfortably
     // above TURN_TOKEN_HARD_FLOOR_S so existing tests are unaffected.
     GetTokenSecondsLeft: vi.fn((): number | null => 3600),
-    GetToken: () => "test-token",
+    GetToken: vi.fn(() => "test-token"),
     GetUserId: () => "user-1",
   },
 }));
@@ -105,7 +105,7 @@ function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () =
 }
 
 vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation: () => [
+  usePrepareAgentExecutionMutation: () => [
     (args: unknown) => {
       prepareExecutionCalls.push(args);
       return mockMutationResult(prepareExecutionImpl(args));
@@ -171,6 +171,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     vi.mocked(KeyCloakService.ensureFreshToken).mockResolvedValue(true);
     vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReset();
     vi.mocked(KeyCloakService.GetTokenSecondsLeft).mockReturnValue(3600);
+    vi.mocked(KeyCloakService.GetToken).mockReset();
+    vi.mocked(KeyCloakService.GetToken).mockReturnValue("test-token");
   });
 
   afterEach(() => {
@@ -1147,5 +1149,145 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await expect(result).resolves.toBe(false);
     expect(prepareExecutionCalls).toHaveLength(0);
     expect(onErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("reconnects an accepted run with its cursor and current refreshed bearer without preparing or executing again", async () => {
+    flushPendingWrites = async () => true;
+    const encoder = new TextEncoder();
+    let firstRead = true;
+    const interrupted = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (firstRead) {
+          firstRead = false;
+          controller.enqueue(
+            encoder.encode(
+              'id: 0\ndata: {"kind":"tool_call","call_id":"call-a","tool_name":"lookup","arguments":{}}\n\n',
+            ),
+          );
+        } else {
+          controller.error(new Error("synthetic disconnect"));
+        }
+      },
+    });
+    const replay = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'id: 0\ndata: {"kind":"tool_call","call_id":"call-a","tool_name":"lookup","arguments":{}}\n\n' +
+              'id: 1\ndata: {"kind":"final","content":"done"}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(KeyCloakService.GetToken).mockReturnValueOnce("initial-token").mockReturnValue("refreshed-token");
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(interrupted, { status: 200, headers: { "X-Fred-Run-Id": "run-a" } }))
+      .mockResolvedValueOnce(new Response(replay, { status: 200 }));
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(prepareExecutionCalls).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+      reconnect: { run_id: "run-a", after_sequence: 0 },
+    });
+    expect((fetchSpy.mock.calls[1][1]?.headers as Record<string, string>).Authorization).toBe("Bearer refreshed-token");
+    expect(latest.messages.filter((message) => message.channel === "tool_call")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.role === "user")).toHaveLength(1);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([401, 403, 404, 409, 410, 503])(
+    "treats reconnect HTTP %s as terminal and never starts a new execution",
+    async (status) => {
+      flushPendingWrites = async () => true;
+      const encoder = new TextEncoder();
+      let firstRead = true;
+      const interrupted = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (firstRead) {
+            firstRead = false;
+            controller.enqueue(encoder.encode('id: 0\ndata: {"kind":"status","status":"running"}\n\n'));
+          } else {
+            controller.error(new Error("synthetic disconnect"));
+          }
+        },
+      });
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(interrupted, { status: 200, headers: { "X-Fred-Run-Id": "run-a" } }))
+        .mockResolvedValueOnce(new Response(null, { status }));
+      mount();
+
+      await act(async () => {
+        await latest.send("hello", "session-1");
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(prepareExecutionCalls).toHaveLength(1);
+      expect(JSON.parse(String(fetchSpy.mock.calls[1][1]?.body))).toEqual({
+        reconnect: { run_id: "run-a", after_sequence: 0 },
+      });
+      expect(onErrorMock).toHaveBeenCalledWith(expect.stringContaining(String(status)));
+      fetchSpy.mockRestore();
+    },
+  );
+
+  it("does not reconnect when the user explicitly aborts an accepted stream", async () => {
+    flushPendingWrites = async () => true;
+    const read = deferred<ReadableStreamReadResult<Uint8Array>>();
+    const body = {
+      getReader: () => ({ read: () => read.promise, releaseLock: () => {} }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "X-Fred-Run-Id": "run-a" }),
+      body,
+    } as Response);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.abort());
+    read.reject(new DOMException("The operation was aborted.", "AbortError"));
+    await act(async () => sendPromise);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("keeps legacy no-handle stream failure behavior without reconnecting", async () => {
+    flushPendingWrites = async () => true;
+    const body = {
+      getReader: () => ({
+        read: () => Promise.reject(new Error("legacy disconnect")),
+        releaseLock: () => {},
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body,
+    } as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).toHaveBeenCalledWith(expect.stringContaining("legacy disconnect"));
+    fetchSpy.mockRestore();
   });
 });

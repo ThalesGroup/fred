@@ -26,21 +26,44 @@ All tests run without any external services.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import threading
+from collections.abc import Iterator
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import fred_runtime.app.openai_compat_router as openai_compat_router_module
+import httpx
+import pytest
 from conftest import (
     StaticChatModelFactory,
     ToolFriendlyFakeChatModel,
     migrate_test_config,
 )
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_core.security.delegation import (
+    GRANT_PARAM_AGENT,
+    GRANT_PARAM_PERSON,
+    GRANT_PARAM_RUN,
+    DelegationConfig,
+)
+from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    set_delegation_runtime,
+)
+from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
+from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk.contracts.openai_compat import OpenAIChatRequest
 from langchain_core.messages import AIMessage
 
 
@@ -376,3 +399,536 @@ def test_chat_completions_streams_openai_chunks_and_done(monkeypatch, tmp_path) 
     # The final chunk must have finish_reason="stop"
     final_chunks = [c for c in chunks if c["choices"][0].get("finish_reason") == "stop"]
     assert final_chunks, "Expected a chunk with finish_reason=stop"
+
+
+# ---------------------------------------------------------------------------
+# /v1/chat/completions — admission
+# ---------------------------------------------------------------------------
+
+PERSON_TOKEN = "person-bearer-token"
+
+
+class _AuditingContainer:
+    """What the route asks of the pod container: the two attributes the audit
+    helper writes to, and the control-plane client the resolution stub ignores."""
+
+    def __init__(self) -> None:
+        self._audit_events_lock = threading.Lock()
+        self.audit_events_buffer: list[dict[str, Any]] = []
+
+    def get_control_plane_http_client(self) -> httpx.AsyncClient | None:
+        return None
+
+
+class _RegistrationContainer(_AuditingContainer):
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        super().__init__()
+        self._client = client
+
+    def get_control_plane_http_client(self) -> httpx.AsyncClient:
+        return self._client
+
+
+class _FakeWorkloadTokens(M2MTokenProvider):
+    """The pod's own bearer, already in hand: the real provider caches one and
+    only talks to the realm when it has none, which offline it never would."""
+
+    def __init__(self) -> None:
+        self.token = "workload-token"
+
+    async def get_token(self) -> str:
+        return self.token
+
+
+@pytest.fixture
+def compat_pod() -> Iterator[_AuditingContainer]:
+    """An offline pod for the /v1 surface: a runtime context with no engine and
+    no delegation left installed for whatever test runs next."""
+    set_runtime_context(
+        FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid/kf/v1"))
+    )
+    yield _AuditingContainer()
+    set_delegation_runtime(None)
+    set_runtime_context(None)
+
+
+def install_delegation(*, allowed_callers: list[str] | None) -> DelegationRuntime:
+    config = (
+        DelegationConfig(enabled=True, allowed_callers=allowed_callers)
+        if allowed_callers
+        else DelegationConfig.model_construct(enabled=True, allowed_callers=[])
+    )
+    runtime = DelegationRuntime(
+        config=config,
+        token_provider=_FakeWorkloadTokens(),
+        workload_client_id="agent-backend",
+    )
+    set_delegation_runtime(runtime)
+    return runtime
+
+
+def compat_client(
+    monkeypatch, captured: dict[str, Any], container: _AuditingContainer
+) -> TestClient:
+    """A client over the /v1 router alone: the turn and the instance resolution
+    are stubbed so the test reads what admission handed them."""
+
+    definition = _HelloAgent()
+
+    async def _fake_resolve(**kwargs: Any):
+        captured["resolved_with"] = kwargs.get("access_token")
+        return agent_app_module._ResolvedExecutionTarget(
+            definition=definition,
+            effective_agent_id=definition.agent_id,
+            team_id=kwargs.get("team_id"),
+        )
+
+    async def _fake_iterate(_definition, _request, **kwargs: Any):
+        captured["kwargs"] = kwargs
+        provider = kwargs.get("credential_provider")
+        if provider is not None:
+            captured["credentials"] = await provider.credentials()
+        yield {"kind": "final", "content": "done"}
+
+    monkeypatch.setattr(
+        openai_compat_router_module, "_resolve_agent_instance", _fake_resolve
+    )
+    monkeypatch.setattr(
+        openai_compat_router_module, "_iterate_runtime_event_payloads", _fake_iterate
+    )
+    monkeypatch.setattr(
+        openai_compat_router_module,
+        "get_pod_container_from_app",
+        lambda _app: container,
+    )
+
+    app = FastAPI()
+    app.include_router(
+        openai_compat_router_module.create_openai_compat_router(
+            {definition.agent_id: definition},
+            security_enabled=True,
+            max_chat_input_chars=5_000,
+            authenticated_user_dep=lambda: KeycloakUser(
+                uid="alice", username="alice", roles=["reader"]
+            ),
+        ),
+        prefix="/v1",
+    )
+    return TestClient(app)
+
+
+def chat_completion(client: TestClient):
+    return client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "test.hello.v1",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": True,
+        },
+        headers={
+            "Authorization": f"Bearer {PERSON_TOKEN}",
+            "X-Fred-Session-Id": "session-compat",
+            "X-Fred-Team-Id": "team-1",
+        },
+    )
+
+
+def test_a_chat_completion_under_delegation_carries_no_persons_bearer(
+    monkeypatch, compat_pod
+) -> None:
+    """This surface admits a run like every other one: the turn calls out with
+    the workload bearer and the grant, never with the person's token."""
+    runtime = install_delegation(allowed_callers=["agent-backend"])
+    captured: dict[str, Any] = {}
+
+    with compat_client(monkeypatch, captured, compat_pod) as client:
+        response = chat_completion(client)
+
+    assert response.status_code == 200
+    credentials = captured["credentials"]
+    assert credentials.delegated is True
+    assert credentials.authorization == "Bearer workload-token"
+    assert credentials.parameters[GRANT_PARAM_PERSON] == "alice"
+    assert credentials.parameters[GRANT_PARAM_AGENT] == "test.hello.v1"
+    assert PERSON_TOKEN not in str(credentials)
+    record = runtime.records.get(credentials.parameters[GRANT_PARAM_RUN])
+    assert record is not None
+    assert record.person_id == "alice"
+    assert record.team_id == "team-1"
+    # The person's credential is spent on the one call that verifies them.
+    assert captured["resolved_with"] == PERSON_TOKEN
+
+
+def test_a_chat_completion_fails_closed_when_delegation_is_unusable(
+    monkeypatch, compat_pod
+) -> None:
+    """No allow-list means no delegated call can be made; the request is refused
+    rather than falling back to the person's bearer."""
+    install_delegation(allowed_callers=None)
+    captured: dict[str, Any] = {}
+
+    with compat_client(monkeypatch, captured, compat_pod) as client:
+        response = chat_completion(client)
+
+    assert response.status_code == 503
+    assert "kwargs" not in captured
+    assert "resolved_with" not in captured
+
+
+def test_with_the_flag_off_a_chat_completion_gets_no_provider_at_all(
+    monkeypatch, compat_pod
+) -> None:
+    """Nothing stands between this surface's turn and the person's token: its
+    clients read it off the context exactly as they did before delegation."""
+    set_delegation_runtime(None)
+    captured: dict[str, Any] = {}
+
+    with compat_client(monkeypatch, captured, compat_pod) as client:
+        response = chat_completion(client)
+
+    assert response.status_code == 200
+    assert "data: [DONE]" in response.text
+    assert captured["kwargs"]["credential_provider"] is None
+    assert captured["kwargs"]["access_token"] == PERSON_TOKEN
+    assert "credentials" not in captured
+
+
+@pytest.mark.asyncio
+async def test_delegated_chat_completion_registers_once_before_execution(
+    monkeypatch, compat_pod
+) -> None:
+    runtime = install_delegation(allowed_callers=["agent-backend"])
+    definition = _HelloAgent()
+    registration_requests: list[httpx.Request] = []
+    captured: dict[str, Any] = {}
+
+    def registration_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/agent-runs":
+            registration_requests.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "run_id": request.url.params[GRANT_PARAM_RUN],
+                    "run_ceiling_seconds": 37.0,
+                    "binding": None,
+                },
+            )
+        return httpx.Response(204)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(registration_handler)
+    ) as control_plane_client:
+        container = _RegistrationContainer(control_plane_client)
+        set_runtime_context(
+            FredRuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="http://kf.invalid/kf/v1",
+                    control_plane_url="http://control-plane.invalid",
+                    control_plane_http_client=control_plane_client,
+                )
+            )
+        )
+        monkeypatch.setattr(
+            openai_compat_router_module,
+            "get_pod_container_from_app",
+            lambda _app: container,
+        )
+
+        async def iterate(_definition, _request, **kwargs: Any):
+            provider = kwargs["credential_provider"]
+            captured["registered"] = provider.record.registered
+            captured["record_started_at"] = provider.record.started_monotonic
+            captured.update(kwargs)
+            try:
+                yield {"kind": "final", "content": "done"}
+            finally:
+                await agent_app_module._finish_admitted_run(provider, "succeeded", None)
+
+        monkeypatch.setattr(
+            openai_compat_router_module,
+            "_iterate_runtime_event_payloads",
+            iterate,
+        )
+        app = FastAPI()
+        app.include_router(
+            openai_compat_router_module.create_openai_compat_router(
+                {definition.agent_id: definition},
+                security_enabled=True,
+                max_chat_input_chars=5_000,
+                authenticated_user_dep=lambda: KeycloakUser(
+                    uid="alice", username="alice", roles=["reader"]
+                ),
+            ),
+            prefix="/v1",
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://runtime.invalid"
+        ) as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": definition.agent_id,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
+                headers={
+                    "Authorization": f"Bearer {PERSON_TOKEN}",
+                    "X-Fred-Session-Id": "session-compat",
+                    "X-Fred-Team-Id": "team-1",
+                },
+            )
+
+    assert response.status_code == 200
+    assert len(registration_requests) == 1
+    assert captured["registered"] is True
+    assert captured["run_limits"].wall_clock_seconds == 37.0
+    assert captured["run_started_at"] == captured["record_started_at"]
+    assert captured["team_id"] == "team-1"
+    assert captured["access_token"] is None
+    assert (
+        runtime.records.get(registration_requests[0].url.params[GRANT_PARAM_RUN])
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_registration_failure_stops_chat_completion_before_execution(
+    monkeypatch, compat_pod
+) -> None:
+    runtime = install_delegation(allowed_callers=["agent-backend"])
+    definition = _HelloAgent()
+    execution_started = False
+    registration_requests = 0
+
+    def registration_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal registration_requests
+        registration_requests += 1
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(registration_handler)
+    ) as control_plane_client:
+        container = _RegistrationContainer(control_plane_client)
+        set_runtime_context(
+            FredRuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="http://kf.invalid/kf/v1",
+                    control_plane_url="http://control-plane.invalid",
+                    control_plane_http_client=control_plane_client,
+                )
+            )
+        )
+        monkeypatch.setattr(
+            openai_compat_router_module,
+            "get_pod_container_from_app",
+            lambda _app: container,
+        )
+
+        async def iterate(*args: Any, **kwargs: Any):
+            nonlocal execution_started
+            execution_started = True
+            yield {"kind": "final", "content": "unexpected"}
+
+        monkeypatch.setattr(
+            openai_compat_router_module,
+            "_iterate_runtime_event_payloads",
+            iterate,
+        )
+        app = FastAPI()
+        app.include_router(
+            openai_compat_router_module.create_openai_compat_router(
+                {definition.agent_id: definition},
+                security_enabled=True,
+                max_chat_input_chars=5_000,
+                authenticated_user_dep=lambda: KeycloakUser(
+                    uid="alice", username="alice", roles=["reader"]
+                ),
+            ),
+            prefix="/v1",
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://runtime.invalid"
+        ) as client:
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": definition.agent_id,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": True,
+                },
+                headers={
+                    "Authorization": f"Bearer {PERSON_TOKEN}",
+                    "X-Fred-Team-Id": "team-1",
+                },
+            )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "delegation_unavailable"
+    assert registration_requests == 1
+    assert execution_started is False
+    assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+async def test_delegated_stream_failure_logs_only_bounded_fields(
+    monkeypatch, compat_pod, caplog
+) -> None:
+    runtime = install_delegation(allowed_callers=["agent-backend"])
+    definition = _HelloAgent()
+    container = _AuditingContainer()
+
+    async def resolve(**kwargs: Any):
+        return agent_app_module._ResolvedExecutionTarget(
+            definition=definition,
+            effective_agent_id=definition.agent_id,
+            team_id=kwargs["team_id"],
+        )
+
+    async def iterate(*args: Any, **kwargs: Any):
+        try:
+            if kwargs.get("yield_unexpected"):
+                yield {}
+            raise RuntimeError("upstream-stream-canary")
+        finally:
+            await agent_app_module._finish_admitted_run(
+                kwargs["credential_provider"], "failed", None
+            )
+
+    monkeypatch.setattr(openai_compat_router_module, "_resolve_agent_instance", resolve)
+    monkeypatch.setattr(
+        openai_compat_router_module, "_iterate_runtime_event_payloads", iterate
+    )
+    monkeypatch.setattr(
+        openai_compat_router_module,
+        "get_pod_container_from_app",
+        lambda _app: container,
+    )
+    app = FastAPI()
+    app.include_router(
+        openai_compat_router_module.create_openai_compat_router(
+            {definition.agent_id: definition},
+            security_enabled=True,
+            max_chat_input_chars=5_000,
+            authenticated_user_dep=lambda: KeycloakUser(
+                uid="person-canary", username="person-canary", roles=[]
+            ),
+        ),
+        prefix="/v1",
+    )
+    caplog.set_level(logging.DEBUG, logger=openai_compat_router_module.__name__)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://runtime.invalid"
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": definition.agent_id,
+                "messages": [{"role": "user", "content": "content-canary"}],
+            },
+            headers={"X-Fred-Team-Id": "team-canary"},
+        )
+
+    assert response.status_code == 200
+    assert "data: [DONE]" in response.text
+    payload = " ".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name == openai_compat_router_module.__name__
+    )
+    assert "event=delegated_stream outcome=failed reason=execution_failed" in payload
+    for canary in (
+        "upstream-stream-canary",
+        "person-canary",
+        "content-canary",
+        "team-canary",
+        definition.agent_id,
+    ):
+        assert canary not in payload
+    assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+async def test_closing_compatibility_stream_waits_for_runtime_cleanup(
+    monkeypatch, compat_pod
+) -> None:
+    runtime = install_delegation(allowed_callers=["agent-backend"])
+    definition = _HelloAgent()
+    container = _AuditingContainer()
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def resolve(**kwargs: Any):
+        return agent_app_module._ResolvedExecutionTarget(
+            definition=definition,
+            effective_agent_id=definition.agent_id,
+            team_id=kwargs["team_id"],
+        )
+
+    async def iterate(*args: Any, **kwargs: Any):
+        try:
+            yield {"kind": "final", "content": "done"}
+            await asyncio.Event().wait()
+        finally:
+            cleanup_started.set()
+            await release_cleanup.wait()
+            await agent_app_module._finish_admitted_run(
+                kwargs["credential_provider"], "cancelled", "cancelled"
+            )
+
+    monkeypatch.setattr(openai_compat_router_module, "_resolve_agent_instance", resolve)
+    monkeypatch.setattr(
+        openai_compat_router_module, "_iterate_runtime_event_payloads", iterate
+    )
+    monkeypatch.setattr(
+        openai_compat_router_module,
+        "get_pod_container_from_app",
+        lambda _app: container,
+    )
+    app = FastAPI()
+    router = openai_compat_router_module.create_openai_compat_router(
+        {definition.agent_id: definition},
+        security_enabled=True,
+        max_chat_input_chars=5_000,
+        authenticated_user_dep=lambda: None,
+    )
+    app.include_router(router, prefix="/v1")
+    route = next(
+        route
+        for route in router.routes
+        if getattr(route, "path", None) == "/chat/completions"
+    )
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query_string": b"",
+            "headers": [(b"x-fred-team-id", b"team")],
+            "scheme": "http",
+            "server": ("runtime.invalid", 80),
+            "client": ("synthetic", 1),
+        }
+    )
+    response = await cast(Any, route).endpoint(
+        OpenAIChatRequest.model_validate(
+            {
+                "model": definition.agent_id,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        ),
+        request,
+        KeycloakUser(uid="person", username="person", roles=[]),
+    )
+    iterator = cast(Any, response.body_iterator)
+
+    await anext(iterator)
+    close_task = asyncio.create_task(iterator.aclose())
+    await asyncio.wait_for(cleanup_started.wait(), 1)
+    assert close_task.done() is False
+    assert len(runtime.records) == 1
+    release_cleanup.set()
+    await asyncio.wait_for(close_task, 1)
+
+    assert len(runtime.records) == 0

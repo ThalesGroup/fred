@@ -40,7 +40,7 @@ from fred_core.tasks.models import (
     TaskTarget,
 )
 from fred_core.tasks.service import TaskService
-from fred_core.tasks.store import TaskStore
+from fred_core.tasks.store import TaskAlreadyExistsError, TaskStore
 from fred_core.tasks.workflow_control import NoopWorkflowControl
 from fred_core.tests.tasks.task_tables import TASK_TABLES, Base
 
@@ -140,6 +140,18 @@ async def test_run_now_task_has_no_scheduled_for(tmp_path) -> None:
 
     task = (await service.list_tasks(kind="migration")).tasks[0]
     assert task.scheduled_for is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_task_id_duplicate_is_rejected(tmp_path) -> None:
+    from fred_core.tasks.models import StartMigrationRequest
+
+    service = await _service(tmp_path)
+    request = StartMigrationRequest()
+    started = await service.start(request, created_by="ops", task_id="stable-task")
+    assert started.task_id == "stable-task"
+    with pytest.raises(TaskAlreadyExistsError):
+        await service.start(request, created_by="ops", task_id="stable-task")
 
 
 @pytest.mark.asyncio

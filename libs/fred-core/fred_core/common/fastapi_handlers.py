@@ -17,7 +17,11 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.models import (
+    AuthorizationError,
+    Resource,
+    StandingAuthorizationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +37,50 @@ _TEAM_PERMISSION_MESSAGES: dict[str, str] = {
 }
 
 
+# Standing decides whether a person may act at all, so a refusal on it belongs
+# beside the delegation decisions on the same audit surface.
+AUDIT_STANDING_REFUSED = "authorization.standing.refused"
+
+# Bounded on purpose: the caller learns the cause is its own account standing,
+# never who was denied, which team was consulted, or what exists.
+_STANDING_REFUSED_DETAIL = (
+    "Your account standing does not currently permit this request."
+)
+_STANDING_UNAVAILABLE_DETAIL = (
+    "Account standing could not be checked. Try again shortly."
+)
+
+
 def _humanize_action(action: str) -> str:
     return action.replace(":", " ").replace("_", " ")
 
 
+def _denial_cause(exc: AuthorizationError) -> str:
+    if isinstance(exc, StandingAuthorizationError):
+        return "standing_unavailable" if exc.unavailable else "standing_refused"
+    return "permission_refused"
+
+
+def _denial_fields(exc: AuthorizationError) -> dict[str, object]:
+    """Types and actions only: enough to tell the causes apart, never who."""
+    cause = _denial_cause(exc)
+    return {
+        "denial_cause": cause,
+        "decision_reached": cause != "standing_unavailable",
+        "subject_type": exc.subject_type.value if exc.subject_type else "unspecified",
+        "action": str(exc.action),
+        "resource_type": exc.resource.value,
+    }
+
+
 def _authorization_detail_for_client(exc: AuthorizationError) -> str:
+    if isinstance(exc, StandingAuthorizationError):
+        return (
+            _STANDING_UNAVAILABLE_DETAIL
+            if exc.unavailable
+            else _STANDING_REFUSED_DETAIL
+        )
+
     action = str(exc.action)
     if exc.resource == Resource.TEAM and action in _TEAM_PERMISSION_MESSAGES:
         return _TEAM_PERMISSION_MESSAGES[action]
@@ -54,8 +97,28 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def authorization_error_handler(
         request: Request, exc: AuthorizationError
     ) -> JSONResponse:
-        """Handle AuthorizationError by returning a 403 Forbidden response."""
-        logger.warning("Authorization denied")
+        """Report a denial, preserving whether a decision was actually reached."""
+        logger.warning("Authorization denied", extra=_denial_fields(exc))
+        if isinstance(exc, StandingAuthorizationError):
+            # Imported here: the logging package reaches back into this one,
+            # so a module-level import closes a cycle at startup.
+            from fred_core.logs.audit_log import emit_audit_log
+
+            emit_audit_log(
+                AUDIT_STANDING_REFUSED,
+                "warning",
+                outcome="refused",
+                reason=(
+                    "standing_unavailable" if exc.unavailable else "standing_not_active"
+                ),
+            )
+            if exc.unavailable:
+                # The dependency never decided, so this is an outage, not a
+                # statement about the caller.
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": _authorization_detail_for_client(exc)},
+                )
         return JSONResponse(
             status_code=403,
             content={"detail": _authorization_detail_for_client(exc)},

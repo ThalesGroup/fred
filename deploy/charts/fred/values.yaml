@@ -477,6 +477,9 @@ applications:
     applicationName: fred-agents
     deployment:
       enabled: true
+    # Foreground reconnect resolves against the pod that admitted the run, so a
+    # second replica answers reconnects it has no run for. Keep this at 1 until
+    # routing back to the admitting pod is configured.
     replicaCount: 1
     statefulset:
       enabled: false
@@ -675,6 +678,8 @@ applications:
           enabled: true
           client_id: "agentic"
           realm_url: "http://your.keycloak.host/realms/your-realm/app"
+          # Read once at startup, so a rotated value reaches the pod only on a
+          # restart. Ordered procedure: WORKLOAD_SECRET_ROTATION.md
           secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
@@ -738,6 +743,8 @@ applications:
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
     dotenv:
       AZURE_OPENAI_API_KEY: ""
+      # Changing this needs a pod roll under a provider-side rotation grace:
+      # WORKLOAD_SECRET_ROTATION.md
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
       LANGFUSE_BASE_URL: ""
@@ -881,7 +888,7 @@ applications:
           transport: "inprocess"
           provider: "kf_vector_search"
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
           agent_instructions: |
             ## Grounding contract (enforced by the search tool — non-negotiable)
 
@@ -959,7 +966,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-knowledge-flow-opensearch-ops"
           name: "mcp.servers.search_opensearch.name"
@@ -979,7 +986,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-knowledge-flow-corpus"
           name: "mcp.servers.corpus.name"
@@ -989,7 +996,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-web-github-readonly"
           name: "mcp.servers.web_github_readonly.name"

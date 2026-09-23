@@ -22,7 +22,7 @@ authorizes every request and fails closed. There is no signed grant.
 from typing import Literal
 
 import pytest
-from pydantic import AnyHttpUrl, AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl, ValidationError
 
 from fred_core.security import oidc
 from fred_core.security.structure import (
@@ -96,3 +96,11 @@ def test_c3_requires_rebac_enabled() -> None:
 
 def test_c3_happy_path_does_not_raise() -> None:
     oidc.apply_security_profile(_security(profile="c3"))  # no exception
+
+
+def test_the_former_setting_name_is_refused_rather_than_ignored() -> None:
+    """Ignored, a stale key would leave the check off without a word."""
+    with pytest.raises(ValidationError, match="standing_gate_enabled was removed"):
+        OpenFgaRebacConfig.model_validate(
+            {"api_url": "http://authz.invalid:9080", "standing_gate_enabled": True}
+        )

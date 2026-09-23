@@ -17,14 +17,22 @@ from __future__ import annotations
 import json
 import logging
 
+import pytest
 from fred_core.logs.base_log_store import LogEventDTO
 from fred_core.logs.log_setup import (
     AUDIT_LOGGER_NAME,
     CompactJsonFormatter,
     StoreEmitHandler,
     UvicornSensitiveQueryFilter,
+    _strip_delegation_query,
     log_setup,
 )
+from fred_core.security.delegation import DelegationConfig, initialize_delegation
+
+
+@pytest.fixture(autouse=True)
+def _reset_delegation() -> None:
+    initialize_delegation(DelegationConfig())
 
 
 class _StubLogStore:
@@ -60,6 +68,144 @@ def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:
     assert isinstance(record.args, tuple)
     assert isinstance(record.args[1], str)
     assert record.args[1] == "/agentic/v1/chatbot/query/ws?token=<redacted>&x=1"
+
+
+def test_delegation_access_record_is_bounded_and_drops_encoded_grant_pairs() -> None:
+    initialize_delegation(
+        DelegationConfig(enabled=True, allowed_callers=["synthetic-workload"])
+    )
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=(
+            "SYNTHETIC-CLIENT-CANARY",
+            "POST",
+            "/documents?ordinary=visible&p%65rson=SYNTHETIC-PERSON-CANARY&"
+            "run=SYNTHETIC-RUN-CANARY&agent=SYNTHETIC-AGENT-CANARY&last=kept",
+            "1.1",
+            200,
+        ),
+        exc_info=None,
+    )
+
+    assert UvicornSensitiveQueryFilter().filter(record) is True
+    assert record.getMessage() == (
+        "access event=delegated_request outcome=completed method=POST status=200"
+    )
+    assert "CANARY" not in repr(record.__dict__)
+    assert "ordinary" not in record.getMessage()
+
+
+def test_delegation_query_stripping_preserves_harmless_pairs_and_order() -> None:
+    sanitized, found = _strip_delegation_query(
+        "/documents?first=one&p%65rson=person-canary&second=two&run=run-canary"
+        "&agent=agent-canary&third=three"
+    )
+
+    assert found is True
+    assert sanitized == "/documents?first=one&second=two&third=three"
+
+
+@pytest.mark.parametrize("status", [200, "SYNTHETIC-STATUS-CANARY"])
+def test_delegation_access_record_excludes_unbounded_metadata(status: object) -> None:
+    initialize_delegation(
+        DelegationConfig(enabled=True, allowed_callers=["synthetic-workload"])
+    )
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=(
+            "SYNTHETIC-CLIENT-CANARY",
+            "SYNTHETIC-METHOD-CANARY",
+            "/documents?person=SYNTHETIC-PERSON-CANARY",
+            "SYNTHETIC-VERSION-CANARY",
+            status,
+        ),
+        exc_info=None,
+    )
+    record.message = "SYNTHETIC-MESSAGE-CANARY"
+    record.exc_text = "SYNTHETIC-EXCEPTION-CANARY"
+    record.stack_info = "SYNTHETIC-STACK-CANARY"
+
+    UvicornSensitiveQueryFilter().filter(record)
+
+    assert "CANARY" not in repr(record.__dict__)
+    if status == 200:
+        assert record.getMessage().endswith("method=OTHER status=200")
+
+
+def test_delegation_access_string_url_is_bounded_without_identifiers() -> None:
+    initialize_delegation(
+        DelegationConfig(enabled=True, allowed_callers=["synthetic-workload"])
+    )
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg=(
+            "POST /documents?ordinary=visible&person=SYNTHETIC-PERSON-CANARY&"
+            "run=SYNTHETIC-RUN-CANARY&agent=SYNTHETIC-AGENT-CANARY 200"
+        ),
+        args=(),
+        exc_info=None,
+    )
+
+    assert UvicornSensitiveQueryFilter().filter(record) is True
+    assert record.getMessage() == "access event=delegated_request outcome=completed"
+    assert "CANARY" not in repr(record.__dict__)
+
+
+def test_delegation_feature_path_is_bounded_without_grant_query() -> None:
+    initialize_delegation(
+        DelegationConfig(enabled=True, allowed_callers=["synthetic-workload"])
+    )
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=(
+            "SYNTHETIC-CLIENT-CANARY",
+            "POST",
+            "/internal/agent-run-tasks/SYNTHETIC-TASK-CANARY/events?ordinary=visible",
+            "1.1",
+            204,
+        ),
+        exc_info=None,
+    )
+
+    UvicornSensitiveQueryFilter().filter(record)
+
+    assert record.getMessage() == (
+        "access event=delegated_request outcome=completed method=POST status=204"
+    )
+    assert "CANARY" not in repr(record.__dict__)
+
+
+def test_delegation_flag_off_preserves_grant_query_behavior() -> None:
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="GET %s",
+        args=("/documents?person=synthetic-person&ordinary=visible",),
+        exc_info=None,
+    )
+
+    UvicornSensitiveQueryFilter().filter(record)
+
+    assert record.getMessage() == (
+        "GET /documents?person=synthetic-person&ordinary=visible"
+    )
 
 
 def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:

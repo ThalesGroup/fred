@@ -18,25 +18,30 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, Security
+from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
+from fred_core.security.delegation import (
+    AssertedUser,
+    initialize_delegation,
+    resolve_delegated_principal,
+)
 from fred_core.security.structure import (
     LOCAL_DEV_CLIENT_ID,
     KeycloakUser,
+    PrincipalContext,
     SecurityConfiguration,
     UserSecurity,
     is_service_agent,
 )
 from fred_core.security.whitelist_access_control.access_control import (
-    is_user_whitelisted,
+    is_principal_whitelisted,
     is_whitelist_active,
 )
 
@@ -88,15 +93,6 @@ def _peek_header_and_claims(token: str) -> Tuple[Dict[str, Any], Dict[str, Any]]
         return _b64json(h), _b64json(p)
     except Exception:
         return {}, {}
-
-
-def _iso(ts: int | float | None) -> str | None:
-    if ts is None:
-        return None
-    try:
-        return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
-    except Exception:
-        return None
 
 
 def get_keycloak_url() -> str:
@@ -166,9 +162,21 @@ def apply_security_profile(config: SecurityConfiguration) -> None:
     The control-plane issues NO signed grant; authorization is decided at the pod
     by a Keycloak JWT + OpenFGA check. Raises ValueError on any violation so the
     service FAILS CLOSED — it refuses to start in an insecure configuration rather
-    than silently degrading. No-op for any non-c3 profile (dev behavior unchanged).
+    than silently degrading.
+
+    Installs ``security.delegation`` for the shared user dependency under every
+    profile; the profile enforcement itself is a no-op for any non-c3 profile
+    (dev behavior unchanged).
     """
     global STRICT_ISSUER, STRICT_AUDIENCE
+
+    # Every backend hands the whole security block to this one startup hook, so the
+    # delegation block is installed here too — before the profile check returns.
+    initialize_delegation(
+        config.delegation,
+        issuer=str(config.m2m.realm_url),
+        audience=config.m2m.audience or config.m2m.client_id,
+    )
 
     if config.profile != "c3":
         return
@@ -242,11 +250,7 @@ def _get_cached_user(token: str) -> KeycloakUser | None:
     expires_at, user = entry
     now = time.time()
     if expires_at > now:
-        logger.debug(
-            "[AUTH] JWT cache hit for subject=%s (expires_at=%s)",
-            user.uid,
-            _iso(expires_at),
-        )
+        logger.debug("[AUTH] JWT cache hit")
         return user
 
     # stale entry
@@ -307,6 +311,14 @@ def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
         return None
 
 
+def _token_audiences(value: object) -> frozenset[str]:
+    if isinstance(value, str) and value:
+        return frozenset({value})
+    if isinstance(value, list):
+        return frozenset(item for item in value if isinstance(item, str) and item)
+    return frozenset()
+
+
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -333,40 +345,19 @@ def decode_jwt(token: str) -> KeycloakUser:
 
     # quick header/claim peek for logs (never log raw token)
     header, payload_peek = _peek_header_and_claims(token)
-    kid = header.get("kid")
     alg = header.get("alg")
-    logger.debug(
-        "JWT peek: kid=%s alg=%s iss=%s aud=%s azp=%s sub=%s exp=%s(%s) nbf=%s(%s)",
-        kid,
-        alg,
-        payload_peek.get("iss"),
-        payload_peek.get("aud"),
-        payload_peek.get("azp"),
-        payload_peek.get("sub"),
-        payload_peek.get("exp"),
-        _iso(payload_peek.get("exp")),
-        payload_peek.get("nbf"),
-        _iso(payload_peek.get("nbf")),
-    )
+    logger.debug("[AUTH] JWT header parsed algorithm=%s", alg)
 
     # Soft observability logs only. Strict enforcement (C3) happens in jwt.decode
     # below, on the SIGNATURE-VERIFIED payload, via exact issuer/audience.
     iss = payload_peek.get("iss")
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
-        logger.warning(
-            "[AUTH] JWT issuer mismatch (soft): iss=%s expected=%s",
-            iss,
-            KEYCLOAK_URL,
-        )
+        logger.warning("[AUTH] JWT issuer mismatch (soft)")
     if KEYCLOAK_CLIENT_ID:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if KEYCLOAK_CLIENT_ID not in aud_list:
-            logger.debug(
-                "[AUTH] JWT audience does not include client_id (soft): aud=%s client_id=%s",
-                aud_list,
-                KEYCLOAK_CLIENT_ID,
-            )
+            logger.debug("[AUTH] JWT audience does not include the configured client")
 
     # JWKS fetch + decode
     try:
@@ -374,10 +365,10 @@ def decode_jwt(token: str) -> KeycloakUser:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
         jwks_ms = (time.perf_counter() - t0) * 1000
-        logger.debug("[AUTH] JWKS resolved key in %.1f ms (kid=%s)", jwks_ms, kid)
-    except Exception as e:
+        logger.debug("[AUTH] JWKS resolved key in %.1f ms", jwks_ms)
+    except Exception:
         # Invalid JWT structure/kid/signature is a normal 401, not a 500.
-        logger.warning("[AUTH] Could not retrieve signing key from JWKS: %s", e)
+        logger.warning("[AUTH] Could not retrieve a trusted JWT signing key")
         raise HTTPException(
             status_code=401,
             detail="Invalid token signature",
@@ -413,8 +404,8 @@ def decode_jwt(token: str) -> KeycloakUser:
                 "WWW-Authenticate": "Bearer error='invalid_token', error_description='token expired'"
             },
         )
-    except jwt.InvalidTokenError as e:
-        logger.error("[AUTH] Invalid JWT token: %s", e)
+    except jwt.InvalidTokenError:
+        logger.error("[AUTH] Invalid JWT token")
         raise HTTPException(
             status_code=401,
             detail="Invalid token",
@@ -437,12 +428,7 @@ def decode_jwt(token: str) -> KeycloakUser:
             # as long as exp itself is still in the future. That negative
             # lifetime would otherwise fail the ">" ceiling check below
             # silently instead of being rejected.
-            logger.warning(
-                "[AUTH] JWT has negative lifetime (exp before iat): iat=%s exp=%s sub=%s",
-                iat,
-                exp,
-                payload.get("sub"),
-            )
+            logger.warning("[AUTH] JWT has negative lifetime")
             raise HTTPException(
                 status_code=401,
                 detail="Token has invalid iat/exp claims",
@@ -451,12 +437,7 @@ def decode_jwt(token: str) -> KeycloakUser:
                 },
             )
         if lifetime_seconds > MAX_TOKEN_LIFETIME_SECONDS:
-            logger.warning(
-                "[AUTH] JWT lifetime exceeds policy ceiling: lifetime=%ss max=%ss sub=%s",
-                lifetime_seconds,
-                MAX_TOKEN_LIFETIME_SECONDS,
-                payload.get("sub"),
-            )
+            logger.warning("[AUTH] JWT lifetime exceeds policy ceiling")
             raise HTTPException(
                 status_code=401,
                 detail="Token lifetime exceeds the maximum permitted duration",
@@ -471,18 +452,12 @@ def decode_jwt(token: str) -> KeycloakUser:
         client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
         client_roles = client_data.get("roles", [])
 
-    logger.debug(
-        "[AUTH] JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
-        payload.get("sub"),
-        payload.get("preferred_username"),
-        payload.get("email"),
-        client_roles,
-    )
+    logger.debug("[AUTH] JWT token decoded")
 
     # Build user
     sub = payload.get("sub")
     if not isinstance(sub, str):
-        logger.warning("[AUTH] JWT token missing or invalid 'sub' claim: %r", sub)
+        logger.warning("[AUTH] JWT token missing or invalid subject claim")
         raise HTTPException(
             status_code=401,
             detail="Invalid token claims",
@@ -495,8 +470,11 @@ def decode_jwt(token: str) -> KeycloakUser:
         roles=client_roles,
         email=payload.get("email"),
         client_id=payload.get("azp"),
+        token_issuer=payload.get("iss"),
+        token_audiences=_token_audiences(payload.get("aud")),
+        token_type=payload.get("typ"),
     )
-    logger.debug("KeycloakUser built: %s", user)
+    logger.debug("[AUTH] Authenticated principal built")
     _cache_user(token, payload, user)
     return user
 
@@ -530,10 +508,11 @@ async def _enforce_gcu(
 
 
 async def get_current_user(
+    request: Request,
     token: str = Security(oauth2_scheme),
     user_store: BaseUserStore = Depends(get_user_store),
     configuration=Depends(get_config),
-) -> KeycloakUser:
+) -> KeycloakUser | AssertedUser:
     """
     Return the authenticated user and enforce persisted GCU acceptance when enabled.
 
@@ -550,41 +529,55 @@ async def get_current_user(
     Example:
     - `user: KeycloakUser = Depends(get_current_user)`
     """
-    user = await get_current_user_without_gcu(token)
+    user = await get_current_user_without_gcu(request, token)
+    if isinstance(user, AssertedUser):
+        # The person's acceptance was gated by their own token when the run was
+        # admitted; the workload speaking for them has no acceptance row of its own.
+        return user
     return await _enforce_gcu(user, user_store, configuration)
 
 
 async def get_current_user_or_service(
+    request: Request,
     token: str = Security(oauth2_scheme),
     user_store: BaseUserStore = Depends(get_user_store),
     configuration=Depends(get_config),
-) -> KeycloakUser:
+) -> KeycloakUser | AssertedUser:
     """Admit a service identity without the GCU gate: a workload cannot accept
     terms, so the human admission rule does not apply to it (ReBAC still does).
     Any other caller goes through exactly `get_current_user`'s gate."""
-    user = await get_current_user_without_gcu(token)
+    user = await get_current_user_without_gcu(request, token)
+    if isinstance(user, AssertedUser):
+        return user
     if is_service_agent(user):
         return user
     return await _enforce_gcu(user, user_store, configuration)
 
 
 async def get_current_user_without_gcu(
+    request: Request,
     token: str = Security(oauth2_scheme),
-) -> KeycloakUser:
-    """Fetches the current user from Keycloak token with robust diagnostics."""
+) -> KeycloakUser | AssertedUser:
+    """Fetches the current user from Keycloak token with robust diagnostics.
+
+    Returns an `AssertedUser` instead when delegation is enabled and an allow-listed
+    caller presented a whole grant beside its own verified bearer.
+    """
     if not KEYCLOAK_ENABLED:
         logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
         # Same local-dev client id as `decode_jwt`'s mock, and for the same
         # reason: this is the branch routes actually reach when authentication
         # is off, so without it every route gated on one exact client — machine
         # synchronization among them — is unreachable on a local stack.
-        return KeycloakUser(
+        user = KeycloakUser(
             uid="admin",
             username="admin",
             roles=["admin"],
             email="admin@mail.com",
             client_id=LOCAL_DEV_CLIENT_ID,
         )
+        request.state.principal_context = PrincipalContext(caller=user, subject=user)
+        return user
 
     if not token:
         logger.warning("No Bearer token provided on secured endpoint")
@@ -594,14 +587,62 @@ async def get_current_user_without_gcu(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # do NOT log the full token
-    logger.debug("[AUTH] Received token prefix: %s...", token[:10])
-    user = decode_jwt(token)
-    if is_whitelist_active() and not is_user_whitelisted(user):
-        logger.warning(
-            "[AUTH] User not in whitelist: uid=%s email=%s",
-            user.uid,
-            user.email,
-        )
+    logger.debug("[AUTH] Received bearer credential")
+    caller = decode_jwt(token)
+    return await resolve_request_principal(request, caller)
+
+
+async def get_authenticated_caller(
+    request: Request,
+    token: str = Security(oauth2_scheme),
+) -> KeycloakUser:
+    """Authenticate the bearer without interpreting an enclosing protocol body."""
+
+    caller = decode_jwt(token)
+    request.state.principal_context = PrincipalContext(caller=caller, subject=caller)
+    return caller
+
+
+async def resolve_request_principal(
+    request: Request,
+    caller: KeycloakUser,
+    *,
+    query_only: bool = False,
+) -> KeycloakUser | AssertedUser:
+    asserted = await resolve_delegated_principal(request, caller, query_only=query_only)
+    subject = asserted or caller
+    if is_whitelist_active() and not is_principal_whitelisted(subject):
+        logger.warning("[AUTH] Request subject is not in the whitelist")
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
+    request.state.principal_context = PrincipalContext(caller=caller, subject=subject)
+    return subject
+
+
+async def get_principal_context(
+    request: Request,
+    subject: KeycloakUser | AssertedUser = Depends(get_current_user),
+) -> PrincipalContext:
+    """Return the bearer caller and authorization subject for this request."""
+
+    context = getattr(request.state, "principal_context", None)
+    if isinstance(context, PrincipalContext):
+        return context
+    if not isinstance(subject, KeycloakUser):
+        raise HTTPException(status_code=403, detail="principal_context_unavailable")
+    return PrincipalContext(caller=subject, subject=subject)
+
+
+async def require_own_credential(
+    user: KeycloakUser | AssertedUser = Depends(get_current_user),
+) -> KeycloakUser:
+    """Dependency for an operation that a caller may not perform for someone else.
+
+    An asserted person presented no credential of their own, so anything that acts
+    on that person's behalf beyond a permission check must refuse them.
+    """
+    if isinstance(user, AssertedUser):
+        logger.warning(
+            "[AUTH] Asserted principal refused on an operation that requires its own credential"
+        )
+        raise HTTPException(status_code=403, detail="requires_own_credential")
     return user

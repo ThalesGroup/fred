@@ -20,6 +20,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Iterable
+from functools import partial
 from typing import Any, List, Optional, Tuple, cast
 
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
@@ -31,16 +32,29 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
-from fred_runtime.common.mcp_interceptors import ExpiredTokenRetryInterceptor
+from fred_runtime.common.mcp_interceptors import (
+    DelegatedAuthorityInterceptor,
+    ExpiredTokenRetryInterceptor,
+)
 from fred_runtime.common.mcp_toolkit import McpToolkit
 from fred_runtime.common.mcp_utils import (
+    AUTH_MODE_DELEGATED,
+    AUTH_MODE_NO_TOKEN,
     MCP_SERVER_ID_METADATA_KEY,
     MCPConnectionError,
+    _normalize_auth_mode,
     get_connected_mcp_client_for_agent,
+)
+from fred_runtime.common.outbound_credentials import (
+    OutboundCredentialProvider,
+    OutboundCredentials,
+    delegation_enabled,
+    resolve_credential_provider,
 )
 from fred_runtime.common.structures import TokenRefreshCallback
 from fred_runtime.common.tool_node_utils import create_mcp_tool_node
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import RunStopError
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +85,10 @@ MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
 # cache key already includes the exact access_token string, so a cache hit implies
 # an identical token/header value already.
 #
+# A delegated connection is single-use and is therefore never cached: its grant
+# names one run, so no later turn could match it, and an entry nothing can hit
+# would only hold its tool objects until it expired.
+#
 # Residual, accepted race: two truly concurrent requests for the SAME identity
 # (same cache key) could have request A's in-flight tool call pick up request B's
 # interceptor instance instead of its own. Both point at the same live user, so
@@ -84,10 +102,25 @@ _mcp_client_cache: dict[
 _mcp_client_cache_lock = asyncio.Lock()
 
 
+async def _context_token(runtime_context: AgentRuntimeContext) -> str | None:
+    return runtime_context.access_token
+
+
 def _mcp_cache_key(
-    agent_id: str, servers: List[MCPServerConfiguration], access_token: str | None
+    agent_id: str,
+    servers: List[MCPServerConfiguration],
+    credentials: OutboundCredentials,
 ) -> Tuple[str, Tuple[str, ...], str]:
-    return (agent_id, tuple(sorted(s.id for s in servers)), access_token or "")
+    # The key names whatever the connection actually carries. Under delegation
+    # that is the grant on the endpoint, so two people never share a connection.
+    identity = (
+        "|".join(
+            f"{name}={value}" for name, value in sorted(credentials.parameters.items())
+        )
+        if credentials.delegated
+        else (credentials.authorization or "")
+    )
+    return (agent_id, tuple(sorted(s.id for s in servers)), identity)
 
 
 def _prune_expired_mcp_cache_locked(now: float) -> None:
@@ -115,8 +148,31 @@ async def _get_or_connect_mcp_client(
     mcp_servers: List[MCPServerConfiguration],
     runtime_context: AgentRuntimeContext,
     tool_interceptors: list,
+    credentials: OutboundCredentialProvider,
 ) -> Tuple[MultiServerMCPClient, List[BaseTool]]:
-    key = _mcp_cache_key(agent_id, mcp_servers, runtime_context.access_token)
+    if all(
+        _normalize_auth_mode(server.auth_mode) == AUTH_MODE_NO_TOKEN
+        for server in mcp_servers
+    ):
+        return await get_connected_mcp_client_for_agent(
+            agent_id=agent_id,
+            mcp_servers=mcp_servers,
+            runtime_context=runtime_context,
+            tool_interceptors=tool_interceptors,
+            credentials=credentials,
+        )
+
+    call_credentials = await credentials.credentials()
+    if call_credentials.delegated:
+        return await get_connected_mcp_client_for_agent(
+            agent_id=agent_id,
+            mcp_servers=mcp_servers,
+            runtime_context=runtime_context,
+            tool_interceptors=tool_interceptors,
+            credentials=credentials,
+        )
+
+    key = _mcp_cache_key(agent_id, mcp_servers, call_credentials)
     now = time.monotonic()
 
     async with _mcp_client_cache_lock:
@@ -128,12 +184,15 @@ async def _get_or_connect_mcp_client(
             # be seen by tool closures already vended from a prior get_tools()
             # call (they hold a reference to the original list object).
             cached_client.tool_interceptors[:] = tool_interceptors
-            logger.info(
-                "[MCP] agent=%s cache hit: reusing connected client (%d tools), "
-                "current request's interceptors swapped in.",
-                agent_id,
-                len(cached[1]),
-            )
+            if credentials.delegated:
+                logger.info("[MCP] event=connection_cache outcome=hit")
+            else:
+                logger.info(
+                    "[MCP] agent=%s cache hit: reusing connected client (%d tools), "
+                    "current request's interceptors swapped in.",
+                    agent_id,
+                    len(cached[1]),
+                )
             return cached_client, cached[1]
 
     client, tools = await get_connected_mcp_client_for_agent(
@@ -141,6 +200,7 @@ async def _get_or_connect_mcp_client(
         mcp_servers=mcp_servers,
         runtime_context=runtime_context,
         tool_interceptors=tool_interceptors,
+        credentials=credentials,
     )
     async with _mcp_client_cache_lock:
         _mcp_client_cache[key] = (client, tools, now + MCP_CLIENT_CACHE_TTL_SECS)
@@ -149,17 +209,14 @@ async def _get_or_connect_mcp_client(
 
 async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> None:
     if not client:
-        logger.debug("[MCP] close_quietly: No client instance provided.")
+        logger.debug("[MCP] event=connection_close outcome=skipped reason=no_client")
         return
 
-    client_id = f"0x{id(client):x}"
-    logger.info("[MCP] client_id=%s close_quietly", client_id)
+    logger.info("[MCP] event=connection_close outcome=started")
 
     # Newer MultiServerMCPClient does not maintain persistent resources; sessions are
     # opened/closed per call. Nothing to close at the client level.
-    logger.debug(
-        "[MCP] client_id=%s close_quietly: nothing to close on client.", client_id
-    )
+    logger.debug("[MCP] event=connection_close outcome=succeeded")
 
 
 class MCPRuntime:
@@ -184,24 +241,39 @@ class MCPRuntime:
         active_servers = getattr(agent.agent_settings, "active_mcp_servers", ())
         self.agent_instance = agent
         self._agent_id = agent.agent_settings.id
+        self._confined_logs = delegation_enabled()
         self.available_servers: List[MCPServerConfiguration] = []
         self.remote_servers: List[MCPServerConfiguration] = []
         self.inprocess_servers: List[MCPServerConfiguration] = []
         mcp_config = get_runtime_context().get_mcp_configuration()
         if mcp_config is None:
-            logger.warning(
-                "[MCP][%s] Global MCP configuration not available; no MCP tools will be loaded.",
-                self._agent_id,
-            )
+            if self._confined_logs:
+                logger.warning(
+                    "[MCP] event=runtime_init outcome=skipped "
+                    "reason=missing_configuration"
+                )
+            else:
+                logger.warning(
+                    "[MCP][%s] Global MCP configuration not available; no MCP "
+                    "tools will be loaded.",
+                    self._agent_id,
+                )
         else:
             for s in active_servers:
                 server_configuration = mcp_config.get_server(s.id)
                 if not server_configuration:
-                    logger.warning(
-                        "[MCP][%s] Server '%s' not found or disabled in global MCP configuration. Skipping.",
-                        self._agent_id,
-                        s.id,
-                    )
+                    if self._confined_logs:
+                        logger.warning(
+                            "[MCP] event=server_activation outcome=skipped "
+                            "reason=unavailable"
+                        )
+                    else:
+                        logger.warning(
+                            "[MCP][%s] Server '%s' not found or disabled in global "
+                            "MCP configuration. Skipping.",
+                            self._agent_id,
+                            s.id,
+                        )
                     continue
                 self.available_servers.append(server_configuration)
                 transport = (
@@ -222,13 +294,16 @@ class MCPRuntime:
         self._ready_event: Optional[asyncio.Event] = None
         self._lifecycle_error: Optional[BaseException] = None
 
-        logger.info(
-            "[MCP]agent=%s mcp_servers=%s remote=%s inprocess=%s (enabled only)",
-            self._agent_id,
-            [s.id for s in self.available_servers],
-            [s.id for s in self.remote_servers],
-            [s.id for s in self.inprocess_servers],
-        )
+        if self._confined_logs:
+            logger.info("[MCP] event=server_activation outcome=resolved")
+        else:
+            logger.info(
+                "[MCP]agent=%s mcp_servers=%s remote=%s inprocess=%s (enabled only)",
+                self._agent_id,
+                [s.id for s in self.available_servers],
+                [s.id for s in self.remote_servers],
+                [s.id for s in self.inprocess_servers],
+            )
 
     # ---------- lifecycle (Token-aware initialization) ----------
 
@@ -240,10 +315,16 @@ class MCPRuntime:
         NOTE: This should only be called once during the agent's async_init.
         """
         if not self.available_servers:
-            logger.info(
-                "agent=%s init: No MCP server configuration found in tunings. Skipping MCP client connection.",
-                self._agent_id,
-            )
+            if self._confined_logs:
+                logger.info(
+                    "[MCP] event=runtime_init outcome=skipped reason=no_servers"
+                )
+            else:
+                logger.info(
+                    "agent=%s init: No MCP server configuration found in tunings. "
+                    "Skipping MCP client connection.",
+                    self._agent_id,
+                )
             # We allow the agent to run, but without MCP tools.
             return
 
@@ -254,10 +335,16 @@ class MCPRuntime:
             raise
 
         if not self.remote_servers:
-            logger.info(
-                "[MCP] agent=%s init: Local inprocess toolkits only; no remote MCP connection required.",
-                self._agent_id,
-            )
+            if self._confined_logs:
+                logger.info(
+                    "[MCP] event=runtime_init outcome=succeeded reason=local_only"
+                )
+            else:
+                logger.info(
+                    "[MCP] agent=%s init: Local inprocess toolkits only; no "
+                    "remote MCP connection required.",
+                    self._agent_id,
+                )
             return
 
         # If already running, just return
@@ -280,26 +367,34 @@ class MCPRuntime:
             last_error = self._lifecycle_error
             await self._await_lifecycle_attempt_completion()
 
+            if isinstance(last_error, RunStopError):
+                # The platform ended this run. Asking again is asking for what
+                # was just refused, under the platform's own identity.
+                await self._aclose_inprocess_toolkits()
+                raise last_error
+
             if (
                 attempt >= MCP_CONNECT_MAX_ATTEMPTS
                 or not self._is_retryable_connection_error(last_error)
             ):
                 await self._aclose_inprocess_toolkits()
-                if last_error is not None:
-                    raise last_error
-                raise RuntimeError(
-                    "MCPRuntime lifecycle failed but no lifecycle error was set."
-                )
+                raise last_error
 
             delay_secs = MCP_CONNECT_RETRY_BASE_DELAY_SECS * (2 ** (attempt - 1))
-            logger.warning(
-                "[MCP] agent=%s init attempt %d/%d failed with %s. Retrying in %.1fs.",
-                self._agent_id,
-                attempt,
-                MCP_CONNECT_MAX_ATTEMPTS,
-                last_error.__class__.__name__,
-                delay_secs,
-            )
+            if self._confined_logs:
+                logger.warning(
+                    "[MCP] event=runtime_init outcome=retrying reason=connection_error"
+                )
+            else:
+                logger.warning(
+                    "[MCP] agent=%s init attempt %d/%d failed with %s. "
+                    "Retrying in %.1fs.",
+                    self._agent_id,
+                    attempt,
+                    MCP_CONNECT_MAX_ATTEMPTS,
+                    last_error.__class__.__name__,
+                    delay_secs,
+                )
             await asyncio.sleep(delay_secs)
 
         await self._aclose_inprocess_toolkits()
@@ -343,7 +438,26 @@ class MCPRuntime:
                 if callable(refresh_cb_attr)
                 else None
             )
-            if refresh_cb:
+            provider = resolve_credential_provider(
+                holder=self.agent_instance,
+                person_token_getter=partial(_context_token, runtime_context),
+            )
+            if provider.delegated:
+                # A delegated call is never retried under another credential, so
+                # the expiry-retry interceptor has no role on this path.
+                delegated_server_ids = {
+                    server.id
+                    for server in self.remote_servers
+                    if str(_normalize_auth_mode(server.auth_mode))
+                    == AUTH_MODE_DELEGATED
+                }
+                interceptors.append(
+                    DelegatedAuthorityInterceptor(
+                        provider,
+                        delegated_server_ids=delegated_server_ids,
+                    )
+                )
+            elif refresh_cb:
                 interceptors.append(ExpiredTokenRetryInterceptor(refresh_cb))
 
             new_client, tools = await _get_or_connect_mcp_client(
@@ -351,6 +465,7 @@ class MCPRuntime:
                 mcp_servers=self.remote_servers,
                 runtime_context=runtime_context,
                 tool_interceptors=interceptors,
+                credentials=provider,
             )
             self.mcp_client = new_client
             # `tools` were already fetched (per server) while connecting/validating
@@ -358,15 +473,19 @@ class MCPRuntime:
             # trip against every server on every single turn.
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
             self.toolkit.tools = tools
-            logger.info(
-                "[MCP] agent=%s init: Connected and cached %d tools.",
-                self._agent_id,
-                len(tools),
-            )
-            logger.info(
-                "[MCP] agent=%s init: Successfully built and connected client.",
-                self._agent_id,
-            )
+            if self._confined_logs:
+                logger.info("[MCP] event=runtime_init outcome=connected")
+                logger.info("[MCP] event=runtime_init outcome=succeeded")
+            else:
+                logger.info(
+                    "[MCP] agent=%s init: Connected and cached %d tools.",
+                    self._agent_id,
+                    len(tools),
+                )
+                logger.info(
+                    "[MCP] agent=%s init: Successfully built and connected client.",
+                    self._agent_id,
+                )
             # Signal readiness
             if self._ready_event:
                 self._ready_event.set()
@@ -375,15 +494,29 @@ class MCPRuntime:
             assert self._stop_event is not None
             await self._stop_event.wait()
 
+        except RunStopError as stop:
+            # The reason is what an operator can act on; the chained traceback
+            # would carry the refused endpoint, grant and all.
+            self._lifecycle_error = stop
+            if self._ready_event and not self._ready_event.is_set():
+                self._ready_event.set()
+            logger.warning(
+                "[MCP] event=runtime_init outcome=stopped reason=%s",
+                stop.reason,
+            )
         except Exception as e:
             # Propagate init error to caller
             self._lifecycle_error = e
             if self._ready_event and not self._ready_event.is_set():
                 self._ready_event.set()
-            logger.exception(
-                "[MCP] agent=%s lifecycle error during init.",
-                self._agent_id,
-            )
+            if self._confined_logs:
+                logger.error(
+                    "[MCP] event=runtime_init outcome=failed reason=unexpected_error"
+                )
+            else:
+                logger.exception(
+                    "[MCP] agent=%s lifecycle error during init.", self._agent_id
+                )
         finally:
             # Close client in the SAME task that opened it
             try:
@@ -403,8 +536,7 @@ class MCPRuntime:
             remote_tools = self.toolkit.get_tools()
         elif self.remote_servers:
             logger.warning(
-                "[MCP] agent=%s get_tools: Toolkit is None. Returning empty list.",
-                self._agent_id,
+                "[MCP] event=tool_loading outcome=skipped reason=runtime_unavailable"
             )
         local_tools = self._get_inprocess_tools()
         return self._dedupe_tools_by_name([*local_tools, *remote_tools])
@@ -424,10 +556,7 @@ class MCPRuntime:
         """
         Shuts down the MCP client associated with this transient runtime.
         """
-        logger.debug(
-            "[MCP] agent=%s aclose: Shutting down MCPRuntime and closing client.",
-            self._agent_id,
-        )
+        logger.debug("[MCP] event=runtime_close outcome=started")
         # If lifecycle task exists, signal and await it to close contexts safely
         if self._lifecycle_task:
             if self._stop_event and not self._stop_event.is_set():
@@ -445,10 +574,7 @@ class MCPRuntime:
             self.mcp_client = None
             self.toolkit = None
         await self._aclose_inprocess_toolkits()
-        logger.info(
-            "[MCP] agent=%s aclose: MCP shutdown complete.",
-            self._agent_id,
-        )
+        logger.info("[MCP] event=runtime_close outcome=succeeded")
 
     def _init_inprocess_toolkits(self) -> None:
         """
@@ -465,27 +591,18 @@ class MCPRuntime:
         factory = get_runtime_context().get_inprocess_toolkit_factory()
         if factory is None:
             logger.info(
-                "[MCP] agent=%s no inprocess toolkit factory configured; skipping local toolkits.",
-                self._agent_id,
+                "[MCP] event=local_toolkit_init outcome=skipped reason=missing_factory"
             )
             return
         for server in self.inprocess_servers:
             toolkit = factory(server.provider, self.agent_instance)
             if toolkit is None:
                 logger.warning(
-                    "[MCP] agent=%s no toolkit built for provider=%s (server=%s)",
-                    self._agent_id,
-                    server.provider,
-                    server.id,
+                    "[MCP] event=local_toolkit_init outcome=skipped reason=unavailable"
                 )
                 continue
             self._inprocess_toolkits.append((server.id, toolkit))
-            logger.info(
-                "[MCP] agent=%s enabled inprocess provider=%s via server=%s",
-                self._agent_id,
-                server.provider,
-                server.id,
-            )
+            logger.info("[MCP] event=local_toolkit_init outcome=succeeded")
 
     def _get_inprocess_tools(self) -> list[BaseTool]:
         tools: list[BaseTool] = []
@@ -493,9 +610,8 @@ class MCPRuntime:
             provider = getattr(toolkit, "tools", None)
             if not callable(provider):
                 logger.warning(
-                    "[MCP] agent=%s local toolkit %s has no tools() method",
-                    self._agent_id,
-                    toolkit.__class__.__name__,
+                    "[MCP] event=local_tool_loading outcome=skipped "
+                    "reason=invalid_toolkit"
                 )
                 continue
             try:
@@ -518,10 +634,8 @@ class MCPRuntime:
                     )
             except Exception:
                 logger.warning(
-                    "[MCP] agent=%s failed loading inprocess tools from %s",
-                    self._agent_id,
-                    toolkit.__class__.__name__,
-                    exc_info=True,
+                    "[MCP] event=local_tool_loading outcome=failed "
+                    "reason=unexpected_error"
                 )
         return tools
 
@@ -534,10 +648,8 @@ class MCPRuntime:
                     await aclose_coro
                 except Exception:
                     logger.warning(
-                        "[MCP] agent=%s failed closing inprocess toolkit %s",
-                        self._agent_id,
-                        toolkit.__class__.__name__,
-                        exc_info=True,
+                        "[MCP] event=local_toolkit_close outcome=failed "
+                        "reason=unexpected_error"
                     )
         self._inprocess_toolkits = []
 
@@ -551,7 +663,10 @@ class MCPRuntime:
                 deduped.append(tool)
                 continue
             if name in seen:
-                logger.warning("[MCP] Duplicate tool name ignored: %s", name)
+                logger.warning(
+                    "[MCP] event=tool_deduplication outcome=skipped "
+                    "reason=duplicate_name"
+                )
                 continue
             seen.add(name)
             deduped.append(tool)

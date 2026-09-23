@@ -40,6 +40,12 @@ def rebac_factory(
 
     oidc_enabled = security_config.user.enabled and security_config.m2m.enabled
     if not oidc_enabled or rebac_config is None or not rebac_config.enabled:
+        # A grant names a person; an engine that authorizes everyone cannot re-check them.
+        if security_config.delegation.enabled:
+            raise ValueError(
+                "Delegation requires an enforced relationship engine: user and "
+                "workload authentication enabled and OpenFGA enabled."
+            )
         return NoopRebacEngine()
 
     if isinstance(rebac_config, OpenFgaRebacConfig):
@@ -48,7 +54,11 @@ def rebac_factory(
             rebac_config.api_url,
             rebac_config.store_name,
         )
-        return OpenFgaRebacEngine(rebac_config, kpi_writer=kpi_writer)
+        return OpenFgaRebacEngine(
+            rebac_config,
+            kpi_writer=kpi_writer,
+            enforces_standing=security_config.delegation.enabled,
+        )
     else:
         # Should not happen
         raise ValueError(

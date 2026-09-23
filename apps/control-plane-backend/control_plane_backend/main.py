@@ -125,6 +125,19 @@ def _norm_origin(origin: object) -> str:
 _TEAM_ORGANIZATION_RECONCILE_LOCK_KEY = "team_organization_relations_reconcile"
 
 
+async def _initialize_account_standing(container) -> None:
+    # Every start re-writes the everyone entry and the marker (idempotent writes);
+    # a marker that does not read back means standing is unusable, so startup fails.
+    rebac = container.get_rebac_engine()
+    if not rebac.enforces_standing:
+        return
+    await rebac.validate_standing_model()
+    await rebac.grant_default_standing()
+    await rebac.mark_standing_seed_ready()
+    if not await rebac.is_standing_seed_ready():
+        raise RuntimeError("Account standing is not ready.")
+
+
 async def _reconcile_team_organization_relations(container) -> None:
     """Cold-path repair of the `organization -> team` structural edge for
     every pre-existing collaborative team (#2065), run once per process
@@ -263,6 +276,7 @@ def create_app() -> FastAPI:
         # protection every fred-runtime agent pod gets automatically.
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
+        await _initialize_account_standing(container)
         await _reconcile_team_organization_relations(container)
         await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)

@@ -9,11 +9,13 @@ from typing import Any, Callable, Optional
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
@@ -187,7 +189,11 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
     resp = getattr(err, "response", None)
 
     method = getattr(req, "method", "?")
-    url = str(getattr(req, "url", "?"))
+    raw_url = str(getattr(req, "url", "?"))
+    url = scrub_grant_text(raw_url)
+    # The failure's own text repeats the endpoint, so the traceback is kept
+    # exactly when that endpoint had no grant on it to repeat.
+    with_traceback = url == raw_url
     code = getattr(resp, "status_code", None)
 
     body_preview = ""
@@ -195,7 +201,9 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
         if resp is not None:
             txt = resp.text
             # keep logs short; we only need a hint
-            body_preview = f" | body: {txt[:300].replace(chr(10), ' ')}"
+            body_preview = scrub_grant_text(
+                f" | body: {txt[:300].replace(chr(10), ' ')}"
+            )
     except httpx.ResponseNotRead:
         logger.debug(
             "HTTP response body not read (streamed response); skipping body preview"
@@ -212,7 +220,7 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             method,
             url,
             body_preview,
-            exc_info=True,
+            exc_info=with_traceback,
         )
     else:
         logger.error(
@@ -222,7 +230,7 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             method,
             url,
             body_preview,
-            exc_info=True,
+            exc_info=with_traceback,
         )
 
 
@@ -443,6 +451,11 @@ class ContextAwareTool(BaseTool):
         try:
             result = self.base_tool._run(**kwargs)
         except Exception as e:
+            run_stop = unwrap_run_stop_error(e)
+            if run_stop is not None:
+                # Raised before any logging: a refused call's body is not ours
+                # to preview, and the run ends rather than answering the model.
+                raise run_stop
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)
 
@@ -478,6 +491,10 @@ class ContextAwareTool(BaseTool):
             # "cancelled" outcome around the whole call, including this one.
             raise
         except Exception as e:
+            run_stop = unwrap_run_stop_error(e)
+            if run_stop is not None:
+                # Same rule as `_run`: a run-stopping error is not a tool result.
+                raise run_stop
             # Check for HTTP status in the exception chain for better logs
             inner = _unwrap_httpx_status_error(e)
 

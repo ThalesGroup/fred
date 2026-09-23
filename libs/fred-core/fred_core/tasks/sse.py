@@ -105,9 +105,15 @@ async def task_event_stream(
     try:
         await service.reconcile_task(task_id)
     except Exception:
-        logger.warning(
-            "task_event_stream: reconcile failed for task %s", task_id, exc_info=True
-        )
+        run = await service.get_run(task_id)
+        if run is not None and run.kind == "agent_run":
+            logger.warning("task_event_stream: agent_run reconcile failed")
+        else:
+            logger.warning(
+                "task_event_stream: reconcile failed for task %s",
+                task_id,
+                exc_info=True,
+            )
 
     # Attach the listener first; anything published from here on is buffered.
     subscription = await service.bus.open_subscription(task_id)

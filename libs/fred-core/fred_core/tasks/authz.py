@@ -56,6 +56,9 @@ async def authorize_task_access(
 
     Raises AuthorizationError/HTTPException (→ 403) when denied.
     """
+    is_agent_run = getattr(run, "kind", None) == "agent_run"
+    if is_agent_run:
+        await rebac.require_user_standing(user.uid)
     if run.created_by is not None and run.created_by == user.uid:
         return
     if await rebac.has_user_permission(
@@ -64,8 +67,13 @@ async def authorize_task_access(
         return
     if run.team_id:
         # Raises AuthorizationError (403) when the caller lacks team read.
+        permission = (
+            TeamPermission.CAN_ADMINISTER_MEMBERS
+            if is_agent_run
+            else TeamPermission.CAN_READ_MEMEBERS
+        )
         await rebac.check_user_team_permission_or_raise(
-            user, TeamPermission.CAN_READ_MEMEBERS, team_id=run.team_id
+            user, permission, team_id=run.team_id
         )
         return
     raise HTTPException(status_code=403, detail="Not authorized for this task")
@@ -88,11 +96,19 @@ async def authorize_task_mutation(
 
     Raises AuthorizationError/HTTPException (→ 403) when denied.
     """
+    is_agent_run = getattr(run, "kind", None) == "agent_run"
+    if is_agent_run:
+        await rebac.require_user_standing(user.uid)
     if run.created_by is not None and run.created_by == user.uid:
         return
     if await rebac.has_user_permission(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     ):
+        return
+    if is_agent_run and run.team_id:
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_ADMINISTER_MEMBERS, team_id=run.team_id
+        )
         return
     raise HTTPException(status_code=403, detail="Not authorized to cancel this task")
 
@@ -118,11 +134,14 @@ async def list_tasks_scoped(
     ``scope`` is assumed already validated to ``platform|team|user`` by the route.
     """
     if scope == "user":
+        if kind == "agent_run":
+            await rebac.require_user_standing(user.uid)
         return await service.list_tasks(
             created_by=user.uid,
             kind=kind,
             state=state,
             exclude_terminal=(state is None),
+            exclude_kind=("agent_run" if kind is None else None),
         )
     if scope == "platform":
         await rebac.check_user_permission_or_raise(
@@ -134,10 +153,23 @@ async def list_tasks_scoped(
         raise HTTPException(
             status_code=400, detail="team_id is required for scope=team"
         )
-    if not await rebac.has_user_permission(
+    is_platform_admin = await rebac.has_user_permission(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-    ):
-        await rebac.check_user_team_permission_or_raise(
-            user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id
+    )
+    if kind == "agent_run":
+        await rebac.require_user_standing(user.uid)
+    if not is_platform_admin:
+        permission = (
+            TeamPermission.CAN_ADMINISTER_MEMBERS
+            if kind == "agent_run"
+            else TeamPermission.CAN_READ_MEMEBERS
         )
-    return await service.list_tasks(team_id=team_id, kind=kind, state=state)
+        await rebac.check_user_team_permission_or_raise(
+            user, permission, team_id=team_id
+        )
+    return await service.list_tasks(
+        team_id=team_id,
+        kind=kind,
+        state=state,
+        exclude_kind=("agent_run" if kind is None and not is_platform_admin else None),
+    )

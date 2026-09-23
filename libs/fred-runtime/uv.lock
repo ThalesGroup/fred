@@ -550,7 +550,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.1.0"
+version = "4.2.0"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -599,6 +599,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.139.0" },
+    { name = "fastapi-mcp", marker = "extra == 'mcp'", specifier = "==0.4.0" },
     { name = "fred-pod", editable = "../fred-pod" },
     { name = "google-cloud-storage", specifier = ">=3.1.0" },
     { name = "greenlet", specifier = ">=3.4.0" },
@@ -633,7 +634,7 @@ requires-dist = [
     { name = "temporalio", specifier = ">=1.14.1" },
     { name = "uv", specifier = ">=0.11.6" },
 ]
-provides-extras = ["migration", "dev"]
+provides-extras = ["mcp", "migration", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -647,7 +648,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.1.0"
+version = "4.2.0"
 source = { editable = "../fred-pod" }
 dependencies = [
     { name = "httpx" },
@@ -687,7 +688,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.1.0"
+version = "4.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -775,7 +776,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.1.0"
+version = "4.2.0"
 source = { editable = "../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

@@ -19,12 +19,14 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
     AcknowledgeTaskResponse,
+    AgentRunDetail,
+    AgentRunTaskEvent,
     ErasureTaskEvent,
     EvaluationTaskEvent,
     IngestionTaskEvent,
@@ -125,8 +127,10 @@ class TaskService:
         team_id: str | None = None,
         target: TaskTarget | None = None,
         scheduled_for: datetime | None = None,
+        task_id: str | None = None,
+        session: AsyncSession | None = None,
     ) -> StartTaskResponse:
-        task_id = self.store.new_task_id()
+        task_id = task_id or self.store.new_task_id()
         await self.store.create(
             task_id=task_id,
             kind=request.kind,
@@ -134,16 +138,22 @@ class TaskService:
             team_id=team_id,
             target=target,
             scheduled_for=scheduled_for,
+            session=session,
         )
-        logger.info("[TaskService] starting task_id=%s kind=%s", task_id, request.kind)
+        if request.kind == "agent_run":
+            logger.info("[TaskService] starting kind=agent_run")
+        else:
+            logger.info(
+                "[TaskService] starting task_id=%s kind=%s", task_id, request.kind
+            )
         return StartTaskResponse(task_id=task_id)
 
     async def cancel(self, task_id: str) -> None:
-        run = await self.store.get_run(task_id)
-        if run is None:
-            raise TaskNotFoundError(task_id)
-        if run.execution_id:
-            await self._control.cancel(run.execution_id)
+        execution_id, event = await self.store.request_cancellation(task_id)
+        if event is not None:
+            await self.bus.publish(event)
+        if execution_id:
+            await self._control.cancel(execution_id)
 
     async def acknowledge(self, task_id: str, *, by: str) -> AcknowledgeTaskResponse:
         """Acknowledge a task that needs attention (rev. 3 §2.10).
@@ -168,8 +178,10 @@ class TaskService:
             acknowledged_by=acknowledged.acknowledged_by,
         )
 
-    async def get_run(self, task_id: str) -> TaskRunColumns | None:
-        return await self.store.get_run(task_id)
+    async def get_run(
+        self, task_id: str, *, session: AsyncSession | None = None
+    ) -> TaskRunColumns | None:
+        return await self.store.get_run(task_id, session=session)
 
     async def get_task(self, task_id: str) -> TaskSummary | None:
         return await self.store.get_task(task_id)
@@ -178,19 +190,27 @@ class TaskService:
         return await self.store.replay_events(task_id, after_seq)
 
     async def record(self, event: TaskEvent) -> bool:
-        assigned_seq = await self.store.record_event(event)
-        if assigned_seq is None:
+        recorded = await self.store.record_event(event)
+        if recorded is None:
             return False
+        assigned_seq, effective_state = recorded
         try:
-            await self.bus.publish(event.model_copy(update={"seq": assigned_seq}))
+            await self.bus.publish(
+                event.model_copy(update={"seq": assigned_seq, "state": effective_state})
+            )
         except Exception:
             # The journal is committed; SSE recovery will deliver it without changing its outcome.
-            logger.warning(
-                "Task notification failed for task_id=%s seq=%s; journal retained",
-                event.task_id,
-                assigned_seq,
-                exc_info=True,
-            )
+            if event.kind == "agent_run":
+                logger.warning(
+                    "[TaskService] agent_run notification failed; journal retained"
+                )
+            else:
+                logger.warning(
+                    "Task notification failed for task_id=%s seq=%s; journal retained",
+                    event.task_id,
+                    assigned_seq,
+                    exc_info=True,
+                )
         return True
 
     async def list_tasks(
@@ -198,6 +218,7 @@ class TaskService:
         *,
         team_id: str | None = None,
         kind: str | None = None,
+        exclude_kind: str | None = None,
         state: str | None = None,
         created_by: str | None = None,
         exclude_terminal: bool = False,
@@ -205,6 +226,7 @@ class TaskService:
         summaries = await self.store.list_tasks(
             team_id=team_id,
             kind=kind,
+            exclude_kind=exclude_kind,
             state=state,
             created_by=created_by,
             exclude_terminal=exclude_terminal,
@@ -213,11 +235,25 @@ class TaskService:
 
     # ── execution binding + reconciliation ───────────────────────────────────
 
-    async def bind_execution(self, task_id: str, *, execution_id: str) -> None:
+    async def bind_execution(
+        self,
+        task_id: str,
+        *,
+        execution_id: str,
+        session: AsyncSession | None = None,
+    ) -> None:
         """Record the Temporal workflow id that backs a task, so it can be reconciled
         against that workflow later. The submitter calls this right after starting the
         workflow. Writes only ``execution_id`` → safe against concurrent worker writes."""
-        await self.store.set_execution(task_id, execution_id=execution_id)
+        run = await self.store.set_execution(
+            task_id, execution_id=execution_id, session=session
+        )
+        if (
+            run.kind == "agent_run"
+            and run.execution_id == execution_id
+            and TaskState(run.state) == TaskState.cancelling
+        ):
+            await self._control.cancel(execution_id)
 
     async def fail_task(self, task_id: str, message: str) -> bool:
         """Drive a non-terminal task to ``failed`` with a message (durable + SSE).
@@ -229,6 +265,12 @@ class TaskService:
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
             return False
+        if run.kind == "agent_run":
+            event = await self.store.fail_agent_run_submission(task_id, message)
+            if event is None:
+                return False
+            await self.bus.publish(event)
+            return True
         return await self.record(self._build_failed_event(run, message))
 
     @staticmethod
@@ -297,6 +339,18 @@ class TaskService:
                 target=target,
                 owner=run.created_by,
             )
+        if run.kind == "agent_run":
+            reason = "cancelled" if state == TaskState.cancelled else "execution_failed"
+            return AgentRunTaskEvent(
+                task_id=run.task_id,
+                state=state,
+                seq=seq,
+                timestamp=now,
+                error=message,
+                target=target,
+                owner=run.created_by,
+                detail=AgentRunDetail(reason=reason),
+            )
         if run.kind == "erasure":
             return ErasureTaskEvent(
                 task_id=run.task_id,
@@ -346,12 +400,17 @@ class TaskService:
             return False
         if not await self.record(self._build_terminal_event(run, state, message)):
             return False
-        logger.info(
-            "[TaskService] reconciled task_id=%s → %s (%s)",
-            task_id,
-            state.value,
-            message,
-        )
+        if run.kind == "agent_run":
+            logger.info(
+                "[TaskService] reconciled kind=agent_run outcome=%s", state.value
+            )
+        else:
+            logger.info(
+                "[TaskService] reconciled task_id=%s → %s (%s)",
+                task_id,
+                state.value,
+                message,
+            )
         # The task row is now correct, but the objects the task was mutating may
         # still read as in-flight (a document whose processing stage is stuck at
         # `in_progress`, #2279). Let the owning app repair its own surface. Never
@@ -361,11 +420,14 @@ class TaskService:
             try:
                 await self._on_reconciled_terminal(run, state, message)
             except Exception:
-                logger.warning(
-                    "[TaskService] reconciled-terminal hook failed for task_id=%s",
-                    task_id,
-                    exc_info=True,
-                )
+                if run.kind == "agent_run":
+                    logger.warning("[TaskService] agent_run terminal hook failed")
+                else:
+                    logger.warning(
+                        "[TaskService] reconciled-terminal hook failed for task_id=%s",
+                        task_id,
+                        exc_info=True,
+                    )
         return True
 
     async def reconcile_task(self, task_id: str) -> bool:
@@ -402,14 +464,19 @@ class TaskService:
             if execution_id not in status_cache:
                 try:
                     status_cache[execution_id] = await self._control.get_status(
-                        execution_id
+                        execution_id, identifier_free=(run.kind == "agent_run")
                     )
                 except Exception:
-                    logger.warning(
-                        "[TaskService] get_status failed for execution_id=%s",
-                        execution_id,
-                        exc_info=True,
-                    )
+                    if run.kind == "agent_run":
+                        logger.warning(
+                            "[TaskService] agent_run execution status unavailable"
+                        )
+                    else:
+                        logger.warning(
+                            "[TaskService] get_status failed for execution_id=%s",
+                            execution_id,
+                            exc_info=True,
+                        )
                     status_cache[execution_id] = None
             try:
                 if await self._emit_terminal_if_diverged(
@@ -417,11 +484,14 @@ class TaskService:
                 ):
                     reconciled_count += 1
             except Exception:
-                logger.warning(
-                    "[TaskService] reconcile failed for task_id=%s",
-                    run.task_id,
-                    exc_info=True,
-                )
+                if run.kind == "agent_run":
+                    logger.warning("[TaskService] agent_run reconciliation failed")
+                else:
+                    logger.warning(
+                        "[TaskService] reconcile failed for task_id=%s",
+                        run.task_id,
+                        exc_info=True,
+                    )
         return reconciled_count
 
 
