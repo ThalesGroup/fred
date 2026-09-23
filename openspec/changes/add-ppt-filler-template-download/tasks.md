@@ -55,7 +55,7 @@
 - [ ] 4.2 Verify the download by hand against a local agent holding a template:
       the file opens in PowerPoint and re-uploads unchanged; verified by the
       round trip succeeding
-- [ ] 4.3 Run `/code-review` on the diff and address the findings; verified by the
+- [x] 4.3 Run `/code-review` on the diff and address the findings; verified by the
       review reporting nothing outstanding or by each finding being answered
 - [ ] 4.4 Record the verification evidence in this change and archive it
 
@@ -93,5 +93,28 @@ What it caught and what was changed:
   risks: `hasPersistedTemplate` reads stored config rather than the stored file,
   and a staged unsaved file sits beside a button that offers the saved one.
 
-Tasks 4.2 (manual round trip against a local agent) and 4.3 (`/code-review`)
-are outstanding: both need the developer to run them.
+The developer then ran `/code-review` on the three commits (task 4.3). It
+returned two findings, both real, both fixed:
+
+- **The alias fix was too broad.** `isPersonalTeamId` also matches an
+  already-canonical `personal-<uid>`, so a correct id was discarded and
+  re-derived from the session uid — wrong for a caller whose uid differs, and
+  `personal-` if the uid were unavailable. The repo's two other `/fs` call sites
+  rewrite the bare alias only; now so does this one. The test that claimed to
+  cover the canonical case passed vacuously (mocked uid equal to the id under
+  test) and now uses a different uid.
+- **Duplicating an agent** yields a copy with the slide schema and no stored
+  bytes, so the button is enabled and every click 404s. The message now names
+  that case ("the template file is missing for this agent, upload it again")
+  instead of reporting a generic failure. Recorded in `design.md` risks with why
+  probing the object store per panel open was not worth it.
+
+It also sharpened a comment: each side pins the path literal for itself, so
+neither drifts unnoticed, but no test compares the two — the docstring now says
+exactly that rather than implying a cross-language assertion.
+
+Frontend suite after those fixes: 2797 passed, 9 skipped (42 over this change).
+`make code-quality` from the root: exit 0.
+
+Task 4.2 (manual round trip against a local agent) is outstanding: it needs the
+developer to run it.

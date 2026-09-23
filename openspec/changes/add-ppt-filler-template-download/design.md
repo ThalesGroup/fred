@@ -91,6 +91,14 @@ Without it the feature would have been dead in the personal space — enabled
 button, 404 on click — and every test would still have passed, because they all
 name a real team.
 
+Only the BARE alias is rewritten, as the repo's two other `/fs` call sites do.
+The first fix used `isPersonalTeamId`, which also matches an already-canonical
+`personal-<uid>` and therefore discarded a correct id to re-derive it from the
+session — wrong for a caller whose uid differs from the id, and `personal-` if
+the uid were ever unavailable. Its test could not catch it: the mocked uid
+matched the id under test, so "passed through" and "rebuilt" produced the same
+string. The test now uses a deliberately different uid.
+
 ### 3. The agent instance id reaches the widget as an optional prop
 
 `CapabilityConfigWidgetProps` already carries `teamId` for exactly this kind of
@@ -132,12 +140,17 @@ place.
 
 - **The button's enabled state reads stored CONFIG, not the stored file.**
   `hasPersistedTemplate` is `schema_slides.length > 0`, which lives in Postgres,
-  while the `.pptx` lives in the object store — and the two are backed up through
-  different channels, so an export/reset/import cycle restores the config without
-  the asset. → Accepted: the button is then enabled and the download fails
-  visibly with the toast above. Asking the object store whether the file is there
-  would cost a request per render of the options panel to convert a rare visible
-  failure into a disabled button.
+  while the `.pptx` lives in the object store. They come apart in a routine
+  action, not only in a disaster: **duplicating an agent** copies the capability
+  config, so the copy inherits the slide schema while the bytes stay with the
+  original (the pod's save path passes a no-upload edit straight through). An
+  export/reset/import cycle does the same. → The button stays enabled, and the
+  failure says what actually happened — "the template file is missing for this
+  agent, upload it again" — instead of a generic download failure. Probing the
+  object store on every render of the options panel would buy a disabled button
+  at the cost of a request per open; the named message is the cheaper honest
+  answer. Revisit if duplication turns out to be common enough to confuse
+  people.
 
 - **A staged, unsaved file sits next to a button that offers the SAVED one.**
   The chip shows the new file's name; the button hands back the previous

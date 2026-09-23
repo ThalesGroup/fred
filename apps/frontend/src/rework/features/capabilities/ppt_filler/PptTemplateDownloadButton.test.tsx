@@ -27,8 +27,12 @@ const showError = vi.hoisted(() => vi.fn());
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError }) }));
 
 const downloadStoredTemplate = vi.hoisted(() => vi.fn());
+// The button narrows on this class by identity, so the mock must be the same
+// class the test throws — not a look-alike.
+const Missing = vi.hoisted(() => class StoredTemplateMissingError extends Error {});
 vi.mock("./templateDownload", () => ({
   downloadStoredTemplate: (...args: unknown[]) => downloadStoredTemplate(...args),
+  StoredTemplateMissingError: Missing,
 }));
 
 const { PptTemplateDownloadButton } = await import("./PptTemplateDownloadButton");
@@ -114,6 +118,18 @@ describe("PptTemplateDownloadButton", () => {
     show({ teamId: "team-a", agentInstanceId: "inst-1", disabled: true });
 
     expect(button()?.disabled).toBe(true);
+  });
+
+  it("tells the administrator when the template file itself is gone", async () => {
+    downloadStoredTemplate.mockRejectedValue(new Missing("Download failed (404)"));
+    show({ teamId: "team-a", agentInstanceId: "inst-1" });
+
+    click();
+    await settle();
+
+    expect(showError.mock.calls[0][0]).toMatchObject({
+      summary: "capability.ppt_filler.form.downloadMissing",
+    });
   });
 
   it("reports a failed download instead of failing silently", async () => {

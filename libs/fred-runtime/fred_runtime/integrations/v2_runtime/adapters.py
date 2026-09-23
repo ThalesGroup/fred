@@ -1514,8 +1514,10 @@ class AgentConfigAssetsAdapter(AgentAssetPort):
 
     The frontend mirrors this path in one place to let an administrator download
     a configured asset (`features/capabilities/ppt_filler/templateDownload.ts`).
-    Both sides pin the same literal — here in `test_agent_config_assets_path.py`,
-    there in `templateDownload.test.ts` — so changing one alone fails a suite.
+    Each side pins the literal for itself — here in
+    `test_agent_config_assets_path.py`, there in `templateDownload.test.ts` — so
+    neither can drift unnoticed. No test compares the two, so a deliberate change
+    here means editing that helper as well; its own test names this one.
     """
 
     def __init__(

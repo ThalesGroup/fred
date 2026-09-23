@@ -24,7 +24,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { downloadStoredTemplate } from "./templateDownload";
+import { downloadStoredTemplate, StoredTemplateMissingError } from "./templateDownload";
 
 export function PptTemplateDownloadButton({
   teamId,
@@ -61,7 +61,10 @@ export function PptTemplateDownloadButton({
       await downloadStoredTemplate(teamId, agentInstanceId, agentDisplayName);
     } catch (err) {
       showError({
-        summary: t("capability.ppt_filler.form.downloadFailed"),
+        summary:
+          err instanceof StoredTemplateMissingError
+            ? t("capability.ppt_filler.form.downloadMissing")
+            : t("capability.ppt_filler.form.downloadFailed"),
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {

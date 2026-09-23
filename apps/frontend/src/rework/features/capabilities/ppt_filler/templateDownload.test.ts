@@ -25,14 +25,20 @@ vi.mock("../../../../utils/downloadUtils", () => ({
   downloadAuthed: (url: string, filename: string) => downloadAuthed(url, filename),
 }));
 
-const uid = vi.hoisted(() => ({ value: "user-9" }));
+// Deliberately NOT the uid inside the canonical id used below: a test whose
+// mocked uid matches cannot tell "passed through" from "discarded and rebuilt".
+const uid = vi.hoisted(() => ({ value: "someone-else" }));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserId: () => uid.value },
 }));
 
-const { PPT_FILLER_TEMPLATE_KEY, downloadStoredTemplate, storedTemplateUrl, templateFileName } = await import(
-  "./templateDownload"
-);
+const {
+  PPT_FILLER_TEMPLATE_KEY,
+  StoredTemplateMissingError,
+  downloadStoredTemplate,
+  storedTemplateUrl,
+  templateFileName,
+} = await import("./templateDownload");
 
 describe("storedTemplateUrl", () => {
   it("addresses the instance's config area under the fixed template key", () => {
@@ -46,11 +52,13 @@ describe("storedTemplateUrl", () => {
   // bare alias. The repo says so on `personalTeamId` itself.
   it("resolves the bare personal route alias to the canonical team id", () => {
     expect(storedTemplateUrl("personal", "inst-1")).toBe(
-      "/knowledge-flow/v1/fs/download/teams/personal-user-9/agents/inst-1/config/ppt_filler_template.pptx",
+      "/knowledge-flow/v1/fs/download/teams/personal-someone-else/agents/inst-1/config/ppt_filler_template.pptx",
     );
   });
 
-  it("leaves an already-canonical personal id alone", () => {
+  it("passes an already-canonical personal id through untouched", () => {
+    // Rebuilding it from the session uid would send the request to
+    // `personal-someone-else` — a team this caller may not even be in.
     expect(storedTemplateUrl("personal-user-9", "inst-1")).toContain("/teams/personal-user-9/agents/inst-1/");
   });
 
@@ -84,6 +92,17 @@ describe("templateFileName", () => {
 });
 
 describe("downloadStoredTemplate", () => {
+  it("names the missing-file case apart from any other failure", async () => {
+    downloadAuthed.mockClear();
+    downloadAuthed.mockRejectedValue(new Error("Download failed (404)"));
+
+    await expect(downloadStoredTemplate("team-a", "inst-1")).rejects.toBeInstanceOf(StoredTemplateMissingError);
+
+    downloadAuthed.mockRejectedValue(new Error("Download failed (403)"));
+    const other = await downloadStoredTemplate("team-a", "inst-1").catch((err) => err);
+    expect(other).not.toBeInstanceOf(StoredTemplateMissingError);
+  });
+
   it("downloads the stored template with the live bearer, under the agent's name", async () => {
     downloadAuthed.mockClear();
     downloadAuthed.mockResolvedValue(undefined);

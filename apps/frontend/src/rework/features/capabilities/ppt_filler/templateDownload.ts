@@ -23,7 +23,7 @@
 // Full rationale: openspec/changes/add-ppt-filler-template-download/design.md.
 
 import { KeyCloakService } from "../../../../security/KeycloakService";
-import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId";
+import { personalTeamId } from "@shared/utils/teamId";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 
 /** Mirrors `PPT_FILLER_TEMPLATE_KEY`: one template per instance, fixed key. */
@@ -45,11 +45,14 @@ function encodePath(segments: string[]): string {
  * the read — no platform identity, no extra rule.
  *
  * `teamId` may be the bare `"personal"` route alias; KF checks ReBAC against the
- * canonical `personal-<uid>`, so it is resolved here (see `personalTeamId`).
+ * canonical `personal-<uid>`, so the alias is resolved here. Only the BARE
+ * alias: an id that is already canonical is passed through untouched, as the
+ * repo's other two `/fs` call sites do — rebuilding it from the session's uid
+ * would discard a correct id to re-derive it, and yield `personal-` if the uid
+ * were ever unavailable.
  */
 export function storedTemplateUrl(teamId: string, agentInstanceId: string): string {
-  const uid = KeyCloakService.GetUserId() ?? "";
-  const fsTeamId = isPersonalTeamId(teamId) ? personalTeamId(uid) : teamId;
+  const fsTeamId = teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
   const path = encodePath(["teams", fsTeamId, "agents", agentInstanceId, "config", PPT_FILLER_TEMPLATE_KEY]);
   return `/knowledge-flow/v1/fs/download/${path}`;
 }
@@ -69,10 +72,27 @@ export function templateFileName(agentDisplayName?: string): string {
   return cleaned ? `${cleaned}.pptx` : PPT_FILLER_TEMPLATE_KEY;
 }
 
+/**
+ * Raised when the agent's config carries a template but the file is gone.
+ * Duplicating an agent produces exactly that: the copy inherits the slide
+ * schema (the pod's save path passes a no-upload edit straight through) while
+ * the bytes stay with the original. The administrator needs "upload it again",
+ * not "download failed".
+ */
+export class StoredTemplateMissingError extends Error {}
+
 export async function downloadStoredTemplate(
   teamId: string,
   agentInstanceId: string,
   agentDisplayName?: string,
 ): Promise<void> {
-  await downloadAuthed(storedTemplateUrl(teamId, agentInstanceId), templateFileName(agentDisplayName));
+  try {
+    await downloadAuthed(storedTemplateUrl(teamId, agentInstanceId), templateFileName(agentDisplayName));
+  } catch (err) {
+    // `fetchAuthedBlob` reports the status in its message and nothing else.
+    if (err instanceof Error && /\(404\)/.test(err.message)) {
+      throw new StoredTemplateMissingError(err.message);
+    }
+    throw err;
+  }
 }
