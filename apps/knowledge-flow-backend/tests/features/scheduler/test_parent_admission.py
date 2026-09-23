@@ -74,7 +74,7 @@ def _intercept(fixture: _Fixture):
     with (
         patch.object(workflow_module.workflow, "start_child_workflow", _start_child_workflow),
         patch.object(workflow_module.workflow, "wait", _wait),
-        patch.object(workflow_module.workflow, "info", lambda: type("I", (), {"workflow_id": "wf-1"})()),
+        patch.object(workflow_module.workflow, "info", type("I", (), {"workflow_id": "wf-1"})),
         patch.object(workflow_module.workflow, "logger", logging.getLogger("test-workflow")),
     ):
         yield

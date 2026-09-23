@@ -51,7 +51,7 @@ async def with_heartbeat(source: AsyncIterator[str]) -> AsyncGenerator[str, None
     finally:
         pending.cancel()
         with suppress(asyncio.CancelledError, Exception):
-            await pending
+            await pending  # Wait for cancellation to settle before closing the source.
         close = getattr(source_iter, "aclose", None)
         if close is not None:
             await close()
@@ -165,5 +165,6 @@ async def task_event_stream(
         if pending_event is not None:
             pending_event.cancel()
             with suppress(asyncio.CancelledError, Exception):
+                # Settle the pending read before closing its subscription.
                 await pending_event
         await subscription.aclose()

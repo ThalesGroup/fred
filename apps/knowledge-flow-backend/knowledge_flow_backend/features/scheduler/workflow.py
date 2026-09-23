@@ -480,11 +480,13 @@ async def _wf_run_parent_pipeline(
                 try:
                     if not task.result():
                         failed += 1
-                except BaseException as exc:  # noqa: BLE001 - only cancellation reaches here
+                except BaseException as exc:  # noqa: BLE001 - collect failures, then re-raise
+                    # Includes asyncio.CancelledError, which is not an Exception.
                     # Every result is read even when one of them is a cancellation:
                     # leaving a sibling's exception unretrieved logs it later as an
                     # unhandled task error, on the very path already reporting a
-                    # cancellation. The cancellation is re-raised once they are all in.
+                    # cancellation. The first exception is re-raised once all
+                    # results are retrieved; none is converted into success.
                     cancellation = cancellation or exc
             if cancellation is not None:
                 raise cancellation

@@ -174,7 +174,9 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
             metadata=DocumentMetadata.model_validate_json(request.metadata_json),
             profile=request.profile,
         )
-    except BaseException as exc:  # noqa: BLE001 - the outcome must cross the pipe, whatever it is
+    except BaseException as exc:  # noqa: BLE001 - child-process failure boundary
+        # Report even SystemExit/KeyboardInterrupt to the parent, then exit with
+        # failure. This process never resumes extraction after an exception.
         _send_outcome(result_pipe, {"error": f"{type(exc).__name__}: {exc}", "permanent": _is_permanent(exc)})
         os._exit(1)
     _send_outcome(result_pipe, {"error": None, "permanent": False})
@@ -480,8 +482,10 @@ def _signal_child(pid: int, pgid: int | None, sig: int) -> None:
         return
     try:
         os.kill(pid, sig)
-    except (ProcessLookupError, PermissionError):
-        pass
+    except ProcessLookupError:
+        pass  # The child already exited; the supervisor still confirms cleanup.
+    except PermissionError:
+        logger.warning("[EXTRACTION] not allowed to signal child %s", pid)
 
 
 def _own_process_group(pid: int) -> int | None:

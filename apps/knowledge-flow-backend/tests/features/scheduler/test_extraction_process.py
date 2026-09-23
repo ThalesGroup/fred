@@ -296,7 +296,7 @@ async def test_cancelling_terminates_the_child_before_propagating(tmp_path) -> N
 
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await task  # Propagate the task exception into pytest.raises.
 
     assert not _alive(pid), "the child was still running when the cancellation propagated"
 
@@ -319,7 +319,7 @@ async def test_cancelling_during_start_up_leaves_nothing_running(tmp_path) -> No
         await asyncio.sleep(0)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await task  # Propagate the task exception into pytest.raises.
 
     assert pids, "the supervisor never reached its stop path"
     for pid in pids:
@@ -357,7 +357,7 @@ async def test_a_second_cancellation_lands_inside_the_stop_without_abandoning_it
         release.set()
 
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await task  # Propagate the task exception into pytest.raises.
 
     assert finished, "the second cancellation abandoned the stop"
     assert await _wait_gone(pid), "the child survived a second cancellation"
@@ -399,7 +399,7 @@ async def test_an_unconfirmed_stop_outranks_the_cancellation_itself(tmp_path) ->
         await _read_pid(tmp_path)
         task.cancel()
         with pytest.raises(ExtractionStopUnconfirmed):
-            await task
+            await task  # Propagate the task exception into pytest.raises.
 
 
 @pytest.mark.asyncio
@@ -492,7 +492,7 @@ async def test_a_spawned_child_is_started_and_stopped(tmp_path) -> None:
 
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await task  # Propagate the task exception into pytest.raises.
 
     assert not _alive(pid), "the spawned child was still running when the cancellation propagated"
 
