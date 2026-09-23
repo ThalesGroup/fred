@@ -1872,7 +1872,7 @@
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
-        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
+        "deleteDisabledWhileProcessing": "Indisponible tant que l’ingestion est en attente ou en cours",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "manageLabels": "Gérer les labels",
@@ -1884,8 +1884,7 @@
         "refresh": "Rafraîchir cette vue",
         "rename": "Renommer",
         "reprocess": "Retraiter",
-        "searchable": "Exclure de la recherche",
-        "stopIngestion": "Arrêter l'ingestion"
+        "searchable": "Exclure de la recherche"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1898,13 +1897,19 @@
         "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
-        "shareTitle": "Copier dans l'espace d'équipe",
-        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
-        "stopIngestionTitle": "Arrêter l'ingestion"
+        "shareTitle": "Copier dans l'espace d'équipe"
       },
       "errorTooltip": {
+        "noDetails": "Le traitement a échoué sans détail disponible. Transmettez la référence du document au support.",
+        "documentReference": "Document : {{id}}",
         "reported": "Signalé par le traitement",
-        "stage": "Étape : {{stage}}"
+        "stage": "Étape : {{stage}}",
+        "stages": {
+          "raw": "Stockage du fichier",
+          "preview": "Extraction du contenu",
+          "vector": "Indexation pour la recherche",
+          "sql": "Indexation des données structurées"
+        }
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -2028,9 +2033,7 @@
         "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé",
-        "stopIngestionError": "Impossible d'arrêter l'ingestion",
-        "stopIngestionRequested": "Arrêt de l'ingestion demandé"
+        "processStarted": "Traitement lancé"
       },
       "pageTitlePersonal": "Vos ressources personnelles",
       "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
@@ -2211,9 +2214,16 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "ingestionStep": {
+        "uploading": "Préparation du document",
+        "processing": "Extraction du contenu",
+        "indexing": "Indexation",
+        "done": "Traitement terminé"
+      },
       "popover": {
         "acknowledge": "Ignorer",
         "close": "Fermer",
+        "supportReference": "Référence support : {{id}}",
         "copyError": "Copier l'erreur",
         "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",

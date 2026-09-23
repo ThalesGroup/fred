@@ -271,11 +271,16 @@ class IngestionService:
         """
         Processes an input document from input_path and writes outputs to output_dir.
         Saves metadata.json alongside.
+
+        The work itself lives on the pipeline manager, which the extraction
+        subprocess also calls: one implementation, whichever process runs it.
         """
-        normalized_profile = coerce_processing_profile(profile)
-        with processing_profile_scope(normalized_profile):
-            pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata, profile=normalized_profile)
-            pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
+        self.pipeline_manager.run_input(
+            input_path=input_path,
+            output_dir=output_dir,
+            metadata=metadata,
+            profile=profile,
+        )
 
     def process_output(
         self,

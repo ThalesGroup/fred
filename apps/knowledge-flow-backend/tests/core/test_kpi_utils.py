@@ -82,6 +82,7 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
         activity_type="pull_input_process",
         task_queue="ingestion",
         workflow_type="ProcessPullFile",
+        workflow_id="workflow-doc-1",
         attempt=2,
     )
 

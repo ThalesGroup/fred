@@ -3,6 +3,7 @@
 _CHART_SCHEMA_MK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 _GEN_CHART_SCHEMA_SCRIPT   := $(_CHART_SCHEMA_MK_DIR)/../generate_chart_schema.py
 _CHECK_CHART_VALUES_SCRIPT := $(_CHART_SCHEMA_MK_DIR)/../check_chart_values.py
+_CHECK_KF_WORKERS_SCRIPT   := $(_CHART_SCHEMA_MK_DIR)/../check_chart_ingestion_workers.py
 
 _CHART_REPO_ROOT   := $(abspath $(_CHART_SCHEMA_MK_DIR)/../..)
 _CHART_SCHEMA_FILE := $(_CHART_REPO_ROOT)/deploy/charts/fred/values.schema.json
@@ -48,3 +49,11 @@ check-chart-values: $(SCRIPTS_UV_READY) ## Validate deploy/charts/fred/values.ya
 	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
 		$(SCRIPTS_UV) run $(_CHECK_CHART_VALUES_SCRIPT) "$(_CHART_SCHEMA_FILE)" "$(_CHART_VALUES_FILE)", \
 		echo "Skipping chart values check: not all backend schemas are present.")
+
+_CHART_DIR := $(_CHART_REPO_ROOT)/deploy/charts/fred
+
+.PHONY: check-chart-ingestion-workers
+check-chart-ingestion-workers: $(SCRIPTS_UV_READY) ## Render the chart and check the knowledge-flow ingestion worker groups agree on queue, storage and image
+	@command -v helm >/dev/null 2>&1 \
+		|| (echo "ERROR: helm is required for this check." && exit 1)
+	$(SCRIPTS_UV) run $(_CHECK_KF_WORKERS_SCRIPT) "$(_CHART_DIR)"

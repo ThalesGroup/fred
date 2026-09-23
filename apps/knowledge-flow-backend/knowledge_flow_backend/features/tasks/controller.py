@@ -120,6 +120,7 @@ class TasksController:
             tags=["Tasks"],
             status_code=202,
             summary="Request cooperative cancellation of a running task",
+            responses={409: {"description": "Ingestion cancellation is not supported"}},
         )
         async def cancel_task(
             task_id: str,
@@ -129,6 +130,8 @@ class TasksController:
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
             await authorize_task_mutation(user, run, get_rebac_engine())
+            if run.kind == "ingestion":
+                raise HTTPException(status_code=409, detail="Ingestion cancellation is not supported. Processing continues until success or failure.")
             await self._service.cancel(task_id)
             if run.execution_id:
                 self._schedule_post_cancel_reconcile(task_id)

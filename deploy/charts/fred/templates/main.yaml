@@ -1,4 +1,9 @@
-{{- range $name, $app := .Values.applications }}
+{{- include "fred.validate-ingestion-worker-roles" $ }}
+{{- range $name, $rawApp := .Values.applications }}
+  {{- $app := $rawApp }}
+  {{- if hasKey $rawApp "inheritFrom" }}
+    {{- $app = include "fred.resolvedApp" (dict "app" $rawApp "root" $ "name" $name) | fromYaml }}
+  {{- end }}
   {{- $appEnabled := true }}
   {{- if hasKey $app "enabled" }}
     {{- $appEnabled = $app.enabled }}

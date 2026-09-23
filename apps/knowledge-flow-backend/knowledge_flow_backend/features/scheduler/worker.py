@@ -15,12 +15,15 @@
 """
 Temporal worker responsible for running ingestion pipelines.
 
-This worker connects to the Temporal service, registers all ingestion-related
-activities and workflows, and listens on the configured task queue.
-
-It is launched in a background thread from main.py during application startup.
+One process serves one or more roles (`scheduler.worker_roles`), each with its own
+Temporal worker on its own queue: the common role runs every workflow and every
+activity but extraction, while an extraction role runs nothing but the two
+extraction activities for one processing profile. A Kubernetes deployment declares
+a single role so its pods size and scale independently; a developer's single
+process declares all four.
 """
 
+import asyncio
 import concurrent.futures
 import logging
 from datetime import timedelta
@@ -28,7 +31,11 @@ from datetime import timedelta
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
+from knowledge_flow_backend.common.structures import (
+    IngestionWorkerRole,
+    TemporalSchedulerConfig,
+    extraction_task_queue,
+)
 from knowledge_flow_backend.features.scheduler.activities import (
     delete_vectors,
     emit_ingestion_task_event,
@@ -78,95 +85,101 @@ from knowledge_flow_backend.features.scheduler.workflow import (
 
 logger = logging.getLogger(__name__)
 
+# Every workflow in the ingestion namespace, plus the recurring-maintenance one.
+# They run on the common queue whatever profile their documents carry: only the
+# extraction activity is routed away.
+_COMMON_WORKFLOWS = [
+    ProcessPull,
+    ProcessPullFile,
+    ProcessPush,
+    ProcessPushFile,
+    CreatePullFileMetadata,
+    GetPushFileMetadata,
+    PullInputProcess,
+    PushInputProcess,
+    OutputProcess,
+    FastStoreVectors,
+    FastDeleteVectors,
+    RevectorizeCorpusWorkflow,
+    RevectorizeDocument,
+    RepairVectorMetadataWorkflow,
+    ExpirePdfRendersWorkflow,
+]
 
-async def run_worker(
-    config: TemporalSchedulerConfig,
+# The two heavy, profile-dependent activities, and the only ones an extraction
+# role registers. Everything else — metadata, progress events, indexing, repair,
+# maintenance — belongs to the common role below.
+_EXTRACTION_ACTIVITIES = [
+    pull_input_process,
+    push_input_process,
+]
+
+_COMMON_ACTIVITIES = [
+    create_pull_file_metadata,
+    get_push_file_metadata,
+    output_process,
+    output_process_trusted,
+    fast_store_vectors,
+    fast_delete_vectors,
+    emit_ingestion_task_event,
+    list_documents_in_scope,
+    get_chunk_count,
+    delete_vectors,
+    prepare_revectorize_file,
+    mark_document_vectorized,
+    list_repair_candidates_for_source_tag,
+    list_strict_vector_document_uids,
+    list_strict_content_document_uids,
+    bulk_repair_vector_metadata,
+    emit_repair_vector_metadata_task_event,
+    expire_pdf_renders,
+]
+
+
+def _role_task_queue(config: TemporalSchedulerConfig, role: IngestionWorkerRole) -> str:
+    """The queue a role polls. Derived through the same function the submission
+    side uses, so the two cannot name a queue differently."""
+    profile = role.extraction_profile
+    return config.task_queue if profile is None else extraction_task_queue(config.task_queue, profile)
+
+
+def _build_worker(
     *,
-    max_concurrent_workflow_tasks: int = 1,
-    max_concurrent_activities: int = 1,
-    pdf_render_ttl_days: int = 30,
-):
-    """
-    Connect to Temporal and start the ingestion worker.
+    client: Client,
+    config: TemporalSchedulerConfig,
+    role: IngestionWorkerRole,
+    workflow_task_concurrency: int,
+    activity_concurrency: int,
+) -> Worker:
+    """One Temporal worker for one role, registering only what that role runs."""
+    is_common = role is IngestionWorkerRole.common
+    queue = _role_task_queue(config, role)
+    if is_common:
+        logger.info(
+            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d max_concurrent_workflow_tasks=%d",
+            role.value,
+            queue,
+            activity_concurrency,
+            workflow_task_concurrency,
+        )
+    else:
+        # No workflow is registered here, so the workflow-task limit would say
+        # nothing about what this pod actually does.
+        logger.info(
+            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d (extraction only, no workflows)",
+            role.value,
+            queue,
+            activity_concurrency,
+        )
 
-    Why:
-        Workflow-task and activity concurrency have different runtime bottlenecks,
-        so they must be configured independently for predictable ingestion throughput.
-    How:
-        Apply dedicated limits to Temporal `Worker` workflow-task and activity-task
-        execution, and size the sync activity thread pool from activity concurrency.
-    Usage example:
-        `await run_worker(config, max_concurrent_workflow_tasks=8, max_concurrent_activities=16)`
-
-    Args:
-        config (TemporalSchedulerConfig): Temporal connection + task queue config.
-        max_concurrent_workflow_tasks (int): Max concurrent workflow tasks handled
-            by this worker process.
-        max_concurrent_activities (int): Max concurrent activity tasks handled by
-            this worker process.
-        pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
-            nightly expiry Schedule (0 removes it).
-    """
-    workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
-    activity_concurrency = max(1, int(max_concurrent_activities))
-    logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
-    client = await Client.connect(
-        target_host=config.host,
-        namespace=config.namespace,
-    )
-    logger.info(f"[SCHEDULER] Connected to Temporal. Registering worker on queue: '{config.task_queue}'")
-
-    # Housekeeping must never keep ingestion from starting: log and carry on.
-    try:
-        await sync_pdf_render_expiry_schedule(client, config, pdf_render_ttl_days)
-    except Exception:  # noqa: BLE001
-        logger.exception("[SCHEDULER] Could not sync the PDF render expiry schedule; ingestion worker starts anyway")
-
-    # Use thread pool executor for sync activities
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency)
-    worker = Worker(
+    return Worker(
         client=client,
-        task_queue=config.task_queue,
-        workflows=[
-            ProcessPull,
-            ProcessPullFile,
-            ProcessPush,
-            ProcessPushFile,
-            CreatePullFileMetadata,
-            GetPushFileMetadata,
-            PullInputProcess,
-            PushInputProcess,
-            OutputProcess,
-            FastStoreVectors,
-            FastDeleteVectors,
-            RevectorizeCorpusWorkflow,
-            RevectorizeDocument,
-            RepairVectorMetadataWorkflow,
-            ExpirePdfRendersWorkflow,
-        ],
-        activities=[
-            create_pull_file_metadata,
-            get_push_file_metadata,
-            pull_input_process,
-            push_input_process,
-            output_process,
-            output_process_trusted,
-            fast_store_vectors,
-            fast_delete_vectors,
-            emit_ingestion_task_event,
-            list_documents_in_scope,
-            get_chunk_count,
-            delete_vectors,
-            prepare_revectorize_file,
-            mark_document_vectorized,
-            list_repair_candidates_for_source_tag,
-            list_strict_vector_document_uids,
-            list_strict_content_document_uids,
-            bulk_repair_vector_metadata,
-            emit_repair_vector_metadata_task_event,
-            expire_pdf_renders,
-        ],
-        activity_executor=executor,
+        task_queue=queue,
+        workflows=_COMMON_WORKFLOWS if is_common else [],
+        activities=_COMMON_ACTIVITIES if is_common else _EXTRACTION_ACTIVITIES,
+        # Sync activities run in threads; one pool per role keeps a saturated
+        # extraction role from starving the common one in a multi-role process.
+        activity_executor=concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency),
         max_concurrent_workflow_tasks=workflow_task_concurrency,
         max_concurrent_activities=activity_concurrency,
         # Heartbeat responses are how the server tells a running activity it was
@@ -180,5 +193,87 @@ async def run_worker(
         default_heartbeat_throttle_interval=timedelta(seconds=5),
     )
 
+
+async def run_worker(
+    config: TemporalSchedulerConfig,
+    *,
+    roles: list[IngestionWorkerRole] | None = None,
+    max_concurrent_workflow_tasks: int = 1,
+    max_concurrent_activities: int = 1,
+    pdf_render_ttl_days: int = 30,
+):
+    """
+    Connect to Temporal and start one worker per configured role.
+
+    Why:
+        Extraction is the expensive, profile-dependent stage; serving it from its
+        own queue and pods keeps a slow document from holding the activity slots
+        a cheap one needs. Workflow-task and activity concurrency have different
+        runtime bottlenecks, so they stay independently configured.
+    How:
+        Build one `Worker` per role — the common role registers every workflow and
+        every activity but extraction, an extraction role registers nothing but the
+        two extraction activities — and run them together until one stops.
+    Usage example:
+        `await run_worker(config, roles=[IngestionWorkerRole.extraction_rich], max_concurrent_activities=1)`
+
+    Args:
+        config (TemporalSchedulerConfig): Temporal connection + base task queue.
+        roles (list[IngestionWorkerRole] | None): Roles this process serves;
+            defaults to the common role alone.
+        max_concurrent_workflow_tasks (int): Max concurrent workflow tasks per role.
+        max_concurrent_activities (int): Max concurrent activity tasks per role.
+        pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
+            nightly expiry Schedule (0 removes it).
+    """
+    from knowledge_flow_backend.features.scheduler.fault_injection import read_ingestion_fault
+
+    fault = read_ingestion_fault()
+    if fault is not None:
+        logger.warning("[SIMULATED INGESTION FAULT] worker started with %s", fault)
+
+    active_roles = list(roles) if roles else [IngestionWorkerRole.common]
+    workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
+    activity_concurrency = max(1, int(max_concurrent_activities))
+
+    logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
+    client = await Client.connect(
+        target_host=config.host,
+        namespace=config.namespace,
+    )
+
+    # The Schedule always targets the common queue, which is where its workflow is
+    # registered, so an extraction role has nothing to post and nothing to move.
+    if IngestionWorkerRole.common in active_roles:
+        # Housekeeping must never keep ingestion from starting: log and carry on.
+        try:
+            await sync_pdf_render_expiry_schedule(client, config, pdf_render_ttl_days)
+        except Exception:  # noqa: BLE001
+            logger.exception("[SCHEDULER] Could not sync the PDF render expiry schedule; ingestion worker starts anyway")
+    else:
+        logger.info("[SCHEDULER] Extraction-only worker; maintenance schedules stay with the common role")
+
+    workers = [
+        _build_worker(
+            client=client,
+            config=config,
+            role=role,
+            workflow_task_concurrency=workflow_task_concurrency,
+            activity_concurrency=activity_concurrency,
+        )
+        for role in active_roles
+    ]
+
+    if len(workers) > 1:
+        logger.info(
+            "[SCHEDULER] %d roles in this process: up to %d activities at once across them",
+            len(workers),
+            len(workers) * activity_concurrency,
+        )
     logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")
-    await worker.run()
+    # A TaskGroup, not gather: when one role's worker dies the others must be
+    # cancelled before the caller's shutdown disposes the database engine and the
+    # KPI writer their activities are still using.
+    async with asyncio.TaskGroup() as group:
+        for worker in workers:
+            group.create_task(worker.run())

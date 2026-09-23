@@ -9,7 +9,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import FileT
 
 
 @pytest.mark.asyncio
-async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> None:
+async def test_submit_documents_embeds_temporal_retry_policy(app_context, monkeypatch) -> None:
     """
     Ensure ingestion submissions carry the profile retry policy into file payloads.
 
@@ -20,6 +20,10 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
         Stub the scheduler backend, submit one document, and assert the captured
         pipeline file includes the normalized retry policy values.
     """
+    profile = app_context.configuration.processing.get_profile_config("medium")
+    monkeypatch.setattr(profile, "push_metadata_activity_timeout", "17s")
+    monkeypatch.setattr(profile, "pull_metadata_activity_timeout", "23s")
+    monkeypatch.setattr(profile, "output_activity_timeout", "41s")
     service = IngestionTaskService(
         scheduler_config=app_context.configuration.scheduler.model_copy(
             update={"backend": "memory"},
@@ -69,3 +73,7 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
     assert file.retry_maximum_interval_seconds == 600
     assert file.retry_maximum_attempts == 6
     assert file.retry_non_retryable_error_types == []
+
+    assert file.push_metadata_activity_timeout_seconds == 17
+    assert file.pull_metadata_activity_timeout_seconds == 23
+    assert file.output_activity_timeout_seconds == 41

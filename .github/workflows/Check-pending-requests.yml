@@ -482,6 +482,9 @@ jobs:
             --set-string applications.control-plane-worker.image.tag=swift-dev \
             --set-string applications.frontend.image.tag=swift-dev
 
+      - name: Check chart - knowledge-flow ingestion worker groups
+        run: make check-chart-ingestion-workers
+
       - name: Check chart - root bootstrap secret contract (AUTHZ-07)
         run: |
           set -euo pipefail

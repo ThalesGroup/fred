@@ -27,6 +27,7 @@ from knowledge_flow_backend.features.scheduler.activity_utils import (
     raise_if_document_deleted,
     to_thread_with_heartbeat,
 )
+from knowledge_flow_backend.features.scheduler.extraction_process import extract_document
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_queue_wait_kpi,
     emit_temporal_activity_result_kpis,
@@ -144,31 +145,39 @@ async def pull_input_process(
             input_dir.mkdir(exist_ok=True)
             output_dir.mkdir(exist_ok=True)
 
-            try:
-                resolved_input_file = await await_with_heartbeat(
-                    resolve_pull_input_file_for_worker(
-                        metadata=metadata,
-                        working_dir=working_dir,
-                    ),
-                    heartbeat_details={
-                        "stage": "pull_input_restore",
-                        "document_uid": metadata.document_uid,
-                    },
-                )
-            except Exception as exc:
-                raise FileNotFoundError(f"Pull input fetch failed for document {metadata.document_uid}.") from exc
-
-            await to_thread_with_heartbeat(
-                ingestion_service.process_input,
-                user,
-                resolved_input_file,
-                output_dir,
-                metadata,
-                profile,
+            # Only a genuinely absent source is a FileNotFoundError: the loader
+            # already raises one when the fetch finds nothing. Wrapping every
+            # failure in one made a transient source outage look permanent.
+            resolved_input_file = await await_with_heartbeat(
+                resolve_pull_input_file_for_worker(
+                    metadata=metadata,
+                    working_dir=working_dir,
+                ),
                 heartbeat_details={
-                    "stage": "pull_input_process",
+                    "stage": "pull_input_restore",
                     "document_uid": metadata.document_uid,
                 },
+            )
+
+            await extract_document(
+                input_path=resolved_input_file,
+                output_dir=output_dir,
+                metadata=metadata,
+                profile=profile,
+                stage="pull_input_process",
+                started_at=started_at,
+                in_process_fallback=lambda: to_thread_with_heartbeat(
+                    ingestion_service.process_input,
+                    user,
+                    resolved_input_file,
+                    output_dir,
+                    metadata,
+                    profile,
+                    heartbeat_details={
+                        "stage": "pull_input_process",
+                        "document_uid": metadata.document_uid,
+                    },
+                ),
             )
             await to_thread_with_heartbeat(
                 ingestion_service.save_output,

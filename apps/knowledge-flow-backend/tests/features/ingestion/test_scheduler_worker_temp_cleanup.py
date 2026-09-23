@@ -120,6 +120,18 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         "knowledge_flow_backend.features.scheduler.push_files_activities.tempfile.TemporaryDirectory",
         lambda prefix="": tracked_dir,
     )
+    # Extraction now runs in a child process. The contract under test is that the
+    # worker's temporary directory is removed once the activity finishes, which
+    # holds whatever extraction does — so it is intercepted rather than spawned.
+    extracted: dict[str, object] = {}
+
+    async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, in_process_fallback) -> None:
+        extracted.update({"input_path": input_path, "output_dir": output_dir, "stage": stage})
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.scheduler.push_files_activities.extract_document",
+        _fake_extract_document,
+    )
 
     result = await push_input_process(
         user=_user(),
@@ -130,6 +142,10 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
     assert result is metadata
     assert tracked_dir.exited is True
+    # The directory is removed only after extraction returned — the ordering that
+    # keeps a still-running extraction from writing into a deleted directory.
+    assert extracted["stage"] == "push_input_process"
+    assert not pathlib.Path(str(extracted["output_dir"])).exists()
     assert not tracked_dir.path.exists()
 
 

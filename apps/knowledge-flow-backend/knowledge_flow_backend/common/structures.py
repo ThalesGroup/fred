@@ -57,6 +57,38 @@ class IngestionProcessingProfile(str, Enum):
     rich = "rich"
 
 
+class IngestionWorkerRole(str, Enum):
+    """What one knowledge-flow worker process is there to do.
+
+    `common` runs every ingestion workflow plus every activity but extraction.
+    The three extraction roles run nothing but the two extraction activities,
+    each on its own queue, so a slow profile cannot hold the activity slots the
+    others need.
+    """
+
+    common = "common"
+    extraction_fast = "extraction-fast"
+    extraction_medium = "extraction-medium"
+    extraction_rich = "extraction-rich"
+
+    @property
+    def extraction_profile(self) -> Optional[IngestionProcessingProfile]:
+        """The profile this role extracts for, or None for the common role."""
+        if self is IngestionWorkerRole.common:
+            return None
+        return IngestionProcessingProfile(self.value.removeprefix("extraction-"))
+
+
+def extraction_task_queue(base_task_queue: str, profile: IngestionProcessingProfile) -> str:
+    """Name the Temporal queue carrying one profile's extraction activities.
+
+    The single source of truth for profile → queue: the side that submits derives
+    it per document, the worker derives it from its own role. Two sides spelling a
+    queue name by hand lose every submission in silence.
+    """
+    return f"{base_task_queue}-{IngestionProcessingProfile(profile).value}"
+
+
 _DURATION_PATTERN = re.compile(r"^(?P<value>\d+)\s*(?P<unit>[smhd]?)$")
 _DURATION_MULTIPLIER_SECONDS = {
     "": 1,
@@ -357,9 +389,13 @@ class ProcessingConfig(BaseModel):
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
         )
+        push_metadata_activity_timeout: str = Field(default="5m", description="Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.")
+        pull_metadata_activity_timeout: str = Field(default="30m", description="Per-attempt timeout for source download and metadata creation; excludes queue wait.")
+        output_activity_timeout: str = Field(default="1h", description="Per-attempt timeout for indexing; excludes queue wait.")
+
         activity_heartbeat_timeout: str = Field(
             default="5m",
-            description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
+            description="Temporal heartbeat timeout for extraction and indexing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
         )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
@@ -395,6 +431,12 @@ class ProcessingConfig(BaseModel):
             default_factory=list,
             description="Temporal application error types that should fail fast for this profile without retry.",
         )
+
+        @field_validator("push_metadata_activity_timeout", "pull_metadata_activity_timeout", "output_activity_timeout", mode="before")
+        @classmethod
+        def _normalize_stage_timeout(cls, value: object) -> str:
+            seconds = parse_duration_seconds(value, field_name="processing.profiles.*.stage_activity_timeout")
+            return f"{seconds}s"
 
         @property
         def retry_initial_interval_seconds(self) -> int:
@@ -627,6 +669,26 @@ class SchedulerConfig(BaseModel):
     enabled: bool = False
     backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig
+    worker_roles: List[IngestionWorkerRole] = Field(
+        default_factory=lambda: list(IngestionWorkerRole),
+        description=(
+            "Roles this worker process serves, one Temporal worker each. A Kubernetes deployment "
+            "declares exactly one so its pods size and scale independently; the default serves all "
+            "four, which is a single process covering every queue (local development). Leaving a "
+            "role unserved parks its work silently, so the four roles must be covered between them. "
+            "ingestion_max_concurrent_activities applies per role, so a process serving several of "
+            "them may run that many activities times the number of roles."
+        ),
+    )
+
+    @field_validator("worker_roles")
+    @classmethod
+    def _validate_worker_roles(cls, roles: List[IngestionWorkerRole]) -> List[IngestionWorkerRole]:
+        if not roles:
+            raise ValueError("scheduler.worker_roles must name at least one role")
+        if len(set(roles)) != len(roles):
+            raise ValueError("scheduler.worker_roles must not repeat a role")
+        return roles
 
 
 class AppConfig(BaseModel):

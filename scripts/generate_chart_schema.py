@@ -297,6 +297,10 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "configurationFileName": _STRING,
         "deployment": _obj({"enabled": _BOOL}),
         "replicaCount": _INT,
+        # Name of another application this one deep-merges itself over, resolved by
+        # templates/_apps.tpl at render time so a -f override of the base also
+        # reaches it — which a YAML anchor in values.yaml cannot do.
+        "inheritFrom": _STRING,
         "statefulset": _obj({"enabled": _BOOL}),
         "job": _obj({"enabled": _BOOL}, additional=True),
         "migration": _MIGRATION,
@@ -370,9 +374,25 @@ def _kf_app(kf_config: dict) -> dict:
     }))
 
 
-def _kf_worker_app(kf_config: dict) -> dict:
+def _drop_required(schema: object) -> object:
+    """Same schema with every `required` list removed, at any depth.
+
+    An application declaring `inheritFrom` supplies a fragment: the keys it
+    overrides, not a whole configuration. Property names and types are still
+    checked, so a typo is still caught — only the completeness check is dropped,
+    because completeness is a property of the merged result, not of the fragment.
+    """
+    if isinstance(schema, dict):
+        return {key: _drop_required(value) for key, value in schema.items() if key != "required"}
+    if isinstance(schema, list):
+        return [_drop_required(item) for item in schema]
+    return schema
+
+
+def _kf_worker_app(kf_config: dict, *, partial_configuration: bool = False) -> dict:
+    configuration = _drop_required(copy.deepcopy(kf_config)) if partial_configuration else kf_config
     return _obj(_base_app_props({
-        "configuration": kf_config,
+        "configuration": configuration,
         "dotenv": _obj({}, additional=True),
     }))
 
@@ -471,6 +491,13 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
                 "frontend": _frontend_app(),
                 "knowledge-flow-backend": _kf_app(kf_config),
                 "knowledge-flow-worker": _kf_worker_app(kf_config),
+                # Same shape, one per profile: each polls that profile's extraction
+                # queue so a slow document cannot take the slots of a cheap one.
+                # They inherit knowledge-flow-worker's configuration and state only
+                # their overrides, so their own block is validated as a fragment.
+                "knowledge-flow-worker-extraction-fast": _kf_worker_app(kf_config, partial_configuration=True),
+                "knowledge-flow-worker-extraction-medium": _kf_worker_app(kf_config, partial_configuration=True),
+                "knowledge-flow-worker-extraction-rich": _kf_worker_app(kf_config, partial_configuration=True),
                 "control-plane-backend": _cp_app(cp_config),
                 "control-plane-worker": _cp_worker_app(cp_config),
             }),
