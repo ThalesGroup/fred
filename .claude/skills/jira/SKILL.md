@@ -19,6 +19,11 @@ Otherwise skip it.
 
 ## Rules
 
+0. **Codex execution:** Jira needs network access. In Codex, run every `acli jira ...`
+   command and every `scripts/jira.py` command outside the sandbox on the first attempt
+   (`sandbox_permissions="require_escalated"`). Repository rules allow the read-only
+   commands without a prompt; mutations may still require approval. Other agents can run
+   the commands normally.
 1. **Sign your analysis.** An internal note you post starts with a first line naming the
    agent: `**Claude Code first analysis**` (Codex → `**Codex first analysis**`). A reader
    must never mistake it for a human teammate's conclusion.
