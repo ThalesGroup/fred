@@ -41,7 +41,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError, is_cancelled_exception
+from temporalio.exceptions import ActivityError, ApplicationError, ChildWorkflowError, RetryState, TimeoutError, TimeoutType, is_cancelled_exception
 
 # The event write itself is tiny, but this activity also runs the terminal
 # document repair: on a cancellation that erases the document's content, vectors,
@@ -183,26 +183,29 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
     return default_seconds
 
 
-def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid: Any, display_name: Any) -> list[Any]:
-    """Build the `emit_ingestion_task_event` args for a per-file pipeline that
-    ended on an exception.
-
-    Cancellation is reported as `cancelled`, never `failed` (#2315): a user stop
-    must not paint the row red, and the terminal state decides what the event's
-    handler does with the document — fail its stuck stages, or erase it.
-    Detection is the SDK's own `is_cancelled_exception`, which knows the shape
-    this arrives in (a `ChildWorkflowError` whose direct cause is a Temporal
-    `CancelledError`); an arbitrary `__cause__` walk would also match a genuine
-    failure that merely carries a cancellation somewhere below it, and deleting
-    the user's document on that reading is not a mistake worth risking.
-
-    Pure so the rule is stated once and unit-testable without a Temporal
-    environment — same shape as `_wf_scope_resolution_failed_event_args`.
-    """
+def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid: Any, display_name: Any, step: str | None = None) -> list[Any]:
+    """Keep the failed stage and useful cause instead of Temporal's wrapper message."""
     if is_cancelled_exception(exc):
         return [task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name]
-    error_str = str(exc).strip() or "Processing failed"
-    return [task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name]
+    cause = exc
+    exhausted = False
+    # Only unwrap orchestration wrappers, preserving the application's own explanation.
+    for _ in range(8):
+        if isinstance(cause, ActivityError):
+            exhausted = cause.retry_state == RetryState.MAXIMUM_ATTEMPTS_REACHED
+        if not isinstance(cause, (ChildWorkflowError, ActivityError)) or cause.__cause__ is None:
+            break
+        cause = cause.__cause__
+    if isinstance(cause, TimeoutError):
+        reason = "The worker stopped reporting activity before the heartbeat deadline." if cause.type == TimeoutType.HEARTBEAT else "The configured time limit was exceeded."
+        if cause.type is not None:
+            reason += f" ({cause.type.name})"
+    else:
+        reason = str(cause).strip() or "No failure details were reported."
+    phase = {"uploading": "document preparation", "processing": "content extraction", "indexing": "indexing", "done": "completion reporting"}.get(step)
+    heading = f"Ingestion failed at the {phase} step." if phase else "Ingestion failed."
+    error_str = f"{heading} {'Configured attempts exhausted. ' if exhausted else ''}{reason[:1500]}"
+    return [task_id, "failed", step, None, error_str, 0, 1, 1, document_uid, display_name]
 
 
 def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
@@ -713,6 +716,7 @@ class ProcessPullFile:
         task_id: str | None = _wf_get(file, "task_id")
         document_uid: str | None = _wf_document_uid(file)
         _wf_log_policy(file)
+        step = "uploading"
 
         try:
             if task_id:
@@ -726,6 +730,7 @@ class ProcessPullFile:
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
 
+            step = "processing"
             if task_id:
                 # progress stays None (indeterminate) through this step: neither
                 # PullInputProcess nor OutputProcess reports intermediate progress,
@@ -746,6 +751,9 @@ class ProcessPullFile:
                 id=_wf_child_id("PullInputProcess", file, file_index),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
+            step = "indexing"
+            if task_id:
+                await _wf_emit_event([task_id, "running", step, None, None, 0, 1, 0, document_uid, display_name])
             await workflow.execute_child_workflow(
                 OutputProcess.run,
                 args=[file, metadata],
@@ -754,12 +762,13 @@ class ProcessPullFile:
             )
             workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
             final_uid = _wf_get(metadata, "document_uid") or document_uid
+            step = "done"
             if task_id:
                 await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name))
+                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name, step))
             raise
 
 
@@ -784,6 +793,7 @@ class ProcessPushFile:
         task_id: str | None = _wf_get(file, "task_id")
         document_uid: str | None = _wf_get(file, "document_uid")
         _wf_log_policy(file)
+        step = "uploading"
 
         try:
             if task_id:
@@ -797,6 +807,7 @@ class ProcessPushFile:
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
 
+            step = "processing"
             if task_id:
                 # progress stays None (indeterminate) through this step: neither
                 # PushInputProcess nor OutputProcess reports intermediate progress,
@@ -818,6 +829,9 @@ class ProcessPushFile:
                 id=_wf_child_id("PushInputProcess", file, file_index),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
+            step = "indexing"
+            if task_id:
+                await _wf_emit_event([task_id, "running", step, None, None, 0, 1, 0, document_uid, display_name])
             await workflow.execute_child_workflow(
                 OutputProcess.run,
                 args=[file, metadata],
@@ -826,12 +840,13 @@ class ProcessPushFile:
             )
             workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
             final_uid = _wf_get(metadata, "document_uid") or document_uid
+            step = "done"
             if task_id:
                 await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
             return {"document_uid": final_uid, "filename": display_name}
         except Exception as exc:
             if task_id:
-                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name))
+                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name, step))
             raise
 
 

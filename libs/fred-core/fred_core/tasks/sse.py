@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
 from fred_core.tasks.models import TaskState
@@ -48,8 +49,12 @@ async def with_heartbeat(source: AsyncIterator[str]) -> AsyncIterator[str]:
             else:
                 yield ": ping\n\n"
     finally:
-        if pending and not pending.done():
-            pending.cancel()
+        pending.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await pending
+        close = getattr(source_iter, "aclose", None)
+        if close is not None:
+            await close()
 
 
 def _sse_frame(seq: int, data_json: str) -> str:
@@ -87,7 +92,8 @@ async def task_event_stream(
 
     Behaviour: read-time reconcile → subscribe → replay events with
     ``seq > after_seq`` → stream live bus events until terminal or client
-    disconnect. A terminal state closes the stream.
+    disconnect. A terminal state closes the stream. Every heartbeat interval,
+    an idle stream checks the durable journal to recover missed notifications.
 
     Ordering matters: the live subscription is opened **before** the replay, so an
     event published in the gap between the replay snapshot and going live is
@@ -105,6 +111,7 @@ async def task_event_stream(
 
     # Attach the listener first; anything published from here on is buffered.
     subscription = await service.bus.open_subscription(task_id)
+    pending_event: asyncio.Task | None = None
     try:
         last_seq = after_seq
         for event in await service.replay(task_id, after_seq=after_seq):
@@ -115,6 +122,12 @@ async def task_event_stream(
 
         run = await service.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
+            # Catch a committed terminal event even when its notification was lost.
+            for event in await service.replay(task_id, after_seq=last_seq):
+                last_seq = event.seq
+                yield _sse_frame(event.seq, event.model_dump_json())
+                if event.state.is_terminal:
+                    return
             # Already terminal: the terminal event may have fired in the race
             # window and be sitting in the buffer — flush it, then stop instead
             # of blocking on a live stream that will never produce more.
@@ -126,14 +139,31 @@ async def task_event_stream(
                     return
             return
 
-        async for live_event in subscription:
-            if await is_disconnected():
-                break
-            if live_event.seq <= last_seq:
-                continue  # already delivered during replay
-            last_seq = live_event.seq
-            yield _sse_frame(live_event.seq, live_event.model_dump_json())
-            if live_event.state.is_terminal:
-                break
+        live = subscription.__aiter__()
+        pending_event = asyncio.create_task(anext(live))
+        while not await is_disconnected():
+            done, _ = await asyncio.wait({pending_event}, timeout=HEARTBEAT_INTERVAL)
+            if not done:
+                # Notifications accelerate delivery; the journal recovers missed publishes.
+                for event in await service.replay(task_id, after_seq=last_seq):
+                    last_seq = event.seq
+                    yield _sse_frame(event.seq, event.model_dump_json())
+                    if event.state.is_terminal:
+                        return
+                continue
+            try:
+                live_event = pending_event.result()
+            except StopAsyncIteration:
+                return
+            if live_event.seq > last_seq:
+                last_seq = live_event.seq
+                yield _sse_frame(live_event.seq, live_event.model_dump_json())
+                if live_event.state.is_terminal:
+                    return
+            pending_event = asyncio.create_task(anext(live))
     finally:
+        if pending_event is not None:
+            pending_event.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await pending_event
         await subscription.aclose()

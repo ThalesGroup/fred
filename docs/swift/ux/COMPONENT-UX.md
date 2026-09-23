@@ -4850,3 +4850,15 @@ Three additions, all made for the rail and all useful beyond it:
 running. Delete remains disabled until the task settles; its tooltip explains
 that ingestion is active. A durable terminal event refreshes document state and
 quota. Cancellation scope and cleanup are deferred to a separate design.
+
+
+### Ingestion failure explanations — 2026-09-23
+
+Ingestion task steps display localized preparation, extraction and indexing
+labels. Failures show the backend's stage/cause explanation; task-detail copy
+includes the document name, task/document references, stage and error. Resources
+shows the durable failure even if its browse snapshot still looks ready, with
+an explicit fallback when no reason was recorded and a copyable document ID.
+Personal Resources loads both failures and successes so an old failure does not
+return after a successful retry. Existing tooltip, copy and task components are
+reused. These changes have static review only; runtime/visual checks are pending.

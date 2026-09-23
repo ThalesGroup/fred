@@ -260,6 +260,8 @@ async def emit_ingestion_task_event(
         from knowledge_flow_backend.features.scheduler.document_failure import repair_document_after_terminal
 
         run = await task_service.get_run(task_id)
+        if run is not None and run.state != state:
+            return  # A different terminal outcome was already persisted.
         await repair_document_after_terminal(
             document_uid,
             TaskState(state),

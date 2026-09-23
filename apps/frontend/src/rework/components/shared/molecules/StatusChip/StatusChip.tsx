@@ -48,6 +48,7 @@ interface StatusChipProps {
    *  before any stage started stamps nothing in `processing.errors`, so without
    *  this the chip says "Erreur" and the panel has nothing to show. */
   taskError?: string | null;
+  documentUid?: string;
   /** The ingestion succeeded during this browser session (its SSE task reached
    *  `succeeded`). Marks the otherwise-silent "ready" state with a success
    *  badge so a user who just launched uploads can spot what finished — on a
@@ -79,7 +80,14 @@ const ICON_SIZE = 12;
  * Stage keys are shown as-is: they are backend pipeline identifiers
  * (preview/vector/sql/…), useful verbatim in a support ticket.
  */
-export function StatusChip({ status, errors, justCompleted, failedDocuments, taskError }: StatusChipProps) {
+export function StatusChip({
+  status,
+  errors,
+  justCompleted,
+  failedDocuments,
+  taskError,
+  documentUid,
+}: StatusChipProps) {
   const { t } = useTranslation();
   // Folder rollup: the count is the label ("2 errors"), because restating
   // "Error" on a folder says nothing the row's own subtree doesn't already
@@ -147,15 +155,28 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments, tas
   // A stage message is more precise than the task's, so it is not repeated when
   // it already says the same thing.
   const showReportedError = reportedError && !errorEntries.some(([, message]) => message.trim() === reportedError);
-  if (errorEntries.length === 0 && !showReportedError) return chip;
+  if (status !== "failed") return chip;
 
+  const fallback =
+    errorEntries.length === 0 && !showReportedError ? t("rework.resources.errorTooltip.noDetails") : null;
+  const reference = documentUid ? t("rework.resources.errorTooltip.documentReference", { id: documentUid }) : null;
   const copyText = [
+    ...(reference ? [reference] : []),
+    ...(fallback ? [fallback] : []),
     ...errorEntries.map(([stage, message]) => `${stage}: ${message}`),
     ...(showReportedError ? [reportedError] : []),
   ].join("\n");
 
   return (
     <DetailPanel title={t("rework.resources.status.failed")} copyText={copyText} chip={chip}>
+      {showReportedError && (
+        <div className={styles.errorEntry}>
+          <span className={styles.errorStage}>{t("rework.resources.errorTooltip.reported")}</span>
+          <span className={styles.errorMessage}>{reportedError}</span>
+        </div>
+      )}
+      {fallback && <span className={styles.errorMessage}>{fallback}</span>}
+      {reference && <span className={styles.errorMessage}>{reference}</span>}
       {errorEntries.length > 0 && (
         <dl className={styles.errorTooltip}>
           {errorEntries.map(([stage, message]) => (
@@ -167,12 +188,6 @@ export function StatusChip({ status, errors, justCompleted, failedDocuments, tas
             </div>
           ))}
         </dl>
-      )}
-      {showReportedError && (
-        <div className={styles.errorEntry}>
-          <span className={styles.errorStage}>{t("rework.resources.errorTooltip.reported")}</span>
-          <span className={styles.errorMessage}>{reportedError}</span>
-        </div>
       )}
     </DetailPanel>
   );

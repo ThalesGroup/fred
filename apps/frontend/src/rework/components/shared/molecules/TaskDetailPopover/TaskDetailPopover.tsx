@@ -18,7 +18,7 @@ import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { selectTask } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
-import { relativeTime } from "../../../../features/tasks/taskLabels";
+import { relativeTime, stepLabel, taskSupportDetails } from "../../../../features/tasks/taskLabels";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -97,7 +97,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
 
   const handleCopyError = () => {
     if (!task.error) return;
-    writeRichClipboard("", task.error).then((ok) => {
+    writeRichClipboard("", taskSupportDetails(task, t)).then((ok) => {
       if (ok) confirmErrorCopied();
     });
   };
@@ -145,7 +145,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
       {/* Step + elapsed */}
       {task.step && (
         <div className={styles.stepRow}>
-          <span className={styles.step}>{task.step}</span>
+          <span className={styles.step}>{stepLabel(task, t)}</span>
           <span className={styles.elapsed}>· {elapsedLabel}</span>
         </div>
       )}
@@ -162,6 +162,10 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
             onClick={handleCopyError}
           />
         </div>
+      )}
+
+      {task.error && (
+        <span className={styles.errorText}>{t("rework.tasks.popover.supportReference", { id: task.taskId })}</span>
       )}
 
       {needsAttention && (

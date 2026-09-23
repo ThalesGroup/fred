@@ -1923,6 +1923,8 @@
         "shareTitle": "Copy to Team space"
       },
       "errorTooltip": {
+        "noDetails": "Processing failed without further details. Share the document reference with support.",
+        "documentReference": "Document: {{id}}",
         "reported": "Reported by the pipeline",
         "stage": "Stage: {{stage}}"
       },
@@ -2229,9 +2231,16 @@
         "terminalCount": "Completed ({{count}})",
         "title": "Tasks"
       },
+      "ingestionStep": {
+        "uploading": "Document preparation",
+        "processing": "Content extraction",
+        "indexing": "Indexing",
+        "done": "Processing complete"
+      },
       "popover": {
         "acknowledge": "Dismiss",
         "close": "Close",
+        "supportReference": "Support reference: {{id}}",
         "copyError": "Copy error",
         "errorCopied": "Error copied",
         "startedAgo": "started {{time}}",

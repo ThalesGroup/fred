@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
@@ -149,33 +149,44 @@ class TaskStore:
         self,
         event: TaskEvent,
         session: AsyncSession | None = None,
-    ) -> int:
+    ) -> int | None:
+        """Atomically append an event; ignore late events for settled ingestion tasks."""
         detail = event.detail.model_dump() if event.detail is not None else None
+        target = event.target.model_dump() if event.target is not None else None
+        values: dict[str, Any] = {
+            "state": event.state,
+            "error": event.error,
+            "updated_at": _utcnow(),
+        }
+        # Sparse events preserve known context; an omitted error clears a transient failure.
+        for key, value in (
+            ("progress", event.progress),
+            ("step", event.step),
+            ("detail", detail),
+            ("target", target),
+        ):
+            if value is not None:
+                values[key] = value
         async with use_session(self._sessions, session) as s:
-            run = await s.get(self._run, event.task_id)
-            if run is None:
-                raise TaskNotFoundError(event.task_id)
-            next_seq = run.seq + 1
-            run.state = event.state
-            run.seq = next_seq
-            # Preserve last-known progress/step/detail when a sparse event omits them
-            # (same rule already applied to target below): a running event that
-            # carries no progress means "unchanged", not "reset to indeterminate".
-            # Terminal/updating events set these explicitly and still overwrite.
-            # `error` is written directly so a later event can *clear* a transient
-            # error (e.g. a retry that recovers) rather than let it stick.
-            if event.progress is not None:
-                run.progress = event.progress
-            if event.step is not None:
-                run.step = event.step
-            if detail is not None:
-                run.detail = detail
-            run.error = event.error
-            run.updated_at = _utcnow()
-
-            target = event.target.model_dump() if event.target is not None else None
-            if target is not None:
-                run.target = target
+            result = await s.execute(
+                update(self._run)
+                .where(
+                    self._run.task_id == event.task_id,
+                    or_(
+                        self._run.kind != "ingestion",
+                        self._run.state.notin_(
+                            [state.value for state in TaskState if state.is_terminal]
+                        ),
+                    ),
+                )
+                .values(**values, seq=self._run.seq + 1)
+                .returning(self._run.seq)
+            )
+            next_seq = result.scalar_one_or_none()
+            if next_seq is None:
+                if await s.get(self._run, event.task_id) is None:
+                    raise TaskNotFoundError(event.task_id)
+                return None
             log_row = self._event_log(
                 task_id=event.task_id,
                 kind=event.kind,

@@ -18,6 +18,7 @@ stream on heartbeats. Regression test for that replay→subscribe race."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable
@@ -134,3 +135,62 @@ async def test_live_events_are_deduped_against_replay_by_seq() -> None:
 
     assert body.count("id: 1") == 1  # deduped
     assert "id: 2" in body  # terminal still delivered
+
+
+@pytest.mark.asyncio
+async def test_idle_stream_recovers_terminal_event_without_notification(monkeypatch):
+    import fred_core.tasks.sse as sse
+
+    monkeypatch.setattr(sse, "HEARTBEAT_INTERVAL", 0.001)
+    bus = MemoryEventBus()
+    service = _FakeService(bus, replay_events=[_event(1)], run_state=TaskState.running)
+    stream = task_event_stream(
+        service, "task-1", after_seq=0, is_disconnected=_never_disconnected
+    )
+    assert "id: 1" in await anext(stream)
+    service._replay_events.append(_event(2, TaskState.failed))
+    frame = await asyncio.wait_for(anext(stream), timeout=1)
+    assert "id: 2" in frame and '"failed"' in frame
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
+    assert not bus._queues
+
+
+@pytest.mark.asyncio
+async def test_terminal_commit_after_replay_is_recovered_without_notification():
+    bus = MemoryEventBus()
+    service = _FakeService(bus, replay_events=[_event(1)], run_state=TaskState.running)
+
+    async def terminal_run(task_id):
+        service._replay_events.append(_event(2, TaskState.succeeded))
+        return SimpleNamespace(state=TaskState.succeeded)
+
+    service.get_run = terminal_run
+    frames = [
+        frame
+        async for frame in task_event_stream(
+            service, "task-1", after_seq=0, is_disconnected=_never_disconnected
+        )
+    ]
+    assert len(frames) == 2
+    assert '"succeeded"' in frames[-1]
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_wrapper_closes_source_when_client_stops_after_a_frame():
+    from fred_core.tasks.sse import with_heartbeat
+
+    closed = False
+
+    async def source():
+        nonlocal closed
+        try:
+            yield "data: running\n\n"
+            await asyncio.Event().wait()
+        finally:
+            closed = True
+
+    stream = with_heartbeat(source())
+    await anext(stream)
+    await stream.aclose()
+    assert closed

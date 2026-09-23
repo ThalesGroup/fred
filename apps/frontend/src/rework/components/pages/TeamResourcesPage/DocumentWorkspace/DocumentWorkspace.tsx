@@ -302,25 +302,18 @@ function DocumentWorkspace({
     }
     return byUid;
   }, [activeTasks]);
-  // Terminal ingestion history, so the rollup below survives a page reload: the
-  // Redux task store is memory-only, and at the Corpus root no child page is
-  // loaded either, which used to leave a tree full of failures looking clean
-  // until the user opened the folder.
-  //
-  // ONE unfiltered call. `exclude_terminal` only defaults to "hide them" on the
-  // `scope=user` branch (authz.py); a team-scoped query returns every state, so
-  // filtering by state would cost a second round-trip AND drop two things worth
-  // having: `cancelled` tasks (needed to clear a failure whose retry the user
-  // stopped) and a teammate's in-flight run.
-  //
-  // A personal space cannot use team scope: personal uploads deliberately leave
-  // the task's `team_id` NULL (ingestion_controller.py, "Ambiguous ... or
-  // personal-space uploads deliberately leave it None"), so the query would come
-  // back empty. `scope=user` is filtered by creator, not by space — a caveat
-  // that only bites if the same file was ingested into a team and a personal
-  // space, since uids are content-derived.
+  // Team history includes terminal outcomes; personal history needs explicit state queries.
   const { data: taskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery(
     isPersonalTeam ? { scope: "user", kind: "ingestion" } : { scope: "team", teamId, kind: "ingestion" },
+  );
+  // User-scoped listing hides terminal tasks unless a state is explicitly requested.
+  const { data: personalFailures } = useListTasksKnowledgeFlowV1TasksGetQuery(
+    { scope: "user", kind: "ingestion", state: "failed" },
+    { skip: !isPersonalTeam },
+  );
+  const { data: personalSuccesses } = useListTasksKnowledgeFlowV1TasksGetQuery(
+    { scope: "user", kind: "ingestion", state: "succeeded" },
+    { skip: !isPersonalTeam },
   );
   const allTasks = useSelector(selectAllTasks);
   // Keyed on the session's terminal outcomes, not on `allTasks` itself: the task
@@ -333,9 +326,13 @@ function DocumentWorkspace({
     .sort()
     .join(KEY_SEP);
   const docOutcomes = useMemo(
-    () => resolveDocOutcomes(taskHistory?.tasks ?? [], allTasks),
+    () =>
+      resolveDocOutcomes(
+        [...(taskHistory?.tasks ?? []), ...(personalFailures?.tasks ?? []), ...(personalSuccesses?.tasks ?? [])],
+        allTasks,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see liveOutcomeKey
-    [taskHistory, liveOutcomeKey],
+    [taskHistory, personalFailures, personalSuccesses, liveOutcomeKey],
   );
 
   // Documents that finished during THIS browser session. Read from the Redux
@@ -357,7 +354,9 @@ function DocumentWorkspace({
   const getDocStatus = (doc: DocumentMetadata): DocStatus =>
     reprocessOverrides[doc.identity.document_uid]
       ? "processing"
-      : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
+      : !activeDocTaskByUid.has(doc.identity.document_uid) && docOutcomes.failed.has(doc.identity.document_uid)
+        ? "failed"
+        : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -1409,6 +1408,7 @@ function DocumentWorkspace({
           <StatusChip
             status={getDocStatus(row.doc)}
             errors={row.doc.processing?.errors}
+            documentUid={row.doc.identity.document_uid}
             // The failure a Temporal child job reported: for a run that died
             // before any stage started, this is the ONLY account of it —
             // `processing.errors` is keyed by stage and stays empty. Already in

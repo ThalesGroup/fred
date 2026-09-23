@@ -1923,6 +1923,8 @@
         "shareTitle": "Copier dans l'espace d'équipe"
       },
       "errorTooltip": {
+        "noDetails": "Le traitement a échoué sans détail disponible. Transmettez la référence du document au support.",
+        "documentReference": "Document : {{id}}",
         "reported": "Signalé par le traitement",
         "stage": "Étape : {{stage}}"
       },
@@ -2229,9 +2231,16 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "ingestionStep": {
+        "uploading": "Préparation du document",
+        "processing": "Extraction du contenu",
+        "indexing": "Indexation",
+        "done": "Traitement terminé"
+      },
       "popover": {
         "acknowledge": "Ignorer",
         "close": "Fermer",
+        "supportReference": "Référence support : {{id}}",
         "copyError": "Copier l'erreur",
         "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",

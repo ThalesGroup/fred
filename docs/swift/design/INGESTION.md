@@ -114,6 +114,20 @@ persisted. An exhausted or non-retryable failure produces a failed task; its
 siblings continue. If the parent ends without a document's terminal event,
 task reconciliation reports failure rather than inventing success.
 
+For ingestion tasks, the first committed terminal outcome is final. Sequence
+allocation and the terminal guard share the journal transaction. A failed live
+notification does not turn a committed success into a failure: an idle SSE stream
+catches up from the journal every 30 seconds. This is a recovery poll, not a
+real-time guarantee when notifications are unavailable.
+
+Failure messages retain the preparation/extraction/indexing step and unwrap
+Temporal orchestration errors to expose the cause. Exhausted activity attempts
+are named only when Temporal reports them. Resource error details include a
+copyable document reference; task details include the task reference as well.
+Resources reads terminal history after reload, including explicit failed/succeeded
+queries for personal space. The global task tray still restores only active tasks;
+restoring its historical failures and retrying its initial fetch remain separate.
+
 **User cancellation is deferred.** The document menu has no Stop ingestion action;
 the task cancellation endpoint rejects ingestion tasks with HTTP 409 after the
 normal authorization check. Deletion stays disabled while ingestion is active.

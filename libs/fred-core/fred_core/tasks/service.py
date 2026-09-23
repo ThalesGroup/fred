@@ -177,9 +177,21 @@ class TaskService:
     async def replay(self, task_id: str, after_seq: int) -> list[TaskEvent]:
         return await self.store.replay_events(task_id, after_seq)
 
-    async def record(self, event: TaskEvent) -> None:
+    async def record(self, event: TaskEvent) -> bool:
         assigned_seq = await self.store.record_event(event)
-        await self.bus.publish(event.model_copy(update={"seq": assigned_seq}))
+        if assigned_seq is None:
+            return False
+        try:
+            await self.bus.publish(event.model_copy(update={"seq": assigned_seq}))
+        except Exception:
+            # The journal is committed; SSE recovery will deliver it without changing its outcome.
+            logger.warning(
+                "Task notification failed for task_id=%s seq=%s; journal retained",
+                event.task_id,
+                assigned_seq,
+                exc_info=True,
+            )
+        return True
 
     async def list_tasks(
         self,
@@ -217,8 +229,7 @@ class TaskService:
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
             return False
-        await self.record(self._build_failed_event(run, message))
-        return True
+        return await self.record(self._build_failed_event(run, message))
 
     @staticmethod
     def _reconciled_terminal(
@@ -333,7 +344,8 @@ class TaskService:
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
             return False
-        await self.record(self._build_terminal_event(run, state, message))
+        if not await self.record(self._build_terminal_event(run, state, message)):
+            return False
         logger.info(
             "[TaskService] reconciled task_id=%s → %s (%s)",
             task_id,
