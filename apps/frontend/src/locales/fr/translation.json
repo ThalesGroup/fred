@@ -560,6 +560,9 @@
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
+    "copied": "Copié",
+    "copy": "Copier",
+    "copyCode": "Copier le code",
     "delete": "Supprimer",
     "description": "Description",
     "edit": "Modifier",
@@ -1559,6 +1562,7 @@
       "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
       "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "executionTime": "Temps d'exécution : {{duration}}",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
       "openReasoning": "Ouvrir le raisonnement complet",
@@ -1567,12 +1571,22 @@
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "sqlQuery": "Requête :",
+      "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
       "summaryReasoning": "Réflexion {{duration}}",
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
-      "thinking": "Réflexion en cours…"
+      "thinking": "Réflexion en cours…",
+      "toolStatus": {
+        "failure": "Échec",
+        "running": "En cours",
+        "success": "Succès"
+      },
+      "toolLabels": {
+        "readQuery": "Lecture de la requête"
+      }
     },
     "collapse": "Réduire",
     "create": "Créer",

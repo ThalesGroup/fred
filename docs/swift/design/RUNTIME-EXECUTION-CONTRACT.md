@@ -2836,12 +2836,14 @@ degradation would have been silent:
    now also honours the artifact flag, which aligns the audit trail with the
    trace for all three document tools.
 
-   **This does not fix the MCP case.** `ContextAwareTool._arun` returns its
-   error as *text* with a `None` artifact (`return msg, None`), so there is no
-   `is_error` flag for the middleware to read and an MCP tool failure is still
-   audited `outcome="succeeded"` — the misreporting recorded in #2073 as
-   adjacent to #2011 remains open. Closing it needs a distinct signal from
-   `ContextAwareTool`, which is outside this change.
+   **MCP follow-up (#2733, 2026-09-22).** `ContextAwareTool` still returns error
+   text to the model so every tool call has a result, but now pairs it with an
+   `is_error=True` artifact. The trace and `ToolObservabilityMiddleware` consume
+   that signal, so caught MCP failures render and audit as failed. Generic MCP
+   details remain behind §8.74's trust boundary. Knowledge Flow `read_query`
+   HTTP 400 is the narrow curated exception: its backend-redacted query error
+   reaches the trace without the HTTP wrapper, and the frontend pairs it with
+   the submitted SQL for the dedicated SQL failure view.
 
 Regression tests: `test_search_tool_failure_returns_is_error_result` and
 `test_search_adapter_wraps_httpx_error_with_status_code`

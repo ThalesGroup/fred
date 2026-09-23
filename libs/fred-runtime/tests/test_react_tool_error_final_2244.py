@@ -199,6 +199,20 @@ def _blocks_empty_error_result(call_id: str, real_message: str) -> ToolMessage:
     )
 
 
+def _read_query_error_result(call_id: str) -> ToolMessage:
+    detail = "Binder Error: Referenced column amount_typo not found"
+    return ToolMessage(
+        content=f"Error: HTTP 400: {detail}",
+        tool_call_id=call_id,
+        name="read_query",
+        artifact=ToolInvocationResult(
+            tool_ref="read_query",
+            is_error=True,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=detail),),
+        ),
+    )
+
+
 def test_typed_error_artifact_is_rendered_via_render_tool_result() -> None:
     """Trusted case: text comes from `render_tool_result(artifact)`, with only
     Fred's own presentation prefix removed — never from `message.content`."""
@@ -229,6 +243,39 @@ def test_typed_error_artifact_with_no_blocks_falls_back_to_generic_message() -> 
     message, not surface that empty string."""
     artifact = ToolInvocationResult(tool_ref="ppt_filler", is_error=True)
     assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_read_query_error_event_keeps_engine_detail_and_drops_http_wrapper() -> (
+    None
+):
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "c1",
+                "name": "read_query",
+                "args": {"sql": "SELECT amount_typo FROM d_sales"},
+            }
+        ],
+    )
+    events = [
+        ("updates", {"agent": {"messages": [tool_call]}}),
+        ("updates", {"tools": {"messages": [_read_query_error_result("c1")]}}),
+        ("updates", {"agent": {"messages": [AIMessage(content="ignored")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    [tool_result] = [
+        event for event in collected if isinstance(event, ToolResultRuntimeEvent)
+    ]
+    assert tool_result.is_error is True
+    assert tool_result.content == (
+        "Binder Error: Referenced column amount_typo not found"
+    )
+    assert "HTTP" not in tool_result.content
+    assert _final(collected).content == tool_result.content
 
 
 def _final(collected: list[object]) -> FinalRuntimeEvent:

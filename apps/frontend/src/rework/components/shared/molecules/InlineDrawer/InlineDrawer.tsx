@@ -32,6 +32,8 @@ interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Optional content rendered immediately after the visible title. */
+  titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
@@ -88,6 +90,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  titleAccessory,
   headerActions,
   width = "480px",
   background,
@@ -187,9 +190,12 @@ export function InlineDrawer({
         <div className={styles.panel}>
           {!hideHeader && (
             <div className={styles.header}>
-              <span id={titleId} className={styles.title}>
-                {title}
-              </span>
+              <div className={styles.titleGroup}>
+                <span id={titleId} className={styles.title}>
+                  {title}
+                </span>
+                {titleAccessory}
+              </div>
               <div className={styles.headerActions}>
                 {headerActions}
                 <IconButton

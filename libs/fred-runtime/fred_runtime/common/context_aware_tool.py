@@ -2,12 +2,18 @@
 # Licensed under the Apache License, Version 2.0
 
 import asyncio
+import json
 import logging
 from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
+from fred_sdk.contracts.context import (
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
@@ -28,6 +34,8 @@ AgentSettingsProvider = Callable[[], AgentSettingsLike]
 
 logger = logging.getLogger(__name__)
 
+_READ_QUERY_TOOL_NAME = "read_query"
+
 
 def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
     # Backward compatibility for existing callers
@@ -35,7 +43,10 @@ def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusE
 
 
 def _build_tool_error_message(
-    exc: BaseException, inner: Optional[httpx.HTTPStatusError]
+    exc: BaseException,
+    inner: Optional[httpx.HTTPStatusError],
+    *,
+    tool_name: str | None = None,
 ) -> str:
     """Return a user-facing error string that surfaces upstream HTTP detail when available.
 
@@ -44,11 +55,24 @@ def _build_tool_error_message(
     line.  Falls back to ``str(exc)`` when no HTTP response is present.
     """
     if inner is None:
+        parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
+        if parsed is not None and tool_name == _READ_QUERY_TOOL_NAME:
+            status_code, detail = parsed
+            if status_code == 400:
+                return f"Error: {detail}"
         return f"Error: {exc}"
-    code = inner.response.status_code if inner.response else "?"
+    code = inner.response.status_code if inner.response is not None else "?"
+    detail = _http_error_detail(inner)
+    if tool_name == _READ_QUERY_TOOL_NAME and code == 400:
+        return f"Error: {detail}"
+    return f"Error: HTTP {code}: {detail}"
+
+
+def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
+    """Extract the upstream service detail without its HTTP transport wrapper."""
     detail: str = str(inner)
     try:
-        if inner.response:
+        if inner.response is not None:
             raw = inner.response.text
             try:
                 body = inner.response.json()
@@ -66,7 +90,91 @@ def _build_tool_error_message(
         logger.warning(
             "Failed to extract HTTP response body for error message", exc_info=True
         )
-    return f"Error: HTTP {code}: {detail}"
+    return detail
+
+
+def _parse_fastapi_mcp_http_error(
+    exc: BaseException, *, tool_name: str | None
+) -> tuple[int, str] | None:
+    """Parse FastApiMCP's bounded HTTP-error envelope.
+
+    FastApiMCP currently serializes route failures into the MCP exception
+    message instead of preserving an ``httpx.HTTPStatusError`` cause. Accept
+    only its exact tool-specific prefix and a JSON object with a string
+    ``detail`` field; malformed or unrelated provider text remains untrusted.
+    """
+    if not tool_name:
+        return None
+    prefix = f"Error calling {tool_name}. Status code: "
+    message = str(exc)
+    if not message.startswith(prefix):
+        return None
+    status_text, separator, response_text = message[len(prefix) :].partition(
+        ". Response: "
+    )
+    if not separator:
+        return None
+    try:
+        status_code = int(status_text)
+        body = json.loads(response_text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    detail = body.get("detail")
+    if not isinstance(detail, str) or not detail:
+        return None
+    return status_code, detail
+
+
+def _build_tool_error_artifact(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    exc: BaseException,
+    inner: Optional[httpx.HTTPStatusError],
+) -> ToolInvocationResult:
+    """Return Fred's trusted failure signal for one caught MCP exception.
+
+    Raw provider text stays out of generic user-facing errors. The sole curated
+    exception is Knowledge Flow's ``read_query`` HTTP 400 contract: its ``detail``
+    has already been classified and redacted by Knowledge Flow. The SQL remains
+    in the paired tool-call arguments; the frontend joins those two trusted
+    fields only for its dedicated ``read_query`` failure view.
+    """
+    is_read_query = (
+        tool_name == _READ_QUERY_TOOL_NAME
+        and isinstance(kwargs.get("sql"), str)
+        and bool(str(kwargs["sql"]).strip())
+    )
+    detail: str | None = None
+    if is_read_query and inner is not None and inner.response is not None:
+        if inner.response.status_code == 400:
+            try:
+                body = inner.response.json()
+            except (ValueError, httpx.ResponseNotRead):
+                body = None
+            if isinstance(body, dict) and isinstance(body.get("detail"), str):
+                detail = body["detail"]
+    elif is_read_query:
+        parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
+        if parsed is not None and parsed[0] == 400:
+            detail = parsed[1]
+
+    if detail:
+        return ToolInvocationResult(
+            tool_ref=tool_name,
+            is_error=True,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.TEXT,
+                    text=detail,
+                ),
+            ),
+        )
+
+    # An empty error artifact carries the failure bit through LangChain while
+    # forcing the shared trust boundary to use Fred's fixed generic message.
+    return ToolInvocationResult(tool_ref=tool_name, is_error=True)
 
 
 def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
@@ -347,9 +455,9 @@ class ContextAwareTool(BaseTool):
 
             # CRITICAL: Return error as text to preserve chat history integrity.
             # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
-            msg = _build_tool_error_message(e, inner)
+            msg = _build_tool_error_message(e, inner, tool_name=self.name)
             if getattr(self, "response_format", None) == "content_and_artifact":
-                return msg, None
+                return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
             return normalize_mcp_content(result)
@@ -381,9 +489,9 @@ class ContextAwareTool(BaseTool):
                 )
 
             # CRITICAL: Return error as text to preserve chat history integrity.
-            msg = _build_tool_error_message(e, inner)
+            msg = _build_tool_error_message(e, inner, tool_name=self.name)
             if getattr(self, "response_format", None) == "content_and_artifact":
-                return msg, None
+                return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
             return normalize_mcp_content(result)

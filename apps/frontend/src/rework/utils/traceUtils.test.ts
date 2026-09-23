@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import {
+  asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
   formatLatencyMs,
@@ -300,6 +301,21 @@ describe("groupTraceEntries", () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toEqual({ kind: "solo", message: planning });
     expect(entries[1]).toMatchObject({ kind: "combo", call, result });
+  });
+});
+
+describe("entryLabel localization", () => {
+  const entry = {
+    kind: "combo" as const,
+    call: toolCallMsg("c1", "mcp__knowledge_flow__read_query"),
+    result: toolResultMsg("c1", "result"),
+  };
+
+  it.each([
+    ["Reading query", "Reading query"],
+    ["Lecture de la requête", "Lecture de la requête"],
+  ])("uses the active language label %s", (translation, expected) => {
+    expect(entryLabel(entry, () => translation)).toBe(expected);
   });
 });
 
@@ -1051,22 +1067,16 @@ describe("toolDiscriminator", () => {
     });
   });
 
-  it("reports 0 rows for a SQL result that carries an error", () => {
+  it("does not report a row count for a failed SQL result", () => {
     const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [], error: "syntax error" }));
-    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
-      kind: "rows",
-      count: 0,
-    });
+    expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toBeNull();
   });
 
-  it("reports 0 rows for a query whose result came back in an unreadable shape", () => {
+  it("does not claim 0 rows when a successful query result has an unreadable shape", () => {
     const opaque = toolResultMsg("c1", "Tool error: binder error on column CA");
     expect(
       toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "mcp__knowledge_flow__read_query"), result: opaque }),
-    ).toEqual({
-      kind: "rows",
-      count: 0,
-    });
+    ).toBeNull();
   });
 
   it("returns null for unrecognized, pending, failed and solo entries", () => {
@@ -1076,6 +1086,48 @@ describe("toolDiscriminator", () => {
     const failed = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }] }), false);
     expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "x"), result: failed })).toBeNull();
     expect(toolDiscriminator({ kind: "solo", message: thoughtMsg("thinking") })).toBeNull();
+  });
+});
+
+describe("asFailedSqlQueryResult", () => {
+  it("pairs a failed read_query with its submitted SQL and engine error", () => {
+    const entry = {
+      kind: "combo" as const,
+      call: toolCallMsg("c1", "mcp__knowledge_flow__read_query", {
+        sql: "SELECT amount_typo FROM d_sales",
+      }),
+      result: toolResultMsg(
+        "c1",
+        'Binder Error: Referenced column "amount_typo" not found in FROM clause!\n' +
+          'Candidate bindings: "amount"\n\n' +
+          "LINE 1: SELECT amount_typo FROM d_sales\n" +
+          "                       ^",
+        false,
+      ),
+    };
+
+    expect(asFailedSqlQueryResult(entry)).toEqual({
+      sql_query: "SELECT amount_typo FROM d_sales",
+      rows: [],
+      error: 'Referenced column "amount_typo" not found in FROM clause!',
+    });
+    expect(toolCopyText(entry)).toBe("SELECT amount_typo FROM d_sales");
+  });
+
+  it("never opens the curated SQL view for a successful or unrelated tool", () => {
+    const successful = {
+      kind: "combo" as const,
+      call: toolCallMsg("c1", "read_query", { sql: "SELECT 1" }),
+      result: toolResultMsg("c1", "opaque", true),
+    };
+    const unrelated = {
+      kind: "combo" as const,
+      call: toolCallMsg("c2", "other_tool", { sql: "SELECT secret" }),
+      result: toolResultMsg("c2", "provider error", false),
+    };
+
+    expect(asFailedSqlQueryResult(successful)).toBeNull();
+    expect(asFailedSqlQueryResult(unrelated)).toBeNull();
   });
 });
 
@@ -1166,6 +1218,16 @@ describe("asSqlQueryResult", () => {
   it("recognizes a RawSQLResponse-shaped object", () => {
     const data = { sql_query: "SELECT * FROM ships", rows: [{ id: 1 }], error: null };
     expect(asSqlQueryResult(data)).toEqual(data);
+  });
+
+  it("removes DuckDB diagnostic context from a legacy JSON error", () => {
+    const data = {
+      sql_query: "SELECT missing FROM d_sales",
+      rows: [],
+      error: 'Binder Error: Referenced column "missing" not found\nCandidate bindings: "amount"\n\nLINE 1: SELECT...',
+    };
+
+    expect(asSqlQueryResult(data)?.error).toBe('Referenced column "missing" not found');
   });
 
   it("returns null when sql_query is missing", () => {
