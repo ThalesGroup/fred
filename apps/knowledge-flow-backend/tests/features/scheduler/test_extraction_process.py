@@ -36,7 +36,9 @@ import multiprocessing
 import os
 import pathlib
 import signal
+import socket
 import time
+from multiprocessing import reduction
 from typing import Any
 
 import pytest
@@ -58,6 +60,17 @@ _TEST_START_METHOD = "fork"
 # Not a pid any process can have as a parent, so the start-up guard's comparison
 # is the only thing that can decide the outcome of that test.
 _A_PARENT_WE_NEVER_HAD = 0
+
+
+@pytest.fixture(autouse=True)
+def _pickle_guarded_sockets(monkeypatch):
+    # pytest-socket subclasses socket; multiprocessing reducers match exact types.
+    # Reuse the socket reducer without disabling the test's network guard.
+    reducers = reduction.ForkingPickler._extra_reducers
+    for base in socket.socket.__mro__:
+        if base in reducers:
+            monkeypatch.setitem(reducers, socket.socket, reducers[base])
+            break
 
 
 # ── test children ─────────────────────────────────────────────────────────────
