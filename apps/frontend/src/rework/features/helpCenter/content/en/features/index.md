@@ -16,6 +16,8 @@ conversation makes them work together:
 - **[Agents](/help/en/features/agents)** — the assistants you talk to. Each
   starts from a template the platform provides, then gets its instructions, its
   documents and its extra functions.
+- **[Capabilities](/help/en/features/capabilities)** — the detail of what an
+  agent can do beyond answering, with each capability's limits.
 - **[Conversations](/help/en/features/chat)** — where you question them, attach a
   file, collect a produced document.
 - **[Resources](/help/en/features/resources)** — the team's documents, and how an

@@ -16,6 +16,8 @@ une conversation les fait travailler ensemble :
 - **[Les agents](/help/fr/features/agents)** — les assistants à qui vous parlez.
   Chacun part d'un modèle fourni par la plateforme, puis reçoit ses instructions,
   ses documents et ses fonctions supplémentaires.
+- **[Les capacités](/help/fr/features/capabilities)** — le détail de ce qu'un
+  agent sait faire en plus de répondre, avec les limites de chaque capacité.
 - **[Les conversations](/help/fr/features/chat)** — l'endroit où vous les
   interrogez, joignez un fichier, récupérez un document produit.
 - **[Les ressources](/help/fr/features/resources)** — les documents de l'équipe,

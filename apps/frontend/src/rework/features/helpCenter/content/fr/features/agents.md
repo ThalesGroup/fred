@@ -49,9 +49,42 @@ Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 Le mode Simple couvre les usages courants. Le mode Avancé reste accessible à
 tout moment.
 
-> **La liste des packs disponibles est celle qu'affiche l'interface**, pas
-> celle-ci : elle évolue avec la plateforme, et chaque déploiement n'ouvre pas
-> les mêmes. Dépliez un pack (**Capacités incluses**) pour voir son détail.
+> Dépliez un pack (**Capacités incluses**) pour voir son détail. Ce que fait
+> chaque capacité, ses limites et un exemple d'emploi figurent sur la page
+> [Les capacités](/help/fr/features/capabilities). **La liste affichée par
+> l'interface fait foi** : elle évolue avec la plateforme, et chaque
+> déploiement n'ouvre pas les mêmes capacités.
+
+### N'activez que ce dont l'agent a besoin
+
+Activer tous les packs « au cas où » est un réflexe courant, et c'est le
+réglage qui produit les agents les moins fiables.
+
+**L'agent choisit seul parmi ce que vous lui donnez.** À chaque message, il
+décide quelle fonction employer. Plus la liste est longue, plus il risque de
+prendre la mauvaise route, et plus la réponse est lente. Un agent qui dispose
+des trois fonctions utiles à sa mission est plus prévisible qu'un agent qui en
+a douze.
+
+**Certaines fonctions coûtent cher.** L'extraction exhaustive, par exemple, lit
+le document entier : elle est lente et demande une confirmation avant chaque
+usage. Sur un agent qui n'en a pas besoin, elle ne sert qu'à être déclenchée
+par erreur.
+
+**Les fonctions modifient l'interface de conversation.** Les pièces jointes
+ajoutent un bouton, la production de documents ouvre un panneau latéral,
+l'accès aux ressources peut afficher un sélecteur de bibliothèque. Un agent
+sur-équipé présente à ses utilisateurs des commandes qui ne servent pas à son
+usage.
+
+S'y ajoute une question de robustesse : un agent est **suspendu** dès qu'une
+des fonctions dont il dépend est retirée à l'équipe. Moins il en dépend, moins
+il y est exposé.
+
+La méthode qui fonctionne part de l'usage : formulez en une phrase ce que
+l'agent doit savoir faire, activez le strict nécessaire, puis complétez si un
+manque apparaît à l'usage. Il est toujours plus simple d'ajouter une capacité
+que de diagnostiquer un agent qui en a trop.
 
 ### Les trois états d'une fonction
 

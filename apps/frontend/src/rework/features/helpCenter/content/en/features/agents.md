@@ -45,9 +45,39 @@ Two ways to choose, via the **Advanced** switch at the top of the tab:
 Simple mode covers ordinary needs. Advanced mode remains available at any
 time.
 
-> **The list of available packs is the one the interface shows**, not this page:
-> it moves with the platform, and not every deployment opens the same ones.
-> Expand a pack (**Included capabilities**) to see its detail.
+> Expand a pack (**Included capabilities**) to see its detail. What each
+> capability does, its limits and an example of use are on the
+> [Capabilities](/help/en/features/capabilities) page. **The list the interface
+> shows is the authoritative one**: it moves with the platform, and not every
+> deployment opens the same capabilities.
+
+### Enable only what the agent needs
+
+Turning on every pack "just in case" is a common reflex, and it is the setting
+that produces the least reliable agents.
+
+**The agent chooses on its own among what you give it.** On every message it
+decides which function to use. The longer the list, the more likely it takes
+the wrong route, and the slower the answer. An agent holding the three
+functions its mission needs is more predictable than one holding twelve.
+
+**Some functions are expensive.** Exhaustive extraction, for instance, reads
+the whole document: it is slow and asks for confirmation before every use. On
+an agent that does not need it, it only ever gets triggered by mistake.
+
+**Functions change the conversation interface.** Attachments add a button,
+document production opens a side panel, resource access may show a library
+selector. An over-equipped agent presents its users with controls its purpose
+does not call for.
+
+There is also a robustness point: an agent is **suspended** as soon as one of
+the functions it depends on is withdrawn from the team. The fewer it depends
+on, the less exposed it is.
+
+The method that works starts from the use case: state in one sentence what the
+agent must be able to do, enable strictly what that requires, then add more if
+a gap shows up in practice. Adding a capability is always simpler than
+diagnosing an agent that has too many.
 
 ### The three states of a function
 
