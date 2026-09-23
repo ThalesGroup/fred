@@ -542,9 +542,6 @@ class _NonBatchingEngine(RebacEngine):
     async def delete_all_relations_of_reference(self, *args, **kwargs):
         raise NotImplementedError
 
-    async def delete_all_relations_of_type(self, *args, **kwargs):
-        raise NotImplementedError
-
     async def list_relations(self, *args, **kwargs):
         raise NotImplementedError
 

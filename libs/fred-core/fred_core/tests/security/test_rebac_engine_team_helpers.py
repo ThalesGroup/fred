@@ -53,9 +53,6 @@ class _RecordingRebacEngine(RebacEngine):
     ) -> str | None:
         return None
 
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
     async def list_relations(
         self,
         *,
@@ -141,9 +138,6 @@ class _ContextualRelationsSpyEngine(RebacEngine):
         reference: RebacReference,
     ) -> str | None:
         return None
-
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
 
     async def list_relations(
         self,
@@ -341,9 +335,6 @@ class _PersonalTeamAwareEngine(RebacEngine):
         self, reference: RebacReference
     ) -> str | None:
         return None
-
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
 
     async def list_relations(
         self,
@@ -649,9 +640,6 @@ class _InMemoryCountingRebacEngine(RebacEngine):
         self, reference: RebacReference
     ) -> str | None:
         return None
-
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
 
     async def list_relations(
         self,

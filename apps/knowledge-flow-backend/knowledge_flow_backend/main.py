@@ -45,7 +45,6 @@ from prometheus_client import start_http_server
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
-from knowledge_flow_backend.application_state import attach_app
 from knowledge_flow_backend.common.config_loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -294,9 +293,6 @@ def create_app() -> FastAPI:
 
     app.add_middleware(RequestResponseLogger)
     app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
-    # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
-    attach_app(app)
-
     router = APIRouter(
         prefix=configuration.app.base_url,
         dependencies=[Depends(declare_delegation_parameters)],

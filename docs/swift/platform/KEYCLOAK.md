@@ -38,7 +38,7 @@ Create (or verify) the clients below:
 > Secrets to store:
 >
 > - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
-> - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
+> - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (no outbound caller consumes it today; provision it only when an integration is added that does)
 
 When directory enumeration is needed (e.g. listing known users for admin jobs):
 grant the `knowledge-flow` and `agentic` service account:
