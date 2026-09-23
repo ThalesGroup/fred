@@ -1,47 +1,72 @@
 ---
 title: Agents
-order: 20
-description: Create an agent from a model, personalize it, manage its lifecycle.
+order: 10
+description: Create an agent from a template, instruct it, give it functions.
 icon: smart_toy
 ---
 
 # Agents
 
-An **agent** is an AI assistant designed for a specific purpose. Your team's
-**Agents** page gathers the available agents, and it's also where you create new
-ones.
+An **agent** is an AI assistant configured for a specific purpose. Your team's
+**Agents** page gathers them.
 
-## From a model to your agent
+> Creating or editing an agent requires the **Editor** role. **Admin** alone
+> does not allow it: the two roles are independent, not rungs on one ladder (see
+> [Teams and permissions](/help/en/features/teams-and-permissions)).
 
-To create an agent, you start from a **model** (a "template") provided by the
-platform. You then get your own agent, which you personalize however you like
-and which belongs to your team. In a conversation, you always talk to one of
-your team's agents.
+## From a template to your agent
 
-## Personalizing an agent
+You start from a **template** the platform provides — for example one able to
+search documents. You get your own agent, belonging to your team, which you tune
+freely. You always talk to an agent of your own team.
 
-At creation, and whenever you like, an agent is tuned on several points:
+## The four settings
 
-- **The system prompt**: the underlying instructions that define its role, tone,
-  and limits. This is the most important setting — it shapes how the agent
-  behaves.
-- **Attached prompts**: prompts from your library that complement those
-  instructions.
-- **Resources**: the documents the agent can consult to answer you.
-- **Capabilities**: the extra functions it can use (see
-  [Capabilities](/help/en/features/capabilities)).
+- **Instructions** — the substantive brief: its role, its tone, its limits. This
+  is the decisive setting; the others complete it.
+- **Attached prompts** — prompts from the library that complete those
+  instructions (see [Prompts](/help/en/features/prompts)).
+- **Resources** — the document libraries the agent may consult. With nothing
+  attached, it sees no document at all.
+- **Functions** — what it can do beyond answering.
 
-![TODO: screenshot — an agent's personalization screen](assets/agents-form.png)
+## What an agent can do beyond answering
 
-## Lifecycle
+The **Capabilities** tab decides what the agent is allowed to do: search the
+team's documents, use an attachment, write a Word document, fill a PowerPoint
+deck, produce a web page, take the time to reason step by step…
 
-- **Duplicate**: start from an existing agent to create a variant, without
-  redoing everything.
-- **Suspend**: an agent is sometimes paused — most often when a capability it
-  needs has been disabled for the team, but also when the team's access to it
-  was revoked or its configuration is no longer valid. It stays visible but
-  can't be used until that's fixed.
-- **Delete**: permanently remove an agent you no longer need.
+Two ways to choose, via the **Advanced** switch at the top of the tab:
 
-> Creating and editing agents requires the **Editor** or **Admin** role
-> (see [roles](/help/en/getting-started/join-create-team)).
+- **Simple** (the default, and the recommended one) — you tick **packs**: sets
+  that naturally belong together. One toggle turns on what is needed.
+- **Advanced** — you enable each function one by one, with its options.
+
+Simple mode covers ordinary needs. Advanced mode remains available at any
+time.
+
+> **The list of available packs is the one the interface shows**, not this page:
+> it moves with the platform, and not every deployment opens the same ones.
+> Expand a pack (**Included capabilities**) to see its detail.
+
+### The three states of a function
+
+Next to each pack's name, a row of dots gives the overall state:
+
+- **Enabled** (filled dot) — active on this agent.
+- **Available, not enabled** (empty circle) — your team may use it, but it is
+  not active here. You can turn it on.
+- **Not allowed** (red dot) — the platform has not opened it to your team. The
+  pack still works with the rest; ask for it to be opened if you need it (see
+  [Administration](/help/en/features/administration)).
+
+## Duplicate, suspended, delete
+
+- **Duplicate** — start from an existing agent to make a variant. The
+  configuration is copied, but **not the files it references**: a PowerPoint
+  template, for instance, has to be uploaded again on the copy.
+- **Suspended** — a suspended agent stays visible but unusable. A function it
+  depends on has been switched off, the team's access to it was withdrawn, or
+  its configuration is no longer valid. See
+  [Common problems](/help/en/troubleshooting/common-problems).
+- **Delete** — deletion is permanent.
