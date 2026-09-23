@@ -84,13 +84,6 @@ import {
 } from "./folderRollups.ts";
 import styles from "./DocumentWorkspace.module.css";
 
-// Hidden 2026-07-30, developer request: undecided whether "Traiter"/"Retraiter"
-// stays in the product — flip back to true to restore it. The underlying
-// reprocess plumbing (the `reprocess` callback, `reprocessOverrides` pinning,
-// the status-poll effect) is untouched, only the row's "more" menu entry
-// pointing at it is hidden.
-const SHOW_REPROCESS_ACTION = false;
-
 const DEFAULT_PAGE_SIZE = 50;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
@@ -141,7 +134,7 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "labels";
+type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -357,6 +350,31 @@ function DocumentWorkspace({
       : !activeDocTaskByUid.has(doc.identity.document_uid) && docOutcomes.failed.has(doc.identity.document_uid)
         ? "failed"
         : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
+  // A TEAMMATE's ingestion is invisible in `activeTasks`: the SSE store is
+  // user-scoped (useTaskRehydration fetches scope=user), so only one's own
+  // tasks land there. The team listing above carries everyone's, in-flight
+  // ones included — `scope=team` does not exclude terminal states, so it is
+  // the only place a colleague's running ingestion shows up.
+  const liveTeamDocUids = useMemo(() => {
+    const uids = new Set<string>();
+    for (const task of taskHistory?.tasks ?? []) {
+      if (!TERMINAL_STATES.has(task.state) && task.target?.type === "document" && task.target.id) {
+        uids.add(task.target.id);
+      }
+    }
+    return uids;
+  }, [taskHistory]);
+  // Relaunching exists to unblock, not to re-run a pipeline on demand: offered
+  // on an ingestion that failed, never ran, or claims to be running while no
+  // task actually is (dead worker, dropped workflow). Anything still running —
+  // one's own, a teammate's, or a relaunch just clicked — means a second call
+  // would only duplicate it.
+  const isRelaunchable = (doc: DocumentMetadata): boolean => {
+    const uid = doc.identity.document_uid;
+    if (reprocessOverrides[uid] || activeDocTaskByUid.has(uid) || liveTeamDocUids.has(uid)) return false;
+    const status = getDocStatus(doc);
+    return status === "failed" || status === "raw" || status === "processing";
+  };
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -573,36 +591,43 @@ function DocumentWorkspace({
     }
   });
 
-  const reprocess = useCallback(
-    async (doc: DocumentMetadata, tagId: string) => {
+  // `POST /process-documents` takes a `files` array, so a multi-selection costs
+  // the same single round trip as one row. Returns whether the call went
+  // through — the caller clears its selection only then.
+  const relaunchIngestion = useCallback(
+    async (docs: DocumentMetadata[], tagId: string): Promise<boolean> => {
+      if (docs.length === 0) return false;
       try {
         await processDocuments({
           processDocumentsRequest: {
-            files: [
-              {
-                source_tag: doc.source?.source_tag ?? "",
-                document_uid: doc.identity.document_uid,
-                profile: "fast",
-                tags: doc.tags?.tag_ids ?? [tagId],
-              },
-            ],
+            files: docs.map((doc) => ({
+              source_tag: doc.source?.source_tag ?? "",
+              document_uid: doc.identity.document_uid,
+              profile: "fast",
+              tags: doc.tags?.tag_ids ?? [tagId],
+            })),
             pipeline_name: "profile-fast",
           },
         }).unwrap();
-        showSuccess?.({ summary: t("rework.resources.toast.processStarted") });
+        showSuccess?.({ summary: t("rework.resources.toast.relaunchStarted", { count: docs.length }) });
+        const deadline = Date.now() + REPROCESS_OVERRIDE_TTL_MS;
         setReprocessOverrides((prev) => ({
           ...prev,
-          [doc.identity.document_uid]: {
-            snapshot: JSON.stringify(doc.processing?.stages ?? {}),
-            deadline: Date.now() + REPROCESS_OVERRIDE_TTL_MS,
-          },
+          ...Object.fromEntries(
+            docs.map((doc) => [
+              doc.identity.document_uid,
+              { snapshot: JSON.stringify(doc.processing?.stages ?? {}), deadline },
+            ]),
+          ),
         }));
         await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+        return true;
       } catch (e: unknown) {
         showError?.({
           summary: t("validation.error"),
-          detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.processError"),
+          detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.relaunchError"),
         });
+        return false;
       }
     },
     [processDocuments, showSuccess, showError, t, loadTagPage, perTag],
@@ -998,6 +1023,23 @@ function DocumentWorkspace({
 
   const hasSelection = selectedDocs.length > 0 || selectedFolders.length > 0;
 
+  // Unlike the search toggle there is no direction to disambiguate here, so a
+  // mixed selection has one unambiguous meaning: relaunch the stuck ones, leave
+  // the rest alone. Computed per render rather than memoized — it reads the
+  // same live inputs as getDocStatus, and the selection is one page at most.
+  // Selected FOLDERS are ignored: their descendants are not resolved.
+  const relaunchableSelection = selectedDocs.filter(isRelaunchable);
+  const [bulkRelaunching, setBulkRelaunching] = useState(false);
+  const bulkRelaunch = async () => {
+    if (!currentTag || relaunchableSelection.length === 0) return;
+    setBulkRelaunching(true);
+    try {
+      if (await relaunchIngestion(relaunchableSelection, currentTag.id)) setSelectedKeys(new Set());
+    } finally {
+      setBulkRelaunching(false);
+    }
+  };
+
   // Delete is folder-aware (#2446): each selected folder's tag is deleted (the
   // backend cascades to sub-folders + their documents, same path as the single-
   // folder delete), and the loose selected documents are untagged from the
@@ -1227,10 +1269,6 @@ function DocumentWorkspace({
   };
 
   const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
-    // Already ingested (`ready`) → "Retraiter": this re-runs the pipeline on a
-    // document that already succeeded, not a first ingestion. Any other status
-    // (raw/processing/failed) keeps "Traiter" — it hasn't been ingested yet.
-    const status = getDocStatus(doc);
     const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
     const options: OptionModel<DocMenuAction>[] = [];
     // No "error detail" entry here: the per-stage messages ride the "failed"
@@ -1284,12 +1322,12 @@ function DocumentWorkspace({
                 },
               },
             ]),
-        ...(SHOW_REPROCESS_ACTION
+        ...(isRelaunchable(doc)
           ? [
               {
-                value: "process" as const,
-                key: "process",
-                label: t(status === "ready" ? "rework.resources.action.reprocess" : "rework.resources.action.process"),
+                value: "relaunch" as const,
+                key: "relaunch",
+                label: t("rework.resources.action.relaunchIngestion"),
                 icon: { category: "outlined" as const, type: "refresh" as const },
               },
             ]
@@ -1484,7 +1522,7 @@ function DocumentWorkspace({
                   if (value === "download") void commands.download(row.doc);
                   if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
-                  if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
+                  if (value === "relaunch" && currentTag) void relaunchIngestion([row.doc], currentTag.id);
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),
@@ -1641,6 +1679,15 @@ function DocumentWorkspace({
               // still be picked and fetched as a ZIP.
               onDelete={canCreateFolder ? bulkDelete : undefined}
               deleteLoading={bulkDeleting}
+              relaunch={
+                canCreateFolder && relaunchableSelection.length > 0
+                  ? {
+                      count: relaunchableSelection.length,
+                      onClick: () => void bulkRelaunch(),
+                      loading: bulkRelaunching,
+                    }
+                  : undefined
+              }
               onClearSelection={() => setSelectedKeys(new Set())}
               searchToggle={
                 // A folder-containing selection can't be resolved to a single
