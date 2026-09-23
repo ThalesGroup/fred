@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from typing import Callable, TypeVar
 
@@ -21,8 +22,11 @@ import yaml
 from pydantic import ValidationError
 
 from .config_files import ConfigFiles
+from .structures import PostgresStoreConfig, default_postgres_store_config
 
 TConfig = TypeVar("TConfig")
+
+logger = logging.getLogger(__name__)
 
 
 def _render_config_error_banner(config_file: str, error: Exception) -> None:
@@ -85,6 +89,39 @@ def load_configuration_with_config_files(
         raise SystemExit(1) from exc
     config_files.mark_config_loaded(config_file)
     return configuration
+
+
+# Own `ConfigFiles`: the caller below is a component that never loads the
+# backend's full configuration model, so it cannot share that loader's instance.
+# The distinct prefix keeps the second pair of [CONFIG] lines traceable.
+_postgres_config_files = ConfigFiles(logger=logger, log_prefix="[CONFIG][postgres]")
+
+
+def _parse_postgres_config(config_file: str) -> PostgresStoreConfig:
+    payload = parse_yaml_mapping_file(config_file)
+    storage = payload.get("storage") or {}
+    section = storage.get("postgres")
+    if section is None:
+        # No section at all: the backends' storage model defaults this field
+        # rather than leaving it empty, so a config without `storage:` must
+        # still yield the SQLite file here — not an unusable all-None config.
+        return default_postgres_store_config()
+    return PostgresStoreConfig.model_validate(section)
+
+
+def load_postgres_config() -> PostgresStoreConfig:
+    """Read `storage.postgres` alone from the component's YAML config file.
+
+    For code that owns a table but not the configuration model around it — a
+    capability package needs the database its tables live in and nothing else,
+    so requiring the whole backend's config model would drag that backend in as
+    a dependency. Same `ENV_FILE`/`CONFIG_FILE` selection and the same
+    `storage.postgres` path every backend config already uses.
+    """
+
+    return load_configuration_with_config_files(
+        _postgres_config_files, _parse_postgres_config
+    )
 
 
 def get_config():

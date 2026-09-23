@@ -116,29 +116,6 @@
     }
   },
   "capability": {
-    "demo_echo": {
-      "name": "Demo echo",
-      "description": "Echoes back what you say, with an option to reply in uppercase.",
-      "cardAria": "Demo capability card",
-      "fields": {
-        "uppercase": {
-          "title": "Uppercase",
-          "description": "Echo replies in uppercase."
-        }
-      },
-      "panel": {
-        "demo_notes": {
-          "title": "Demo notes",
-          "hint": "Call the demo capability's own /analyze route directly.",
-          "textPlaceholder": "text",
-          "analyze": "Analyze",
-          "error": "Request failed",
-          "original": "original",
-          "transformed": "transformed",
-          "length": "length"
-        }
-      }
-    },
     "document_access": {
       "name": "Search team resources",
       "description": "Ability to search for information in the team's resources.",

@@ -124,9 +124,13 @@ jobs:
             fred-agents:
               - 'apps/fred-agents/**'
             platform-ops:
-              - 'libs/fred-capability-platform-ops/**'
+              - 'libs/capabilities/fred-capability-platform-ops/**'
             html-artifact:
-              - 'libs/fred-capability-html-artifact/**'
+              - 'libs/capabilities/fred-capability-html-artifact/**'
+            documents:
+              - 'libs/capabilities/fred-capability-documents/**'
+            document-access:
+              - 'libs/capabilities/fred-capability-document-access/**'
             # Shared CI and Python tooling: a change runs every matrix entry.
             ci:
               - '.github/workflows/Check-pending-requests.yml'
@@ -176,11 +180,15 @@ jobs:
             {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-agents", "directory": "apps/fred-agents", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-agents", "platform-ops", "html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
-            {"name": "fred-capability-platform-ops", "directory": "libs/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["fred-agents", "platform-ops", "html-artifact", "documents", "document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-platform-ops", "directory": "libs/capabilities/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
              "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
-            {"name": "fred-capability-html-artifact", "directory": "libs/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
+            {"name": "fred-capability-html-artifact", "directory": "libs/capabilities/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["html-artifact", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-documents", "directory": "libs/capabilities/fred-capability-documents", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["documents", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-document-access", "directory": "libs/capabilities/fred-capability-document-access", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
           ]
           JSON
 

@@ -116,29 +116,6 @@
     }
   },
   "capability": {
-    "demo_echo": {
-      "name": "Écho de démonstration",
-      "description": "Répète ce que vous dites en écho, avec une option pour répondre en majuscules.",
-      "cardAria": "Carte de la capacité de démonstration",
-      "fields": {
-        "uppercase": {
-          "title": "Majuscules",
-          "description": "Renvoyer la réponse en majuscules."
-        }
-      },
-      "panel": {
-        "demo_notes": {
-          "title": "Notes de démonstration",
-          "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
-          "textPlaceholder": "texte",
-          "analyze": "Analyser",
-          "error": "Échec de la requête",
-          "original": "original",
-          "transformed": "transformé",
-          "length": "longueur"
-        }
-      }
-    },
     "document_access": {
       "name": "Rechercher dans les ressources",
       "description": "Capacité de rechercher une information dans les ressources de l'équipe.",

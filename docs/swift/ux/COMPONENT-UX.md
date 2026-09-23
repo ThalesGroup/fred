@@ -4555,8 +4555,8 @@ Earlier behaviour (#2459):
   it - two title rows said the same thing twice and ate the top of the column. A
   panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
   `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
-  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
-  which has no header of its own, keeps the drawer's.
+  name) plus `flushBody`, and the pane renders its own close button. A panel with
+  no header of its own keeps the drawer's.
 - **Switching conversations closes any open push drawer** (2026-08-28). Opening one
   is a statement about one conversation and every panel reads the open session, so
   a drawer carried across sat there empty. A capability whose new conversation

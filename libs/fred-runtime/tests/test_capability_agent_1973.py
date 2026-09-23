@@ -35,13 +35,13 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from _tracer_capability import TracerEchoCapability, TracerEchoConfig
 from fred_runtime.capabilities import (
     CapabilityAssemblyError,
     CapabilityRegistry,
     build_capability_agent_block,
     build_capability_context,
 )
-from fred_runtime.capabilities.demo import DemoEchoCapability, DemoEchoConfig
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -194,7 +194,7 @@ def _build_capability_agent(
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
         definition=_definition(),
-        available_tool_names={"demo_echo", "demo_gadget"},
+        available_tool_names={"tracer_echo", "demo_gadget"},
         capability_middleware=block.middleware,
         capability_hitl=block.hitl,
     )
@@ -436,20 +436,20 @@ def test_one_capability_returning_two_same_named_tools_raises() -> None:
 @pytest.mark.asyncio
 async def test_demo_capability_tool_is_callable_in_chat_when_enabled() -> None:
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
+    registry.register(TracerEchoCapability())
     registry.validate(env={})
 
     model = ScriptedModel(
         script=[
             AIMessage(
                 content="",
-                tool_calls=[_tool_call("demo_echo", {"text": "hello"}, "c-1")],
+                tool_calls=[_tool_call("tracer_echo", {"text": "hello"}, "c-1")],
             ),
             AIMessage(content="echoed"),
         ]
     )
     agent = _build_capability_agent(
-        model, registry, {"demo_echo": {"uppercase": True}}, approval_enabled=False
+        model, registry, {"tracer_echo": {"uppercase": True}}, approval_enabled=False
     )
 
     res = await agent.ainvoke(
@@ -466,7 +466,7 @@ async def test_demo_capability_tool_is_callable_in_chat_when_enabled() -> None:
 @pytest.mark.asyncio
 async def test_demo_capability_config_defaults_apply() -> None:
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
+    registry.register(TracerEchoCapability())
     # Boot always validates (folding chat parts into the UiPart union, #1977)
     # before any tool runs; the demo tool's artifact relies on that.
     registry.validate(env={})
@@ -475,13 +475,13 @@ async def test_demo_capability_config_defaults_apply() -> None:
         script=[
             AIMessage(
                 content="",
-                tool_calls=[_tool_call("demo_echo", {"text": "hello"}, "c-1")],
+                tool_calls=[_tool_call("tracer_echo", {"text": "hello"}, "c-1")],
             ),
             AIMessage(content="echoed"),
         ]
     )
     agent = _build_capability_agent(
-        model, registry, {"demo_echo": {}}, approval_enabled=False
+        model, registry, {"tracer_echo": {}}, approval_enabled=False
     )
 
     res = await agent.ainvoke({"messages": [HumanMessage("echo")]}, _cfg("t-demo-def"))
@@ -494,12 +494,12 @@ def test_context_slice_validation_rejects_bad_config() -> None:
 
     with pytest.raises(ValidationError):
         build_capability_context(
-            DemoEchoCapability(),
+            TracerEchoCapability(),
             identity=_identity(),
             services=RuntimeServices(),
             config={"uppercase": "not-a-bool"},
         )
-    assert DemoEchoConfig(uppercase=True).uppercase is True
+    assert TracerEchoConfig(uppercase=True).uppercase is True
 
 
 # ---------------------------------------------------------------------------

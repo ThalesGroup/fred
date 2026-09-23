@@ -33,6 +33,7 @@ Why this file exists:
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -41,7 +42,6 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
-from fred_runtime.capabilities.document_access import DocumentAccessCapability
 from fred_runtime.graph.graph_runtime import (
     _adapt_capability_tool_for_graph,
     _adapted_capability_tools,
@@ -58,8 +58,6 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
-    DocumentSearchPort,
-    DocumentSearchResult,
     RuntimeServices,
     RuntimeToolHandle,
     ToolProviderPort,
@@ -68,38 +66,36 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.tools import tool as lc_tool
 
 
-class _FakeDocumentSearchPort(DocumentSearchPort):
-    async def search(
-        self,
-        query: str,
-        *,
-        top_k: int = 8,
-        library_tag_ids=None,
-        document_uids=None,
-        search_policy=None,
-        attachments_only: bool = False,
-    ) -> DocumentSearchResult:
-        return DocumentSearchResult(
-            hits=(
-                VectorSearchHit(
-                    uid="d1", title="Doc", content="body", score=1.0, type="document"
-                ),
-            )
-        )
+@lc_tool("corpus_search", response_format="content_and_artifact")
+async def _corpus_search(question: str) -> tuple[str, ToolInvocationResult]:
+    """A citing capability tool: JSON content, plus an artifact with sources.
 
+    Stands in for the shape a real search capability returns (blocks AND
+    sources), which the bridge must preserve; `tracer_echo` further down covers
+    the other shape (ui_parts, no blocks). Local on purpose — fred-runtime's
+    own tests never depend on a capability package.
+    """
 
-def _document_access_tool():
-    """The real `document_access` search tool, `response_format="content_and_artifact"`."""
-
-    cap = DocumentAccessCapability()
-    ctx = build_capability_context(
-        cap,
-        identity=CapabilityIdentity(user_id="u-1", session_id="s-1", team_id=None),
-        services=RuntimeServices(document_search=_FakeDocumentSearchPort()),
-        config={},
+    hits = (
+        VectorSearchHit(
+            uid="d1", title="Doc", content="body", score=1.0, type="document"
+        ),
     )
-    by_name = {t.name: t for t in cap.tools(ctx)}
-    return by_name["search_documents_using_vectorization"]
+    # A JSON object, because `_normalize_runtime_tool_output` parses a content
+    # string back into a dict — what the unadapted control case asserts on.
+    content = json.dumps({"query": question, "hits": [{"uid": hits[0].uid}]})
+    artifact = ToolInvocationResult(
+        tool_ref="corpus_search",
+        blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data={"query": question}),),
+        sources=hits,
+    )
+    return content, artifact
+
+
+def _sourced_capability_tool():
+    """The citing capability tool above, `response_format="content_and_artifact"`."""
+
+    return _corpus_search
 
 
 def _binding() -> BoundRuntimeContext:
@@ -140,7 +136,7 @@ def _node_context(
 
 def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     """
-    Build `document_access`'s real tool, adapt it with
+    Build a citing capability tool, adapt it with
     `_adapt_capability_tool_for_graph` exactly as `GraphRuntime.build_executor`
     would, register it on a real `_GraphNodeExecutionContext` (the class
     `GraphNodeContext` actually is at runtime), and call
@@ -149,14 +145,12 @@ def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     (Phase 1's finding); with it, `.sources` survives.
     """
 
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
     adapted = _adapt_capability_tool_for_graph(source_tool)
     ctx = _node_context({adapted.name: adapted})
 
     result = asyncio.run(
-        ctx.invoke_runtime_tool(
-            "search_documents_using_vectorization", {"question": "what is fred?"}
-        )
+        ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"})
     )
 
     # `_normalize_runtime_tool_output` model_dumps the bare ToolInvocationResult
@@ -175,33 +169,33 @@ def test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool() -> No
     a no-op.
     """
 
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
     ctx = _node_context({source_tool.name: source_tool})
 
     result = asyncio.run(
-        ctx.invoke_runtime_tool(
-            "search_documents_using_vectorization", {"question": "what is fred?"}
-        )
+        ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"})
     )
 
     assert isinstance(result, dict)
     assert "sources" not in result
 
 
-def test_real_demo_echo_capability_answer_survives_invoke_runtime_tool() -> None:
+def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
     """
-    PR #2067 review (Codex), end to end against the REAL in-tree reference
-    capability, not a synthetic stand-in: `demo_echo` puts its answer in
+    PR #2067 review (Codex), end to end through a full capability — manifest,
+    context and `tools()`, not a bare tool object: `tracer_echo` puts its answer in
     `content` and returns an artifact with only `ui_parts`, no `blocks`.
     Before the content-folding fix, a Graph node calling it through
     `invoke_runtime_tool` got back an artifact with no textual answer at
-    all — this proves the fix against the real capability + the real
-    adapter + the real `invoke_runtime_tool` path together.
+    all — this proves the fix against the real adapter and the real
+    `invoke_runtime_tool` path. The capability itself is a test fixture: no
+    shipped capability has this artifact shape any more, so the shape is
+    pinned here rather than borrowed from whatever happens to be installed.
     """
+    from _tracer_capability import TracerEchoCapability
     from fred_runtime.capabilities import CapabilityRegistry
-    from fred_runtime.capabilities.demo import DemoEchoCapability
 
-    cap = DemoEchoCapability()
+    cap = TracerEchoCapability()
     # Boot always validates the registry (extending the UiPart union) before
     # any tool can run; mirror that here so the artifact's ui_parts validate
     # (test_capability_chat_parts_1977.py's pattern).
@@ -218,7 +212,7 @@ def test_real_demo_echo_capability_answer_survives_invoke_runtime_tool() -> None
     adapted = _adapt_capability_tool_for_graph(source_tool)
     ctx = _node_context({adapted.name: adapted})
 
-    result = asyncio.run(ctx.invoke_runtime_tool("demo_echo", {"text": "hello"}))
+    result = asyncio.run(ctx.invoke_runtime_tool("tracer_echo", {"text": "hello"}))
 
     assert isinstance(result, dict)
     assert result["blocks"][0]["text"] == "HELLO"
@@ -254,7 +248,7 @@ def test_adapt_folds_content_into_blocks_when_artifact_carries_none() -> None:
     """
     PR #2067 review (Codex): `document_access`'s tools duplicate their
     answer into `artifact.blocks`, so keeping only the artifact is safe for
-    them — but a tool shaped like `demo_echo` (the in-tree reference
+    them — but a tool shaped like `tracer_echo` (the in-tree reference
     capability) puts its real answer in `content` and returns an artifact
     carrying only `ui_parts` (a UI card), no `blocks` at all. Discarding
     `content` unconditionally would silently drop the answer for any such
@@ -262,13 +256,13 @@ def test_adapt_folds_content_into_blocks_when_artifact_carries_none() -> None:
     doesn't already carry any.
     """
 
-    @lc_tool("demo_echo_shaped", response_format="content_and_artifact")
-    async def _demo_echo_shaped(text: str) -> tuple[str, ToolInvocationResult]:
-        """Mirrors demo_echo's exact shape: answer in content, artifact has
+    @lc_tool("tracer_echo_shaped", response_format="content_and_artifact")
+    async def _tracer_echo_shaped(text: str) -> tuple[str, ToolInvocationResult]:
+        """Mirrors tracer_echo's exact shape: answer in content, artifact has
         only ui_parts, no blocks."""
-        return text.upper(), ToolInvocationResult(tool_ref="demo_echo_shaped")
+        return text.upper(), ToolInvocationResult(tool_ref="tracer_echo_shaped")
 
-    adapted = _adapt_capability_tool_for_graph(_demo_echo_shaped)
+    adapted = _adapt_capability_tool_for_graph(_tracer_echo_shaped)
     result = asyncio.run(adapted.ainvoke({"text": "hello"}))
 
     assert isinstance(result, ToolInvocationResult)
@@ -490,7 +484,7 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
 
 
 def test_capability_tool_colliding_with_mcp_tool_name_raises() -> None:
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
     block = CapabilityAgentBlock(middleware=(), hitl={}, tools=(source_tool,))
 
     with pytest.raises(CapabilityAssemblyError, match=source_tool.name):
@@ -500,7 +494,7 @@ def test_capability_tool_colliding_with_mcp_tool_name_raises() -> None:
 
 
 def test_capability_tools_merge_cleanly_when_no_mcp_name_collision() -> None:
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
     block = CapabilityAgentBlock(middleware=(), hitl={}, tools=(source_tool,))
 
     adapted = _adapted_capability_tools(block, mcp_tool_names={"unrelated_tool"})
@@ -606,7 +600,7 @@ def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
         """An MCP-provided tool."""
         return text
 
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
     block = CapabilityAgentBlock(middleware=(), hitl={}, tools=(source_tool,))
     runtime = GraphRuntime(
         definition=_min_graph_agent_definition(),
@@ -618,19 +612,19 @@ def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
     assert isinstance(executor, _DeterministicGraphExecutor)
 
     runtime_tools = executor._runtime_tools  # pyright: ignore[reportPrivateUsage]
-    assert set(runtime_tools) == {"mcp_probe", "search_documents_using_vectorization"}
+    assert set(runtime_tools) == {"mcp_probe", "corpus_search"}
     # The capability tool object registered on the executor is the adapted
     # wrapper, not the raw ReAct-shaped one — proven by response_format
     # falling back to LangChain's "content" default (the raw tool is
     # "content_and_artifact").
-    adapted_in_executor = runtime_tools["search_documents_using_vectorization"]
+    adapted_in_executor = runtime_tools["corpus_search"]
     assert adapted_in_executor.response_format == "content"
 
 
 def test_build_executor_raises_on_capability_mcp_name_collision() -> None:
     from fred_runtime.graph.graph_runtime import GraphRuntime
 
-    source_tool = _document_access_tool()
+    source_tool = _sourced_capability_tool()
 
     @lc_tool(source_tool.name)
     def _colliding_mcp_tool(question: str) -> str:

@@ -165,6 +165,18 @@ class PostgresStoreConfig(BaseModel):
         return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
 
 
+# The laptop escape hatch a pod falls back to when its config declares no
+# `storage.postgres`. Defined once: the backends' storage model and the
+# narrow `load_postgres_config()` reader must resolve the same thing.
+DEFAULT_POD_SQLITE_PATH = "~/.fred/pod/pod.sqlite3"
+
+
+def default_postgres_store_config() -> PostgresStoreConfig:
+    """The `storage.postgres` default: a local SQLite file, never a live server."""
+
+    return PostgresStoreConfig(sqlite_path=DEFAULT_POD_SQLITE_PATH)
+
+
 class PostgresTableConfig(BaseModel):
     # Allow reusing the same table-oriented config for local SQLite runs.
     type: Literal["postgres"]
