@@ -310,6 +310,9 @@ export function AgentFormBody({
       return (
         <PptFillerPackOptions
           disabled={isSubmitting}
+          teamId={teamId}
+          agentInstanceId={editInstance?.agent_instance_id}
+          agentDisplayName={editInstance?.display_name}
           configValues={capabilityConfigValues[CAP_PPT_FILLER] ?? {}}
           assetFiles={capabilityAssetFiles[CAP_PPT_FILLER] ?? {}}
           onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_FILLER, slotKey, file)}
@@ -482,6 +485,8 @@ export function AgentFormBody({
                                 configValues={capabilityConfigValues[capability.id] ?? {}}
                                 disabled={isSubmitting}
                                 teamId={teamId}
+                                agentInstanceId={editInstance?.agent_instance_id}
+                                agentDisplayName={editInstance?.display_name}
                                 assetFiles={capabilityAssetFiles[capability.id] ?? {}}
                                 onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
                                 onAssetFileChange={(slotKey, file) =>
