@@ -1,7 +1,13 @@
+/* Takes the space left under the nav menu, never the panel's full height: this
+ * is the last child of a flex column, so `height: 100%` overflowed the panel by
+ * its siblings' height and the tail of the list ended up under the absolutely
+ * positioned user profile, unreachable however far you scrolled. `min-height: 0`
+ * is what lets a flex item shrink below its content so the scroll below works. */
 .chatListContainer {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
 }
 
 .chatListHeader {
@@ -21,6 +27,7 @@
    * min-height, so they stay distinct without space between them — and their
    * hover and selected backgrounds only ever land on one row at a time. */
   padding: 0 var(--spacing-xs) var(--spacing-xs);
+  min-height: 0;
   overflow-y: auto;
 }
 
