@@ -273,6 +273,7 @@
           "type": "string"
         },
         "secret_key": {
+          "default": null,
           "title": "Secret Key",
           "type": "string"
         },
@@ -289,7 +290,6 @@
       "required": [
         "endpoint",
         "access_key",
-        "secret_key",
         "bucket_name"
       ],
       "title": "MinioRuntimeFilesystemConfig",

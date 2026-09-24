@@ -79,6 +79,12 @@ storage:
   log_store:
     type: opensearch
     index: app-logs-index
+  filesystem:
+    type: minio
+    endpoint: "http://localhost:8333"
+    access_key: "admin"
+    bucket_name: "fred-runtime-conversations"
+    secure: false
 
 scheduler:
   enabled: false

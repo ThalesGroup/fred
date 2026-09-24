@@ -63,6 +63,7 @@ Example `config/configuration.yaml`:
 
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
@@ -78,7 +79,7 @@ from fred_core.common import (
 from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -309,9 +310,19 @@ class MinioRuntimeFilesystemConfig(BaseModel):
     type: Literal["minio"] = "minio"
     endpoint: str
     access_key: str
-    secret_key: str
+    secret_key: str = Field(default=None)  # type: ignore[assignment]
     bucket_name: str
     secure: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secret(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            values = {**values}
+            values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+            if not values["secret_key"]:
+                raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
 
 
 class GcsRuntimeFilesystemConfig(BaseModel):

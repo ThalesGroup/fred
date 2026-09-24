@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import secrets
 import threading
 from pathlib import Path
 
@@ -22,7 +23,9 @@ from fred_core.filesystem.gcs_filesystem import GcsFilesystem
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_runtime.app import AgentPodConfig, build_runtime_filesystem
+from fred_runtime.app.config import MinioRuntimeFilesystemConfig
 from fred_runtime.app.context import PodApplicationContext
+from pydantic import ValidationError
 
 
 def _config(filesystem: dict[str, object]) -> AgentPodConfig:
@@ -53,6 +56,40 @@ def test_conversation_filesystem_quotas_use_code_defaults() -> None:
     assert quotas.scratchpad_max_files == 1_000
     assert quotas.deep_max_bytes == 1024 * 1024 * 1024
     assert quotas.deep_max_files == 10_000
+
+
+def test_minio_runtime_filesystem_reads_secret_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = secrets.token_urlsafe(32)
+    monkeypatch.setenv("MINIO_SECRET_KEY", secret)
+
+    config = MinioRuntimeFilesystemConfig.model_validate(
+        {
+            "type": "minio",
+            "endpoint": "http://localhost:8333",
+            "access_key": "runtime",
+            "bucket_name": "fred-runtime-conversations",
+        }
+    )
+
+    assert config.secret_key == secret
+
+
+def test_minio_runtime_filesystem_requires_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
+
+    with pytest.raises(ValidationError, match="Missing MINIO_SECRET_KEY"):
+        MinioRuntimeFilesystemConfig.model_validate(
+            {
+                "type": "minio",
+                "endpoint": "http://localhost:8333",
+                "access_key": "runtime",
+                "bucket_name": "fred-runtime-conversations",
+            }
+        )
 
 
 def test_conversation_filesystem_quotas_allow_partial_and_complete_overrides() -> None:
