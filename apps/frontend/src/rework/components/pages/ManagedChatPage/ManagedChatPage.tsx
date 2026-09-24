@@ -802,7 +802,11 @@ export default function ManagedChatPage() {
           footerLaunchers={footerLaunchers}
         />
 
-        <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
+        <TraceDetailDrawer
+          entry={selectedTraceEntry}
+          messages={chat.messages}
+          onClose={() => setSelectedTraceKey(null)}
+        />
         <UploadWarningAckDialog
           open={pendingAttachments !== null}
           onConfirm={() => {

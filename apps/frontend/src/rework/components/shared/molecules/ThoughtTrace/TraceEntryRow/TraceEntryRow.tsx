@@ -56,7 +56,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
   const discriminator = toolDiscriminator(entry);
   const discriminatorText = discriminator
-    ? t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })
+    ? `${t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })}${discriminator.partial ? ` · ${t("rework.chatTrace.tabular.partialResult")}` : ""}`
     : "";
 
   return (

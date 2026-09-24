@@ -1,0 +1,183 @@
+.tabularCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-s);
+  min-width: 0;
+}
+
+.documentCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface);
+}
+
+.documentName {
+  margin: 0;
+  font: var(--font-title-small-emphasized);
+  overflow-wrap: anywhere;
+}
+
+.catalogMarkdown {
+  border-radius: var(--radius-m);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface);
+}
+
+.schemaDocument {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.schemaTables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.tabularTable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface);
+}
+
+.tabularHeading,
+.tabularColumn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-2xs) var(--spacing-s);
+  overflow-wrap: anywhere;
+}
+
+.tabularNested {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-left: var(--spacing-s);
+  min-width: 0;
+}
+
+.documentTree,
+.treeTables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  list-style: none;
+}
+
+.documentTree {
+  gap: var(--spacing-2xs);
+  margin-left: var(--spacing-s);
+}
+
+.treeSheetName,
+.treeTable {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.treeSheetName {
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.sheetIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--on-surface-retreat);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.treeTables {
+  margin-top: var(--spacing-2xs);
+  margin-left: calc(var(--spacing-m) + var(--spacing-s));
+}
+
+.treeSheetName strong {
+  font: var(--font-label-medium-emphasized);
+}
+
+.treeTable {
+  font: var(--font-body-small);
+}
+
+.treeTableName {
+  flex: 1;
+  min-width: 0;
+}
+
+.treeSingleTable {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.treeSingleTable::before {
+  margin-right: var(--spacing-2xs);
+  content: "·";
+}
+
+.treeCount {
+  margin-left: auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.tabularColumn {
+  padding-block: var(--spacing-3xs);
+}
+
+.tabularColumn code {
+  color: var(--on-surface-retreat);
+}
+
+.tabularWarning {
+  margin: 0;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-s);
+  background: var(--warning-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-warning-container);
+  font: var(--font-body-medium);
+}
+
+.tabularPreviewNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.showMore {
+  align-self: flex-start;
+}
+
+.showMore > div {
+  font: var(--font-label-medium);
+}
