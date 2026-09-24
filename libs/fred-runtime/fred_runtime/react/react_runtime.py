@@ -86,6 +86,13 @@ from fred_runtime.capabilities.assembly import (
 )
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
 
+from .middleware.tool_call_recovery import (
+    MAX_TOOL_CALL_RECOVERY_CHARS,
+    MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
+    RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
+    is_mistral_model_name,
+)
+
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
 # - this file should decide when Fred invokes, streams, and emits runtime events
@@ -98,13 +105,13 @@ from .react_langchain_adapter import (
     decode_stream_chunk as _decode_stream_chunk,
 )
 from .react_langchain_adapter import (
-    extract_model_name_from_object as _extract_model_name_from_object,
-)
-from .react_langchain_adapter import (
     extract_interrupt_request as _extract_interrupt_request,
 )
 from .react_langchain_adapter import (
     extract_messages_from_update as _extract_messages_from_update,
+)
+from .react_langchain_adapter import (
+    extract_model_name_from_object as _extract_model_name_from_object,
 )
 from .react_langchain_adapter import (
     final_assistant_message as _final_assistant_message_adapter,
@@ -155,12 +162,6 @@ from .react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from .react_tool_loop import build_tool_loop_compiled_react_agent
-from .middleware.tool_call_recovery import (
-    MAX_TOOL_CALL_RECOVERY_CHARS,
-    MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
-    RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
-    is_mistral_model_name,
-)
 from .react_tool_rendering import (
     GENERIC_TOOL_FAILURE_MESSAGE as _GENERIC_TOOL_FAILURE_MESSAGE,
 )

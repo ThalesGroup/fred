@@ -20,14 +20,14 @@ import json
 import re
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
-from langchain_core.messages.tool import tool_call
+from langchain_core.messages.tool import ToolCall, tool_call
 from langchain_core.tools import BaseTool
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ..react_model_adapter import extract_model_name_from_model_response
 
@@ -139,7 +139,7 @@ def _parse_sequence(
     *,
     first_name: str,
     tools_by_name: dict[str, BaseTool],
-) -> tuple[list[dict[str, Any]], str] | None:
+) -> tuple[list[ToolCall], str] | None:
     parsed: list[tuple[str, dict[str, Any]]] = []
     retained: list[str] = []
     position = 0
@@ -149,9 +149,8 @@ def _parse_sequence(
             args, end = _JSON_DECODER.raw_decode(text, start)
             if not isinstance(args, dict):
                 return None
-            tools_by_name[name].get_input_schema().model_validate(
-                args, extra="forbid"
-            )
+            schema = cast(type[BaseModel], tools_by_name[name].get_input_schema())
+            schema.model_validate(args, extra="forbid")
         except (
             json.JSONDecodeError,
             RecursionError,
@@ -200,7 +199,7 @@ def _parse_sequence(
 
 def _recover_calls(
     content: object, tools_by_name: dict[str, BaseTool]
-) -> tuple[str, list[dict[str, Any]]] | None:
+) -> tuple[str, list[ToolCall]] | None:
     anchored = _anchored_text(content, tools_by_name)
     if anchored is None:
         return None

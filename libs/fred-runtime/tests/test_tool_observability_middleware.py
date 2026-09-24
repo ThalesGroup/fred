@@ -52,11 +52,11 @@ from fred_runtime.deep.deep_runtime import (
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
 )
-from fred_runtime.react.middleware.tool_observability import (
-    ToolObservabilityMiddleware,
-)
 from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
+)
+from fred_runtime.react.middleware.tool_observability import (
+    ToolObservabilityMiddleware,
 )
 from fred_runtime.react.react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
 from fred_runtime.react.react_tracing import active_agent_span
@@ -689,15 +689,19 @@ async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> Non
         return model_response
 
     normalized = await recovery.awrap_model_call(
-        ModelRequest(model=None, messages=[], tools=[native_capability_tool]),
+        ModelRequest(
+            model=cast(Any, None), messages=[], tools=[native_capability_tool]
+        ),
         model_handler,
     )
-    (call,) = normalized.result[0].tool_calls
+    message = normalized.result[0]
+    assert isinstance(message, AIMessage)
+    (call,) = message.tool_calls
     middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
     request = ToolCallRequest(
         tool_call=call,
         tool=native_capability_tool,
-        state={"messages": [normalized.result[0]]},
+        state={"messages": [message]},
         runtime=cast(Any, None),
     )
     handler_called = False
@@ -715,6 +719,7 @@ async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> Non
     with _with_rebac_engine(engine):
         result = await middleware.awrap_tool_call(request, handler)
 
+    assert isinstance(result, ToolMessage)
     assert handler_called is True
     assert engine.calls == [("user-1", "team-1")]
     assert result.tool_call_id == call["id"]

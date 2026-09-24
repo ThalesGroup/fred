@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 from fred_runtime.react.middleware import hitl as hitl_module
 from fred_runtime.react.middleware.hitl import FredHitlMiddleware
@@ -29,8 +31,9 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ToolApprovalPolicy
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
 
 @tool
@@ -82,7 +85,7 @@ def send_email(to: str) -> str:
     return f"sent to {to}"
 
 
-_ALL_TOOLS = [read_query, list_tabular_documents, task, ls, write_todos]
+_ALL_TOOLS: list[BaseTool] = [read_query, list_tabular_documents, task, ls, write_todos]
 
 
 def _structured_call_content(
@@ -90,7 +93,7 @@ def _structured_call_content(
     arguments_and_followups: str,
     *,
     preamble: str = "",
-) -> list[dict[str, object]]:
+) -> list[str | dict[Any, Any]]:
     return [
         {"type": "text", "text": f"{preamble}{name}"},
         {"type": "reference", "reference_ids": []},
@@ -112,10 +115,14 @@ def _binding() -> BoundRuntimeContext:
 
 
 async def _recover_message(
-    message: AIMessage, *, tools: list[object] | None = None
+    message: AIMessage, *, tools: list[BaseTool] | None = None
 ) -> tuple[ModelResponse, AIMessage]:
     middleware = ToolCallTextRecoveryMiddleware()
-    request = ModelRequest(model=None, messages=[], tools=tools or _ALL_TOOLS)
+    request = ModelRequest(
+        model=cast(BaseChatModel, None),
+        messages=[],
+        tools=cast(list[BaseTool | dict[str, Any]], tools or _ALL_TOOLS),
+    )
     response = ModelResponse(result=[message])
 
     async def handler(_: ModelRequest) -> ModelResponse:
@@ -127,7 +134,9 @@ async def _recover_message(
 @pytest.mark.asyncio
 async def test_completed_mistral_tool_call_text_becomes_a_native_call() -> None:
     middleware = ToolCallTextRecoveryMiddleware()
-    request = ModelRequest(model=None, messages=[], tools=[read_query])
+    request = ModelRequest(
+        model=cast(BaseChatModel, None), messages=[], tools=[read_query]
+    )
     response = ModelResponse(
         result=[
             AIMessage(
@@ -189,7 +198,9 @@ async def test_tool_name_attached_to_an_identifier_is_not_recovered() -> None:
 @pytest.mark.asyncio
 async def test_illustrative_tool_call_text_is_not_recovered() -> None:
     middleware = ToolCallTextRecoveryMiddleware()
-    request = ModelRequest(model=None, messages=[], tools=[read_query])
+    request = ModelRequest(
+        model=cast(BaseChatModel, None), messages=[], tools=[read_query]
+    )
     original = AIMessage(
         content=(
             "Example:\n\n"
@@ -234,9 +245,7 @@ async def test_duplicate_json_keys_are_not_recovered() -> None:
 @pytest.mark.asyncio
 async def test_unknown_argument_is_not_recovered() -> None:
     original = AIMessage(
-        content=_structured_call_content(
-            "ls", '{"path":"/","unexpected":"value"}'
-        ),
+        content=_structured_call_content("ls", '{"path":"/","unexpected":"value"}'),
         response_metadata={"model_name": "mistral-medium-latest"},
     )
 
@@ -282,7 +291,7 @@ async def test_unknown_argument_is_not_recovered() -> None:
     ],
 )
 async def test_only_exact_empty_reference_sentinel_is_recovered(
-    content: object,
+    content: str | list[str | dict[Any, Any]],
 ) -> None:
     original = AIMessage(
         content=content,
@@ -408,7 +417,7 @@ async def test_deeply_nested_json_remains_assistant_text(
     ids=["character_cap", "call_cap", "block_cap"],
 )
 async def test_recovery_caps_reject_before_creating_calls(
-    content: object,
+    content: str | list[str | dict[Any, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def unexpected_uuid() -> None:
@@ -529,7 +538,7 @@ async def test_recovery_caps_reject_before_creating_calls(
     ids=["query_then_catalog", "two_delegated_tasks", "list_then_update_todos"],
 )
 async def test_reconstructed_incidents_recover_every_complete_call_once(
-    content: object,
+    content: str | list[str | dict[Any, Any]],
     expected_content: str,
     expected_calls: list[tuple[str, dict[str, object]]],
 ) -> None:
@@ -604,7 +613,7 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
     ],
 )
 async def test_ambiguous_or_invalid_content_remains_assistant_text(
-    content: object, model_name: str
+    content: str | list[str | dict[Any, Any]], model_name: str
 ) -> None:
     original = AIMessage(
         content=content,
@@ -668,7 +677,8 @@ async def test_disabled_recovery_preserves_the_no_execution_baseline() -> None:
         return response
 
     result = await middleware.awrap_model_call(
-        ModelRequest(model=None, messages=[], tools=[ls]), handler
+        ModelRequest(model=cast(BaseChatModel, None), messages=[], tools=[ls]),
+        handler,
     )
 
     assert result is response

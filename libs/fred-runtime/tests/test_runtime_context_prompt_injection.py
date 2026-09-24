@@ -41,6 +41,7 @@ import fred_runtime.deep.deep_runtime as deep_mod
 import fred_runtime.react.react_runtime as react_mod
 import pytest
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -49,7 +50,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import RuntimeServices
-from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import tool
 

@@ -32,18 +32,20 @@ Why this exists:
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import cast
 
 import pytest
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.react.middleware.tool_call_recovery import (
     RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
 )
+from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
-    ExecutionConfig,
     AssistantDeltaRuntimeEvent,
+    ExecutionConfig,
     FinalRuntimeEvent,
+    RuntimeEvent,
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
@@ -471,7 +473,7 @@ async def test_ordinary_typed_text_is_emitted_before_next_provider_event() -> No
     stream = executor.stream(input_model, ExecutionConfig())
 
     first = await anext(stream)
-    await stream.aclose()
+    await cast(AsyncGenerator[RuntimeEvent, None], stream).aclose()
 
     assert isinstance(first, AssistantDeltaRuntimeEvent)
     assert first.delta == "ordinary text now"

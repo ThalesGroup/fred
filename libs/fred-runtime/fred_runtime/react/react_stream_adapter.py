@@ -49,14 +49,14 @@ from fred_sdk.contracts.runtime import HumanInputRequest
 from langchain_core.messages import AIMessageChunk, BaseMessage
 from pydantic import ValidationError
 
+from fred_runtime.react.middleware.tool_call_recovery import (
+    is_tool_call_recovery_reference_block,
+)
 from fred_runtime.runtime_support.model_metadata import (
     normalize_token_usage,
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
     sum_token_usage,
-)
-from fred_runtime.react.middleware.tool_call_recovery import (
-    is_tool_call_recovery_reference_block,
 )
 from fred_runtime.support.thinking import content_to_text
 
@@ -260,6 +260,8 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
     seen_reference = False
     if has_reference_marker:
         for block in chunk.content:
+            if not isinstance(block, dict):
+                continue
             if is_tool_call_recovery_reference_block(block):
                 seen_reference = True
             elif block.get("type") == "text" and isinstance(block.get("text"), str):

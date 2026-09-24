@@ -1059,7 +1059,7 @@ class _ToolCallTextIncident:
     history_rank: int
     trace_id: str
     observation_id: str
-    reconstructed_content: list[dict[str, object]]
+    reconstructed_content: list[str | dict[Any, Any]]
     observed_history_projection: str
     observed_trace_thinking_blocks: int
     observed_trace_after_thinking: str

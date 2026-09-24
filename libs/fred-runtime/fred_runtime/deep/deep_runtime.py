@@ -51,11 +51,11 @@ from fred_runtime.react.middleware.hitl import (
     FredHitlMiddleware,
 )
 from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
-from fred_runtime.react.middleware.tool_observability import (
-    ToolObservabilityMiddleware,
-)
 from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
+)
+from fred_runtime.react.middleware.tool_observability import (
+    ToolObservabilityMiddleware,
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.react.react_model_adapter import extract_model_name_from_object
