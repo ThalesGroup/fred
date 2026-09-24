@@ -185,3 +185,95 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
     assert model.bound_tool_names
     assert all(_SAFE_FILESYSTEM_TOOLS <= names for names in model.bound_tool_names)
     assert all("execute" not in names for names in model.bound_tool_names)
+
+
+@pytest.mark.asyncio
+async def test_native_child_can_concatenate_shared_parts_for_parent(
+    tmp_path: Any,
+) -> None:
+    filesystem = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "conversation-a"
+    )
+    scratchpad = filesystem.scratchpad()
+    await scratchpad.write_text("part-1.md", "one\n")
+    await scratchpad.write_text("part-2.md", "two")
+    await scratchpad.write_text("epilogue.md", "\nend")
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "task",
+                        {
+                            "description": "merge the parts",
+                            "subagent_type": "general-purpose",
+                        },
+                        "delegate",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "concat_files",
+                        {
+                            "paths": [
+                                "/scratchpad/part-1.md",
+                                "/scratchpad/part-2.md",
+                            ],
+                            "output_path": "/scratchpad/report.md",
+                        },
+                        "merge",
+                    )
+                ],
+            ),
+            AIMessage(content="merged"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "concat_files",
+                        {
+                            "paths": [
+                                "/scratchpad/report.md",
+                                "/scratchpad/epilogue.md",
+                            ],
+                            "output_path": "/scratchpad/final.md",
+                        },
+                        "finalize",
+                    )
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    def middleware(*, child: bool = False) -> list[Any]:
+        return _build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=_binding(),
+            approval_policy=ToolApprovalPolicy(),
+            available_tool_names=_SAFE_FILESYSTEM_TOOLS | {"concat_files"},
+            scratchpad=scratchpad,
+            child=child,
+        )
+
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Use the shared scratchpad.",
+        checkpointer=InMemorySaver(),
+        middleware=middleware(),
+        subagent_middleware=middleware(child=True),
+        backend=_build_conversation_backend(filesystem),
+    )
+
+    await _drive(agent)
+
+    assert await scratchpad.read_text("report.md") == "one\ntwo"
+    assert await scratchpad.read_text("final.md") == "one\ntwo\nend"
+    assert len(model.bound_tool_names) >= 2
+    assert all("concat_files" in names for names in model.bound_tool_names)

@@ -36,7 +36,12 @@ from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPer
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
-from fred_sdk.contracts.runtime import Executor, RuntimeServices, TracerPort
+from fred_sdk.contracts.runtime import (
+    ConversationScratchpadPort,
+    Executor,
+    RuntimeServices,
+    TracerPort,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -45,6 +50,7 @@ from langgraph.types import Checkpointer
 
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import (
     ConversationNamespaceBackend,
 )
@@ -203,6 +209,9 @@ class DeepAgentRuntime(ReActRuntime):
                 if tool.name
             )
         available_tool_names.update(_SAFE_FILESYSTEM_TOOL_NAMES)
+        scratchpad = self.services.conversation_scratchpad
+        if scratchpad is not None:
+            available_tool_names.add("concat_files")
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -256,6 +265,7 @@ class DeepAgentRuntime(ReActRuntime):
                 approval_policy=policy.tool_approval,
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
+                scratchpad=scratchpad,
             ),
             subagent_middleware=_build_deepagent_runtime_middleware(
                 tracer=self.services.tracer,
@@ -264,6 +274,7 @@ class DeepAgentRuntime(ReActRuntime):
                 approval_policy=policy.tool_approval,
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
+                scratchpad=scratchpad,
                 child=True,
             ),
             backend=backend,
@@ -415,6 +426,7 @@ def _build_deepagent_runtime_middleware(
     approval_policy: ToolApprovalPolicy,
     available_tool_names: set[str] | frozenset[str],
     capability_block: CapabilityAgentBlock | None = None,
+    scratchpad: ConversationScratchpadPort | None = None,
     child: bool = False,
 ) -> list[AgentMiddleware]:
     """Keep hygiene outermost and guard disabled tools before HITL runs.
@@ -431,6 +443,7 @@ def _build_deepagent_runtime_middleware(
             kpi=kpi,
         ),
         *(capability_block.middleware if capability_block is not None else ()),
+        *((ConcatFilesMiddleware(scratchpad),) if scratchpad is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         TracingKpiMiddleware(
             tracer=tracer,
