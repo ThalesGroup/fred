@@ -1368,6 +1368,18 @@ async def test_mistral_completed_call_text_executes_each_recovered_call_once(
     ]
     assert Counter(result_ids) == Counter(proposed_ids)
     assert len(result_ids) == len(incident.native_calls)
+    recovery_events = [
+        event
+        for event in store.events
+        if event.metric and event.metric.name == "agent.tool_call_text_recovered_total"
+    ]
+    assert sum(event.metric.value or 0 for event in recovery_events) == len(
+        incident.native_calls
+    )
+    assert all(
+        event.dims.get("model_name") == "mistral-medium-latest"
+        for event in recovery_events
+    )
     assert len(
         [
             event

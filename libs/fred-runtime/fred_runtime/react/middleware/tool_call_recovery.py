@@ -22,6 +22,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
@@ -29,7 +30,10 @@ from langchain_core.messages.tool import ToolCall, tool_call
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
-from ..react_model_adapter import extract_model_name_from_model_response
+from ..react_model_adapter import (
+    extract_model_name_from_model_response,
+    extract_model_name_from_object,
+)
 
 RECOVERED_TOOL_CALL_TEXT_METADATA_KEY = "fred_tool_call_text_recovered"
 
@@ -64,11 +68,6 @@ _JSON_DECODER = json.JSONDecoder(
     parse_constant=_reject_json_constant,
     object_pairs_hook=_strict_json_object,
 )
-
-
-def _mistral_response(message: AIMessage) -> bool:
-    model_name = extract_model_name_from_model_response(message)
-    return is_mistral_model_name(model_name)
 
 
 def is_mistral_model_name(model_name: str | None) -> bool:
@@ -218,9 +217,12 @@ def _recover_calls(
 class ToolCallTextRecoveryMiddleware(AgentMiddleware):
     """Adapt unambiguous completed tool-call text before agent routing."""
 
-    def __init__(self, *, enabled: bool = True) -> None:
+    def __init__(
+        self, *, enabled: bool = True, kpi: BaseKPIWriter | None = None
+    ) -> None:
         super().__init__()
         self._enabled = enabled
+        self._kpi = kpi
 
     async def awrap_model_call(
         self,
@@ -240,13 +242,16 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
 
         result = list(response.result)
         changed = False
+        recovered_counts: dict[str, int] = {}
         for index, message in enumerate(result):
             if (
                 not isinstance(message, AIMessage)
                 or message.tool_calls
                 or message.invalid_tool_calls
-                or not _mistral_response(message)
             ):
+                continue
+            model_name = extract_model_name_from_model_response(message)
+            if model_name is None or not is_mistral_model_name(model_name):
                 continue
             recovered = _recover_calls(message.content, tools_by_name)
             if recovered is None:
@@ -262,8 +267,22 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
                 }
             )
             changed = True
+            metric_model_name = (
+                extract_model_name_from_object(request.model) or model_name
+            )
+            recovered_counts[metric_model_name] = recovered_counts.get(
+                metric_model_name, 0
+            ) + len(calls)
         if not changed:
             return response
+        if self._kpi is not None:
+            for model_name, count in recovered_counts.items():
+                self._kpi.count(
+                    "agent.tool_call_text_recovered_total",
+                    count,
+                    dims={"model_name": model_name},
+                    actor=KPIActor(type="system"),
+                )
         return ModelResponse(
             result=result,
             structured_response=response.structured_response,

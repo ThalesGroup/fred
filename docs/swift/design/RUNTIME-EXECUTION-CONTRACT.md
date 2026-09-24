@@ -6108,5 +6108,6 @@ representation is normalized at most once and then follows the normal tool
 route: existing limits run before HITL proposals, approved calls execute through
 tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
 sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
-provider time; the bounded local validation adds no new content-bearing or
-high-cardinality metric.
+provider time. Each reconstructed call increments
+`agent.tool_call_text_recovered_total`, with a bounded model-name label for
+Prometheus/Grafana; this counts proposals even if a later gate prevents execution.

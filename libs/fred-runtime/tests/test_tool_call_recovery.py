@@ -14,9 +14,11 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
 from typing import Any, cast
 
 import pytest
+from fred_core.kpi import BaseKPIWriter
 from fred_runtime.react.middleware import hitl as hitl_module
 from fred_runtime.react.middleware.hitl import FredHitlMiddleware
 from fred_runtime.react.middleware.tool_call_recovery import (
@@ -163,6 +165,44 @@ async def test_completed_mistral_tool_call_text_becomes_a_native_call() -> None:
             {"sql": "SELECT 1", "dataset_uids": ["fake-dataset"]},
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_recovery_counts_only_reconstructed_calls_by_model() -> None:
+    kpi = Mock(spec=BaseKPIWriter)
+    middleware = ToolCallTextRecoveryMiddleware(kpi=kpi)
+    configured_model = Mock(spec=BaseChatModel)
+    configured_model.model_name = "mistral-medium-configured"
+    request = ModelRequest(
+        model=cast(BaseChatModel, configured_model),
+        messages=[],
+        tools=[ls, list_tabular_documents],
+    )
+    response = ModelResponse(
+        result=[
+            AIMessage(
+                content=_structured_call_content(
+                    "ls", '{"path":"/"} list_tabular_documents{}'
+                ),
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "ls", "args": {"path": "/"}, "id": "native"}],
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+        ]
+    )
+
+    async def handler(_: ModelRequest) -> ModelResponse:
+        return response
+
+    await middleware.awrap_model_call(request, handler)
+
+    kpi.count.assert_called_once()
+    args, kwargs = kpi.count.call_args
+    assert args == ("agent.tool_call_text_recovered_total", 2)
+    assert kwargs["dims"] == {"model_name": "mistral-medium-configured"}
 
 
 @pytest.mark.asyncio

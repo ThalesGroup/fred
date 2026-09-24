@@ -91,7 +91,9 @@ def build_react_platform_middleware_frame(
         # Outside tracing so the model span and llm.call_latency_ms remain bare
         # provider time. The normalized response still reaches reverse-order
         # limit/HITL hooks through LangChain's normal model path.
-        ToolCallTextRecoveryMiddleware(enabled=tool_call_text_recovery_enabled),
+        ToolCallTextRecoveryMiddleware(
+            enabled=tool_call_text_recovery_enabled, kpi=kpi
+        ),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

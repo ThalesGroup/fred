@@ -316,7 +316,7 @@ def _build_deepagent_runtime_middleware(
         ),
         *(capability_block.middleware if capability_block is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
-        ToolCallTextRecoveryMiddleware(),
+        ToolCallTextRecoveryMiddleware(kpi=kpi),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,
