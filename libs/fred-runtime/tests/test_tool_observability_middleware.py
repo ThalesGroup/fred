@@ -55,6 +55,9 @@ from fred_runtime.deep.deep_runtime import (
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
 from fred_runtime.react.react_tracing import active_agent_span
 from fred_runtime.runtime_context import (
@@ -74,6 +77,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolApprovalPolicy
 from langchain.agents import create_agent
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
@@ -662,6 +666,58 @@ async def test_reverify_team_authorization_allows_when_rebac_grants() -> None:
     assert isinstance(result, ToolMessage)
     assert result.content == "ok"
     assert engine.calls == [("user-1", "team-1")]
+
+
+@pytest.mark.asyncio
+async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> None:
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    recovery = ToolCallTextRecoveryMiddleware()
+    model_response = ModelResponse(
+        result=[
+            AIMessage(
+                content=[
+                    {"type": "text", "text": native_capability_tool.name},
+                    {"type": "reference", "reference_ids": []},
+                    {"type": "text", "text": '{"question":"what is fred"}'},
+                ],
+                response_metadata={"model_name": "mistral-medium-latest"},
+            )
+        ]
+    )
+
+    async def model_handler(_: ModelRequest) -> ModelResponse:
+        return model_response
+
+    normalized = await recovery.awrap_model_call(
+        ModelRequest(model=None, messages=[], tools=[native_capability_tool]),
+        model_handler,
+    )
+    (call,) = normalized.result[0].tool_calls
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = ToolCallRequest(
+        tool_call=call,
+        tool=native_capability_tool,
+        state={"messages": [normalized.result[0]]},
+        runtime=cast(Any, None),
+    )
+    handler_called = False
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        nonlocal handler_called
+        assert engine.calls == [("user-1", "team-1")]
+        handler_called = True
+        return ToolMessage(
+            content="fake result",
+            name=req.tool_call["name"],
+            tool_call_id=req.tool_call["id"],
+        )
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert handler_called is True
+    assert engine.calls == [("user-1", "team-1")]
+    assert result.tool_call_id == call["id"]
 
 
 @pytest.mark.asyncio

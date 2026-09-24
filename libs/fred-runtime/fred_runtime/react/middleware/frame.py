@@ -22,7 +22,7 @@ just assembles that order.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
@@ -35,6 +35,7 @@ from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .hitl import CapabilityHitlBinding, FredHitlMiddleware
 from .rate_limit_retry import RateLimitRetryMiddleware
+from .tool_call_recovery import ToolCallTextRecoveryMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
@@ -43,12 +44,13 @@ def build_react_platform_middleware_frame(
     *,
     binding: BoundRuntimeContext,
     approval_policy: ToolApprovalPolicy,
-    available_tool_names: set[str] | frozenset[str],
+    available_tool_names: Collection[str],
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     max_history_messages: int | None,
     max_history_chars: int | None = None,
     max_tool_calls_per_turn: int | None = None,
+    tool_call_text_recovery_enabled: bool = True,
     capability_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
 ) -> list[AgentMiddleware]:
@@ -86,6 +88,10 @@ def build_react_platform_middleware_frame(
         # span and a real latency sample, while hygiene, prompt and capability
         # middleware are computed once for the whole retried call.
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
+        # Outside tracing so the model span and llm.call_latency_ms remain bare
+        # provider time. The normalized response still reaches reverse-order
+        # limit/HITL hooks through LangChain's normal model path.
+        ToolCallTextRecoveryMiddleware(enabled=tool_call_text_recovery_enabled),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

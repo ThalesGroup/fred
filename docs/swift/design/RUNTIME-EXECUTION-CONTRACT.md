@@ -5970,3 +5970,29 @@ children. Retries and input hygiene use the same policies as their parent frame.
 This integration does not restore custom `run_subagent` execution, add invocation-depth runtime fields, inject
 storage backends or implement compaction. Filesystem/backend work remains a separate slice;
 these tests do not establish durable workspace or replica-safe storage behavior.
+
+### 8.84 Mistral completed-message tool-call recovery (2026-09-22)
+
+ReAct and Deep parent/child frames may recover a tool call only at the completed
+assistant-message boundary, only for a Mistral-qualified response, and only when
+the reconstructed provider content contains the exact empty typed sentinel
+`{"type":"reference","reference_ids":[]}` between a registered tool name
+and strict JSON arguments. Prose before, between, or after valid calls remains
+assistant content; the calls execute. Non-empty citation references, extra
+reference fields, literal exporter placeholders, duplicate JSON keys, unknown
+tools, schema-invalid arguments and over-cap representations remain assistant
+text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
+which carry reference IDs.
+Native tool calls, including duplicates, are preserved unchanged.
+
+Recovery is bounded, validates every call before allocating call IDs, and marks
+the normalized message so the Mistral-gated streaming bridge withholds the typed
+marker and call syntax from assistant/reasoning SSE. Only the longest suffix
+that remains a prefix of a registered tool name is held while the marker is
+unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+representation is normalized at most once and then follows the normal tool
+route: existing limits run before HITL proposals, approved calls execute through
+tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
+sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
+provider time; the bounded local validation adds no new content-bearing or
+high-cardinality metric.

@@ -41,7 +41,7 @@ How to use:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -327,6 +327,27 @@ class CapabilityAgentBlock:
     # listing by server (#2455). Empty for Graph agents and any caller that
     # never built a capability block.
     mcp_prompt_groups: tuple[McpPromptGroup, ...] = ()
+
+
+def collect_available_tool_names(
+    base_names: Iterable[str],
+    capability_block: CapabilityAgentBlock | None,
+) -> tuple[str, ...]:
+    """Collect every runtime-visible tool name once in deterministic order."""
+
+    names: dict[str, None] = {}
+    for name in base_names:
+        if name:
+            names.setdefault(name, None)
+    if capability_block is not None:
+        for tool in capability_block.tools:
+            if tool.name:
+                names.setdefault(tool.name, None)
+        for middleware in capability_block.middleware:
+            for tool in getattr(middleware, "tools", ()):
+                if tool.name:
+                    names.setdefault(tool.name, None)
+    return tuple(names)
 
 
 def build_capability_agent_block(

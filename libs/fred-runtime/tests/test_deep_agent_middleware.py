@@ -48,6 +48,9 @@ from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddlew
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_sdk.contracts.capability import HitlSpec
 from fred_sdk.contracts.context import (
@@ -85,9 +88,7 @@ def _binding() -> BoundRuntimeContext:
 # ---------------------------------------------------------------------------
 
 
-def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled() -> (
-    None
-):
+def test_middleware_keeps_recovery_outside_model_observability() -> None:
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -98,6 +99,7 @@ def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled()
     assert [type(m) for m in middleware] == [
         CheckpointHygieneMiddleware,
         RateLimitRetryMiddleware,
+        ToolCallTextRecoveryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -118,13 +120,14 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     )
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert type(middleware[1]) is RateLimitRetryMiddleware
-    assert type(middleware[2]) is TracingKpiMiddleware
-    assert type(middleware[3]) is ToolObservabilityMiddleware
-    assert type(middleware[4]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[5:])
+    assert type(middleware[2]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[3]) is TracingKpiMiddleware
+    assert type(middleware[4]) is ToolObservabilityMiddleware
+    assert type(middleware[5]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[6:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 5 + 7
+    assert len(middleware) == 5 + 7 + 1
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
@@ -168,9 +171,10 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert middleware[1] is marker
     assert type(middleware[2]) is RateLimitRetryMiddleware
-    assert type(middleware[3]) is TracingKpiMiddleware
-    assert type(middleware[4]) is ToolObservabilityMiddleware
-    assert type(middleware[5]) is FredHitlMiddleware
+    assert type(middleware[3]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[4]) is TracingKpiMiddleware
+    assert type(middleware[5]) is ToolObservabilityMiddleware
+    assert type(middleware[6]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -288,12 +292,13 @@ async def test_deep_build_executor_wires_observability_middleware(
     await runtime.build_executor(_binding())
 
     # The fake tool pipeline resolves no tools, so the filesystem guard
-    # clause also fires — this test only cares that observability leads.
+    # clause also fires — this test only cares about the model wrapper order.
     wired = captured["middleware"]
     assert type(wired[0]) is CheckpointHygieneMiddleware
     assert type(wired[1]) is RateLimitRetryMiddleware
-    assert type(wired[2]) is TracingKpiMiddleware
-    assert type(wired[3]) is ToolObservabilityMiddleware
+    assert type(wired[2]) is ToolCallTextRecoveryMiddleware
+    assert type(wired[3]) is TracingKpiMiddleware
+    assert type(wired[4]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio
@@ -373,6 +378,17 @@ async def test_deep_build_executor_wires_capability_middleware(
     assert any(
         isinstance(m, DeepChildHitlMiddleware) for m in captured["subagent_middleware"]
     )
+    parent_recovery = next(
+        m
+        for m in captured["middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    child_recovery = next(
+        m
+        for m in captured["subagent_middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    assert parent_recovery is not child_recovery
 
 
 @pytest.mark.asyncio

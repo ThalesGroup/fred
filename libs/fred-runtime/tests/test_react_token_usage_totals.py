@@ -36,13 +36,18 @@ from collections.abc import AsyncIterator
 
 import pytest
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.react.middleware.tool_call_recovery import (
+    RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
+)
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     ExecutionConfig,
+    AssistantDeltaRuntimeEvent,
     FinalRuntimeEvent,
+    ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
 
 class _FakePortable:
@@ -81,12 +86,37 @@ class _FakeCompiledAgent:
             yield event
 
 
-async def _run_stream(events: list[object]) -> list[object]:
+class _FailAfterFirstChunkAgent:
+    async def astream(
+        self,
+        graph_input: object,
+        *,
+        config: object = None,
+        stream_mode: object = None,
+    ) -> AsyncIterator[object]:
+        yield (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "text", "text": "ordinary text now"}]),
+                {},
+            ),
+        )
+        raise AssertionError("runtime pulled another provider event before streaming")
+
+
+async def _run_stream(
+    events: list[object],
+    *,
+    model_name: str = "mistral-medium-latest",
+    available_tool_names: set[str] | None = None,
+) -> list[object]:
     executor = _TransportBackedReActExecutor(
         compiled_agent=_FakeCompiledAgent(events),  # type: ignore[arg-type]
         binding=_FakeBinding(),  # type: ignore[arg-type]
         services=_FakeServices(),  # type: ignore[arg-type]
         runtime_class_name="ReActRuntime",
+        available_tool_names=available_tool_names or {"ls"},
+        model_name=model_name,
     )
     input_model = ReActInput(
         messages=(ReActMessage(role=ReActMessageRole.USER, content="hi"),)
@@ -212,6 +242,302 @@ async def test_tool_call_event_no_longer_carries_the_deciding_calls_prompt() -> 
         e for e in await _run_stream(events) if isinstance(e, ToolCallRuntimeEvent)
     ]
     assert not hasattr(tool_call, "token_usage")
+
+
+@pytest.mark.asyncio
+async def test_recovered_partial_stream_is_reconciled_once_at_completion() -> None:
+    recovered = AIMessage(
+        content="",
+        tool_calls=[{"id": "recovered-1", "name": "ls", "args": {"path": "/"}}],
+        response_metadata={RECOVERED_TOOL_CALL_TEXT_METADATA_KEY: True},
+    )
+    events = [
+        (
+            "messages",
+            (AIMessageChunk(content=[{"type": "text", "text": "ls"}]), {}),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "reference", "reference_ids": []}]),
+                {},
+            ),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "text", "text": '{"path": "/"}'}]),
+                {},
+            ),
+        ),
+        ("updates", {"agent": {"messages": [recovered]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="fake-file.md",
+                            tool_call_id="recovered-1",
+                            name="ls",
+                        )
+                    ]
+                }
+            },
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="done")]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    streamed_text = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    thought_text = "".join(
+        event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+    )
+    assert "ls" not in streamed_text
+    assert '"path"' not in streamed_text
+    assert "ls" not in thought_text
+    assert '"path"' not in thought_text
+    tool_calls = [
+        event for event in collected if isinstance(event, ToolCallRuntimeEvent)
+    ]
+    assert [(event.tool_name, event.arguments) for event in tool_calls] == [
+        ("ls", {"path": "/"})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> None:
+    recovered = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "recovered-1",
+                "name": "read_query",
+                "args": {"sql": "SELECT 1", "dataset_uids": ["fake"]},
+            }
+        ],
+        response_metadata={RECOVERED_TOOL_CALL_TEXT_METADATA_KEY: True},
+    )
+    events = [
+        (
+            "messages",
+            (AIMessageChunk(content=[{"type": "text", "text": "read"}]), {}),
+        ),
+        (
+            "messages",
+            (AIMessageChunk(content=[{"type": "text", "text": "_query"}]), {}),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "reference", "reference_ids": []}]),
+                {},
+            ),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}',
+                        }
+                    ]
+                ),
+                {},
+            ),
+        ),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events, available_tool_names={"read_query"})
+
+    streamed = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, (AssistantDeltaRuntimeEvent, ThoughtDeltaEvent))
+    )
+    assert "read" not in streamed
+    assert "_query" not in streamed
+    assert '"sql"' not in streamed
+    assert [
+        event.tool_name
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == ["read_query"]
+
+
+@pytest.mark.asyncio
+async def test_capability_only_tool_name_is_withheld_from_react_stream() -> None:
+    recovered = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "recovered-capability-1",
+                "name": "capability_search",
+                "args": {"query": "fred"},
+            }
+        ],
+        response_metadata={RECOVERED_TOOL_CALL_TEXT_METADATA_KEY: True},
+    )
+    events = [
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "text", "text": "capability_search"}]),
+                {},
+            ),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "reference", "reference_ids": []}]),
+                {},
+            ),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "text", "text": '{"query":"fred"}'}]),
+                {},
+            ),
+        ),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(
+        events,
+        available_tool_names={"capability_search"},
+    )
+
+    streamed = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, (AssistantDeltaRuntimeEvent, ThoughtDeltaEvent))
+    )
+    assert "capability_search" not in streamed
+    assert '"query"' not in streamed
+    assert [
+        event.tool_name
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == ["capability_search"]
+
+
+@pytest.mark.asyncio
+async def test_ordinary_typed_text_streams_with_only_a_bounded_suffix_held() -> None:
+    ordinary_text = "This ordinary answer should stream promptly."
+    events = [
+        (
+            "messages",
+            (
+                AIMessageChunk(content=[{"type": "text", "text": ordinary_text}]),
+                {},
+            ),
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content=ordinary_text)]}}),
+    ]
+
+    collected = await _run_stream(events)
+
+    deltas = [
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    ]
+    assert "".join(deltas) == ordinary_text
+    assert deltas == [ordinary_text]
+
+
+@pytest.mark.asyncio
+async def test_ordinary_typed_text_is_emitted_before_next_provider_event() -> None:
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=_FailAfterFirstChunkAgent(),  # type: ignore[arg-type]
+        binding=_FakeBinding(),  # type: ignore[arg-type]
+        services=_FakeServices(),  # type: ignore[arg-type]
+        runtime_class_name="ReActRuntime",
+        available_tool_names={"ls", "read_query"},
+        model_name="mistral-medium-latest",
+    )
+    input_model = ReActInput(
+        messages=(ReActMessage(role=ReActMessageRole.USER, content="hi"),)
+    )
+    stream = executor.stream(input_model, ExecutionConfig())
+
+    first = await anext(stream)
+    await stream.aclose()
+
+    assert isinstance(first, AssistantDeltaRuntimeEvent)
+    assert first.delta == "ordinary text now"
+
+
+@pytest.mark.asyncio
+async def test_non_mistral_mixed_reference_chunk_loses_no_text() -> None:
+    events = [
+        (
+            "messages",
+            (
+                AIMessageChunk(
+                    content=[
+                        {"type": "text", "text": "before "},
+                        {"type": "reference", "reference_ids": []},
+                        {"type": "text", "text": "after"},
+                    ]
+                ),
+                {},
+            ),
+        ),
+        ("updates", {"agent": {"messages": [AIMessage(content="before after")]}}),
+    ]
+
+    collected = await _run_stream(events, model_name="gpt-5")
+
+    streamed = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    assert "before " in streamed
+    assert "after" in streamed
+
+
+@pytest.mark.asyncio
+async def test_mistral_ordinary_citation_chunk_loses_no_text() -> None:
+    events = [
+        (
+            "messages",
+            (
+                AIMessageChunk(
+                    content=[
+                        {"type": "text", "text": "cited before "},
+                        {"type": "reference", "reference_ids": ["document-1"]},
+                        {"type": "text", "text": "cited after"},
+                    ]
+                ),
+                {},
+            ),
+        ),
+        (
+            "updates",
+            {"agent": {"messages": [AIMessage(content="cited before cited after")]}},
+        ),
+    ]
+
+    collected = await _run_stream(events)
+
+    streamed = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    assert "cited before " in streamed
+    assert "cited after" in streamed
 
 
 @pytest.mark.asyncio
