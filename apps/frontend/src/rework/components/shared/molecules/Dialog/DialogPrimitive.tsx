@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Button from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";

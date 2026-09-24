@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { format } from "sql-formatter";
 
 /** Format a DuckDB query for display without preventing malformed SQL from being inspected. */

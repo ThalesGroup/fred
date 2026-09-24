@@ -28,9 +28,8 @@ from temporalio import activity
 from temporalio.testing import ActivityEnvironment
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
-from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
+from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
@@ -39,6 +38,7 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.i
     ImageTranscription,
 )
 from knowledge_flow_backend.features.scheduler.activity_utils import to_thread_with_heartbeat
+from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
 load_dotenv(dotenv_path)

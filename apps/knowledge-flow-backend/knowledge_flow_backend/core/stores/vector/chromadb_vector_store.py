@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-
 """
 ChromaDBVectorStore — embedded, local FS-backed implementation for Fred
 """

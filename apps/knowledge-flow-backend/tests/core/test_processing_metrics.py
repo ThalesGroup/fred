@@ -15,8 +15,8 @@
 import ast
 import asyncio
 from contextlib import contextmanager
-from pathlib import Path
 from importlib.util import resolve_name
+from pathlib import Path
 
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope, processing_timer
 
