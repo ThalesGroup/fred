@@ -479,6 +479,7 @@ async def _revive_after_grant(
     capability_id: str,
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    available_by_source: dict[str, frozenset[str] | None] | None = None,
 ) -> int:
     """Clear the suspensions a fresh grant resolves (the #1980 → #1975 seam).
 
@@ -495,7 +496,10 @@ async def _revive_after_grant(
     if not source_runtime_ids:
         return 0
     usable_ids, available_by_source = await resolve_availability_for_team(
-        deps, team_id=team_id, source_runtime_ids=source_runtime_ids
+        deps,
+        team_id=team_id,
+        source_runtime_ids=source_runtime_ids,
+        available_by_source=available_by_source,
     )
     return await revive_dependent_instances(
         agent_instance_store=agent_instance_store,
@@ -505,6 +509,37 @@ async def _revive_after_grant(
         team_id=team_id,
         kpi_writer=deps.get_kpi_writer(),
     )
+
+
+# Bounds the DB sessions and OpenFGA lookups one platform-wide grant opens at once.
+_REVIVE_TEAM_CONCURRENCY = 10
+
+
+async def _revive_teams_after_grant(
+    *, capability_id: str, team_ids: set[TeamId], deps: ProductServiceDependencies
+) -> int:
+    """`_revive_after_grant` for many teams: pod availability does not depend on
+    the team, so it is fetched once, and teams are revived ten at a time."""
+
+    from control_plane_backend.product.service import (
+        _available_capability_ids_by_source,
+    )
+
+    if not team_ids:
+        return 0
+    available_by_source = await _available_capability_ids_by_source(deps)
+    semaphore = asyncio.Semaphore(_REVIVE_TEAM_CONCURRENCY)
+
+    async def _revive(team_id: TeamId) -> int:
+        async with semaphore:
+            return await _revive_after_grant(
+                capability_id=capability_id,
+                team_id=team_id,
+                deps=deps,
+                available_by_source=available_by_source,
+            )
+
+    return sum(await asyncio.gather(*(_revive(team_id) for team_id in team_ids)))
 
 
 async def enable_team_capability(
@@ -680,16 +715,20 @@ async def set_default_on(
         # gathering must match `_suspend_instance_for_revoked_capability`'s
         # two suspension conditions, or a team suspended only via the
         # template condition is never revived.
+        # Only teams holding a SUSPENDED dependent: the revive never touches a
+        # running instance, so the others would cost a lookup for nothing.
         team_ids = {
             instance.team_id
             for instance in await agent_instance_store.list_all()
-            if capability_id in (instance.tuning.selected_capability_ids or [])
-            or is_template_capability_instance(instance, capability_id)
-        }
-        for team_id in team_ids:
-            revived += await _revive_after_grant(
-                capability_id=capability_id, team_id=team_id, deps=deps
+            if instance.is_suspended
+            and (
+                capability_id in (instance.tuning.selected_capability_ids or [])
+                or is_template_capability_instance(instance, capability_id)
             )
+        }
+        revived = await _revive_teams_after_grant(
+            capability_id=capability_id, team_ids=team_ids, deps=deps
+        )
     # Switching a model OFF switches its reasoning off with it (REASON-01 §5.7).
     # The two axes are independent by design — access has a subject, reasoning
     # does not — but they are not independent in THIS direction: leaving a
@@ -828,8 +867,8 @@ async def _revive_personal_after_grant(
     the personal-class counterpart of `_revive_after_grant` above (#1975 seam).
 
     Runs AFTER the class tuple write. Scoped to PERSONAL-space teams that hold
-    a suspended dependent selecting the capability, revived one team at a time
-    through `_revive_after_grant` so the real per-team availability facts
+    a suspended dependent selecting the capability, revived through
+    `_revive_teams_after_grant` so the real per-team availability facts
     (ReBAC `can_use` + pod manifest) decide each instance, never a synthetic
     set — the same guarantee that leaves a `capability_config_invalid`
     suspension or an unreachable-pod instance untouched.
@@ -849,12 +888,9 @@ async def _revive_personal_after_grant(
             or is_template_capability_instance(instance, capability_id)
         )
     }
-    revived = 0
-    for team_id in personal_team_ids:
-        revived += await _revive_after_grant(
-            capability_id=capability_id, team_id=team_id, deps=deps
-        )
-    return revived
+    return await _revive_teams_after_grant(
+        capability_id=capability_id, team_ids=personal_team_ids, deps=deps
+    )
 
 
 async def set_personal_scope(

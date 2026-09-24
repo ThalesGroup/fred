@@ -269,6 +269,7 @@ async def resolve_availability_for_team(
     *,
     team_id: TeamId,
     source_runtime_ids: set[str],
+    available_by_source: dict[str, frozenset[str] | None] | None = None,
 ) -> tuple[set[str] | None, dict[str, frozenset[str] | None]]:
     """The real availability facts a GRANT needs to revive instances.
 
@@ -278,6 +279,9 @@ async def resolve_availability_for_team(
     `selected - {id}` instead; a grant cannot, because it does not know whether
     the instance's OTHER capabilities are healthy. See
     `revive_dependent_instances`.
+
+    Pass `available_by_source` when one grant revives many teams: pod
+    availability does not depend on the team, so it is fetched once upstream.
     """
 
     from control_plane_backend.product.service import (
@@ -285,7 +289,8 @@ async def resolve_availability_for_team(
     )
 
     usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, team_id)
-    available_by_source = await _available_capability_ids_by_source(deps)
+    if available_by_source is None:
+        available_by_source = await _available_capability_ids_by_source(deps)
     return usable_ids, {
         runtime_id: available_by_source.get(runtime_id)
         for runtime_id in source_runtime_ids
