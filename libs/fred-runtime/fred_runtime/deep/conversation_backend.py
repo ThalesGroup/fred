@@ -21,7 +21,6 @@ from collections.abc import Awaitable, Callable, Iterable
 from pathlib import PurePosixPath
 from typing import TypeVar
 
-from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import (
     BackendProtocol,
     EditResult,
@@ -50,7 +49,6 @@ from fred_runtime.conversation_filesystem import (
     ConversationTextNamespacePort,
 )
 
-_UNMOUNTED_PATH_ERROR = "Path is outside mounted conversation filesystems"
 _MAX_CONCURRENT_READS = 16
 
 _InputT = TypeVar("_InputT")
@@ -214,95 +212,6 @@ async def _bounded_gather(
     return list(await asyncio.gather(*(run(item) for item in items)))
 
 
-class RejectingBackend(BackendProtocol):
-    """Reject Deep file operations outside explicitly mounted namespaces."""
-
-    async def als(self, path: str) -> LsResult:
-        del path
-        return LsResult(error=_UNMOUNTED_PATH_ERROR)
-
-    async def aread(
-        self, file_path: str, offset: int = 0, limit: int = 2000
-    ) -> ReadResult:
-        del file_path, offset, limit
-        return ReadResult(error=_UNMOUNTED_PATH_ERROR)
-
-    async def awrite(self, file_path: str, content: str) -> WriteResult:
-        del file_path, content
-        return WriteResult(error=_UNMOUNTED_PATH_ERROR)
-
-    async def aedit(
-        self,
-        file_path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,  # noqa: FBT001, FBT002
-    ) -> EditResult:
-        del file_path, old_string, new_string, replace_all
-        return EditResult(error=_UNMOUNTED_PATH_ERROR)
-
-    async def aglob(self, pattern: str, path: str | None = None) -> GlobResult:
-        del pattern, path
-        return GlobResult(error=_UNMOUNTED_PATH_ERROR)
-
-    async def agrep(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-    ) -> GrepResult:
-        del pattern, path, glob
-        return GrepResult(error=_UNMOUNTED_PATH_ERROR)
-
-
-class ConversationCompositeBackend(CompositeBackend):
-    """Composite that searches only Fred's explicit conversation mounts."""
-
-    async def aglob(self, pattern: str, path: str | None = None) -> GlobResult:
-        if path not in (None, "/"):
-            if not any(path.startswith(prefix) for prefix in self.routes):
-                return GlobResult(error=_UNMOUNTED_PATH_ERROR)
-            return await super().aglob(pattern, path)
-
-        matches: list[FileInfo] = []
-        for prefix, backend in self.routes.items():
-            result = await backend.aglob(pattern, "/")
-            if result.error:
-                return result
-            matches.extend(
-                {**match, "path": _mount_path(prefix, match["path"])}
-                for match in result.matches or []
-            )
-        matches.sort(key=lambda match: match["path"])
-        return GlobResult(matches=matches)
-
-    async def agrep(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-    ) -> GrepResult:
-        if path not in (None, "/"):
-            if not any(path.startswith(prefix) for prefix in self.routes):
-                return GrepResult(error=_UNMOUNTED_PATH_ERROR)
-            return await super().agrep(pattern, path, glob)
-
-        matches: list[GrepMatch] = []
-        for prefix, backend in self.routes.items():
-            result = await backend.agrep(pattern, "/", glob)
-            if result.error:
-                return result
-            matches.extend(
-                {**match, "path": _mount_path(prefix, match["path"])}
-                for match in result.matches or []
-            )
-        return GrepResult(matches=matches)
-
-
-def _mount_path(prefix: str, path: str) -> str:
-    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
-
-
 def _error_message(error: ConversationScratchpadError) -> str:
     if isinstance(error, ConversationScratchpadStorageError):
         return "Shared scratchpad storage failed"
@@ -324,6 +233,8 @@ def _error_message(error: ConversationScratchpadError) -> str:
 def _relative_path(path: str, *, allow_root: bool = False) -> str:
     if path == "/" and allow_root:
         return ""
+    if allow_root and path.endswith("/"):
+        path = path[:-1]
     if not path.startswith("/"):
         return path
     return path[1:]

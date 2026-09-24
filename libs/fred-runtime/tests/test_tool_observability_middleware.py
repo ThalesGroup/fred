@@ -40,6 +40,7 @@ from conftest import (
     RecordingTracer as _RecordingTracer,
 )
 from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import StateBackend
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
@@ -49,7 +50,6 @@ from fred_core.portable import Span
 from fred_core.security.models import AuthorizationError, Resource
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.deep.deep_runtime import (
-    RejectingBackend,
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
 )
@@ -1008,7 +1008,7 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             checkpointer=None,
             subagent_middleware=[],
             middleware=[carrier, *middleware],
-            backend=RejectingBackend(),
+            backend=StateBackend(),
         )
     else:
         agent = create_agent(

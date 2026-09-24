@@ -27,7 +27,6 @@ from fred_core.filesystem.structures import (
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_backend import (
     ConversationNamespaceBackend,
-    RejectingBackend,
 )
 
 
@@ -218,7 +217,7 @@ async def test_backend_grep_bounds_parallel_reads() -> None:
 
 
 @pytest.mark.asyncio
-async def test_backends_translate_storage_and_unmounted_path_failures() -> None:
+async def test_backend_translates_storage_failures() -> None:
     class _FailingFilesystem(_MemoryFilesystem):
         async def read(self, path: str) -> bytes:
             del path
@@ -230,20 +229,6 @@ async def test_backends_translate_storage_and_unmounted_path_failures() -> None:
         "scratchpad"
     )
     backend = ConversationNamespaceBackend(namespace)
-    rejecting = RejectingBackend()
-
     failed_read = await backend.aread("/notes.md")
-    rejected_read = await rejecting.aread("/outside.md")
-    rejected_write = await rejecting.awrite("/outside.md", "content")
-    rejected_edit = await rejecting.aedit("/outside.md", "old", "new")
-    rejected_list = await rejecting.als("/")
-    rejected_glob = await rejecting.aglob("**/*", path="/")
-    rejected_grep = await rejecting.agrep("text", path="/")
 
     assert failed_read.error == "Shared scratchpad storage failed"
-    assert rejected_read.error == "Path is outside mounted conversation filesystems"
-    assert rejected_write.error == rejected_read.error
-    assert rejected_edit.error == rejected_read.error
-    assert rejected_list.error == rejected_read.error
-    assert rejected_glob.error == rejected_read.error
-    assert rejected_grep.error == rejected_read.error

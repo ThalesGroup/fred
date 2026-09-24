@@ -5784,12 +5784,14 @@ and an operator-configured `ToolApprovalPolicy` route through that one gate and 
 runtime has a second approval mechanism. `GraphRuntime` keeps its own separate HITL lifecycle and is
 unaffected.
 
-Deep receives one explicit conversation-scoped `CompositeBackend`. Its rejecting default routes
-only `/scratchpad/` and `/.deep/` to a shared runtime object store; the parent and all native
-children use the same backend, so successful writes are visible without child-state merge and
-across later turns or runtime replicas. `/scratchpad/` is model-readable and writable. `/.deep/` is
-model-readable but model writes are rejected; trusted Deep middleware writes its internal artifacts
-there. The six safe built-ins (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) are
+Deep receives one explicit conversation-scoped `CompositeBackend`. Its default backend maps the
+root workspace to the conversation scratchpad in the shared runtime object store; `/.deep/` is a
+separate mount with its own quota. The parent and all native children use the same backend, so
+successful writes are visible without child-state merge and across later turns or runtime replicas.
+The root workspace is model-readable and writable. `/.deep/` is model-readable but model writes
+are rejected; trusted Deep middleware writes its internal artifacts there. Future special
+filesystems must be mounted explicitly with their own model write restrictions. The six safe
+built-ins (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) are
 standard runtime bindings even with no optional filesystem capability, while `execute` remains
 guarded and unavailable.
 

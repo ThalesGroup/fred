@@ -101,6 +101,16 @@ async def test_model_write_and_edit_permissions_preserve_deep_internal_file() ->
     assert "permission denied for write" in str(edit.content)
     assert await internal.read_text("artifact.txt") == "original"
 
+    root_write = await cast(Any, tools["write_file"]).coroutine(
+        file_path="/notes.txt", content="shared", runtime=runtime
+    )
+    root_read = await cast(Any, tools["read_file"]).coroutine(
+        file_path="/notes.txt", runtime=runtime
+    )
+    assert root_write.status == "success"
+    assert root_read.status == "success"
+    assert "shared" in str(root_read.content)
+
 
 @pytest.mark.asyncio
 async def test_trusted_backend_routes_deep_artifacts_to_persistent_namespace() -> None:
@@ -125,7 +135,7 @@ async def test_trusted_backend_routes_deep_artifacts_to_persistent_namespace() -
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("root", [None, "/"])
-async def test_root_search_aggregates_only_mounted_namespaces(
+async def test_root_search_aggregates_workspace_and_internal_mount(
     root: str | None,
 ) -> None:
     filesystem = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
@@ -141,23 +151,35 @@ async def test_root_search_aggregates_only_mounted_namespaces(
     assert globbed.error is None
     assert [match["path"] for match in globbed.matches or []] == [
         "/.deep/large_tool_results/result.md",
-        "/scratchpad/notes/shared.md",
+        "/notes/shared.md",
     ]
     assert grepped.error is None
     assert [match["path"] for match in grepped.matches or []] == [
-        "/scratchpad/notes/shared.md",
+        "/notes/shared.md",
         "/.deep/large_tool_results/result.md",
     ]
 
 
 @pytest.mark.asyncio
-async def test_search_rejects_a_path_outside_mounted_namespaces() -> None:
+async def test_unmounted_paths_use_root_workspace() -> None:
+    storage = _MemoryFilesystem()
     backend = _build_conversation_backend(
-        ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
+        ConversationFilesystemService(storage, "conversation-a")
     )
 
-    globbed = await backend.aglob("**/*", path="/outside/")
+    written = await backend.awrite("/outside/notes.md", "needle")
+    read = await backend.aread("/outside/notes.md")
     grepped = await backend.agrep("needle", path="/outside/")
 
-    assert globbed.error == "Path is outside mounted conversation filesystems"
-    assert grepped.error == globbed.error
+    assert written.error is None
+    assert read.file_data == {"content": "needle", "encoding": "utf-8"}
+    assert (
+        storage.files["conversations/conversation-a/scratchpad/outside/notes.md"]
+        == b"needle"
+    )
+    assert [match["path"] for match in grepped.matches or []] == ["/outside/notes.md"]
+
+
+def test_missing_conversation_filesystem_fails_closed() -> None:
+    with pytest.raises(RuntimeError, match="requires a conversation filesystem"):
+        _build_conversation_backend(None)

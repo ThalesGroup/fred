@@ -37,6 +37,7 @@ from typing import Any, cast
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import RecordingSpan, RecordingTracer, ToolFriendlyFakeChatModel
+from deepagents.backends import StateBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import subagents as deep_subagents
 from deepagents.middleware.filesystem import FilesystemMiddleware
@@ -156,7 +157,7 @@ def _compile_deep_agent(
             capability_block=capability_block,
             child=True,
         ),
-        backend=deep_mod.RejectingBackend(),
+        backend=StateBackend(),
     )
 
 
@@ -736,7 +737,7 @@ def _native_agent(
         checkpointer=InMemorySaver(),
         middleware=frame(),
         subagent_middleware=frame(child=True),
-        backend=backend if backend is not None else deep_mod.RejectingBackend(),
+        backend=backend if backend is not None else StateBackend(),
     )
 
 
@@ -780,10 +781,8 @@ async def test_native_children_and_parent_share_live_conversation_backend(
     )
     namespace = SharedNamespace()
     backend = deep_mod.CompositeBackend(
-        default=deep_mod.RejectingBackend(),
-        routes={
-            "/scratchpad/": deep_mod.ConversationNamespaceBackend(cast(Any, namespace)),
-        },
+        default=deep_mod.ConversationNamespaceBackend(cast(Any, namespace)),
+        routes={},
         artifacts_root="/.deep",
     )
     agent = _native_agent(model, tools=[], backend=backend)
@@ -791,9 +790,9 @@ async def test_native_children_and_parent_share_live_conversation_backend(
     assert agent is not None
     assert child_backends
     assert all(child_backend is backend for child_backend in child_backends)
-    child_write = await child_backends[0].awrite("/scratchpad/shared.md", "shared live")
-    parent_read = await backend.aread("/scratchpad/shared.md")
-    sibling_read = await child_backends[0].aread("/scratchpad/shared.md")
+    child_write = await child_backends[0].awrite("/shared.md", "shared live")
+    parent_read = await backend.aread("/shared.md")
+    sibling_read = await child_backends[0].aread("/shared.md")
 
     assert child_write.error is None
     assert parent_read.file_data == {
@@ -830,7 +829,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
                     tool_calls=[
                         _tool_call(
                             "read_file",
-                            {"file_path": "/scratchpad/shared.md"},
+                            {"file_path": "/shared.md"},
                             "parent-read",
                         )
                     ],
@@ -844,7 +843,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
                         _tool_call(
                             "write_file",
                             {
-                                "file_path": "/scratchpad/shared.md",
+                                "file_path": "/shared.md",
                                 "content": "shared live",
                             },
                             "child-write",
@@ -859,7 +858,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
                     tool_calls=[
                         _tool_call(
                             "read_file",
-                            {"file_path": "/scratchpad/shared.md"},
+                            {"file_path": "/shared.md"},
                             "sibling-read",
                         )
                     ],
@@ -900,7 +899,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
                     tool_calls=[
                         _tool_call(
                             "read_file",
-                            {"file_path": "/scratchpad/shared.md"},
+                            {"file_path": "/shared.md"},
                             "fresh-read",
                         )
                     ],

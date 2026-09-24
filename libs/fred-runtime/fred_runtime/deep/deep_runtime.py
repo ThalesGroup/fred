@@ -46,9 +46,7 @@ from langgraph.types import Checkpointer
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_backend import (
-    ConversationCompositeBackend,
     ConversationNamespaceBackend,
-    RejectingBackend,
 )
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
@@ -108,6 +106,18 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
 )
 _SAFE_FILESYSTEM_TOOL_NAMES: frozenset[str] = frozenset(
     name for name in _FILESYSTEM_TOOL_NAMES if name != "execute"
+)
+_CONVERSATION_FILESYSTEM_PROMPT = (
+    "# Conversation filesystem\n\n"
+    "- `/` is the shared workspace for collaboration between the "
+    "parent agent and its sub-agents in this conversation.\n"
+    "- It is also the designated future location for files the agent creates "
+    "for users. Do not claim that those files are user-accessible unless a "
+    "delivery mechanism is available.\n"
+    "- Use absolute paths when creating or editing shared files, for example "
+    "`/notes.md`.\n"
+    "- `/.deep/` is reserved for runtime artifacts. Do not write or edit files "
+    "there. Other mounted filesystems may also be read-only."
 )
 
 
@@ -315,18 +325,16 @@ def _create_compiled_deep_agent(
 def _build_conversation_backend(
     conversation_filesystem: ConversationFilesystemService | None,
 ) -> CompositeBackend:
-    routes: dict[str, BackendProtocol] = {}
-    if conversation_filesystem is not None:
-        routes = {
-            "/scratchpad/": ConversationNamespaceBackend(
-                conversation_filesystem.namespace("scratchpad")
-            ),
+    if conversation_filesystem is None:
+        raise RuntimeError("DeepAgentRuntime requires a conversation filesystem.")
+    return CompositeBackend(
+        default=ConversationNamespaceBackend(conversation_filesystem.scratchpad()),
+        routes={
             "/.deep/": ConversationNamespaceBackend(
                 conversation_filesystem.namespace(".deep")
-            ),
-        }
-    return ConversationCompositeBackend(
-        default=RejectingBackend(), routes=routes, artifacts_root="/.deep"
+            )
+        },
+        artifacts_root="/.deep",
     )
 
 
@@ -342,7 +350,7 @@ def _reject_capability_filesystem_middleware(
         raise RuntimeError(
             "Deep capability middleware must not provide FilesystemMiddleware; "
             "use the runtime conversation filesystem backend through the standard "
-            "/scratchpad/ mount instead."
+            "root workspace instead."
         )
 
 
@@ -356,14 +364,15 @@ def _unavailable_filesystem_tool_names(
 
 
 def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
-    """Tell the model exactly which Deep filesystem tools remain unavailable."""
+    """Describe Deep's mounted filesystem scope and unavailable operations."""
     unavailable_tool_names = _unavailable_filesystem_tool_names(available_tool_names)
-    if not unavailable_tool_names:
-        return ""
-    return (
-        "The following filesystem tools are disabled in this runtime: "
-        f"{', '.join(unavailable_tool_names)}. Do not call them."
-    )
+    parts = [_CONVERSATION_FILESYSTEM_PROMPT]
+    if unavailable_tool_names:
+        parts.append(
+            "The following filesystem tools are disabled in this runtime: "
+            f"{', '.join(unavailable_tool_names)}. Do not call them."
+        )
+    return "\n\n".join(parts)
 
 
 def _build_deepagent_runtime_middleware(

@@ -124,7 +124,7 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
                     _tool_call(
                         "write_file",
                         {
-                            "file_path": "/scratchpad/note.txt",
+                            "file_path": "/note.txt",
                             "content": "shared note",
                         },
                         "write-note",
@@ -136,7 +136,7 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
                 tool_calls=[
                     _tool_call(
                         "read_file",
-                        {"file_path": "/scratchpad/note.txt"},
+                        {"file_path": "/note.txt"},
                         "read-note",
                     )
                 ],
