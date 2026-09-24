@@ -12,7 +12,7 @@ read-only), #2574 (agent writes), plus the WIKI-05 correctness-pass issues
 (#2579, #2580, #2582) — all referenced by the still-open PR #2576, which
 carries every slice and closes them on merge
 **Related:** `writable_document` capability
-(`libs/fred-capability-writable-document/`) as the reference vertical for a
+(`libs/capabilities/fred-capability-writable-document/`) as the reference vertical for a
 capability package; `platform_postgres` / `document_access` as the reference for
 a capability reaching an external service through a typed port;
 `capabilities/AUTHORING.md`; `platform/REBAC.md` (team roles);

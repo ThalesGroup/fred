@@ -118,6 +118,30 @@ function withResourceState(
   return { ...state, selectedCapabilityIds: ids, capabilityConfigValues };
 }
 
+/**
+ * Can this pack's switch do anything for this team?
+ *
+ * A pack whose capabilities the admin never opened is a dead control:
+ * `applyPackToggle` only ever adds ids present in `availableIds`, and
+ * `derivePackChecked` requires at least one selectable id — so the switch can
+ * neither be turned on nor already be on. The Simple view hides such a pack
+ * rather than offering a switch that does nothing.
+ *
+ * What decides is what the pack ENABLES, not what it lists: both resource
+ * packs hang on `document_access`, which `conversation_attachments`
+ * deliberately keeps out of its `includes` (see `toolPacks.ts`). Without it,
+ * `corpusOn`/`attachmentsOn` stay false however many of the listed reading
+ * capabilities the team holds.
+ */
+export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
+  // Reasoning is a form field (`reasoningEnabled`), not a capability, so team
+  // grants never gate it. Whether it will RUN depends on the model's admin
+  // setting, which needs an agent_instance_id the creation form has not got.
+  if (pack.kind === "reasoning") return true;
+  if (pack.documentAccessIntent) return availableIds.has(CAP_DOCUMENT_ACCESS);
+  return pack.enablesCapabilityIds.some((id) => availableIds.has(id));
+}
+
 /** Is the pack currently active, derived from the underlying selection so the
  *  Simple and Advanced views stay in sync automatically. */
 export function derivePackChecked(

@@ -16,6 +16,7 @@ on:
       - 'apps/control-plane-backend/**'
       - 'apps/knowledge-flow-backend/**'
       - 'libs/fred-*/**'
+      - 'libs/capabilities/**'
       - 'Makefile'
       - 'scripts/**'
       - '.github/workflows/Check-migrations.yml'
@@ -62,7 +63,7 @@ jobs:
 
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
-        working-directory: libs/fred-capability-writable-document
+        working-directory: libs/capabilities/fred-capability-writable-document
 
       - name: Check single Alembic head per tree
         run: make db-check-combined-heads
@@ -96,7 +97,7 @@ jobs:
 
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
-        working-directory: libs/fred-capability-writable-document
+        working-directory: libs/capabilities/fred-capability-writable-document
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -130,7 +131,7 @@ jobs:
 
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
-        working-directory: libs/fred-capability-writable-document
+        working-directory: libs/capabilities/fred-capability-writable-document
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres

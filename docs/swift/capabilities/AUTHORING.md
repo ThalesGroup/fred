@@ -46,7 +46,10 @@ Contract surface (import from here, never re-declare):
 `manifest.py` (`CapabilityManifest`, `FieldSpec` via `..models`, `AssetSlot`,
 `ChatControlSpec`, `SidePanelSpec`, `TeamScopePolicy`, `UploadedFile`),
 `context.py` (`CapabilityContext`, `CapabilityIdentity`, `SaveContext`, `EmptyModel`),
-`hitl.py` (`HitlSpec`, `HitlGateRequest`), and
+`hitl.py` (`HitlSpec`, `HitlGateRequest`),
+`libs/fred-sdk/fred_sdk/contracts/models.py` (`FieldSpec`, `UIHints`, and the stock
+chat-control params `DocumentScopeControlParams`, `SearchPolicyControlParams`,
+`RagScopeControlParams`), and
 `libs/fred-sdk/fred_sdk/contracts/runtime.py` (`RuntimeServices` + its typed ports).
 
 ---
@@ -55,12 +58,12 @@ Contract surface (import from here, never re-declare):
 
 | File | What it shows |
 | --- | --- |
-| `libs/fred-runtime/fred_runtime/capabilities/demo.py` (`DemoEchoCapability`) | **Minimal tracer**: one static tool, one scalar config field, plus one router + one owned table + one chat part + one side panel — the full vertical, smallest possible. Implements `tools()` — works on ReAct and Graph agents. |
-| `libs/fred-runtime/fred_runtime/capabilities/document_access/` (`DocumentAccessCapability`, #1906) | **Canonical real capability**: three live tools (vector search, `list_document_tree`, `summarize_document`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree` / `document_summarize`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial. Implements `tools()` — works on ReAct and Graph agents. |
+| `libs/capabilities/fred-capability-document-access/` (`DocumentAccessCapability`) | **Canonical real capability**: two live tools (vector search and `list_document_tree`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial, and the single-capability package shape. Implements `tools()` — works on ReAct and Graph agents. |
 | `libs/fred-runtime/fred_runtime/capabilities/mcp.py` (`McpCapability`, #1978, id contract fixed #1988) | An MCP catalog server surfaced *as* a capability — the zero-Fred-code lane, in code. Capability id is the catalog server id verbatim (no `mcp:` prefix); `fred_sdk.contracts.capability.mcp_ids` and its `is_mcp_capability_id` helper are retired — MCP-ness is detected via catalog/registry membership, never id sniffing. Its own tool loading is a separate, pre-existing path (`FredMcpToolProvider`) already common to ReAct and Graph — it legitimately overrides `middleware()` only for its prompt fragment. |
-| `libs/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
-| `libs/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
-| `libs/fred-capability-team-wiki/` (`TeamWikiCapability`, #2573) | **The `tools()` + `middleware()` combination, worked.** Two tools reaching control-plane through the typed `RuntimeServices.team_wiki` port (`TeamWikiPort`, fred-sdk), PLUS a `middleware()` override contributing a system-prompt fragment `tools()` cannot express. Read its `middleware()`: it returns ONLY the prompt middleware — the assembler already builds the tool carrier from `tools()` and calls this hook separately, so returning a carrier here too registers every tool twice. Declares `execution_models=("react",)` even though it implements `tools()`, because the fragment it injects is non-negotiable and Graph would silently skip it. |
+| `libs/capabilities/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
+| `libs/capabilities/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/capabilities/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
+| `libs/capabilities/fred-capability-team-wiki/` (`TeamWikiCapability`, #2573) | **The `tools()` + `middleware()` combination, worked.** Two tools reaching control-plane through the typed `RuntimeServices.team_wiki` port (`TeamWikiPort`, fred-sdk), PLUS a `middleware()` override contributing a system-prompt fragment `tools()` cannot express. Read its `middleware()`: it returns ONLY the prompt middleware — the assembler already builds the tool carrier from `tools()` and calls this hook separately, so returning a carrier here too registers every tool twice. Declares `execution_models=("react",)` even though it implements `tools()`, because the fragment it injects is non-negotiable and Graph would silently skip it. |
+| `libs/capabilities/fred-capability-documents/` (`document_summarize`, `document_similarity`, `document_label_search`, `document_extract`, `document_verbatim`) | **One package, several entry points.** Five sibling capabilities over the Knowledge Flow document ports, each its own `fred.capabilities` entry point and each admin-gated; four of them share one module (`document_read_common.py`: read config, pagination, error shaping). Extracted from `fred-runtime` so the runtime ships only the capability *framework* (`registry.py`, `assembly.py`, `mcp.py`). Copy its shape when several small capabilities share plumbing and would otherwise cost one package each. |
 
 ---
 
@@ -83,7 +86,7 @@ authoritative rules. In one line each:
   **i18n keys** (`capability.<id>.fields.<field_key>.title`/`.description`),
   resolved by `TuningFieldRenderer` via `t()` — never plain text. Add the
   matching entries to both `apps/frontend/src/locales/{en,fr}/translation.json`
-  in the same change (`document_access`/`demo_echo` are the worked examples).
+  in the same change (`document_access` is the worked example).
   A widget-owned field (`ui.widget` resolving in the plugin's `configWidgets`,
   e.g. `ppt_filler_template`) is the one exception — the generic renderer
   never displays its title/description, so the plugin owns that field's
@@ -142,7 +145,7 @@ migrations described under "Registration, boot invariants, tables" below
   the additive path whenever the change allows it — a suspension is visible
   and disruptive to whoever owns that agent instance.
 - **Current policy, pre-GA:** `manifest.version` stays unbumped ("config-surface
-  changes land without bumps" — see `document_summarize/capability.py`) while
+  changes land without bumps" — see `fred_capability_documents/document_summarize/capability.py`) while
   the platform has no real production installs to protect. No in-tree
   capability has ever shipped a non-default `upgrade_config()` — the
   mechanism is proven by the `GreeterCapability` test fixture, not by real
@@ -168,9 +171,12 @@ ReAct **and** Graph agents; every other row is `middleware()`-only — ReAct age
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
 
 Chat-time controls: return `ChatControlSpec`s from `chat_controls(config)` (computed at
-session-prep, never persisted — RFC §3.3, §3.7). Chat parts: extend the `UiPart` union
+session-prep, never persisted — RFC §3.3, §3.7). A stock widget's params are SDK models
+(`contracts/models.py`) — import them, never re-declare them — and they carry the
+widget's *default* only: the value the user then picks travels on `RuntimeContext`, not
+in the capability's turn options. Chat parts: extend the `UiPart` union
 by declaring a part with a `Literal` `type` discriminator in `manifest.chat_parts`
-(RFC §3.6). Both are shown in `document_access` / `demo.py`.
+(RFC §3.6). Both are shown in `fred-capability-document-access`.
 
 **Used a `middleware()`-only row above?** Declare `manifest.execution_models =
 ("react",)` — the default is `("react", "graph")`. Skipping this is not a safe default:
@@ -195,7 +201,7 @@ agent can do" belong outside the capability system.
 | --- | --- | --- |
 | Tools + config + prompt fragment | an **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id (no prefix — #1988) | **zero** `[T1]` |
 | Full vertical (`validate_config`, middleware, `router`, `tables`, team settings) | a **capability package** built on `fred-sdk` | the package only |
-| First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/fred-capability-ppt-filler`, #1903) | the package only |
+| First-party | same package model, installed in the `fred-agents` pod via a `pyproject.toml` dependency (worked example: `libs/capabilities/fred-capability-ppt-filler`, #1903) | the package only |
 
 **Do not** build a "capability pod" and **do not** put capability runtime code in
 control-plane — it stays the proxy/registry/team-policy authority (RFC §7).
@@ -204,8 +210,9 @@ control-plane — it stays the proxy/registry/team-policy authority (RFC §7).
 
 ## Registration, boot invariants, tables
 
-Declare a `fred.capabilities` entry point pointing at the subclass — see
-`libs/fred-runtime/pyproject.toml` (`demo_echo`, `document_access`). The registry
+Declare a `fred.capabilities` entry point pointing at the subclass — see any
+`libs/capabilities/*/pyproject.toml`. `fred-runtime` declares none: it ships the
+capability framework, never a capability. The registry
 auto-discovers installed packages at pod boot and **fails startup loudly** on any invalid
 registration (`libs/fred-runtime/fred_runtime/capabilities/registry.py`,
 `boot_capability_registry`): `DuplicateCapabilityIdError`, `DuplicateChatPartKindError`,
@@ -215,7 +222,8 @@ capability twice (entry point *and* manual `register`) — that trips the duplic
 Owns tables? Put them under the capability's **own** `DeclarativeBase`, name them
 `cap_<id>_*`, use no foreign keys into core, ship an Alembic tree beside the package, and
 return its path from `migrations_location()`. `python -m fred_runtime migrate` applies it
-under `cap_<id>_alembic_version` (RFC §7.1). `demo.py` + `demo_migrations/` is the pattern.
+under `cap_<id>_alembic_version` (RFC §7.1). `fred-capability-writable-document`
+is the pattern — `store.py` + `writable_document_migrations/`.
 
 **Team scope** (RFC §8.3): `TeamScopePolicy.DEFAULT_ON` (usable without an admin gate — a
 capability with a *required* team-settings field cannot be default-on) or `ADMIN_GATED`

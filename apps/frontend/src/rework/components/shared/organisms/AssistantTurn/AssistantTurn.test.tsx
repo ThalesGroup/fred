@@ -52,6 +52,23 @@ vi.mock("@shared/molecules/TokenUsageBadge/TokenUsageBadge", () => ({
   TokenUsageBadge: () => <div>token-usage</div>,
 }));
 
+vi.mock("@rework/features/capabilities/partRendererRegistry", async (importOriginal) => {
+  // A stub kind, not a real capability's: this file tests the turn host, and
+  // pinning it to whichever capability ships a pure renderer is how it broke
+  // when one was retired. The real registry still answers every other kind.
+  const actual = await importOriginal<typeof import("@rework/features/capabilities/partRendererRegistry")>();
+  const ProbeCard = ({ part }: { part: { title?: string; body?: string } }) => (
+    <div>
+      <strong>{part.title}</strong>
+      <span>{part.body}</span>
+    </div>
+  );
+  return {
+    ...actual,
+    rendererForPartKind: (kind: string) => (kind === "probe_card" ? ProbeCard : actual.rendererForPartKind(kind)),
+  };
+});
+
 function renderTurn(
   uiParts: RawUiPart[],
   isStreaming = false,
@@ -81,26 +98,26 @@ const A_TRACE_MESSAGE: ChatMessage = {
   parts: [{ type: "tool_call", call_id: "c1", name: "summarize_document", args: {} }],
 };
 
-const DEMO_CARD: RawUiPart = { type: "demo_card", title: "Demo echo", body: "HELLO" };
+const PROBE_CARD: RawUiPart = { type: "probe_card", title: "Probe card", body: "HELLO" };
 const UNKNOWN: RawUiPart = { type: "part_kind_from_the_future", payload: "??" };
 
 describe("AssistantTurn × chat parts (#1977)", () => {
-  it("renders the demo capability card inline with the answer", () => {
-    const html = renderTurn([DEMO_CARD]);
+  it("renders a capability card inline with the answer", () => {
+    const html = renderTurn([PROBE_CARD]);
     expect(html).toContain("the answer");
-    expect(html).toContain("Demo echo");
+    expect(html).toContain("Probe card");
     expect(html).toContain("HELLO");
   });
 
   it("skips unknown kinds without dropping known siblings or crashing", () => {
-    const html = renderTurn([UNKNOWN, DEMO_CARD]);
+    const html = renderTurn([UNKNOWN, PROBE_CARD]);
     expect(html).toContain("HELLO");
     expect(html).not.toContain("part_kind_from_the_future");
   });
 
   it("hides parts while streaming (unchanged behavior)", () => {
-    const html = renderTurn([DEMO_CARD], true);
-    expect(html).not.toContain("Demo echo");
+    const html = renderTurn([PROBE_CARD], true);
+    expect(html).not.toContain("Probe card");
   });
 });
 

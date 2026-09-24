@@ -28,6 +28,7 @@ from knowledge_flow_backend.features.scheduler.activity_utils import (
     raise_if_document_deleted,
     to_thread_with_heartbeat,
 )
+from knowledge_flow_backend.features.scheduler.extraction_process import extract_document
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_queue_wait_kpi,
     emit_temporal_activity_result_kpis,
@@ -129,32 +130,40 @@ async def push_input_process(
                 if not resolved_input_file.exists() or not resolved_input_file.is_file():
                     raise FileNotFoundError(f"Provided push input file does not exist for document {metadata.document_uid}: {resolved_input_file}")
             else:
-                try:
-                    resolved_input_file = await await_with_heartbeat(
-                        resolve_push_input_file_for_worker(
-                            user=user,
-                            metadata=metadata,
-                            working_dir=working_dir,
-                        ),
-                        heartbeat_details={
-                            "stage": "push_input_restore",
-                            "document_uid": metadata.document_uid,
-                        },
-                    )
-                except Exception as exc:
-                    raise FileNotFoundError(f"Push input restore failed for document {metadata.document_uid}.") from exc
+                # Only a genuinely absent input is a FileNotFoundError. Wrapping
+                # every failure in one made a transient object-store outage look
+                # permanent, and a permanent miss look worth six more attempts.
+                resolved_input_file = await await_with_heartbeat(
+                    resolve_push_input_file_for_worker(
+                        user=user,
+                        metadata=metadata,
+                        working_dir=working_dir,
+                    ),
+                    heartbeat_details={
+                        "stage": "push_input_restore",
+                        "document_uid": metadata.document_uid,
+                    },
+                )
 
-            await to_thread_with_heartbeat(
-                ingestion_service.process_input,
-                user,
-                resolved_input_file,
-                output_dir,
-                metadata,
-                profile,
-                heartbeat_details={
-                    "stage": "push_input_process",
-                    "document_uid": metadata.document_uid,
-                },
+            await extract_document(
+                input_path=resolved_input_file,
+                output_dir=output_dir,
+                metadata=metadata,
+                profile=profile,
+                stage="push_input_process",
+                started_at=started_at,
+                in_process_fallback=lambda: to_thread_with_heartbeat(
+                    ingestion_service.process_input,
+                    user,
+                    resolved_input_file,
+                    output_dir,
+                    metadata,
+                    profile,
+                    heartbeat_details={
+                        "stage": "push_input_process",
+                        "document_uid": metadata.document_uid,
+                    },
+                ),
             )
             await to_thread_with_heartbeat(
                 ingestion_service.save_output,

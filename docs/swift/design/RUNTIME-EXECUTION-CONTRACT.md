@@ -2836,12 +2836,14 @@ degradation would have been silent:
    now also honours the artifact flag, which aligns the audit trail with the
    trace for all three document tools.
 
-   **This does not fix the MCP case.** `ContextAwareTool._arun` returns its
-   error as *text* with a `None` artifact (`return msg, None`), so there is no
-   `is_error` flag for the middleware to read and an MCP tool failure is still
-   audited `outcome="succeeded"` — the misreporting recorded in #2073 as
-   adjacent to #2011 remains open. Closing it needs a distinct signal from
-   `ContextAwareTool`, which is outside this change.
+   **MCP follow-up (#2733, 2026-09-22).** `ContextAwareTool` still returns error
+   text to the model so every tool call has a result, but now pairs it with an
+   `is_error=True` artifact. The trace and `ToolObservabilityMiddleware` consume
+   that signal, so caught MCP failures render and audit as failed. Generic MCP
+   details remain behind §8.74's trust boundary. Knowledge Flow `read_query`
+   HTTP 400 is the narrow curated exception: its backend-redacted query error
+   reaches the trace without the HTTP wrapper, and the frontend pairs it with
+   the submitted SQL for the dedicated SQL failure view.
 
 Regression tests: `test_search_tool_failure_returns_is_error_result` and
 `test_search_adapter_wraps_httpx_error_with_status_code`
@@ -4365,7 +4367,7 @@ carries the wire call.
 **Why a capability and not a built-in tool ref.** The first cut of this issue
 ported the `mvp/rags-support` shape verbatim: a `knowledge.similarity_search`
 entry in the `fred-sdk` built-in catalog, next to `knowledge.search`. That was
-withdrawn before merge. `capabilities/document_access/capability.py` already
+withdrawn before merge. The `document_access` capability already
 documents the built-in surface as back-compat whose retirement is a follow-up,
 so adding to it would have meant shipping a new tool onto a surface with a
 scheduled end, and a second, differently-scoped comparison path the moment
@@ -5978,3 +5980,115 @@ children. Retries and input hygiene use the same policies as their parent frame.
 This integration does not restore custom `run_subagent` execution, add invocation-depth runtime fields, inject
 storage backends or implement compaction. Filesystem/backend work remains a separate slice;
 these tests do not establish durable workspace or replica-safe storage behavior.
+
+### 8.84 ✅ Capability packages regrouped under `libs/capabilities/`; five document capabilities leave `fred-runtime` (issue #2707, 2026-09-18)
+
+**Scope.** Packaging, plus one additive fred-sdk contract move (last bullet) —
+no behaviour, id, tuple or OpenAPI change.
+
+- The five existing capability packages moved as-is from `libs/` to
+  `libs/capabilities/` (directory name still equals distribution name).
+- `document_summarize`, `document_verbatim`, `document_extract`,
+  `document_similarity`, `document_label_search` and their shared
+  `document_read_common.py` moved out of `fred_runtime.capabilities` into the
+  new `libs/capabilities/fred-capability-documents/` package, which now
+  declares their five `fred.capabilities` entry points (`document_access`
+  followed, see below). Capability ids, OpenFGA
+  tuples, stored `selected_capability_ids` and the runtime OpenAPI are
+  unchanged; the fred-agents pod discovers the same twelve ids as before
+  (`apps/fred-agents/tests/test_capability_boot.py` pins the set).
+- Paths cited in earlier entries (`fred-runtime/capabilities/document_*`)
+  are historical; the modules live in the package above.
+- `DocumentScopeControlParams`, `SearchPolicyControlParams`,
+  `RagScopeControlParams` and the `SearchPolicyName` / `RagScopeName` literals
+  moved from `fred_runtime/capabilities/mcp.py` to `fred_sdk.contracts.models`,
+  beside `FieldSpec`/`UIHints`: they are UI contract, and a capability package
+  must be able to describe its composer surface without importing
+  `fred-runtime`. `mcp.py` imports them from the SDK. `DocumentScopeControlParams`
+  had been declared twice with different defaults (`False/False` in `mcp.py`,
+  `True/True` in `document_access`); the SDK keeps `True/True` and both copies
+  are deleted. Emitted params are byte-identical — every call site passes all
+  three fields explicitly, so no default was ever on the wire.
+- `document_access` left too, into its own single-capability package
+  `libs/capabilities/fred-capability-document-access/`
+  (`fred_capability_document_access.capability:DocumentAccessCapability`).
+  `fred-runtime` was then left declaring one entry point, `demo_echo`; §8.85
+  removes that one too, so it now declares none and ships the capability
+  *framework* only. The capability id, its OpenFGA tuples,
+  stored `selected_capability_ids` and the runtime OpenAPI are unchanged.
+- The framework tests that used `document_access` as their fixture were
+  rebased rather than moved, so `fred-runtime` keeps its no-dependency-on-a-
+  capability-package invariant (it does not even dev-depend on one):
+  `test_graph_capability_bridge.py` now builds a local citing tool
+  (`corpus_search`, blocks + sources) beside the `demo_echo` case it already
+  had for the other artifact shape; the tool-return-convention tests and the
+  `_document_tool_failure` message tests, both about this capability rather
+  than the framework, moved into the package; the URL-redaction half of
+  `test_document_port_error_redaction.py` stays, since `_wrap_document_port_error`
+  is the adapter's.
+- `GET /pod/v1/agents/templates` served from a bare `fred-runtime` venv
+  advertised `["demo_echo"]` alone at this point; §8.85 takes it to `[]`, and
+  the fred-agents pod from twelve ids to eleven.
+- The invariant now holds in both directions: **no capability package depends
+  on `fred-runtime` at runtime either.** `writable_document` was the last one —
+  it owns a table, and reached `load_agent_pod_config().storage.postgres` for
+  the database to build its engine and its Alembic env against. `fred-pod`
+  gained `load_postgres_config()` (re-exported by `fred_core.common`), which
+  reads `storage.postgres` alone through the same `ConfigFiles` /
+  `parse_yaml_mapping_file` path; the package declares `fred-runtime` in its
+  dev group only. A component that owns a table no longer needs the
+  configuration model of the pod hosting it.
+- The default that field carries when a config declares no `storage.postgres`
+  — the `~/.fred/pod/pod.sqlite3` laptop escape hatch — is now
+  `fred_pod.common.default_postgres_store_config()`, applied by both
+  `PodStorageConfig.postgres` and the narrow reader. It used to be a literal
+  inside `PodStorageConfig`'s `default_factory` alone, so a reader that parsed
+  the YAML section directly resolved an all-`None` config instead and failed
+  at engine build. One definition, both callers.
+
+### 8.85 ⚠️ The `demo_echo` capability is retired; `fred-runtime` declares no entry point (2026-09-22)
+
+`demo_echo` was a tracer — a capability written to exercise the full vertical
+(router, owned table, chat part, side panel) — but it shipped as a real
+`fred.capabilities` entry point with a real migration tree, so **every pod that
+ever ran `python -m fred_runtime migrate` holds `cap_demo_echo_notes` and its
+own `cap_demo_echo_alembic_version` row**.
+
+- `fred_runtime/capabilities/demo_migrations/` is deleted. Deleting a tree does
+  not drop what it created, so runtime revision `d4e5c6b7a8f9`
+  (`down_revision: c3d4b5a6f7e8`) drops both tables with `DROP TABLE IF EXISTS`
+  — idempotent, because a fresh install applies it before any capability tree
+  would have created anything. `downgrade()` is a deliberate no-op: there is no
+  longer a capability for those tables to belong to.
+- `DemoEchoCapability.migrations_location()` is removed. `manifest.tables`
+  stays: `validate()` checks table-name hygiene, it never required a tree.
+- `test_run_all_migrations_creates_per_capability_version_table` asserted that
+  an installed capability's tree runs and gets its own version table, using
+  `demo_echo` as the installed example. fred-runtime now ships no capability
+  with a tree, so it became
+  `test_run_all_migrations_applies_runtime_tree_and_drops_retired_demo` —
+  same runner, now also pinning the drop above. Per-capability tree *execution*
+  is only reachable where a capability that owns one is installed (the
+  fred-agents pod, via `writable_document`).
+
+**Deployment note.** The drop runs on the next `python -m fred_runtime migrate`.
+Data loss is intended and limited to demo rows.
+
+**The capability itself is gone too**, which supersedes §8.84's entry-point
+statements:
+
+- `fred_runtime/capabilities/demo.py` is deleted and
+  `[project.entry-points."fred.capabilities"]` is removed from
+  `libs/fred-runtime/pyproject.toml` entirely. **`fred-runtime` now declares
+  zero entry points**: it ships the capability *framework*, never a
+  capability. `GET /pod/v1/agents/templates` served from a bare `fred-runtime`
+  venv advertises `[]`. The fred-agents pod ships eleven ids, `demo_echo` no
+  longer among them.
+- Its i18n block is removed from `locales/{en,fr}/translation.json`, so it no
+  longer appears in the user-facing capability catalog.
+- The framework tests that used it as their harness now use
+  `libs/fred-runtime/tests/_tracer_capability.py` — the same full vertical
+  (tool, router, owned table, chat part, side panel, config field) under id
+  `tracer_echo`, living in the test tree: never packaged, never discovered,
+  no migrations. A test fixture is what it always was; shipping it as a real
+  entry point is what put a demo table in production databases.

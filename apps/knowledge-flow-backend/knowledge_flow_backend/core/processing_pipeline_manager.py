@@ -1,10 +1,12 @@
 import logging
+import pathlib
 from dataclasses import dataclass, field
 from typing import Dict, List
 
 from fred_core.documents.document_structures import DocumentMetadata
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor
@@ -89,6 +91,31 @@ class ProcessingPipelineManager:
 
             self.pipelines[pipeline_name] = pipeline
             self.profile_to_pipeline[profile] = pipeline_name
+
+    def run_input(
+        self,
+        *,
+        input_path: "pathlib.Path",
+        output_dir: "pathlib.Path",
+        metadata: DocumentMetadata,
+        profile: IngestionProcessingProfile | str | None = None,
+    ) -> None:
+        """Run one document's extraction stage, writing its output into output_dir.
+
+        The narrowest entry point into extraction: a pipeline manager needs the
+        configuration and the processor classes, nothing else — no content store,
+        no metadata service, no database. `IngestionService.process_input` calls
+        it in-process, and the extraction subprocess calls it having built only a
+        manager, so neither can drift from the other and the subprocess opens no
+        connection it does not need.
+
+        The profile scope is entered here, so the processors read the same
+        effective per-profile settings on both paths.
+        """
+        normalized_profile = coerce_processing_profile(profile)
+        with processing_profile_scope(normalized_profile):
+            pipeline = self.get_pipeline_for_metadata(metadata, profile=normalized_profile)
+            pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
     @staticmethod
     def normalize_profile(profile: IngestionProcessingProfile | str | None) -> IngestionProcessingProfile | None:

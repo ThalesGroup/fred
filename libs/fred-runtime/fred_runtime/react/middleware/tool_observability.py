@@ -46,23 +46,14 @@ Semantics preserved from `ContextAwareTool` (do not drift from these):
 - never log tool arguments, tool results, or any raw content here — only
   identifiers and bounded outcome/error fields
 
-Known gap NOT closed by this middleware (flagged, not fixed, here — see
-#2011 follow-up discussion): `ContextAwareTool._run`/`_arun` deliberately
-catches exceptions raised by the underlying MCP tool call and returns a
-formatted error STRING instead of raising (see its "CRITICAL: Return error
-as text to preserve chat history integrity" comment). LangChain's `BaseTool`
-machinery only sets `ToolMessage.status="error"` when a `ToolException` (or
-another exception `handle_tool_errors` catches) actually propagates out of
-`_run`/`_arun` — since `ContextAwareTool` never raises, `awrap_tool_call`
-here sees a normal, successful `handler(request)` return for these
-already-caught MCP-adapter failures, and reports them as `"succeeded"`. This
-narrow case regressed relative to `ContextAwareTool`'s own previous internal
-instrumentation (which wrapped the raw underlying call directly and could
-see the exception before it was swallowed). Fixing it would require either
-raising `ToolException` from `ContextAwareTool` (a behavior change to the
-"never orphan a tool call" design) or a structured error signal in the
-returned content/artifact — out of scope for this change; see the
-implementation report for #2011.
+MCP failures preserve the same no-orphan guarantee: `ContextAwareTool._run` /
+`_arun` still returns formatted text for the model instead of re-raising, but
+since #2733 it pairs that text with an `is_error=True` artifact. The artifact
+is the structured signal this middleware, the runtime trace and KPI/audit use;
+raw provider text still cannot become generic user-facing error content. The
+one curated exception is Knowledge Flow `read_query` HTTP 400: its already
+redacted engine detail crosses in a Fred artifact so the SQL trace can explain
+the failed query without exposing HTTP transport details.
 
 How to use:
 - always part of the frame, positioned next to `TracingKpiMiddleware` (see

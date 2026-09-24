@@ -9,9 +9,12 @@
     "../../libs/fred-core",
     "../../libs/fred-sdk",
     "../../libs/fred-runtime",
-    "../../libs/fred-capability-writable-document",
-    "../../libs/fred-capability-ppt-filler",
-    "../../libs/fred-capability-platform-ops",
-    "../../libs/fred-capability-team-wiki"
+    "../../libs/capabilities/fred-capability-writable-document",
+    "../../libs/capabilities/fred-capability-ppt-filler",
+    "../../libs/capabilities/fred-capability-platform-ops",
+    "../../libs/capabilities/fred-capability-html-artifact",
+    "../../libs/capabilities/fred-capability-team-wiki",
+    "../../libs/capabilities/fred-capability-documents",
+    "../../libs/capabilities/fred-capability-document-access"
   ]
 }

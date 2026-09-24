@@ -36,11 +36,11 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from _tracer_capability import TracerEchoCapability, install_tracer_entry_point
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import create_agent_app
-from fred_runtime.capabilities.demo import DemoEchoCapability
 from fred_runtime.capabilities.errors import UnknownCapabilityError
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -176,6 +176,7 @@ def _app_with_capabilities(
 ):
     # Offline pods have no models catalog; stub the factory like every other
     # agent_app test does.
+    install_tracer_entry_point(monkeypatch)
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -192,9 +193,9 @@ def _app_with_capabilities(
     client = TestClient(app)
     client.__enter__()  # run lifespan → boot registry on app.state
     for capability in capabilities:
-        # demo_echo self-registers via the fred.capabilities entry-point at app
-        # construction (#1977); only add capabilities not already discovered so the
-        # registry's fail-on-duplicate invariant (#1973) is not tripped.
+        # Only add capabilities not already discovered, so the registry's
+        # fail-on-duplicate invariant is not tripped when a local venv happens
+        # to have a real capability package installed out-of-band.
         if capability.manifest.id not in app.state.capability_registry:
             app.state.capability_registry.register(capability)
     return client
@@ -206,40 +207,30 @@ def _app_with_capabilities(
 
 
 def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch, DemoEchoCapability())
+    client = _app_with_capabilities(tmp_path, monkeypatch, TracerEchoCapability())
     try:
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         entries = response.json()[0]["available_capabilities"]
-        # Capabilities self-register via `fred.capabilities` entry points, but
-        # only the ones declared in THIS package's own pyproject.toml
-        # ([project.entry-points."fred.capabilities"]) are guaranteed present
-        # in fred-runtime's own test venv: demo_echo (tracer), the #1906
-        # document_access pilot, document_summarize and document_label_search
-        # (both split out of it), and the DOCREAD-01 document-reading pair
-        # (document_verbatim + document_extract) — advertised sorted by id.
-        # `ppt_filler`/`writable_document` live in SEPARATE packages
-        # (fred-capability-ppt-filler, fred-capability-writable-document) that
-        # are not a declared dependency here; they only show up if a local venv
-        # happens to have them installed out-of-band (e.g. via a monorepo-wide
-        # `make` command) — do not add them back to this list, that made the
-        # test pass locally while failing in CI's clean environment.
+        # `fred-runtime` declares NO `fred.capabilities` entry point of its
+        # own — it ships the framework, not a capability — so discovery in its
+        # test venv finds nothing and the only entry here is the fixture the
+        # helper registered explicitly.
+        # Every real capability lives in a SEPARATE package under
+        # libs/capabilities/ (fred-capability-document-access, -documents,
+        # -ppt-filler, ...) that is not a declared dependency here; they only
+        # show up if a local venv happens to have them installed out-of-band
+        # (e.g. via a monorepo-wide `make` command) — do not add them to this
+        # list, that made the test pass locally while failing in CI's clean
+        # environment.
         #
         # Reasoning is deliberately NOT here: it is a property of how the model
         # is called, not a tool an agent uses, so it is a plain agent field
         # (`AgentTuning.reasoning_enabled`) plus a platform-emitted composer
         # control — never a capability (REASON-01 §6/§7).
-        assert [e["id"] for e in entries] == [
-            "demo_echo",
-            "document_access",
-            "document_extract",
-            "document_label_search",
-            "document_similarity",
-            "document_summarize",
-            "document_verbatim",
-        ]
+        assert [e["id"] for e in entries] == ["tracer_echo"]
         entry = entries[0]
-        assert entry["version"] == DemoEchoCapability.manifest.version
+        assert entry["version"] == TracerEchoCapability.manifest.version
         assert entry["config_fields"][0]["key"] == "uppercase"
         assert entry["assets"] == []
     finally:
@@ -359,6 +350,7 @@ def test_templates_hide_react_only_capabilities_from_graph_templates(
     that refusal exists to prevent. `GET /agents/templates` must filter
     `available_capabilities` per template by execution model.
     """
+    install_tracer_entry_point(monkeypatch)
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
@@ -394,8 +386,8 @@ def test_templates_hide_react_only_capabilities_from_graph_templates(
         assert "react_only_probe" not in graph_ids
         # A tools()-based capability (default execution_models) stays offered
         # to both — the filter must not over-hide.
-        assert "demo_echo" in react_ids
-        assert "demo_echo" in graph_ids
+        assert "tracer_echo" in react_ids
+        assert "tracer_echo" in graph_ids
 
 
 def test_templates_hide_all_capabilities_for_definition_that_opts_out(
@@ -408,7 +400,7 @@ def test_templates_hide_all_capabilities_for_definition_that_opts_out(
     the Eva bug: `available_capabilities` used to be computed purely from the
     pod's `capability_registry`, so a Graph agent's list was only accidentally
     empty when the pod happened to have nothing graph-compatible registered.
-    Register something real (below, `demo_echo`, which passes the
+    Register something real (below, `tracer_echo`, which passes the
     `execution_models` filter that `test_templates_hide_react_only_capabilities_from_graph_templates`
     covers) and the honest-opt-out definition must still advertise nothing.
     """
@@ -420,6 +412,7 @@ def test_templates_hide_all_capabilities_for_definition_that_opts_out(
         ),
         raising=True,
     )
+    install_tracer_entry_point(monkeypatch)
     graph_definition = _MinGraphOptedOutAgent()
     app = create_agent_app(
         registry={graph_definition.agent_id: graph_definition},
@@ -427,12 +420,10 @@ def test_templates_hide_all_capabilities_for_definition_that_opts_out(
     )
     client = TestClient(app)
     with client:
-        # `demo_echo` is already present via the default entry-point discovery
-        # (see `test_templates_hide_react_only_capabilities_from_graph_templates`
-        # above) — no need to register it manually, and this pod's registry is
-        # never empty by the time a real deployment runs, which is exactly the
-        # point: this must be `[]` because the definition opts out, not because
-        # nothing happens to be registered.
+        # The registry is deliberately NON-empty here (the helper above makes
+        # `tracer_echo` discoverable): this must be `[]` because the definition
+        # opts out, not because nothing happened to be registered. Without that,
+        # the assertion holds trivially and stops guarding anything.
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         by_id = {t["template_agent_id"]: t for t in response.json()}
@@ -482,8 +473,9 @@ def test_default_capability_ids_include_native_capability(
         ),
         raising=True,
     )
+    install_tracer_entry_point(monkeypatch)
     definition = _EchoAgent().model_copy(
-        update={"default_mcp_servers": (MCPServerRef(id="document_access"),)}
+        update={"default_mcp_servers": (MCPServerRef(id="tracer_echo"),)}
     )
     app = create_agent_app(
         registry={definition.agent_id: definition},
@@ -492,7 +484,7 @@ def test_default_capability_ids_include_native_capability(
     with TestClient(app) as client:
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
-        assert response.json()[0]["default_capability_ids"] == ["document_access"]
+        assert response.json()[0]["default_capability_ids"] == ["tracer_echo"]
 
 
 def test_template_default_tuning_carries_reasoning_defaults(
@@ -564,15 +556,15 @@ def test_template_default_tuning_reasoning_off_by_default(
 
 
 def test_validate_config_returns_versioned_envelope(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch, DemoEchoCapability())
+    client = _app_with_capabilities(tmp_path, monkeypatch, TracerEchoCapability())
     try:
         response = client.post(
-            "/pod/v1/agents/capabilities/demo_echo/validate-config",
+            "/pod/v1/agents/capabilities/tracer_echo/validate-config",
             data={"config": json.dumps({"uppercase": True})},
         )
         assert response.status_code == 200
         assert response.json() == {
-            "schema_version": DemoEchoCapability.manifest.version,
+            "schema_version": TracerEchoCapability.manifest.version,
             "config": {"uppercase": True},
         }
     finally:
@@ -580,7 +572,7 @@ def test_validate_config_returns_versioned_envelope(tmp_path, monkeypatch) -> No
 
 
 def test_validate_config_unknown_capability_is_404(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch, DemoEchoCapability())
+    client = _app_with_capabilities(tmp_path, monkeypatch, TracerEchoCapability())
     try:
         response = client.post(
             "/pod/v1/agents/capabilities/ghost/validate-config",
@@ -593,14 +585,14 @@ def test_validate_config_unknown_capability_is_404(tmp_path, monkeypatch) -> Non
 
 
 def test_validate_config_invalid_value_is_422(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch, DemoEchoCapability())
+    client = _app_with_capabilities(tmp_path, monkeypatch, TracerEchoCapability())
     try:
         response = client.post(
-            "/pod/v1/agents/capabilities/demo_echo/validate-config",
+            "/pod/v1/agents/capabilities/tracer_echo/validate-config",
             data={"config": json.dumps({"uppercase": "not-a-bool"})},
         )
         assert response.status_code == 422
-        assert "demo_echo" in response.json()["detail"]
+        assert "tracer_echo" in response.json()["detail"]
     finally:
         client.__exit__(None, None, None)
 
@@ -822,7 +814,7 @@ def test_managed_execution_with_demo_capability_end_to_end(
             AIMessage(
                 content="",
                 tool_calls=[
-                    {"id": "call-1", "name": "demo_echo", "args": {"text": "ping"}}
+                    {"id": "call-1", "name": "tracer_echo", "args": {"text": "ping"}}
                 ],
             ),
             AIMessage(content="Echo done."),
@@ -833,10 +825,10 @@ def test_managed_execution_with_demo_capability_end_to_end(
         "AsyncClient",
         _fake_control_plane(
             {
-                "selected_capability_ids": ["demo_echo"],
+                "selected_capability_ids": ["tracer_echo"],
                 "capability_config": {
-                    "demo_echo": {
-                        "schema_version": DemoEchoCapability.manifest.version,
+                    "tracer_echo": {
+                        "schema_version": TracerEchoCapability.manifest.version,
                         "config": {"uppercase": True},
                     }
                 },
@@ -846,7 +838,7 @@ def test_managed_execution_with_demo_capability_end_to_end(
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
-        DemoEchoCapability(),
+        TracerEchoCapability(),
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )
@@ -872,7 +864,7 @@ def test_managed_execution_with_unknown_capability_fails_loudly(
     client = _app_with_capabilities(
         tmp_path,
         monkeypatch,
-        DemoEchoCapability(),
+        TracerEchoCapability(),
         model=model,
         control_plane_url="http://control-plane:8222/control-plane/v1",
     )

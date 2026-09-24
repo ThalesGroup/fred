@@ -17,7 +17,7 @@ import { fromEvent } from "file-selector";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
-import type { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import type { DataTableColumn, SortState } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -40,7 +40,6 @@ import {
   type OwnerFilter,
   type TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
-  useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
@@ -84,6 +83,14 @@ import {
   resolveDocOutcomes,
 } from "./folderRollups.ts";
 import styles from "./DocumentWorkspace.module.css";
+import {
+  DEFAULT_ORDERING,
+  SORTABLE_COLUMN_KEYS,
+  orderingFromSortState,
+  sortStateFromOrdering,
+  type DocumentOrdering,
+  type DocumentSortField,
+} from "./documentOrdering.ts";
 
 // Hidden 2026-07-30, developer request: undecided whether "Traiter"/"Retraiter"
 // stays in the product — flip back to true to restore it. The underlying
@@ -142,7 +149,7 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "stopIngestion" | "labels";
+type DocMenuAction = "rename" | "download" | "searchable" | "process" | "delete" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -198,6 +205,9 @@ function DocumentWorkspace({
   readOnly = false,
 }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
+  // One place the sortable columns get their label, shared by the column
+  // definitions and by the sort-state translation both ways.
+  const columnLabel = useCallback((field: DocumentSortField) => t(SORTABLE_COLUMN_KEYS[field]), [t]);
   const { showSuccess, showError, showWarn, showInfo } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
@@ -295,14 +305,7 @@ function DocumentWorkspace({
   const [reprocessOverrides, setReprocessOverrides] = useState<Record<string, { snapshot: string; deadline: number }>>(
     {},
   );
-  // The live ingestion task backing each row, keyed by document uid (#2315).
-  // The browse snapshot's `processing.stages` lags the worker — a stage is
-  // stamped `in_progress` only once the activity starts, and nothing refetches
-  // the row before the task finishes — so deriving the badge from the snapshot
-  // alone reads "raw" for the whole run (and a short run never shows
-  // "processing" at all). The SSE task feed already carries the live state
-  // with `target.id = document_uid`; the same map also resolves which task the
-  // row's stop-ingestion action must cancel.
+  // The SSE task feed updates badges before processing stages reach the browse snapshot.
   const activeDocTaskByUid = useMemo(() => {
     const byUid = new Map<string, TaskViewModel>();
     for (const task of activeTasks) {
@@ -310,25 +313,18 @@ function DocumentWorkspace({
     }
     return byUid;
   }, [activeTasks]);
-  // Terminal ingestion history, so the rollup below survives a page reload: the
-  // Redux task store is memory-only, and at the Corpus root no child page is
-  // loaded either, which used to leave a tree full of failures looking clean
-  // until the user opened the folder.
-  //
-  // ONE unfiltered call. `exclude_terminal` only defaults to "hide them" on the
-  // `scope=user` branch (authz.py); a team-scoped query returns every state, so
-  // filtering by state would cost a second round-trip AND drop two things worth
-  // having: `cancelled` tasks (needed to clear a failure whose retry the user
-  // stopped) and a teammate's in-flight run.
-  //
-  // A personal space cannot use team scope: personal uploads deliberately leave
-  // the task's `team_id` NULL (ingestion_controller.py, "Ambiguous ... or
-  // personal-space uploads deliberately leave it None"), so the query would come
-  // back empty. `scope=user` is filtered by creator, not by space — a caveat
-  // that only bites if the same file was ingested into a team and a personal
-  // space, since uids are content-derived.
+  // Team history includes terminal outcomes; personal history needs explicit state queries.
   const { data: taskHistory } = useListTasksKnowledgeFlowV1TasksGetQuery(
     isPersonalTeam ? { scope: "user", kind: "ingestion" } : { scope: "team", teamId, kind: "ingestion" },
+  );
+  // User-scoped listing hides terminal tasks unless a state is explicitly requested.
+  const { data: personalFailures } = useListTasksKnowledgeFlowV1TasksGetQuery(
+    { scope: "user", kind: "ingestion", state: "failed" },
+    { skip: !isPersonalTeam },
+  );
+  const { data: personalSuccesses } = useListTasksKnowledgeFlowV1TasksGetQuery(
+    { scope: "user", kind: "ingestion", state: "succeeded" },
+    { skip: !isPersonalTeam },
   );
   const allTasks = useSelector(selectAllTasks);
   // Keyed on the session's terminal outcomes, not on `allTasks` itself: the task
@@ -341,9 +337,13 @@ function DocumentWorkspace({
     .sort()
     .join(KEY_SEP);
   const docOutcomes = useMemo(
-    () => resolveDocOutcomes(taskHistory?.tasks ?? [], allTasks),
+    () =>
+      resolveDocOutcomes(
+        [...(taskHistory?.tasks ?? []), ...(personalFailures?.tasks ?? []), ...(personalSuccesses?.tasks ?? [])],
+        allTasks,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see liveOutcomeKey
-    [taskHistory, liveOutcomeKey],
+    [taskHistory, personalFailures, personalSuccesses, liveOutcomeKey],
   );
 
   // Documents that finished during THIS browser session. Read from the Redux
@@ -365,7 +365,9 @@ function DocumentWorkspace({
   const getDocStatus = (doc: DocumentMetadata): DocStatus =>
     reprocessOverrides[doc.identity.document_uid]
       ? "processing"
-      : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
+      : !activeDocTaskByUid.has(doc.identity.document_uid) && docOutcomes.failed.has(doc.identity.document_uid)
+        ? "failed"
+        : deriveDocStatus(doc, activeDocTaskByUid.get(doc.identity.document_uid)).status;
   const [uploadOpen, setUploadOpen] = useState(false);
   // Files dropped on a folder row, handed to the upload drawer as its initial list;
   // cleared on close so a later "+"-opened drawer starts empty.
@@ -393,12 +395,15 @@ function DocumentWorkspace({
   // Shared across the whole browser (not per-tag) — matches how the members
   // table's rows-per-page selector is one setting for the whole DataTable.
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  // Ordering travels to the server with every browse: only one page comes
+  // back, so sorting it in the browser would order 50 rows and call it a
+  // sorted folder. Same lifetime as rowsPerPage — one setting for the view.
+  const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
-  const [cancelTask] = useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation();
   const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
   // Direct retrievable mutation for the folder-aware "exclude from search" bulk
   // action (#2446): a folder's descendant documents are toggled one PUT each,
@@ -411,14 +416,14 @@ function DocumentWorkspace({
   const currentTag = currentNode.tagsHere[0] ?? null;
 
   const loadTagPage = useCallback(
-    async (tagId: string, offset: number, limit: number = rowsPerPage) => {
+    async (tagId: string, offset: number, limit: number = rowsPerPage, sort: DocumentOrdering = ordering) => {
       setPerTag((prev) => ({
         ...prev,
         [tagId]: { docs: prev[tagId]?.docs ?? [], total: prev[tagId]?.total ?? 0, offset, loading: true },
       }));
       try {
         const res = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit },
+          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit, sort_by: sort.by, sort_order: sort.order },
         }).unwrap();
         setPerTag((prev) => ({
           ...prev,
@@ -428,7 +433,7 @@ function DocumentWorkspace({
         setPerTag((prev) => ({ ...prev, [tagId]: { ...prev[tagId], loading: false } as PageState }));
       }
     },
-    [browseDocumentsByTag, rowsPerPage],
+    [browseDocumentsByTag, rowsPerPage, ordering],
   );
 
   const handleRowsPerPageChange = useCallback(
@@ -437,6 +442,20 @@ function DocumentWorkspace({
       if (currentTag) void loadTagPage(currentTag.id, 0, limit);
     },
     [currentTag, loadTagPage],
+  );
+
+  // Back to the first page: page 3 of a name-ordered folder holds different
+  // documents than page 3 of a size-ordered one, so keeping the offset would
+  // land the reader in an unrelated slice. The new ordering is passed
+  // explicitly for the same reason `handleRowsPerPageChange` passes its limit
+  // — `loadTagPage` would otherwise close over the pre-update state.
+  const handleSortChange = useCallback(
+    (next: SortState | null) => {
+      const sort = orderingFromSortState(next, columnLabel);
+      setOrdering(sort);
+      if (currentTag) void loadTagPage(currentTag.id, 0, rowsPerPage, sort);
+    },
+    [currentTag, loadTagPage, rowsPerPage, columnLabel],
   );
 
   // Explicit "reload what I'm looking at". The knowledge-flow cache now serves
@@ -562,19 +581,7 @@ function DocumentWorkspace({
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
   });
-  // When an ingestion task settles, the browse snapshot that backs its row is
-  // stale (still "raw") and would need a manual refresh to show "Ready". Reload
-  // just the loaded folder page(s) showing that document so its status goes live.
-  // Also the moment the storage quota moves, in both directions:
-  //   - success: ingestion saves the metadata (and its file size) at the end of
-  //     the workflow, so the earlier refetchTags() at task registration ran
-  //     while the document still weighed nothing;
-  //   - cancel: the backend erases the half-built document and gives its quota
-  //     back (`delete_cancelled_document`), seconds after the cancel request
-  //     returned — far too late for confirmStopIngestion to refetch anything
-  //     itself, which is why it deliberately does not try.
-  // Without this notification the quota meter stays behind by exactly the
-  // document that just landed, or the one that was just erased.
+  // Refresh document state and quota after a durable terminal task event.
   useRefetchOnTaskSettled("document", (documentUid) => {
     onDocumentsChanged?.();
     for (const [tagId, page] of Object.entries(perTag)) {
@@ -703,35 +710,6 @@ function DocumentWorkspace({
     ],
   );
 
-  // Cooperative cancel of the live ingestion task backing this row (#2315) —
-  // the task id comes from the same SSE map the status badge reads. The cancel
-  // is a request, not the outcome: the row keeps reading "processing" until the
-  // executor's verdict lands (the OPS-04 sweeper flips the task to `cancelled`
-  // and fails the document's stuck stages via `on_reconciled_terminal`,
-  // document_failure.py), so the toast is the only immediate acknowledgement.
-  const confirmStopIngestion = useCallback(
-    (doc: DocumentMetadata) => {
-      const task = activeDocTaskByUid.get(doc.identity.document_uid);
-      if (!task) return;
-      showConfirmationDialog({
-        title: t("rework.resources.confirm.stopIngestionTitle"),
-        message: t("rework.resources.confirm.stopIngestionMessage", { name: documentDisplayName(doc) }),
-        onConfirm: () =>
-          void cancelTask({ taskId: task.taskId })
-            .unwrap()
-            .then(() => showSuccess?.({ summary: t("rework.resources.toast.stopIngestionRequested") }))
-            .catch((e: unknown) => {
-              showError?.({
-                summary: t("validation.error"),
-                detail:
-                  (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.stopIngestionError"),
-              });
-            }),
-      });
-    },
-    [activeDocTaskByUid, cancelTask, showConfirmationDialog, showSuccess, showError, t],
-  );
-
   // Derived from the same map the badge and the row menu read, so "this row has
   // a live ingestion" has one definition in this page instead of three.
   const runningDocIds = useMemo(
@@ -833,10 +811,22 @@ function DocumentWorkspace({
   };
 
   const page = currentTag ? perTag[currentTag.id] : undefined;
-  const childFolders = useMemo(
-    () => [...currentNode.children.values()].sort((a, b) => a.name.localeCompare(b.name)),
-    [currentNode],
-  );
+  // Folders always come first (they are prepended to the rows below, never
+  // interleaved); this orders them among themselves by the same key the
+  // server applies to the documents. They come from the in-memory tag tree,
+  // not from the paginated browse, so their order is ours to compute.
+  const childFolders = useMemo(() => {
+    const nodes = [...currentNode.children.values()];
+    const direction = ordering.order === "desc" ? -1 : 1;
+    if (ordering.by === "created") {
+      const at = (node: TagNode) => Date.parse(node.tagsHere[0]?.created_at ?? "") || 0;
+      return nodes.sort((a, b) => direction * (at(a) - at(b)));
+    }
+    // A folder has no size of its own — its rollup is fetched per view and is
+    // not known here — so ordering by size falls back to the name, which at
+    // least keeps the group stable instead of shuffling it.
+    return nodes.sort((a, b) => direction * a.name.localeCompare(b.name));
+  }, [currentNode, ordering]);
 
   // Folder rows show the total size of every document the folder contains,
   // including its subfolders' — a folder tag's own item_ids never cover
@@ -1345,30 +1335,13 @@ function DocumentWorkspace({
               },
             ]
           : []),
-        // Only while the backing task is genuinely stoppable — `cancelling`
-        // means a stop was already requested, offering a second one is noise.
-        ...(activeTask && (activeTask.state === "pending" || activeTask.state === "running")
-          ? [
-              {
-                value: "stopIngestion" as const,
-                key: "stopIngestion",
-                label: t("rework.resources.action.stopIngestion"),
-                icon: { category: "outlined" as const, type: "stop" as const },
-                destructive: true,
-              },
-            ]
-          : []),
         {
           value: "delete",
           key: "delete",
           label: t("rework.resources.action.delete"),
           icon: { category: "outlined", type: "delete" },
           destructive: true,
-          // #2315: while an ingestion is live, "stop" is the only exit — it
-          // cancels the workflow AND deletes the half-built document. A plain
-          // delete here would race the still-running workflow, which can
-          // re-write metadata/vectors right after the delete lands. Greyed
-          // with a hover tooltip explaining why, per developer request.
+          // Deletion must wait until ingestion stops writing.
           disabled: !!activeTask,
           ...(activeTask ? { tooltip: t("rework.resources.action.deleteDisabledWhileProcessing") } : {}),
         },
@@ -1379,7 +1352,8 @@ function DocumentWorkspace({
 
   const columns: DataTableColumn<Row>[] = [
     {
-      label: t("rework.resources.columns.name"),
+      label: columnLabel("name"),
+      sortable: true,
       size: "2fr",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
@@ -1401,7 +1375,8 @@ function DocumentWorkspace({
       },
     },
     {
-      label: t("rework.resources.columns.size"),
+      label: columnLabel("size"),
+      sortable: true,
       size: "6.5rem",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
@@ -1420,7 +1395,8 @@ function DocumentWorkspace({
       // processor never extracts one), not when it landed in Fred.
       // date_added_to_kb is stamped server-side at ingestion (SourceInfo's
       // Pydantic default_factory, base_input_processor.py) and always set.
-      label: t("rework.resources.columns.created"),
+      label: columnLabel("created"),
+      sortable: true,
       size: "9rem",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
@@ -1476,6 +1452,7 @@ function DocumentWorkspace({
           <StatusChip
             status={getDocStatus(row.doc)}
             errors={row.doc.processing?.errors}
+            documentUid={row.doc.identity.document_uid}
             // The failure a Temporal child job reported: for a run that died
             // before any stage started, this is the ONLY account of it —
             // `processing.errors` is keyed by stage and stays empty. Already in
@@ -1552,7 +1529,6 @@ function DocumentWorkspace({
                   if (value === "labels") setLabelsTarget(row.doc);
                   if (value === "searchable") void toggleSearchable(row.doc);
                   if (value === "process" && currentTag) void reprocess(row.doc, currentTag.id);
-                  if (value === "stopIngestion") confirmStopIngestion(row.doc);
                   if (value === "delete" && currentTag) {
                     showConfirmationDialog({
                       title: t("rework.resources.confirm.deleteTitle"),
@@ -1794,6 +1770,13 @@ function DocumentWorkspace({
               }
             : undefined
         }
+        // Controlled: the server ordered the whole tag before cutting this
+        // page, so the table must not re-sort the rows it was handed. And the
+        // active header only ever flips direction — clearing would have to fall
+        // back to a default column, which reads as the sort jumping elsewhere.
+        sortState={sortStateFromOrdering(ordering, columnLabel)}
+        onSortChange={handleSortChange}
+        sortClearable={false}
       />
 
       {pageDragActive && (

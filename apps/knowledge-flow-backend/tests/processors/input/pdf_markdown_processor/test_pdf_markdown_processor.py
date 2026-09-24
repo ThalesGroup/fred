@@ -456,3 +456,67 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
     assert md_file.exists()
     md_content = md_file.read_text(encoding="utf-8").strip()
     assert md_content != ""
+
+
+@pytest.mark.parametrize("sink_fails", [False, True])
+def test_pdf_child_timer_forwards_without_temporal_context(processor, monkeypatch, sink_fails):
+    import socket
+    from unittest.mock import Mock
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import drain_extraction_kpis, extraction_kpi_socket
+
+    writer = Mock()
+    if sink_fails:
+        writer.emit.side_effect = RuntimeError("KPI sink unavailable")
+    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: _FakeAppContext(writer))
+    receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+    with receiver, sender:
+        receiver.setblocking(False)
+        sender.setblocking(False)
+        token = extraction_kpi_socket.set(sender)
+        try:
+            assert not activity.in_activity()
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop"}):
+                pass
+        finally:
+            extraction_kpi_socket.reset(token)
+        drain_extraction_kpis(receiver)
+    writer.emit.assert_called_once()
+    assert writer.emit.call_args.kwargs["dims"] == {"pdf_stage": "image_loop", "status": "ok"}
+
+
+def test_pdf_child_timer_preserves_error_when_channel_is_closed(processor):
+    import socket
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+
+    sender = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    sender.close()
+    token = extraction_kpi_socket.set(sender)
+    try:
+        with pytest.raises(ValueError, match="original error"):
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {}):
+                raise ValueError("original error")
+    finally:
+        extraction_kpi_socket.reset(token)
+
+
+def test_pdf_child_timer_drops_when_channel_is_full(processor, caplog):
+    import socket
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+
+    receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+    with receiver, sender:
+        sender.setblocking(False)
+        sender.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+        with pytest.raises(BlockingIOError):
+            for _ in range(100):
+                sender.send(b"x")
+        token = extraction_kpi_socket.set(sender)
+        try:
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {}):
+                pass
+        finally:
+            extraction_kpi_socket.reset(token)
+    assert any("Dropping timing" in record.message for record in caplog.records)

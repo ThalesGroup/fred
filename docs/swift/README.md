@@ -76,6 +76,7 @@ execution path, or session/team concern.
 | `SESSION-IDENTITY-CONTRACT.md` _(planned)_                                      | `session_id` ownership rules, thread_id ban, history vs metadata split                                                 |
 | [`ARCHITECTURAL-SECURITY-REPORT.md`](design/ARCHITECTURAL-SECURITY-REPORT.md)   | Security posture, grant trust, correlation check, planned hardening                                                    |
 | [`AGENT_DESIGN.md`](design/AGENT_DESIGN.md)                                     | Agent graph and authoring design                                                                                       |
+| [`INGESTION.md`](design/INGESTION.md) | Document ingestion: Temporal roles, queues, concurrency, shared storage and validation limits |
 | [`DESIGN.md`](design/DESIGN.md)                                                 | General system design overview                                                                                         |
 | [`FILESYSTEM.md`](design/FILESYSTEM.md)                                         | File system layout conventions                                                                                         |
 | [`MULTI_AGENT_MEMORY.md`](design/MULTI_AGENT_MEMORY.md)                         | Multi-agent conversational memory, checkpoint semantics, and invocation history propagation                              |
@@ -122,7 +123,7 @@ guides. Read the developer contract first.
 | [`MODEL_CONFIGURATION.md`](platform/MODEL_CONFIGURATION.md)                 | LLM model configuration          |
 | [`LLM_ROUTING_FRED.md`](platform/LLM_ROUTING_FRED.md)                       | Fred LLM routing                 |
 | [`LLM_ROUTING_PRIMER.md`](platform/LLM_ROUTING_PRIMER.md)                   | LLM routing concepts             |
-| [`TEMPORAL.md`](platform/TEMPORAL.md)                                       | Temporal workflow setup          |
+| [`TEMPORAL.md`](platform/TEMPORAL.md)                                       | Temporal orchestration decision guide          |
 | [`PROCESSING_GUIDE.md`](platform/PROCESSING_GUIDE.md)                       | Document processing pipeline     |
 | [`BENCHMARKS.md`](platform/BENCHMARKS.md)                                   | Performance benchmarks           |
 | [`VERSIONING.md`](platform/VERSIONING.md)                                   | Versioning policy                |
@@ -190,7 +191,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                                                                                                                                   |
 | [`AGENT-FILESYSTEM-HARDENING-RFC.md`](rfc/AGENT-FILESYSTEM-HARDENING-RFC.md)         | Agent filesystem completion and hardening — remaining `FILES-04`/`FILES-05` gaps and the `RUNTIME-07` security dependency                                                                               |
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Fred Runtime Discovery Contract (FRDC v1) — Kubernetes-native pod auto-discovery via Service labels/annotations; not yet implemented, static catalog is the production mechanism                        |
-| [`CAPABILITY-EXECUTION-FLOW-RFC.md`](rfc/CAPABILITY-EXECUTION-FLOW-RFC.md)           | Vocabulary (Agent / Capability execution flow / Application Workflow) + a durable Temporal-backed tier for capability-internal orchestration (e.g. `document_extract`'s map phase) — open design question, extends TEMPORAL.md and #2240's pattern |
+| [`CAPABILITY-EXECUTION-FLOW-RFC.md`](rfc/CAPABILITY-EXECUTION-FLOW-RFC.md) | Open decisions for durable execution inside capabilities |
 | [`DELEGATED-DOWNSTREAM-AUTH-RFC.md`](rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md)           | AUTH-TX — token exchange at admission so the pod stops forwarding a fixed-lifetime user bearer for an unbounded turn; follow-up to #2125, multi-repo (realm templates), design only                     |
 | [`DOCUMENT-VIEWER-AI-PANEL-RFC.md`](rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md)             | "Ask the assistant" side panel next to the document viewer — blocked on an agent-picker product decision                                                                                                |
 | [`FRED-APPLICATION-HOSTING-RFC.md`](rfc/FRED-APPLICATION-HOSTING-RFC.md)     | Team-scoped applications shipped as their owner's container images: two browser-facing prefixes, registration split between catalog and gateway, a message-passing frame contract, and capability-based admission           |
@@ -199,7 +200,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`PROMPT-SYSTEM-HARDENING-RFC.md`](rfc/PROMPT-SYSTEM-HARDENING-RFC.md)               | Prompt-system completion and hardening: agent-form prompt UX, scoped resolution, promotion metadata, marketplace, token KPIs                                                     |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                                                                                                                                  |
 | [`SYSTEM-PROMPT-LAYERING-RFC.md`](rfc/SYSTEM-PROMPT-LAYERING-RFC.md)                 | PROMPT-10 — four XML-delimited system-prompt blocks with a written precedence (platform instructions > platform prompt > tools > agent), heading demotion in one wrapper, reserved-tag 422 on the platform prompt and agent prompt fields; implemented 2026-09-09, archived by #2595 step 6 |
-| [`TASK-EVENT-STREAM-RFC.md`](rfc/TASK-EVENT-STREAM-RFC.md)                           | OPS-04 — unified task event stream, worker-action audit log, and the shared admin Activity surface                                                                                                      |
+| [`TASK-EVENT-STREAM-RFC.md`](rfc/TASK-EVENT-STREAM-RFC.md) | Remaining task coverage, presentation and retention questions; links to implemented contracts |
 | [`TEAM-PLATFORM-POLICY-RFC.md`](rfc/TEAM-PLATFORM-POLICY-RFC.md)                     | Team platform policy — storage, ingestion, size, deletion retention, tool guardrails (model/MCP allowlisting is out of scope, governed by the capability system instead)                                |
 
 ---

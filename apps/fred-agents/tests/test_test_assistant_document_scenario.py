@@ -40,13 +40,13 @@ from __future__ import annotations
 import pytest
 from fred_agents.test_assistant.graph_agent import TestAssistantGraphAgent
 from fred_agents.test_assistant.graph_state import TestInput
+from fred_capability_document_access import DocumentAccessCapability
 from fred_core.store import VectorSearchHit
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     build_capability_agent_block,
     build_capability_contexts,
 )
-from fred_runtime.capabilities.document_access import DocumentAccessCapability
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import (

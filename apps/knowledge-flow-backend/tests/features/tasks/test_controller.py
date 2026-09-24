@@ -53,7 +53,7 @@ class _FakeTaskService:
     async def get_run(self, task_id: str) -> Any:
         if task_id != self._summary.task_id:
             return None
-        return SimpleNamespace(created_by=self._summary.created_by, team_id=self._summary.team_id)
+        return SimpleNamespace(created_by=self._summary.created_by, team_id=self._summary.team_id, kind=self._summary.kind)
 
     async def reconcile_task(self, task_id: str) -> bool:
         self.reconciled.append(task_id)
@@ -98,6 +98,7 @@ def _client(tasks: SimpleNamespace, user: KeycloakUser) -> TestClient:
     register_exception_handlers(app)
     app.include_router(tasks.router)
     app.dependency_overrides[get_current_user_or_service] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     return TestClient(app)
 
 
@@ -154,3 +155,17 @@ def test_every_other_task_route_keeps_human_admission(tasks: SimpleNamespace, pa
     calls = _dependency_calls(tasks.router, path, method)
     assert get_current_user in calls
     assert get_current_user_or_service not in calls
+
+
+def test_ingestion_cancellation_is_explicitly_unsupported(tasks: SimpleNamespace) -> None:
+    with _client(tasks, _service_identity(_CREATOR)) as client:
+        response = client.post(f"/tasks/{_TASK_ID}/cancel")
+    assert response.status_code == 409
+    assert "not supported" in response.json()["detail"]
+    assert tasks.service.reconciled == []
+
+
+def test_cancellation_still_checks_authorization(tasks: SimpleNamespace) -> None:
+    with _client(tasks, _service_identity("someone-else")) as client:
+        response = client.post(f"/tasks/{_TASK_ID}/cancel")
+    assert response.status_code == 403

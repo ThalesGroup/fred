@@ -2031,7 +2031,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
-- Suspension/catalog warning banner, when applicable.
+- Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
@@ -4057,14 +4057,17 @@ more"), but **copy always writes the full list** — copying is exactly when the
 whole thing is wanted.
 
 A document's panel also carries the message the ingestion **task** reported,
-under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+under "Reported by the pipeline", instead of repeating per-stage `processing.errors`.
 A run killed before any pipeline stage started (worker saturation, a Temporal
 `TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
 with an empty panel while the message sat on the task — visible only in the task
 popover, which is not mounted for most users. The parent workflow already pulls
 it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
 rollup already fetches it with the task history, so this is a wiring change, not
-a new source. It is skipped when a stage message already says the same thing.
+a new source. Per-stage errors are the fallback when the final task explanation
+is absent. Their stage names are translated (for example, `preview` becomes
+"Content extraction"); copied fallback details retain the technical stage keys
+for support. The document reference remains available.
 
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
@@ -4552,8 +4555,8 @@ Earlier behaviour (#2459):
   it - two title rows said the same thing twice and ate the top of the column. A
   panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
   `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
-  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
-  which has no header of its own, keeps the drawer's.
+  name) plus `flushBody`, and the pane renders its own close button. A panel with
+  no header of its own keeps the drawer's.
 - **Switching conversations closes any open push drawer** (2026-08-28). Opening one
   is a statement about one conversation and every panel reads the open session, so
   a drawer carried across sat there empty. A capability whose new conversation
@@ -4842,3 +4845,23 @@ Three additions, all made for the rail and all useful beyond it:
   moment of an alt-tab was still open on return and — its own leave event
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
+
+
+### Ingestion actions — 2026-09-23
+
+`DocumentWorkspace` offers no user cancellation while ingestion is pending or
+running. Delete remains disabled until the task settles; its tooltip explains
+that ingestion is active. A durable terminal event refreshes document state and
+quota. Cancellation scope and cleanup are deferred to a separate design.
+
+
+### Ingestion failure explanations — 2026-09-23
+
+Ingestion task steps display localized preparation, extraction and indexing
+labels. Failures show the backend's stage/cause explanation; task-detail copy
+includes the document name, task/document references, stage and error. Resources
+shows the durable failure even if its browse snapshot still looks ready, with
+an explicit fallback when no reason was recorded and a copyable document ID.
+Personal Resources loads both failures and successes so an old failure does not
+return after a successful retry. Existing tooltip, copy and task components are
+reused. These changes have static review only; runtime/visual checks are pending.

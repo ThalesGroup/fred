@@ -4060,3 +4060,13 @@ admin chip in light orange with a clock icon ("Admin (pending)" on hover).
 version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
+
+
+## Knowledge Flow ingestion cancellation — 2026-09-23
+
+`POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
+authorization, then returns HTTP 409 for `kind=ingestion`, without requesting
+Temporal cancellation. Other task kinds retain their existing behavior. The
+resource document menu no longer offers Stop ingestion. This delivery exposes
+success/failure completion; user cancellation and its cleanup semantics are
+deferred. See [INGESTION.md](INGESTION.md).

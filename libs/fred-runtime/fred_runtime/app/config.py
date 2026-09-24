@@ -75,6 +75,7 @@ from fred_core.common import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     TemporalSchedulerConfig,
+    default_postgres_store_config,
 )
 from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
@@ -366,11 +367,7 @@ class PodStorageConfig(BaseModel):
     - `object_store`: one bucket/root for all runtime-owned files
     """
 
-    postgres: PostgresStoreConfig = Field(
-        default_factory=lambda: PostgresStoreConfig(
-            sqlite_path="~/.fred/pod/pod.sqlite3"
-        )
-    )
+    postgres: PostgresStoreConfig = Field(default_factory=default_postgres_store_config)
     opensearch: Optional[OpenSearchStoreConfig] = None
     log_store: Optional[LogStorageConfig] = None
     object_store: RuntimeFilesystemConfig = Field(

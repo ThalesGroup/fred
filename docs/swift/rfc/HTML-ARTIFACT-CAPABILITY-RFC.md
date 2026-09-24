@@ -7,7 +7,7 @@
 **Related:** `AGENT-CAPABILITY-PRESENTATION.html` (part-renderer / side-panel
 architecture), `CAPABILITY-EXECUTION-FLOW-RFC.md`, the `add-fred-capability`
 skill, and the `writable_document` capability
-(`libs/fred-capability-writable-document/`) used as the reference vertical.
+(`libs/capabilities/fred-capability-writable-document/`) used as the reference vertical.
 
 ---
 
@@ -63,7 +63,7 @@ it contributes a **custom chat part** (the artifact card) and a **side panel**
 `execution_models = ("react",)` because it carries a system-prompt fragment via a
 `middleware()` override (§4.5), exactly like `writable_document`/`ppt_filler`.
 
-New package: `libs/fred-capability-html-artifact/fred_capability_html_artifact/`,
+New package: `libs/capabilities/fred-capability-html-artifact/fred_capability_html_artifact/`,
 mirroring `writable_document`'s structure minus the store/router (§5).
 
 ### 4.2 Typed models

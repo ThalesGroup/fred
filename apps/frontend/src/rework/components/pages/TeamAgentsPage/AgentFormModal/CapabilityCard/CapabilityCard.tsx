@@ -79,6 +79,8 @@ export function CapabilityConfigForm({
   configValues,
   disabled,
   teamId,
+  agentInstanceId,
+  agentDisplayName,
   assetFiles,
   onConfigChange,
   onAssetFileChange,
@@ -89,6 +91,8 @@ export function CapabilityConfigForm({
   configValues: Record<string, unknown>;
   disabled: boolean;
   teamId?: string;
+  agentInstanceId?: string;
+  agentDisplayName?: string;
   assetFiles: Record<string, File | undefined>;
   onConfigChange: (key: string, value: unknown) => void;
   onAssetFileChange: (slotKey: string, file: File | null) => void;
@@ -117,6 +121,8 @@ export function CapabilityConfigForm({
             <Widget
               capabilityId={capability.id}
               teamId={teamId}
+              agentInstanceId={agentInstanceId}
+              agentDisplayName={agentDisplayName}
               disabled={disabled}
               configValues={configValues}
               onConfigChange={onConfigChange}

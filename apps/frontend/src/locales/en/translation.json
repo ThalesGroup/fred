@@ -116,29 +116,6 @@
     }
   },
   "capability": {
-    "demo_echo": {
-      "name": "Demo echo",
-      "description": "Echoes back what you say, with an option to reply in uppercase.",
-      "cardAria": "Demo capability card",
-      "fields": {
-        "uppercase": {
-          "title": "Uppercase",
-          "description": "Echo replies in uppercase."
-        }
-      },
-      "panel": {
-        "demo_notes": {
-          "title": "Demo notes",
-          "hint": "Call the demo capability's own /analyze route directly.",
-          "textPlaceholder": "text",
-          "analyze": "Analyze",
-          "error": "Request failed",
-          "original": "original",
-          "transformed": "transformed",
-          "length": "length"
-        }
-      }
-    },
     "document_access": {
       "name": "Search team resources",
       "description": "Ability to search for information in the team's resources.",
@@ -315,6 +292,11 @@
       "form": {
         "uploadTemplate": "Upload a .pptx template",
         "replaceTemplate": "Replace the template",
+        "downloadTemplate": "Download template",
+        "downloadTemplateHint": "Downloads the template saved for this agent.",
+        "downloadTemplateUnavailable": "No template is saved for this agent yet.",
+        "downloadFailed": "The template could not be downloaded.",
+        "downloadMissing": "The template file is missing for this agent. Upload it again.",
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
@@ -583,6 +565,9 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
+    "copied": "Copied",
+    "copy": "Copy",
+    "copyCode": "Copy code",
     "delete": "Delete",
     "description": "Description",
     "edit": "Edit",
@@ -1320,7 +1305,7 @@
       "edit": "Edit",
       "noDescription": "No description yet.",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
-      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it.",
+      "suspendedToggleLocked": "Suspended",
       "duplicate": "Duplicate",
       "delete": "Delete",
       "tooltip": {
@@ -1581,21 +1566,74 @@
       "awaitingConfirmation": "awaiting confirmation…",
       "cancelledByUser": "cancelled by the user",
       "details": "Details",
-      "errorCopied": "Error message copied to clipboard",
+      "documents_one": "{{count}} document",
+      "documents_other": "{{count}} documents",
+      "executionTime": "Execution time: {{duration}}",
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
+      "matches_one": "{{count}} match",
+      "matches_other": "{{count}} matches",
       "openReasoning": "Open the full reasoning",
       "restatedReasoning": "Restates the earlier reasoning",
       "rows_one": "{{count}} row",
       "rows_other": "{{count}} rows",
       "running": "running…",
       "show": "Show the agent's reasoning and tool calls",
+      "sqlQuery": "Query:",
+      "sqlResponse": "Response:",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
+      "tables_one": "{{count}} table",
+      "tables_other": "{{count}} tables",
       "summaryReasoning": "Reasoning {{duration}}",
       "summaryTools_one": "{{count}} tool",
       "summaryTools_other": "{{count}} tools",
-      "thinking": "Thinking…"
+      "thinking": "Thinking…",
+      "tabular": {
+        "catalogForDocument": "Reading the summary of document “{{name}}”.",
+        "catalogForWorkbook": "Reading the workbook summary.",
+        "catalogPreview": "Only part of the catalog is shown.",
+        "emptyCatalog": "This catalog is empty.",
+        "fieldsPreview": "Limited preview: some columns or values are shortened.",
+        "kind": {
+          "csv": "CSV",
+          "spreadsheet": "Workbook"
+        },
+        "keyword": "Search term:",
+        "matchedColumns": "Matching columns",
+        "identifiedDocuments_one": "Here is the identified document:",
+        "identifiedDocuments_other": "Here are the {{count}} identified documents:",
+        "moreValues_one": "+{{count}} more value",
+        "moreValues_other": "+{{count}} more values",
+        "moreColumns_one": "+{{count}} more column",
+        "moreColumns_other": "+{{count}} more columns",
+        "noColumns": "No columns described.",
+        "noDocuments": "No tabular documents available.",
+        "noMatches": "No matches found in the tables searched.",
+        "noSchemas": "No schemas returned.",
+        "noTables": "No tables described.",
+        "partialResult": "partial result",
+        "rowsPreview": "preview of {{count}} rows",
+        "rowsTruncated": "Partial preview: more rows match in this table.",
+        "samples": "Examples",
+        "showFullCatalog": "Show the full catalog",
+        "showMore_one": "Show {{count}} more item",
+        "showMore_other": "Show {{count}} more items",
+        "tableNumber": "Table {{number}}",
+        "tablesTruncated": "Partial result: other tables or documents may contain this value."
+      },
+      "toolStatus": {
+        "failure": "Failed",
+        "running": "Running",
+        "success": "Success"
+      },
+      "toolLabels": {
+        "readQuery": "Reading query",
+        "documents": "Listing tabular documents",
+        "markdown": "Reading the workbook catalog",
+        "schemas": "Reading tabular schemas",
+        "search": "Searching tabular values"
+      }
     },
     "collapse": "Collapse",
     "create": "Create",
@@ -1675,9 +1713,7 @@
         "gettingStarted": "Getting started",
         "features": "Features",
         "guides": "Guides & use cases",
-        "troubleshooting": "Troubleshooting",
-        "faq": "FAQ",
-        "changelog": "What's new"
+        "troubleshooting": "Help & limits"
       }
     },
     "avatarCrop": {
@@ -1895,7 +1931,7 @@
         "back": "Back to previous folder",
         "copyToTeam": "Copy to Team space",
         "delete": "Delete",
-        "deleteDisabledWhileProcessing": "Unavailable during ingestion — use \"Stop ingestion\"",
+        "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
         "download": "Download",
         "includeInSearch": "Include in search",
         "manageLabels": "Manage labels",
@@ -1907,8 +1943,7 @@
         "refresh": "Refresh this view",
         "rename": "Rename",
         "reprocess": "Reprocess",
-        "searchable": "Exclude from search",
-        "stopIngestion": "Stop ingestion"
+        "searchable": "Exclude from search"
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
@@ -1921,13 +1956,19 @@
         "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
         "deleteFolderTitle": "Delete folder",
         "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
-        "shareTitle": "Copy to Team space",
-        "stopIngestionMessage": "Interrupt the processing of \"{{name}}\"? The document and all its data (file, vectors, metadata) will be deleted.",
-        "stopIngestionTitle": "Stop ingestion"
+        "shareTitle": "Copy to Team space"
       },
       "errorTooltip": {
+        "noDetails": "Processing failed without further details. Share the document reference with support.",
+        "documentReference": "Document: {{id}}",
         "reported": "Reported by the pipeline",
-        "stage": "Stage: {{stage}}"
+        "stage": "Stage: {{stage}}",
+        "stages": {
+          "raw": "File storage",
+          "preview": "Content extraction",
+          "vector": "Search indexing",
+          "sql": "Structured data indexing"
+        }
       },
       "empty": {
         "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
@@ -2051,9 +2092,7 @@
         "downloadEmpty": "The selected folders contain no documents to download",
         "downloadError": "Could not download the selected files",
         "processError": "Could not start processing",
-        "processStarted": "Processing started",
-        "stopIngestionError": "Could not stop the ingestion",
-        "stopIngestionRequested": "Ingestion stop requested"
+        "processStarted": "Processing started"
       },
       "pageTitlePersonal": "Your personal resources",
       "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
@@ -2234,9 +2273,16 @@
         "terminalCount": "Completed ({{count}})",
         "title": "Tasks"
       },
+      "ingestionStep": {
+        "uploading": "Document preparation",
+        "processing": "Content extraction",
+        "indexing": "Indexing",
+        "done": "Processing complete"
+      },
       "popover": {
         "acknowledge": "Dismiss",
         "close": "Close",
+        "supportReference": "Support reference: {{id}}",
         "copyError": "Copy error",
         "errorCopied": "Error copied",
         "startedAgo": "started {{time}}",

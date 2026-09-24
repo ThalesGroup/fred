@@ -4,6 +4,7 @@ import pytest
 
 from knowledge_flow_backend import main_worker as main_worker_module
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import IngestionWorkerRole
 
 
 @pytest.mark.asyncio
@@ -30,6 +31,8 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,
+            # Not the default, so the wiring is actually proven rather than matching by luck.
+            "worker_roles": ["extraction-rich"],
             "temporal": config.scheduler.temporal.model_copy(
                 update={
                     "ingestion_max_concurrent_workflow_tasks": 4,
@@ -46,12 +49,14 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     async def fake_run_worker(
         temporal_config,
         *,
+        roles=None,
         max_concurrent_workflow_tasks: int = 1,
         max_concurrent_activities: int = 1,
         pdf_render_ttl_days: int = 30,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
         observed["temporal_config"] = temporal_config
+        observed["roles"] = roles
         observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
         observed["max_concurrent_activities"] = max_concurrent_activities
         observed["pdf_render_ttl_days"] = pdf_render_ttl_days
@@ -115,4 +120,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
     assert observed["pdf_render_ttl_days"] == 45
+    # The role is what decides the queue polled and the registrations; the worker
+    # derives both from it, so nothing here spells a queue name out.
+    assert observed["roles"] == [IngestionWorkerRole.extraction_rich]
     assert observed["shutdown_called"] is True
