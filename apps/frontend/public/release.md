@@ -1,3 +1,53 @@
+**v2.2.2** — 2026-09-24
+
+- **Summary**
+
+  Deep agents now show their live task list above the chat, and the sub-tasks
+  they delegate follow the same instructions, approvals and retries as the agent
+  itself. Document ingestion keeps heavy files from holding up light ones, and
+  the trace now explains what tabular and SQL steps actually did.
+
+- **Features**
+
+  - Deep agents show their evolving task list in a collapsible panel above the chat composer (#2724)
+  - The team resources table can be sorted by name, date added or size, across every page of a folder (#2786)
+  - A PPT Filler agent's saved template can be downloaded back from its options (#2779)
+  - Knowledge Bases ingest through the same pipeline as uploads, with a fast, medium or rich profile per document (#2767)
+  - Hosted applications follow Fred's light/dark theme and language live, and can offer file downloads (#2712, #2727)
+
+- **Improvements**
+
+  - Fast, medium and rich extraction run on separate lanes, and a failed ingestion shows its cause and stage in Resources (#2762)
+  - The trace shows readable views for tabular document lists, schemas and value searches (#2778)
+  - Agents retry automatically when a model provider is rate-limiting instead of failing the turn (#2535)
+  - The agent form hides capability packs the team is not allowed to use (#2785)
+  - The "Document reading" pack is retired: both document-access packs now include verbatim reading and extraction (#2732)
+  - Agent cards are more compact, guess a more fitting icon, and a suspension banner no longer stretches the card (#2763, #2787)
+  - Agents are told how to recover when they use a filename instead of a dataset identifier (#2743)
+  - Each admin catalog entry shows which pod provides it and its real version (#2699)
+  - The Help Center content is corrected and consolidated (#2782)
+
+- **Bug Fixes**
+
+  - Sub-tasks delegated by Deep agents now receive the agent's instructions, capabilities and approval protections (#2739)
+  - Deep agents no longer fail on Mistral models or replay invalid tool history (#2740, #2741)
+  - Capability tool calls now always appear in the trace (#2742)
+  - A failed SQL query shows the submitted SQL and the engine's error instead of "0 rows" (#2733)
+  - Windows-1252 CSV files no longer stall ingestion for minutes on offline deployments (#2690)
+  - Conversations removed with the home-page cleanup now also disappear from the sidebar (#2772)
+  - The last conversations in the sidebar are reachable again instead of hiding under the profile tile (#2773)
+
+- **Deployment note**
+
+  Agent pods now require `app.runtime_id`: the Helm chart sets it, but agent
+  configurations written by hand must add it or the pod will not start
+  (`fred-core`, `fred-sdk` and `fred-runtime` move to 4.0.0 together). Knowledge
+  Flow now deploys a common worker plus fast, medium and rich extraction workers;
+  drain in-flight ingestions first and upgrade API, workers and chart together,
+  or keep a single worker with all roles (compact mode). The chart now creates
+  the `s3-credentials` secret from content-storage credentials. One migration
+  drops the demo echo capability tables.
+
 **v2.2.1** — 2026-09-16
 
 - **Summary**
