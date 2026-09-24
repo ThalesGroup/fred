@@ -84,7 +84,7 @@ def _binding() -> BoundRuntimeContext:
 
 def _fake_conversation_filesystem() -> Any:
     return SimpleNamespace(
-        scratchpad=lambda: SimpleNamespace(),
+        scratchpad=SimpleNamespace,
         namespace=lambda _name: SimpleNamespace(),
     )
 
