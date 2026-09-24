@@ -21,6 +21,7 @@ from uuid import UUID
 from fred_core import (
     ORGANIZATION_ID,
     DocumentPermission,
+    DocumentSortField,
     KeycloakUser,
     OrganizationPermission,
     RebacDisabledResult,
@@ -28,11 +29,13 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
+    SortOrder,
     TagPermission,
     TeamMetadataStore,
     get_user_store,
 )
 from fred_core.common.team_id import TeamId
+from fred_core.documents.document_store import DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
     DocumentMetadata,
@@ -321,13 +324,25 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
         return []
 
-    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+    async def browse_documents_in_tag(
+        self,
+        user: KeycloakUser,
+        tag_id: str,
+        offset: int = 0,
+        limit: int = 50,
+        sort_by: DocumentSortField = DEFAULT_SORT_FIELD,
+        sort_order: SortOrder = DEFAULT_SORT_ORDER,
+    ) -> tuple[list[DocumentMetadata], int]:
         """
-        Paginated fetch of documents in a given tag.
+        Paginated fetch of documents in a given tag, ordered store-side.
+
+        The order has to come from the store rather than the caller: only one
+        page is returned, so a client sorting what it received would reorder
+        50 rows out of the whole tag and call it a sorted folder.
         """
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
-        docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit, sort_by=sort_by, sort_order=sort_order)
         logger.debug(
             "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
             tag_id,

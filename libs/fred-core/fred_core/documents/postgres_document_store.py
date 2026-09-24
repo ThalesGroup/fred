@@ -37,8 +37,13 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.document_store import (
+    DEFAULT_SORT_FIELD,
+    DEFAULT_SORT_ORDER,
     BaseDocumentMetadataStore,
     DocumentMetadataDeserializationError,
+    DocumentSortField,
+    SortOrder,
+    sort_documents,
 )
 from fred_core.documents.document_structures import (
     DocumentMetadata,
@@ -313,12 +318,43 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         docs = await self.get_all_metadata(filters={}, session=session)
         return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
 
+    def _browse_order_by(self, sort_by: DocumentSortField, sort_order: SortOrder):
+        """ORDER BY terms for a paginated tag browse.
+
+        Only `date_added_to_kb` is a real column; the displayed name and the
+        file size live inside the JSONB `doc` blob, extracted the same way
+        `total_size_by_tags` below already extracts the size. Neither path is
+        indexed, so sorting a very large tag by name or size scans it.
+
+        `document_uid` closes the order: without it, documents sharing a sort
+        value can swap between two paginated requests, showing one twice and
+        another never.
+        """
+        if sort_by == "created":
+            column = DocumentMetadataRow.date_added_to_kb
+        elif sort_by == "size":
+            column = sql_cast(
+                DocumentMetadataRow.doc["file"]["file_size_bytes"].astext, BigInteger
+            )
+        else:
+            # The table shows `identity.document_name`, not `title` — sorting on
+            # anything else would order the list by something invisible.
+            column = func.lower(
+                DocumentMetadataRow.doc["identity"]["document_name"].astext
+            )
+        tie_break = DocumentMetadataRow.document_uid
+        if sort_order == "desc":
+            return [column.desc(), tie_break.desc()]
+        return [column.asc(), tie_break.asc()]
+
     async def browse_metadata_in_tag(
         self,
         tag_id: str,
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
+        sort_by: DocumentSortField = DEFAULT_SORT_FIELD,
+        sort_order: SortOrder = DEFAULT_SORT_ORDER,
     ) -> tuple[list[DocumentMetadata], int]:
         if self._is_postgres:
             cond: ColumnElement[bool] = cast(
@@ -334,6 +370,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                         await s.execute(
                             select(DocumentMetadataRow)
                             .where(cond)
+                            .order_by(*self._browse_order_by(sort_by, sort_order))
                             .limit(limit)
                             .offset(offset)
                         )
@@ -345,10 +382,11 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 await self._hydrate_labels(docs, s)
             return docs, int(total)
 
-        # SQLite: filter in Python (get_all_metadata already hydrates)
+        # SQLite: filter and order in Python (get_all_metadata already hydrates)
         docs = await self.get_all_metadata(filters={}, session=session)
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
-        return filtered[offset : offset + limit], len(filtered)
+        ordered = sort_documents(filtered, sort_by, sort_order)
+        return ordered[offset : offset + limit], len(filtered)
 
     async def document_uids_by_tags(
         self, tag_ids: List[str], session: AsyncSession | None = None

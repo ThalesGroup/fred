@@ -15,11 +15,55 @@
 import asyncio
 from abc import abstractmethod
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fred_core.documents.document_structures import DocumentMetadata
+
+DocumentSortField = Literal["name", "created", "size"]
+SortOrder = Literal["asc", "desc"]
+
+DEFAULT_SORT_FIELD: DocumentSortField = "name"
+DEFAULT_SORT_ORDER: SortOrder = "asc"
+
+
+def document_sort_key(field: DocumentSortField):
+    """Python sort key for ``field``, used wherever the sort cannot be pushed
+    into SQL (the SQLite test path, and the base store's in-memory fallback).
+
+    Each key leads with an is-missing flag so ``None`` never meets a datetime
+    in a comparison, and so a plain ``reverse=True`` puts missing values first
+    — matching PostgreSQL's own default (NULLS LAST ascending, NULLS FIRST
+    descending) rather than inventing a second ordering for the same request.
+    """
+    if field == "created":
+        return lambda md: (
+            md.source.date_added_to_kb is None,
+            md.source.date_added_to_kb,
+        )
+    if field == "size":
+        size = lambda md: md.file.file_size_bytes if md.file else None  # noqa: E731
+        return lambda md: (size(md) is None, size(md) or 0)
+    # Case-folded: an ASCII sort would file "Zebra" before "annexe", which
+    # reads as broken in a file list.
+    return lambda md: (False, (md.identity.document_name or "").casefold())
+
+
+def sort_documents(
+    docs: list["DocumentMetadata"],
+    sort_by: DocumentSortField,
+    sort_order: SortOrder,
+) -> list["DocumentMetadata"]:
+    """Order ``docs`` as the store would, tie-broken by ``document_uid``.
+
+    The tie-break is not cosmetic: without a total order, two documents sharing
+    a sort value can swap between two paginated requests, so the same document
+    shows up twice — or never — as the reader pages through.
+    """
+    key = document_sort_key(sort_by)
+    ordered = sorted(docs, key=lambda md: (key(md), md.identity.document_uid))
+    return list(reversed(ordered)) if sort_order == "desc" else ordered
 
 
 class DocumentMetadataDeserializationError(Exception):
@@ -106,11 +150,14 @@ class BaseDocumentMetadataStore:
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
+        sort_by: DocumentSortField = DEFAULT_SORT_FIELD,
+        sort_order: SortOrder = DEFAULT_SORT_ORDER,
     ) -> tuple[List[DocumentMetadata], int]:
         """Return a paginated list of metadata entries tagged with a specific tag ID."""
         all_docs = await self.get_metadata_in_tag(tag_id, session=session)
         total = len(all_docs)
-        return all_docs[offset : offset + limit], total
+        ordered = sort_documents(all_docs, sort_by, sort_order)
+        return ordered[offset : offset + limit], total
 
     async def document_uids_by_tags(
         self, tag_ids: List[str], session: AsyncSession | None = None

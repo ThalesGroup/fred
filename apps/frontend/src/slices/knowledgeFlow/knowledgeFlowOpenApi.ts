@@ -2054,6 +2054,10 @@ export type BrowseDocumentsByTagRequest = {
   tag_id: string;
   offset?: number;
   limit?: number;
+  /** Field the whole tag is ordered by before the page is cut: `name` (the document's displayed file name, case-insensitive), `created` (date added) or `size` (file size). The order is applied store-side on purpose — only one page is returned, so a client reordering what it received would sort a page rather than the folder. Ties are broken by document uid, so paging never shows one document twice. */
+  sort_by?: "name" | "created" | "size";
+  /** Ascending or descending. Missing values sort last ascending, first descending. */
+  sort_order?: "asc" | "desc";
 };
 export type TagSizesResponse = {
   /** Total document bytes per requested tag id (0 when unknown/empty) */
