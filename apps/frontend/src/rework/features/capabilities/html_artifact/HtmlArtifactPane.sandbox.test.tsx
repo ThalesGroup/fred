@@ -14,12 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Layer B regression guard (RFC §4.7): the Preview iframes MUST stay `sandbox=""`
-// — no `allow-scripts`, no `allow-same-origin`. That empty sandbox is the
-// browser-enforced no-script guarantee for the in-app preview; a future edit that
-// added a token or dropped the attribute would silently re-enable script
-// execution. This renders the pane and asserts the attribute directly, so such a
-// regression fails the build rather than shipping.
+// Sandbox regression guard (RFC §4.7): the Preview iframes MUST stay exactly
+// `sandbox="allow-scripts"` — author JS runs, and `allow-same-origin` never joins
+// it. The pair is what would let untrusted content clear its own sandbox and reach
+// the app's DOM, cookies and storage, and the isolation now rests entirely on this
+// attribute since the markup is no longer sanitized. This renders the pane and
+// asserts the attribute directly, so such a regression fails the build rather
+// than shipping.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,6 +47,8 @@ vi.mock("./htmlArtifactSlice", () => ({
   selectHtmlArtifactSessionId: () => "s1",
   selectHtmlArtifactSelectedId: () => "a1",
   selectHtmlArtifact: (id: string) => ({ type: "select", payload: id }),
+  selectHtmlArtifactClosedIds: () => ({}),
+  closeHtmlArtifact: (id: string) => ({ type: "close", payload: id }),
 }));
 vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => "s1" }));
 vi.mock("react-redux", () => ({
@@ -88,7 +91,7 @@ afterEach(() => {
 });
 
 describe("HtmlArtifactPane preview sandbox", () => {
-  it('renders the preview iframes as sandbox="" with no script/same-origin escape', () => {
+  it('renders the preview iframes as sandbox="allow-scripts" with no same-origin escape', () => {
     act(() => {
       root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
     });
@@ -97,8 +100,10 @@ describe("HtmlArtifactPane preview sandbox", () => {
     // The double-buffered preview mounts two stacked frames.
     expect(iframes.length).toBe(2);
     for (const frame of iframes) {
-      expect(frame.getAttribute("sandbox")).toBe("");
-      expect(frame.outerHTML).not.toContain("allow-scripts");
+      // Author JS must run — the artifact needs it for tabs and animations.
+      expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+      // …but NEVER alongside same-origin: together the two would let the content
+      // clear its own sandbox and reach the app's DOM, cookies and storage.
       expect(frame.outerHTML).not.toContain("allow-same-origin");
     }
   });
@@ -113,6 +118,9 @@ describe("HtmlArtifactPane preview buffers", () => {
 
     const [back, loaded] = container.querySelectorAll("iframe");
     expect(back.hasAttribute("srcdoc")).toBe(false);
-    expect(loaded.getAttribute("srcdoc")).toContain("<h1>hi</h1>");
+    // The preview renders the shell, which carries the artifact in its bootstrap
+    // string literal with `</` neutralized — hence `<\/h1>`, not `</h1>`.
+    expect(loaded.getAttribute("srcdoc")).toContain("<h1>hi<\\/h1>");
+    expect(loaded.getAttribute("srcdoc")).toContain("frame-src blob:");
   });
 });

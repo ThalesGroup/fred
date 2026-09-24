@@ -113,19 +113,40 @@ redéposer.
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
-### Générer une page web (HTML/CSS)
+### Générer une page web (HTML/CSS/JS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché
-dans un aperçu à côté de la conversation. L'aperçu se télécharge en HTML, PDF
-ou image.
+dans un aperçu à côté de la conversation. La page peut être **interactive** :
+onglets, accordéons, animations, graphiques. L'aperçu se télécharge en HTML,
+PDF ou image.
 
-**Ses limites** — HTML et CSS uniquement : pas de JavaScript, donc rien
-d'interactif. L'aperçu est en lecture seule et la page produite reste de taille
-modeste ; au-delà, l'agent doit l'alléger. Ce n'est pas un outil de publication :
-rien n'est mis en ligne.
+**Ses limites** — la page doit être **autonome** : rien ne peut être chargé
+depuis Internet (ni bibliothèque, ni police, ni image distante) et la page ne
+peut faire aucun appel réseau. Les images sont donc intégrées directement dans
+le fichier, et les données dont le JavaScript a besoin doivent y être écrites.
+La page ne peut rien mémoriser d'une visite à l'autre : elle repart de son état
+initial à chaque ouverture. Le fichier **HTML téléchargé** s'ouvre et s'affiche
+normalement, mais il enveloppe la page dans une coquille de sécurité : ce n'est
+pas du code source à retoucher. Pour récupérer le source, utilisez les onglets
+**HTML** et **CSS** de l'aperçu, ou le bouton **Copier**.
+Les exports PDF et image capturent la page **avant l'exécution du JavaScript** :
+les parties interactives y apparaissent dans leur état initial. La page reste de
+taille modeste ; au-delà, l'agent doit l'alléger. Ce n'est pas un outil de
+publication : rien n'est mis en ligne.
+
+Quand vous demandez à l'agent de **modifier** la page, il remplace celle qui est
+déjà à l'écran plutôt que d'en ouvrir une seconde. Vous n'obtenez un nouvel aperçu
+que si vous demandez une page sans rapport avec la précédente. Chaque aperçu se
+ferme par la croix de son onglet, et se rouvre depuis le bouton **Ouvrir l'aperçu**
+de sa carte dans la conversation.
+
+Si une page se comporte mal — elle ralentit votre navigateur, ou elle affiche
+quelque chose qui vous semble douteux — l'aperçu propose un bouton **Arrêter la
+page**, qui interrompt son exécution immédiatement. Un bouton **Relancer la page**
+la remet en marche si vous le souhaitez.
 
 **Un exemple** — « Présente ces indicateurs sous forme d'un tableau de bord
-d'une page, que je puisse exporter en PDF. »
+d'une page, avec un onglet par région. »
 
 ## Intelligence et orchestration
 

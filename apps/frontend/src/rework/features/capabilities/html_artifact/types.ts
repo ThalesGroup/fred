@@ -23,7 +23,7 @@
 /** Backend capability id (`manifest.id`) — the side-panel open-request key. */
 export const CAPABILITY_ID = "html_artifact";
 
-/** One static HTML/CSS artifact snapshot, as carried on an `html_artifact` part. */
+/** One HTML/CSS/JS artifact snapshot, as carried on an `html_artifact` part. */
 export interface HtmlArtifactPartData {
   type: "html_artifact";
   /** Stable id of the artifact (one per artifact in the session; reused on revise). */

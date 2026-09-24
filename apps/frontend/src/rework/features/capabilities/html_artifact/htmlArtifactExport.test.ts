@@ -1,3 +1,7 @@
+// @vitest-environment jsdom
+//
+// `createMeasuringFrame` builds a real <iframe>, so this file needs a DOM.
+//
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +17,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { buildImagePdf } from "./htmlArtifactExport";
+import { MEASURE_SANDBOX, buildImagePdf, createMeasuringFrame } from "./htmlArtifactExport";
 
 // A latin1 decode keeps a 1:1 byte↔char mapping, so string indices equal the PDF's
 // byte offsets — which is what the xref table records.
@@ -49,5 +53,30 @@ describe("buildImagePdf", () => {
       const offset = Number(entry.slice(0, 10));
       expect(text.slice(offset).startsWith(`${i + 1} 0 obj`)).toBe(true);
     });
+  });
+});
+
+// The measuring frame is the ONE artifact frame granted `allow-same-origin`, which
+// rasterizing needs to read `contentDocument`. Pairing that with `allow-scripts`
+// would let untrusted content clear its own sandbox and reach the app origin — the
+// one combination this capability must never ship.
+describe("createMeasuringFrame", () => {
+  it("grants same-origin for measurement and NEVER allow-scripts", () => {
+    // Both export paths build their frame here, so this one assertion covers the
+    // PNG raster and the fit-width measurement. Asserting the element rather than
+    // the constant is the point: a second hardcoded setAttribute elsewhere is
+    // exactly the mistake this replaced.
+    const frame = createMeasuringFrame("<p>x</p>", 800);
+    expect(frame.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(frame.outerHTML).not.toContain("allow-scripts");
+    expect(frame.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(MEASURE_SANDBOX).toBe("allow-same-origin");
+  });
+
+  it("carries the composed document in srcdoc and stays off-screen", () => {
+    const frame = createMeasuringFrame("<p>measured</p>", 640);
+    expect(frame.getAttribute("srcdoc")).toContain("<p>measured</p>");
+    expect(frame.style.cssText).toContain("width: 640px");
+    expect(frame.style.cssText).toContain("-99999px");
   });
 });

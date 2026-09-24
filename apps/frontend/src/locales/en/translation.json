@@ -241,7 +241,9 @@
       },
       "untitled": "Document",
       "saving": "Saving…",
+      "allClosed": "No preview open. Reopen one from its card in the conversation.",
       "close": "Close panel",
+      "closeArtifact": "Close this artifact",
       "download": "Download",
       "downloadError": "Download failed",
       "noSession": "No session — open a chat to see its documents.",
@@ -261,8 +263,8 @@
       }
     },
     "html_artifact": {
-      "name": "Generate a web page (HTML/CSS)",
-      "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
+      "name": "Generate a web page (HTML/CSS/JS)",
+      "description": "Ability to produce a self-contained web page, interactive JavaScript included, rendered in a preview beside the chat.",
       "panel": {
         "html_artifact_pane": {
           "title": "HTML artifact",
@@ -280,10 +282,14 @@
       "copied": "Copied to clipboard",
       "copyFailed": "Could not copy.",
       "exportFailed": "Could not export the {{format}}.",
+      "exportStaticCapture": "The {{format}} captures the page before its JavaScript runs, so interactive parts appear in their initial state.",
       "fitWidth": "Fit width",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "resetZoom": "Reset zoom",
+      "restart": "Run the page again",
+      "stop": "Stop the page",
+      "stoppedNotice": "The page has been stopped.",
       "empty": "No artifact yet. Ask the assistant to build a page or component.",
       "card": {
         "aria": "HTML artifact",
@@ -2678,8 +2684,8 @@
               "description": "Ability to fill a PPT file from a detailed template."
             },
             "webPage": {
-              "title": "Generate a web page (HTML/CSS)",
-              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+              "title": "Generate a web page (HTML/CSS/JS)",
+              "description": "Ability to produce a self-contained web page, interactive JavaScript included, rendered in a preview beside the chat."
             },
             "reasoning": {
               "title": "Reasoning",

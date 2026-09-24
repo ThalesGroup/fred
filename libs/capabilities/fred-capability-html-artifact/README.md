@@ -1,8 +1,10 @@
 # fred-capability-html-artifact
 
-A Fred agent capability (`html_artifact`) that lets an agent produce a **static
-HTML/CSS artifact** rendered live in a **sandboxed viewer beside the chat** —
-the "artifact" experience, scoped to static markup (no JavaScript) for v1.
+A Fred agent capability (`html_artifact`) that lets an agent produce an
+**HTML/CSS/JS artifact** rendered live in a **sandboxed viewer beside the chat** —
+the "artifact" experience. JavaScript is allowed, so an artifact can have tabs,
+animations and interaction; it must be self-contained, with no external resource
+and no network access.
 
 Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 
@@ -13,8 +15,8 @@ Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478).
 - **Chat part** `HtmlArtifactPart` (`type="html_artifact"`) carrying the markup
   **inline** — no owned table, no router, no migration (v1 is read-only; chat
   `ui_parts` persist across reload).
-- **Prompt fragment** steering the model to call the tool (static only) instead of
-  pasting code into the chat.
+- **Prompt fragment** steering the model to call the tool (and to keep the artifact
+  self-contained) instead of pasting code into the chat.
 - **Side panel** `html_artifact_pane` (frontend): read-only tabs **Preview**
   (sandboxed `<iframe srcdoc>`) / **HTML** / **CSS** + download.
 
@@ -29,10 +31,21 @@ wired into the pod as an editable path dependency of `apps/fred-agents`.
 
 ## Security
 
-The markup is untrusted LLM output; the backend carries only inert strings. Safe
-rendering is a frontend concern (RFC §4.7): the Preview iframe uses `sandbox`
-**without** `allow-scripts`/`allow-same-origin` and a restrictive CSP, so no
-script runs and no network egress is possible.
+The markup is untrusted LLM output and it runs script, so it is **isolated rather
+than sanitized**. The backend carries only inert strings; safe rendering is a
+frontend concern (RFC §4.7). Every artifact frame is `sandbox="allow-scripts"`
+**without** `allow-same-origin` — an opaque origin with no reach into the app's DOM,
+cookies or storage — under a CSP of `default-src 'none'` plus
+`script-src 'unsafe-inline'` and `webrtc 'block'`, so inline script runs but no
+fetch, XHR, WebSocket or remote subresource is possible.
+
+A CSP cannot stop a document **navigating itself**, which is a full-bandwidth
+exfiltration channel, so all three scripting paths — preview, new tab and `.html`
+download — render a trusted shell that bootstraps the artifact into a `blob:`-URL
+child frame and carries `frame-src blob:`. That directive on the *parent* is the
+only thing that blocks the navigation; it needs a matchable URL, which is why the
+artifact is not passed inline as `srcdoc`. Verified in Chrome 153, `file://`
+included.
 
 ## Dev
 

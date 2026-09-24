@@ -14,44 +14,47 @@
 
 // Compose an agent-produced (untrusted) html + css into ONE self-contained
 // document for the Preview iframe (`srcdoc`), the download blob, and the new-tab
-// shell. The markup is untrusted LLM output; NO output path may run script.
-// Three independent layers enforce that — content sanitization (A, here), the
-// frame `sandbox=""` (B, Preview + newTabDocument), and a CSP `<meta>` (C). Full
-// rationale and the verification suite: HTML-ARTIFACT-CAPABILITY-RFC.md §4.7.
+// shell. The markup is untrusted LLM output and it MAY run script — an artifact
+// needs JS for tabs, animations and interaction.
+//
+// Script is therefore ISOLATED, not removed. Three browser-enforced mechanisms do
+// that, and the third is not optional:
+//   1. `sandbox="allow-scripts"` WITHOUT `allow-same-origin` — opaque origin, no
+//      reach into the app's DOM, cookies or storage.
+//   2. a CSP `<meta>` refusing every subresource fetch (`default-src 'none'`).
+//   3. `frame-src blob:` on the ENCLOSING shell, which is what stops the artifact
+//      NAVIGATING ITSELF to an attacker URL. A sandboxed frame may always navigate
+//      itself and no CSP directive of its own can prevent it (`navigate-to` was
+//      specced then dropped), so the control has to sit on the parent document and
+//      the artifact has to be loaded from a `blob:` URL for `frame-src` to have a
+//      target to match. Measured in Chrome 153: without it, `location.href` to an
+//      external host egresses from every scripting path, `file://` included.
+// Full rationale: HTML-ARTIFACT-CAPABILITY-RFC.md §4.7.
 
-import DOMPurify, { type Config } from "dompurify";
+// The ONLY sandbox token an artifact frame ever carries. `allow-same-origin` must
+// NEVER join it: together the two let the content clear its own sandbox and reach
+// the app origin. Frozen by tests here and in HtmlArtifactPane.sandbox.test.tsx.
+export const ARTIFACT_SANDBOX = "allow-scripts";
 
-// Layer A — strip every script-bearing construct from the author HTML. DOMPurify's
-// defaults drop <script>, on* handlers and javascript:/unknown-protocol URLs; we
-// also forbid the egress/nested-content tags the static viewer never needs.
-// FORCE_BODY keeps a root-level inline <style>; RETURN_TRUSTED_TYPE:false → string.
-const SANITIZE_CONFIG: Config = {
-  FORCE_BODY: true,
-  FORBID_TAGS: ["script", "iframe", "object", "embed", "base", "meta", "link"],
-  RETURN_TRUSTED_TYPE: false,
-};
-
-function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
-}
-
-// `default-src 'none'` blocks everything not explicitly allowed (scripts, fetch,
-// frames, remote images/fonts/styles); `style-src 'unsafe-inline'` is required for
-// author CSS and is safe with scripts disabled; images/fonts only as `data:` URIs;
-// no `base-uri` and no `form-action` so a stray <base>/<form> cannot redirect.
-const CSP_META =
-  '<meta http-equiv="Content-Security-Policy" content="' +
-  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; " +
-  "base-uri 'none'; form-action 'none'" +
-  '">';
+// `default-src 'none'` blocks every fetch, XHR, WebSocket, frame and remote
+// subresource; `webrtc 'block'` closes the one egress API that no fetch directive
+// covers. `script-src 'unsafe-inline'` is what lets author JS run at all — inline
+// only, never a remote origin, so an artifact stays self-contained and works
+// offline. It deliberately omits 'unsafe-eval', so `eval`/`new Function` throw.
+// This policy does NOT stop the document navigating itself: that is `frame-src` on
+// the shell (see SHELL_CSP).
+const CSP_DIRECTIVES =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  "img-src data:; font-src data:; base-uri 'none'; form-action 'none'; webrtc 'block'";
+const CSP_META = `<meta http-equiv="Content-Security-Policy" content="${CSP_DIRECTIVES}">`;
 
 // Neutralize any `</style` sequence in author CSS before it goes inside a <style>
-// element. Valid CSS never contains `</style>`; an attacker-crafted value could use
-// it to break out of the raw-text style element into HTML context (e.g. inject a
-// <meta http-equiv="refresh">). The iframe sandbox (no allow-scripts) + CSP already
-// block script and network egress, but this closes the markup-injection breakout too
-// (defense in depth). Inserting a backslash keeps the HTML parser from seeing a real
-// closing tag; the CSS parser treats the residue as an ignorable bad token.
+// element. Valid CSS never contains it, so a value that does is trying to break out
+// of the raw-text style element into HTML context. That buys little now that the
+// markup may carry script anyway — it is kept because it costs one replace and
+// keeps the style element well-formed, not as a security boundary. Inserting a
+// backslash keeps the HTML parser from seeing a real closing tag; the CSS parser
+// treats the residue as an ignorable bad token.
 function neutralizeStyleClose(css: string): string {
   return css.replace(/<\/(style)/gi, "<\\/$1");
 }
@@ -82,18 +85,28 @@ function headInjection(css: string): string {
   return `<meta charset="utf-8">${VIEWPORT_META}${CSP_META}${FIT_STYLE}${authorStyle}`;
 }
 
+// `<link rel="preconnect">` and `rel="dns-prefetch"` perform no *fetch*, so no CSP
+// fetch directive reaches them and they egress a hostname (DNS + SNI) even from a
+// frame that cannot run script — measured. A <link> has no legitimate use in a
+// document forbidden every external resource, so drop the element entirely. Author
+// markup that merely DISPLAYS `&lt;link` is escaped text and is untouched.
+function stripLinkElements(html: string): string {
+  return html.replace(/<link\b[^>]*>/gi, "");
+}
+
 /**
  * Compose the artifact into one self-contained HTML document string.
  *
  * The author markup (a bare fragment OR a full `<!doctype html>…` document) is
- * first SANITIZED (Layer A), then ALWAYS placed inside OUR shell's <body>, never
- * spliced into an author-provided <head>/<html>. This guarantees our CSP <meta>
- * is the FIRST thing the parser reaches, so it governs EVERY author subresource —
- * a meta CSP only applies to content parsed after it, so any `<img>` an author
- * put before their own <head> would otherwise fetch from the network before the
- * policy took effect. Sanitization drops head-only tags (<title>) and the
- * forbidden set (<script>/<link>/…); a full document's remaining meaningful body
- * content still renders — now under our already-active CSP.
+ * ALWAYS placed inside OUR shell's <body>, never spliced into an author-provided
+ * <head>/<html>. This guarantees our CSP <meta> is the FIRST thing the parser
+ * reaches, so it governs every author subresource AND every author script — a meta
+ * CSP only applies to content parsed after it, so anything an author put before
+ * their own <head> would otherwise load before the policy took effect.
+ *
+ * The markup is deliberately NOT sanitized: author script is the point. Isolation
+ * comes from the frame sandbox and the CSP above, both browser-enforced. A composed
+ * document must never be rendered in a frame that grants `allow-same-origin`.
  *
  * `zoom` (default 1) applies a browser-like zoom to the PREVIEW only, via the CSS
  * `zoom` property so content actually reflows (a wide fixed-width page shrinks to
@@ -103,8 +116,8 @@ function headInjection(css: string): string {
  */
 export function composeHtmlDocument(html: string, css: string, zoom = 1): string {
   const zoomStyle = zoom !== 1 ? `<style>html{zoom:${zoom}}</style>` : "";
-  const safeHtml = sanitizeHtml(html);
-  return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${safeHtml}</body></html>`;
+  const body = stripLinkElements(html);
+  return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${body}</body></html>`;
 }
 
 // Discrete zoom stops for the viewer's zoom controls (100% = 1, the default).
@@ -134,12 +147,19 @@ export function artifactFileName(title: string, ext = "html"): string {
 }
 
 /**
- * Trigger a client-side download of the composed document. The markup is inline on
- * the part, so this is a plain blob save — no network, no bearer (unlike the
- * bearer-protected file downloads of ppt_filler / writable_document).
+ * Trigger a client-side download of the artifact as one self-contained .html file.
+ * The markup is inline on the part, so this is a plain blob save — no network, no
+ * bearer (unlike the bearer-protected file downloads of ppt_filler /
+ * writable_document).
+ *
+ * It saves the SANDBOXED SHELL, never the bare composed document: a file opened by
+ * double-click is the top document on the `file://` origin with no frame around it,
+ * so carrying the artifact one level down inside `sandbox="allow-scripts"` is what
+ * keeps the browser-enforced isolation on the one output path that has no
+ * application to provide it.
  */
 export function downloadHtmlArtifact(html: string, css: string, title: string): void {
-  const doc = composeHtmlDocument(html, css);
+  const doc = sandboxedShellDocument(html, css);
   const blob = new Blob([doc], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -153,43 +173,69 @@ export function downloadHtmlArtifact(html: string, css: string, title: string): 
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-// Escape a document so it can ride safely inside a double-quoted `srcdoc="…"`
-// attribute: `"` (would end the attribute) and `&` (would start an entity) MUST
-// be escaped; `<`/`>` are escaped too so the value can never be misparsed. The
-// browser reverses these entities when it parses srcdoc, yielding the exact doc.
-function escapeForSrcdoc(doc: string): string {
-  return doc.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// The new tab's TOP document — trusted, author-free, its only body a sandboxed
-// iframe. Keeping the artifact one level down in `sandbox=""` restores the
-// browser-enforced no-script guarantee (Layer B) even though a blob: URL is
-// same-origin with the app: the only same-origin document is this shell, which
-// carries no author markup.
-const NEW_TAB_SHELL_STYLE =
+// The shell's TOP document — trusted and author-free. It exists for two reasons.
+//
+// It keeps the artifact off its own origin: the artifact may never BE the top
+// document, because a `blob:` URL is same-origin with the app and a saved file runs
+// on `file://`. And it carries `frame-src blob:`, the only control that stops the
+// artifact navigating itself out (see the file header) — which is why the artifact
+// is handed to the child frame as a `blob:` URL rather than inline `srcdoc`:
+// `frame-src` needs a URL to match, and `about:srcdoc` gives it none.
+//
+// The shell's policy is INHERITED by the blob: document (CSP propagates across
+// local schemes), so it must also carry everything the artifact needs.
+const SHELL_CSP = `<meta http-equiv="Content-Security-Policy" content="${CSP_DIRECTIVES}; frame-src blob:">`;
+const SHELL_STYLE =
   "<style>html,body{margin:0;height:100%}iframe{display:block;border:0;width:100%;height:100%}</style>";
 
 /**
- * The self-contained document opened in a new browser tab: the sanitized+CSP
- * composed artifact (Layers A & C) wrapped in a trusted shell whose sandboxed
- * iframe hosts it (Layer B). Exported for unit testing; `openHtmlArtifactInNewTab`
- * is the side-effecting caller.
+ * The artifact wrapped in its trusted sandboxed shell — the exact document used for
+ * the preview, the new tab and the downloaded file. Exported for unit testing.
+ *
+ * `zoom` reaches the artifact document unchanged; only the preview passes one.
  */
-export function newTabDocument(html: string, css: string): string {
-  const composed = composeHtmlDocument(html, css);
+export function sandboxedShellDocument(html: string, css: string, zoom = 1): string {
+  const composed = composeHtmlDocument(html, css, zoom);
+  // `</` is neutralized so the artifact's own `</script>` cannot close the shell's
+  // bootstrap block — a real bug this hit during browser testing.
+  const literal = JSON.stringify(composed).replace(/<\//g, "<\\/");
   return (
-    `<!doctype html><html><head><meta charset="utf-8">${NEW_TAB_SHELL_STYLE}</head>` +
-    `<body><iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeForSrcdoc(composed)}"></iframe></body></html>`
+    `<!doctype html><html><head><meta charset="utf-8">${SHELL_CSP}${SHELL_STYLE}</head>` +
+    `<body><iframe id="a" sandbox="${ARTIFACT_SANDBOX}" referrerpolicy="no-referrer"></iframe>` +
+    `<script>document.getElementById("a").src=` +
+    `URL.createObjectURL(new Blob([${literal}],{type:"text/html"}));</script>` +
+    `</body></html>`
+  );
+}
+
+/**
+ * Whether the artifact carries anything the browser would execute — a `<script>`
+ * element or an inline `on*` handler.
+ *
+ * Parsed rather than pattern-matched, because only a parser separates markup from
+ * text: a tutorial artifact that DISPLAYS `onclick="…"` inside a `<pre>` must not
+ * trip the warning, and the self-closing `<script/>` (a real, executing element
+ * once parsed) must. Runs once per export click, never on a render path.
+ *
+ * A UI hint only: the PNG/PDF export rasterizes a frame that cannot run script, so
+ * a JS-driven artifact captures its pre-script state and the viewer says so. Never
+ * a security boundary — that is the sandbox's job.
+ */
+export function artifactHasScript(html: string): boolean {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (doc.querySelector("script")) return true;
+  return Array.from(doc.querySelectorAll("*")).some((el) =>
+    el.getAttributeNames().some((name) => name.startsWith("on")),
   );
 }
 
 /**
  * Open the artifact full-size in a new browser tab — the escape hatch for content
- * too wide for the side panel. Loads a blob: URL of the sandboxed-shell document
- * (`newTabDocument`), opened with `noopener` so it cannot reach `window.opener`.
+ * too wide for the side panel. Loads a blob: URL of the sandboxed-shell document,
+ * opened with `noopener` so it cannot reach `window.opener`.
  */
 export function openHtmlArtifactInNewTab(html: string, css: string): void {
-  const blob = new Blob([newTabDocument(html, css)], { type: "text/html" });
+  const blob = new Blob([sandboxedShellDocument(html, css)], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener,noreferrer");
   // Keep the URL alive long enough for the new tab to load, then free it.
