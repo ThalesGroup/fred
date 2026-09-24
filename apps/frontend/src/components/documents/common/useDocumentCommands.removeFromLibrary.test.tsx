@@ -53,9 +53,6 @@ vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [vi.fn()],
   useMutateDocumentLabelsMutation: () => [vi.fn()],
 }));
-vi.mock("../../../slices/knowledgeFlow/knowledgeFlowApi.blob", () => ({
-  useLazyDownloadRawContentBlobQuery: () => [vi.fn()],
-}));
 
 import { useDocumentCommands } from "./useDocumentCommands";
 
