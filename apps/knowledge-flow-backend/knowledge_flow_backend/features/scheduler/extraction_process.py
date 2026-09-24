@@ -51,6 +51,8 @@ from typing import Any
 from fred_core.documents.document_structures import DocumentMetadata
 from temporalio import exceptions
 
+from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
+
 logger = logging.getLogger(__name__)
 
 # How long to wait for a SIGKILLed child and its group to disappear. Only an
@@ -226,12 +228,13 @@ class _ChildGroup:
 
 
 def _child_with_kpis(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, sender: socket.socket, target: Callable[..., None]) -> None:
-    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket, processor_activity_timer
 
     sender.setblocking(False)
     token = extraction_kpi_socket.set(sender)
     try:
-        target(request, result_pipe, parent_pid)
+        with processing_metrics_scope(processor_activity_timer):
+            target(request, result_pipe, parent_pid)
     finally:
         extraction_kpi_socket.reset(token)
         sender.close()
@@ -586,7 +589,10 @@ async def extract_document(
     from temporalio import activity
 
     if not activity.in_activity():
-        await in_process_fallback()
+        from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
+
+        with processing_metrics_scope(processor_activity_timer):
+            await in_process_fallback()
         return
 
     from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault

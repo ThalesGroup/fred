@@ -29,6 +29,8 @@ from temporalio.testing import ActivityEnvironment
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import ProcessingConfig
+from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
+from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
@@ -49,7 +51,9 @@ class MockImageDescriber(BaseImageDescriber):
 
 @pytest.fixture
 def processor():
-    return PdfMarkdownProcessor()
+    # The execution boundary supplies telemetry; the processor only consumes it.
+    with processing_metrics_scope(processor_activity_timer):
+        yield PdfMarkdownProcessor()
 
 
 @pytest.fixture
