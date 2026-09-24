@@ -119,8 +119,8 @@ describe("HtmlArtifactPane preview buffers", () => {
     const [back, loaded] = container.querySelectorAll("iframe");
     expect(back.hasAttribute("srcdoc")).toBe(false);
     // The preview renders the shell, which carries the artifact in its bootstrap
-    // string literal with `</` neutralized — hence `<\/h1>`, not `</h1>`.
-    expect(loaded.getAttribute("srcdoc")).toContain("<h1>hi<\\/h1>");
+    // string literal with every `<` escaped — hence `\u003ch1>`, not `<h1>`.
+    expect(loaded.getAttribute("srcdoc")).toContain("\\u003ch1>hi\\u003c/h1>");
     expect(loaded.getAttribute("srcdoc")).toContain("frame-src blob:");
   });
 });

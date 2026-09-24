@@ -165,16 +165,28 @@ describe("composeHtmlDocument keeps author script and closes the policy", () => 
     expect(out).toContain("script-src 'unsafe-inline';");
   });
 
-  it("drops <link> elements, the one construct that egresses despite the policy", () => {
+  it("defuses <link> elements, the one construct that egresses despite the policy", () => {
     // `preconnect`/`dns-prefetch` perform no fetch, so no CSP directive reaches
     // them; measured egressing a hostname even from a frame that cannot run script.
-    const out = composeHtmlDocument(
-      '<link rel="preconnect" href="https://attacker.example"><link rel="stylesheet" href="https://a.example/x.css"><p>ok</p>',
-      "",
-    );
-    expect(out).toContain("<p>ok</p>");
-    expect(out).not.toContain("attacker.example");
-    expect(out.toLowerCase()).not.toContain("<link");
+    // Asserted through the PARSER: what matters is that no `link` element exists in
+    // the composed document, not that some substring is absent from its text.
+    const links = (author: string) =>
+      new DOMParser().parseFromString(composeHtmlDocument(author, ""), "text/html").querySelectorAll("link").length;
+
+    expect(
+      links(
+        '<link rel="preconnect" href="https://attacker.example"><link rel="stylesheet" href="https://a.example/x.css"><p>ok</p>',
+      ),
+    ).toBe(0);
+    // Two measured bypasses of a delete-the-match strip, both inert now.
+    // An unterminated tag: deletion needs a closing `>`, which the author withholds
+    // and the composed document then supplies from its own `</body>`.
+    expect(links('<p>ok</p><link rel=preconnect href="https://attacker.example" ')).toBe(0);
+    // And a tag the strip would MANUFACTURE, by splicing together what surrounded
+    // the text it cut out. The browser parses this author markup as no link at all.
+    expect(links('<li<link>nk rel=preconnect href="https://attacker.example">')).toBe(0);
+
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("<p>ok</p>");
   });
 
   it("leaves markup that merely DISPLAYS a <link> tag as text alone", () => {
@@ -231,21 +243,29 @@ describe("sandboxedShellDocument (RFC §4.7 — the sandboxed shell)", () => {
     expect(sandboxedShellDocument("<p>x</p>", "")).toContain("webrtc 'block'");
   });
 
-  it("neutralizes the artifact's own </script> so it cannot close the bootstrap", () => {
-    // This bug bit during browser testing: the artifact's closing tag ended the
-    // shell's script block, the bootstrap never ran and the frame stayed blank.
+  it("leaves the artifact no `<` at all inside the bootstrap literal", () => {
+    // Two bugs, both measured in the browser, both closed by escaping every `<`:
+    // the artifact's own `</script>` ended the shell's script block, and an unclosed
+    // `<!--` before a `<script` flipped the tokenizer into a state where `</script>`
+    // stops closing anything. Either way the bootstrap never ran and the frame
+    // stayed blank — so no author `<` may survive into that literal.
     const out = sandboxedShellDocument("<script>window.x=1</script>", "");
-    expect(out).toContain("<\\/script>");
+    expect(out).toContain("\\u003c/script>");
     // Exactly one real closing tag: the bootstrap's own.
     expect((out.match(/<\/script>/g) ?? []).length).toBe(1);
+
+    const commented = sandboxedShellDocument("<h1>a</h1><!-- <script>", "");
+    expect(commented).not.toContain("<!--");
+    expect(commented).toContain("\\u003c!--");
+    expect((commented.match(/<\/script>/g) ?? []).length).toBe(1);
   });
 
   it("parses no author markup at the shell's own top level", () => {
     const out = sandboxedShellDocument("<h1>hi</h1>", "");
-    // The artifact rides inside a JS string literal with every `</` neutralized,
-    // so no author element ever closes at the shell's top level.
+    // The artifact rides inside a JS string literal with every `<` escaped, so no
+    // author element ever opens or closes at the shell's top level.
     expect(out).not.toContain("<h1>hi</h1>");
-    expect(out).toContain("<h1>hi<\\/h1>");
+    expect(out).toContain("\\u003ch1>hi\\u003c/h1>");
   });
 
   it("passes the preview's zoom through to the artifact document", () => {
@@ -299,6 +319,14 @@ describe("artifactHasScript", () => {
     // `<script/>` is not `<script>` followed by space or `>`, so pattern matching
     // misses it while the browser still runs it — the one case the toast is for.
     expect(artifactHasScript("<script/>window.x=1</script><p>after</p>")).toBe(true);
+  });
+
+  it("spots a `javascript:` URL, which runs on activation", () => {
+    // `script-src 'unsafe-inline'` permits it, so such a page CAN execute and must
+    // get the stop control and the "captured before its JavaScript runs" warning.
+    expect(artifactHasScript('<a href="javascript:alert(1)">go</a>')).toBe(true);
+    expect(artifactHasScript('<a href=" JavaScript:alert(1)">go</a>')).toBe(true);
+    expect(artifactHasScript('<a href="https://example.com/javascript:x">go</a>')).toBe(false);
   });
 
   it("stays false for an artifact that merely DISPLAYS handler code as text", () => {

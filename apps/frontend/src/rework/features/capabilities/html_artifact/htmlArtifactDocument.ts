@@ -87,11 +87,14 @@ function headInjection(css: string): string {
 
 // `<link rel="preconnect">` and `rel="dns-prefetch"` perform no *fetch*, so no CSP
 // fetch directive reaches them and they egress a hostname (DNS + SNI) even from a
-// frame that cannot run script — measured. A <link> has no legitimate use in a
-// document forbidden every external resource, so drop the element entirely. Author
-// markup that merely DISPLAYS `&lt;link` is escaped text and is untouched.
-function stripLinkElements(html: string): string {
-  return html.replace(/<link\b[^>]*>/gi, "");
+// frame that cannot run script — measured. The element is RENAMED rather than
+// deleted: deletion needs a closing `>` the author can simply withhold, and cutting
+// text out can splice a fresh `<link` from what surrounds the hole. Renaming leaves
+// an unknown element whatever follows it. Markup that merely DISPLAYS `&lt;link` is
+// escaped text and is untouched. This covers markup only — author script can append
+// a live one at runtime, an open residual (RFC §4.7).
+function defuseLinkElements(html: string): string {
+  return html.replace(/<link\b/gi, "<x-link");
 }
 
 /**
@@ -116,7 +119,7 @@ function stripLinkElements(html: string): string {
  */
 export function composeHtmlDocument(html: string, css: string, zoom = 1): string {
   const zoomStyle = zoom !== 1 ? `<style>html{zoom:${zoom}}</style>` : "";
-  const body = stripLinkElements(html);
+  const body = defuseLinkElements(html);
   return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${body}</body></html>`;
 }
 
@@ -196,9 +199,12 @@ const SHELL_STYLE =
  */
 export function sandboxedShellDocument(html: string, css: string, zoom = 1): string {
   const composed = composeHtmlDocument(html, css, zoom);
-  // `</` is neutralized so the artifact's own `</script>` cannot close the shell's
-  // bootstrap block — a real bug this hit during browser testing.
-  const literal = JSON.stringify(composed).replace(/<\//g, "<\\/");
+  // Every `<` becomes a `\u003c` escape — same string value, but no `<` left for the
+  // HTML tokenizer — so nothing in the artifact can disturb the shell's bootstrap:
+  // neither the artifact's own `</script>` (which ended the block during browser
+  // testing) nor an unclosed `<!--` before a `<script`, which flips the tokenizer
+  // into a state where `</script>` stops closing anything and the bootstrap dies.
+  const literal = JSON.stringify(composed).replace(/</g, "\\u003c");
   return (
     `<!doctype html><html><head><meta charset="utf-8">${SHELL_CSP}${SHELL_STYLE}</head>` +
     `<body><iframe id="a" sandbox="${ARTIFACT_SANDBOX}" referrerpolicy="no-referrer"></iframe>` +
@@ -210,7 +216,7 @@ export function sandboxedShellDocument(html: string, css: string, zoom = 1): str
 
 /**
  * Whether the artifact carries anything the browser would execute — a `<script>`
- * element or an inline `on*` handler.
+ * element, an inline `on*` handler, or a `javascript:` URL.
  *
  * Parsed rather than pattern-matched, because only a parser separates markup from
  * text: a tutorial artifact that DISPLAYS `onclick="…"` inside a `<pre>` must not
@@ -224,6 +230,9 @@ export function sandboxedShellDocument(html: string, css: string, zoom = 1): str
 export function artifactHasScript(html: string): boolean {
   const doc = new DOMParser().parseFromString(html, "text/html");
   if (doc.querySelector("script")) return true;
+  // A `javascript:` URL runs on activation, and `script-src 'unsafe-inline'` permits it.
+  const hrefs = Array.from(doc.querySelectorAll("[href]"));
+  if (hrefs.some((el) => /^\s*javascript:/i.test(el.getAttribute("href") ?? ""))) return true;
   return Array.from(doc.querySelectorAll("*")).some((el) =>
     el.getAttributeNames().some((name) => name.startsWith("on")),
   );

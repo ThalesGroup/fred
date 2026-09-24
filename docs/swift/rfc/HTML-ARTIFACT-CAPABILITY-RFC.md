@@ -241,12 +241,20 @@ requests while its script still ran**. Both halves matter — an earlier candida
 `frame-src 'none'`, produced zero requests *because it blocked the artifact frame
 outright*, which would have removed the feature rather than secured it.
 
-**A residual, closed by content removal rather than policy.** `<link
+**A residual that content filtering narrows but does not close.** `<link
 rel="preconnect">` and `rel="dns-prefetch"` perform no fetch, so no CSP directive
 reaches them, and they egress a hostname (DNS + SNI) **even from a frame that cannot
-run script** — measured. `<link>` has no legitimate use in a document forbidden every
-external resource, so `composeHtmlDocument` drops the element. This is the only
-content filtering left, and it exists because policy cannot express it.
+run script** — measured. `composeHtmlDocument` therefore **renames** the element to
+`<x-link>` rather than deleting it. Deleting needs a closing `>` an author can simply
+withhold, and cutting text out can splice a fresh `<link` together from what
+surrounded the hole; both were measured egressing in Chrome 153, and the first also
+went out through the PNG/PDF frame, whose only other isolation is that script cannot
+run. Renaming leaves an unknown element however the tag terminates.
+
+What this does **not** cover is script: an artifact can append a live `<link>` at
+runtime, which no markup pass can see. On the three scripting paths the hostname
+channel therefore stays open. Content filtering is the only one left here, and it
+exists because policy cannot express this at all.
 
 An opaque origin also means `localStorage`, `sessionStorage` and cookies are
 unavailable and **throw** on access. That is a consequence of the isolation, not a
@@ -266,8 +274,8 @@ path by path; three of the five have no application frame to rely on:
 | In-app preview | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
 | New browser tab | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
 | `.html` download | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
-| PNG export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` stripped |
-| PDF export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` stripped |
+| PNG export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` defused |
+| PDF export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` defused |
 | **Copy to clipboard** | none — plain text handed to the user | **the user's own judgement** |
 
 The clipboard is a real sixth path and is not contained by any of the above: Copy
