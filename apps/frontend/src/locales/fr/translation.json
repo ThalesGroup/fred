@@ -1671,9 +1671,7 @@
         "gettingStarted": "Démarrage",
         "features": "Fonctionnalités",
         "guides": "Guides et cas d'usage",
-        "troubleshooting": "Résolution de problèmes",
-        "faq": "FAQ",
-        "changelog": "Nouveautés"
+        "troubleshooting": "Aide et limites"
       }
     },
     "avatarCrop": {

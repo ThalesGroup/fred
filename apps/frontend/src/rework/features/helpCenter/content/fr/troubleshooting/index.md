@@ -1,20 +1,26 @@
 ---
 title: Diagnostic rapide
 order: 0
-description: Un premier réflexe par symptôme pour trouver la bonne page.
-icon: build
+description: Un symptôme, une cause probable, où regarder.
+icon: help_center
 ---
 
-# Résolution de problèmes
+# Aide et limites
 
-Repérez votre symptôme et suivez le lien vers la page qui le traite.
+Repérez votre symptôme. Les causes sont classées par fréquence.
 
-| Symptôme                                                     | Où regarder                                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------------- |
-| Je n'arrive pas à me connecter, ou je ne vois pas mon équipe | [Connexion et accès](/help/fr/troubleshooting/login-access)         |
-| Une réponse s'interrompt, un agent est indisponible          | [Problèmes de chat](/help/fr/troubleshooting/chat-issues)           |
-| Un document n'est pas trouvé ou jamais cité                  | [Problèmes de documents](/help/fr/troubleshooting/documents-issues) |
-| C'est lent, ou je bute sur une limite                        | [Lenteurs et limites](/help/fr/troubleshooting/limits)              |
+| Symptôme                               | Cause la plus fréquente                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Un document n'est jamais utilisé       | Il est déposé **hors d'une bibliothèque**, ou la bibliothèque n'est pas rattachée à l'agent |
+| Un bouton ou une page n'apparaît pas   | Votre **rôle** ne le permet pas — souvent Admin sans Éditeur                                |
+| Un agent est visible mais inutilisable | Il est **suspendu** : une de ses fonctions a été refermée                                   |
+| La réponse s'interrompt                | Un aléa de traitement : relancez, ou découpez la demande                                    |
+| Je ne trouve pas mon équipe            | Elle est **privée** : elle n'apparaît qu'à ses membres                                      |
+| C'est lent, ou un dépôt est refusé     | Un volume ou un quota — voir [Limites et données](/help/fr/troubleshooting/limits-and-data) |
 
-> Votre cas n'y figure pas ? Utilisez la **recherche** en haut de page ou
-> consultez la [FAQ](/help/fr/faq).
+Le détail est sur deux pages :
+[Problèmes courants](/help/fr/troubleshooting/common-problems) et
+[Limites et données](/help/fr/troubleshooting/limits-and-data).
+
+> Si l'application se comporte autrement que ce centre d'aide ne le décrit,
+> **fiez-vous à l'application** et signalez l'écart à votre administrateur.

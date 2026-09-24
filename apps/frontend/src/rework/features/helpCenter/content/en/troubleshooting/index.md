@@ -1,20 +1,26 @@
 ---
 title: Quick diagnosis
 order: 0
-description: One first reflex per symptom to find the right page.
-icon: build
+description: A symptom, a likely cause, where to look.
+icon: help_center
 ---
 
-# Troubleshooting
+# Help and limits
 
-Spot your symptom and follow the link to the page that handles it.
+Find your symptom. Causes are ordered by frequency.
 
-| Symptom                                  | Where to look                                                |
-| ---------------------------------------- | ------------------------------------------------------------ |
-| I can't sign in, or I don't see my team  | [Login and access](/help/en/troubleshooting/login-access)    |
-| An answer stops, an agent is unavailable | [Chat issues](/help/en/troubleshooting/chat-issues)          |
-| A document isn't found or never cited    | [Document issues](/help/en/troubleshooting/documents-issues) |
-| It's slow, or I hit a limit              | [Slowness and limits](/help/en/troubleshooting/limits)       |
+| Symptom                             | Most frequent cause                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| A document is never used            | It sits **outside a library**, or the library is not attached to the agent            |
+| A button or page is missing         | Your **role** does not allow it — often Admin without Editor                          |
+| An agent is visible but unusable    | It is **suspended**: one of its functions was closed                                  |
+| The answer stops midway             | A processing hiccup: ask again, or split the request                                  |
+| I cannot find my team               | It is **private**: it only appears to its members                                     |
+| It is slow, or an upload is refused | A volume or a quota — see [Limits and data](/help/en/troubleshooting/limits-and-data) |
 
-> Your case isn't here? Use the **search** at the top of the page or check the
-> [FAQ](/help/en/faq).
+The detail is on two pages:
+[Common problems](/help/en/troubleshooting/common-problems) and
+[Limits and data](/help/en/troubleshooting/limits-and-data).
+
+> If the application behaves differently from what this help centre describes,
+> **trust the application** and report the gap to your administrator.

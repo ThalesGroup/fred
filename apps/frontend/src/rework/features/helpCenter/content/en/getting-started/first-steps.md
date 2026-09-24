@@ -1,54 +1,56 @@
 ---
-title: First login
+title: First steps
 order: 10
-description: Sign in, choose your language, and find your way around the interface.
+description: Sign in, switch language, find your way around, join a team.
 icon: login
 ---
 
-# First login
-
-A few minutes are enough to sign in and get your bearings. We'll walk you
-through it step by step.
+# First steps
 
 ## Signing in
 
-You access the platform with your organization account, through the secure
-sign-in page. Enter your usual credentials: no separate password is required.
+Access uses your organization account: your usual credentials, no password to
+create. If sign-in fails or loops, refresh the page or reopen the tab for a
+clean session; if it persists, it is an access-configuration matter: ask your
+administrator.
 
-![TODO: screenshot — sign-in page](assets/first-steps-login.png)
+## Switching language
 
-If you can't sign in, see
-[Login and access](/help/en/troubleshooting/login-access).
-
-## Choosing your language
-
-The interface is available in French and English. To switch languages, open the
-**profile menu** (your name, at the bottom of the navigation panel), choose
-**Profile**, then pick your language on the **Settings** page. This help
-center follows the same choice — you can also switch its language with the
-**FR / EN** selector at the top right.
+The interface exists in French and English. Open the **profile menu** (your
+name, at the bottom of the navigation panel) → **Profile** → **Settings**. This
+help centre follows the same choice, and its **FR / EN** switch at the top right
+changes it for the moment.
 
 ## Finding your way around
 
-Three areas make up the screen:
+Three zones:
 
-- **The navigation panel**, on the left: it gives access to your personal
-  space, the team marketplace, a top-level **Help Center** icon (opens this
-  help center in a new tab), and — once a team is selected — its agents,
-  prompts, resources, and settings.
-- **The workspace**, in the center: this is where the current page or
-  conversation appears.
-- **The profile menu**, at the bottom left: your Profile, Contact support, and
-  sign-out.
-
-![TODO: screenshot — annotated interface overview](assets/first-steps-overview.png)
+- **The navigation panel**, on the left: your personal space, the team
+  marketplace, this help centre, and — once a team is selected — its agents,
+  prompts, resources and settings.
+- **The work area**, in the middle: the current page or conversation.
+- **The profile menu**, bottom left: your profile, support, sign-out.
 
 ## Your personal space
 
-From your very first login, you have a **personal space**. It's a team of one:
-you can create agents there, upload documents, and test prompts without anyone
-else having access. It's the ideal place to get comfortable before joining a
-shared team.
+From your first sign-in you have a **personal space**: a team you are the only
+member of. You can drop documents there and try agents out without anyone else
+reaching them — not even a platform administrator. It is the place to get
+familiar with the platform.
 
-Ready to learn the vocabulary? Move on to the
-[key concepts](/help/en/getting-started/concepts).
+## Joining a team
+
+The **team marketplace**, in the navigation panel, lists the teams visible in
+your organization. Each shows how it is joined:
+
+- **Open** — you join it with one click on **Join**.
+- **Invite only** — a team administrator has to add you.
+
+A team can also be **private**: it then appears only to its members. If you are
+looking for a team and cannot find it, ask one of its members to add you.
+
+> Creating a team is restricted to certain platform roles, and whoever creates
+> one does not become its administrator — see
+> [Teams and permissions](/help/en/features/teams-and-permissions).
+
+Next: [your first conversation](/help/en/getting-started/first-conversation).
