@@ -39,6 +39,7 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+              - '.github/workflows/Check-pending-requests.yml'
             frontend-packages:
               - 'libs/frontend/**'
               - 'apps/frontend/src/styles/color-ramps.css'
@@ -413,6 +414,7 @@ jobs:
         include:
           - check: type-check
           - check: format-check
+          - check: lint
           # - check: knip
           #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}
