@@ -29,5 +29,9 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* Without min-height:0 a flex:1 child (a full-height page filling this column)
+   * cannot shrink below its content, so a tall table grows the page and this
+   * <main> scrolls as a whole instead of the table scrolling inside its own box. */
+  min-height: 0;
   overflow: auto;
 }
