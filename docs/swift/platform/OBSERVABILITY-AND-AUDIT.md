@@ -248,3 +248,111 @@ authorization gap (the values logged are query filter dims already carried in th
 identity fields, and `category` resolves correctly to `application` regardless of the tag text) —
 just hygiene. Renaming to a non-reserved tag (e.g. `[KPI-STORE]`) or dropping the bracket entirely
 is a good follow-up.
+
+## Authentication operational signals
+
+The API security startup hook installs an optional observer for the shared M2M
+provider. Fred exports its collectors through the existing default Prometheus
+registry. No metrics dependency is added to fred-pod.
+
+| Metric | Meaning |
+| --- | --- |
+| `fred_auth_m2m_request_seconds` | Actual IAM token attempts including response validation; operation initial/renewal and outcomes success/error/cancelled. Histogram `_count` gives request/error rates. |
+| `fred_auth_m2m_acquire_seconds` | Caller wait including cache, lock and IAM; same outcomes. |
+| `fred_auth_m2m_cache_total` | Decisions hit/miss/shared_refresh; not mutually exclusive request outcomes. |
+| `fred_auth_delegation_decisions_total` | Grant admission accepted/rejected, with the bounded reasons of the existing audit events. Not downstream authorization or execution success. |
+
+These are operational collectors, not product analytics. Labels contain no URL,
+client, user, team, token or run ID. Use scrape job/instance to locate the source.
+`initial` means this provider has never acquired a token; `renewal` means it is
+replacing a previously acquired token. Each provider/replica has its own cache;
+a new process starts with an initial acquisition. A cache miss is not necessarily
+an IAM call: a concurrent caller may wait for another caller's renewal.
+
+### Using the dashboard
+
+Open **Fred / Application KPIs** in local Docker Grafana (default
+http://localhost:3002). From deployment-factory, `make grafana-up` starts local
+Prometheus and Grafana. Use matching Fred/factory branches and restart the three
+Fred APIs after configuration changes. The local exporters listen on 0.0.0.0 so
+Docker can scrape them through host.docker.internal; keep ports 9000, 9222, 9111
+and worker 9112 on a trusted development network. Check Prometheus **Targets**
+(default http://localhost:9090/targets) before diagnosing an empty dashboard.
+
+Docker and GCP provision the same application dashboard JSON and datasource UID;
+Docker's `gmp` UID points to local Prometheus, GCP's to its managed query service.
+The base Docker stack does not start Grafana automatically. The local command
+above is sufficient; the full extended stack is not required. An already-running
+Grafana must be recreated through its Make target to load new volume mounts.
+
+- **IAM workload token requests / s**: initial acquisition versus renewal, success
+  versus error/cancellation. No new request during cache reuse is expected.
+- **IAM request p95**: time spent obtaining/validating a token. **Caller wait p95**
+  also includes lock waiting; it can rise when concurrent callers share a refresh.
+- **Cache decisions**: hit, miss, shared refresh. These are events, not
+  mutually exclusive outcomes; do not sum them as a request count.
+- **Delegation decisions**: grant admission only, not a guarantee of downstream
+  authorization or execution success.
+
+Known series start at zero. Missing series are not proof of zero failures: verify
+scrape `up`, the matching application build and the time window first. Rate panels
+need at least two scrapes; p95 has no useful value without observations. Histograms
+are bucket-based estimates, not exact request timings. For sparse renewal tests,
+use `increase(fred_auth_m2m_request_seconds_count{operation="renewal"}[10m])`;
+for an exact single-run comparison, record raw counter values before/after,
+ensuring there was no process restart or other traffic.
+
+### Keeping this documentation current
+
+The collector declarations in `fred_core/security/auth_metrics.py` are the source
+of truth for names, labels and histogram buckets. Keep this guide focused on
+meaning, scope and operations; do not duplicate buckets or every Prometheus
+`_bucket`/`_sum`/`_count` series in prose. When changing the collectors, update the
+shared dashboard and run `make check-auth-dashboard` in deployment-factory
+(`SWIFT_SRC=/path/to/fred` if needed). It checks authentication query names and
+aggregation labels against the source without importing applications. This is a
+static contract check, not a PromQL execution or live scrape check. Run it during
+paired repository reviews; deployment-factory currently has no CI workflow that
+automatically enforces it. Runtime tests verify initial acquisition, cache reuse,
+renewal and acquisition-failure observations.
+
+Runtime user refresh already emits `auth.token_refresh_latency_ms` through the
+KPI writer. Browser refresh contacts the IAM directly: its console event
+`browser_token_refresh` reports refreshed/reused/error/timeout/superseded and
+`duration_ms`, without token contents. This is browser-local evidence, not central
+production telemetry. Central browser/IAM event collection remains separate work.
+These counters do not cover all JWT rejection paths or count auth-related run
+failures. A short chat after expiry does not prove renewal during a long run.
+
+### Execution errors and support references
+
+Unhandled runtime errors return a fixed phase-specific explanation and a random
+support reference to the UI. Search `error_ref` in the agent pod logs for the same
+reference. The diagnostic includes exception types and code locations (file basename,
+line, function), including bounded exception chains/groups. It deliberately omits
+exception messages, URLs, variables and source lines, which may contain credentials
+or delegated identities. The reference is per error, not a user/session identifier.
+
+## Deferred proposal: platform-admin authentication health
+
+Deferred by the developer on 2026-09-24 to a separate issue/PR; not part of the
+current authentication-metrics implementation.
+
+A read-only admin card could show, over a selectable recent window: reporting
+replicas and scrape failures, initial M2M acquisitions versus renewals, failed
+attempts, IAM latency p95, delegation admission outcomes and data freshness.
+Allow component/replica breakdown and a copyable diagnostic summary without
+credentials or user identities. Failed attempts do not imply failed user runs;
+missing data and idle traffic must not be presented as healthy operation.
+
+Architecture: the frontend calls a platform-admin-only Control Plane endpoint;
+Control Plane executes fixed, bounded queries against Prometheus or the managed
+metrics query service. Aggregate across all replicas; do not poll individual
+Fred pods or query Grafana. Keep metrics credentials server-side, use timeouts
+and bounded refresh/caching, and never expose an unrestricted PromQL proxy.
+
+Start with observed replica counts and scrape failures. Expected-versus-reporting
+coverage needs reliable deployment discovery and is optional follow-up scope.
+Browser renewal telemetry remains a separate gap. Before implementation, confirm
+the deployment's query endpoint, read credentials and component labels; test
+permissions, multi-replica aggregation, restarts and missing/stale data.

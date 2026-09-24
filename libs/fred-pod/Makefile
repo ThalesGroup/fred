@@ -1,4 +1,4 @@
-VERSION=4.1.0
+VERSION=4.2.0
 PROJECT_NAME=fred-pod
 PY_PACKAGE=fred_pod
 

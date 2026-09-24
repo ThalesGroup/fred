@@ -198,6 +198,37 @@ def test_request_managed_execution_carries_team_in_runtime_context() -> None:
     assert req.effective_team_id() == "t-1"
 
 
+@pytest.mark.parametrize(
+    "runtime_context",
+    [None, {"user_id": "u-1"}, {"user_id": "u-1", "team_id": "   "}],
+)
+def test_request_managed_execution_requires_nonblank_team(
+    runtime_context: dict[str, str] | None,
+) -> None:
+    with pytest.raises(ValueError, match=r"runtime_context\.team_id is required"):
+        RuntimeExecuteRequest.model_validate(
+            {
+                "agent_instance_id": "inst-42",
+                "input": "hello",
+                "runtime_context": runtime_context,
+            }
+        )
+
+
+def test_request_schema_advertises_managed_team_and_direct_modes() -> None:
+    schema = RuntimeExecuteRequest.model_json_schema()
+    managed, direct = schema["oneOf"]
+
+    assert managed["required"] == ["agent_instance_id", "runtime_context"]
+    assert managed["properties"]["agent_id"] == {"type": "null"}
+    team_schema = managed["properties"]["runtime_context"]
+    assert team_schema["required"] == ["team_id"]
+    assert team_schema["properties"]["team_id"]["pattern"] == r"\S"
+
+    assert direct["required"] == ["agent_id"]
+    assert direct["properties"]["agent_instance_id"] == {"type": "null"}
+
+
 def test_request_resume_payload_allows_empty_input() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",

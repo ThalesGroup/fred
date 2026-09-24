@@ -23,6 +23,7 @@ is the only one not listed as held — so it is written again.
 from __future__ import annotations
 
 import asyncio
+import secrets
 from typing import Any
 
 import httpx
@@ -256,6 +257,48 @@ def test_a_blip_on_the_way_to_fred_does_not_end_the_wait(monkeypatch):
 
     assert outcome.succeeded is True
     assert len(fred.calls) == 4
+
+
+def test_a_token_endpoint_out_of_reach_does_not_end_the_wait(monkeypatch):
+    """The pod's own token is on the way to Fred too, so losing it is a blip."""
+    monkeypatch.setenv("ACME_KB_CLIENT_SECRET", secrets.token_urlsafe())
+    clock = [1_000.0]
+    token_requests = 0
+    polls = 0
+
+    def _network(request: httpx.Request) -> httpx.Response:
+        nonlocal token_requests, polls
+        if request.url.path.endswith("/protocol/openid-connect/token"):
+            token_requests += 1
+            if token_requests == 1:
+                raise httpx.ConnectError("unreachable", request=request)
+            return httpx.Response(
+                200, json={"access_token": secrets.token_urlsafe(), "expires_in": 300}
+            )
+        polls += 1
+        return httpx.Response(200, json=_summary("succeeded"))
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        documents_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(
+            **{**kwargs, "transport": httpx.MockTransport(_network)}
+        ),
+    )
+
+    async def _sleep(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr(documents_module.asyncio, "sleep", _sleep)
+    publisher = DocumentPublisher(
+        _configuration(), library_id=LIBRARY, source_tag="fred"
+    )
+
+    outcome = asyncio.run(publisher.wait(TASK, poll_interval=2))
+
+    assert outcome.succeeded is True
+    assert (token_requests, polls) == (2, 1)
 
 
 @pytest.mark.parametrize("status", [408, 429])

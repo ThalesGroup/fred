@@ -80,6 +80,71 @@ class CheckpointStrategy(str, Enum):
     DISABLED = "disabled"
 
 
+class RuntimeStopReason(str, Enum):
+    """
+    Machine-readable reason a run was ended by the platform.
+
+    Why this exists: message text alone cannot tell a lost credential from a
+    crash, so a client cannot choose between "sign in again" and "retry".
+    """
+
+    AUTHORITY_LOST = "authority_lost"
+    CANCELLED = "cancelled"
+    DELEGATION_UNAVAILABLE = "delegation_unavailable"
+
+
+class RunStopError(RuntimeError):
+    """Base: a run must end; `reason` is the machine-readable value on the terminal event.
+
+    The exception's own text is platform-owned. Checkpointers and generic handlers
+    stringify exceptions, so an upstream response body must never sit on `args`.
+    """
+
+    reason: str = "cancelled"
+    _SENTENCE = "The run was stopped."
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(self._SENTENCE)
+        self._detail = detail
+
+    @property
+    def detail(self) -> str | None:
+        """Caller-supplied context, never stringified into sinks by the platform."""
+        return self._detail
+
+
+def unwrap_run_stop_error(exc: BaseException) -> RunStopError | None:
+    """Find a run-stopping error anywhere in a raised exception's chain.
+
+    A tool failure becomes text so the transcript keeps a result for every call;
+    a run-stopping one must not, so it is looked for through the wrappers the
+    tool and transport layers add.
+    """
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        if isinstance(current, RunStopError):
+            return current
+
+        for nested in (
+            getattr(current, "__cause__", None),
+            getattr(current, "__context__", None),
+        ):
+            if nested is not None:
+                stack.append(nested)
+        group = getattr(current, "exceptions", None)
+        if isinstance(group, tuple):
+            stack.extend(group)
+
+    return None
+
+
 class RuntimeEventKind(str, Enum):
     STATUS = "status"
     TOOL_CALL = "tool_call"
@@ -387,10 +452,15 @@ class RuntimeErrorEvent(RuntimeEventBase):
     - Treat `execution_error` as a terminal event: no `final` will follow.
     - Display `message` as a technical error detail (not as assistant content).
     - The stream closes after this event is delivered.
+    - `reason` is set only when the platform itself ended the run. It is absent
+      for a crash, so a client that ignores it behaves exactly as before.
+      When it is set, `message` is a platform-owned sentence that never carries
+      upstream error detail.
     """
 
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
     message: str = Field(..., min_length=1)
+    reason: RuntimeStopReason | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from "uuid";
 import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { ChatControlDescriptor, ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePrepareAgentExecutionMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
@@ -307,8 +307,7 @@ export function useChatSse(
     flushPendingWrites,
   } = params;
 
-  const [prepareExecution] =
-    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const [prepareExecution] = usePrepareAgentExecutionMutation();
   const dispatch = useDispatch();
   const { i18n } = useTranslation();
 
@@ -356,6 +355,15 @@ export function useChatSse(
   // registry (plugin first, then the capability-agnostic stock kit).
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
   const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      preflightOwnerRef.current = null;
+    },
+    [],
+  );
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;

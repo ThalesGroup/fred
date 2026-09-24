@@ -36,6 +36,7 @@ from fred_runtime.capabilities.registry import (
     FRED_CAPABILITIES_ENTRY_POINT_GROUP,
     CapabilityRegistry,
 )
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
 from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
@@ -286,6 +287,27 @@ async def test_a_port_failure_degrades_to_an_error_artifact() -> None:
 
     assert message.artifact.is_error
     assert "find similar passages" in message.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+async def test_authority_loss_escapes_instead_of_becoming_an_artifact(
+    wrapped: bool,
+) -> None:
+    stop = AuthorityLostError()
+    error: Exception = stop
+    if wrapped:
+        try:
+            raise stop
+        except AuthorityLostError as exc:
+            try:
+                raise DocumentPortCallError("port wrapper") from exc
+            except DocumentPortCallError as wrapper:
+                error = wrapper
+    port = _FakePort(error=error)
+
+    with pytest.raises(AuthorityLostError):
+        await _invoke(_ctx(port), {"anchor": "x", "document_uids": ["doc-b"]})
 
 
 @pytest.mark.asyncio

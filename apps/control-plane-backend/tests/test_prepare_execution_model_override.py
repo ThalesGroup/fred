@@ -20,6 +20,9 @@ instance's chat model for that one call only, never persisted. Covers:
   returned `agent_profile_overrides` for this instance's source_agent_id
 - a regular user token is rejected (403) before profile validation ever runs
 - a profile the team can't use is rejected (422), not silently ignored
+- a workload holding the caller role is refused as itself whatever the
+  switches, and honored under delegation for the person its grant names; a
+  service bearer without the role keeps the service-identity path
 """
 
 from __future__ import annotations
@@ -32,7 +35,15 @@ from control_plane_backend.config.models import RuntimeCatalogSourceConfig
 from control_plane_backend.main import create_app
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import ProfileNotUsableError
-from fred_core import KeycloakUser, get_current_user
+from fred_core import (
+    AssertedUser,
+    KeycloakUser,
+    PrincipalContext,
+    get_current_user,
+    get_principal_context,
+)
+from fred_core.security import delegation
+from fred_core.security.delegation import DelegationConfig
 from httpx import ASGITransport, AsyncClient
 from test_main import (
     _fake_require_team_access,
@@ -168,3 +179,139 @@ async def test_non_usable_profile_is_rejected_not_silently_ignored(
         )
 
     assert resp.status_code == 422
+
+
+_ISSUER = "https://id.invalid/realms/fred"
+
+
+def _workload(**update: Any) -> KeycloakUser:
+    return KeycloakUser(
+        uid="evaluator-account",
+        username="evaluator-account",
+        roles=["service_agent"],
+        client_id="evaluator",
+        token_issuer=_ISSUER,
+        token_audiences=frozenset({"fred-delegation"}),
+        token_type="Bearer",
+        caller_roles=frozenset({"delegation_caller"}),
+    ).model_copy(update=update)
+
+
+def _build_delegating_app(
+    monkeypatch: pytest.MonkeyPatch,
+    context: PrincipalContext,
+    config: DelegationConfig | None = None,
+) -> Any:
+    app = _build_app(monkeypatch)
+    # After create_app, which installs the configuration's own delegation block.
+    delegation.initialize_delegation(
+        config or DelegationConfig(accept_delegated_calls=True),
+        issuers=[_ISSUER],
+        user_clients=["app"],
+    )
+    app.dependency_overrides[get_principal_context] = lambda: context
+    return app
+
+
+async def _post_override(app: Any) -> Any:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        return await client.post(
+            f"/control-plane/v1/teams/personal/agent-instances/{_INSTANCE_ID}/prepare-execution",
+            params={"agent_model_override": "chat.openai.gpt52"},
+        )
+
+
+async def test_delegated_override_is_honored_for_a_caller_role_holder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    person = AssertedUser(
+        uid="campaign-creator",
+        client_id="evaluator",
+        run_id="run-1",
+        agent_id=_SOURCE_AGENT_ID,
+    )
+    app = _build_delegating_app(
+        monkeypatch, PrincipalContext(caller=_workload(), subject=person)
+    )
+
+    async def _fake_check(
+        deps: Any, *, team_id: Any, profile_id: Any, source_runtime_ids: Any
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        routing_policy_service, "check_profile_usable_for_team", _fake_check
+    )
+
+    resp = await _post_override(app)
+
+    assert resp.status_code == 200
+    assert (
+        resp.json()["agent_profile_overrides"][_SOURCE_AGENT_ID] == "chat.openai.gpt52"
+    )
+
+
+_SWITCHES = pytest.mark.parametrize(
+    "config",
+    [
+        DelegationConfig(),
+        DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(act_for_people=True),
+    ],
+    ids=["off", "accepting", "acting-only"],
+)
+
+
+@_SWITCHES
+async def test_a_service_identity_without_the_role_keeps_the_override(
+    monkeypatch: pytest.MonkeyPatch, config: DelegationConfig
+) -> None:
+    # The evaluator holds the service role and not the caller role: it names no
+    # person, so it keeps the path it has with delegation off.
+    caller = _workload(caller_roles=frozenset())
+    app = _build_delegating_app(
+        monkeypatch, PrincipalContext(caller=caller, subject=caller), config
+    )
+
+    async def _fake_check(
+        deps: Any, *, team_id: Any, profile_id: Any, source_runtime_ids: Any
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        routing_policy_service, "check_profile_usable_for_team", _fake_check
+    )
+
+    resp = await _post_override(app)
+
+    assert resp.status_code == 200
+    assert (
+        resp.json()["agent_profile_overrides"][_SOURCE_AGENT_ID] == "chat.openai.gpt52"
+    )
+
+
+@_SWITCHES
+async def test_a_delegation_client_acting_as_itself_cannot_override(
+    monkeypatch: pytest.MonkeyPatch, config: DelegationConfig
+) -> None:
+    # It holds the service role too; only the person its grant names lets it in.
+    caller = _workload()
+    app = _build_delegating_app(
+        monkeypatch, PrincipalContext(caller=caller, subject=caller), config
+    )
+    called = False
+
+    async def _fail_if_called(deps: Any, **kwargs: Any) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        routing_policy_service, "check_profile_usable_for_team", _fail_if_called
+    )
+
+    resp = await _post_override(app)
+
+    assert resp.status_code == 403
+    assert called is False

@@ -32,6 +32,7 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    holds_caller_role,
     is_service_agent,
 )
 from fred_core.common import TeamId, personal_team_id
@@ -3149,6 +3150,7 @@ async def prepare_execution(
     deps: ProductServiceDependencies,
     authorization: str | None = None,
     agent_model_override: str | None = None,
+    model_override_authorized: bool = False,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3165,8 +3167,9 @@ async def prepare_execution(
     - `agent_model_override`, when set, replaces this instance's entry in the
       `agent_profile_overrides` snapshot for THIS call only — never persisted,
       never visible via `GET .../routing-policy`. Restricted to the evaluator's
-      service identity (`is_service_agent`); rejected outright for any other
-      caller, and rejected if the profile isn't `can_use`-enabled for the team.
+      service identity (`is_service_agent`, without the delegation caller role);
+      rejected outright for any other caller, and rejected if the profile isn't
+      `can_use`-enabled for the team.
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -3330,7 +3333,10 @@ async def prepare_execution(
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
     if agent_model_override is not None:
-        if not is_service_agent(user):
+        # A delegation client holds the service role too; it never takes this path.
+        if not model_override_authorized and not (
+            is_service_agent(user) and not holds_caller_role(user)
+        ):
             raise ExecutionPreparationError(
                 "agent_model_override is only honored for the evaluator's "
                 "service identity.",

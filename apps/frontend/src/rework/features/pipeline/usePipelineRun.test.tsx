@@ -40,7 +40,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
       "useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation",
       "useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation",
       "usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation",
-      "usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation",
+      "usePrepareAgentExecutionMutation",
       "usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation",
       "usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation",
     ].map((name) => [name, () => [vi.fn()]]),
@@ -49,17 +49,11 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => [h.instances],
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation: () => [h.remove],
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation: () => [h.enroll],
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation: () => [
-    h.prepare,
-  ],
+  usePrepareAgentExecutionMutation: () => [h.prepare],
 }));
 vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () =>
   Object.fromEntries(
-    [
-      "useCreateTagKnowledgeFlowV1TagsPostMutation",
-      "useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation",
-      "useLazyListAllTagsKnowledgeFlowV1TagsGetQuery",
-    ].map((name) => [name, () => [vi.fn()]]),
+    ["useCreateTagMutation", "useDeleteTagMutation", "useLazyListTagsQuery"].map((name) => [name, () => [vi.fn()]]),
   ),
 );
 afterEach(() => vi.clearAllMocks());

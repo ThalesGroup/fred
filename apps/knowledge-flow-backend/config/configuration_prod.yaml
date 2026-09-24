@@ -31,6 +31,8 @@ app:
 observability:
   kpi:
     prometheus:
+      # Docker Prometheus reaches this host-run exporter through host.docker.internal.
+      address: "0.0.0.0"
       port: 9111
 
 processing:
@@ -239,20 +241,16 @@ processing:
 #   - suffix: ".csv"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 security:
+  profile: c3
   m2m:
     enabled: true
     client_id: "knowledge-flow"
-    realm_url: "http://app-keycloak:8080/realms/app"
+    realm_url: "http://localhost:8080/realms/app"
     secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET # pragma: allowlist secret
   user:
     enabled: true
     client_id: "app"
-    # Must be browser-reachable: tokens validated here are issued client-side
-    # by keycloak-js against this same URL, so it must match the browser's
-    # issuer exactly (soft "JWT issuer mismatch" warning otherwise, oidc.py).
-    # "app-keycloak" only resolves inside the docker-compose network.
-    # security.m2m.realm_url above stays docker-internal (backend-to-Keycloak only).
-    # Mirrors control-plane-backend/config/configuration_prod.yaml's split.
+    # Match the browser and workload issuer exactly under the strict profile.
     realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
@@ -260,6 +258,25 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+  delegation:
+    # Delegation lets a program act for a person. The program (a "workload") signs
+    # in with its own service account: a Keycloak client identity that belongs to
+    # the program, not to anyone. With each call it names the person, run and
+    # agent the call is for. Each backend has one switch per direction.
+    #
+    # accept_delegated_calls (incoming) - this backend's switch. It believes the
+    # person a calling workload names, but only when that workload's token carries
+    # the role named by caller_role (default delegation_caller) on the client
+    # named by audience (default fred-delegation). The role is granted in Keycloak
+    # to the caller's service account; no list of callers is kept here.
+    #
+    # act_for_people (outgoing) - this backend never calls others for a person;
+    # leave it false.
+    #
+    # Both are off by default. Locally, make delegation turns the right one on
+    # through config/.delegation.local.json after checking a freshly issued token.
+    act_for_people: false
+    accept_delegated_calls: false
 scheduler:
   enabled: true
   backend: "temporal"

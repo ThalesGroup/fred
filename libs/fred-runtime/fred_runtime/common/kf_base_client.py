@@ -18,16 +18,26 @@ import logging
 from typing import Any, Dict, Optional, Protocol
 
 import httpx
+from fred_core.common.fastapi_handlers import (
+    DENIAL_CAUSE_HEADER,
+    STANDING_UNAVAILABLE_CAUSE,
+)
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 
 from fred_runtime.common.kf_http_client import get_shared_kf_async_client
+from fred_runtime.common.outbound_credentials import (
+    OutboundCredentialProvider,
+    attach_grant,
+    resolve_credential_provider,
+)
 from fred_runtime.common.structures import (
     AgentSettingsLike,
     TokenRefreshCallback,
     resolve_refresh_result,
 )
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import AuthorityLostError
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +62,7 @@ class KfBaseClient:
         agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
         refresh_user_access_token: Optional[TokenRefreshCallback] = None,
+        credentials: Optional[OutboundCredentialProvider] = None,
     ):
         """
         Why: centralize KF client setup so all callers share the same transport and KPI wiring.
@@ -76,9 +87,22 @@ class KfBaseClient:
         self._agent = agent
         self._static_access_token = access_token
         self._refresh_cb = refresh_user_access_token
+        self._explicit_credentials = credentials
 
-        if not self._agent and not self._static_access_token:
+        if not self._agent and not self._static_access_token and credentials is None:
             raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
+
+    def credential_provider(self) -> OutboundCredentialProvider:
+        """The provider this client asks before every request.
+
+        Resolved per call, never captured: a turn that becomes delegated, or a
+        token refreshed in place, is seen by requests already in flight.
+        """
+        return resolve_credential_provider(
+            explicit=self._explicit_credentials,
+            holder=self._agent,
+            person_token_getter=self._current_access_token,
+        )
 
     def _kpi_actor(self) -> KPIActor:
         return KPIActor(type="system")
@@ -214,11 +238,16 @@ class KfBaseClient:
         """
         url = f"{self.base_url}{path}"
 
-        # Support explicit override of the token
-        token = kwargs.pop("access_token", None) or await self._current_access_token()
+        # One source for both halves of the call's identity: the header, and the
+        # grant parameters a delegated call carries beside it.
+        credentials = await self.credential_provider().credentials(
+            override_token=kwargs.pop("access_token", None)
+        )
 
         headers: Dict[str, str] = kwargs.pop("headers", {})
-        headers["Authorization"] = f"Bearer {token}"
+        if credentials.authorization:
+            headers["Authorization"] = credentials.authorization
+        kwargs = attach_grant(kwargs, credentials.parameters)
 
         # httpx>=0.28 path: build a Request then send it with explicit stream mode.
         stream = bool(kwargs.pop("stream", False))
@@ -269,6 +298,18 @@ class KfBaseClient:
             r = await self._execute_authenticated_request(
                 method=method, path=path, **kwargs
             )
+            if self.credential_provider().delegated and (
+                r.status_code in (401, 403)
+                or (
+                    r.status_code == 503
+                    and r.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+                )
+            ):
+                # The receiver refused this run's authority. Retrying, or falling
+                # back to the person's bearer, would be asking a second time for
+                # what was just denied — the run ends instead.
+                await r.aclose()
+                raise AuthorityLostError()
             if r.status_code != 401:
                 r.raise_for_status()
                 return r

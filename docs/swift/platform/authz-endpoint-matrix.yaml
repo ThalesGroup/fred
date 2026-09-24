@@ -784,7 +784,7 @@ operations:
     method: GET
     path: /control-plane/v1/knowledge-bases/definitions/{definition_id}/instances/{instance_id}/runs/{run_id}/context
     review_status: approved
-    required_permission: none # Deliberately not a ReBAC check, and the same exact-client verification publication uses: the caller must be the confidential client this definition was published by. A broad service role alone never authorizes — every backend workload holds one, and this route serves the instance configuration, which is where a source's secrets are. The instance must belong to the named definition, so one pod cannot read another's. Outside the GCU gate for the same reason publication is: the caller is a client with no user row.
+    required_permission: none # Deliberately not a ReBAC check, and the same exact-client verification publication uses: the caller must be the confidential client this definition was published by. A broad service role alone never authorizes — every backend workload holds one, and this route serves the instance configuration, which is where a source's secrets are. The instance must belong to the named definition, so one pod cannot read another's. Outside the GCU gate for the same reason publication is: the caller is a client with no user row. Independent of delegation: a run names no person, so the pod reads it with its own credential and a person named by a delegation grant is refused.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/capabilities/{capability_id}/default-on

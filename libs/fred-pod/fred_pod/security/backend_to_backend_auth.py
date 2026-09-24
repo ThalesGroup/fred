@@ -15,9 +15,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 import os
 import time
 import typing as t
+from collections.abc import Callable
 
 import httpx
 from httpx import Request, Response
@@ -38,6 +41,24 @@ ASGIApp = t.Callable[
 # A tool or pod calling a Fred API has no user bearer, so it needs a service
 # token (client_credentials) or the call 401s. It lives in fred-pod because every
 # pod needs it and none should install the agents platform to get it.
+
+
+# Optional process-local observer: fred-pod stays independent of metrics libraries.
+TokenObserver = Callable[[str, str, float], None]
+_token_observer: TokenObserver | None = None
+
+
+def set_token_observer(observer: TokenObserver | None) -> None:
+    global _token_observer
+    _token_observer = observer
+
+
+def _observe_token(event: str, outcome: str, seconds: float = 0.0) -> None:
+    if _token_observer is not None:
+        try:
+            _token_observer(event, outcome, seconds)
+        except Exception:
+            logging.getLogger(__name__).warning("Auth metrics observer failed")
 
 
 class M2MAuthConfig(BaseModel):
@@ -61,35 +82,57 @@ class M2MAuthConfig(BaseModel):
         return f"{self.keycloak_realm_url}/protocol/openid-connect/token"
 
 
+_REFRESH_FAILED = "Workload token refresh failed."
+
+
 class M2MTokenProvider:
     """
     Caches and refreshes a Keycloak client-credentials token.
     Thread-safe (async) and cheap to reuse across calls.
     """
 
-    def __init__(self, cfg: M2MAuthConfig):
+    def __init__(
+        self,
+        cfg: M2MAuthConfig,
+        *,
+        wall_clock: Callable[[], float] = time.time,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.cfg = cfg
         self._secret = os.getenv(cfg.secret_env, "")
         self._lock = asyncio.Lock()
         self._token: str | None = None
-        self._exp: int = 0  # epoch seconds
+        self._exp: float = 0  # epoch seconds
+        self._wall_clock = wall_clock
+        self._transport = transport
 
     async def get_token(self) -> str:
-        now = int(time.time())
-        if self._token and now < self._exp - 30:
-            return self._token
+        started = time.perf_counter()
+        outcome = "error"
+        try:
+            token = await self._get_token()
+            outcome = "success"
+            return token
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            _observe_token("acquire", outcome, time.perf_counter() - started)
 
+    async def _get_token(self) -> str:
+        now = self._wall_clock()
+        if self._token and now < self._exp - 30:
+            _observe_token("cache", "hit")
+            return self._token
+        _observe_token("cache", "miss")
         async with self._lock:
             # double-check inside lock
-            now = int(time.time())
+            now = self._wall_clock()
             if self._token and now < self._exp - 30:
+                _observe_token("cache", "shared_refresh")
                 return self._token
-
             if not self._secret:
-                # Fail fast: missing secret will otherwise cause confusing 401s
-                raise RuntimeError(
-                    f"Missing Keycloak client secret in env: {self.cfg.secret_env}"
-                )
+                raise RuntimeError(_REFRESH_FAILED)
 
             form = {
                 "grant_type": "client_credentials",
@@ -99,20 +142,46 @@ class M2MTokenProvider:
             if self.cfg.scope:
                 form["scope"] = self.cfg.scope
 
-            async with httpx.AsyncClient(timeout=10.0) as c:
-                r = await c.post(self.cfg.token_url, data=form)
-                r.raise_for_status()
-                payload = r.json()
+            request_started = time.perf_counter()
+            request_outcome = "error"
+            try:
+                async with httpx.AsyncClient(
+                    timeout=10.0, transport=self._transport
+                ) as c:
+                    r = await c.post(self.cfg.token_url, data=form)
+                    r.raise_for_status()
+                    payload = r.json()
 
-            token = payload.get("access_token")
-            expires_in = int(payload.get("expires_in", 60))
-
-            if not isinstance(token, str) or not token:
-                raise RuntimeError("Auth server did not return a valid access_token")
+                token = payload.get("access_token")
+                raw_expires_in = payload.get("expires_in", 60)
+                if not isinstance(token, str) or not token:
+                    raise ValueError
+                if isinstance(raw_expires_in, bool):
+                    raise ValueError
+                expires_in = float(raw_expires_in)
+                if not math.isfinite(expires_in) or expires_in <= 0:
+                    raise ValueError
+                expires_at = now + expires_in
+                if self._wall_clock() >= expires_at:
+                    raise ValueError
+                request_outcome = "success"
+            except asyncio.CancelledError:
+                request_outcome = "cancelled"
+                raise
+            except httpx.TransportError as exc:
+                # Same httpx class as the underlying failure, without its request or detail.
+                raise type(exc)(_REFRESH_FAILED) from None
+            except Exception:
+                raise RuntimeError(_REFRESH_FAILED) from None
+            finally:
+                _observe_token(
+                    "request_renewal" if self._token is not None else "request_initial",
+                    request_outcome,
+                    time.perf_counter() - request_started,
+                )
 
             self._token = token
-            self._exp = now + expires_in
-
+            self._exp = expires_at
             # Guarantee to the outside world that we return str
             assert self._token is not None
             return self._token

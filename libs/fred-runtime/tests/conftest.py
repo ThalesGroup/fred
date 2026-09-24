@@ -20,10 +20,35 @@ from typing import Any
 
 import pytest
 from fred_core.portable.observability import Span, Tracer
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_core.security.delegation import DelegationConfig
 from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    set_delegation_runtime,
+)
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+
+
+class StaticWorkloadTokens(M2MTokenProvider):
+    def __init__(self, token: str = "workload-token") -> None:
+        self.token = token
+
+    async def get_token(self) -> str:
+        return self.token
+
+
+def install_delegation_runtime(
+    token_provider: M2MTokenProvider | None,
+) -> DelegationRuntime:
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True),
+        token_provider=token_provider,
+    )
+    set_delegation_runtime(runtime)
+    return runtime
 
 
 def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:

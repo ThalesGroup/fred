@@ -8,13 +8,18 @@
 > `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
 > [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2 and §8.11.
 
-> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> The shared team check `_validate_team_and_check_permission` now recognizes a **service
-> identity** (`service_agent` role — the evaluation worker) for **read-only** team access
+> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).** The
+> shared team check `_validate_team_and_check_permission` recognizes a **service
+> identity** (`service_agent` role — the evaluation worker — without the delegation
+> caller role) for **read-only** team access
 > (`can_read`), **scoped to the request `team_id`**, without any OpenFGA tuple. A **write**
 > permission (e.g. `can_update_agents`) is NOT bypassed: it falls through to the normal
 > ReBAC check and is therefore denied (the worker holds no team relation). Regular users
 > are unchanged. This covers the `prepare-execution` path the async worker calls.
+> A caller holding the delegation caller role is never recognized here, whatever
+> the delegation switches; where the control plane accepts delegated calls, team
+> permissions are decided on the person a grant names — see the 2026-09-19 section
+> below.
 
 This document is the authoritative design reference for the first
 control-plane product migration slice.
@@ -1139,9 +1144,13 @@ closed, 422, on an unknown or disabled profile) and overwrites this
 instance's entry in the returned `agent_profile_overrides` snapshot for
 **this call only** — never persisted, never visible via
 `GET …/routing-policy`. Restricted to the evaluator's M2M service identity
-(`is_service_agent`); rejected (403) for a regular user token. This sits at
-the "team override" precedence level — a platform chat binding or pod
-static override still wins silently over it; `fred-agent-evaluator` detects
+(`service_agent` without the delegation caller role, whatever the switches); rejected
+(403) for a regular user token and for a delegation caller acting as itself. Where the
+control plane accepts delegated calls and a grant names a person, the override is
+authorized on the workload caller holding the delegation caller role instead: the
+grant's subject carries no roles, so the decision is made on the bearer, not on a
+service role. This sits at the "team override" precedence level — a platform chat
+binding or pod static override still wins silently over it; `fred-agent-evaluator` detects
 that by comparing the requested override against the model that actually
 answered (`EvalTrace.model_name`), not by anything this endpoint can
 guarantee.
@@ -4067,3 +4076,40 @@ Temporal cancellation. Other task kinds retain their existing behavior. The
 resource document menu no longer offers Stop ingestion. This delivery exposes
 success/failure completion; user cancellation and its cleanup semantics are
 deferred. See [INGESTION.md](INGESTION.md).
+
+## Workload identity and person authorization (2026-09-18)
+
+The control plane authenticates the workload and authorizes the asserted
+person's current standing, whitelist and resource permissions. Caller trust is
+specified in runtime contract §8.90. Caller-only publication APIs retain their
+workload and ownership checks. Managed delegated runs resolve bindings through
+a read-only GET carrying the grant; direct runs need no binding request.
+
+The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
+maintains the endpoint policy inventory.
+
+## Team access under delegation is decided on the person a grant names (2026-09-19)
+
+The shared team gate grants its read-only service shortcut only to
+`service_agent` identities without the caller role. All other team checks use
+the acting subject's permissions; write access never receives this shortcut.
+Asserted people carry no bearer roles.
+
+For delegated `prepare-execution`, the one-shot model override is authorized
+against the workload caller's delegation role. Otherwise it requires an ordinary
+service identity. Detailed cases are in the
+[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+
+## Deleting a person removes their standing first (2026-09-23)
+
+User deletion retains administrator permission and protected-account checks,
+and rejects wildcard or userset identifiers. It resolves identity administration
+before mutation, then writes suspension before deleting the account whenever
+standing is enforced. Failed account deletion leaves suspension effective;
+other authorization relations remain and retries are safe.
+
+Suspension applies at the next authorization decision, not to work already
+authorized. Direct identity-provider changes do not update platform standing.
+With standing disabled, deletion writes no suspension. Exact refusal and retry
+scenarios are maintained in the
+[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).

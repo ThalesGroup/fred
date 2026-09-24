@@ -213,6 +213,7 @@ Runbooks and operational guides for the platform.
 | -------------------------------------------------------------------- | --------------------------------------------- |
 | [`AGENT_POD_RUNTIME_PROTOCOL.md`](ops/AGENT_POD_RUNTIME_PROTOCOL.md) | Runtime pod protocol and operational contract |
 | [`DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md)               | Database migration runbook                    |
+| [`WORKLOAD_SECRET_ROTATION.md`](ops/WORKLOAD_SECRET_ROTATION.md)     | Workload client-secret rotation runbook       |
 
 ---
 
