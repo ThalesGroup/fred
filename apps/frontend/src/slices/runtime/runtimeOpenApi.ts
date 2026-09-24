@@ -148,16 +148,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    analyzePodV1CapabilitiesDemoEchoAnalyzePost: build.mutation<
-      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse,
-      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/capabilities/demo_echo/analyze`,
-        method: "POST",
-        body: queryArg.demoAnalyzeRequest,
-      }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -281,11 +271,6 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
-};
-export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse =
-  /** status 200 Successful Response */ DemoAnalyzeResponse;
-export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg = {
-  demoAnalyzeRequest: DemoAnalyzeRequest;
 };
 export type AuditEventRecord = {
   agent_id?: string | null;
@@ -572,11 +557,6 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
-export type DemoCardPart = {
-  body?: string;
-  title: string;
-  type?: "demo_card";
-};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -612,9 +592,6 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
-    | ({
-        type: "demo_card";
-      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -676,9 +653,6 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
-    | ({
-        type: "demo_card";
-      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1051,14 +1025,6 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
-export type DemoAnalyzeResponse = {
-  length: number;
-  original: string;
-  transformed: string;
-};
-export type DemoAnalyzeRequest = {
-  text: string;
-};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -1091,5 +1057,4 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
-  useAnalyzePodV1CapabilitiesDemoEchoAnalyzePostMutation,
 } = injectedRtkApi;

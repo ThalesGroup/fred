@@ -15,6 +15,7 @@ on:
       - 'apps/knowledge-flow-backend/**'
       - 'apps/fred-agents/**'
       - 'libs/fred-*/**'
+      - 'libs/capabilities/**'
       - 'deploy/charts/**'
       - 'Makefile'
       - 'scripts/**'

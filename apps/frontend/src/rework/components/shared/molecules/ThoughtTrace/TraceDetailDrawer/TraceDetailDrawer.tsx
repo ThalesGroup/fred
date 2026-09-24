@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { useToast, type ToastInput } from "@shared/molecules/Toast/ToastProvider";
-import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -24,11 +21,13 @@ import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
 import {
   PHASE_LABELS,
+  asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
   detailTextForEntry,
   entryLabel,
   formatLatencyMs,
+  findTabularDocumentName,
   genericToolPayload,
   isDocumentTreeTool,
   isSummarizeDocumentTool,
@@ -38,18 +37,22 @@ import {
   statusForEntry,
   stripDocumentUids,
   thoughtExtras,
-  toolCopyText,
+  toolCallId,
   toolName,
   toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
+import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/tabularTrace";
 import phaseStyles from "../phaseBadge.module.css";
+import { formatSqlForDisplay } from "./formatSqlForDisplay";
+import { TabularToolDetail } from "./TabularToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
 
 interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
   entry: TraceEntry | null;
+  messages?: ChatMessage[];
   onClose: () => void;
 }
 
@@ -97,45 +100,37 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Status + latency line shown atop every tool-result view. */
-function ToolMeta({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
-  const latency = entry.result ? formatLatencyMs(toolResultLatencyMs(entry.result)) : "";
-  const status = !entry.result ? "running" : toolResultOk(entry.result) ? "completed" : "failed";
-  return (
-    <div className={styles.meta}>
-      <span className={styles.metaInfo}>{status}</span>
-      {latency && <span className={styles.metaInfo}>{latency}</span>}
-    </div>
-  );
-}
-
 /** Curated view for the tabular/SQL tool: the executed query plus a row preview. */
-function SqlToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "combo" }>; data: SqlQueryResult }) {
+function SqlToolDetail({ data }: { data: SqlQueryResult }) {
+  const { t } = useTranslation();
+  const rowCount = t("rework.chatTrace.rows", { count: data.rows.length });
+  const formattedQuery = formatSqlForDisplay(data.sql_query);
+
   return (
     <div className={styles.detail}>
-      <ToolMeta entry={entry} />
-      <CodeBlock code={data.sql_query} language="sql" hideCopy />
-      {data.error ? (
-        <div className={styles.errorBox}>{data.error}</div>
-      ) : (
-        <>
-          <span className={styles.metaInfo}>
-            {data.rows.length} row{data.rows.length > 1 ? "s" : ""}
-          </span>
-          {data.rows.length > 0 && (
-            <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" hideCopy />
-          )}
-        </>
-      )}
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
+        <CodeBlock code={formattedQuery} copyText={data.sql_query} language="sql" />
+      </div>
+      <div className={styles.toolSection}>
+        <div className={styles.sectionHeader}>
+          <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlResponse")}</p>
+          {!data.error && <span className={styles.metaInfo}>{rowCount}</span>}
+        </div>
+        {data.error ? (
+          <div className={styles.errorBox}>{data.error}</div>
+        ) : (
+          <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" />
+        )}
+      </div>
     </div>
   );
 }
 
 /** Curated view for RAG/vector-search tools: the query plus retrieved sources. */
-function RagToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "combo" }>; data: RagSearchResult }) {
+function RagToolDetail({ data }: { data: RagSearchResult }) {
   return (
     <div className={styles.detail}>
-      <ToolMeta entry={entry} />
       <p className={styles.detailTitle}>{data.query}</p>
       <SourcesPanel sources={data.hits} />
     </div>
@@ -143,10 +138,9 @@ function RagToolDetail({ entry, data }: { entry: Extract<TraceEntry, { kind: "co
 }
 
 /** Curated view for the on-demand document summarizer: the generated summary as prose. */
-function SummarizeDocumentDetail({ entry, text }: { entry: Extract<TraceEntry, { kind: "combo" }>; text: string }) {
+function SummarizeDocumentDetail({ text }: { text: string }) {
   return (
     <div className={styles.detail}>
-      <ToolMeta entry={entry} />
       <div className={styles.markdown}>
         <MarkdownRenderer text={text} />
       </div>
@@ -156,11 +150,10 @@ function SummarizeDocumentDetail({ entry, text }: { entry: Extract<TraceEntry, {
 
 /** Curated view for the document tree listing: indented tree text, with the
  *  bracketed internal document uids stripped (never shown to the end user). */
-function DocumentTreeDetail({ entry, text }: { entry: Extract<TraceEntry, { kind: "combo" }>; text: string }) {
+function DocumentTreeDetail({ text }: { text: string }) {
   return (
     <div className={styles.detail}>
-      <ToolMeta entry={entry} />
-      <CodeBlock code={stripDocumentUids(text)} hideCopy />
+      <CodeBlock code={stripDocumentUids(text)} />
     </div>
   );
 }
@@ -170,24 +163,45 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
   const payload = genericToolPayload(entry);
   return (
     <div className={styles.detail}>
-      <CodeBlock code={JSON.stringify(payload, null, 2)} language="json" hideCopy />
+      <CodeBlock code={JSON.stringify(payload, null, 2)} language="json" />
     </div>
   );
 }
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
-function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  if (tabularToolKind(toolName(entry.call))) {
+    const tabular =
+      entry.result && toolResultOk(entry.result)
+        ? parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result))
+        : null;
+    return tabular ? (
+      <TabularToolDetail
+        key={toolCallId(entry.call)}
+        data={tabular}
+        documentName={
+          tabular.kind === "markdown" && messages
+            ? findTabularDocumentName(messages, tabular.documentUid, toolCallId(entry.call))
+            : null
+        }
+      />
+    ) : (
+      <GenericToolDetail entry={entry} />
+    );
+  }
   const data = entry.result ? parseToolResultContent(entry.result) : null;
   const sqlResult = asSqlQueryResult(data);
-  if (sqlResult) return <SqlToolDetail entry={entry} data={sqlResult} />;
+  if (sqlResult) return <SqlToolDetail data={sqlResult} />;
+  const failedSqlResult = asFailedSqlQueryResult(entry);
+  if (failedSqlResult) return <SqlToolDetail data={failedSqlResult} />;
   const ragResult = asRagSearchResult(data);
-  if (ragResult) return <RagToolDetail entry={entry} data={ragResult} />;
+  if (ragResult) return <RagToolDetail data={ragResult} />;
   const name = toolName(entry.call);
   if (entry.result && isSummarizeDocumentTool(name)) {
-    return <SummarizeDocumentDetail entry={entry} text={toolResultContent(entry.result)} />;
+    return <SummarizeDocumentDetail text={toolResultContent(entry.result)} />;
   }
   if (entry.result && isDocumentTreeTool(name)) {
-    return <DocumentTreeDetail entry={entry} text={toolResultContent(entry.result)} />;
+    return <DocumentTreeDetail text={toolResultContent(entry.result)} />;
   }
   return <GenericToolDetail entry={entry} />;
 }
@@ -203,52 +217,34 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Single copy affordance for the drawer header — copies the SQL query, the curated
- *  JSON payload, the raw error message, or nothing (RAG sources are browsed, not
- *  copied as text). `toast`, when set, confirms the copy with a success toast. */
-function CopyHeaderAction({ text, toast }: { text: string; toast?: ToastInput }) {
-  const [copied, setCopied] = useState(false);
-  const { showSuccess } = useToast();
-
-  const handleCopy = () => {
-    writeRichClipboard("", text).then((ok) => {
-      if (ok) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        if (toast) showSuccess(toast);
-      }
-    });
-  };
-
-  return (
-    <IconButton
-      variant="icon"
-      size="small"
-      icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
-      aria-label={copied ? "Copied" : "Copy"}
-      onClick={handleCopy}
-    />
-  );
-}
-
-export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
+export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
   const { t } = useTranslation();
-  const label = entry ? entryLabel(entry) : "";
-  const copyText = entry ? toolCopyText(entry) : null;
+  const label = entry ? entryLabel(entry, (key) => t(key)) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
+  const toolStatus =
+    entry?.kind === "combo" ? (!entry.result ? "running" : toolResultOk(entry.result) ? "success" : "failure") : null;
+  const toolLatency = entry?.kind === "combo" && entry.result ? formatLatencyMs(toolResultLatencyMs(entry.result)) : "";
 
   return (
     <InlineDrawer
       open={entry !== null}
       onClose={onClose}
       title={label}
-      headerActions={
-        copyText ? (
-          <CopyHeaderAction
-            text={copyText}
-            toast={isError ? { summary: t("rework.chatTrace.errorCopied") } : undefined}
-            key={label}
-          />
+      titleAccessory={
+        toolStatus ? (
+          <>
+            <span className={styles.statusBadge} data-status={toolStatus}>
+              {t(`rework.chatTrace.toolStatus.${toolStatus}`)}
+            </span>
+            {toolLatency && (
+              <span
+                className={styles.latencyBadge}
+                aria-label={t("rework.chatTrace.executionTime", { duration: toolLatency })}
+              >
+                {toolLatency}
+              </span>
+            )}
+          </>
         ) : undefined
       }
       layout="overlay"
@@ -258,7 +254,7 @@ export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
         (isError ? (
           <ErrorDetail entry={entry} />
         ) : entry.kind === "combo" ? (
-          <ToolDetail entry={entry} />
+          <ToolDetail entry={entry} messages={messages} />
         ) : (
           <TextDetail entry={entry} />
         ))}

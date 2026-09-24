@@ -164,16 +164,10 @@
   min-width: 0;
   color: inherit;
 
+  /* Deliberately no hover or active colour: a sortable header reads exactly
+     like the others, and the arrow alone marks the ordered column. */
   .header-content {
     color: var(--on-surface-retreat);
-  }
-
-  &:hover .header-content {
-    color: var(--on-surface);
-  }
-
-  &[data-active] .header-content {
-    color: var(--primary);
   }
 }
 
@@ -181,7 +175,9 @@
   display: flex;
   align-items: center;
   opacity: 0;
-  color: var(--primary);
+  /* Same token as the header label it sits next to — the arrow is part of the
+     label, not an accent on it. */
+  color: var(--on-surface-retreat);
   font-size: 1.125rem;
 
   &[data-visible] {

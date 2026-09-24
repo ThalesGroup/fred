@@ -218,16 +218,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         return self._image_describer
 
     def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
-        """Guarded KPI timer for the per-image OCR/VLM path.
+        """Measure in the child when present, otherwise use the activity's writer."""
+        from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket, extraction_kpi_timer
 
-        `_extract_md` runs inside a Temporal activity but off the activity's own
-        coroutine (see `to_thread_with_heartbeat`), so `activity.in_activity()` must
-        be checked before touching the KPI writer. Mirrors the gating in
-        `features/scheduler/kpi_utils.py`'s `emit_temporal_activity_result_kpis`:
-        KPI setup failures are logged and swallowed, never raised into the
-        ingestion path. No-ops (returns a null context) outside an activity or on
-        setup failure.
-        """
+        if extraction_kpi_socket.get() is not None:
+            return extraction_kpi_timer(name, dims)
         if not activity.in_activity():
             return nullcontext()
         try:

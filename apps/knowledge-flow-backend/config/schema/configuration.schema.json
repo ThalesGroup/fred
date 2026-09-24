@@ -650,6 +650,17 @@
       "title": "IngestionProcessingProfile",
       "type": "string"
     },
+    "IngestionWorkerRole": {
+      "description": "What one knowledge-flow worker process is there to do.\n\n`common` runs every ingestion workflow plus every activity but extraction.\nThe three extraction roles run nothing but the two extraction activities,\neach on its own queue, so a slow profile cannot hold the activity slots the\nothers need.",
+      "enum": [
+        "common",
+        "extraction-fast",
+        "extraction-medium",
+        "extraction-rich"
+      ],
+      "title": "IngestionWorkerRole",
+      "type": "string"
+    },
     "IntegrationsConfig": {
       "description": "Optional upstream service integrations consumed by Knowledge Flow.",
       "properties": {
@@ -1785,9 +1796,27 @@
           "title": "Input Activity Timeout",
           "type": "string"
         },
+        "push_metadata_activity_timeout": {
+          "default": "5m",
+          "description": "Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.",
+          "title": "Push Metadata Activity Timeout",
+          "type": "string"
+        },
+        "pull_metadata_activity_timeout": {
+          "default": "30m",
+          "description": "Per-attempt timeout for source download and metadata creation; excludes queue wait.",
+          "title": "Pull Metadata Activity Timeout",
+          "type": "string"
+        },
+        "output_activity_timeout": {
+          "default": "1h",
+          "description": "Per-attempt timeout for indexing; excludes queue wait.",
+          "title": "Output Activity Timeout",
+          "type": "string"
+        },
         "activity_heartbeat_timeout": {
           "default": "5m",
-          "description": "Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
+          "description": "Temporal heartbeat timeout for extraction and indexing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~5s).",
           "title": "Activity Heartbeat Timeout",
           "type": "string"
         },
@@ -2011,6 +2040,14 @@
         },
         "temporal": {
           "$ref": "#/$defs/TemporalSchedulerConfig"
+        },
+        "worker_roles": {
+          "description": "Roles this worker process serves, one Temporal worker each. A Kubernetes deployment declares exactly one so its pods size and scale independently; the default serves all four, which is a single process covering every queue (local development). Leaving a role unserved parks its work silently, so the four roles must be covered between them. ingestion_max_concurrent_activities applies per role, so a process serving several of them may run that many activities times the number of roles.",
+          "items": {
+            "$ref": "#/$defs/IngestionWorkerRole"
+          },
+          "title": "Worker Roles",
+          "type": "array"
         }
       },
       "required": [

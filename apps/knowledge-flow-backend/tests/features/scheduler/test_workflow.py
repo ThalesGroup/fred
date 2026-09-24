@@ -24,7 +24,7 @@ mirroring the existing `_wf_*` helpers.
 from __future__ import annotations
 
 import pytest
-from temporalio.exceptions import ApplicationError, CancelledError, ChildWorkflowError
+from temporalio.exceptions import ActivityError, ApplicationError, CancelledError, ChildWorkflowError, RetryState, TimeoutError, TimeoutType
 
 from knowledge_flow_backend.features.scheduler.workflow import (
     _wf_file_terminal_event_args,
@@ -120,16 +120,39 @@ def test_cancelled_child_workflow_reports_cancelled_not_failed() -> None:
 def test_genuine_child_failure_reports_failed_with_its_message() -> None:
     args = _wf_file_terminal_event_args(_child_workflow_error("Child Workflow execution failed", ApplicationError("worker exploded")), "task-1", "doc-1", "report.pdf")
     assert args[1] == "failed"
-    assert args[4] == "Child Workflow execution failed"
+    assert args[4] == "Ingestion failed. worker exploded"
     assert args[7] == 1
 
 
 def test_plain_failure_reports_failed() -> None:
     args = _wf_file_terminal_event_args(RuntimeError("boom"), "task-1", "doc-1", "report.pdf")
     assert args[1] == "failed"
-    assert args[4] == "boom"
+    assert args[4] == "Ingestion failed. boom"
 
 
 def test_failure_without_a_message_still_carries_one() -> None:
     args = _wf_file_terminal_event_args(RuntimeError(), "task-1", "doc-1", "report.pdf")
-    assert args[4] == "Processing failed"
+    assert args[4] == "Ingestion failed. No failure details were reported."
+
+
+@pytest.mark.parametrize("timeout_type", [TimeoutType.START_TO_CLOSE, TimeoutType.HEARTBEAT])
+def test_failure_names_stage_timeout_and_exhausted_activity_attempts(timeout_type):
+    activity_error = ActivityError(
+        "Activity task failed", scheduled_event_id=1, started_event_id=2, identity="worker", activity_type="output_process", activity_id="activity-1", retry_state=RetryState.MAXIMUM_ATTEMPTS_REACHED
+    )
+    activity_error.__cause__ = TimeoutError("activity timed out", type=timeout_type, last_heartbeat_details=[])
+    exc = _child_workflow_error("Child Workflow execution failed", activity_error)
+    args = _wf_file_terminal_event_args(exc, "task-1", "doc-1", "report.pdf", "indexing")
+    assert args[2] == "indexing"
+    assert "indexing step" in args[4]
+    assert "Configured attempts exhausted" in args[4]
+    assert timeout_type.name in args[4]
+    assert "Child Workflow" not in args[4]
+
+
+def test_child_workflow_retry_limit_does_not_claim_activity_attempts_exhausted():
+    exc = _child_workflow_error("Child Workflow execution failed", ApplicationError("Invalid PDF", non_retryable=True))
+    args = _wf_file_terminal_event_args(exc, "task-1", "doc-1", "report.pdf", "processing")
+    assert "content extraction" in args[4]
+    assert "Invalid PDF" in args[4]
+    assert "exhausted" not in args[4]

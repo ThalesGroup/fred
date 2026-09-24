@@ -95,7 +95,7 @@ class TabularDocumentResponse(BaseModel):
       document identity N times.
 
     How to use:
-    - Returned by `GET /tabular/documents`.
+    - Used internally to assemble the compact `GET /tabular/documents` response.
     - Follow up with `GET /tabular/documents/schemas` for column-level detail.
     """
 
@@ -106,6 +106,22 @@ class TabularDocumentResponse(BaseModel):
     tag_ids: list[str] = Field(default_factory=list)
     tag_names: list[str] = Field(default_factory=list)
     source_tag: Optional[str] = None
+
+
+class TabularDocumentListTableResponse(BaseModel):
+    """Excel table identity exposed by the document-list endpoint."""
+
+    query_alias: str
+    sheet: Optional[str] = None
+    title: Optional[str] = None
+
+
+class TabularDocumentListResponse(BaseModel):
+    """Document name and identifiers needed by later tabular tools."""
+
+    document_uid: str
+    document_name: str
+    tables: Optional[list[TabularDocumentListTableResponse]] = None
 
 
 class TabularTableSchema(TabularTableSummary):

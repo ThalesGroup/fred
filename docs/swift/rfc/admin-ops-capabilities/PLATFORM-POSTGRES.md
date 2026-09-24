@@ -40,7 +40,7 @@ single query can express (describe-table, EXPLAIN, FK lookup) is *not* a tool.
 
 - **Capability id:** `platform_postgres` (`platform_` prefix marks the
   platform-introspection family; catalog sorts the family together).
-- **Package:** `libs/fred-capability-platform-ops/` (in-tree — closes parent §9.4),
+- **Package:** `libs/capabilities/fred-capability-platform-ops/` (in-tree — closes parent §9.4),
   module `fred_capability_platform_ops`, per-concern subpackage `postgres/`.
   Entry point in the package's `pyproject.toml`:
   `platform_postgres = "fred_capability_platform_ops.postgres.capability:PlatformPostgresCapability"`.
@@ -210,7 +210,7 @@ One issue + one PR (consolidation-phase scope discipline), after WP1:
 
 - fred-sdk: `PlatformSqlPort` + `SqlQueryResult` + `PlatformSqlPortError`.
 - fred-runtime: adapter (pool + enforcement), `RuntimeServices.platform_sql` wiring.
-- `libs/fred-capability-platform-ops/`: package scaffold + `postgres/` capability.
+- `libs/capabilities/fred-capability-platform-ops/`: package scaffold + `postgres/` capability.
 - fred-agents: `platform_ops` template + prompt file; en/fr i18n keys.
 - Docs: capability row per AUTHORING.md; parent RFC §9.4/§9.5 already amended.
 - No frozen-contract change expected (additive capability + template).

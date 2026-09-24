@@ -1,60 +1,65 @@
 ---
-title: Document resources
-order: 40
-description: Upload and organize the documents your agents can draw on.
+title: Resources
+order: 30
+description: Upload the team's documents, organize them, understand how an agent reads them.
 icon: folder
 ---
 
-# Document resources
+# Resources
 
-**Resources** are your team's documents. Once uploaded, your agents can draw on
-them to answer your questions and **show you the passages** they relied on.
-That's what lets them talk about _your_ content rather than generalities.
+**Resources** are your team's documents. They are what lets an agent talk about
+_your_ content and show you the passages it relies on.
+
+> Uploading, renaming or deleting a document requires the **Editor** role. Any
+> member can browse them and question an agent that uses them.
 
 ## The team corpus
 
-The **Resources** page shows the **team corpus**: the shared document base,
-common to the team's members, that your agents work from.
+The **Resources** page holds the **team corpus**: the document base shared
+between its members.
 
-## Filing documents into libraries
+Documents go into **libraries**, like folders. Create a library first, then
+upload your documents into it.
 
-Documents are filed into **libraries**, a bit like folders. Start by creating a
-library, then add your documents inside it.
+> **A document uploaded outside a library will never be used by an agent.** It
+> is the first point to check when a document seems ignored.
 
-> A document uploaded outside a library can't be used by your agents: always
-> remember to place it in a library.
+Common formats work: PDF, text, Word, OpenDocument, PowerPoint, Excel, CSV,
+Markdown, images and audio files. An unusual format may be refused; convert it
+to a common one.
 
-The usual formats are accepted: PDF, text documents, Word and OpenDocument
-files, presentations (PowerPoint), spreadsheets (Excel, CSV), Markdown. Images
-and audio files are also supported.
+## After the upload
 
-## What happens after upload
-
-When you add a document, it needs a short **preparation** moment before it can
-be used. During that time, a **Processing** tag shows next to its name; it
-**disappears on its own** as soon as the document is ready — there's nothing for
-you to do.
-
-Each document also shows where it came from: **Uploaded** (added by a team
-member), **Generated** (produced by an agent), or **Shared**.
-
-![TODO: screenshot — the team corpus with the Processing tag](assets/resources-corpus.png)
+A document needs a short **preparation** before it can be used. A **Processing**
+tag shows next to its name and clears by itself: there is nothing for you to do.
+Each document also shows where it came from — **Uploaded**, **Generated** by an
+agent, or **Shared**.
 
 ## Managing documents
 
-From the corpus, you can:
+From the corpus: **rename**, **preview**, **delete**, or **exclude from search**
+— the agent then stops taking it into account without the document disappearing,
+and you can include it again.
 
-- **Rename** a document or a library.
-- **Preview** a document without leaving the page.
-- **Exclude from search** so your agents stop taking it into account, without
-  deleting it — you can **include** it again anytime.
-- **Delete** a document or a whole library.
+Each team has a **storage allowance**, whose usage the page shows. Near the
+limit, an upload can be refused: tidy up, or ask a team Admin for an increase.
 
-## Storage space
+## How an agent reads your documents
 
-Each team has a **storage space** for its documents. The page shows you what's
-in use. If you're getting close to the limit, do a little cleanup (duplicates,
-outdated versions) or ask one of your team's administrators for help.
+This behaviour explains the shape of the answers. The choice is not yours: the
+agent decides from your request.
 
-A document you uploaded but the agent never seems to use? Take a look at
-[Document issues](/help/en/troubleshooting/documents-issues).
+- **Search** — finds the most relevant passages and answers from them. Fast, and
+  the right reflex for "what do we know about X?". It only surfaces what it
+  judges relevant, so **it can miss things**.
+- **Verbatim reading** — reads the exact text, in order, when you want a
+  passage's precise wording.
+- **Extraction** — goes through the whole document and lists everything that
+  matches, omitting nothing. The slowest, the most exhaustive.
+- **Summary** — a short overview, deliberately not exhaustive.
+
+> **If nothing may be missed, say so**: "list _every_ deadline". The agent then
+> uses extraction rather than search.
+
+A document never used? See
+[Common problems](/help/en/troubleshooting/common-problems).

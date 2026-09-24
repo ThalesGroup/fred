@@ -116,29 +116,6 @@
     }
   },
   "capability": {
-    "demo_echo": {
-      "name": "Écho de démonstration",
-      "description": "Répète ce que vous dites en écho, avec une option pour répondre en majuscules.",
-      "cardAria": "Carte de la capacité de démonstration",
-      "fields": {
-        "uppercase": {
-          "title": "Majuscules",
-          "description": "Renvoyer la réponse en majuscules."
-        }
-      },
-      "panel": {
-        "demo_notes": {
-          "title": "Notes de démonstration",
-          "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
-          "textPlaceholder": "texte",
-          "analyze": "Analyser",
-          "error": "Échec de la requête",
-          "original": "original",
-          "transformed": "transformé",
-          "length": "longueur"
-        }
-      }
-    },
     "document_access": {
       "name": "Rechercher dans les ressources",
       "description": "Capacité de rechercher une information dans les ressources de l'équipe.",
@@ -315,6 +292,11 @@
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",
+        "downloadTemplate": "Télécharger le modèle",
+        "downloadTemplateHint": "Télécharge le modèle enregistré pour cet agent.",
+        "downloadTemplateUnavailable": "Aucun modèle enregistré pour cet agent.",
+        "downloadFailed": "Le modèle n'a pas pu être téléchargé.",
+        "downloadMissing": "Le fichier du modèle est introuvable pour cet agent. Téléversez-le à nouveau.",
         "uploadAria": "Fichier de modèle PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",
@@ -583,6 +565,9 @@
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
+    "copied": "Copié",
+    "copy": "Copier",
+    "copyCode": "Copier le code",
     "delete": "Supprimer",
     "description": "Description",
     "edit": "Modifier",
@@ -1320,7 +1305,7 @@
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
-      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver.",
+      "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
       "tooltip": {
@@ -1581,21 +1566,74 @@
       "awaitingConfirmation": "en attente de confirmation…",
       "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
-      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "documents_one": "{{count}} document",
+      "documents_other": "{{count}} documents",
+      "executionTime": "Temps d'exécution : {{duration}}",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
+      "matches_one": "{{count}} correspondance",
+      "matches_other": "{{count}} correspondances",
       "openReasoning": "Ouvrir le raisonnement complet",
       "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "sqlQuery": "Requête :",
+      "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
+      "tables_one": "{{count}} table",
+      "tables_other": "{{count}} tables",
       "summaryReasoning": "Réflexion {{duration}}",
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
-      "thinking": "Réflexion en cours…"
+      "thinking": "Réflexion en cours…",
+      "tabular": {
+        "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
+        "catalogForWorkbook": "Lecture du sommaire du classeur.",
+        "catalogPreview": "Le catalogue est affiché en partie.",
+        "emptyCatalog": "Ce catalogue est vide.",
+        "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
+        "kind": {
+          "csv": "CSV",
+          "spreadsheet": "Classeur"
+        },
+        "keyword": "Recherche du terme :",
+        "matchedColumns": "Colonnes correspondantes",
+        "identifiedDocuments_one": "Voici le document identifié :",
+        "identifiedDocuments_other": "Voici les {{count}} documents identifiés :",
+        "moreValues_one": "+{{count}} autre valeur",
+        "moreValues_other": "+{{count}} autres valeurs",
+        "moreColumns_one": "+{{count}} autre colonne",
+        "moreColumns_other": "+{{count}} autres colonnes",
+        "noColumns": "Aucune colonne décrite.",
+        "noDocuments": "Aucun document tabulaire accessible.",
+        "noMatches": "Aucune correspondance trouvée dans les tables parcourues.",
+        "noSchemas": "Aucun schéma retourné.",
+        "noTables": "Aucune table décrite.",
+        "partialResult": "résultat partiel",
+        "rowsPreview": "aperçu de {{count}} lignes",
+        "rowsTruncated": "Aperçu partiel : d'autres lignes correspondent dans cette table.",
+        "samples": "Exemples",
+        "showFullCatalog": "Afficher le catalogue complet",
+        "showMore_one": "Afficher {{count}} élément supplémentaire",
+        "showMore_other": "Afficher {{count}} éléments supplémentaires",
+        "tableNumber": "Table {{number}}",
+        "tablesTruncated": "Résultat partiel : d'autres tables ou documents peuvent contenir cette valeur."
+      },
+      "toolStatus": {
+        "failure": "Échec",
+        "running": "En cours",
+        "success": "Succès"
+      },
+      "toolLabels": {
+        "readQuery": "Lecture de la requête",
+        "documents": "Liste des documents tabulaires",
+        "markdown": "Lecture du catalogue du classeur",
+        "schemas": "Lecture des schémas tabulaires",
+        "search": "Recherche d'une valeur tabulaire"
+      }
     },
     "collapse": "Réduire",
     "create": "Créer",
@@ -1675,9 +1713,7 @@
         "gettingStarted": "Démarrage",
         "features": "Fonctionnalités",
         "guides": "Guides et cas d'usage",
-        "troubleshooting": "Résolution de problèmes",
-        "faq": "FAQ",
-        "changelog": "Nouveautés"
+        "troubleshooting": "Aide et limites"
       }
     },
     "avatarCrop": {
@@ -1895,7 +1931,7 @@
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
-        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
+        "deleteDisabledWhileProcessing": "Indisponible tant que l’ingestion est en attente ou en cours",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "manageLabels": "Gérer les labels",
@@ -1907,8 +1943,7 @@
         "refresh": "Rafraîchir cette vue",
         "rename": "Renommer",
         "reprocess": "Retraiter",
-        "searchable": "Exclure de la recherche",
-        "stopIngestion": "Arrêter l'ingestion"
+        "searchable": "Exclure de la recherche"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1921,13 +1956,19 @@
         "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
-        "shareTitle": "Copier dans l'espace d'équipe",
-        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
-        "stopIngestionTitle": "Arrêter l'ingestion"
+        "shareTitle": "Copier dans l'espace d'équipe"
       },
       "errorTooltip": {
+        "noDetails": "Le traitement a échoué sans détail disponible. Transmettez la référence du document au support.",
+        "documentReference": "Document : {{id}}",
         "reported": "Signalé par le traitement",
-        "stage": "Étape : {{stage}}"
+        "stage": "Étape : {{stage}}",
+        "stages": {
+          "raw": "Stockage du fichier",
+          "preview": "Extraction du contenu",
+          "vector": "Indexation pour la recherche",
+          "sql": "Indexation des données structurées"
+        }
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -2051,9 +2092,7 @@
         "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
         "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé",
-        "stopIngestionError": "Impossible d'arrêter l'ingestion",
-        "stopIngestionRequested": "Arrêt de l'ingestion demandé"
+        "processStarted": "Traitement lancé"
       },
       "pageTitlePersonal": "Vos ressources personnelles",
       "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
@@ -2234,9 +2273,16 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "ingestionStep": {
+        "uploading": "Préparation du document",
+        "processing": "Extraction du contenu",
+        "indexing": "Indexation",
+        "done": "Traitement terminé"
+      },
       "popover": {
         "acknowledge": "Ignorer",
         "close": "Fermer",
+        "supportReference": "Référence support : {{id}}",
         "copyError": "Copier l'erreur",
         "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",

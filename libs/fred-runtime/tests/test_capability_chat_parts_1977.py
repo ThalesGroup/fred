@@ -22,7 +22,7 @@ What is verified:
 - the app built by `create_agent_app` exposes the demo capability's part in
   its OpenAPI document with ZERO hand edits to union files — the acceptance
   criterion for the generated-frontend-types flow
-- the demo tool emits `DemoCardPart` through the standard
+- the demo tool emits `TracerCardPart` through the standard
   `content_and_artifact` channel the runtime merges onto tool_result/final
 """
 
@@ -32,16 +32,16 @@ import json
 from typing import Literal
 
 import pytest
+from _tracer_capability import TracerCardPart, TracerEchoCapability
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.assembly import build_capability_context
-from fred_runtime.capabilities.demo import DemoCardPart, DemoEchoCapability
 from fred_runtime.capabilities.registry import BUILTIN_CHAT_PART_KINDS
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.runtime import RuntimeServices
 from pydantic import BaseModel, ValidationError
 
-DEMO_CARD = {"type": "demo_card", "title": "Demo echo", "body": "HELLO"}
+DEMO_CARD = {"type": "tracer_card", "title": "Demo echo", "body": "HELLO"}
 
 
 class _AlphaPart(BaseModel):
@@ -82,10 +82,10 @@ def test_builtin_kinds_derive_from_sdk_base_union() -> None:
 def test_chat_parts_compose_in_deterministic_capability_order() -> None:
     registry = CapabilityRegistry()
     registry.register(_capability_with_part("zeta", _AlphaPart))
-    registry.register(DemoEchoCapability())
+    registry.register(TracerEchoCapability())
 
-    # Sorted capability ids: demo_echo before zeta.
-    assert registry.chat_parts() == (DemoCardPart, _AlphaPart)
+    # Sorted capability ids: tracer_echo before zeta.
+    assert registry.chat_parts() == (TracerCardPart, _AlphaPart)
 
 
 # -- model-build-time union registration ---------------------------------------
@@ -96,13 +96,13 @@ def test_validate_folds_demo_part_into_ui_part_union() -> None:
         ToolInvocationResult.model_validate({"tool_ref": "t", "ui_parts": [DEMO_CARD]})
 
     registry = CapabilityRegistry()
-    registry.register(DemoEchoCapability())
+    registry.register(TracerEchoCapability())
     registry.validate(env={})
 
     result = ToolInvocationResult.model_validate(
         {"tool_ref": "t", "ui_parts": [DEMO_CARD]}
     )
-    assert isinstance(result.ui_parts[0], DemoCardPart)
+    assert isinstance(result.ui_parts[0], TracerCardPart)
     assert result.ui_parts[0].body == "HELLO"
 
 
@@ -143,20 +143,22 @@ def _openapi_pod_config():
     )
 
 
-def test_openapi_includes_demo_capability_part_with_no_hand_edits() -> None:
+def test_openapi_includes_capability_part_with_no_hand_edits(monkeypatch) -> None:
     """
     The offline OpenAPI export path (`generate_openapi.py` → `create_agent_app`
-    → `app.openapi()`, no lifespan): the installed demo capability's chat part
-    must appear in the schema purely through entry-point registration.
+    → `app.openapi()`, no lifespan): an installed capability's chat part must
+    appear in the schema purely through entry-point registration.
     """
 
+    from _tracer_capability import install_tracer_entry_point
     from fred_runtime.app import create_agent_app
 
+    install_tracer_entry_point(monkeypatch)
     app = create_agent_app(registry={}, config=_openapi_pod_config())
     document = json.dumps(app.openapi())
 
-    assert "DemoCardPart" in document
-    assert "demo_card" in document
+    assert "TracerCardPart" in document
+    assert "tracer_card" in document
     # The frozen members are still there.
     assert "LinkPart" in document
     assert "GeoPart" in document
@@ -166,8 +168,8 @@ def test_openapi_includes_demo_capability_part_with_no_hand_edits() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
-    capability = DemoEchoCapability()
+async def test_demo_tool_emits_tracer_card_part_as_artifact() -> None:
+    capability = TracerEchoCapability()
     # Boot always validates the registry (extending the union) before any
     # tool can run; mirror that here so the artifact's ui_parts validate.
     registry = CapabilityRegistry()
@@ -182,11 +184,11 @@ async def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
     (middleware,) = capability.middleware(ctx)
     (demo_tool,) = middleware.tools
 
-    # CAPAB-02: demo_echo is now `async def` (it was the one capability tool
+    # CAPAB-02: tracer_echo is now `async def` (it was the one capability tool
     # still on the sync-only path) — `.ainvoke()`, not `.invoke()`.
     message = await demo_tool.ainvoke(
         {
-            "name": "demo_echo",
+            "name": "tracer_echo",
             "args": {"text": "hello"},
             "id": "c-1",
             "type": "tool_call",
@@ -197,6 +199,6 @@ async def test_demo_tool_emits_demo_card_part_as_artifact() -> None:
     artifact = message.artifact
     assert isinstance(artifact, ToolInvocationResult)
     part = artifact.ui_parts[0]
-    assert isinstance(part, DemoCardPart)
-    assert part.type == "demo_card"
+    assert isinstance(part, TracerCardPart)
+    assert part.type == "tracer_card"
     assert part.body == "HELLO"

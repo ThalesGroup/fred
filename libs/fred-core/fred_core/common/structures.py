@@ -18,6 +18,7 @@ Moved to `fred_pod.common.structures` so a pod can read its configuration withou
 agents platform. Re-exported here so existing imports keep working."""
 
 from fred_pod.common.structures import (
+    DEFAULT_POD_SQLITE_PATH,
     BaseModelWithId,
     DuckdbStoreConfig,
     InMemoryStoreConfig,
@@ -34,9 +35,11 @@ from fred_pod.common.structures import (
     PostgresTableConfig,
     StoreConfig,
     TemporalSchedulerConfig,
+    default_postgres_store_config,
 )
 
 __all__ = [
+    "DEFAULT_POD_SQLITE_PATH",
     "BaseModelWithId",
     "DuckdbStoreConfig",
     "InMemoryStoreConfig",
@@ -53,4 +56,5 @@ __all__ = [
     "PostgresTableConfig",
     "StoreConfig",
     "TemporalSchedulerConfig",
+    "default_postgres_store_config",
 ]

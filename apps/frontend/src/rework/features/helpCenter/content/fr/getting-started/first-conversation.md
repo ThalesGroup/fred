@@ -1,66 +1,55 @@
 ---
 title: Première conversation
-order: 40
-description: Choisir un agent, poser une question, joindre un document et lire la réponse.
+order: 20
+description: Poser une question à un assistant, lire sa réponse, la vérifier.
 icon: forum
 ---
 
 # Première conversation
 
-Pas besoin d'être un expert : discuter avec un agent, c'est aussi simple
-qu'écrire un message. Voici comment se déroule un premier échange.
+## Choisir un agent et poser sa question
 
-## Choisir un agent
+Depuis une équipe, ouvrez ses **agents** et démarrez une conversation avec
+celui qui correspond à votre besoin. Son nom et sa description disent à quoi il
+sert ; si plusieurs semblent proches, celui dont la description mentionne vos
+documents est généralement le bon.
 
-Sélectionnez votre équipe dans le panneau de navigation, puis ouvrez la page
-**Agents**. Chaque agent y est présenté par son nom et sa vocation. Cliquez sur
-celui qui correspond à votre besoin pour démarrer une conversation.
+Formulez votre question comme vous le feriez auprès d'un collègue, en donnant
+le contexte : ce que vous cherchez, dans quel but, et sous quelle forme vous
+attendez la réponse. Une demande précise obtient une meilleure réponse qu'une
+demande large.
 
-![TODO: capture — la liste des agents d'une équipe](assets/first-conv-agents.png)
+## Lire la réponse
 
-## Poser une question
+Une réponse peut contenir plusieurs choses :
 
-Écrivez votre question dans le champ de saisie, en bas de la conversation, puis
-envoyez. Quelques conseils pour de meilleures réponses :
+- **Le texte**, mis en forme (titres, listes, tableaux).
+- **Les sources** : quand l'agent s'appuie sur vos documents, il indique les
+  passages utilisés. Cliquez-les.
+- **La trace d'exécution** : les étapes suivies — une recherche documentaire,
+  l'appel d'une fonction, un calcul. Utile pour comprendre _comment_ la réponse
+  a été construite.
+- **Les documents produits** : certains agents génèrent un fichier, que vous
+  téléchargez.
 
-- **Soyez précis** : indiquez le contexte, le format attendu, le niveau de
-  détail.
-- **Une intention à la fois** : mieux vaut enchaîner les questions que tout
-  demander d'un coup.
-- **Réutilisez un prompt** : si votre équipe a préparé des prompts, insérez
-  celui qui convient plutôt que de tout réécrire.
+## Vérifier
 
-## Joindre un document
+Un agent s'appuie sur un modèle de langage : il peut se tromper, et
+formuler une erreur avec assurance. Pour toute réponse qui compte, **ouvrez les
+passages cités** et confirmez : les sources existent pour cela.
 
-Vous pouvez **joindre un fichier** à un message pour que l'agent en tienne
-compte le temps de la conversation. Pour un usage durable et partagé, déposez
-plutôt vos documents dans les [ressources](/help/fr/features/resources) de
-l'équipe : l'agent peut alors s'y référer et vous montrer les passages qu'il
-utilise.
+Si l'agent ne cite aucune source, c'est qu'il n'a pas consulté de document :
+la réponse vient de ses connaissances générales, pas de vos contenus.
 
-## Lire une réponse
+## Obtenir de meilleures réponses
 
-Une réponse d'agent peut contenir plusieurs éléments :
+- **Une intention à la fois** plutôt qu'une demande fourre-tout.
+- **Dites le format attendu** : une liste, un tableau, trois phrases.
+- **Si rien ne doit être oublié**, dites-le : « liste _toutes_ les échéances ».
+  L'agent parcourt alors le document en entier au lieu d'en remonter les
+  passages qu'il juge les plus pertinents.
+- **Réutilisez les prompts** de la bibliothèque de votre équipe plutôt que de
+  reformuler chaque fois (voir [Les prompts](/help/fr/features/prompts)).
 
-- **Le texte** de la réponse.
-- **Des sources** : lorsque l'agent s'appuie sur vos documents, il indique les
-  passages utilisés — vérifiez-les pour vous assurer de la pertinence.
-- **La trace** : le détail des étapes que l'agent a suivies, dans l'ordre — son
-  propre raisonnement (« Réflexion en cours… ») ainsi que les actions des outils (une
-  recherche documentaire, un calcul…).
-- **Des documents produits** : certains agents génèrent des fichiers (un
-  document rédigé, un tableau, une présentation).
-
-![TODO: capture — une réponse avec sources et trace](assets/first-conv-answer.png)
-
-> **Vérifiez toujours** les réponses importantes. Un agent peut se tromper ;
-> les sources citées sont là pour vous permettre de recouper. Voir
-> [Les réponses de l'IA](/help/fr/faq/ai-answers).
-
-## Retrouver ses conversations
-
-Vos sessions sont conservées et regroupées par agent. Vous pouvez en rouvrir
-une pour poursuivre l'échange, ou en supprimer une définitivement.
-
-Pour aller plus loin, explorez les [fonctionnalités](/help/fr/features) en
-détail, ou suivez un [guide](/help/fr/guides) adapté à votre cas d'usage.
+Un souci pendant une conversation ? Voir
+[Problèmes courants](/help/fr/troubleshooting/common-problems).

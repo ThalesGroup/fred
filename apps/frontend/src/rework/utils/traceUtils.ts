@@ -21,6 +21,7 @@ import type {
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
+import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -304,9 +305,45 @@ export function parseToolResultContent(result: ChatMessage): Record<string, unkn
 
 export function asSqlQueryResult(data: Record<string, unknown> | null): SqlQueryResult | null {
   if (data && typeof data.sql_query === "string" && Array.isArray(data.rows)) {
-    return data as unknown as SqlQueryResult;
+    const result = data as unknown as SqlQueryResult;
+    return typeof result.error === "string" ? { ...result, error: userFacingSqlError(result.error) } : result;
   }
   return null;
+}
+
+/** Reduce a DuckDB diagnostic to the first actionable error for end users.
+ *
+ * The model still receives the complete diagnostic. The trace drawer omits
+ * engine categories, candidate dumps, source excerpts and caret markers because
+ * the submitted SQL is already displayed directly above the response.
+ */
+function userFacingSqlError(error: string): string {
+  const firstLine = error.split(/\r?\n/, 1)[0]?.trim() ?? "";
+  const withoutRequestPrefix = firstLine.replace(/^Invalid SQL query:\s*/i, "");
+  const summary = withoutRequestPrefix.replace(/^(?:Binder|Parser|Catalog|Conversion|Invalid Input) Error:\s*/i, "");
+  return summary || firstLine;
+}
+
+/** Build the curated SQL failure view from the paired call/result messages.
+ *
+ * Only `read_query` is allowed to reveal one argument in the trace: the SQL is
+ * already shown by the success view, and the failed result text crossed Fred's
+ * typed error trust boundary before reaching the frontend. Transport details
+ * such as HTTP status stay outside this payload.
+ */
+export function asFailedSqlQueryResult(entry: TraceEntry): SqlQueryResult | null {
+  if (
+    entry.kind !== "combo" ||
+    !entry.result ||
+    toolResultOk(entry.result) ||
+    toolSlug(toolName(entry.call)) !== "read_query"
+  ) {
+    return null;
+  }
+  const sql = toolCallPart(entry.call)?.args?.sql;
+  const error = toolResultContent(entry.result).trim();
+  if (typeof sql !== "string" || !sql.trim() || !error) return null;
+  return { sql_query: sql, rows: [], error: userFacingSqlError(error) };
 }
 
 export function asRagSearchResult(data: Record<string, unknown> | null): RagSearchResult | null {
@@ -348,21 +385,26 @@ export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>
   };
 }
 
-/** Text for the drawer header's single copy action, or null when there's nothing to copy. */
-export function toolCopyText(entry: TraceEntry): string | null {
-  // Error rows: the raw crash message is copyable from the drawer.
-  if (entry.kind === "solo") {
-    return entry.message.channel === "error" ? textOf(entry.message) || null : null;
+/** Resolve a workbook name from authorized list/schema results before this call. */
+export function findTabularDocumentName(
+  messages: ChatMessage[],
+  documentUid: string,
+  beforeCallId: string,
+): string | null {
+  const entries = groupTraceEntries(messages);
+  const beforeIndex = entries.findIndex((entry) => entry.kind === "combo" && toolCallId(entry.call) === beforeCallId);
+  if (beforeIndex < 0) return null;
+  for (let index = beforeIndex - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) continue;
+    const kind = tabularToolKind(toolName(entry.call));
+    if (kind !== "documents" && kind !== "schemas") continue;
+    const result = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
+    if (result?.kind !== "documents" && result?.kind !== "schemas") continue;
+    const name = result.documents.find((document) => document.document_uid === documentUid)?.document_name;
+    if (name) return name;
   }
-  const data = entry.result ? parseToolResultContent(entry.result) : null;
-  const sqlResult = asSqlQueryResult(data);
-  if (sqlResult) return sqlResult.sql_query;
-  const ragResult = asRagSearchResult(data);
-  if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
-  if (entry.result && isSummarizeDocumentTool(toolName(entry.call))) return toolResultContent(entry.result);
-  if (entry.result && isDocumentTreeTool(toolName(entry.call)))
-    return stripDocumentUids(toolResultContent(entry.result));
-  return JSON.stringify(genericToolPayload(entry), null, 2);
+  return null;
 }
 
 export type ThoughtExtras = {
@@ -454,7 +496,7 @@ export function findTraceEntry(messages: ChatMessage[], key: string): TraceEntry
 }
 
 // Primary label shown in the row (channel-based)
-export function entryLabel(entry: TraceEntry): string {
+export function entryLabel(entry: TraceEntry, translate?: (key: string) => string): string {
   const channel = entry.kind === "combo" ? entry.call.channel : entry.message.channel;
   switch (channel) {
     case "thought": {
@@ -467,8 +509,15 @@ export function entryLabel(entry: TraceEntry): string {
       return "Plan";
     case "observation":
       return "Observation";
-    case "tool_call":
-      return entry.kind === "combo" ? humanizeToolName(toolName(entry.call)) || "Tool" : "Tool call";
+    case "tool_call": {
+      if (entry.kind !== "combo") return "Tool call";
+      if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
+        return translate("rework.chatTrace.toolLabels.readQuery");
+      }
+      const tabularKind = tabularToolKind(toolName(entry.call));
+      if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.${tabularKind}`);
+      return humanizeToolName(toolName(entry.call)) || "Tool";
+    }
     case "tool_result":
       return "Tool result";
     case "system_note":
@@ -1161,31 +1210,37 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
   });
 }
 
-// Tool slugs whose result volume IS a row count. A completed call to one of
-// these always reports its count — zero included — because "0 rows" is the
-// answer the reader needs (the query ran and found nothing, or came back in a
-// shape we can't read), not an absence of information. Without this, a barren
-// query rendered as a bare "Reading query" row, indistinguishable from a step
-// still missing its metadata.
-const ROW_COUNT_TOOL_SLUGS: ReadonlySet<string> = new Set(["read_query"]);
-
 /**
  * Curated discriminator for a tool step, so two calls to the same tool are
  * distinguishable ("Reading query" ×2 was byte-identical before).
  *
- * Only volume metadata is derived — never raw arguments or raw result content,
+ * Only volume and partial-result metadata are derived — never raw arguments or raw result content,
  * which stay redacted per the rule enforced in {@link primaryTextForEntry}.
  * Returns null when the result shape is unrecognized, still running, or failed
  * (the red status dot already carries the failure).
  */
-export function toolDiscriminator(entry: TraceEntry): { kind: "rows" | "sources"; count: number } | null {
+export function toolDiscriminator(
+  entry: TraceEntry,
+): { kind: "rows" | "sources" | "documents" | "tables" | "matches"; count: number; partial?: boolean } | null {
   if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) return null;
+  const tabular = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
+  if (tabular?.kind === "documents") return { kind: "documents", count: tabular.documents.length };
+  if (tabular?.kind === "schemas") {
+    return { kind: "tables", count: tabular.documents.reduce((count, document) => count + document.tables.length, 0) };
+  }
+  if (tabular?.kind === "search") {
+    return {
+      kind: "matches",
+      count: tabular.matches.length,
+      partial: tabular.tablesTruncated || tabular.matches.some((match) => match.row_truncated),
+    };
+  }
+  if (tabularToolKind(toolName(entry.call))) return null;
   const data = parseToolResultContent(entry.result);
   const sql = asSqlQueryResult(data);
-  if (sql) return { kind: "rows", count: sql.error ? 0 : sql.rows.length };
+  if (sql) return sql.error ? null : { kind: "rows", count: sql.rows.length };
   const rag = asRagSearchResult(data);
   if (rag) return { kind: "sources", count: rag.hits.length };
-  if (ROW_COUNT_TOOL_SLUGS.has(toolSlug(toolName(entry.call)))) return { kind: "rows", count: 0 };
   return null;
 }
 

@@ -39,34 +39,10 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 [project.scripts]
 fred-agents-cli = "fred_runtime.client:main"
 
-# Installing a package that declares a `fred.capabilities` entry point IS the
-# registration (RFC AGENT-CAPABILITY-RFC §4/§7). The in-tree demo capability is
-# the known-good tracer every capability slice verifies against (#1973, #1977);
-# it is admin-gated (`team_scope`) so shipping it registered is inert until a
-# team admin enables it.
-[project.entry-points."fred.capabilities"]
-demo_echo = "fred_runtime.capabilities.demo:DemoEchoCapability"
-# The #1906 pilot: a real, working vector-search capability wired through the
-# SDK `DocumentSearchPort` (CAPAB-01). Auto-discovered at app construction — do
-# NOT also register it manually (double-registration trips the boot invariant).
-document_access = "fred_runtime.capabilities.document_access:DocumentAccessCapability"
-# Split out of document_access (RFC §10.1): admin-gated, HITL-gated on-demand
-# summarization. Auto-discovered the same way — do NOT register manually.
-document_summarize = "fred_runtime.capabilities.document_summarize:DocumentSummarizeCapability"
-# Document-reading pair (DOCREAD-01): verbatim paginated read + exhaustive
-# extraction, both on the shared `DocumentMarkdownPort`. Admin-gated,
-# auto-discovered — do NOT register manually.
-document_verbatim = "fred_runtime.capabilities.document_verbatim:DocumentVerbatimCapability"
-document_extract = "fred_runtime.capabilities.document_extract:DocumentExtractCapability"
-# Targeted document-to-document comparison on the `document_similarity`
-# port - the comparison counterpart of document_access's search. Admin-gated,
-# auto-discovered - do NOT register manually.
-document_similarity = "fred_runtime.capabilities.document_similarity:DocumentSimilarityCapability"
-# Exhaustive, paginated business-label resolution on the shared
-# DocumentTreePort.list_by_label — deliberately kept out of document_access
-# (DEFAULT_ON) so no existing agent's tool set changes; a team admin opts in
-# explicitly. Admin-gated, auto-discovered — do NOT register manually.
-document_label_search = "fred_runtime.capabilities.document_label_search:DocumentLabelSearchCapability"
+# No `fred.capabilities` entry point: fred-runtime ships the capability
+# FRAMEWORK, never a capability. Every capability lives in its own package
+# under libs/capabilities/, and installing that package is the registration
+# (RFC AGENT-CAPABILITY-RFC §4/§7).
 
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.
