@@ -122,6 +122,9 @@ class _Fred:
             async def get(self, url, **kwargs):
                 return fred._respond("GET", url, kwargs)
 
+            async def put(self, url, **kwargs):
+                return fred._respond("PUT", url, kwargs)
+
             async def request(self, method, url, **kwargs):
                 return fred._respond(method, url, kwargs)
 
@@ -410,11 +413,40 @@ def test_a_partial_inventory_is_said_so_and_still_returned(monkeypatch, caplog):
     assert f"only part of library {LIBRARY}" in caplog.text
 
 
+@pytest.mark.parametrize("recorded", [None, "rev-9"])
+def test_the_source_version_reads_back_what_was_recorded(monkeypatch, recorded):
+    fred = _Fred().answers("GET", (200, {"source_version": recorded}))
+    publisher = _publisher(fred, monkeypatch)
+
+    assert asyncio.run(publisher.source_version()) == recorded
+    assert fred.calls[0][:2] == ("GET", f"{BASE}/libraries/{LIBRARY}/source-version")
+
+
+def test_recording_the_source_version_sends_it_verbatim(monkeypatch):
+    fred = _Fred().answers("PUT", (200, {"source_version": "rev-9"}))
+    publisher = _publisher(fred, monkeypatch)
+
+    asyncio.run(publisher.record_source_version("rev-9"))
+
+    method, url, kwargs = fred.calls[0]
+    assert (method, url) == ("PUT", f"{BASE}/libraries/{LIBRARY}/source-version")
+    assert kwargs["json"] == {"source_version": "rev-9"}
+
+
+def test_a_refused_source_version_names_the_library(monkeypatch):
+    fred = _Fred().answers("PUT", (400, "too long"))
+    publisher = _publisher(fred, monkeypatch)
+
+    with pytest.raises(DocumentPublishError, match=f"library {LIBRARY}: 400"):
+        asyncio.run(publisher.record_source_version("x" * 10_000))
+
+
 def test_every_call_carries_the_pod_identity(monkeypatch):
     fred = (
         _Fred()
         .answers("POST", (202, ACCEPTED))
         .answers("GET", (200, _summary("succeeded")))
+        .answers("PUT", (200, {"source_version": "rev-9"}))
         .answers("DELETE", (204, ""))
     )
     publisher = _publisher(fred, monkeypatch)
@@ -423,11 +455,12 @@ def test_every_call_carries_the_pod_identity(monkeypatch):
         async with publisher:
             await publisher.publish(relative_path="docs/a.md", content=b"x")
             await publisher.outcome(TASK)
+            await publisher.record_source_version("rev-9")
             await publisher.retract(relative_path="docs/a.md")
 
     asyncio.run(_one_of_everything())
 
-    assert len(fred.calls) == 3
+    assert len(fred.calls) == 4
     assert all(
         kwargs["headers"]["Authorization"] == "Bearer a-token"
         for _, _, kwargs in fred.calls

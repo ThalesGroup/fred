@@ -301,7 +301,9 @@ workload identity and a cadence; the handler owns discovery, replay-safe writes 
 explicit retractions — Fred never infers a deletion from absence. `DocumentPublisher`
 is the shortcut for writing: a write is accepted at once and ingested by Fred
 afterwards, `wait` follows it to its end, and `documents()` reads back what the
-library holds so a run can reconcile against it. Install
+library holds so a run can reconcile against it. A source that can say what
+changed since a version (a Git revision) keeps that version in Fred with
+`record_source_version()` and reads it back with `source_version()`. Install
 `fred-sdk[knowledge-base]`. Working declarations live in the `fred-samples`
 repository under `knowledge-bases/`.
 
