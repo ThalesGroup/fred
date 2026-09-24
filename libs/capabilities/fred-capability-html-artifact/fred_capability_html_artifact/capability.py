@@ -123,14 +123,22 @@ _HTML_INSTRUCTIONS = (
 # The tool announces its id in its own result text, which is the only trace that
 # outlives a turn: capability middleware is rebuilt per turn, so there is no memory
 # to keep it in. Reading it back from the transcript is what lets a revision target
-# the open artifact without the model having to remember an id.
+# the open artifact without the model having to remember an id. Matched against tool
+# messages only — see `_artifact_id_in_history`.
 _RENDERED_ID = re.compile(r"rendered \(id=([0-9a-f]+)\)")
 
 
 def _artifact_id_in_history(messages: Sequence[object]) -> str | None:
-    """The most recently rendered artifact id in this conversation, if any."""
+    """The most recently rendered artifact id in this conversation, if any.
+
+    Only TOOL messages are scanned. The marker is text, and a user message, a
+    retrieved document or another tool's output could carry the same wording and
+    retarget which artifact a revision replaces.
+    """
 
     for message in reversed(list(messages)):
+        if getattr(message, "type", None) != "tool":
+            continue
         content = getattr(message, "content", None)
         if not isinstance(content, str):
             continue
