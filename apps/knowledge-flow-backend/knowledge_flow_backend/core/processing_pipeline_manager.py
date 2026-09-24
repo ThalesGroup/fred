@@ -16,23 +16,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcessingPipelineManager:
-    """
-    Registry for library-aware pipelines.
-
-    This manager owns:
-      - a default pipeline (mirroring legacy behaviour),
-      - an optional set of named pipelines,
-      - a mapping from tag_id -> pipeline_name.
-
-    For now, only the default pipeline is instantiated. Tag-based routing is
-    prepared but no tag is mapped yet; all documents go through the default
-    pipeline. Admin APIs can later populate tag_to_pipeline and pipelines.
-    """
+    """Select extraction and output pipelines by processing profile."""
 
     default_pipeline: ProcessingPipeline
     default_profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
     pipelines: Dict[str, ProcessingPipeline] = field(default_factory=dict)
-    tag_to_pipeline: Dict[str, str] = field(default_factory=dict)
     profile_to_pipeline: Dict[IngestionProcessingProfile, str] = field(default_factory=dict)
 
     @classmethod
@@ -113,7 +101,7 @@ class ProcessingPipelineManager:
         """
         normalized_profile = coerce_processing_profile(profile)
         with processing_profile_scope(normalized_profile):
-            pipeline = self.get_pipeline_for_metadata(metadata, profile=normalized_profile)
+            pipeline = self.get_pipeline_for_profile(normalized_profile)
             pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
     @staticmethod
@@ -128,31 +116,3 @@ class ProcessingPipelineManager:
         normalized = self.normalize_profile(profile) or self.default_profile
         pipeline_name = self.profile_to_pipeline.get(normalized, "default")
         return self.pipelines.get(pipeline_name, self.default_pipeline)
-
-    def get_pipeline_for_metadata(self, metadata: DocumentMetadata, profile: IngestionProcessingProfile | str | None = None) -> ProcessingPipeline:
-        """
-        Select a pipeline based on the document's library tags.
-
-        Current heuristic:
-        - If a profile is explicitly requested, use the profile pipeline first.
-        - Iterate metadata.tags.tag_ids in order.
-        - If a tag id is mapped to a pipeline name, and that pipeline exists,
-          return it.
-        - Otherwise, fall back to the default pipeline.
-        """
-        normalized = self.normalize_profile(profile) or self.default_profile
-        pipeline_name = self.profile_to_pipeline.get(normalized, "default")
-        pipeline = self.pipelines.get(pipeline_name)
-        if pipeline is not None:
-            return pipeline
-
-        tag_ids: List[str] = metadata.tags.tag_ids or []
-
-        for tag_id in tag_ids:
-            pipeline_name = self.tag_to_pipeline.get(tag_id)
-            if pipeline_name:
-                pipeline = self.pipelines.get(pipeline_name)
-                if pipeline:
-                    return pipeline
-
-        return self.default_pipeline

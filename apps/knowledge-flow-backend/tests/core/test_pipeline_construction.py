@@ -35,13 +35,14 @@ class LibraryProcessor(LibraryOutputProcessor):
         return []
 
 
+@pytest.mark.parametrize("default_profile", list(IngestionProcessingProfile))
 @pytest.mark.parametrize("include_output", [False, True])
-def test_profile_construction_preserves_input_selection_without_output_dependencies(monkeypatch, include_output):
+def test_profile_construction_preserves_input_selection_without_output_dependencies(monkeypatch, include_output, default_profile):
     profiles = list(IngestionProcessingProfile)
     selected = {profile: Mock() for profile in profiles}
     config = SimpleNamespace(
         processing=SimpleNamespace(
-            default_profile=IngestionProcessingProfile.medium,
+            default_profile=default_profile,
             profiles=SimpleNamespace(**{profile.value: SimpleNamespace(input_processors=[SimpleNamespace(suffix=".PDF", class_path=profile.value)]) for profile in profiles}),
         ),
         library_output_processors=[SimpleNamespace(class_path=f"{__name__}.LibraryProcessor")],
@@ -55,9 +56,10 @@ def test_profile_construction_preserves_input_selection_without_output_dependenc
 
     # Exercise the ordinary default too, so indexing cannot silently lose output.
     manager = ProcessingPipelineManager.create_with_default(context) if include_output else ProcessingPipelineManager.create_with_default(context, include_output=False)
-    assert manager.get_pipeline_for_profile(None) is manager.get_pipeline_for_profile(IngestionProcessingProfile.medium)
+    assert manager.get_pipeline_for_profile(None) is manager.get_pipeline_for_profile(default_profile)
     for profile in profiles:
         pipeline = manager.get_pipeline_for_profile(profile)
+        assert manager.get_pipeline_for_profile(profile.value) is pipeline
         assert pipeline.input_processors == {".pdf": selected[profile]}
         assert bool(pipeline.output_processors) is include_output
         assert bool(pipeline.library_output_processors) is include_output

@@ -44,9 +44,7 @@ class IngestionService:
         self.context = ApplicationContext.get_instance()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.metadata_service = MetadataService()
-        # Library-aware pipeline manager. For now it contains only the default
-        # pipeline mirroring legacy behaviour, but it is ready to support
-        # per-library pipelines via tag-based routing.
+        # Shared pipeline manager for the configured processing profiles.
         self.pipeline_manager = ProcessingPipelineManager.create_with_default(self.context)
 
     @staticmethod
@@ -295,7 +293,7 @@ class IngestionService:
         """
         normalized_profile = coerce_processing_profile(profile)
         with processing_profile_scope(normalized_profile):
-            pipeline = self.pipeline_manager.get_pipeline_for_metadata(input_file_metadata, profile=normalized_profile)
+            pipeline = self.pipeline_manager.get_pipeline_for_profile(normalized_profile)
             return pipeline.process_output(
                 input_file_name=input_file_name,
                 output_dir=output_dir,
