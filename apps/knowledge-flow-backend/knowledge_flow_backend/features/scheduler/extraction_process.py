@@ -169,7 +169,7 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
         ApplicationContext(load_configuration())
         # Build only the input pipeline. Individual processors may still open
         # their own services (for example, table storage for spreadsheets).
-        manager = ProcessingPipelineManager.create_with_default(ApplicationContext.get_instance())
+        manager = ProcessingPipelineManager.create_with_default(ApplicationContext.get_instance(), include_output=False)
         manager.run_input(
             input_path=pathlib.Path(request.input_path),
             output_dir=pathlib.Path(request.output_dir),

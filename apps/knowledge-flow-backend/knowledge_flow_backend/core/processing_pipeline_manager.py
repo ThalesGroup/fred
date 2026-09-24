@@ -36,8 +36,8 @@ class ProcessingPipelineManager:
     profile_to_pipeline: Dict[IngestionProcessingProfile, str] = field(default_factory=dict)
 
     @classmethod
-    def create_with_default(cls, context: ApplicationContext) -> "ProcessingPipelineManager":
-        default = ProcessingPipeline.build_default(context)
+    def create_with_default(cls, context: ApplicationContext, *, include_output: bool = True) -> "ProcessingPipelineManager":
+        default = ProcessingPipeline.build_default(context, include_output=include_output)
         pipelines = {"default": default}
         manager = cls(
             default_pipeline=default,
@@ -103,11 +103,10 @@ class ProcessingPipelineManager:
         """Run one document's extraction stage, writing its output into output_dir.
 
         The narrowest entry point into extraction: a pipeline manager needs the
-        configuration and the processor classes, nothing else — no content store,
-        no metadata service, no database. `IngestionService.process_input` calls
-        it in-process, and the extraction subprocess calls it having built only a
-        manager, so neither can drift from the other and the subprocess opens no
-        connection it does not need.
+        configuration and the processor classes. Extraction-only construction
+        excludes output processors; input processors may still require stores.
+        Both `IngestionService.process_input` and the extraction subprocess call
+        this method, keeping the extraction algorithm shared.
 
         The profile scope is entered here, so the processors read the same
         effective per-profile settings on both paths.
