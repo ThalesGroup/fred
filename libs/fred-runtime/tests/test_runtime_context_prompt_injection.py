@@ -34,12 +34,15 @@ above rather than duplicating them.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import fred_runtime.react.react_runtime as react_mod
 import pytest
+from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -153,7 +156,7 @@ async def test_react_build_executor_injects_context_prompt_into_compiled_agent(
 
 @pytest.mark.asyncio
 async def test_deep_build_executor_injects_context_prompt_into_compiled_agent(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     captured: dict[str, str] = {}
 
@@ -165,7 +168,11 @@ async def test_deep_build_executor_injects_context_prompt_into_compiled_agent(
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
     runtime = deep_mod.DeepAgentRuntime(
-        definition=_fake_definition(), services=RuntimeServices()
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=ConversationFilesystemService(
+            LocalFilesystem(root=str(tmp_path)), "prompt-test"
+        ),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 

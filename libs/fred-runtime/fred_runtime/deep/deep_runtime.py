@@ -328,7 +328,9 @@ def _build_conversation_backend(
     if conversation_filesystem is None:
         raise RuntimeError("DeepAgentRuntime requires a conversation filesystem.")
     return CompositeBackend(
-        default=ConversationNamespaceBackend(conversation_filesystem.scratchpad()),
+        default=ConversationNamespaceBackend(
+            conversation_filesystem.namespace("scratchpad")
+        ),
         routes={
             "/.deep/": ConversationNamespaceBackend(
                 conversation_filesystem.namespace(".deep")
