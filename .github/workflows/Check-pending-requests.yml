@@ -242,7 +242,7 @@ jobs:
           - format
           - import-order
           - sast
-          # - detect-secret # todo: baseline not working, fix it and re enable this check
+          - detect-secret
           - type-check
     name: Code Quality - ${{ matrix.module.directory }} - ${{ matrix.check }}
 
