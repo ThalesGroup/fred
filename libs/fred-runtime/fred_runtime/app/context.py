@@ -161,7 +161,7 @@ class PodApplicationContext:
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
         self._filesystem = await build_runtime_filesystem(
-            self.configuration.storage.filesystem
+            self.configuration.storage.object_store
         )
 
     async def initialize_sql(self) -> None:

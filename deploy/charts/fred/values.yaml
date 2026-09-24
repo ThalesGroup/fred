@@ -685,11 +685,11 @@ applications:
       storage:
         # Default is a local filesystem for one-replica development. Production
         # deployments should select minio or gcs with a private runtime bucket.
-        # filesystem:
+        # object_store:
         #   type: minio
         #   endpoint: http://seaweedfs:8333
         #   access_key: admin
-        #   bucket_name: fred-runtime-conversations
+        #   bucket_name: fred-runtime # optional default
         #   secure: false
         postgres:
           host: localhost
@@ -719,7 +719,7 @@ applications:
       M2M_CLIENT_SECRET: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
-      MINIO_SECRET_KEY: "" # required when storage.filesystem.type=minio
+      MINIO_SECRET_KEY: "" # required when storage.object_store.type=minio
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # These files override the versions embedded in the Docker image.

@@ -138,37 +138,40 @@ In a production-like setup you will typically manage:
    - Used to harden authentication and authorization in multi-user environments.
    - See `docs/KEYCLOAK.md` for details when enabled.
 
-## 4.1 Fred Runtime conversation-file storage
+## 4.1 Fred Runtime object storage
 
-Deep agents require one private object-storage bucket per Fred Runtime deployment. This bucket is
-owned by the runtime, not by Knowledge Flow, and stores only code-owned keys below
-`conversations/<session_id>/scratchpad/` and `conversations/<session_id>/.deep/`. Do not expose the
-bucket publicly and do not make either prefix configurable.
+Fred Runtime uses one private object-storage bucket per deployment for all runtime-owned files.
+The runtime, rather than Knowledge Flow, owns this bucket. Feature code owns the paths within it;
+Deep agents currently use `conversations/<session_id>/scratchpad/` and
+`conversations/<session_id>/.deep/`. Do not expose the bucket publicly or make feature paths
+configurable.
 
 Grant the runtime workload identity permission to list the bucket and read, create, replace, and
 delete objects in it. On GCS, use Application Default Credentials with Workload Identity in
 production. On MinIO or another S3-compatible service, inject the access and secret keys from the
 deployment secret mechanism into the rendered runtime configuration; do not commit credentials.
 
-Configure `storage.filesystem` in the runtime's `CONFIG_FILE`:
+Configure `storage.object_store` in the runtime's `CONFIG_FILE`:
 
 ```yaml
 # GCS (preferred on GKE; authentication comes from Workload Identity)
 storage:
-  filesystem:
+  object_store:
     type: gcs
-    bucket_name: fred-runtime-conversations
     project_id: my-project # optional when ADC resolves the project
 ```
 
 The Fred Helm chart keeps its one-replica development default on local storage and rejects a
-`fred-agents` deployment with more than one replica while that backend is selected. On GKE, set
-`<RUNTIME_FILES_BUCKET>` in `deploy/charts/fred/values-gcp.yaml`; its `fred-agents` service-account
-annotation uses Workload Identity, so no service-account key is mounted or written to the ConfigMap.
+`fred-agents` deployment with more than one replica while that backend is selected. On GKE,
+the `fred-agents` service-account annotation uses Workload Identity, so no service-account key
+is mounted or written to the ConfigMap.
 
 For MinIO/S3-compatible storage, select `type: minio` and provide `endpoint`, `access_key`,
-`secret_key`, `bucket_name`, and `secure`. Local development may select `type: local` and `root`;
-local storage is not replica-safe and is not a production deployment profile.
+`secret_key`, and `secure`. The bucket defaults to `fred-runtime` for both GCS and MinIO; set
+`bucket_name` only when a deployment needs a different name. Existing deployments using
+`fred-runtime-conversations` must keep that name explicitly until their objects are migrated.
+Local development may select `type: local` and `root`; local storage is not replica-safe and is
+not a production deployment profile.
 
 The soft namespace limits are code defaults: `/scratchpad/` gets 100 MiB and 1,000 files, while
 `/.deep/` gets 1 GiB and 10,000 files. Override only the limits that a deployment needs under

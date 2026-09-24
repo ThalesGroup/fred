@@ -298,11 +298,10 @@ applications:
           read: 60
 
       storage:
-        filesystem:
+        object_store:
           type: minio
           endpoint: http://seaweedfs:8333
           access_key: "admin"
-          bucket_name: "fred-runtime-conversations"
           secure: false
         postgres:
           host: postgres

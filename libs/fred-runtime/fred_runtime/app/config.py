@@ -311,7 +311,7 @@ class MinioRuntimeFilesystemConfig(BaseModel):
     endpoint: str
     access_key: str
     secret_key: str = Field(default=None)  # type: ignore[assignment]
-    bucket_name: str
+    bucket_name: str = "fred-runtime"
     secure: bool = False
 
     @model_validator(mode="before")
@@ -329,7 +329,7 @@ class GcsRuntimeFilesystemConfig(BaseModel):
     """GCS object storage using Application Default Credentials."""
 
     type: Literal["gcs"] = "gcs"
-    bucket_name: str
+    bucket_name: str = "fred-runtime"
     project_id: str | None = None
 
 
@@ -363,7 +363,7 @@ class PodStorageConfig(BaseModel):
       local dev via sqlite_path, PostgreSQL in production via host/port/database)
     - `opensearch`: optional, for log forwarding in production
     - `log_store`: optional, for structured log persistence
-    - `filesystem`: one bucket/root for runtime-owned conversation files
+    - `object_store`: one bucket/root for all runtime-owned files
     """
 
     postgres: PostgresStoreConfig = Field(
@@ -373,12 +373,19 @@ class PodStorageConfig(BaseModel):
     )
     opensearch: Optional[OpenSearchStoreConfig] = None
     log_store: Optional[LogStorageConfig] = None
-    filesystem: RuntimeFilesystemConfig = Field(
+    object_store: RuntimeFilesystemConfig = Field(
         default_factory=LocalRuntimeFilesystemConfig
     )
     conversation_filesystem: ConversationFilesystemQuotaConfig = Field(
         default_factory=ConversationFilesystemQuotaConfig
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_filesystem_config(cls, values: Any) -> Any:
+        if isinstance(values, dict) and "filesystem" in values:
+            raise ValueError("storage.filesystem was renamed to storage.object_store")
+        return values
 
 
 # ---------------------------------------------------------------------------

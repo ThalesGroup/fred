@@ -42,9 +42,9 @@ applications:
 
     configuration:
       storage:
-        filesystem:
+        object_store:
           type: gcs
-          bucket_name: "<RUNTIME_FILES_BUCKET>"
+          # bucket_name defaults to fred-runtime; set it for a different bucket.
 
   control-plane-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---

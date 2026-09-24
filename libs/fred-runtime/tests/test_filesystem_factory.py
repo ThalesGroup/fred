@@ -23,7 +23,10 @@ from fred_core.filesystem.gcs_filesystem import GcsFilesystem
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_runtime.app import AgentPodConfig, build_runtime_filesystem
-from fred_runtime.app.config import MinioRuntimeFilesystemConfig
+from fred_runtime.app.config import (
+    GcsRuntimeFilesystemConfig,
+    MinioRuntimeFilesystemConfig,
+)
 from fred_runtime.app.context import PodApplicationContext
 from pydantic import ValidationError
 
@@ -44,7 +47,7 @@ def _config(filesystem: dict[str, object]) -> AgentPodConfig:
                     "client_id": "test-user",
                 },
             },
-            "storage": {"filesystem": filesystem},
+            "storage": {"object_store": filesystem},
         }
     )
 
@@ -74,6 +77,29 @@ def test_minio_runtime_filesystem_reads_secret_from_environment(
     )
 
     assert config.secret_key == secret
+
+
+def test_runtime_object_store_uses_shared_default_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINIO_SECRET_KEY", secrets.token_urlsafe(32))
+    minio = _config(
+        {"type": "minio", "endpoint": "http://localhost:8333", "access_key": "runtime"}
+    ).storage.object_store
+    gcs = GcsRuntimeFilesystemConfig()
+
+    assert isinstance(minio, MinioRuntimeFilesystemConfig)
+    assert minio.bucket_name == "fred-runtime"
+    assert gcs.bucket_name == "fred-runtime"
+
+
+def test_legacy_filesystem_key_fails_instead_of_falling_back_to_local() -> None:
+    config = _config({"type": "local"})
+    values = config.model_dump()
+    values["storage"]["filesystem"] = values["storage"].pop("object_store")
+
+    with pytest.raises(ValidationError, match="storage.filesystem was renamed"):
+        AgentPodConfig.model_validate(values)
 
 
 def test_minio_runtime_filesystem_requires_secret(
@@ -140,7 +166,7 @@ def test_conversation_filesystem_quotas_allow_partial_and_complete_overrides() -
 @pytest.mark.asyncio
 async def test_local_runtime_filesystem_round_trips_text(tmp_path: Path) -> None:
     filesystem = await build_runtime_filesystem(
-        _config({"type": "local", "root": str(tmp_path)}).storage.filesystem
+        _config({"type": "local", "root": str(tmp_path)}).storage.object_store
     )
 
     assert isinstance(filesystem, LocalFilesystem)
@@ -164,7 +190,7 @@ async def test_local_runtime_filesystem_initializes_outside_event_loop_thread(
     monkeypatch.setattr(filesystem_factory, "LocalFilesystem", _build)
 
     filesystem = await build_runtime_filesystem(
-        _config({"type": "local", "root": str(tmp_path)}).storage.filesystem
+        _config({"type": "local", "root": str(tmp_path)}).storage.object_store
     )
 
     assert isinstance(filesystem, LocalFilesystem)
@@ -192,7 +218,7 @@ async def test_minio_runtime_filesystem_uses_configured_bucket(
                 "secret_key": "generated-test-secret",
                 "bucket_name": "runtime-files",
             }
-        ).storage.filesystem
+        ).storage.object_store
     )
 
     assert isinstance(filesystem, MinioFilesystem)
@@ -222,7 +248,7 @@ async def test_gcs_runtime_filesystem_uses_workload_identity_client(
                 "bucket_name": "runtime-files",
                 "project_id": "fred-dev",
             }
-        ).storage.filesystem
+        ).storage.object_store
     )
 
     assert isinstance(filesystem, GcsFilesystem)

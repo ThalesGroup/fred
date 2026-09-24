@@ -331,7 +331,7 @@ def _build_test_config(
                 "postgres": {
                     "sqlite_path": str(tmp_path / "runtime.sqlite3"),
                 },
-                "filesystem": {
+                "object_store": {
                     "type": "local",
                     "root": str(tmp_path / "filesystem"),
                 },
