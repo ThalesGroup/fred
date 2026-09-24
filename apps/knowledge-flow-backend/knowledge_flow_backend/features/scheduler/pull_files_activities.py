@@ -83,7 +83,14 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     # Step 2: Fetch local file path from loader (downloads if needed)
     with tempfile.TemporaryDirectory() as tmpdir:
         destination = pathlib.Path(tmpdir)
-        full_path = loader.fetch_by_relative_path(file.external_path, destination)
+        # Source loaders perform synchronous network/file I/O. Keep it off the
+        # common worker's event loop; the shared helper also supports local calls.
+        full_path = await to_thread_with_heartbeat(
+            loader.fetch_by_relative_path,
+            file.external_path,
+            destination,
+            heartbeat_details={"stage": "pull_metadata_fetch", "source_tag": file.source_tag},
+        )
 
         if not full_path.exists() or not full_path.is_file():
             raise FileNotFoundError(f"Pull file not found after fetch: {full_path}")

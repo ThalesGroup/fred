@@ -37,7 +37,7 @@ __all__ = ["SYNCHRONIZE_WORKFLOW", "SynchronizeInput", "task_queue_for"]
 def task_queue_for(name: str) -> str:
     """Return the task queue a definition's runs are dispatched on.
 
-    The queue *is* the catalog id built by the same fred-core function Control
+    The queue *is* the catalog id built by the same fred-pod function Control
     Plane uses, so the dispatching side and the worker side cannot disagree by
     construction. The contributed name already carries its prefix, so two
     contributors never share a queue.

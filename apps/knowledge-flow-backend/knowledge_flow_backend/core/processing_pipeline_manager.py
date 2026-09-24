@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import pathlib
 from dataclasses import dataclass, field
@@ -16,28 +30,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcessingPipelineManager:
-    """
-    Registry for library-aware pipelines.
-
-    This manager owns:
-      - a default pipeline (mirroring legacy behaviour),
-      - an optional set of named pipelines,
-      - a mapping from tag_id -> pipeline_name.
-
-    For now, only the default pipeline is instantiated. Tag-based routing is
-    prepared but no tag is mapped yet; all documents go through the default
-    pipeline. Admin APIs can later populate tag_to_pipeline and pipelines.
-    """
+    """Select extraction and output pipelines by processing profile."""
 
     default_pipeline: ProcessingPipeline
     default_profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
     pipelines: Dict[str, ProcessingPipeline] = field(default_factory=dict)
-    tag_to_pipeline: Dict[str, str] = field(default_factory=dict)
     profile_to_pipeline: Dict[IngestionProcessingProfile, str] = field(default_factory=dict)
 
     @classmethod
-    def create_with_default(cls, context: ApplicationContext) -> "ProcessingPipelineManager":
-        default = ProcessingPipeline.build_default(context)
+    def create_with_default(cls, context: ApplicationContext, *, include_output: bool = True) -> "ProcessingPipelineManager":
+        default = ProcessingPipeline.build_default(context, include_output=include_output)
         pipelines = {"default": default}
         manager = cls(
             default_pipeline=default,
@@ -103,18 +105,17 @@ class ProcessingPipelineManager:
         """Run one document's extraction stage, writing its output into output_dir.
 
         The narrowest entry point into extraction: a pipeline manager needs the
-        configuration and the processor classes, nothing else — no content store,
-        no metadata service, no database. `IngestionService.process_input` calls
-        it in-process, and the extraction subprocess calls it having built only a
-        manager, so neither can drift from the other and the subprocess opens no
-        connection it does not need.
+        configuration and the processor classes. Extraction-only construction
+        excludes output processors; input processors may still require stores.
+        Both `IngestionService.process_input` and the extraction subprocess call
+        this method, keeping the extraction algorithm shared.
 
         The profile scope is entered here, so the processors read the same
         effective per-profile settings on both paths.
         """
         normalized_profile = coerce_processing_profile(profile)
         with processing_profile_scope(normalized_profile):
-            pipeline = self.get_pipeline_for_metadata(metadata, profile=normalized_profile)
+            pipeline = self.get_pipeline_for_profile(normalized_profile)
             pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
     @staticmethod
@@ -129,31 +130,3 @@ class ProcessingPipelineManager:
         normalized = self.normalize_profile(profile) or self.default_profile
         pipeline_name = self.profile_to_pipeline.get(normalized, "default")
         return self.pipelines.get(pipeline_name, self.default_pipeline)
-
-    def get_pipeline_for_metadata(self, metadata: DocumentMetadata, profile: IngestionProcessingProfile | str | None = None) -> ProcessingPipeline:
-        """
-        Select a pipeline based on the document's library tags.
-
-        Current heuristic:
-        - If a profile is explicitly requested, use the profile pipeline first.
-        - Iterate metadata.tags.tag_ids in order.
-        - If a tag id is mapped to a pipeline name, and that pipeline exists,
-          return it.
-        - Otherwise, fall back to the default pipeline.
-        """
-        normalized = self.normalize_profile(profile) or self.default_profile
-        pipeline_name = self.profile_to_pipeline.get(normalized, "default")
-        pipeline = self.pipelines.get(pipeline_name)
-        if pipeline is not None:
-            return pipeline
-
-        tag_ids: List[str] = metadata.tags.tag_ids or []
-
-        for tag_id in tag_ids:
-            pipeline_name = self.tag_to_pipeline.get(tag_id)
-            if pipeline_name:
-                pipeline = self.pipelines.get(pipeline_name)
-                if pipeline:
-                    return pipeline
-
-        return self.default_pipeline

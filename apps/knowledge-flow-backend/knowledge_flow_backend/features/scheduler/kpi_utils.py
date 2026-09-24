@@ -20,7 +20,7 @@ import logging
 import socket
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from typing import Any
 
@@ -380,3 +380,19 @@ def drain_extraction_kpis(receiver: socket.socket) -> None:
             ApplicationContext.get_instance().get_kpi_writer().emit(name=metric["name"], type="timer", unit="ms", value=metric["value"], dims=metric["dims"], actor=build_temporal_activity_kpi_actor())
         except Exception:
             logger.warning("[EXTRACTION][KPI] Could not emit timing", exc_info=True)
+
+
+def processor_activity_timer(name: str, dims: Dims) -> AbstractContextManager:
+    """Adapt processor timings to the current activity or extraction child."""
+    if extraction_kpi_socket.get() is not None:
+        return extraction_kpi_timer(name, dims)
+    if not activity.in_activity():
+        return nullcontext()
+    try:
+        from knowledge_flow_backend.application_context import ApplicationContext
+
+        kpi = ApplicationContext.get_instance().get_kpi_writer()
+        return kpi.timer(name, dims=dims, actor=build_temporal_activity_kpi_actor())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[PROCESSOR][PDF][KPI] Failed to start timer %s: %s", name, exc)
+        return nullcontext()

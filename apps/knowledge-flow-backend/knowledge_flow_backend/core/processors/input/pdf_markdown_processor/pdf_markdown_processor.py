@@ -21,16 +21,16 @@ import shutil
 import tempfile
 import threading
 import time
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 import pypdf
 from fred_core.kpi import Dims
 from markitdown import MarkItDown
 from pypdf.errors import PdfReadError
-from temporalio import activity
 
 from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.common.processing_metrics import processing_timer
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
@@ -218,23 +218,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         return self._image_describer
 
     def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
-        """Measure in the child when present, otherwise use the activity's writer."""
-        from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket, extraction_kpi_timer
-
-        if extraction_kpi_socket.get() is not None:
-            return extraction_kpi_timer(name, dims)
-        if not activity.in_activity():
-            return nullcontext()
-        try:
-            from knowledge_flow_backend.application_context import ApplicationContext
-            from knowledge_flow_backend.features.scheduler.kpi_utils import build_temporal_activity_kpi_actor
-
-            kpi = ApplicationContext.get_instance().get_kpi_writer()
-            actor = build_temporal_activity_kpi_actor()
-            return kpi.timer(name, dims=dims, actor=actor)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[PROCESSOR][PDF][KPI] Failed to start timer %s: %s", name, exc)
-            return nullcontext()
+        return processing_timer(name, dims)
 
     def _extract_md(self, file_path: Path, work_dir: str):
         """Orchestrate full extraction: configured extractor → optional OCR / VLM per image → final Markdown.

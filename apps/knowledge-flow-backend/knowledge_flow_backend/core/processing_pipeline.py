@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import pathlib
 from dataclasses import dataclass, field
@@ -37,11 +51,12 @@ class ProcessingPipeline:
     library_output_processors: List[LibraryOutputProcessor] = field(default_factory=list)
 
     @classmethod
-    def build_default(cls, context: ApplicationContext) -> "ProcessingPipeline":
+    def build_default(cls, context: ApplicationContext, *, include_output: bool = True) -> "ProcessingPipeline":
         """
         Build the default pipeline from the existing configuration.
 
-        This preserves current behaviour:
+        Extraction-only callers set include_output=False to avoid constructing
+        indexing and library processors. The default preserves current behaviour:
         - One input processor per extension (from default profile input processors).
         - One output processor per extension (or defaulted via EXTENSION_CATEGORY).
         - Optional library-level processors (if configured).
@@ -58,6 +73,9 @@ class ProcessingPipeline:
                 logger.debug("No input processor configured for extension %s; skipping in default pipeline.", ext)
                 continue
 
+            if not include_output:
+                continue
+
             try:
                 out_proc = context.get_output_processor_instance(ext)
                 output_processors[ext] = [out_proc]
@@ -66,7 +84,7 @@ class ProcessingPipeline:
 
         # Instantiate configured library-level processors if any
         cfg = context.get_config()
-        for entry in cfg.library_output_processors or []:
+        for entry in (cfg.library_output_processors or []) if include_output else []:
             try:
                 module_path, class_name = entry.class_path.rsplit(".", 1)
                 module = __import__(module_path, fromlist=[class_name])
