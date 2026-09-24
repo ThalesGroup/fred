@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 from fred_core.kpi import BaseKPIWriter
