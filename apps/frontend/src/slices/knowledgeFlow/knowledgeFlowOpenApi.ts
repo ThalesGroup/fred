@@ -1543,7 +1543,7 @@ export type CorpusTasksListApiResponse = /** status 200 Successful Response */ a
 export type CorpusTasksListApiArg = {
   taskListRequestV1: TaskListRequestV1;
 };
-export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentResponse[];
+export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentListResponse[];
 export type ListTabularDocumentsApiArg = {
   /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
@@ -2603,21 +2603,15 @@ export type TaskListRequestV1 = {
   limit?: number;
   team_id: string;
 };
-export type TabularTableSummary = {
+export type TabularDocumentListTableResponse = {
   query_alias: string;
   sheet?: string | null;
   title?: string | null;
-  row_count?: number | null;
-  generated_at?: string | null;
 };
-export type TabularDocumentResponse = {
+export type TabularDocumentListResponse = {
   document_uid: string;
   document_name: string;
-  kind: "csv" | "spreadsheet";
-  tables?: TabularTableSummary[];
-  tag_ids?: string[];
-  tag_names?: string[];
-  source_tag?: string | null;
+  tables?: TabularDocumentListTableResponse[] | null;
 };
 export type TabularColumnSchema = {
   name: string;

@@ -21,6 +21,7 @@ import type {
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
+import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -384,23 +385,26 @@ export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>
   };
 }
 
-/** Text for the drawer header's single copy action, or null when there's nothing to copy. */
-export function toolCopyText(entry: TraceEntry): string | null {
-  // Error rows: the raw crash message is copyable from the drawer.
-  if (entry.kind === "solo") {
-    return entry.message.channel === "error" ? textOf(entry.message) || null : null;
+/** Resolve a workbook name from authorized list/schema results before this call. */
+export function findTabularDocumentName(
+  messages: ChatMessage[],
+  documentUid: string,
+  beforeCallId: string,
+): string | null {
+  const entries = groupTraceEntries(messages);
+  const beforeIndex = entries.findIndex((entry) => entry.kind === "combo" && toolCallId(entry.call) === beforeCallId);
+  if (beforeIndex < 0) return null;
+  for (let index = beforeIndex - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) continue;
+    const kind = tabularToolKind(toolName(entry.call));
+    if (kind !== "documents" && kind !== "schemas") continue;
+    const result = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
+    if (result?.kind !== "documents" && result?.kind !== "schemas") continue;
+    const name = result.documents.find((document) => document.document_uid === documentUid)?.document_name;
+    if (name) return name;
   }
-  const data = entry.result ? parseToolResultContent(entry.result) : null;
-  const sqlResult = asSqlQueryResult(data);
-  if (sqlResult) return sqlResult.sql_query;
-  const failedSqlResult = asFailedSqlQueryResult(entry);
-  if (failedSqlResult) return failedSqlResult.sql_query;
-  const ragResult = asRagSearchResult(data);
-  if (ragResult) return null; // sources are browsed via SourcesPanel, not copied as text
-  if (entry.result && isSummarizeDocumentTool(toolName(entry.call))) return toolResultContent(entry.result);
-  if (entry.result && isDocumentTreeTool(toolName(entry.call)))
-    return stripDocumentUids(toolResultContent(entry.result));
-  return JSON.stringify(genericToolPayload(entry), null, 2);
+  return null;
 }
 
 export type ThoughtExtras = {
@@ -505,12 +509,15 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Plan";
     case "observation":
       return "Observation";
-    case "tool_call":
+    case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
       if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
         return translate("rework.chatTrace.toolLabels.readQuery");
       }
+      const tabularKind = tabularToolKind(toolName(entry.call));
+      if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.${tabularKind}`);
       return humanizeToolName(toolName(entry.call)) || "Tool";
+    }
     case "tool_result":
       return "Tool result";
     case "system_note":
@@ -1207,13 +1214,28 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
  * Curated discriminator for a tool step, so two calls to the same tool are
  * distinguishable ("Reading query" ×2 was byte-identical before).
  *
- * Only volume metadata is derived — never raw arguments or raw result content,
+ * Only volume and partial-result metadata are derived — never raw arguments or raw result content,
  * which stay redacted per the rule enforced in {@link primaryTextForEntry}.
  * Returns null when the result shape is unrecognized, still running, or failed
  * (the red status dot already carries the failure).
  */
-export function toolDiscriminator(entry: TraceEntry): { kind: "rows" | "sources"; count: number } | null {
+export function toolDiscriminator(
+  entry: TraceEntry,
+): { kind: "rows" | "sources" | "documents" | "tables" | "matches"; count: number; partial?: boolean } | null {
   if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) return null;
+  const tabular = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
+  if (tabular?.kind === "documents") return { kind: "documents", count: tabular.documents.length };
+  if (tabular?.kind === "schemas") {
+    return { kind: "tables", count: tabular.documents.reduce((count, document) => count + document.tables.length, 0) };
+  }
+  if (tabular?.kind === "search") {
+    return {
+      kind: "matches",
+      count: tabular.matches.length,
+      partial: tabular.tablesTruncated || tabular.matches.some((match) => match.row_truncated),
+    };
+  }
+  if (tabularToolKind(toolName(entry.call))) return null;
   const data = parseToolResultContent(entry.result);
   const sql = asSqlQueryResult(data);
   if (sql) return sql.error ? null : { kind: "rows", count: sql.rows.length };

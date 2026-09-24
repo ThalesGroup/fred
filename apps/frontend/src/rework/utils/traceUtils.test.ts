@@ -20,7 +20,6 @@ import {
   statusForEntry,
   stripDocumentUids,
   textOf,
-  toolCopyText,
   toolDiscriminator,
   totalLatencyMs,
   traceRows,
@@ -332,13 +331,11 @@ describe("statusForEntry", () => {
     expect(statusForEntry({ kind: "solo", message: m })).toBe("error");
   });
 
-  it("keeps a turn-crash error line short and copyable (DOCREAD-01)", () => {
+  it("keeps a turn-crash error line short (DOCREAD-01)", () => {
     const raw = 'Error code: 429 - {"message":"Rate limit exceeded"}';
     const entry = { kind: "solo", message: textMsg(raw, { channel: "error" }) } as const;
-    // Line: no raw dump inline (the row renders a localized short indication);
-    // drawer: the raw message is what gets copied.
+    // The row renders a localized short indication rather than the raw dump.
     expect(primaryTextForEntry(entry)).toBe("");
-    expect(toolCopyText(entry)).toBe(raw);
     expect(entryLabel(entry)).toBe("Error");
   });
 });
@@ -1043,6 +1040,52 @@ describe("traceSummary", () => {
 // ── toolDiscriminator ─────────────────────────────────────────────────────────
 
 describe("toolDiscriminator", () => {
+  it("summarizes only validated tabular results and flags partial searches", () => {
+    const document = {
+      document_uid: "uid-1",
+      document_name: "Sales.csv",
+      kind: "csv",
+      tables: [{ query_alias: "d_private", row_count: 12 }],
+    };
+    const list = {
+      kind: "combo" as const,
+      call: toolCallMsg("c1", "mcp__knowledge_flow__list_tabular_documents"),
+      result: toolResultMsg("c1", JSON.stringify([document])),
+    };
+    expect(toolDiscriminator(list)).toEqual({ kind: "documents", count: 1 });
+    expect(entryLabel(list, (key) => key)).toBe("rework.chatTrace.toolLabels.documents");
+
+    const schemas = {
+      kind: "combo" as const,
+      call: toolCallMsg("c2", "get_tabular_documents_schemas"),
+      result: toolResultMsg("c2", JSON.stringify([{ ...document, tables: [{ ...document.tables[0], columns: [] }] }])),
+    };
+    expect(toolDiscriminator(schemas)).toEqual({ kind: "tables", count: 1 });
+
+    const search = {
+      kind: "combo" as const,
+      call: toolCallMsg("c3", "search_tabular_values"),
+      result: toolResultMsg(
+        "c3",
+        JSON.stringify({
+          keyword: "Acme",
+          normalized_keyword: "acme",
+          matches: [],
+          tables_truncated: true,
+          searched_dataset_uids: ["uid-1"],
+        }),
+      ),
+    };
+    expect(toolDiscriminator(search)).toEqual({ kind: "matches", count: 0, partial: true });
+
+    const malformed = {
+      ...list,
+      result: toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT secret", rows: [{ secret: "private" }] })),
+    };
+    expect(toolDiscriminator(malformed)).toBeNull();
+    expect(toolDiscriminator({ ...list, result: toolResultMsg("c1", JSON.stringify([document]), false) })).toBeNull();
+  });
+
   it("reports the row count of a SQL result", () => {
     const result = toolResultMsg("c1", JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }, { a: 2 }] }));
     expect(toolDiscriminator({ kind: "combo", call: toolCallMsg("c1", "read_query"), result })).toEqual({
@@ -1111,7 +1154,6 @@ describe("asFailedSqlQueryResult", () => {
       rows: [],
       error: 'Referenced column "amount_typo" not found in FROM clause!',
     });
-    expect(toolCopyText(entry)).toBe("SELECT amount_typo FROM d_sales");
   });
 
   it("never opens the curated SQL view for a successful or unrelated tool", () => {
@@ -1301,28 +1343,6 @@ describe("stripDocumentUids", () => {
       "\n",
     );
     expect(stripDocumentUids(tree)).toBe(["docs/", "  report.pdf (2026-01-01)"].join("\n"));
-  });
-});
-
-describe("toolCopyText", () => {
-  it("copies the raw summary text for summarize_document", () => {
-    const call = toolCallMsg("c1", "summarize_document", { document_uid: "doc-1" });
-    const result = toolResultMsg("c1", "This document is about...");
-    const entries = groupTraceEntries([call, result]);
-    expect(toolCopyText(entries[0])).toBe("This document is about...");
-  });
-
-  it("copies the uid-stripped tree text for list_document_tree", () => {
-    const call = toolCallMsg("c1", "list_document_tree", {});
-    const result = toolResultMsg("c1", "report.pdf [doc-1] (2026-01-01)");
-    const entries = groupTraceEntries([call, result]);
-    expect(toolCopyText(entries[0])).toBe("report.pdf (2026-01-01)");
-  });
-
-  it("falls back to the generic {action, status} payload when the tool call has no result yet", () => {
-    const call = toolCallMsg("c1", "summarize_document", {});
-    const entries = groupTraceEntries([call]);
-    expect(JSON.parse(toolCopyText(entries[0]) ?? "")).toEqual({ action: "Summarize Document", status: "running" });
   });
 });
 

@@ -37,6 +37,7 @@ from knowledge_flow_backend.features.tabular.execution import (
     register_tabular_exception_handlers,
 )
 from knowledge_flow_backend.features.tabular.service import TabularQueryError, forbidden_datasets_message
+from knowledge_flow_backend.features.tabular.structures import TabularDocumentResponse, TabularTableSummary
 
 
 def _user() -> KeycloakUser:
@@ -92,6 +93,45 @@ def test_read_query_403_body_names_the_document_listing_tool(tabular_client):
 
     assert response.status_code == 403
     assert "list_tabular_documents" in response.json()["detail"]
+
+
+def test_document_list_returns_only_names_identifiers_and_excel_tables(tabular_client):
+    client, controller = tabular_client
+
+    async def _list(*_args, **_kwargs):
+        return [
+            TabularDocumentResponse(
+                document_uid="csv-uid",
+                document_name="Sales.csv",
+                kind="csv",
+                tables=[TabularTableSummary(query_alias="csv-alias", row_count=12)],
+                tag_names=["Finance"],
+            ),
+            TabularDocumentResponse(
+                document_uid="excel-uid",
+                document_name="Budget.xlsx",
+                kind="spreadsheet",
+                tables=[TabularTableSummary(query_alias="q1-alias", sheet="Q1", title="Revenue", row_count=8)],
+                tag_names=["Finance"],
+            ),
+        ]
+
+    controller.service.list_documents = _list
+
+    response = client.get("/tabular/documents")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"document_uid": "csv-uid", "document_name": "Sales.csv"},
+        {
+            "document_uid": "excel-uid",
+            "document_name": "Budget.xlsx",
+            "tables": [{"query_alias": "q1-alias", "sheet": "Q1", "title": "Revenue"}],
+        },
+    ]
+
+    paths = client.get("/openapi.json").json()["paths"]
+    assert paths["/tabular/documents"]["get"]["operationId"] == "list_tabular_documents"
+    assert "/tabular/mcp/documents" not in paths
 
 
 @pytest.mark.parametrize(
