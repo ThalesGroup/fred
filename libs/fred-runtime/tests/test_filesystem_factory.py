@@ -215,7 +215,7 @@ async def test_minio_runtime_filesystem_uses_configured_bucket(
                 "type": "minio",
                 "endpoint": "http://minio:9000",
                 "access_key": "developer",
-                "secret_key": "generated-test-secret",
+                "secret_key": secrets.token_urlsafe(32),
                 "bucket_name": "runtime-files",
             }
         ).storage.object_store
