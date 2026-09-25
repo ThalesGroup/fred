@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Deterministic Deep file assembly through Fred's conversation scratchpad port."""
+"""Deterministic Deep file assembly through Fred's virtual filesystem port."""
 
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from pathlib import PurePosixPath
 
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.runtime import (
+    ConversationFilesystemPort,
     ConversationScratchpadError,
-    ConversationScratchpadPort,
 )
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
@@ -36,7 +36,7 @@ _TOOL_REF = "runtime:concat_files"
 class ConcatFilesMiddleware(AgentMiddleware):
     """Expose one conversation-bound tool to a Deep parent or native child."""
 
-    def __init__(self, scratchpad: ConversationScratchpadPort) -> None:
+    def __init__(self, filesystem: ConversationFilesystemPort) -> None:
         super().__init__()
 
         @tool("concat_files", response_format="content_and_artifact")
@@ -46,9 +46,9 @@ class ConcatFilesMiddleware(AgentMiddleware):
             heading_per_file: bool = False,
             replace: bool = False,
         ) -> tuple[str, ToolInvocationResult]:
-            """Concatenate ordered scratchpad text files into a new scratchpad file.
+            """Concatenate ordered workspace text files into an output file.
 
-            Use absolute `/scratchpad/` paths. The output contains the exact
+            Use absolute paths such as `/notes.md`. The output contains the exact
             input text in the specified order, with no inserted separators.
             Set heading_per_file for Markdown `##` headings derived from input
             filenames, with blank lines between sections. When every input is
@@ -60,43 +60,31 @@ class ConcatFilesMiddleware(AgentMiddleware):
             """
             if not paths:
                 return _error("concat_files needs at least one input path.")
-            try:
-                inputs = [_relative_path(path) for path in paths]
-                output = _relative_path(output_path)
-            except ValueError as exc:
-                return _error(str(exc))
-            if output in inputs:
+            if output_path in paths:
                 return _error("Output path must differ from every input path.")
             try:
-                if not replace and await scratchpad.exists(output):
+                if not replace and await filesystem.exists(output_path, origin="agent"):
                     return _error(f"Output already exists: {output_path}.")
                 contents = []
-                for supplied_path, path in zip(paths, inputs, strict=True):
+                for path in paths:
                     try:
-                        contents.append(await scratchpad.read_text(path))
+                        contents.append(
+                            await filesystem.read_text(path, origin="agent")
+                        )
                     except ConversationScratchpadError as exc:
-                        return _error(f"Cannot read {supplied_path}: {exc}")
+                        return _error(f"Cannot read {path}: {exc}")
                 merged = await asyncio.to_thread(
-                    _assemble, paths, inputs, contents, heading_per_file
+                    _assemble, paths, contents, heading_per_file
                 )
-                await scratchpad.write_text(output, merged)
+                await filesystem.write_text(output_path, merged, origin="agent")
             except (ConversationScratchpadError, ValueError) as exc:
                 return _error(f"Cannot concatenate files: {exc}")
             return (
-                f"Concatenated {len(inputs)} file(s) into {output_path}.",
+                f"Concatenated {len(paths)} file(s) into {output_path}.",
                 ToolInvocationResult(tool_ref=_TOOL_REF),
             )
 
         self.tools: Sequence[BaseTool] = [concat_files]
-
-
-def _relative_path(path: str) -> str:
-    if not path.startswith("/scratchpad/"):
-        raise ValueError(f"Path must be under /scratchpad/: {path}")
-    relative = path.removeprefix("/scratchpad/")
-    if not relative or any(part in ("", ".", "..") for part in relative.split("/")):
-        raise ValueError(f"Invalid scratchpad path: {path}")
-    return relative
 
 
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
@@ -117,16 +105,15 @@ def _join_csv_files(contents: list[str]) -> str:
 
 
 def _assemble(
-    supplied_paths: list[str],
-    inputs: list[str],
+    paths: list[str],
     contents: list[str],
     heading_per_file: bool,
 ) -> str:
-    if all(path.lower().endswith(".csv") for path in inputs):
+    if all(path.lower().endswith(".csv") for path in paths):
         if heading_per_file:
             raise ValueError("Markdown headings cannot be added to CSV output")
         counts: list[tuple[int, ...]] = []
-        for path, content in zip(supplied_paths, contents, strict=True):
+        for path, content in zip(paths, contents, strict=True):
             try:
                 widths = {
                     len(row) for row in csv.reader(io.StringIO(content), strict=True)
@@ -137,13 +124,13 @@ def _assemble(
         if any(len(widths) != 1 or widths[0] != counts[0][0] for widths in counts):
             details = ", ".join(
                 f"{path}: {'/'.join(map(str, widths))} columns"
-                for path, widths in zip(supplied_paths, counts, strict=True)
+                for path, widths in zip(paths, counts, strict=True)
             )
             raise ValueError(f"CSV column count mismatch: {details}")
         return _join_csv_files(contents)
     if heading_per_file:
         return "\n\n".join(
             f"## {_heading(path)}\n\n{body}"
-            for path, body in zip(inputs, contents, strict=True)
+            for path, body in zip(paths, contents, strict=True)
         )
     return "".join(contents)

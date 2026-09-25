@@ -37,7 +37,7 @@ import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import ToolFriendlyFakeChatModel
 from deepagents.backends import CompositeBackend, StateBackend
-from deepagents.middleware.filesystem import FilesystemMiddleware
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
@@ -523,6 +523,54 @@ async def test_deep_build_executor_wires_capability_middleware(
     assert any(
         isinstance(m, DeepChildHitlMiddleware) for m in captured["subagent_middleware"]
     )
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_binds_child_filesystem_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    child_rules = [
+        FilesystemPermission(operations=["read"], paths=["/**"], mode="deny")
+    ]
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
+        subagent_permissions=child_rules,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    assert captured["subagent_permissions"] == child_rules
+    assert captured["permissions"] != child_rules
+    child_concat = next(
+        middleware
+        for middleware in cast(list[AgentMiddleware], captured["subagent_middleware"])
+        if isinstance(middleware, deep_mod.ConcatFilesMiddleware)
+    )
+    result = await child_concat.tools[0].ainvoke(
+        {
+            "type": "tool_call",
+            "name": "concat_files",
+            "args": {"paths": ["/input.txt"], "output_path": "/output.txt"},
+            "id": "child-denied",
+        }
+    )
+    assert isinstance(result, ToolMessage)
+    assert getattr(result.artifact, "is_error", False)
+    assert "Permission denied for read on /output.txt" in str(result.content)
 
 
 @pytest.mark.asyncio

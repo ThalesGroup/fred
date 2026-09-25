@@ -21,10 +21,12 @@ from typing import Any
 import pytest
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     _build_conversation_backend,
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
+    build_conversation_filesystem,
 )
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -194,12 +196,22 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
     filesystem = ConversationFilesystemService(
         LocalFilesystem(str(tmp_path)), "conversation-a"
     )
-    scratchpad = filesystem.scratchpad()
-    await scratchpad.write_text("part-1.md", "one\n")
-    await scratchpad.write_text("part-2.md", "two")
-    await scratchpad.write_text("epilogue.md", "\nend")
+    backend, permissions = build_conversation_filesystem(filesystem)
+    workspace = DeepConversationFilesystemPort(backend, permissions)
+    await workspace.write_text("/part-2.md", "two", origin="system")
+    await workspace.write_text("/epilogue.md", "\nend", origin="system")
     model = _ScriptedModel(
         script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "write_file",
+                        {"file_path": "/part-1.md", "content": "one\n"},
+                        "write-first-part",
+                    )
+                ],
+            ),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -220,10 +232,10 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
                         "concat_files",
                         {
                             "paths": [
-                                "/scratchpad/part-1.md",
-                                "/scratchpad/part-2.md",
+                                "/part-1.md",
+                                "/part-2.md",
                             ],
-                            "output_path": "/scratchpad/report.md",
+                            "output_path": "/report.md",
                         },
                         "merge",
                     )
@@ -237,13 +249,19 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
                         "concat_files",
                         {
                             "paths": [
-                                "/scratchpad/report.md",
-                                "/scratchpad/epilogue.md",
+                                "/report.md",
+                                "/epilogue.md",
                             ],
-                            "output_path": "/scratchpad/final.md",
+                            "output_path": "/final.md",
                         },
                         "finalize",
                     )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("read_file", {"file_path": "/final.md"}, "read-final")
                 ],
             ),
             AIMessage(content="done"),
@@ -257,7 +275,7 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
             binding=_binding(),
             approval_policy=ToolApprovalPolicy(),
             available_tool_names=_SAFE_FILESYSTEM_TOOLS | {"concat_files"},
-            scratchpad=scratchpad,
+            filesystem=workspace,
             child=child,
         )
 
@@ -268,12 +286,25 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
         checkpointer=InMemorySaver(),
         middleware=middleware(),
         subagent_middleware=middleware(child=True),
-        backend=_build_conversation_backend(filesystem),
+        backend=backend,
+        permissions=permissions,
     )
 
-    await _drive(agent)
+    updates = await _drive(agent)
 
-    assert await scratchpad.read_text("report.md") == "one\ntwo"
-    assert await scratchpad.read_text("final.md") == "one\ntwo\nend"
+    assert await workspace.read_text("/report.md", origin="system") == "one\ntwo"
+    assert await workspace.read_text("/final.md", origin="system") == "one\ntwo\nend"
+    messages = [
+        message
+        for update in updates
+        for value in update.values()
+        if isinstance(value, dict)
+        for message in value.get("messages") or []
+        if isinstance(message, ToolMessage)
+    ]
+    assert any(
+        message.tool_call_id == "read-final" and message.status == "success"
+        for message in messages
+    )
     assert len(model.bound_tool_names) >= 2
     assert all("concat_files" in names for names in model.bound_tool_names)
