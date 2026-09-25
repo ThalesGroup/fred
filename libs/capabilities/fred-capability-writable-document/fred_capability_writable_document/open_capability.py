@@ -35,15 +35,6 @@ from fred_capability_writable_document.capability import save_writable_document
 logger = logging.getLogger(__name__)
 
 _TOOL_REF = "open_writable_document"
-_MAX_IMPORT_BYTES = 1024 * 1024
-
-
-def _markdown_path(path: str) -> str:
-    if not path.startswith("/"):
-        raise ValueError("Use an absolute workspace path, such as /report.md.")
-    if PurePosixPath(path).suffix.lower() != ".md":
-        raise ValueError("Only Markdown (.md) files can be opened in this editor.")
-    return path
 
 
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
@@ -92,16 +83,12 @@ class OpenWritableDocumentCapability(
                 return _error("Conversation files are unavailable on this agent.")
             if not title.strip():
                 return _error("Give the document a non-empty title.")
+            if PurePosixPath(path).suffix.lower() != ".md":
+                return _error("Only Markdown (.md) files can be opened in this editor.")
             try:
-                content = await filesystem.read_text(
-                    _markdown_path(path), origin="agent"
-                )
-            except (ValueError, ConversationScratchpadError) as exc:
+                content = await filesystem.read_text(path, origin="agent")
+            except ConversationScratchpadError as exc:
                 return _error(f"Cannot open {path}: {exc}")
-            if len(content.encode("utf-8")) > _MAX_IMPORT_BYTES:
-                return _error(
-                    "This Markdown file is too large for the demo editor (1 MiB limit)."
-                )
             try:
                 return await save_writable_document(
                     session_id=session_id,

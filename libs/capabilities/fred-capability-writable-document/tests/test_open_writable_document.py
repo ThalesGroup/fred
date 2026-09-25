@@ -89,12 +89,11 @@ async def test_imports_markdown_without_exposing_its_body_to_the_model(fake_stor
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "path", ["report.md", "/results.csv"]
-)
-async def test_rejects_unsupported_paths_before_reading(fake_store, path):
+async def test_rejects_non_markdown_before_reading(fake_store):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
-    _result, artifact = await _tool(filesystem).coroutine(path=path, title="Report")
+    _result, artifact = await _tool(filesystem).coroutine(
+        path="/results.csv", title="Report"
+    )
 
     assert artifact.is_error
     filesystem.read_text.assert_not_awaited()
@@ -105,8 +104,15 @@ async def test_rejects_unsupported_paths_before_reading(fake_store, path):
 @pytest.mark.parametrize(
     ("path", "error"),
     [
+        (
+            "report.md",
+            ConversationScratchpadInvalidPathError("Absolute path required"),
+        ),
         ("/../secret.md", ConversationScratchpadInvalidPathError("Unsafe path")),
-        ("/mounted/private.md", ConversationFilesystemPermissionError("Access denied")),
+        (
+            "/mounted/private.md",
+            ConversationFilesystemPermissionError("Access denied"),
+        ),
     ],
 )
 async def test_respects_filesystem_path_and_permission_checks(fake_store, path, error):
@@ -120,16 +126,25 @@ async def test_respects_filesystem_path_and_permission_checks(fake_store, path, 
 
 
 @pytest.mark.asyncio
-async def test_requires_filesystem_and_limits_editor_import(fake_store):
+async def test_requires_filesystem(fake_store):
     _result, unavailable = await _tool(None).coroutine(
         path="/report.md", title="Report"
     )
     assert unavailable.is_error
 
+    assert await fake_store.list_for_session("session-1") == []
+
+
+@pytest.mark.asyncio
+async def test_import_does_not_add_a_demo_size_limit(fake_store):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
-    filesystem.read_text.return_value = "x" * (1024 * 1024 + 1)
-    _result, oversized = await _tool(filesystem).coroutine(
+    content = "x" * (1024 * 1024 + 1)
+    filesystem.read_text.return_value = content
+
+    _result, artifact = await _tool(filesystem).coroutine(
         path="/report.md", title="Report"
     )
-    assert oversized.is_error
-    assert await fake_store.list_for_session("session-1") == []
+
+    assert not artifact.is_error
+    rows = await fake_store.list_for_session("session-1")
+    assert rows[0].content_md == content
