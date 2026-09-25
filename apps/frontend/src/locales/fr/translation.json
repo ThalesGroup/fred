@@ -3415,8 +3415,6 @@
       },
       "row": {
         "enabled": "Afficher cette annonce aux utilisateurs",
-        "live": "Affichée",
-        "draft": "Brouillon",
         "edit": "Modifier cette annonce",
         "delete": "Supprimer cette annonce"
       },

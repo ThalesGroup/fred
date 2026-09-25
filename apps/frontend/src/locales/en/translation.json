@@ -3415,8 +3415,6 @@
       },
       "row": {
         "enabled": "Show this announcement to users",
-        "live": "Live",
-        "draft": "Draft",
         "edit": "Edit this announcement",
         "delete": "Delete this announcement"
       },

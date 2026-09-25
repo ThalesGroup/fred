@@ -140,17 +140,16 @@ export default function AnnouncementsPage() {
             <li key={announcement.id} className={styles.row}>
               {/* The real banner component, not a lookalike: an admin has to be
                   able to trust that what they see here is what users get. */}
-              <AnnouncementBanner announcement={announcement} preview />
+              <div className={styles.preview}>
+                <AnnouncementBanner announcement={announcement} preview />
+              </div>
               <div className={styles.controls}>
-                <label className={styles.toggle}>
-                  <Switch
-                    checked={announcement.enabled}
-                    onChange={(event) => void onToggle(announcement, event.target.checked)}
-                    aria-label={t("rework.announcements.row.enabled")}
-                  />
-                  {announcement.enabled ? t("rework.announcements.row.live") : t("rework.announcements.row.draft")}
-                </label>
-                <span className={styles.controlsSpacer} />
+                <Switch
+                  size="small"
+                  checked={announcement.enabled}
+                  onChange={(event) => void onToggle(announcement, event.target.checked)}
+                  aria-label={t("rework.announcements.row.enabled")}
+                />
                 <IconButton
                   size="small"
                   variant="icon"

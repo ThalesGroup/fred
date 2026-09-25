@@ -34,36 +34,29 @@
   list-style: none;
 }
 
-/* Each row is a card wrapping the real banner plus the admin controls. The
-   card clips so the banner's container colour runs edge to edge exactly as it
-   does full-width at the top of the app. */
+/* Banner on the left, admin controls on the right — the banner keeps the full
+   remaining width so every row lines up on the same two edges. No card around
+   the pair: the severity fill is already its own boundary. */
 .row {
-  border: 1px solid var(--outline-variant);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+/* The rounding lives here rather than on the banner, which is square when it
+   spans the top of the app. Clipping keeps the container colour inside it. */
+.preview {
+  flex: 1;
   border-radius: var(--radius-s);
+  min-width: 0;
   overflow: hidden;
 }
 
-/* The controls sit on the page's own surface, deliberately NOT on the banner's
-   container colour: they belong to the admin page, not to the announcement,
-   and sharing its background would read as part of what users will see. */
+/* Every row carries the same three controls, so their natural widths already
+   match — no fixed width to keep in step with the atoms' sizes. */
 .controls {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  background: var(--surface-container-low);
-  padding: var(--spacing-2xs) var(--spacing-s);
-}
-
-.controlsSpacer {
-  flex: 1;
-}
-
-.toggle {
-  display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-xs);
-  cursor: pointer;
-  color: var(--on-surface-variant);
-  font: var(--font-body-small);
+  gap: var(--spacing-2xs);
 }

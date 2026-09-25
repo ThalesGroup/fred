@@ -99,14 +99,23 @@
 }
 
 .title {
-  font: var(--font-body-medium-emphasized);
+  font: var(--font-title-medium);
 }
 
-/* The short description is markdown, but it sits in a strip: strip the
-   renderer's block spacing so one or two lines do not open a gap the height of
-   a paragraph. */
-.short > * {
+/* The renderer paints its own reading colour and prose size on its root, both
+   wrong on a filled strip: every glyph here belongs to the severity's `on-`
+   pair, at the banner's body size. Block spacing goes too, so one or two lines
+   do not open a gap the height of a paragraph. */
+.banner .short > * {
   margin-block: 0;
+  color: inherit;
+  font: var(--font-body-medium);
+}
+
+/* Links keep the underline to stay distinguishable without the accent colour,
+   which has no contrast guarantee on a container background. */
+.banner .short a {
+  color: inherit;
 }
 
 .actions {
