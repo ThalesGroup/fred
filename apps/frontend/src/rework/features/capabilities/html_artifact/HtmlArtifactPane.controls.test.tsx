@@ -62,6 +62,8 @@ vi.mock("./htmlArtifactSlice", () => ({
   closeHtmlArtifact: (id: string) => ({ type: "close", payload: id }),
 }));
 vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => "s1" }));
+// The posture is resolved through RTK Query; these tests are about the tabs.
+vi.mock("./useHtmlArtifactJavaScript", () => ({ useHtmlArtifactJavaScriptAllowed: () => true }));
 vi.mock("react-redux", () => ({
   useSelector: (fn: (s: unknown) => unknown) => fn({}),
   useDispatch: () => () => undefined,

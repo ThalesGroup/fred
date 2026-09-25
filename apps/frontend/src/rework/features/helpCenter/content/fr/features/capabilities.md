@@ -113,12 +113,20 @@ redéposer.
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
-### Générer une page web (HTML/CSS/JS)
+### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché
-dans un aperçu à côté de la conversation. La page peut être **interactive** :
-onglets, accordéons, animations, graphiques. L'aperçu se télécharge en HTML,
+dans un aperçu à côté de la conversation. L'aperçu se télécharge en HTML,
 PDF ou image.
+
+**Les pages interactives s'autorisent équipe par équipe.** Les onglets, accordéons,
+animations et graphiques qui réagissent au clic reposent sur du JavaScript, et un
+administrateur de la plateforme décide quelles équipes peuvent l'exécuter. Sans
+cette autorisation, vos agents produisent toujours des pages : elles sont
+simplement statiques, et l'agent organise le contenu pour qu'il se lise sans
+interaction. Si une page que vous aviez produite était interactive et ne réagit
+plus, c'est que cette autorisation a été retirée à votre équipe ; l'aperçu vous
+l'indique au-dessus de la page.
 
 **Ses limites** — la page doit être **autonome** : rien ne peut être chargé
 depuis Internet (ni bibliothèque, ni police, ni image distante) et la page ne
@@ -140,10 +148,11 @@ que si vous demandez une page sans rapport avec la précédente. Chaque aperçu 
 ferme par la croix de son onglet, et se rouvre depuis le bouton **Ouvrir l'aperçu**
 de sa carte dans la conversation.
 
-Si une page se comporte mal — elle ralentit votre navigateur, ou elle affiche
-quelque chose qui vous semble douteux — l'aperçu propose un bouton **Arrêter la
-page**, qui interrompt son exécution immédiatement. Un bouton **Relancer la page**
-la remet en marche si vous le souhaitez.
+Si une page interactive se comporte mal — elle ralentit votre navigateur, ou elle
+affiche quelque chose qui vous semble douteux — l'aperçu propose un bouton
+**Arrêter la page**, qui interrompt son exécution immédiatement. Un bouton
+**Relancer la page** la remet en marche si vous le souhaitez. Une page statique n'a
+rien à arrêter : le bouton n'apparaît pas.
 
 **Un exemple** — « Présente ces indicateurs sous forme d'un tableau de bord
 d'une page, avec un onglet par région. »

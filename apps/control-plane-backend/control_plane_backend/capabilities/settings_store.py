@@ -149,6 +149,31 @@ class TeamCapabilitySettingsStore:
             row.capability_id: json.loads(row.settings_json or "{}") for row in rows
         }
 
+    async def list_for_capability(
+        self,
+        capability_id: str,
+        session: AsyncSession | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """All teams' settings for ONE capability, keyed by team id.
+
+        The mirror of `list_for_team`, for the admin surface: showing which teams
+        have which options set otherwise costs one request per team row.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(TeamCapabilitySettingsRow).where(
+                            TeamCapabilitySettingsRow.capability_id == capability_id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return {row.team_id: json.loads(row.settings_json or "{}") for row in rows}
+
     async def delete(
         self,
         *,

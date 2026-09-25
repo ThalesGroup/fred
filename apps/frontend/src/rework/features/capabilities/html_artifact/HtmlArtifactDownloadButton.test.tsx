@@ -72,9 +72,12 @@ const { default: HtmlArtifactDownloadButton } = await import("./HtmlArtifactDown
 let container: HTMLDivElement;
 let root: Root;
 
-function mount(html: string) {
+// The posture is explicit here, and the prop now defaults to DENIED: the warning
+// below is about script that will actually run, so it only applies to a team that
+// may run it.
+function mount(html: string, allowJavaScript = true) {
   act(() => {
-    root.render(<HtmlArtifactDownloadButton html={html} css="" title="My Page" />);
+    root.render(<HtmlArtifactDownloadButton html={html} css="" title="My Page" allowJavaScript={allowJavaScript} />);
   });
 }
 
@@ -111,6 +114,17 @@ describe("HtmlArtifactDownloadButton pre-script capture warning", () => {
 
   it("stays silent for an artifact with nothing to execute", async () => {
     mount("<h1>hi</h1><p>static page</p>");
+    await act(async () => void (await select!("pdf")));
+
+    expect(infos).toEqual([]);
+    expect(downloadPdf).toHaveBeenCalledOnce();
+  });
+
+  it("stays silent for a team that may not run script — nothing is captured early", async () => {
+    // The page carries script, but it will not run in any frame this team sees,
+    // so the export is faithful and the "before its JavaScript runs" caveat would
+    // describe a thing that never happens.
+    mount("<script>window.x=1</script><h1>hi</h1>", false);
     await act(async () => void (await select!("pdf")));
 
     expect(infos).toEqual([]);

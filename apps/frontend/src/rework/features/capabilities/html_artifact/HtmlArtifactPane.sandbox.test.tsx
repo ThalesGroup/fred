@@ -14,13 +14,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Sandbox regression guard (RFC §4.7): the Preview iframes MUST stay exactly
-// `sandbox="allow-scripts"` — author JS runs, and `allow-same-origin` never joins
-// it. The pair is what would let untrusted content clear its own sandbox and reach
-// the app's DOM, cookies and storage, and the isolation now rests entirely on this
-// attribute since the markup is no longer sanitized. This renders the pane and
-// asserts the attribute directly, so such a regression fails the build rather
-// than shipping.
+// Sandbox regression guard (RFC §4.7). Two levels, and the test covers both.
+//
+// The Preview iframes host our TRUSTED shell, so they stay exactly
+// `sandbox="allow-scripts"`: the shell's bootstrap is a script. The ARTIFACT's own
+// permission sits one level down, on the inner frame the shell writes — and that
+// one follows the team's posture: `allow-scripts` for a team that may run script,
+// NO token at all for a team that may not.
+//
+// `allow-same-origin` must never join either: the pair is what would let untrusted
+// content clear its own sandbox and reach the app's DOM, cookies and storage, and
+// the isolation rests entirely on these attributes since the markup is no longer
+// sanitized.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -51,6 +56,10 @@ vi.mock("./htmlArtifactSlice", () => ({
   closeHtmlArtifact: (id: string) => ({ type: "close", payload: id }),
 }));
 vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => "s1" }));
+let allowJavaScript = true;
+vi.mock("./useHtmlArtifactJavaScript", () => ({
+  useHtmlArtifactJavaScriptAllowed: () => allowJavaScript,
+}));
 vi.mock("react-redux", () => ({
   useSelector: (fn: (s: unknown) => unknown) => fn({}),
   useDispatch: () => () => undefined,
@@ -80,6 +89,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  allowJavaScript = true;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -91,7 +101,7 @@ afterEach(() => {
 });
 
 describe("HtmlArtifactPane preview sandbox", () => {
-  it('renders the preview iframes as sandbox="allow-scripts" with no same-origin escape', () => {
+  it('renders the shell-hosting preview iframes as sandbox="allow-scripts", never same-origin', () => {
     act(() => {
       root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
     });
@@ -100,7 +110,8 @@ describe("HtmlArtifactPane preview sandbox", () => {
     // The double-buffered preview mounts two stacked frames.
     expect(iframes.length).toBe(2);
     for (const frame of iframes) {
-      // Author JS must run — the artifact needs it for tabs and animations.
+      // The shell's own bootstrap must run; this token is structural, not a
+      // decision about the artifact.
       expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
       // …but NEVER alongside same-origin: together the two would let the content
       // clear its own sandbox and reach the app's DOM, cookies and storage.
@@ -122,5 +133,50 @@ describe("HtmlArtifactPane preview buffers", () => {
     // string literal with every `<` escaped — hence `\u003ch1>`, not `<h1>`.
     expect(loaded.getAttribute("srcdoc")).toContain("\\u003ch1>hi\\u003c/h1>");
     expect(loaded.getAttribute("srcdoc")).toContain("frame-src blob:");
+  });
+});
+
+describe("HtmlArtifactPane artifact frame posture", () => {
+  const innerSandbox = (srcdoc: string) => /<iframe id="a" sandbox="([^"]*)"/.exec(srcdoc)?.[1];
+
+  it("grants the inner artifact frame allow-scripts for an opted-in team", () => {
+    allowJavaScript = true;
+
+    act(() => {
+      root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
+    });
+
+    const [, loaded] = container.querySelectorAll("iframe");
+    expect(innerSandbox(loaded.getAttribute("srcdoc") ?? "")).toBe("allow-scripts");
+  });
+
+  it("gives the inner artifact frame NO token for a team that may not run script", () => {
+    allowJavaScript = false;
+
+    act(() => {
+      root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
+    });
+
+    const [, loaded] = container.querySelectorAll("iframe");
+    const srcdoc = loaded.getAttribute("srcdoc") ?? "";
+    // Empty, not absent: an iframe with no sandbox attribute at all is UNsandboxed.
+    expect(innerSandbox(srcdoc)).toBe("");
+    expect(srcdoc).not.toContain("allow-scripts");
+    expect(srcdoc).not.toContain("allow-same-origin");
+  });
+
+  it("keeps the CSP in the restricted mode — denying script is not denying egress", () => {
+    allowJavaScript = false;
+
+    act(() => {
+      root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
+    });
+
+    const [, loaded] = container.querySelectorAll("iframe");
+    const srcdoc = loaded.getAttribute("srcdoc") ?? "";
+    // Markup alone still reaches the network (`<img src="https://host/?d=…">`),
+    // so the policy has to hold in both modes.
+    expect(srcdoc).toContain("default-src 'none'");
+    expect(srcdoc).toContain("webrtc 'block'");
   });
 });

@@ -26,7 +26,19 @@ import { downloadHtmlArtifactPdf, downloadHtmlArtifactPng } from "./htmlArtifact
 
 type DownloadFormat = "html" | "pdf" | "png";
 
-export default function HtmlArtifactDownloadButton({ html, css, title }: { html: string; css: string; title: string }) {
+export default function HtmlArtifactDownloadButton({
+  html,
+  css,
+  title,
+  allowJavaScript = false,
+}: {
+  html: string;
+  css: string;
+  title: string;
+  /** This team's JavaScript posture — the saved file must carry the same one.
+   *  Defaults to denied: a forgotten prop must not hand out a runnable file. */
+  allowJavaScript?: boolean;
+}) {
   const { t } = useTranslation();
   const { showError, showInfo } = useToast();
   const label = t("capability.html_artifact.download", { defaultValue: "Download" });
@@ -54,13 +66,15 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
 
   const onSelect = async (format: DownloadFormat) => {
     if (format === "html") {
-      downloadHtmlArtifact(html, css, title);
+      // The saved file opens outside the app, where nothing else would deny
+      // script — so the posture has to travel INSIDE the document.
+      downloadHtmlArtifact(html, css, title, allowJavaScript);
       return;
     }
     // The rasterizing frame cannot run script (it grants same-origin, so granting
     // allow-scripts too would be unsafe), so an interactive artifact is captured as
     // it looks before its JS runs. Say so rather than hand over a puzzling image.
-    if (artifactHasScript(html)) {
+    if (allowJavaScript && artifactHasScript(html)) {
       showInfo({
         summary: t("capability.html_artifact.exportStaticCapture", {
           format: format.toUpperCase(),

@@ -1,6 +1,13 @@
 # RFC — HTML Artifact Capability: agent-generated HTML/CSS/JS with a sandboxed preview
 
-**Status:** Draft for developer review
+**Status:** Shipped. Kept only as the design record for the capability's shape
+and the containment reasoning behind §4.7. **The JavaScript policy in this
+document is superseded**: script is no longer unconditional, it is granted per
+team. The current truth is
+`openspec/specs/html-artifact-javascript-policy/spec.md` (issue #2798); where the
+two disagree, that spec and the code win. This RFC has no open question left and
+is a candidate for archival once §4.7's containment rationale has a home in a
+compact doc.
 **Author:** Maxime Daragon
 **Date:** 2026-08-31
 **Area:** `fred-runtime` (new capability package), `frontend`
@@ -129,8 +136,12 @@ A one-line always-on system note via a `middleware()` `wrap_model_call` override
 (mirrors `writable_document`'s `_WRITE_INSTRUCTIONS`): "When the user asks for a
 web page, component, mockup, or styled HTML, call `render_html_artifact` with the
 HTML and CSS; a rendered preview opens beside the chat — never paste the code into
-the chat. JavaScript is allowed for interaction, inline only; keep the artifact
-self-contained — no external resources and no network calls, which are blocked."
+the chat. Keep the artifact self-contained — no external resources and no network
+calls, which are blocked."
+
+Superseded in one respect: the fragment now has **two variants**, and which one is
+delivered follows the team's `allow_javascript` setting, so a team that may not
+run script is never offered it. See the capability spec (issue #2798).
 
 ### 4.6 Frontend — the viewer
 
@@ -181,15 +192,25 @@ the first thing the parser reaches and therefore governs EVERY author subresourc
 string feeds both the iframe `srcdoc` and the download blob. Author CSS is
 neutralized against a `</style>` breakout before it enters the `<style>` element.
 
-### 4.7 Security — JS runs, isolated on every output path (the load-bearing part)
+### 4.7 Security — JS isolated on every output path (the load-bearing part)
 
 **Amended 2026-09-24.** v1 forbade JavaScript outright and enforced that with
-three layers. The prohibition is lifted: an artifact needs JS for tabs,
+three layers. The blanket prohibition is lifted: an artifact needs JS for tabs,
 accordions, animations and charts, and refusing it made the capability produce
-dead mockups. Script is now **isolated rather than removed**, which changes what
-the layers are for — two browser-enforced primitives contain script instead of
-three independent mechanisms deleting it. The superseded §6 alternative 5
-("Allow JavaScript — deferred") is hereby taken.
+dead mockups. Script is **isolated rather than removed**, which changes what the
+layers are for — browser-enforced primitives contain script instead of three
+independent mechanisms deleting it. The superseded §6 alternative 5 ("Allow
+JavaScript — deferred") is hereby taken.
+
+**Superseded 2026-09-25 (issue #2798).** "Every artifact frame is
+`sandbox="allow-scripts"`" below is no longer true, and neither is the assumption
+that every artifact executes. Script is granted **per team**: an opted-in team's
+artifact frame carries `allow-scripts`, and a restricted team's carries no token
+at all, so nothing executes. Everything else in this section still holds and
+applies to BOTH modes — in particular the CSP, which is what blocks egress from
+markup alone, and the shell plus `frame-src blob:`, which the download path needs
+regardless of posture. Read the rest with that substitution in mind; the spec
+under `openspec/specs/html-artifact-javascript-policy/` is the current contract.
 
 The markup is untrusted LLM output and it executes. Isolation rests on two
 mechanisms, both enforced by the browser and unbypassable by content

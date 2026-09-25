@@ -24,7 +24,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer";
 
@@ -46,7 +46,13 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useEnableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
   useDisableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
   useSetCapabilityPersonalScopeMutation: () => [vi.fn(), { isLoading: false }],
+  useLazyAdminTeamCapabilitySettingsQuery: () => [vi.fn(), { isLoading: false }],
+  useSetTeamCapabilitySettingsMutation: () => [vi.fn(), { isLoading: false }],
+  useCapabilityTeamSettingsMapQuery: () => ({ data: settingsMapData, refetch: vi.fn() }),
 }));
+
+// Mutable so a test can say which teams have an option on.
+let settingsMapData: { capability_id: string; by_team: Record<string, Record<string, unknown>> } | undefined;
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
@@ -280,5 +286,100 @@ describe("CapabilityTeamMatrixDrawer agent dependency gate (#2408, RFC §8.6 dep
     const row = personalRow(html);
     expect(row).not.toContain("rework.admin.capabilities.matrix.personal.dependencyHint");
     expect(enableSegment(row)).not.toContain("disabled");
+  });
+});
+
+describe("CapabilityTeamMatrixDrawer per-team settings affordance", () => {
+  const JS_FIELD = {
+    key: "allow_javascript",
+    type: "boolean" as const,
+    title: "cap.html_artifact.teamSettings.allow_javascript.title",
+    default: false,
+  };
+
+  const OPTIONS_ARIA = "rework.admin.capabilities.matrix.editSettingsAria";
+
+  it("offers the options control for an enabled team when the capability has settings", () => {
+    // Without it, changing one setting meant disabling the capability first —
+    // which suspends every agent depending on it.
+    const html = render({
+      capability: capability({ team_settings_fields: [JS_FIELD], enabled_team_ids: ["t1"] }),
+      teams: [team("t1", "Alpha")],
+    });
+
+    expect(html).toContain(OPTIONS_ARIA);
+  });
+
+  it("offers nothing for a capability that declares no settings", () => {
+    const html = render({
+      capability: capability({ team_settings_fields: [], enabled_team_ids: ["t1"] }),
+      teams: [team("t1", "Alpha")],
+    });
+
+    expect(html).not.toContain(OPTIONS_ARIA);
+  });
+
+  it("offers nothing for a team the capability is not enabled for", () => {
+    // There are no settings to edit until the capability is granted.
+    const html = render({
+      capability: capability({ team_settings_fields: [JS_FIELD], enabled_team_ids: [] }),
+      teams: [team("t1", "Alpha")],
+    });
+
+    expect(html).not.toContain(OPTIONS_ARIA);
+  });
+});
+
+describe("CapabilityTeamMatrixDrawer active-option dot", () => {
+  const JS_FIELD = {
+    key: "allow_javascript",
+    type: "boolean" as const,
+    title: "cap.html_artifact.teamSettings.allow_javascript.title",
+    default: false,
+  };
+
+  const ACTIVE_ARIA = "rework.admin.capabilities.matrix.editSettingsActiveAria";
+  const PLAIN_ARIA = "rework.admin.capabilities.matrix.editSettingsAria";
+
+  const renderRows = () =>
+    render({
+      capability: capability({ team_settings_fields: [JS_FIELD], enabled_team_ids: ["t1", "t2"] }),
+      teams: [team("t1", "Alpha"), team("t2", "Beta")],
+    });
+
+  afterEach(() => {
+    settingsMapData = undefined;
+  });
+
+  it("marks only the team whose option is on", () => {
+    settingsMapData = {
+      capability_id: "web_search",
+      by_team: { t1: { allow_javascript: true }, t2: { allow_javascript: false } },
+    };
+
+    const html = renderRows();
+
+    // The dot is aria-hidden, so the row's meaning has to travel in the label.
+    expect(html).toContain(ACTIVE_ARIA);
+    expect(html).toContain(PLAIN_ARIA);
+  });
+
+  it("marks nothing when no team has the option on", () => {
+    settingsMapData = { capability_id: "web_search", by_team: { t1: { allow_javascript: false } } };
+
+    const html = renderRows();
+
+    expect(html).not.toContain(ACTIVE_ARIA);
+    expect(html).toContain(PLAIN_ARIA);
+  });
+
+  it("marks nothing while the map has not loaded", () => {
+    // Fails quiet rather than guessing: a dot that appears then vanishes reads
+    // as a state change the admin did not make.
+    settingsMapData = undefined;
+
+    const html = renderRows();
+
+    expect(html).not.toContain(ACTIVE_ARIA);
   });
 });

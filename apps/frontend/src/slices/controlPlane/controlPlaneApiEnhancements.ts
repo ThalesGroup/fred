@@ -687,6 +687,20 @@ export const {
   // Fired on demand from the disable-confirmation dialog (lazy — not on render).
   useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery:
     useLazyCapabilityRevokeImpactQuery,
+  // One team's effective capability settings. Two surfaces, two gates: the admin
+  // one seeds the settings form for an already-enabled team; the member one lets
+  // a capability's own UI read the posture its team was given.
+  useLazyGetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetQuery:
+    useLazyAdminTeamCapabilitySettingsQuery,
+  useGetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetQuery:
+    useTeamCapabilitySettingsQuery,
+  // Every team's settings for one capability, so the drawer can mark the rows
+  // whose options are set in one round trip instead of one request per row.
+  useGetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetQuery:
+    useCapabilityTeamSettingsMapQuery,
+  // Settings-only write: leaves the team's enablement tri-state untouched.
+  usePutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutMutation:
+    useSetTeamCapabilitySettingsMutation,
   // Platform-wide chat model binding — chat-only.
   useGetPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsGetQuery: usePlatformModelBindingQuery,
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,

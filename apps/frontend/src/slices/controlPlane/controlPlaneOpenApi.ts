@@ -669,6 +669,38 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGet: build.query<
+      GetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetApiResponse,
+      GetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}/settings`,
+      }),
+    }),
+    putTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPut: build.mutation<
+      PutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutApiResponse,
+      PutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}/settings`,
+        method: "PUT",
+        body: queryArg.setTeamCapabilitySettingsRequest,
+      }),
+    }),
+    getAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGet: build.query<
+      GetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetApiResponse,
+      GetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/settings` }),
+    }),
+    getTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGet: build.query<
+      GetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetApiResponse,
+      GetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/capabilities/${queryArg.capabilityId}/settings`,
+      }),
+    }),
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: build.mutation<
       PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse,
       PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg
@@ -1961,6 +1993,30 @@ export type GetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityId
   capabilityId: string;
   /** Preview one team's disable. Omit for a platform-wide default-off preview. */
   teamId?: string | null;
+};
+export type GetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetApiResponse =
+  /** status 200 Successful Response */ TeamCapabilitySettingsView;
+export type GetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetApiArg = {
+  capabilityId: string;
+  teamId: string;
+};
+export type PutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutApiResponse =
+  /** status 200 Successful Response */ TeamCapabilitySettingsView;
+export type PutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutApiArg = {
+  capabilityId: string;
+  teamId: string;
+  setTeamCapabilitySettingsRequest: SetTeamCapabilitySettingsRequest;
+};
+export type GetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetApiResponse =
+  /** status 200 Successful Response */ CapabilityTeamSettingsMap;
+export type GetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetApiArg = {
+  capabilityId: string;
+};
+export type GetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetApiResponse =
+  /** status 200 Successful Response */ TeamCapabilitySettingsView;
+export type GetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetApiArg = {
+  teamId: string;
+  capabilityId: string;
 };
 export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse =
   /** status 200 Successful Response */ TeamCapabilityEnablementResult;
@@ -3579,6 +3635,27 @@ export type CapabilityImpactPreview = {
   /** The affected agents, for the admin drill-down. */
   instances?: ImpactedInstanceSummary[];
 };
+export type TeamCapabilitySettingsView = {
+  capability_id: string;
+  team_id: string;
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type SetTeamCapabilitySettingsRequest = {
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type CapabilityTeamSettingsMap = {
+  capability_id: string;
+  /** Team id -> effective settings. A team with no stored row is absent; the caller falls back to the declared defaults in team_settings_fields. */
+  by_team?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+};
 export type TeamCapabilityEnablementResult = {
   capability_id: string;
   team_id: string;
@@ -4374,6 +4451,13 @@ export const {
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
   useLazyGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
+  useGetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetQuery,
+  useLazyGetAdminTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsGetQuery,
+  usePutTeamCapabilitySettingsControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdSettingsPutMutation,
+  useGetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetQuery,
+  useLazyGetAdminCapabilityTeamSettingsMapControlPlaneV1AdminCapabilitiesCapabilityIdTeamsSettingsGetQuery,
+  useGetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetQuery,
+  useLazyGetTeamCapabilitySettingsControlPlaneV1TeamsTeamIdCapabilitiesCapabilityIdSettingsGetQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,

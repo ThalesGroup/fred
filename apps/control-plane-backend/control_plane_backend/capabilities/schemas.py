@@ -189,6 +189,50 @@ class CapabilityEnablementList(BaseModel):
     items: list[CapabilityEnablementItem] = Field(default_factory=list)
 
 
+class TeamCapabilitySettingsView(BaseModel):
+    """One team's effective settings for one capability (CAPAB-01, RFC §8.2).
+
+    Effective, not stored: every key the capability declares in
+    `team_settings_fields` is present, absent rows falling back to the declared
+    default. A caller therefore never has to reproduce the default itself.
+
+    Only declared keys are returned, and they are readable by any member of the
+    team — a capability must not declare a secret-bearing team setting.
+    """
+
+    capability_id: str
+    team_id: str
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityTeamSettingsMap(BaseModel):
+    """Every team's effective settings for ONE capability (admin surface).
+
+    Exists so the admin drawer can show, per team row, which options are set
+    without one request per row. Same per-key discipline as
+    `TeamCapabilitySettingsView`: only keys the manifest declares.
+    """
+
+    capability_id: str
+    by_team: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Team id -> effective settings. A team with no stored row is absent; "
+            "the caller falls back to the declared defaults in team_settings_fields."
+        ),
+    )
+
+
+class SetTeamCapabilitySettingsRequest(BaseModel):
+    """Settings-only payload; validated against team_settings_fields.
+
+    Distinct from `EnableTeamCapabilityRequest` because the route it feeds does
+    NOT touch the team's enablement — same body shape, different consequence.
+    """
+
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
 class EnableTeamCapabilityRequest(BaseModel):
     """Enable-with-settings payload; validated against team_settings_fields."""
 

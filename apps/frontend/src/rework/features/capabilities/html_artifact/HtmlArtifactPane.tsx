@@ -23,7 +23,7 @@
 // SECURITY (RFC §4.7): the preview renders the SANDBOXED SHELL, not the artifact
 // itself — the shell's `frame-src blob:` is what stops the artifact navigating
 // itself to an attacker URL, which nothing in the artifact's own CSP can do. The
-// frame is `sandbox={ARTIFACT_SANDBOX}` — `allow-scripts` so author JS runs, and
+// frame is `sandbox={SHELL_SANDBOX}` — `allow-scripts` so the shell boots, and
 // NEVER `allow-same-origin`, so it stays an opaque origin with no access to the
 // app's DOM, cookies or storage. `srcDoc` (never `src`) keeps it out of any app URL.
 
@@ -45,7 +45,7 @@ import {
 } from "./htmlArtifactSlice";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
-  ARTIFACT_SANDBOX,
+  SHELL_SANDBOX,
   ZOOM_LEVELS,
   artifactHasScript,
   composeHtmlDocument,
@@ -57,6 +57,7 @@ import {
 import { nextBufferAction } from "./previewBuffers";
 import { measureArtifactWidth } from "./htmlArtifactExport";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
+import { useHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 import styles from "./HtmlArtifactPane.module.css";
 
 export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
@@ -97,11 +98,15 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
     [artifacts, selectedId],
   );
 
+  // Whether THIS team may run script, resolved now rather than when the artifact
+  // was produced — withdrawing the right has to reach pages that already exist.
+  const allowJavaScript = useHtmlArtifactJavaScriptAllowed();
+
   // The composed, CSP-carrying document for the Preview iframe (recomputed when the
-  // selected artifact's markup OR the zoom changes).
+  // selected artifact's markup, the zoom, OR the team's posture changes).
   const composed = useMemo(
-    () => (selected ? sandboxedShellDocument(selected.html, selected.css, zoom) : ""),
-    [selected, zoom],
+    () => (selected ? sandboxedShellDocument(selected.html, selected.css, zoom, allowJavaScript) : ""),
+    [selected, zoom, allowJavaScript],
   );
 
   // Stopping is about the page in front of you, so switching artifact starts the
@@ -109,8 +114,17 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const selectedKey = selected?.artifact_id;
   useEffect(() => setStopped(false), [selectedKey]);
 
+  // Whether the markup carries anything the browser WOULD execute. Parsed, so a
+  // page merely displaying `onclick="…"` in a <pre> does not count.
+  const carriesScript = useMemo(() => (selected ? artifactHasScript(selected.html) : false), [selected]);
+
   // Only a page that can execute has anything to stop.
-  const canStop = useMemo(() => (selected ? artifactHasScript(selected.html) : false), [selected]);
+  const canStop = carriesScript && allowJavaScript;
+
+  // Script that exists but will not run. This is the visible half of the posture:
+  // the page was produced while the team could run script and the right has since
+  // been withdrawn, so it would otherwise just look broken.
+  const scriptSuppressed = carriesScript && !allowJavaScript;
 
   // Double-buffer the Preview so a zoom / markup change never flashes the iframe's
   // blank white background: the newly composed document loads into the HIDDEN back
@@ -213,12 +227,19 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "open_in_new" }}
-              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css)}
+              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css, allowJavaScript)}
               aria-label={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}
             />
           </Tooltip>
         )}
-        {selected && <HtmlArtifactDownloadButton html={selected.html} css={selected.css} title={selected.title} />}
+        {selected && (
+          <HtmlArtifactDownloadButton
+            html={selected.html}
+            css={selected.css}
+            title={selected.title}
+            allowJavaScript={allowJavaScript}
+          />
+        )}
         <IconButton
           variant="icon"
           size="small"
@@ -339,6 +360,17 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           </div>
 
           <div className={styles.body}>
+            {scriptSuppressed && (
+              <div className={styles.suppressedNotice} role="status">
+                <Icon category="outlined" type="info" />
+                <span>
+                  {t("capability.html_artifact.scriptSuppressedNotice", {
+                    defaultValue:
+                      "This page contains JavaScript, which your team is not allowed to run. It is shown without interaction.",
+                  })}
+                </span>
+              </div>
+            )}
             <div ref={previewWrapRef} className={styles.previewFrameWrap}>
               {stopped ? (
                 <div className={styles.stoppedNotice}>
@@ -353,7 +385,10 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
                     srcDoc={buffers[i] || undefined}
                     className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
                     title={selected.title || untitled}
-                    sandbox={ARTIFACT_SANDBOX}
+                    // The frame hosts our TRUSTED shell, whose bootstrap is a
+                    // script. The ARTIFACT's own permission is one level down,
+                    // on the inner frame the shell writes.
+                    sandbox={SHELL_SANDBOX}
                     referrerPolicy="no-referrer"
                     onLoad={() => handleFrameLoad(i)}
                   />

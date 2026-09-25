@@ -263,8 +263,8 @@
       }
     },
     "html_artifact": {
-      "name": "Générer une page web (HTML/CSS/JS)",
-      "description": "Capacité de produire une page web autonome, JavaScript interactif inclus, rendue dans un aperçu à côté du chat.",
+      "name": "Générer une page web (HTML/CSS)",
+      "description": "Capacité de produire une page web autonome, rendue dans un aperçu à côté du chat.",
       "panel": {
         "html_artifact_pane": {
           "title": "Artefact HTML",
@@ -290,6 +290,13 @@
       "restart": "Relancer la page",
       "stop": "Arrêter la page",
       "stoppedNotice": "La page a été arrêtée.",
+      "scriptSuppressedNotice": "Cette page contient du JavaScript, que votre équipe n'est pas autorisée à exécuter. Elle est affichée sans interaction.",
+      "teamSettings": {
+        "allow_javascript": {
+          "title": "Autoriser le JavaScript",
+          "description": "Permet aux agents de cette équipe de produire des pages qui exécutent du JavaScript — onglets, animations, graphiques. Sans cette option, les pages sont générées et affichées de façon statique. La désactiver empêche aussi les pages déjà produites par cette équipe de s'exécuter."
+        }
+      },
       "empty": "Aucun artefact pour l'instant. Demandez à l'assistant de créer une page ou un composant.",
       "card": {
         "aria": "Artefact HTML",
@@ -1210,6 +1217,12 @@
           "disable": "Désactiver",
           "cancel": "Annuler",
           "saveEnable": "Enregistrer et activer",
+          "editSettings": "Options",
+          "editSettingsActiveAria": "Options pour {{team}} (une option est active)",
+          "settingsSavedToast": "Options enregistrées pour {{team}}.",
+          "settingsSaveError": "Impossible d'enregistrer les options.",
+          "editSettingsAria": "Options pour {{team}}",
+          "settingsLoadError": "Impossible de charger les options actuelles ; les valeurs par défaut sont affichées.",
           "enabledToast": "Fonctionnalité activée pour {{team}}.",
           "enableError": "Impossible d'activer la fonctionnalité.",
           "disabledToast": "Fonctionnalité désactivée pour {{team}}.",
@@ -2684,8 +2697,8 @@
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
             },
             "webPage": {
-              "title": "Générer une page web (HTML/CSS/JS)",
-              "description": "Capacité de produire une page web autonome, JavaScript interactif inclus, rendue dans un aperçu à côté du chat."
+              "title": "Générer une page web (HTML/CSS)",
+              "description": "Capacité de produire une page web autonome, rendue dans un aperçu à côté du chat."
             },
             "reasoning": {
               "title": "Raisonnement",
