@@ -1,0 +1,110 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* One platform announcement banner, see AnnouncementBanner.tsx */
+
+/* Collapsible wrapper for the dismiss exit: animating grid-template-rows
+   1fr → 0fr eases an auto height down to nothing, so the app content slides
+   up smoothly instead of jumping when the banner goes. Duration must match
+   HIDE_TRANSITION_MS in AnnouncementBanner.tsx. */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex-shrink: 0;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 300ms ease;
+}
+
+.collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The accent reads as a left rule plus the icon, not a flooded background:
+   several of these can stack, and four saturated full-width strips at the top
+   of the app would be unreadable. */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-variant);
+  border-left: 3px solid var(--banner-accent);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-xl);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+/* Same severity → accent mapping as Toast and UploadWarningBanner, for
+   cross-surface consistency. */
+.banner[data-severity="success"] {
+  --banner-accent: var(--success);
+}
+.banner[data-severity="error"] {
+  --banner-accent: var(--error);
+}
+.banner[data-severity="warning"] {
+  --banner-accent: var(--warning);
+}
+.banner[data-severity="info"] {
+  --banner-accent: var(--secondary);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--banner-accent);
+  font-size: 1.125rem;
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font: var(--font-body-medium-emphasized);
+}
+
+/* The short description is markdown, but it sits in a strip: strip the
+   renderer's block spacing so one or two lines do not open a gap the height of
+   a paragraph. */
+.short > * {
+  margin-block: 0;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}

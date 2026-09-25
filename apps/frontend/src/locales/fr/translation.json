@@ -3385,6 +3385,15 @@
         "hours": "heures",
         "days": "jours"
       }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "Plus d'info",
+        "dismiss": "Masquer cette annonce"
+      },
+      "dialog": {
+        "close": "Fermer"
+      }
     }
   },
   "runtime": {

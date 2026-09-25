@@ -13,16 +13,16 @@
 
 ## 3. Generated client
 
-- [ ] 3.1 Run `cd apps/frontend && make update-control-plane-api` and commit the regenerated `controlPlaneOpenApi.ts`; verify the announcement types and hooks are present in the diff and that no hand-written type duplicates them.
-- [ ] 3.2 Add friendly aliases for the announcement hooks in `controlPlaneApiEnhancements.ts`, with the read query configured for a 60 s `pollingInterval` and `refetchOnFocus`; verify `make type-check` passes.
+- [x] 3.1 Run `cd apps/frontend && make update-control-plane-api` and commit the regenerated `controlPlaneOpenApi.ts`; verify the announcement types and hooks are present in the diff and that no hand-written type duplicates them.
+- [x] 3.2 Add friendly aliases and cache tags for the announcement hooks in `controlPlaneApiEnhancements.ts`; the 60 s refresh comes from the existing `crossSessionRefresh` helper at the call site, since RTK's `refetchOnFocus` is inert without `setupListeners`, which this app never calls; verify `make type-check` passes.
 
 ## 4. Banner rendering
 
-- [ ] 4.1 Rework `InfoBanner` into an announcement renderer taking an announcement as a prop — severity-driven colour and icon (`info`, `warning`, `error`, `check_circle`), localized title, `description_short` through `MarkdownRenderer`, actions toolbar — keeping the existing 300 ms collapse and its `prefers-reduced-motion` handling; verify the existing and extended component tests pass.
-- [ ] 4.2 Add the dismissal helper over `localStorage`, keyed by announcement id + `content_version`, with every read and write wrapped so unavailable storage degrades to "never dismissed"; verify unit tests cover persistence, the version bump making a banner reappear, and the throwing-storage path.
-- [ ] 4.3 Add the stack container that queries active announcements, filters out dismissed ones, and orders by severity then creation date; verify tests cover the ordering and the empty-set case rendering nothing.
-- [ ] 4.4 Add the more-info dialog on the central `Dialog` molecule — title plus `description_long` through `MarkdownRenderer`, a "Fermer" button, backdrop dismissal — shown only when `description_long` is non-empty; verify tests cover its presence, its absence, and that closing it leaves the banner up.
-- [ ] 4.5 Mount the stack inside the guards in `app/App.tsx`, replacing the pre-auth `<InfoBanner />`, and confirm `.appShell`/`.appContent` still push content down rather than overlay it; verify no banner renders on the GCU and bootstrap screens.
+- [x] 4.1 Rework `InfoBanner` into an announcement renderer taking an announcement as a prop — severity-driven colour and icon (`info`, `warning`, `error`, `check_circle`), localized title, `description_short` through `MarkdownRenderer`, actions toolbar — keeping the existing 300 ms collapse and its `prefers-reduced-motion` handling; verify the existing and extended component tests pass.
+- [x] 4.2 Add the dismissal helper over `localStorage`, keyed by announcement id + `content_version`, with every read and write wrapped so unavailable storage degrades to "never dismissed"; verify unit tests cover persistence, the version bump making a banner reappear, and the throwing-storage path.
+- [x] 4.3 Add the stack container that queries active announcements, filters out dismissed ones, and orders by severity then creation date; verify tests cover the ordering and the empty-set case rendering nothing.
+- [x] 4.4 Add the more-info dialog on the central `Dialog` molecule — title plus `description_long` through `MarkdownRenderer`, a "Fermer" button, backdrop dismissal — shown only when `description_long` is non-empty; verify tests cover its presence, its absence, and that closing it leaves the banner up.
+- [x] 4.5 Mount the stack inside the guards in `app/App.tsx`, replacing the pre-auth `<InfoBanner />`, and confirm `.appShell`/`.appContent` still push content down rather than overlay it; verify no banner renders on the GCU and bootstrap screens.
 
 ## 5. Admin page
 
@@ -33,9 +33,9 @@
 
 ## 6. Remove the deploy-time info banner
 
-- [ ] 6.1 Remove `InfoBanner`/`InfoBannerLink` from `control_plane_backend/config/models.py`, the `info_banner` field from `product/schemas.py` and `product/service.py`, and the related assertions in `tests/test_main.py`; verify `make test` is green in `apps/control-plane-backend`.
-- [ ] 6.2 Remove `info_banner` from `common/config.tsx` (`AppConfig`, `getInfoBanner`) and every remaining reference; verify `grep -rn info_banner apps/frontend/src` returns only the regenerated client's removal in the diff, and `make type-check` passes.
-- [ ] 6.3 Remove the `info_banner` block from `deploy/charts/fred/values.yaml`, `config/configuration.yaml` and `config/configuration_prod.yaml`; verify `grep -rn info_banner deploy apps/control-plane-backend/config` returns nothing.
+- [x] 6.1 Remove `InfoBanner`/`InfoBannerLink` from `control_plane_backend/config/models.py`, the `info_banner` field from `product/schemas.py` and `product/service.py`, and the related assertions in `tests/test_main.py`; verify `make test` is green in `apps/control-plane-backend`.
+- [x] 6.2 Remove `info_banner` from `common/config.tsx` (`AppConfig`, `getInfoBanner`) and every remaining reference; verify `grep -rn info_banner apps/frontend/src` returns only the regenerated client's removal in the diff, and `make type-check` passes.
+- [x] 6.3 Remove the `info_banner` block from `deploy/charts/fred/values.yaml`, `config/configuration.yaml` and `config/configuration_prod.yaml`; verify `grep -rn info_banner deploy apps/control-plane-backend/config` returns nothing.
 
 ## 7. Verification and close-out
 

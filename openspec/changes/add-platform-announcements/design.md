@@ -77,6 +77,13 @@ focus-refetch declaratively (`pollingInterval`, `refetchOnFocus`).
 stream. Rejected — it couples an admin-content concern to the task lifecycle
 and would deliver nothing to a user with no tasks running.
 
+**Amended during implementation:** RTK Query's own `refetchOnFocus` is inert
+in this app — `setupListeners` is never called. Rather than enable it globally,
+the stack reuses `rework/core/hooks/crossSessionRefresh.ts`, which already
+exists for exactly this problem (an administrator changing something in another
+session) and already uses a 60 s interval plus an explicit focus listener. No
+new polling helper, and one fewer global behaviour change.
+
 ### Version the content with a monotonic integer, bumped in the service
 
 **Why:** an `updated_at` timestamp would also work as a cache key, but it

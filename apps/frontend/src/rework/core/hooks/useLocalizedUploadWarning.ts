@@ -26,9 +26,10 @@ type LocalizedUploadWarning = {
  * Resolve one deployer-configured locale map ({locale → text}) for an i18next
  * language tag ("fr-FR" → "fr"), falling back to "en", then to nothing.
  *
- * The single home of the config locale-fallback contract: `upload_warning`
- * and `info_banner` both resolve their texts through this — do not
- * duplicate the chain at a call site.
+ * The single home of the locale-fallback contract: the deployer-configured
+ * `upload_warning` and the admin-authored platform announcements both
+ * resolve their texts through this — do not duplicate the chain at a
+ * call site.
  */
 export function resolveLocalizedText(
   map: { [locale: string]: string } | undefined | null,

@@ -17,7 +17,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import InfoBanner from "@shared/molecules/InfoBanner/InfoBanner";
+import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
@@ -99,13 +99,13 @@ function FredUiContent() {
       }
     >
       <AuthProvider>
-        {/* The InfoBanner (config-driven, absent by default) sits above the
-            guards so it shows on every page — GCU acceptance and root
-            bootstrap included — and pushes the app down instead of covering
-            it. Routed pages size with height: 100% against .appContent,
-            never 100vh. */}
+        {/* The announcement banners sit above the guards structurally so they
+            push the app down instead of covering it — routed pages size with
+            height: 100% against .appContent, never 100vh. The stack renders
+            nothing until the user is authenticated, so the GCU-acceptance and
+            root-bootstrap screens stay bare. */}
         <div className={styles.appShell}>
-          <InfoBanner />
+          <AnnouncementStack />
           <div className={styles.appContent}>
             <GcuGuard>
               <BootstrapGuard>
