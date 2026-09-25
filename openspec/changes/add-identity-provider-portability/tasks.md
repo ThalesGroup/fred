@@ -27,7 +27,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 - [x] 3.3 `decode_jwt`: the expected audience becomes `[config.audience or KEYCLOAK_CLIENT_ID]` (plus the delegation audience, unchanged), in both the soft check and the strict check.
 - [x] 3.4 `decode_jwt`: read the username, email, given name and family name through the configured claim names. Read roles through `roles_claim` when set, else `resource_access.<client_id>.roles` (today's path). Add a small `_claim_path(payload, path)` helper.
 - [x] 3.5 `decode_jwt`: read the identity from `claims.uid`. If the value is not a UUID and `provider == "oidc"`, set `uid = str(uuid5(NAMESPACE_URL, f"{issuer}#{value}"))`. Keycloak behavior is unchanged.
-- [ ] 3.6 Tests, following the existing `fred_core/tests/security/test_oidc_*.py` style (locally generated RSA key, JWKS served by a mock): Keycloak token regression (identical `KeycloakUser`); Entra-shaped v2 token (`oid`, `roles`, `azp`, `aud` = API GUID) with `claims.uid: oid`, `roles_claim: [roles]`, `audience` set; `is_service_agent` true for `roles: [service_agent]`; `uuid5` determinism for a non-UUID `sub`; wrong audience rejected in strict mode.
+- [x] 3.6 Tests, following the existing `fred_core/tests/security/test_oidc_*.py` style (locally generated RSA key, JWKS served by a mock): Keycloak token regression (identical `KeycloakUser`); Entra-shaped v2 token (`oid`, `roles`, `azp`, `aud` = API GUID) with `claims.uid: oid`, `roles_claim: [roles]`, `audience` set; `is_service_agent` true for `roles: [service_agent]`; `uuid5` determinism for a non-UUID `sub`; wrong audience rejected in strict mode.
 
 ## 4. Workload and refresh token endpoints
 
