@@ -27,6 +27,7 @@ from fred_capability_writable_document.capability import (
 from fred_capability_writable_document.open_capability import (
     OpenWritableDocumentCapability,
 )
+from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -38,7 +39,7 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadInvalidPathError,
     RuntimeServices,
 )
-from fred_runtime.capabilities.registry import CapabilityRegistry
+from langchain_core.tools import StructuredTool
 from port_fakes import FakeWritableDocumentStore
 
 
@@ -52,14 +53,24 @@ def fake_store():
         store_module.clear_store_provider()
 
 
-def _tool(filesystem: ConversationFilesystemPort | None):
+def _tool(filesystem: ConversationFilesystemPort | None) -> StructuredTool:
     ctx = CapabilityContext(
         identity=CapabilityIdentity(user_id="user-1", session_id="session-1"),
         config=EmptyModel(),
         turn_options=EmptyModel(),
         services=RuntimeServices(conversation_filesystem=filesystem),
     )
-    return OpenWritableDocumentCapability().tools(ctx)[0]
+    result = OpenWritableDocumentCapability().tools(ctx)[0]
+    assert isinstance(result, StructuredTool)
+    return result
+
+
+async def _run_tool(
+    filesystem: ConversationFilesystemPort | None, *, path: str, title: str
+):
+    coroutine = _tool(filesystem).coroutine
+    assert coroutine is not None
+    return await coroutine(path=path, title=title)
 
 
 @pytest.mark.asyncio
@@ -71,8 +82,8 @@ async def test_imports_markdown_without_exposing_its_body_to_the_model(fake_stor
 
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
     filesystem.read_text.return_value = "# Report\n\nComplete result"
-    result, artifact = await _tool(filesystem).coroutine(
-        path="/.deep/results/merged.md", title="Merged report"
+    result, artifact = await _run_tool(
+        filesystem, path="/.deep/results/merged.md", title="Merged report"
     )
 
     filesystem.read_text.assert_awaited_once_with(
@@ -91,9 +102,7 @@ async def test_imports_markdown_without_exposing_its_body_to_the_model(fake_stor
 @pytest.mark.asyncio
 async def test_rejects_non_markdown_before_reading(fake_store):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
-    _result, artifact = await _tool(filesystem).coroutine(
-        path="/results.csv", title="Report"
-    )
+    _result, artifact = await _run_tool(filesystem, path="/results.csv", title="Report")
 
     assert artifact.is_error
     filesystem.read_text.assert_not_awaited()
@@ -118,7 +127,7 @@ async def test_rejects_non_markdown_before_reading(fake_store):
 async def test_respects_filesystem_path_and_permission_checks(fake_store, path, error):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
     filesystem.read_text.side_effect = error
-    _result, artifact = await _tool(filesystem).coroutine(path=path, title="Report")
+    _result, artifact = await _run_tool(filesystem, path=path, title="Report")
 
     filesystem.read_text.assert_awaited_once_with(path, origin="agent")
     assert artifact.is_error
@@ -127,9 +136,7 @@ async def test_respects_filesystem_path_and_permission_checks(fake_store, path, 
 
 @pytest.mark.asyncio
 async def test_requires_filesystem(fake_store):
-    _result, unavailable = await _tool(None).coroutine(
-        path="/report.md", title="Report"
-    )
+    _result, unavailable = await _run_tool(None, path="/report.md", title="Report")
     assert unavailable.is_error
 
     assert await fake_store.list_for_session("session-1") == []
@@ -141,9 +148,7 @@ async def test_import_does_not_add_a_demo_size_limit(fake_store):
     content = "x" * (1024 * 1024 + 1)
     filesystem.read_text.return_value = content
 
-    _result, artifact = await _tool(filesystem).coroutine(
-        path="/report.md", title="Report"
-    )
+    _result, artifact = await _run_tool(filesystem, path="/report.md", title="Report")
 
     assert not artifact.is_error
     rows = await fake_store.list_for_session("session-1")
