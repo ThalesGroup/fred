@@ -45,7 +45,7 @@
    banner from the page, and a rule on top of it only adds noise. */
 .banner {
   background: var(--banner-container);
-  padding: var(--spacing-xs) var(--spacing-m);
+  padding: var(--spacing-2xs) var(--spacing-m);
   color: var(--banner-on-container);
   font: var(--font-body-medium);
 }
@@ -96,13 +96,25 @@
   font-size: 1.25rem;
 }
 
+/* Icon and text form one group with a tighter rhythm of their own, so the
+   space separating them from the actions stays wider than the space inside
+   them (gestalt proximity — one uniform gap across the row would read as four
+   unrelated things). */
+.lede {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
 /* Title and description run on one line, sharing a baseline. The title holds
    its width; only the description gives way when the strip gets narrow. */
 .text {
   display: flex;
   flex: 1;
   align-items: baseline;
-  gap: var(--spacing-m);
+  gap: var(--spacing-l);
   min-width: 0;
 }
 

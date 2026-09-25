@@ -91,18 +91,22 @@ function AnnouncementBanner({ announcement, onDismissed, preview = false }: Anno
             aria-live={preview ? undefined : "polite"}
           >
             <div className={styles.inner}>
-              <span className={styles.icon} aria-hidden>
-                <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
-              </span>
-              <div className={styles.text}>
-                {title && <span className={styles.title}>{title}</span>}
-                {short && (
-                  <span className={styles.short}>
-                    {/* Inline: a banner's short description is one or two lines
-                        of phrasing content, not a paragraph block. */}
-                    <MarkdownRenderer text={short} inline />
-                  </span>
-                )}
+              {/* Icon and text are one group with their own rhythm, so the
+                  space to the actions can stay wider than the one inside it. */}
+              <div className={styles.lede}>
+                <span className={styles.icon} aria-hidden>
+                  <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
+                </span>
+                <div className={styles.text}>
+                  {title && <span className={styles.title}>{title}</span>}
+                  {short && (
+                    <span className={styles.short}>
+                      {/* Inline: a banner's short description is one or two
+                          lines of phrasing content, not a paragraph block. */}
+                      <MarkdownRenderer text={short} inline />
+                    </span>
+                  )}
+                </div>
               </div>
               <div className={styles.actions}>
                 {long && (
