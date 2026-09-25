@@ -119,15 +119,35 @@ class M2MSecurity(BaseModel):
     enabled: bool = True
     realm_url: AnyUrl
     client_id: str
+    provider: Literal["keycloak", "oidc"] = "keycloak"
+    scope: str | None = None
+    token_url: AnyHttpUrl | None = None
     secret_env_var: str = "M2M_CLIENT_SECRET"
+
+
+class UserClaims(BaseModel):
+    """Claim names used to construct an authenticated person's identity."""
+
+    uid: str = "sub"
+    username: str = "preferred_username"
+    email: str = "email"
+    given_name: str = "given_name"
+    family_name: str = "family_name"
 
 
 class UserSecurity(BaseModel):
     """Configuration for user authentication."""
 
     enabled: bool = True
-    realm_url: AnyUrl
+    realm_url: AnyUrl = Field(description="Keycloak realm URL or OIDC issuer URL")
     client_id: str
+    provider: Literal["keycloak", "oidc"] = "keycloak"
+    audience: str | None = None
+    scope: str | None = None
+    jwks_url: AnyHttpUrl | None = None
+    token_url: AnyHttpUrl | None = None
+    roles_claim: list[str] | None = None
+    claims: UserClaims = Field(default_factory=UserClaims)
 
 
 class RebacBaseConfig(BaseModel):
@@ -195,6 +215,7 @@ RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="t
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
+    user_directory: Literal["keycloak", "local"] = "keycloak"
     delegation: DelegationConfig = Field(default_factory=DelegationConfig)
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None
