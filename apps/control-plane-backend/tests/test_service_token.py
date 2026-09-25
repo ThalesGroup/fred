@@ -52,6 +52,40 @@ def test_service_token_provider_is_built_from_control_plane_sa(
     assert ctx.get_service_token_provider() is provider
 
 
+def test_service_token_provider_uses_oidc_endpoint_and_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    config = load_configuration()
+    config.security.m2m = config.security.m2m.model_copy(
+        update={
+            "provider": "oidc",
+            "scope": "api://fred/.default",
+            "token_url": "https://identity.example/token",
+        }
+    )
+    monkeypatch.setattr(
+        "fred_pod.security.oidc_endpoints.httpx.get",
+        lambda *_args, **_kwargs: type(
+            "DiscoveryResponse",
+            (),
+            {
+                "status_code": 200,
+                "json": lambda self: {
+                    "issuer": str(config.security.m2m.realm_url).rstrip("/"),
+                    "jwks_uri": "https://identity.example/keys",
+                },
+            },
+        )(),
+    )
+
+    provider = ApplicationContext(config).get_service_token_provider()
+
+    assert provider.cfg.scope == "api://fred/.default"
+    assert provider.cfg.token_url == "https://identity.example/token"
+
+
+
 @pytest.mark.asyncio
 async def test_get_service_bearer_formats_bearer(
     monkeypatch: pytest.MonkeyPatch,

@@ -820,6 +820,41 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
     assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
 
 
+def test_pod_m2m_uses_oidc_endpoint_and_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+    from fred_pod.security.oidc_endpoints import resolve_endpoints
+
+    configured = _valid_configuration()
+    configured["security"]["m2m"].update(
+        provider="oidc",
+        scope="api://fred/.default",
+        token_url="https://identity.example/token",
+    )
+    configuration = PodConfiguration.model_validate(configured)
+    monkeypatch.setattr(
+        "fred_pod.security.oidc_endpoints.httpx.get",
+        lambda *_args, **_kwargs: type(
+            "DiscoveryResponse",
+            (),
+            {
+                "status_code": 200,
+                "json": lambda self: {
+                    "issuer": configured["security"]["m2m"]["realm_url"],
+                    "jwks_uri": "https://identity.example/keys",
+                },
+            },
+        )(),
+    )
+    resolve_endpoints.cache_clear()
+
+    assert configuration.m2m.scope == "api://fred/.default"
+    assert configuration.m2m.token_url == "https://identity.example/token"
+    resolve_endpoints.cache_clear()
+
+
+
 def test_a_missing_configuration_file_is_its_own_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
