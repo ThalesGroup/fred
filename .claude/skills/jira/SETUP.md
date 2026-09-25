@@ -30,12 +30,12 @@ acli jira auth login      # interactive browser OAuth
 
 Also not something you can do for them — suggest `! acli jira auth login`.
 
-## 4. API token (downloads and comments only)
+## 4. API token (downloads, comments and assignments)
 
 `acli` keeps its OAuth tokens in the OS keyring and offers no way to reuse them for REST
-calls, so `jira.py attachments` and `jira.py comment` use Basic auth instead. `acli` cannot
-mint a token either (`acli jira auth login --token` only *consumes* one) — the web UI is
-the only way:
+calls, so `jira.py attachments`, `jira.py comment` and `jira.py assign` use Basic auth.
+`acli` cannot mint a token either (`acli jira auth login --token` only *consumes* one) —
+the web UI is the only way:
 
 1. <https://id.atlassian.com/manage-profile/security/api-tokens> → create a token.
 2. The developer pastes it into their own terminal (never through you):

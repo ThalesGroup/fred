@@ -554,13 +554,13 @@ def test_transient_errors_stay_retryable(exc) -> None:
 
 # This target must be importable by spawn: no inherited Temporal context/writer.
 def _child_with_pdf_timings(request, pipe, _parent_pid) -> None:
-    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_timer
+    from knowledge_flow_backend.common.processing_metrics import processing_timer
 
     os.setsid()
     failed = request.profile == "rich"
     try:
-        with extraction_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
-            with extraction_kpi_timer("knowledge_flow.pdf.image_description_latency_ms", {"pdf_stage": "image_description", "model_name": "test-vision"}):
+        with processing_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop", "file_type": "pdf"}):
+            with processing_timer("knowledge_flow.pdf.image_description_latency_ms", {"pdf_stage": "image_description", "model_name": "test-vision"}):
                 if failed:
                     raise ValueError("image description failed")
     except ValueError:

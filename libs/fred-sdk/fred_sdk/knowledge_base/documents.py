@@ -182,7 +182,8 @@ class DocumentPublisher:
     ) -> None:
         if not configuration.knowledge_flow_url:
             raise ValueError(
-                "This pod has no Knowledge Flow URL: set FRED_KNOWLEDGE_FLOW_URL, "
+                "This pod has no Knowledge Flow URL: set "
+                "knowledge_base.knowledge_flow_url in its configuration.yaml, "
                 "or keep your own store and do not use DocumentPublisher."
             )
         self._base_url = configuration.knowledge_flow_url
@@ -318,6 +319,28 @@ class DocumentPublisher:
             headers=await self._headers(),
         )
         _raise_for(response, DocumentRetractError, relative_path)
+
+    async def source_version(self) -> str | None:
+        """What the last run recorded with `record_source_version`, or None.
+
+        Lets a source that can say what changed since a version (a Git
+        revision, a change token) resume from Fred rather than keep a ledger.
+        """
+        response = await self._client.get(
+            f"{self._base_url}/libraries/{self._library_id}/source-version",
+            headers=await self._headers(),
+        )
+        _raise_for(response, DocumentPublishError, f"library {self._library_id}")
+        return response.json().get("source_version")
+
+    async def record_source_version(self, value: str) -> None:
+        """Store how far this library got in its source. Kept verbatim."""
+        response = await self._client.put(
+            f"{self._base_url}/libraries/{self._library_id}/source-version",
+            json={"source_version": value},
+            headers=await self._headers(),
+        )
+        _raise_for(response, DocumentPublishError, f"library {self._library_id}")
 
     async def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {await self._tokens.get_token()}"}

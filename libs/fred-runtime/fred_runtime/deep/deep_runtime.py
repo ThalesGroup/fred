@@ -43,11 +43,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
-from fred_runtime.capabilities.assembly import CapabilityAgentBlock
-from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.deep.conversation_backend import (
-    ConversationNamespaceBackend,
+from fred_runtime.capabilities.assembly import (
+    CapabilityAgentBlock,
+    collect_available_tool_names,
 )
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -55,10 +56,14 @@ from fred_runtime.react.middleware.hitl import (
     FredHitlMiddleware,
 )
 from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
+from fred_runtime.react.react_model_adapter import extract_model_name_from_object
 from fred_runtime.react.react_prompting import (
     compose_system_prompt as _compose_system_prompt,
 )
@@ -186,22 +191,13 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        available_tool_names = {
-            bound_tool.runtime_name
-            for bound_tool in bound_tools
-            if bound_tool.runtime_name
-        }
-        if capability_block is not None:
-            available_tool_names.update(
-                tool.name for tool in capability_block.tools if tool.name
-            )
-            available_tool_names.update(
-                tool.name
-                for entry in capability_block.middleware
-                for tool in getattr(entry, "tools", ())
-                if tool.name
-            )
-        available_tool_names.update(_SAFE_FILESYSTEM_TOOL_NAMES)
+        available_tool_names = collect_available_tool_names(
+            (
+                *(bound_tool.runtime_name for bound_tool in bound_tools),
+                *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
+            ),
+            capability_block,
+        )
         system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
@@ -268,6 +264,8 @@ class DeepAgentRuntime(ReActRuntime):
             binding=binding,
             services=self.services,
             runtime_class_name=type(self).__name__,
+            available_tool_names=available_tool_names,
+            model_name=extract_model_name_from_object(self._model),
         )
 
 
@@ -399,7 +397,7 @@ def _build_deepagent_runtime_middleware(
     kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
     approval_policy: ToolApprovalPolicy,
-    available_tool_names: set[str] | frozenset[str],
+    available_tool_names: Collection[str],
     capability_block: CapabilityAgentBlock | None = None,
     child: bool = False,
 ) -> list[AgentMiddleware]:
@@ -418,6 +416,7 @@ def _build_deepagent_runtime_middleware(
         ),
         *(capability_block.middleware if capability_block is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
+        ToolCallTextRecoveryMiddleware(kpi=kpi),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

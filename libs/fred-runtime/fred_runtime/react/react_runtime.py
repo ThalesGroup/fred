@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
 from typing import cast
 
@@ -80,8 +80,18 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
-from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.capabilities.assembly import (
+    CapabilityAgentBlock,
+    collect_available_tool_names,
+)
 from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
+
+from .middleware.tool_call_recovery import (
+    MAX_TOOL_CALL_RECOVERY_CHARS,
+    MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
+    RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
+    is_mistral_model_name,
+)
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -99,6 +109,9 @@ from .react_langchain_adapter import (
 )
 from .react_langchain_adapter import (
     extract_messages_from_update as _extract_messages_from_update,
+)
+from .react_langchain_adapter import (
+    extract_model_name_from_object as _extract_model_name_from_object,
 )
 from .react_langchain_adapter import (
     final_assistant_message as _final_assistant_message_adapter,
@@ -305,10 +318,23 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         binding: BoundRuntimeContext,
         services: RuntimeServices,
         runtime_class_name: str,
+        available_tool_names: Collection[str] = (),
+        model_name: str | None = None,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
         self._services = services
+        self._available_tool_names = frozenset(
+            name
+            for name in available_tool_names
+            if 0 < len(name) <= MAX_TOOL_CALL_RECOVERY_NAME_CHARS
+        )
+        self._tool_name_prefixes = frozenset(
+            name[:length]
+            for name in self._available_tool_names
+            for length in range(1, len(name) + 1)
+        )
+        self._model_name = model_name
         # Names the actual runtime class (both ReActRuntime and DeepAgentRuntime
         # construct this same executor) so per-turn logs never say "ReActRuntime"
         # for a Deep turn.
@@ -461,6 +487,61 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         round_preamble: list[str] = []
         round_preamble_chars = 0
         round_preamble_started_at: float | None = None
+        # Keep only a possible Mistral tool-name suffix, then a bounded marked
+        # candidate; the completed message decides release vs recovery.
+        # Full streaming contract: RUNTIME-EXECUTION-CONTRACT.md §8.84.
+        recovery_probe = False
+        recovery_marker_seen = False
+        recovery_buffer: list[str] = []
+        recovery_buffer_chars = 0
+
+        def _assistant_delta(text: str) -> AssistantDeltaRuntimeEvent | None:
+            nonlocal sequence
+            nonlocal round_preamble_chars, round_preamble_started_at
+
+            if not text or suppress_assistant_deltas:
+                return None
+            event = AssistantDeltaRuntimeEvent(sequence=sequence, delta=text)
+            sequence += 1
+            if round_preamble_started_at is None:
+                round_preamble_started_at = time.monotonic()
+            round_preamble_chars += len(text)
+            if round_preamble_chars <= MAX_PREAMBLE_CHARS:
+                round_preamble.append(text)
+            return event
+
+        def _reset_recovery_probe() -> None:
+            nonlocal recovery_probe, recovery_marker_seen, recovery_buffer_chars
+
+            recovery_probe = False
+            recovery_marker_seen = False
+            recovery_buffer.clear()
+            recovery_buffer_chars = 0
+
+        def _buffer_tool_name_suffix(text: str) -> str:
+            """Return text safe to stream and retain only a possible tool name."""
+
+            nonlocal recovery_probe, recovery_buffer_chars
+
+            combined = "".join(recovery_buffer) + text
+            max_suffix = min(
+                len(combined),
+                MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
+            )
+            held_chars = 0
+            for length in range(max_suffix, 0, -1):
+                if combined[-length:] in self._tool_name_prefixes:
+                    held_chars = length
+                    break
+            if held_chars:
+                emitted = combined[:-held_chars]
+                recovery_buffer[:] = [combined[-held_chars:]]
+            else:
+                emitted = combined
+                recovery_buffer.clear()
+            recovery_buffer_chars = held_chars
+            recovery_probe = bool(held_chars)
+            return emitted
 
         def _close_model_native_thought(
             conclusion: str | None = None,
@@ -552,25 +633,75 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             delta=fragment,
                         )
                         sequence += 1
-                    if decoded.text:
+                    stream_is_mistral = is_mistral_model_name(
+                        model_name or last_model_name or self._model_name
+                    )
+                    buffered = ""
+                    if recovery_marker_seen:
+                        if decoded.text:
+                            recovery_buffer.append(decoded.text)
+                            recovery_buffer_chars += len(decoded.text)
+                        if (
+                            recovery_buffer_chars
+                            <= MAX_TOOL_CALL_RECOVERY_CHARS
+                            + MAX_TOOL_CALL_RECOVERY_NAME_CHARS
+                        ):
+                            continue
+                        buffered = "".join(recovery_buffer)
+                        _reset_recovery_probe()
+                    elif (
+                        stream_is_mistral
+                        and self._available_tool_names
+                        and decoded.has_reference_marker
+                    ):
+                        buffered = _buffer_tool_name_suffix(
+                            decoded.text_before_reference
+                        )
+                        candidate_name = "".join(recovery_buffer)
+                        if candidate_name in self._available_tool_names:
+                            recovery_marker_seen = True
+                            if decoded.text_after_reference:
+                                recovery_buffer.append(decoded.text_after_reference)
+                                recovery_buffer_chars += len(
+                                    decoded.text_after_reference
+                                )
+                            if (
+                                recovery_buffer_chars
+                                <= MAX_TOOL_CALL_RECOVERY_CHARS
+                                + MAX_TOOL_CALL_RECOVERY_NAME_CHARS
+                            ):
+                                if buffered:
+                                    closed = _close_model_native_thought()
+                                    if closed is not None:
+                                        yield closed
+                                    assistant_event = _assistant_delta(buffered)
+                                    if assistant_event is not None:
+                                        yield assistant_event
+                                continue
+                            buffered += "".join(recovery_buffer)
+                        else:
+                            buffered += "".join(recovery_buffer)
+                            buffered += decoded.text_after_reference
+                        _reset_recovery_probe()
+                    elif decoded.text:
+                        if stream_is_mistral and self._available_tool_names:
+                            buffered = _buffer_tool_name_suffix(decoded.text)
+                            if not buffered:
+                                continue
+                        else:
+                            if recovery_probe:
+                                buffered = "".join(recovery_buffer)
+                                _reset_recovery_probe()
+                            buffered += decoded.text
+                    if buffered:
                         # Close the reasoning block before the first answer delta so
                         # the UI accordion ends cleanly ahead of the response.
                         closed = _close_model_native_thought()
                         if closed is not None:
                             yield closed
-                        if not suppress_assistant_deltas:
-                            yield AssistantDeltaRuntimeEvent(
-                                sequence=sequence,
-                                delta=decoded.text,
-                            )
-                            sequence += 1
-                            if round_preamble_started_at is None:
-                                round_preamble_started_at = time.monotonic()
-                            # Stop appending past the cap rather than buffering a
-                            # whole answer this round may never need.
-                            round_preamble_chars += len(decoded.text)
-                            if round_preamble_chars <= MAX_PREAMBLE_CHARS:
-                                round_preamble.append(decoded.text)
+                        assistant_event = _assistant_delta(buffered)
+                        if assistant_event is not None:
+                            yield assistant_event
                     continue
 
                 if mode != "updates":
@@ -657,6 +788,22 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             sequence += 1
                         continue
 
+                    if isinstance(message, AIMessage) and recovery_probe:
+                        recovered_text_call = bool(
+                            message.response_metadata.get(
+                                RECOVERED_TOOL_CALL_TEXT_METADATA_KEY
+                            )
+                        )
+                        if not recovered_text_call:
+                            buffered = "".join(recovery_buffer)
+                            closed = _close_model_native_thought()
+                            if closed is not None:
+                                yield closed
+                            assistant_event = _assistant_delta(buffered)
+                            if assistant_event is not None:
+                                yield assistant_event
+                        _reset_recovery_probe()
+
                     if isinstance(message, AIMessage) and message.tool_calls:
                         # The reasoning that led to this round is over: close its
                         # block here so the next round opens a fresh one, ranked
@@ -671,8 +818,25 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # the bubble the moment the tool call below lands. Keep it
                         # as reasoning, where it belongs and where it survives a
                         # reload, unless it is too big to be a preamble at all.
-                        preamble = "".join(round_preamble)
-                        if preamble and round_preamble_chars <= MAX_PREAMBLE_CHARS:
+                        recovered_text_call = bool(
+                            message.response_metadata.get(
+                                RECOVERED_TOOL_CALL_TEXT_METADATA_KEY
+                            )
+                        )
+                        # Recovery happens only after the completed response. Its
+                        # streamed syntax was transient answer text, so persist
+                        # only the safe preamble retained on the normalized message.
+                        preamble = (
+                            message.content
+                            if recovered_text_call and isinstance(message.content, str)
+                            else "".join(round_preamble)
+                        )
+                        preamble_chars = (
+                            len(preamble)
+                            if recovered_text_call
+                            else round_preamble_chars
+                        )
+                        if preamble and preamble_chars <= MAX_PREAMBLE_CHARS:
                             preamble_id = uuid.uuid4().hex
                             yield ThoughtStartEvent(
                                 sequence=sequence,
@@ -965,11 +1129,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             self.definition.agent_id,
             len(system_prompt),
         )
-        available_tool_names = {
-            bound_tool.runtime_name
-            for bound_tool in bound_tools
-            if bound_tool.runtime_name
-        }
+        available_tool_names = collect_available_tool_names(
+            (bound_tool.runtime_name for bound_tool in bound_tools),
+            self._capability_block,
+        )
 
         compiled_agent = _create_compiled_react_agent(
             model=self._model,
@@ -990,6 +1153,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             binding=binding,
             services=self.services,
             runtime_class_name=type(self).__name__,
+            available_tool_names=available_tool_names,
+            model_name=_extract_model_name_from_object(self._model),
         )
 
     async def on_dispose(self) -> None:
@@ -1030,7 +1195,7 @@ def _create_compiled_react_agent(
     tracer: TracerPort | None,
     kpi: BaseKPIWriter | None,
     definition: ReActAgentDefinition,
-    available_tool_names: set[str] | frozenset[str],
+    available_tool_names: Collection[str],
     max_tool_calls_per_turn: int | None = None,
     capability_block: CapabilityAgentBlock | None = None,
 ) -> _CompiledReActAgent:

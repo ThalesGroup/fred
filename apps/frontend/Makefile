@@ -140,22 +140,18 @@ format-fix: check-node node_modules ## Reformat the codebase in place with prett
 lint: check-node node_modules ## Lint frontend source with ESLint
 	npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern "src/**/*.{ts,tsx}"
 
-# knip (unused-export/dependency detection) is not wired in yet; see the
-# code-quality TODO below. Uncomment once the config is stable.
-# .PHONY: knip
-# knip: node_modules ## Find unused exports, files and dependencies
-# 	npx knip
-
-# .PHONY: knip-fix
-# knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
-# 	npx knip --fix --format
+# Diagnostic only; version pinned, fetched through npm's cache on first use.
+# Nonzero exit means findings OR execution failure: inspect output and stderr.
+.PHONY: knip
+knip: check-node node_modules ## Report unused-code candidates; never auto-fix
+	npm exec --yes --package=knip@6.38.0 -- knip
 
 # TODO: add `knip` to the prerequisites below once it is wired in.
 .PHONY: code-quality
 code-quality: type-check format-check lint  ## Run all checks (type-check + prettier + eslint) — the gate to pass before committing
 	@echo "All frontend code quality checks completed"
 
-# TODO: add `knip-fix` to the prerequisites below once knip is wired in.
+# Automatic removal is deliberately excluded: candidates need consumer review.
 .PHONY: code-quality-fix
 code-quality-fix: format-fix  ## Auto-fix what code-quality flags (currently prettier formatting)
 	@echo "Frontend auto-fix tasks completed"
