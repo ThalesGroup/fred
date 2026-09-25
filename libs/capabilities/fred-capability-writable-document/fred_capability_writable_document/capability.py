@@ -132,13 +132,14 @@ def _open_documents_fragment(records: Sequence[WritableDocumentRecord]) -> str:
 _WRITE_INSTRUCTIONS = (
     "WRITABLE DOCUMENT: when the user asks — in any wording or language — to "
     "write, create, draft, or produce a document, report, email, memo, "
-    "meeting notes, or any other textual deliverable, you MUST call the "
-    "'write_document' tool; never write the deliverable itself in the chat. "
+    "meeting notes, or any other textual deliverable, you MUST open it in the "
+    "editor; never write the deliverable itself in the chat. If the finished "
+    "Markdown already exists in the conversation workspace and the "
+    "open_writable_document tool is available, call it with the file path. "
+    "Otherwise call the write_document tool with the full content. "
     "The tool opens the document in a side-by-side editor where the user can "
     "review, edit, and export it. In the chat, reply only with a short "
-    "summary of what you put in the document. If the finished Markdown already "
-    "exists in the conversation workspace and the open_writable_document tool "
-    "is available, use that tool instead of retyping the file content."
+    "summary of what you put in the document."
 )
 
 
