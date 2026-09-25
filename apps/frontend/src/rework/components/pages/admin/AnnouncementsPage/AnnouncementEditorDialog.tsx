@@ -124,11 +124,7 @@ export default function AnnouncementEditorDialog({
             />
           </div>
           <label className={styles.toggle}>
-            <Switch
-              size="small"
-              checked={dismissible}
-              onChange={(event) => setDismissible(event.target.checked)}
-            />
+            <Switch size="small" checked={dismissible} onChange={(event) => setDismissible(event.target.checked)} />
             {t("rework.announcements.editor.dismissible")}
           </label>
           <span className={styles.rowSpacer} />
@@ -154,7 +150,7 @@ export default function AnnouncementEditorDialog({
           label={t("rework.announcements.editor.descriptionShort")}
           explanation={t("rework.announcements.editor.descriptionShortHint")}
           error={missingShort ? t("rework.announcements.editor.shortRequired") : undefined}
-          rows={3}
+          rows={2}
           value={short[locale] ?? ""}
           onChange={(event) => setShort(withLocale(short, locale, event.target.value))}
         />
@@ -162,7 +158,7 @@ export default function AnnouncementEditorDialog({
         <TextArea
           label={t("rework.announcements.editor.descriptionLong")}
           explanation={t("rework.announcements.editor.descriptionLongHint")}
-          rows={8}
+          rows={4}
           value={long[locale] ?? ""}
           onChange={(event) => setLong(withLocale(long, locale, event.target.value))}
         />
