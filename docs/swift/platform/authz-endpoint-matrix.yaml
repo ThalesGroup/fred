@@ -849,7 +849,7 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}
     review_status: approved
-    required_permission: can_manage_platform # Replaces an announcement's content wholesale. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording.
+    required_permission: can_manage_platform # Replaces an announcement's content wholesale, never its delivery. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording.
   - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}/enabled

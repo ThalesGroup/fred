@@ -118,6 +118,32 @@ describe("AnnouncementEditorDialog", () => {
     expect(onSave.mock.calls[0][0].description_long).toEqual({});
   });
 
+  it("opens a new announcement without shouting two errors at the admin", () => {
+    // A blank form is not a wrong form. The errors also displace the field
+    // hints while showing, so an untouched form would open with no guidance.
+    render();
+
+    expect(document.body.textContent).not.toContain("rework.announcements.editor.titleRequired");
+    expect(document.body.textContent).not.toContain("rework.announcements.editor.shortRequired");
+    expect(document.body.textContent).toContain("rework.announcements.editor.descriptionShortHint");
+  });
+
+  it("reports a required field once the admin has left it empty", () => {
+    render();
+
+    act(() => void titleField().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+
+    expect(document.body.textContent).toContain("rework.announcements.editor.titleRequired");
+  });
+
+  it("stops the admin at the length the server would refuse", () => {
+    render();
+
+    expect(titleField().maxLength).toBe(200);
+    expect(shortField().maxLength).toBe(500);
+    expect(longField().maxLength).toBe(20_000);
+  });
+
   it("refuses to save until a title and a short description exist somewhere", () => {
     render();
     const save = button("rework.save") as HTMLButtonElement;

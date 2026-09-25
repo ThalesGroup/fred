@@ -67,9 +67,9 @@ def _content_changed(
 ) -> bool:
     """Whether anything a reader actually sees differs from what is stored.
 
-    `enabled` is excluded here because it says nothing about the wording; the
-    transition that matters is handled by `_relaunched`. `dismissible` IS
-    included — it changes the banner's controls.
+    `enabled` is excluded here because this path never changes delivery at
+    all — see `update_announcement`. `dismissible` IS included: it changes the
+    banner's controls.
     """
 
     return (
@@ -88,7 +88,8 @@ def _relaunched(stored: StoredAnnouncement, enabled: bool) -> bool:
     dismissals live in their own browser's storage, keyed by content version,
     so bumping that version is the only lever the server has. Turning an
     announcement off never bumps, and neither does re-sending `enabled=True`
-    on one that is already live.
+    on one that is already live. Only the `/enabled` endpoint can trigger this:
+    the content PUT leaves delivery alone.
     """
 
     return enabled and not stored.enabled
@@ -161,17 +162,21 @@ async def update_announcement(
             status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
         )
 
-    bumped = _content_changed(existing, request) or _relaunched(
-        existing, request.enabled
+    content_version = existing.content_version + (
+        1 if _content_changed(existing, request) else 0
     )
-    content_version = existing.content_version + (1 if bumped else 0)
     stored = await store.update(
         announcement_id=announcement_id,
         severity=request.severity,
         title=request.title,
         description_short=request.description_short,
         description_long=request.description_long,
-        enabled=request.enabled,
+        # Delivery is owned by the `/enabled` endpoint alone. The editor fills
+        # `enabled` from the announcement as it was when the dialog opened, so
+        # honouring it here would let a save made after someone flicked the
+        # switch silently undo that — and, on the off → on direction, bump the
+        # version and resurrect every dismissed banner.
+        enabled=existing.enabled,
         dismissible=request.dismissible,
         content_version=content_version,
         updated_by=user.uid,
@@ -186,7 +191,7 @@ async def update_announcement(
         actor_uid=user.uid,
         announcement_id=announcement_id,
         severity=request.severity,
-        enabled=request.enabled,
+        enabled=existing.enabled,
         content_version=content_version,
     )
     return _to_announcement(stored)

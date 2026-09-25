@@ -27,6 +27,9 @@ text, severity, or `dismissible` flag changes, and whenever a disabled
 announcement is enabled again. Disabling an announcement SHALL NOT change it:
 nothing a reader sees has moved.
 
+Replacing an announcement's content SHALL NOT change whether it is delivered.
+Enabling and disabling SHALL be a distinct operation.
+
 #### Scenario: Locale resolution with fallback
 
 - **WHEN** an announcement has a `fr` and an `en` title and the viewer's locale is `fr`

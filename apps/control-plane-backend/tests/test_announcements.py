@@ -198,16 +198,20 @@ async def test_re_enabling_an_already_live_announcement_does_not_bump(
 
 
 @pytest.mark.asyncio
-async def test_update_that_only_switches_delivery_off_does_not_bump(
+async def test_saving_content_never_changes_delivery(
     store: AnnouncementStore,
 ) -> None:
-    # The full-update route carries `enabled` too, so it has to follow the same
-    # rule as the toggle: off is not a relaunch.
+    # The editor fills `enabled` from the announcement as it was when the
+    # dialog opened. Honouring it would let a save land on top of a toggle
+    # someone made meanwhile — silently pulling a live banner, or putting one
+    # back on air and expiring every dismissal with it.
     deps = _deps(store, _platform_admin())
-    created = await create_announcement(
-        user=_user(), request=_write(enabled=True), deps=deps
+    created = await create_announcement(user=_user(), request=_write(), deps=deps)
+    await set_announcement_enabled(
+        user=_user(), announcement_id=created.id, enabled=True, deps=deps
     )
 
+    # A stale snapshot: the editor still believes the announcement is disabled.
     updated = await update_announcement(
         user=_user(),
         announcement_id=created.id,
@@ -215,12 +219,11 @@ async def test_update_that_only_switches_delivery_off_does_not_bump(
         deps=deps,
     )
 
-    assert updated.enabled is False
-    assert updated.content_version == created.content_version
+    assert updated.enabled is True
 
 
 @pytest.mark.asyncio
-async def test_update_that_puts_it_back_on_air_bumps_the_version(
+async def test_a_stale_snapshot_cannot_relaunch_through_the_content_route(
     store: AnnouncementStore,
 ) -> None:
     deps = _deps(store, _platform_admin())
@@ -233,7 +236,8 @@ async def test_update_that_puts_it_back_on_air_bumps_the_version(
         deps=deps,
     )
 
-    assert updated.content_version == created.content_version + 1
+    assert updated.enabled is False
+    assert updated.content_version == created.content_version
 
 
 @pytest.mark.asyncio

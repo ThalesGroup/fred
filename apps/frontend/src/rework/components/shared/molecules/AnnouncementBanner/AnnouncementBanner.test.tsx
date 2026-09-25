@@ -183,6 +183,22 @@ describe("AnnouncementBanner", () => {
     // aria-hidden in the subtree — the severity icon carries one too.
     expect(el.firstElementChild?.getAttribute("aria-hidden")).toBeNull();
     expect(el.textContent).toContain("Scheduled maintenance");
+    // Visible, but not offered as a control: a dead tab stop per admin row.
+    expect(close!.tabIndex).toBe(-1);
+    expect(close!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("is not a live region in preview mode", () => {
+    // The admin list renders one banner per row. Left as live regions they
+    // would announce every announcement on load, in severity order.
+    const live = render(<AnnouncementBanner announcement={announcement()} onDismissed={() => {}} />);
+    expect(live.querySelector('[role="status"]')).not.toBeNull();
+    act(() => root?.unmount());
+
+    const el = render(<AnnouncementBanner announcement={announcement()} preview />);
+
+    expect(el.querySelector('[role="status"]')).toBeNull();
+    expect(el.querySelector("[aria-live]")).toBeNull();
   });
 
   it("reports the dismissal only once the collapse has finished", () => {

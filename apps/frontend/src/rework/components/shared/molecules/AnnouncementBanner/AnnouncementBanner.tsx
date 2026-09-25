@@ -45,10 +45,13 @@ interface AnnouncementBannerProps {
    * Render as a preview of the live banner — the admin page's list.
    *
    * Everything still renders, including the close button, because the point of
-   * the preview is to show exactly what users will get. Only the dismissal is
-   * neutered: collapsing a row in the admin list would leave a hole and say
-   * nothing useful. "More info" stays live, so an admin can check that their
-   * long description actually reads well before enabling the announcement.
+   * the preview is to show exactly what users will get. What changes is that
+   * the strip stops being a real announcement: dismissal no-ops (collapsing a
+   * row in the admin list would leave a hole), the close button leaves the tab
+   * order and the accessibility tree rather than offering a dead control, and
+   * the strip is not a live region — a list of ten would otherwise announce
+   * all ten on load. "More info" stays live, so an admin can check that their
+   * long description reads well before enabling the announcement.
    */
   preview?: boolean;
 }
@@ -81,7 +84,12 @@ function AnnouncementBanner({ announcement, onDismissed, preview = false }: Anno
         aria-hidden={hiding || undefined}
       >
         <div className={styles.collapseInner}>
-          <div className={styles.banner} data-severity={severity} role="status" aria-live="polite">
+          <div
+            className={styles.banner}
+            data-severity={severity}
+            role={preview ? undefined : "status"}
+            aria-live={preview ? undefined : "polite"}
+          >
             <div className={styles.inner}>
               <span className={styles.icon} aria-hidden>
                 <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
@@ -114,6 +122,10 @@ function AnnouncementBanner({ announcement, onDismissed, preview = false }: Anno
                     icon={{ category: "outlined", type: "close" }}
                     aria-label={t("rework.announcements.banner.dismiss")}
                     onClick={dismiss}
+                    // Visible but inert in a preview: it has to be there for
+                    // the admin to see, and must not be reachable as a control.
+                    tabIndex={preview ? -1 : undefined}
+                    aria-hidden={preview || undefined}
                   />
                 )}
               </div>

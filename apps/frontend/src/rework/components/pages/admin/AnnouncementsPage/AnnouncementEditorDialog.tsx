@@ -27,6 +27,14 @@ type Locale = (typeof LOCALES)[number];
 
 const SEVERITIES = ["info", "warning", "error", "success"] as const;
 
+// Mirrors MAX_TITLE_CHARS / MAX_DESCRIPTION_SHORT_CHARS / MAX_DESCRIPTION_LONG_CHARS
+// in the backend's announcement_models.py. Duplicated so the field stops the
+// admin at the limit with a counter, instead of letting the save come back as
+// an untranslated 422 from the server — which still enforces it.
+const MAX_TITLE = 200;
+const MAX_SHORT = 500;
+const MAX_LONG = 20_000;
+
 type LocaleMap = Record<string, string>;
 
 interface AnnouncementEditorDialogProps {
@@ -75,6 +83,11 @@ export default function AnnouncementEditorDialog({
   const [short, setShort] = useState<LocaleMap>(announcement?.description_short ?? {});
   const [long, setLong] = useState<LocaleMap>(announcement?.description_long ?? {});
   const [dismissible, setDismissible] = useState(announcement?.dismissible ?? true);
+  // A blank form is not a wrong form: the two required-field errors appear
+  // once the admin has actually left the field empty, not the moment the
+  // dialog opens. They also hide the field's hint while showing.
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const touch = (field: string) => setTouched((current) => new Set(current).add(field));
 
   // Mirrors the backend's own refusal so the admin sees it before submitting:
   // a banner with no title or no short text in any locale renders as an empty
@@ -141,23 +154,28 @@ export default function AnnouncementEditorDialog({
 
         <TextInput
           label={t("rework.announcements.editor.title")}
+          maxLength={MAX_TITLE}
           value={title[locale] ?? ""}
           onChange={(event) => setTitle(withLocale(title, locale, event.target.value))}
-          error={missingTitle ? t("rework.announcements.editor.titleRequired") : undefined}
+          onBlur={() => touch("title")}
+          error={missingTitle && touched.has("title") ? t("rework.announcements.editor.titleRequired") : undefined}
         />
 
         <TextArea
           label={t("rework.announcements.editor.descriptionShort")}
           explanation={t("rework.announcements.editor.descriptionShortHint")}
-          error={missingShort ? t("rework.announcements.editor.shortRequired") : undefined}
+          error={missingShort && touched.has("short") ? t("rework.announcements.editor.shortRequired") : undefined}
+          maxLength={MAX_SHORT}
           rows={2}
           value={short[locale] ?? ""}
           onChange={(event) => setShort(withLocale(short, locale, event.target.value))}
+          onBlur={() => touch("short")}
         />
 
         <TextArea
           label={t("rework.announcements.editor.descriptionLong")}
           explanation={t("rework.announcements.editor.descriptionLongHint")}
+          maxLength={MAX_LONG}
           rows={4}
           value={long[locale] ?? ""}
           onChange={(event) => setLong(withLocale(long, locale, event.target.value))}

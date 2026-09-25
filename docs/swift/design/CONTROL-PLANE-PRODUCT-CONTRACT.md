@@ -4062,8 +4062,10 @@ browser's storage. It bumps on an edit, and on the off → on transition, becaus
 putting an announcement back on air is a relaunch and is meant to reach the
 users who closed the previous run. It does not bump when an announcement is
 switched off, nor when `enabled=true` is re-sent for one already live: neither
-changes what is on screen. The toggle keeps its own endpoint so a relaunch
-never has to resubmit content that did not change. Dismissals are per-browser:
+changes what is on screen. The content `PUT` never changes `enabled` at all —
+the editor fills it from the announcement as it was when the dialog opened, so
+honouring it would let a save land on top of a toggle made meanwhile. Delivery
+is owned by the `/enabled` endpoint alone. Dismissals are per-browser:
 there is no server-side per-user state, and losing the stored set only makes a
 banner show again.
 
