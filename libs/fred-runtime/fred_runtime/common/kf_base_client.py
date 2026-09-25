@@ -23,10 +23,12 @@ from fred_core.common.fastapi_handlers import (
     STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 
 from fred_runtime.common.kf_http_client import get_shared_kf_async_client
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     OutboundCredentialProvider,
     attach_grant,
     resolve_credential_provider,
@@ -206,8 +208,8 @@ class KfBaseClient:
                     return False
                 logger.info("Agent-led user token refresh succeeded.")
                 return True
-            except Exception as e:
-                logger.error("Agent-led token refresh failed: %s", e)
+            except Exception:
+                logger.error("Agent-led token refresh failed.")
                 return False
 
         if self._refresh_cb:
@@ -219,8 +221,8 @@ class KfBaseClient:
                 self._static_access_token = new_token
                 logger.info("Session-led user token refresh succeeded.")
                 return True
-            except Exception as e:
-                logger.error("Session-led token refresh failed: %s", e)
+            except Exception:
+                logger.error("Session-led token refresh failed.")
                 return False
 
         return False
@@ -240,9 +242,9 @@ class KfBaseClient:
 
         # One source for both halves of the call's identity: the header, and the
         # grant parameters a delegated call carries beside it.
-        credentials = await self.credential_provider().credentials(
-            override_token=kwargs.pop("access_token", None)
-        )
+        provider = self.credential_provider()
+        override_token = kwargs.pop("access_token", None)
+        credentials = await provider.credentials(override_token=override_token)
 
         headers: Dict[str, str] = kwargs.pop("headers", {})
         if credentials.authorization:
@@ -253,6 +255,9 @@ class KfBaseClient:
         stream = bool(kwargs.pop("stream", False))
         follow_redirects = kwargs.pop("follow_redirects", httpx.USE_CLIENT_DEFAULT)
         auth = kwargs.pop("auth", httpx.USE_CLIENT_DEFAULT)
+        if auth is httpx.USE_CLIENT_DEFAULT:
+            if isinstance(provider, DelegatedCredentialProvider):
+                auth = M2MBearerAuth(provider)
         request = self.client.build_request(
             method,
             url,
@@ -305,9 +310,8 @@ class KfBaseClient:
                     and r.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
                 )
             ):
-                # The receiver refused this run's authority. Retrying, or falling
-                # back to the person's bearer, would be asking a second time for
-                # what was just denied — the run ends instead.
+                # The receiver refused this run's authority after service-token
+                # recovery. Never fall back to the person's bearer.
                 await r.aclose()
                 raise AuthorityLostError()
             if r.status_code != 401:
@@ -322,12 +326,9 @@ class KfBaseClient:
                 path,
             )
             if await self._try_refresh_token():
-                # Drop the stale explicit token so _execute_authenticated_request
-                # falls back to _current_access_token() and picks up the refreshed one.
                 retry_kwargs = {k: v for k, v in kwargs.items() if k != "access_token"}
                 r = await self._execute_authenticated_request(
                     method=method, path=path, **retry_kwargs
                 )
-
             r.raise_for_status()
             return r

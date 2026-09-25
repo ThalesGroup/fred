@@ -55,6 +55,29 @@ from fred_pod import ConfigFiles, load_configuration_with_config_files
 client secret; the value itself never appears in the YAML. `M2MTokenProvider`
 exchanges it for a token, caches it and refreshes it before it expires.
 
+Attach the provider to an HTTPX client to renew early and retry one rejected
+request. Create one `M2MTokenProvider` from the service's `M2MAuthConfig` and
+share it across calls for that identity, so concurrent calls share renewal:
+
+```python
+import httpx
+from fred_pod.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    M2MTokenProvider,
+)
+
+async def submit_job(tokens: M2MTokenProvider) -> None:
+    async with httpx.AsyncClient(auth=M2MBearerAuth(tokens)) as client:
+        response = await client.post(
+            "https://fred.example/api/jobs", json={"name": "sync"}
+        )
+        response.raise_for_status()
+```
+
+`M2MBearerAuth` renews service-account tokens. Person tokens continue through
+the calling client's headers or live token getter; the client that owns the
+person token handles its refresh.
+
 **Naming.** Everything a pod contributes has a dotted name under a prefix its
 contributor owns: `fred.samples.local-folder`, `acme.support.router`. Fred
 claims the prefix for the first client that publishes under it, so no central

@@ -21,6 +21,7 @@ import os
 import time
 import typing as t
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import httpx
 from httpx import Request, Response
@@ -85,6 +86,18 @@ class M2MAuthConfig(BaseModel):
 _REFRESH_FAILED = "Workload token refresh failed."
 
 
+@dataclass(frozen=True)
+class TokenLease:
+    token: str = field(repr=False)
+    generation: int
+
+
+class RefreshableTokenProvider(t.Protocol):
+    async def get_token_lease(self) -> TokenLease: ...
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease: ...
+
+
 class M2MTokenProvider:
     """
     Caches and refreshes a Keycloak client-credentials token.
@@ -103,37 +116,73 @@ class M2MTokenProvider:
         self._lock = asyncio.Lock()
         self._token: str | None = None
         self._exp: float = 0  # epoch seconds
+        self._generation = 0
+        self._renewal: asyncio.Task[None] | None = None
         self._wall_clock = wall_clock
         self._transport = transport
 
     async def get_token(self) -> str:
+        return (await self.get_token_lease()).token
+
+    async def get_token_lease(self) -> TokenLease:
         started = time.perf_counter()
         outcome = "error"
         try:
-            token = await self._get_token()
+            lease = await self._get_token_lease()
             outcome = "success"
-            return token
+            return lease
         except asyncio.CancelledError:
             outcome = "cancelled"
             raise
         finally:
             _observe_token("acquire", outcome, time.perf_counter() - started)
 
-    async def _get_token(self) -> str:
-        now = self._wall_clock()
-        if self._token and now < self._exp - 30:
-            _observe_token("cache", "hit")
-            return self._token
-        _observe_token("cache", "miss")
+    async def _get_token_lease(self) -> TokenLease:
         async with self._lock:
-            # double-check inside lock
-            now = self._wall_clock()
-            if self._token and now < self._exp - 30:
-                _observe_token("cache", "shared_refresh")
-                return self._token
+            if self._token and self._wall_clock() < self._exp - 30:
+                _observe_token("cache", "hit")
+                return TokenLease(self._token, self._generation)
+            _observe_token("cache", "shared_refresh" if self._renewal else "miss")
+            task = self._start_renewal_locked()
+        await asyncio.shield(task)
+        async with self._lock:
+            assert self._token is not None
+            return TokenLease(self._token, self._generation)
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        started = time.perf_counter()
+        outcome = "error"
+        try:
+            async with self._lock:
+                if self._token is not None and self._generation != lease.generation:
+                    _observe_token("cache", "hit")
+                    outcome = "success"
+                    return TokenLease(self._token, self._generation)
+                _observe_token("cache", "shared_refresh" if self._renewal else "miss")
+                task = self._start_renewal_locked()
+            await asyncio.shield(task)
+            async with self._lock:
+                assert self._token is not None
+                outcome = "success"
+                return TokenLease(self._token, self._generation)
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            _observe_token("acquire", outcome, time.perf_counter() - started)
+
+    def _start_renewal_locked(self) -> asyncio.Task[None]:
+        if self._renewal is None:
+            self._renewal = asyncio.create_task(self._renew())
+            self._renewal.add_done_callback(
+                lambda task: None if task.cancelled() else task.exception()
+            )
+        return self._renewal
+
+    async def _renew(self) -> None:
+        try:
             if not self._secret:
                 raise RuntimeError(_REFRESH_FAILED)
-
             form = {
                 "grant_type": "client_credentials",
                 "client_id": self.cfg.client_id,
@@ -142,6 +191,7 @@ class M2MTokenProvider:
             if self.cfg.scope:
                 form["scope"] = self.cfg.scope
 
+            now = self._wall_clock()
             request_started = time.perf_counter()
             request_outcome = "error"
             try:
@@ -180,11 +230,13 @@ class M2MTokenProvider:
                     time.perf_counter() - request_started,
                 )
 
-            self._token = token
-            self._exp = expires_at
-            # Guarantee to the outside world that we return str
-            assert self._token is not None
-            return self._token
+            async with self._lock:
+                self._token = token
+                self._exp = expires_at
+                self._generation += 1
+        finally:
+            async with self._lock:
+                self._renewal = None
 
 
 class M2MBearerAuth(httpx.Auth):
@@ -198,15 +250,22 @@ class M2MBearerAuth(httpx.Auth):
     requires_request_body = True
     requires_response_body = False
 
-    def __init__(self, provider: M2MTokenProvider):
+    def __init__(self, provider: RefreshableTokenProvider):
         self._provider = provider
 
     async def async_auth_flow(
         self, request: Request
     ) -> t.AsyncGenerator[Request, Response]:
-        token = await self._provider.get_token()
-        request.headers["Authorization"] = f"Bearer {token}"
-        yield request  # httpx performs the request; we don't need the response hook here.
+        await request.aread()
+        lease = await self._provider.get_token_lease()
+        request.headers["Authorization"] = f"Bearer {lease.token}"
+        response = yield request
+        if response.status_code == 401:
+            await response.aread()
+            await response.aclose()
+            replacement = await self._provider.refresh_rejected(lease)
+            request.headers["Authorization"] = f"Bearer {replacement.token}"
+            yield request
 
 
 def make_m2m_asgi_client(app: ASGIApp, auth: httpx.Auth) -> httpx.AsyncClient:

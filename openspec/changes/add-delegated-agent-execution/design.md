@@ -41,7 +41,7 @@ A complete grant from a caller without the delegation role receives 403 when del
 
 `DelegatedCredentialProvider` supplies both the authorization header and grant parameters. Knowledge, document, workspace, team-wiki, binding and tool clients ask it immediately before a request. Subagents derive a provider with their own agent identity and the same run. A missing or terminal record prevents credential acquisition. Liveness must still hold after any awaited token acquisition.
 
-`M2MTokenProvider` caches one service-account token per provider in runtime-process memory. Callers reuse it while more than 30 seconds remain. A renewal uses client credentials, under an async lock with a second cache check. Transport failures preserve their exception class with bounded text so existing polling callers can retry. After a failed acquisition, the next caller may retry immediately under the same lock.
+`M2MTokenProvider` caches one service-account token per provider in runtime-process memory. Callers reuse it while more than 30 seconds remain. Renewal uses client credentials and one shared in-flight task. The shared HTTP authentication adapter refreshes after the first 401 and retries the same request once. Concurrent and delayed 401 responses for the same cache generation share the replacement. A first 403 or a retry returning 401/403 is terminal. Transport failures preserve their exception class with bounded text so existing polling callers can retry. After a failed acquisition, the next caller may retry immediately.
 
 An ordinary service identity without the caller role runs on its own bearer, with no delegated record. Its provider remains separate from the delegated workload provider.
 
@@ -61,7 +61,7 @@ Credential acquisition rechecks the record and captured run scope after token ac
 
 ### 4. Tool authentication and application integration
 
-For a run using delegated credentials, authenticated tool servers must use `delegated` mode on a supported HTTP transport. Calls carry a current workload bearer and an endpoint grant. `no_token` servers remain unauthenticated. A grant-bearing connection is scoped to one run. Listing or calling that returns 401/403 or a structured standing-unavailable refusal produces `authority_lost`; unsupported authentication produces `delegation_unavailable`.
+For a run using delegated credentials, authenticated tool servers must use `delegated` mode on a supported HTTP transport. Calls carry a current workload bearer and an endpoint grant. `no_token` servers remain unauthenticated. A grant-bearing connection is scoped to one run. Connection, listing and invocation use the shared HTTP authentication adapter. A first 403, a 401/403 after the single authentication retry, or a structured standing-unavailable refusal produces `authority_lost`; unsupported authentication produces `delegation_unavailable`.
 
 Ordinary service identities retain their own bearer and send no grant, including to catalog entries declared `delegated`. Their behavior depends on the credential provider of that execution, not merely on the process-wide delegation switch.
 

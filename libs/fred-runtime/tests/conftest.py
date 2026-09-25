@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 from fred_core.portable.observability import Span, Tracer
-from fred_core.security.backend_to_backend_auth import M2MTokenProvider
+from fred_core.security.backend_to_backend_auth import M2MTokenProvider, TokenLease
 from fred_core.security.delegation import DelegationConfig
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.common.outbound_credentials import (
@@ -35,9 +35,18 @@ from langchain_core.messages import AIMessage
 class StaticWorkloadTokens(M2MTokenProvider):
     def __init__(self, token: str = "workload-token") -> None:
         self.token = token
+        self._generation = 0
 
     async def get_token(self) -> str:
         return self.token
+
+    async def get_token_lease(self) -> TokenLease:
+        return TokenLease(self.token, self._generation)
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        if lease.generation == self._generation:
+            self._generation += 1
+        return TokenLease(self.token, self._generation)
 
 
 def install_delegation_runtime(

@@ -76,7 +76,13 @@ class _ScriptedClient:
         self.calls: list[dict[str, Any]] = []
 
     async def request(
-        self, method: str, url: str, *, headers: dict[str, str], json: Any = None
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: Any = None,
+        auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
         self.calls.append({"method": method, "url": url, "json": json})
         item = self._payloads.pop(0)

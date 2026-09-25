@@ -254,6 +254,21 @@ async def test_with_the_flag_off_a_user_token_server_still_gets_the_person(conne
     connection = connections["kf-mcp"]
     assert connection["headers"]["Authorization"] == PERSON_BEARER
     assert connection["url"] == "http://kf.invalid/mcp"
+    assert "auth" not in connection
+
+
+@pytest.mark.asyncio
+async def test_user_token_near_expiry_is_forwarded_without_service_auth(connections):
+    context = RuntimeContext(access_token="person-token", access_token_expires_at=0)
+
+    await mcp_utils.get_connected_mcp_client_for_agent(
+        agent_id="agent-a",
+        mcp_servers=[server("user_token")],
+        runtime_context=context,
+    )
+
+    assert connections["kf-mcp"]["headers"]["Authorization"] == PERSON_BEARER
+    assert "auth" not in connections["kf-mcp"]
 
 
 @pytest.mark.asyncio
@@ -972,6 +987,57 @@ async def test_a_refused_tool_listing_ends_the_run_at_once(
 
 
 @pytest.mark.asyncio
+async def test_iam_refusal_during_listing_keeps_delegation_unavailable(
+    monkeypatch, empty_client_cache
+) -> None:
+    attempts = 0
+
+    class _Client:
+        def __init__(self, conns, tool_interceptors=None) -> None:
+            self.tool_interceptors = list(tool_interceptors or [])
+
+        async def get_tools(self, server_name: str):
+            nonlocal attempts
+            attempts += 1
+            request = httpx.Request("POST", "https://iam.invalid/token")
+            response = httpx.Response(401, request=request)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError:
+                raise ExceptionGroup(
+                    "transport",
+                    [DelegationUnavailableError()],
+                ) from None
+
+    with pytest.raises(DelegationUnavailableError):
+        await init_mcp_runtime(
+            monkeypatch,
+            client_cls=_Client,
+            provider=DelegatedProvider(),
+            auth_mode="delegated",
+        )
+    assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_iam_refusal_during_tool_call_keeps_delegation_unavailable() -> None:
+    interceptor = DelegatedAuthorityInterceptor(
+        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+    )
+    request = httpx.Request("POST", "https://iam.invalid/token")
+    response = httpx.Response(401, request=request)
+
+    async def handler(call):
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            raise ExceptionGroup("transport", [DelegationUnavailableError()]) from None
+
+    with pytest.raises(DelegationUnavailableError):
+        await interceptor(tool_request(), handler)
+
+
+@pytest.mark.asyncio
 async def test_a_receiver_that_is_merely_unwell_is_still_retried(
     monkeypatch, empty_client_cache
 ):
@@ -1020,12 +1086,11 @@ async def test_a_transport_failure_is_still_retried(monkeypatch, empty_client_ca
 
 
 @pytest.mark.asyncio
-async def test_with_the_flag_off_a_refused_listing_keeps_its_retries(
-    monkeypatch, empty_client_cache
+@pytest.mark.parametrize("refused_status", [401, 403])
+async def test_with_the_flag_off_a_refused_listing_retries_connection(
+    monkeypatch, empty_client_cache, refused_status
 ):
-    """Nothing changes for a person's own token: a 401 there is an expiry to
-    recover from, not an authority the platform has lost."""
-    client_cls, instances = refusing_client(401)
+    client_cls, instances = refusing_client(refused_status)
 
     with pytest.raises(mcp_utils.MCPConnectionError):
         await init_mcp_runtime(

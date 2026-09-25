@@ -27,7 +27,11 @@ import logging
 
 import httpx
 import pytest
-from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.backend_to_backend_auth import (
+    M2MAuthConfig,
+    M2MTokenProvider,
+    TokenLease,
+)
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
@@ -74,6 +78,7 @@ class FakeWorkloadTokens(M2MTokenProvider):
     def __init__(self, *tokens: str) -> None:
         self._tokens = list(tokens) or ["workload-token-1"]
         self._index = 0
+        self._generation = 0
         self.calls = 0
 
     def rotate(self) -> None:
@@ -82,6 +87,15 @@ class FakeWorkloadTokens(M2MTokenProvider):
     async def get_token(self) -> str:
         self.calls += 1
         return self._tokens[self._index]
+
+    async def get_token_lease(self) -> TokenLease:
+        return TokenLease(await self.get_token(), self._generation)
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        if lease.generation == self._generation:
+            self.rotate()
+            self._generation += 1
+        return await self.get_token_lease()
 
 
 def enabled_runtime(

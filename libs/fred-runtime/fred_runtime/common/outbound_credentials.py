@@ -24,7 +24,11 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.backend_to_backend_auth import (
+    M2MAuthConfig,
+    M2MTokenProvider,
+    TokenLease,
+)
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
@@ -222,6 +226,43 @@ class DelegatedCredentialProvider(OutboundCredentialProvider):
             },
             delegated=True,
         )
+
+    async def get_token_lease(self) -> TokenLease:
+        record = self._require_live_run()
+        provider = self._runtime._token_provider
+        if provider is None:
+            raise DelegationUnavailableError()
+        try:
+            lease = await provider.get_token_lease()
+        except Exception:
+            raise DelegationUnavailableError() from None
+        if self._require_live_run() is not record:
+            raise DelegationUnavailableError()
+        return lease
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        record = self._require_live_run()
+        provider = self._runtime._token_provider
+        if provider is None:
+            raise DelegationUnavailableError()
+        try:
+            replacement = await provider.refresh_rejected(lease)
+        except Exception:
+            raise DelegationUnavailableError() from None
+        if self._require_live_run() is not record:
+            raise DelegationUnavailableError()
+        return replacement
+
+    def _require_live_run(self) -> RunRecord:
+        record = self.record
+        if record.terminal:
+            raise DelegationUnavailableError()
+        scope = RunScope.current()
+        if scope is not None:
+            if scope.closed:
+                raise DelegationUnavailableError()
+            scope.raise_if_stopped()
+        return record
 
     def for_agent(self, agent_id: str) -> "DelegatedCredentialProvider":
         return DelegatedCredentialProvider(

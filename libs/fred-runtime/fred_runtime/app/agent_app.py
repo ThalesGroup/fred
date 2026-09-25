@@ -74,6 +74,7 @@ from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import AssertedUser, holds_caller_role
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -157,6 +158,7 @@ from fred_runtime.capabilities.errors import (
 )
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     OutboundCredentialProvider,
     PersonCredentialProvider,
     RunRecord,
@@ -1694,6 +1696,8 @@ async def _resolve_agent_instance(
     request_kwargs: dict[str, Any] = {"headers": headers or None}
     if call_credentials.parameters:
         request_kwargs["params"] = dict(call_credentials.parameters)
+    if isinstance(provider, DelegatedCredentialProvider):
+        request_kwargs["auth"] = M2MBearerAuth(provider)
     response = await http_client.get(url, **request_kwargs)
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(

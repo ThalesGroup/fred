@@ -254,9 +254,11 @@ for an authenticated one, against current relations, on every call.
 
 The terminal error event SHALL carry an optional `reason` with the values
 `authority_lost`, `cancelled` and `delegation_unavailable`, absent for an ordinary
-crash. When a receiver denies a delegated call for lost authority (401 or 403),
-or returns a structured standing-unavailable refusal (503), the run SHALL end
-with reason `authority_lost`. Unrelated 503 responses SHALL retain ordinary
+crash. A first HTTP 401 SHALL refresh the workload token and retry the same call
+exactly once. Concurrent 401 responses for the same cached token SHALL share
+that refresh. A first 403, a retry returning 401 or 403, or a structured
+standing-unavailable refusal (503) SHALL end the run with reason `authority_lost`.
+Unrelated 503 responses SHALL retain ordinary
 error handling. A local per-tool permission or standing refusal during delegated
 execution SHALL produce the same typed stop. When delegation cannot be used —
 no workload credential, a refused tool server — the run SHALL end with
@@ -268,9 +270,15 @@ capability's own error handling.
 
 #### Scenario: Denied mid-run
 
-- **WHEN** a downstream call returns an authorization failure
+- **WHEN** a downstream call returns a first 403 or its authentication retry returns 401 or 403
 - **THEN** the run ends with reason `authority_lost`, all children are cancelled,
   and no further execution, tool or data call is made for the run
+
+#### Scenario: A workload bearer is renewed after rejection
+
+- **GIVEN** a live delegated run
+- **WHEN** a downstream call returns 401 and succeeds after the shared token refresh
+- **THEN** the call uses one retry with the original grant and the run continues
 
 #### Scenario: A local tool recheck refuses authority
 
@@ -461,8 +469,10 @@ grant, outside tool arguments, to a server declared `delegated`, SHALL send no
 credential to a server declared `no_token`, and SHALL refuse to activate any other
 server, or a `delegated` server whose transport cannot carry the grant, with
 reason `delegation_unavailable`. A connection carrying a grant SHALL NOT be shared
-with another run. A tool server refusing a delegated call or listing SHALL end
-the run with `authority_lost` without a retry.
+with another run. HTTP connection, listing and invocation SHALL use the shared
+authentication adapter. A first HTTP 401 SHALL refresh the workload token and
+retry the same HTTP request once. A first 403 or a retry returning 401 or 403
+SHALL end the run with `authority_lost`; tool wrappers SHALL NOT retry again.
 
 An ordinary service identity running as itself SHALL retain its own bearer and
 send no grant, including to a server declared `delegated`, while a `no_token`

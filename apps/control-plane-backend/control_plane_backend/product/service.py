@@ -39,6 +39,10 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from fred_core.security.models import Resource
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
@@ -2460,6 +2464,7 @@ async def _delete_knowledge_flow_attachment(
     document_uid: str | None,
     storage_key: str | None,
     session_id: str,
+    token_provider: RefreshableTokenProvider | None = None,
 ) -> None:
     """
     Orchestrate the Knowledge Flow cleanup path for one persisted attachment.
@@ -2495,7 +2500,10 @@ async def _delete_knowledge_flow_attachment(
         params["storage_key"] = storage_key
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            auth=M2MBearerAuth(token_provider) if token_provider is not None else None,
+        ) as client:
             response = await client.delete(
                 url,
                 params=params,

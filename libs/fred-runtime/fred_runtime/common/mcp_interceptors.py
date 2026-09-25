@@ -25,14 +25,12 @@ from fred_core.common.fastapi_handlers import (
     DENIAL_CAUSE_HEADER,
     STANDING_UNAVAILABLE_CAUSE,
 )
+from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 from mcp.types import CallToolResult
 
 from fred_runtime.common.outbound_credentials import OutboundCredentialProvider
-from fred_runtime.common.structures import (
-    TokenRefreshCallback,
-    resolve_refresh_result,
-)
+from fred_runtime.common.structures import TokenRefreshCallback, resolve_refresh_result
 from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
@@ -89,6 +87,9 @@ class DelegatedAuthorityInterceptor:
         except AuthorityLostError:
             raise
         except Exception as e:  # noqa: BLE001
+            run_stop = unwrap_run_stop_error(e)
+            if run_stop is not None:
+                raise run_stop from None
             http_err: httpx.HTTPStatusError | None = unwrap_httpx_status_error(e)
             status = (
                 http_err.response.status_code
@@ -138,12 +139,7 @@ class LivePersonBearerInterceptor:
 
 
 class ExpiredTokenRetryInterceptor:
-    """
-    Intercepts MCP tool calls; on expired-token 401 it refreshes the token and retries once.
-
-    - Awaits the agent-provided `refresh_user_access_token` callback to fetch a new token.
-    - Injects the fresh Authorization header on retry only (does not mutate base connection).
-    """
+    """Refresh an expired person token and retry an MCP tool call once."""
 
     def __init__(self, refresh_token_cb: TokenRefreshCallback):
         self._refresh = refresh_token_cb

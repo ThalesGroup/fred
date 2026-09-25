@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 
 import httpx
 import pytest
@@ -36,7 +37,7 @@ def _config() -> M2MAuthConfig:
 
 
 @pytest.mark.asyncio
-async def test_concurrent_failures_are_serialized_and_bounded(
+async def test_concurrent_failures_share_one_bounded_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
@@ -65,7 +66,7 @@ async def test_concurrent_failures_are_serialized_and_bounded(
     release.set()
     results = await asyncio.gather(*callers, return_exceptions=True)
 
-    assert attempts == 8
+    assert attempts == 1
     assert max_active == 1
     assert all(type(result) is RuntimeError for result in results)
     assert all(str(result) == "Workload token refresh failed." for result in results)
@@ -212,7 +213,7 @@ async def test_missing_secret_name_is_not_disclosed(
 
 
 @pytest.mark.asyncio
-async def test_cancelled_refresh_allows_the_next_attempt(
+async def test_cancelled_waiter_does_not_cancel_shared_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
@@ -239,8 +240,9 @@ async def test_cancelled_refresh_allows_the_next_attempt(
     with pytest.raises(asyncio.CancelledError):
         await refresh
 
+    block.set()
     assert await provider.get_token() == "recovered"
-    assert attempts == 2
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
@@ -249,12 +251,19 @@ async def test_metrics_distinguish_iam_calls_cache_and_failures(monkeypatch):
 
     from fred_pod.security import backend_to_backend_auth as auth
 
-    from fred_core.security.auth_metrics import M2M_CACHE, M2M_REQUEST, observe_m2m
+    from fred_core.security.auth_metrics import (
+        M2M_ACQUIRE,
+        M2M_CACHE,
+        M2M_REQUEST,
+        observe_m2m,
+    )
 
     monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", secrets.token_urlsafe())
     monkeypatch.setattr(auth, "_token_observer", observe_m2m)
     token = secrets.token_urlsafe()
     before_requests = M2M_REQUEST.labels("initial", "success")._sum.get()
+    before_renewals = M2M_REQUEST.labels("renewal", "success")._sum.get()
+    before_acquisitions = M2M_ACQUIRE.labels("success")._sum.get()
     before_hits = M2M_CACHE.labels("hit")._value.get()
     attempts = 0
 
@@ -269,6 +278,12 @@ async def test_metrics_distinguish_iam_calls_cache_and_failures(monkeypatch):
     assert attempts == 1
     assert M2M_REQUEST.labels("initial", "success")._sum.get() > before_requests
     assert M2M_CACHE.labels("hit")._value.get() == before_hits + 1
+    rejected = await provider.get_token_lease()
+    replacement = await provider.refresh_rejected(rejected)
+    assert replacement.generation == rejected.generation + 1
+    assert attempts == 2
+    assert M2M_REQUEST.labels("renewal", "success")._sum.get() > before_renewals
+    assert M2M_ACQUIRE.labels("success")._sum.get() > before_acquisitions
 
 
 @pytest.mark.asyncio
@@ -366,3 +381,121 @@ async def test_metrics_separate_initial_token_and_renewal(monkeypatch):
     await provider.get_token()
     assert count("initial") == initial + 1
     assert count("renewal") == renewal + 1
+
+
+@pytest.mark.asyncio
+async def test_early_renewal_starts_at_thirty_seconds_remaining(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
+    clock = _Clock()
+    issued = 0
+
+    def endpoint(request):
+        nonlocal issued
+        issued += 1
+        return httpx.Response(
+            200, json={"access_token": f"token-{issued}", "expires_in": 120}
+        )
+
+    provider = M2MTokenProvider(
+        _config(), wall_clock=clock, transport=httpx.MockTransport(endpoint)
+    )
+    assert await provider.get_token() == "token-1"
+    clock.advance(89)
+    assert await provider.get_token() == "token-1"
+    clock.advance(1)
+    assert await provider.get_token() == "token-2"
+    assert issued == 2
+
+
+@pytest.mark.asyncio
+async def test_early_renewal_is_shared_and_rejected_new_token_still_refreshes(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
+    clock = _Clock()
+    issued = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+    issued_tokens = [secrets.token_urlsafe() for _ in range(3)]
+
+    async def endpoint(request):
+        nonlocal issued
+        issued += 1
+        if issued == 2:
+            started.set()
+            await release.wait()
+        return httpx.Response(
+            200, json={"access_token": issued_tokens[issued - 1], "expires_in": 120}
+        )
+
+    provider = M2MTokenProvider(
+        _config(), wall_clock=clock, transport=httpx.MockTransport(endpoint)
+    )
+    await provider.get_token()
+    clock.advance(90)
+    callers = [asyncio.create_task(provider.get_token_lease()) for _ in range(8)]
+    await started.wait()
+    release.set()
+    leases = await asyncio.gather(*callers)
+    assert {lease.token for lease in leases} == {issued_tokens[1]}
+    assert issued == 2
+    replacement = await provider.refresh_rejected(leases[0])
+    assert replacement.token == issued_tokens[2]
+    assert issued == 3
+
+
+@pytest.mark.asyncio
+async def test_same_value_refresh_advances_generation(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
+    issued = 0
+    same_token = secrets.token_urlsafe()
+
+    def endpoint(request):
+        nonlocal issued
+        issued += 1
+        return httpx.Response(200, json={"access_token": same_token, "expires_in": 120})
+
+    provider = M2MTokenProvider(_config(), transport=httpx.MockTransport(endpoint))
+    old = await provider.get_token_lease()
+    new = await provider.refresh_rejected(old)
+    delayed = await provider.refresh_rejected(old)
+    assert new.token == old.token == delayed.token
+    assert new.generation == old.generation + 1 == delayed.generation
+    assert issued == 2
+
+
+@pytest.mark.asyncio
+async def test_separate_providers_keep_refreshes_separate(monkeypatch) -> None:
+    monkeypatch.setenv("TEST_M2M_PROVIDER_SECRET", "synthetic-secret")
+    calls = []
+    issued_tokens: dict[str, list[str]] = {}
+
+    def endpoint(request):
+        client_id = request.content.decode().split("client_id=")[1].split("&")[0]
+        calls.append(client_id)
+        token = secrets.token_urlsafe()
+        issued_tokens.setdefault(client_id, []).append(token)
+        return httpx.Response(
+            200,
+            json={
+                "access_token": token,
+                "expires_in": 120,
+            },
+        )
+
+    transport = httpx.MockTransport(endpoint)
+    config = _config()
+    first = M2MTokenProvider(config, transport=transport)
+    second = M2MTokenProvider(
+        config.model_copy(update={"client_id": "other"}), transport=transport
+    )
+    first_lease, second_lease = await asyncio.gather(
+        first.get_token_lease(), second.get_token_lease()
+    )
+    first_new, second_new = await asyncio.gather(
+        first.refresh_rejected(first_lease), second.refresh_rejected(second_lease)
+    )
+    assert first_new.token == issued_tokens[config.client_id][1]
+    assert second_new.token == issued_tokens["other"][1]
+    assert first_new.token != second_new.token
+    assert calls.count("workload") == calls.count("other") == 2

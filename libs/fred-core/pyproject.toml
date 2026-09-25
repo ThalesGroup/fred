@@ -16,7 +16,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 dependencies = [
     # The pod floor: configuration, identity, naming. Every name it holds is
     # re-exported from here, so this library's own surface is unchanged.
-    "fred-pod>=4.2.0",
+    "fred-pod>=4.2.1",
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still
     # admits versions vulnerable to the remediated CVEs. Pin the patched floor

@@ -44,14 +44,17 @@ from fred_core.common.fastapi_handlers import (
     DENIAL_CAUSE_HEADER,
     STANDING_UNAVAILABLE_CAUSE,
 )
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
+from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
 
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     OutboundCredentialProvider,
     OutboundCredentials,
     grant_query_url,
@@ -403,6 +406,12 @@ async def get_connected_mcp_client_for_agent(
         try:
             if transport == "streamable_http":
                 conn_cfg = _build_streamable_http_kwargs(server, headers, env, url)
+                if _normalize_auth_mode(
+                    server.auth_mode
+                ) != AUTH_MODE_NO_TOKEN and isinstance(
+                    provider, DelegatedCredentialProvider
+                ):
+                    conn_cfg["auth"] = M2MBearerAuth(provider)
             elif transport == "stdio":
                 conn_cfg = _build_stdio_kwargs(server, headers, env)
             else:
@@ -493,6 +502,9 @@ async def get_connected_mcp_client_for_agent(
             ]
             fetched_tools.extend(tagged_tools)
         except Exception as e:
+            run_stop = unwrap_run_stop_error(e)
+            if run_stop is not None:
+                raise run_stop from None
             refusal = _refusal_status(e) if call_credentials.delegated else None
             if refusal is not None:
                 # The receiver refused this run's authority. Nothing upstream is

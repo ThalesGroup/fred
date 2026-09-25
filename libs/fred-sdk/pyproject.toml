@@ -10,7 +10,7 @@ dependencies = [
   # Deliberately lean: configuration, identity, naming and plain contract
   # models only. The agent platform (fred-core, langchain, langgraph) lives
   # behind the `agents` extra so a Knowledge Base pod never installs it.
-  "fred-pod>=4.2.0",
+  "fred-pod>=4.2.1",
   "pydantic>=2.7.0,<3.0.0",
   "httpx>=0.28.1",
 ]
@@ -26,7 +26,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # The agent authoring surface: graph, ReAct, capability and runtime contracts,
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
-  "fred-core>=4.2.0",
+  "fred-core>=4.2.1",
   "langchain-core>=0.3.0",
   "langchain>=1.3.14",
   "langgraph>=1.2.9",

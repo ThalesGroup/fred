@@ -54,6 +54,7 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
@@ -124,6 +125,7 @@ from fred_runtime.common.kf_workspace_client import (
 )
 from fred_runtime.common.mcp_runtime import MCPRuntime
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     OutboundCredentialProvider,
     attach_grant,
     resolve_credential_provider,
@@ -3096,9 +3098,12 @@ class TeamWikiAdapter(TeamWikiPort):
             if credentials.authorization
             else {}
         )
+        auth = httpx.USE_CLIENT_DEFAULT
+        if isinstance(provider, DelegatedCredentialProvider):
+            auth = M2MBearerAuth(provider)
         try:
             response = await client.request(
-                method, url, headers=headers, **request_kwargs
+                method, url, headers=headers, auth=auth, **request_kwargs
             )
             if credentials.delegated and (
                 response.status_code in (401, 403)
@@ -3108,8 +3113,7 @@ class TeamWikiAdapter(TeamWikiPort):
                     == STANDING_UNAVAILABLE_CAUSE
                 )
             ):
-                # Refused authority ends the run; it is never re-asked under the
-                # platform's own identity, and the body is not repeated.
+                # Refused authority ends the run under this same identity.
                 raise AuthorityLostError()
             response.raise_for_status()
         except AuthorityLostError:

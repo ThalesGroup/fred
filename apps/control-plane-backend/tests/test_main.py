@@ -4937,6 +4937,83 @@ async def test_erase_session_skips_history_when_checkpoint_fails(
 
 
 @pytest.mark.asyncio
+async def test_scheduled_erase_records_auth_failure_and_retains_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    class _FailingTokens:
+        async def get_token_lease(self):
+            raise RuntimeError("sensitive-IAM-detail")
+
+        async def refresh_rejected(self, lease):
+            raise AssertionError("No request was sent")
+
+    requests = 0
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return httpx.Response(200, json={"deleted": 1})
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(endpoint), **kwargs
+        ),
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    service = ConversationErasureService(deps, token_provider=_FailingTokens())
+
+    receipt = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer old-service-token",
+    )
+    by_store = {result.store: result for result in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert by_store["runtime_checkpoint"].error == (
+        "runtime checkpoint delete authentication failed"
+    )
+    assert by_store["runtime_history"].ok is False
+    assert "skipped" in (by_store["runtime_history"].error or "")
+    assert len(session_store._records) == 1
+    assert requests == 0
+
+    history = await service._erase_runtime_history(  # noqa: SLF001 - isolated store result
+        "http://runtime-a.internal", "session-1", "Bearer old-service-token"
+    )
+    assert history.ok is False
+    assert history.error == "runtime history delete authentication failed"
+
+
+@pytest.mark.asyncio
 async def test_session_attachment_endpoints_round_trip_for_owned_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

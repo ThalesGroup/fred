@@ -417,11 +417,12 @@ async def test_with_the_flag_off_an_expired_token_is_still_refreshed_and_retried
         FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid/kf/v1"))
     )
     shim = PersonAgentShim("expired-person-token")
+    shim.runtime_context.access_token_expires_at = 0
     answers = [httpx.Response(401, text="expired"), httpx.Response(200, json={})]
-    seen: list[httpx.Request] = []
+    seen: list[str] = []
 
     def _handle(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
+        seen.append(request.headers["Authorization"])
         return answers[len(seen) - 1]
 
     try:
@@ -439,7 +440,7 @@ async def test_with_the_flag_off_an_expired_token_is_still_refreshed_and_retried
 
     assert response.status_code == 200
     assert shim.refreshes == 1
-    assert [request.headers["Authorization"] for request in seen] == [
+    assert seen == [
         "Bearer expired-person-token",
         "Bearer refreshed-person-token",
     ]

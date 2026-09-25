@@ -444,8 +444,6 @@ class MCPRuntime:
                 person_token_getter=partial(_context_token, runtime_context),
             )
             if provider.delegated:
-                # A delegated call is never retried under another credential, so
-                # the expiry-retry interceptor has no role on this path.
                 delegated_server_ids = {
                     server.id
                     for server in self.remote_servers

@@ -28,6 +28,7 @@ from typing import Any
 
 import httpx
 import pytest
+from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.knowledge_base import documents as documents_module
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import (
@@ -84,6 +85,7 @@ class _Fred:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self._answers: dict[str, list[tuple[int, Any] | BaseException]] = {}
+        self.auth: httpx.Auth | None = None
 
     def answers(
         self, method: str, *answers: tuple[int, Any] | BaseException
@@ -106,16 +108,9 @@ class _Fred:
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fred = self
 
-        class _Tokens:
-            def __init__(self, _config) -> None:
-                pass
-
-            async def get_token(self) -> str:
-                return "a-token"  # pragma: allowlist secret
-
         class _Client:
-            def __init__(self, **_kwargs) -> None:
-                pass
+            def __init__(self, **kwargs) -> None:
+                fred.auth = kwargs.get("auth")
 
             async def post(self, url, **kwargs):
                 return fred._respond("POST", url, kwargs)
@@ -132,9 +127,6 @@ class _Fred:
             async def aclose(self) -> None:
                 return None
 
-        monkeypatch.setattr(
-            "fred_sdk.knowledge_base.documents.M2MTokenProvider", _Tokens
-        )
         monkeypatch.setattr(
             "fred_sdk.knowledge_base.documents.httpx.AsyncClient", _Client
         )
@@ -504,7 +496,4 @@ def test_every_call_carries_the_pod_identity(monkeypatch):
     asyncio.run(_one_of_everything())
 
     assert len(fred.calls) == 4
-    assert all(
-        kwargs["headers"]["Authorization"] == "Bearer a-token"
-        for _, _, kwargs in fred.calls
-    )
+    assert isinstance(fred.auth, M2MBearerAuth)

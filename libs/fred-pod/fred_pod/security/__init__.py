@@ -18,6 +18,8 @@ from fred_pod.security.backend_to_backend_auth import (
     M2MAuthConfig,
     M2MBearerAuth,
     M2MTokenProvider,
+    RefreshableTokenProvider,
+    TokenLease,
     make_m2m_asgi_client,
 )
 from fred_pod.security.structure import (
@@ -43,6 +45,8 @@ __all__ = [
     "M2MBearerAuth",
     "M2MSecurity",
     "M2MTokenProvider",
+    "RefreshableTokenProvider",
+    "TokenLease",
     "OpenFgaRebacConfig",
     "Principal",
     "PrincipalContext",

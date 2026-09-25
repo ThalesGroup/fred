@@ -33,6 +33,10 @@ import asyncio
 
 import httpx
 from fred_core.common import TeamId
+from fred_core.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from pydantic import BaseModel, Field, computed_field
 
 from control_plane_backend.product import service as product_service
@@ -81,8 +85,14 @@ class ConversationErasureService:
     A2) runs with the caller's identity.
     """
 
-    def __init__(self, deps: ProductServiceDependencies) -> None:
+    def __init__(
+        self,
+        deps: ProductServiceDependencies,
+        *,
+        token_provider: RefreshableTokenProvider | None = None,
+    ) -> None:
         self._deps = deps
+        self._token_provider = token_provider
 
     async def erase_session(
         self,
@@ -134,6 +144,7 @@ class ConversationErasureService:
                     document_uid=attachment.document_uid,
                     storage_key=attachment.storage_key,
                     session_id=session_id,
+                    token_provider=self._token_provider,
                 )
             await attachment_store.delete_for_session(session_id)
             receipt.stores.append(
@@ -360,7 +371,12 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/checkpoints/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(
+                timeout=_RUNTIME_TIMEOUT_SECONDS,
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else None,
+            ) as client:
                 response = await client.delete(
                     url, headers={"Authorization": authorization}
                 )
@@ -381,6 +397,12 @@ class ConversationErasureService:
                 store=STORE_CHECKPOINT,
                 ok=False,
                 error=f"runtime checkpoint delete request failed: {exc}",
+            )
+        except RuntimeError:
+            return StoreErasureResult(
+                store=STORE_CHECKPOINT,
+                ok=False,
+                error="runtime checkpoint delete authentication failed",
             )
         except (ValueError, TypeError) as exc:
             # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
@@ -407,7 +429,12 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/sessions/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(
+                timeout=_RUNTIME_TIMEOUT_SECONDS,
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else None,
+            ) as client:
                 response = await client.delete(
                     url, headers={"Authorization": authorization}
                 )
@@ -428,6 +455,12 @@ class ConversationErasureService:
                 store=STORE_HISTORY,
                 ok=False,
                 error=f"runtime history delete request failed: {exc}",
+            )
+        except RuntimeError:
+            return StoreErasureResult(
+                store=STORE_HISTORY,
+                ok=False,
+                error="runtime history delete authentication failed",
             )
         except (ValueError, TypeError) as exc:
             # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
