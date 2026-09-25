@@ -11,7 +11,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 - [x] 1.2 Add to `M2MSecurity`: `provider` (same literal, default `keycloak`), `scope: str | None = None`, `token_url: AnyHttpUrl | None = None`.
 - [x] 1.3 Add to `SecurityConfiguration`: `user_directory: Literal["keycloak","local"] = "keycloak"`.
 - [ ] 1.4 Regenerate the configuration JSON schemas and the Helm `values.schema.json` with the repository's existing generators. Add the new keys, commented out, to `deploy/charts/fred/values.yaml`.
-- [ ] 1.5 `libs/fred-core/fred_core/security/env_config.py`: read optional `OIDC_PROVIDER`, `OIDC_AUDIENCE`, `OIDC_SCOPE`, `OIDC_ROLES_CLAIM` (comma-separated path), `OIDC_UID_CLAIM`, `OIDC_M2M_SCOPE` and `FRED_USER_DIRECTORY` into the models above (design §8c). Keep every `KEYCLOAK_*` name and the existing `KEYCLOAK_M2M_AUDIENCE` refusal.
+- [x] 1.5 `libs/fred-core/fred_core/security/env_config.py`: read optional `OIDC_PROVIDER`, `OIDC_AUDIENCE`, `OIDC_SCOPE`, `OIDC_ROLES_CLAIM` (comma-separated path), `OIDC_UID_CLAIM`, `OIDC_M2M_SCOPE` and `FRED_USER_DIRECTORY` into the models above (design §8c). Keep every `KEYCLOAK_*` name and the existing `KEYCLOAK_M2M_AUDIENCE` refusal.
 - [ ] 1.6 Tests: an old configuration file parses to the defaults above; invalid literals are rejected; `security_configuration_from_env` with only today's variables equals today's result, and with the new variables sets each field.
 
 ## 2. Endpoint resolution (`libs/fred-pod`)
