@@ -1009,6 +1009,7 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             subagent_middleware=[],
             middleware=[carrier, *middleware],
             backend=StateBackend(),
+            permissions=[],
         )
     else:
         agent = create_agent(

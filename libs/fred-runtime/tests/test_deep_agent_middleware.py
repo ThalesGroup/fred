@@ -666,6 +666,7 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
             subagent_middleware=[],
             middleware=middleware,
             backend=StateBackend(),
+            permissions=[],
         ),
     )
     config = {"configurable": {"thread_id": "hygiene-parent"}}

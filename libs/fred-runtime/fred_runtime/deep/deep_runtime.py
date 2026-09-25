@@ -48,7 +48,6 @@ from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_backend import (
     ConversationNamespaceBackend,
 )
-from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -236,14 +235,9 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
-        capability_filesystem = self.services.conversation_filesystem
-        if isinstance(capability_filesystem, DeepConversationFilesystemPort):
-            backend = capability_filesystem.backend
-            permissions = capability_filesystem.permissions
-        else:
-            backend, permissions = build_conversation_filesystem(
-                self._conversation_filesystem
-            )
+        backend, permissions = build_conversation_filesystem(
+            self._conversation_filesystem
+        )
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
@@ -286,7 +280,7 @@ def _create_compiled_deep_agent(
     middleware: Sequence[AgentMiddleware],
     subagent_middleware: Sequence[AgentMiddleware],
     backend: BackendProtocol,
-    permissions: list[FilesystemPermission] | None = None,
+    permissions: list[FilesystemPermission],
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -322,9 +316,7 @@ def _create_compiled_deep_agent(
             subagents=[subagent],
             checkpointer=checkpointer,
             backend=backend,
-            permissions=permissions
-            if permissions is not None
-            else _conversation_permissions(),
+            permissions=permissions,
         ),
     )
 

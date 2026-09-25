@@ -159,7 +159,7 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
     filesystem = ConversationFilesystemService(
         LocalFilesystem(str(tmp_path)), "conversation-a"
     )
-    backend, _ = build_conversation_filesystem(filesystem)
+    backend, permissions = build_conversation_filesystem(filesystem)
     agent = _create_compiled_deep_agent(
         model=model,
         tools=[],
@@ -168,6 +168,7 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
         middleware=middleware(),
         subagent_middleware=middleware(child=True),
         backend=backend,
+        permissions=permissions,
     )
 
     updates = await _drive(agent)

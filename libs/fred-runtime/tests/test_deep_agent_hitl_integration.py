@@ -159,6 +159,7 @@ def _compile_deep_agent(
             child=True,
         ),
         backend=StateBackend(),
+        permissions=[],
     )
 
 
@@ -739,6 +740,7 @@ def _native_agent(
         middleware=frame(),
         subagent_middleware=frame(child=True),
         backend=backend if backend is not None else StateBackend(),
+        permissions=[],
     )
 
 
