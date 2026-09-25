@@ -43,4 +43,4 @@
 - [x] 7.2 Run the `fred-performance-reviewer` skill over the read route and the polling hook — a per-tab request every 60 s under concurrent load — and address anything it raises.
 - [x] 7.3 Run `/code-review` on the full branch diff at default effort or higher and address the findings.
 - [x] 7.4 Add the dated entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` for the new routes and the removed `/frontend/config` field, and document the banner stack and its dialog in `docs/swift/ux/COMPONENT-UX.md`.
-- [ ] 7.5 Record verification evidence in the change, then `openspec archive add-platform-announcements`; close the GitHub issue.
+- [x] 7.5 Verification evidence recorded in `verification.md`; change archived. The GitHub issue stays open until the branch is merged — see its status comment.
