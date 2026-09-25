@@ -530,6 +530,36 @@ def test_both_switches_on_with_user_authentication_build_a_usable_runtime():
     runtime.ensure_usable()
 
 
+def test_workload_oidc_endpoint_and_scope_reach_token_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    security = security_configuration(act_for_people=True, user_enabled=True)
+    security.m2m = security.m2m.model_copy(
+        update={
+            "provider": "oidc",
+            "scope": "api://fred/.default",
+            "token_url": "https://identity.example/token",
+        }
+    )
+    monkeypatch.setattr(
+        "fred_pod.security.oidc_endpoints.httpx.get",
+        lambda *_args, **_kwargs: httpx.Response(
+            200,
+            json={
+                "issuer": str(security.m2m.realm_url).rstrip("/"),
+                "jwks_uri": "https://identity.example/keys",
+            },
+        ),
+    )
+
+    runtime = build_delegation_runtime(security, user_authentication_enabled=True)
+
+    assert runtime._token_provider is not None  # noqa: SLF001
+    assert runtime._token_provider.cfg.scope == "api://fred/.default"  # noqa: SLF001
+    assert runtime._token_provider.cfg.token_url == "https://identity.example/token"  # noqa: SLF001
+
+
+
 def test_no_security_configuration_at_all_is_an_inert_runtime():
     assert (
         build_delegation_runtime(None, user_authentication_enabled=False).enabled

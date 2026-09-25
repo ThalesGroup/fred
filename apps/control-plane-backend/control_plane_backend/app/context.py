@@ -27,6 +27,7 @@ from fred_core import (
     RebacEngine,
     rebac_factory,
 )
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
@@ -340,10 +341,17 @@ class ApplicationContext:
         """
         if self._service_token_provider is None:
             m2m = self.configuration.security.m2m
+            token_endpoint = resolve_endpoints(
+                provider=m2m.provider,
+                realm_url=str(m2m.realm_url).rstrip("/"),
+                token_url=str(m2m.token_url) if m2m.token_url else None,
+            ).token_endpoint
             self._service_token_provider = M2MTokenProvider(
                 M2MAuthConfig(
                     keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                     client_id=m2m.client_id,
+                    scope=m2m.scope,
+                    token_url_override=token_endpoint,
                     secret_env=m2m.secret_env_var,
                 )
             )
