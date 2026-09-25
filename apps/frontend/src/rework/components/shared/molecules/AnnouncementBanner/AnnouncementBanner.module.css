@@ -111,12 +111,15 @@
   font: var(--font-label-large);
 }
 
-/* The renderer paints its own reading colour and prose size on its root, both
-   wrong on a filled strip: every glyph here belongs to the severity's `on-`
-   pair, at the banner's body size. */
+/* The renderer paints its own reading colour, prose size and text selection on
+   its root, all three wrong on a filled strip: every glyph here belongs to the
+   severity's `on-` pair, at the banner's body size, and a one-line notice is
+   interface chrome rather than a reading zone — it takes the page-wide
+   `user-select: none` back. */
 .banner .short > * {
   color: inherit;
   font: var(--font-body-medium);
+  user-select: none;
 }
 
 /* Links keep the underline to stay distinguishable without the accent colour,
