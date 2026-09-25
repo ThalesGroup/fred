@@ -21,6 +21,7 @@ import csv
 import io
 from collections.abc import Sequence
 from pathlib import PurePosixPath
+from typing import Literal
 
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.runtime import (
@@ -31,6 +32,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 
 _TOOL_REF = "runtime:concat_files"
+JoinMode = Literal["exact", "lines", "sections"]
 
 
 class ConcatFilesMiddleware(AgentMiddleware):
@@ -43,18 +45,23 @@ class ConcatFilesMiddleware(AgentMiddleware):
         async def concat_files(
             paths: list[str],
             output_path: str,
-            heading_per_file: bool = False,
+            join: JoinMode = "lines",
             replace: bool = False,
         ) -> tuple[str, ToolInvocationResult]:
             """Concatenate ordered workspace text files into an output file.
 
-            Use absolute paths such as `/notes.md`. The output contains the exact
-            input text in the specified order, with no inserted separators.
-            Set heading_per_file for Markdown `##` headings derived from input
-            filenames, with blank lines between sections. When every input is
-            `.csv`, write headerless CSV batches: quoted fields are respected,
-            all records must have the same column count, and a missing newline
-            is added between batches. Tell sub-agents not to write CSV headers.
+            Use absolute paths such as `/notes.md`.
+
+            Join modes:
+            - "lines" (default): ensure exactly one newline between files.
+            - "exact": preserve input text unchanged.
+            - "sections": add filename-based Markdown `##` headings and blank
+              lines between files.
+
+            When every input is `.csv`, quoted fields are respected, all records
+            must have the same column count, and "sections" is unavailable.
+            CSV inputs should omit repeated headers.
+
             Set replace=True to overwrite an existing output. The result is a
             bounded summary, not the merged content.
             """
@@ -73,9 +80,7 @@ class ConcatFilesMiddleware(AgentMiddleware):
                         )
                     except ConversationScratchpadError as exc:
                         return _error(f"Cannot read {path}: {exc}")
-                merged = await asyncio.to_thread(
-                    _assemble, paths, contents, heading_per_file
-                )
+                merged = await asyncio.to_thread(_assemble, paths, contents, join)
                 await filesystem.write_text(output_path, merged, origin="agent")
             except (ConversationScratchpadError, ValueError) as exc:
                 return _error(f"Cannot concatenate files: {exc}")
@@ -95,23 +100,23 @@ def _heading(path: str) -> str:
     return PurePosixPath(path).stem.replace("_", " ").replace("-", " ")
 
 
-def _join_csv_files(contents: list[str]) -> str:
-    pieces: list[str] = []
-    for content in contents:
-        if pieces and pieces[-1] and not pieces[-1].endswith(("\r", "\n")):
-            pieces.append("\n")
-        pieces.append(content)
-    return "".join(pieces)
+def _join_lines(contents: list[str], newline_count: int) -> str:
+    if not contents:
+        return ""
+    merged = contents[0]
+    for content in contents[1:]:
+        merged = merged.rstrip("\r\n") + "\n" * newline_count + content.lstrip("\r\n")
+    return merged
 
 
 def _assemble(
     paths: list[str],
     contents: list[str],
-    heading_per_file: bool,
+    join: JoinMode,
 ) -> str:
     if all(path.lower().endswith(".csv") for path in paths):
-        if heading_per_file:
-            raise ValueError("Markdown headings cannot be added to CSV output")
+        if join == "sections":
+            raise ValueError("CSV inputs do not support join='sections'")
         counts: list[tuple[int, ...]] = []
         for path, content in zip(paths, contents, strict=True):
             try:
@@ -127,10 +132,16 @@ def _assemble(
                 for path, widths in zip(paths, counts, strict=True)
             )
             raise ValueError(f"CSV column count mismatch: {details}")
-        return _join_csv_files(contents)
-    if heading_per_file:
-        return "\n\n".join(
-            f"## {_heading(path)}\n\n{body}"
-            for path, body in zip(paths, contents, strict=True)
+    if join == "sections":
+        return _join_lines(
+            [
+                f"## {_heading(path)}\n\n{body}"
+                for path, body in zip(paths, contents, strict=True)
+            ],
+            2,
         )
-    return "".join(contents)
+    if join == "lines":
+        return _join_lines(contents, 1)
+    if join == "exact":
+        return "".join(contents)
+    raise ValueError(f"Unknown join mode: {join}")

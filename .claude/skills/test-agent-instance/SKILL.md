@@ -29,6 +29,10 @@ Confirm the selected authenticated user has access to that team. Reuse the cache
 from the developer's existing local fixture/config. Keep passwords out of command
 arguments, transcripts and reports. Never invent authorization or copy another user's token.
 
+For this local demo stack, the developer-provided test login is `alice` /
+`Azerty123_`. Use it only for local instance tests and pass the password through
+`FRED_PASSWORD` without printing it in test artifacts.
+
 Inspect the instance's tuning when diagnosing prompt/capability behavior. Resolve its
 runtime binding from the configured runtime catalog; `--pod-url` must target that runtime,
 not whichever pod happens to listen on the default port.

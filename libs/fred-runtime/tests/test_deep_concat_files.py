@@ -115,6 +115,7 @@ async def test_text_inputs_keep_order_and_whitespace_without_echoing_content() -
         scratchpad,
         paths=["/second.md", "/first.md"],
         output_path="/merged.md",
+        join="exact",
     )
 
     assert result.status == "success"
@@ -186,13 +187,71 @@ async def test_markdown_headings_are_explicit_and_do_not_trim_bodies() -> None:
         scratchpad,
         paths=["/part-one.md", "/part-two.md"],
         output_path="/report.md",
-        heading_per_file=True,
+        join="sections",
     )
 
     assert result.status == "success"
     assert await scratchpad.read_text("report.md") == (
-        "## part one\n\n  Alpha\n\n\n## part two\n\nBeta  "
+        "## part one\n\n  Alpha\n\n## part two\n\nBeta  "
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "first_tail,second_head", [("", ""), ("\n", ""), ("\n\n", "\n")]
+)
+async def test_lines_join_continues_one_markdown_table(
+    first_tail: str, second_head: str
+) -> None:
+    scratchpad = _scratchpad()
+    await scratchpad.write_text(
+        "first.md", f"| ID | Score |\n| --- | --- |\n| 1 | 8 |{first_tail}"
+    )
+    await scratchpad.write_text("second.md", f"{second_head}| 2 | 9 |")
+
+    result = await _concat(
+        scratchpad,
+        paths=["/first.md", "/second.md"],
+        output_path="/merged.md",
+    )
+
+    assert result.status == "success"
+    assert await scratchpad.read_text("merged.md") == (
+        "| ID | Score |\n| --- | --- |\n| 1 | 8 |\n| 2 | 9 |"
+    )
+
+
+@pytest.mark.asyncio
+async def test_csv_rejects_sections_join() -> None:
+    scratchpad = _scratchpad()
+    await scratchpad.write_text("first.csv", "1,2")
+
+    result = await _concat(
+        scratchpad,
+        paths=["/first.csv"],
+        output_path="/merged.csv",
+        join="sections",
+    )
+
+    assert getattr(result.artifact, "is_error", False)
+    assert not await scratchpad.exists("merged.csv")
+
+
+@pytest.mark.asyncio
+async def test_csv_exact_join_preserves_input_boundaries() -> None:
+    scratchpad = _scratchpad()
+    await scratchpad.write_text("first.csv", "1,2")
+    await scratchpad.write_text("second.csv", "3,4")
+
+    result = await _concat(
+        scratchpad,
+        paths=["/first.csv", "/second.csv"],
+        output_path="/merged.csv",
+        join="exact",
+    )
+
+    assert result.status == "success"
+    assert await scratchpad.read_text("merged.csv") == "1,23,4"
 
 
 @pytest.mark.asyncio
