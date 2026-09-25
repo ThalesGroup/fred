@@ -97,9 +97,11 @@ function AnnouncementBanner({ announcement, onDismissed, preview = false }: Anno
               <div className={styles.text}>
                 {title && <span className={styles.title}>{title}</span>}
                 {short && (
-                  <div className={styles.short}>
-                    <MarkdownRenderer text={short} />
-                  </div>
+                  <span className={styles.short}>
+                    {/* Inline: a banner's short description is one or two lines
+                        of phrasing content, not a paragraph block. */}
+                    <MarkdownRenderer text={short} inline />
+                  </span>
                 )}
               </div>
               <div className={styles.actions}>

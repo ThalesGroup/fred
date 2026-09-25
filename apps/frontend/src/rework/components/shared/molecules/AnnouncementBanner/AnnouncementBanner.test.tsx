@@ -80,6 +80,21 @@ describe("AnnouncementBanner", () => {
     expect(el.textContent).toContain("Fred is down on Sunday.");
   });
 
+  it("renders the short description as phrasing content, not a paragraph", () => {
+    // It is one line inside a strip: a `p` puts a block box in the middle of
+    // a flex row and says the wrong thing about what it is.
+    const el = render(
+      <AnnouncementBanner
+        announcement={announcement({ description_short: { en: "Down **Sunday**." } })}
+        onDismissed={() => {}}
+      />,
+    );
+
+    expect(el.querySelector("p")).toBeNull();
+    // Still markdown: the emphasis survives the inline rendering.
+    expect(el.querySelector("strong")?.textContent).toBe("Sunday");
+  });
+
   it("marks the banner with its severity so the accent and icon follow", () => {
     const el = render(<AnnouncementBanner announcement={announcement({ severity: "error" })} onDismissed={() => {}} />);
 

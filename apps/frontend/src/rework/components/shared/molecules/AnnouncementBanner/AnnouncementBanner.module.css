@@ -113,10 +113,8 @@
 
 /* The renderer paints its own reading colour and prose size on its root, both
    wrong on a filled strip: every glyph here belongs to the severity's `on-`
-   pair, at the banner's body size. Block spacing goes too, so one or two lines
-   do not open a gap the height of a paragraph. */
+   pair, at the banner's body size. */
 .banner .short > * {
-  margin-block: 0;
   color: inherit;
   font: var(--font-body-medium);
 }
