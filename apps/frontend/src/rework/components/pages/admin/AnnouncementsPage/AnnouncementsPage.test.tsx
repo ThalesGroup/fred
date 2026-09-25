@@ -133,10 +133,20 @@ describe("AnnouncementsPage", () => {
     expect(render().textContent).toContain("rework.announcements.page.subtitle:1");
   });
 
-  it("marks each row with its severity so it reads like the live banner", () => {
-    listMock.mockReturnValue({ data: [announcement({ severity: "error" })], isLoading: false });
+  it("previews each announcement with the real banner component", () => {
+    // Not a lookalike styled to match: the admin has to be able to trust that
+    // this is what users will get, which only holds if it is the same code.
+    listMock.mockReturnValue({
+      data: [announcement({ severity: "error", description_long: { en: "The full story." } })],
+      isLoading: false,
+    });
 
-    expect(render().querySelector('[data-severity="error"]')).not.toBeNull();
+    const el = render();
+
+    expect(el.querySelector('[data-severity="error"]')).not.toBeNull();
+    // The banner's own actions render too, so the admin sees what users get.
+    expect(el.textContent).toContain("rework.announcements.banner.moreInfo");
+    expect(el.querySelector('[aria-label="rework.announcements.banner.dismiss"]')).not.toBeNull();
   });
 
   it("toggles through the dedicated enabled endpoint, not a content update", () => {

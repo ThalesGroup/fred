@@ -16,14 +16,13 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
-import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import AnnouncementBanner from "@shared/molecules/AnnouncementBanner/AnnouncementBanner";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { SEVERITY_ICONS, type Severity } from "@shared/utils/severity";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
 import {
@@ -137,21 +136,12 @@ export default function AnnouncementsPage() {
         />
       ) : (
         <ul className={styles.list}>
-          {announcements.map((announcement) => {
-            const severity = announcement.severity as Severity;
-            return (
-              <li key={announcement.id} className={styles.row} data-severity={severity}>
-                <span className={styles.severityIcon} aria-label={t(`rework.announcements.severity.${severity}`)}>
-                  <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
-                </span>
-                <div className={styles.rowText}>
-                  <span className={styles.rowTitle}>
-                    {resolveAnnouncementText(announcement.title, i18n.language) ?? announcement.id}
-                  </span>
-                  <span className={styles.rowMeta}>
-                    {resolveAnnouncementText(announcement.description_short, i18n.language)}
-                  </span>
-                </div>
+          {announcements.map((announcement) => (
+            <li key={announcement.id} className={styles.row}>
+              {/* The real banner component, not a lookalike: an admin has to be
+                  able to trust that what they see here is what users get. */}
+              <AnnouncementBanner announcement={announcement} preview />
+              <div className={styles.controls}>
                 <label className={styles.toggle}>
                   <Switch
                     checked={announcement.enabled}
@@ -160,6 +150,7 @@ export default function AnnouncementsPage() {
                   />
                   {announcement.enabled ? t("rework.announcements.row.live") : t("rework.announcements.row.draft")}
                 </label>
+                <span className={styles.controlsSpacer} />
                 <IconButton
                   size="small"
                   variant="icon"
@@ -172,9 +163,9 @@ export default function AnnouncementsPage() {
                   aria-label={t("rework.announcements.row.delete")}
                   onClick={() => onDelete(announcement)}
                 />
-              </li>
-            );
-          })}
+              </div>
+            </li>
+          ))}
         </ul>
       )}
 

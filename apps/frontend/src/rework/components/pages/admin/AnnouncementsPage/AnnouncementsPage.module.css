@@ -34,57 +34,28 @@
   list-style: none;
 }
 
+/* Each row is a card wrapping the real banner plus the admin controls. The
+   card clips so the banner's container colour runs edge to edge exactly as it
+   does full-width at the top of the app. */
 .row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);
-  background: var(--surface-container-low);
-  padding: var(--spacing-s) var(--spacing-m);
-}
-
-/* Same severity → accent mapping as the banner itself, so the admin reads the
-   row and the live banner as the same object. */
-.row[data-severity="success"] {
-  --row-accent: var(--success);
-}
-.row[data-severity="error"] {
-  --row-accent: var(--error);
-}
-.row[data-severity="warning"] {
-  --row-accent: var(--warning);
-}
-.row[data-severity="info"] {
-  --row-accent: var(--secondary);
-}
-
-.severityIcon {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--row-accent);
-}
-
-.rowText {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.rowTitle {
-  color: var(--on-surface);
-  font: var(--font-body-medium-emphasized);
-}
-
-.rowMeta {
-  /* One line: the full text is in the editor, this is a reminder. */
   overflow: hidden;
-  color: var(--on-surface-variant);
-  font: var(--font-body-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* The controls sit on the page's own surface, deliberately NOT on the banner's
+   container colour: they belong to the admin page, not to the announcement,
+   and sharing its background would read as part of what users will see. */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  background: var(--surface-container-low);
+  padding: var(--spacing-2xs) var(--spacing-s);
+}
+
+.controlsSpacer {
+  flex: 1;
 }
 
 .toggle {

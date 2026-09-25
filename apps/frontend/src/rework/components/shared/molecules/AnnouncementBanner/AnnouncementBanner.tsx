@@ -40,10 +40,20 @@ export const HIDE_TRANSITION_MS = 300;
 interface AnnouncementBannerProps {
   announcement: Announcement;
   /** Called once the exit animation has finished, not when it starts. */
-  onDismissed: (announcement: Announcement) => void;
+  onDismissed?: (announcement: Announcement) => void;
+  /**
+   * Render as a preview of the live banner — the admin page's list.
+   *
+   * Everything still renders, including the close button, because the point of
+   * the preview is to show exactly what users will get. Only the dismissal is
+   * neutered: collapsing a row in the admin list would leave a hole and say
+   * nothing useful. "More info" stays live, so an admin can check that their
+   * long description actually reads well before enabling the announcement.
+   */
+  preview?: boolean;
 }
 
-function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerProps) {
+function AnnouncementBanner({ announcement, onDismissed, preview = false }: AnnouncementBannerProps) {
   const { t, i18n } = useTranslation();
   const [hiding, setHiding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -57,8 +67,9 @@ function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerPro
   // prefers-reduced-motion the transition never fires an end event (the
   // collapse snaps), while the timeout removes the node either way.
   const dismiss = () => {
+    if (preview) return;
     setHiding(true);
-    window.setTimeout(() => onDismissed(announcement), HIDE_TRANSITION_MS);
+    window.setTimeout(() => onDismissed?.(announcement), HIDE_TRANSITION_MS);
   };
 
   return (
@@ -84,7 +95,13 @@ function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerPro
             </div>
             <div className={styles.actions}>
               {long && (
-                <Button color="on-surface" variant="text" size="small" onClick={() => setDialogOpen(true)}>
+                <Button
+                  color="on-surface"
+                  variant="text"
+                  size="small"
+                  className={styles.actionButton}
+                  onClick={() => setDialogOpen(true)}
+                >
                   {t("rework.announcements.banner.moreInfo")}
                 </Button>
               )}
@@ -92,6 +109,7 @@ function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerPro
                 <IconButton
                   size="small"
                   variant="icon"
+                  className={styles.actionButton}
                   icon={{ category: "outlined", type: "close" }}
                   aria-label={t("rework.announcements.banner.dismiss")}
                   onClick={dismiss}

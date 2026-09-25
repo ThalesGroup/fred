@@ -165,6 +165,26 @@ describe("AnnouncementBanner", () => {
     expect(el.querySelector('[aria-label="rework.announcements.banner.dismiss"]')).toBeNull();
   });
 
+  it("keeps the close button but does nothing on click in preview mode", () => {
+    // The admin list renders the real banner so the preview is trustworthy —
+    // the close button has to be visible (users will have one) without
+    // collapsing the row it sits in.
+    vi.useFakeTimers();
+    const onDismissed = vi.fn();
+    const el = render(<AnnouncementBanner announcement={announcement()} onDismissed={onDismissed} preview />);
+    const close = el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.banner.dismiss"]');
+
+    expect(close).not.toBeNull();
+    act(() => close!.click());
+    act(() => void vi.advanceTimersByTime(HIDE_TRANSITION_MS * 2));
+
+    expect(onDismissed).not.toHaveBeenCalled();
+    // The collapse never starts: assert on the wrapper, not on any
+    // aria-hidden in the subtree — the severity icon carries one too.
+    expect(el.firstElementChild?.getAttribute("aria-hidden")).toBeNull();
+    expect(el.textContent).toContain("Scheduled maintenance");
+  });
+
   it("reports the dismissal only once the collapse has finished", () => {
     vi.useFakeTimers();
     const onDismissed = vi.fn();
@@ -172,8 +192,10 @@ describe("AnnouncementBanner", () => {
     const close = el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.banner.dismiss"]');
 
     act(() => close!.click());
-    // The exit is playing: hidden from assistive tech, still reported to no one.
-    expect(el.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    // The exit is playing: the WRAPPER goes aria-hidden (querying the subtree
+    // would match the severity icon and prove nothing), and nothing is
+    // reported yet.
+    expect(el.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
     expect(onDismissed).not.toHaveBeenCalled();
 
     act(() => void vi.advanceTimersByTime(HIDE_TRANSITION_MS));

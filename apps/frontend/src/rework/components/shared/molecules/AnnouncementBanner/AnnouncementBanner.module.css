@@ -39,49 +39,62 @@
   overflow: hidden;
 }
 
-/* The accent reads as a left rule plus the icon, not a flooded background:
-   several of these can stack, and four saturated full-width strips at the top
-   of the app would be unreadable. */
+/* Severity drives the whole strip: the container role fills the background and
+   its `on-` pair colours every glyph on top of it — icon, title, markdown and
+   both action buttons. No border: the filled container already separates the
+   banner from the page, and a rule on top of it only adds noise. */
 .banner {
   display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-  border-bottom: 1px solid var(--outline-variant);
-  border-left: 3px solid var(--banner-accent);
-  background: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-xl);
-  color: var(--on-surface);
+  align-items: center;
+  gap: var(--spacing-m);
+  background: var(--banner-container);
+  padding: var(--spacing-xs) var(--spacing-xl);
+  color: var(--banner-on-container);
   font: var(--font-body-medium);
 }
 
-/* Same severity → accent mapping as Toast and UploadWarningBanner, for
-   cross-surface consistency. */
-.banner[data-severity="success"] {
-  --banner-accent: var(--success);
-}
-.banner[data-severity="error"] {
-  --banner-accent: var(--error);
-}
 .banner[data-severity="warning"] {
-  --banner-accent: var(--warning);
+  --banner-container: var(--warning-container);
+  --banner-on-container: var(--on-warning-container);
+  --banner-hover: var(--state-on-warning-container-hover);
+  --banner-pressed: var(--state-on-warning-container-pressed);
 }
+
+.banner[data-severity="error"] {
+  --banner-container: var(--error-container);
+  --banner-on-container: var(--on-error-container);
+  --banner-hover: var(--state-on-error-container-hover);
+  --banner-pressed: var(--state-on-error-container-pressed);
+}
+
+.banner[data-severity="success"] {
+  --banner-container: var(--success-container);
+  --banner-on-container: var(--on-success-container);
+  --banner-hover: var(--state-on-success-container-hover);
+  --banner-pressed: var(--state-on-success-container-pressed);
+}
+
 .banner[data-severity="info"] {
-  --banner-accent: var(--secondary);
+  --banner-container: var(--info-container);
+  --banner-on-container: var(--on-info-container);
+  --banner-hover: var(--state-on-info-container-hover);
+  --banner-pressed: var(--state-on-info-container-pressed);
 }
 
 .icon {
   display: inline-flex;
   flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--banner-accent);
-  font-size: 1.125rem;
+  font-size: 1.25rem;
 }
 
+/* The two texts belong together, so they get the tight rhythm; the wide gap
+   above separates them from the actions, which are a different kind of thing
+   (gestalt proximity — a single uniform gap would read as one flat row). */
 .text {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--spacing-3xs);
   min-width: 0;
 }
 
@@ -100,7 +113,25 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-3xs);
+}
+
+/* The atoms colour themselves from their own `color` prop, which knows nothing
+   about the container they sit on. Override their documented custom-property
+   seam instead so both buttons take the banner's `on-` pair, state layers
+   included — the layer colour must be the majority content colour, never a
+   generic surface tone. The `[data-severity]` attribute is there to outrank
+   the atoms' own `.btn-<color>.btn-<variant>` rules. */
+.banner[data-severity] .actionButton {
+  --btn-text-color: var(--banner-on-container);
+}
+
+.banner[data-severity] .actionButton:hover:not(:disabled) {
+  --btn-background-surface: var(--banner-hover);
+}
+
+.banner[data-severity] .actionButton:active:not(:disabled) {
+  --btn-background-surface: var(--banner-pressed);
 }
 
 @media (prefers-reduced-motion: reduce) {
