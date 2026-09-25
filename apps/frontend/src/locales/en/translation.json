@@ -226,6 +226,10 @@
         }
       }
     },
+    "open_writable_document": {
+      "name": "Open a workspace document",
+      "description": "Demo: copy a Markdown file from a Deep agent's conversation workspace into the editable document panel. Enable Writable Documents too."
+    },
     "writable_document": {
       "name": "Generate a text document (Word)",
       "description": "Ability to edit and generate a downloadable text document.",
