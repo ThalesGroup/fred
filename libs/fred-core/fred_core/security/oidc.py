@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Mapping, Sequence
 from typing import Any, Dict, Tuple
 from uuid import UUID
 
@@ -44,6 +45,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     PrincipalContext,
     SecurityConfiguration,
+    UserClaims,
     UserSecurity,
     is_service_agent,
 )
@@ -82,6 +84,7 @@ KEYCLOAK_CLIENT_ID = ""
 USER_AUDIENCE = ""
 USER_ISSUER = ""
 USER_TOKEN_ENDPOINT = ""
+USER_SECURITY_CONFIG: UserSecurity | None = None
 # Every address the realm is configured under: tokens minted at the machine-to-
 # machine address carry that issuer. Set by apply_security_profile.
 _REALM_ISSUERS: frozenset[str] = frozenset()
@@ -148,6 +151,7 @@ def initialize_user_security(config: UserSecurity) -> None:
         USER_AUDIENCE, \
         USER_ISSUER, \
         USER_TOKEN_ENDPOINT, \
+        USER_SECURITY_CONFIG, \
         _JWKS_CLIENT
 
     realm_url = str(config.realm_url).rstrip("/")
@@ -164,6 +168,7 @@ def initialize_user_security(config: UserSecurity) -> None:
     KEYCLOAK_JWKS_URL = endpoints.jwks_uri
     USER_ISSUER = endpoints.issuer
     USER_TOKEN_ENDPOINT = endpoints.token_endpoint
+    USER_SECURITY_CONFIG = config
     _JWKS_CLIENT = None  # reset; will lazy-create on first decode
 
     if config.provider == "keycloak":
@@ -371,6 +376,14 @@ def _token_audiences(value: object) -> frozenset[str]:
     return frozenset()
 
 
+def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | None:
+    """Read a verified JWT claim by its configured sequence of keys."""
+    value: object = payload
+    for key in path:
+        value = value.get(key) if isinstance(value, Mapping) else None
+    return value
+
+
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -512,10 +525,18 @@ def decode_jwt(token: str) -> KeycloakUser:
             )
 
     # Extract client roles
-    client_roles = []
-    if "resource_access" in payload:
-        client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
-        client_roles = client_data.get("roles", [])
+    claims = USER_SECURITY_CONFIG.claims if USER_SECURITY_CONFIG else UserClaims()
+    roles_path = (
+        USER_SECURITY_CONFIG.roles_claim
+        if USER_SECURITY_CONFIG and USER_SECURITY_CONFIG.roles_claim
+        else ("resource_access", KEYCLOAK_CLIENT_ID, "roles")
+    )
+    roles_value = _claim_path(payload, roles_path)
+    client_roles = (
+        [role for role in roles_value if isinstance(role, str)]
+        if isinstance(roles_value, list)
+        else []
+    )
     caller_roles = read_caller_roles(payload)
     # Keycloak names the client in azp; RFC 9068 access tokens in client_id.
     client_id = payload.get("azp") or payload.get("client_id")
@@ -548,11 +569,17 @@ def decode_jwt(token: str) -> KeycloakUser:
             headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
         )
 
+    username_value = _claim_path(payload, (claims.username,))
+    email_value = _claim_path(payload, (claims.email,))
+    given_name_value = _claim_path(payload, (claims.given_name,))
+    family_name_value = _claim_path(payload, (claims.family_name,))
     user = KeycloakUser(
         uid=sub,
-        username=payload.get("preferred_username", ""),
+        username=username_value if isinstance(username_value, str) else "",
         roles=client_roles,
-        email=payload.get("email"),
+        email=email_value if isinstance(email_value, str) else None,
+        first_name=given_name_value if isinstance(given_name_value, str) else None,
+        last_name=family_name_value if isinstance(family_name_value, str) else None,
         client_id=client_id,
         token_issuer=payload.get("iss"),
         token_audiences=audiences,

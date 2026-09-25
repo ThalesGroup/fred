@@ -35,6 +35,7 @@ from fastapi import HTTPException
 
 from fred_core.security import delegation, oidc
 from fred_core.security.delegation import DelegationConfig
+from fred_core.security.structure import UserClaims, UserSecurity, is_service_agent
 
 _REALM = "http://localhost:8080/realms/app"
 _CLIENT = "app"
@@ -142,6 +143,77 @@ def test_strict_accepts_exact_issuer_and_audience(_rsa_keypair):
     assert "token_issuer" not in user.model_dump()
     assert "token_audiences" not in user.model_dump()
     assert "token_type" not in user.model_dump()
+
+
+def test_configured_claims_and_flat_roles_are_read_from_the_verified_token(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=_REALM,
+            client_id=_CLIENT,
+            roles_claim=["roles"],
+            claims=UserClaims(
+                username="upn",
+                email="mail",
+                given_name="givenName",
+                family_name="surname",
+            ),
+        ),
+    )
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            upn="alice@example.test",
+            mail="alice@example.test",
+            givenName="Alice",
+            surname="Example",
+            roles=["service_agent"],
+            resource_access={_CLIENT: {"roles": ["viewer"]}},
+        )
+    )
+
+    assert user.username == "alice@example.test"
+    assert user.email == "alice@example.test"
+    assert user.first_name == "Alice"
+    assert user.last_name == "Example"
+    assert user.roles == ["service_agent"]
+    assert is_service_agent(user)
+    assert "Alice" not in repr(user)
+    assert "Example" not in repr(user)
+    assert "first_name" not in user.model_dump()
+    assert "last_name" not in user.model_dump()
+
+
+def test_default_claims_keep_keycloak_role_and_name_paths(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_SECURITY_CONFIG", None)
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            email="alice@example.test",
+            given_name="Alice",
+            family_name="Example",
+            resource_access={_CLIENT: {"roles": ["viewer"]}},
+        )
+    )
+
+    assert user.username == "alice"
+    assert user.email == "alice@example.test"
+    assert user.first_name == "Alice"
+    assert user.last_name == "Example"
+    assert user.roles == ["viewer"]
 
 
 def test_strict_uses_a_separate_api_audience(
