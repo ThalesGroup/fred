@@ -23,7 +23,6 @@ from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
-    _build_conversation_backend,
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
     build_conversation_filesystem,
@@ -161,6 +160,7 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
     filesystem = ConversationFilesystemService(
         LocalFilesystem(str(tmp_path)), "conversation-a"
     )
+    backend, permissions = build_conversation_filesystem(filesystem)
     agent = _create_compiled_deep_agent(
         model=model,
         tools=[],
@@ -168,7 +168,8 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
         checkpointer=InMemorySaver(),
         middleware=middleware(),
         subagent_middleware=middleware(child=True),
-        backend=_build_conversation_backend(filesystem),
+        backend=backend,
+        permissions=permissions,
     )
 
     updates = await _drive(agent)

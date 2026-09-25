@@ -9,24 +9,23 @@ factory so any agent pod is just a registry and a YAML file away from running.
 
 ## Where `fred-runtime` fits
 
-Fred follows a strict three-layer model:
-
 ```
-fred-core          Pure utilities — model factories, embeddings, logging, KPI store
-     │
-fred-sdk           Execution engine + authoring surface (pip-installable, no infra)
-     │              ReAct runtime, Graph runtime, agent contracts, tool abstractions
-     │
-fred-runtime       Platform adapters + pod factory (this package)
-                    SQL checkpointer, MCP wiring, LLM routing, OpenAI-compat surface,
-                    FastAPI app factory, observability, security middleware
+fred-pod                    configuration, identity, naming
+└── fred-sdk                authoring contracts
+    └── [agents]            + fred-core, langchain, langgraph
+        └── fred-runtime    execution, MCP, model routing    ← this package
+            └── [app]       + the FastAPI pod factory        → an agent pod
 ```
 
 **Rule of thumb:**
 
-- Write agent logic in `fred-sdk`.
+- Write agent logic against `fred-sdk`.
 - Write infrastructure adapters (DB, MCP server, Keycloak, object store) in `fred-runtime`.
 - `fred-sdk` must stay importable on a bare laptop with no services running.
+
+A Knowledge Base pod does not need this package. What a pod is, and which
+package each kind installs:
+[fred-pod](https://github.com/ThalesGroup/fred/tree/swift/libs/fred-pod).
 
 ---
 
@@ -235,16 +234,23 @@ if __name__ == "__main__":
 **`registry.py`**
 
 ```python
-from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk import ReActAgent
 
-class MyAgent(ReActAgentDefinition):
-    agent_id = "my-agent"
-    ...
+class MyAgent(ReActAgent):
+    agent_id: str = "acme.my.assistant"
+    role: str = "Assistant"
+    description: str = "Answers general questions."
+    system_prompt_template: str = "You are a concise assistant."
 
-REGISTRY = {MyAgent.agent_id: MyAgent()}
+MY_AGENT = MyAgent()
+
+REGISTRY = {MY_AGENT.agent_id: MY_AGENT}
 ```
 
-See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a working reference pod.
+How to write agents and their tools: the
+[fred-sdk README](https://github.com/ThalesGroup/fred/tree/swift/libs/fred-sdk).
+[fred-samples](https://github.com/fred-agent/fred-samples/tree/swift/agents) is a
+working pod with several agents.
 
 ---
 
@@ -252,9 +258,9 @@ See [fred-samples](https://github.com/ThalesGroup/fred-samples) for a working re
 
 | Package        | PyPI                                           | Role                                                                          |
 | -------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
-| `fred-pod`     | [pypi](https://pypi.org/project/fred-pod/)     | Pod floor — configuration, identity, naming                                   |
-| `fred-core`    | [pypi](https://pypi.org/project/fred-core/)    | Pure utilities — logging, model factories, embeddings, portable observability |
-| `fred-sdk`     | [pypi](https://pypi.org/project/fred-sdk/)     | Agent authoring — ReAct, Graph, tool contracts                                |
+| `fred-pod`     | [pypi](https://pypi.org/project/fred-pod/)     | What every pod shares — configuration, identity, naming                       |
+| `fred-core`    | [pypi](https://pypi.org/project/fred-core/)    | The agents platform — stores, model providers, logging, observability         |
+| `fred-sdk`     | [pypi](https://pypi.org/project/fred-sdk/)     | Authoring — agents, tools, Knowledge Bases                                    |
 | `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | This package                                                                  |
 
 ---

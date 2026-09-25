@@ -159,6 +159,7 @@ def _compile_deep_agent(
             child=True,
         ),
         backend=StateBackend(),
+        permissions=[],
     )
 
 
@@ -739,6 +740,7 @@ def _native_agent(
         middleware=frame(),
         subagent_middleware=frame(child=True),
         backend=backend if backend is not None else StateBackend(),
+        permissions=[],
     )
 
 
@@ -821,7 +823,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
         "grep",
     }
     storage = LocalFilesystem(str(tmp_path))
-    backend = deep_mod._build_conversation_backend(
+    backend, _ = deep_mod.build_conversation_filesystem(
         ConversationFilesystemService(storage, "conversation-a")
     )
     model = _NativeModel(
@@ -914,7 +916,7 @@ async def test_native_children_parent_and_fresh_graph_share_scratchpad(
             ]
         },
     )
-    fresh_backend = deep_mod._build_conversation_backend(
+    fresh_backend, _ = deep_mod.build_conversation_filesystem(
         ConversationFilesystemService(storage, "conversation-a")
     )
     fresh_agent = _native_agent(

@@ -829,7 +829,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.1.0"
+version = "4.1.1"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

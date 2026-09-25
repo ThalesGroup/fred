@@ -42,7 +42,9 @@ import fred_runtime.deep.deep_runtime as deep_mod
 import fred_runtime.react.react_runtime as react_mod
 import pytest
 from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -52,8 +54,23 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import tool
 
 _CTX_MARKER = "CTXPROMPT-always-respond-in-spanish"
+
+
+@tool
+def capability_direct(query: str) -> str:
+    """Capability-only direct tool."""
+
+    return query
+
+
+@tool
+def capability_middleware(query: str) -> str:
+    """Capability-only middleware tool."""
+
+    return query
 
 
 def _binding() -> BoundRuntimeContext:
@@ -152,6 +169,43 @@ async def test_react_build_executor_injects_context_prompt_into_compiled_agent(
     assert captured["system_prompt"].index("BASE-TEMPLATE") < captured[
         "system_prompt"
     ].index(_CTX_MARKER)
+
+
+@pytest.mark.asyncio
+async def test_react_uses_one_complete_capability_tool_name_inventory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured["compiled_names"] = kwargs["available_tool_names"]
+        return object()
+
+    monkeypatch.setattr(react_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(react_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(react_mod, "_create_compiled_react_agent", _fake_compile)
+    block = CapabilityAgentBlock(
+        middleware=(
+            ToolCarrierMiddleware(
+                (capability_direct, capability_middleware),
+                capability_id="test.capability",
+            ),
+        ),
+        hitl={},
+        tools=(capability_direct,),
+    )
+    runtime = react_mod.ReActRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=block,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    executor = await runtime.build_executor(_binding())
+
+    expected = ("capability_direct", "capability_middleware")
+    assert captured["compiled_names"] == expected
+    assert executor._available_tool_names == frozenset(expected)  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

@@ -541,6 +541,7 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             middleware=middleware,
             checkpointer=InMemorySaver(),
             backend=StateBackend(),
+            permissions=[],
         )
     result = await agent.ainvoke(
         {"messages": [HumanMessage(content="go")]},

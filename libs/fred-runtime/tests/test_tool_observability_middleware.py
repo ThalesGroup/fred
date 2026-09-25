@@ -53,6 +53,9 @@ from fred_runtime.deep.deep_runtime import (
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
 )
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -75,6 +78,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolApprovalPolicy
 from langchain.agents import create_agent
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
@@ -666,6 +670,63 @@ async def test_reverify_team_authorization_allows_when_rebac_grants() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recovered_call_reaches_rebac_before_fake_tool_invocation() -> None:
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    recovery = ToolCallTextRecoveryMiddleware()
+    model_response = ModelResponse(
+        result=[
+            AIMessage(
+                content=[
+                    {"type": "text", "text": native_capability_tool.name},
+                    {"type": "reference", "reference_ids": []},
+                    {"type": "text", "text": '{"question":"what is fred"}'},
+                ],
+                response_metadata={"model_name": "mistral-medium-latest"},
+            )
+        ]
+    )
+
+    async def model_handler(_: ModelRequest) -> ModelResponse:
+        return model_response
+
+    normalized = await recovery.awrap_model_call(
+        ModelRequest(
+            model=cast(Any, None), messages=[], tools=[native_capability_tool]
+        ),
+        model_handler,
+    )
+    message = normalized.result[0]
+    assert isinstance(message, AIMessage)
+    (call,) = message.tool_calls
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = ToolCallRequest(
+        tool_call=call,
+        tool=native_capability_tool,
+        state={"messages": [message]},
+        runtime=cast(Any, None),
+    )
+    handler_called = False
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        nonlocal handler_called
+        assert engine.calls == [("user-1", "team-1")]
+        handler_called = True
+        return ToolMessage(
+            content="fake result",
+            name=req.tool_call["name"],
+            tool_call_id=req.tool_call["id"],
+        )
+
+    with _with_rebac_engine(engine):
+        result = await middleware.awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert handler_called is True
+    assert engine.calls == [("user-1", "team-1")]
+    assert result.tool_call_id == call["id"]
+
+
+@pytest.mark.asyncio
 async def test_reverify_team_authorization_skips_when_rebac_disabled() -> None:
     """A Noop/disabled engine (identity-only dev posture) must not block
     anything — mirrors the same skip `_authorize_execution_or_raise` applies
@@ -1009,6 +1070,7 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             subagent_middleware=[],
             middleware=[carrier, *middleware],
             backend=StateBackend(),
+            permissions=[],
         )
     else:
         agent = create_agent(

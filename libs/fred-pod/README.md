@@ -1,42 +1,83 @@
 # fred-pod
 
-What a Fred component needs to *be* a pod: **configuration, identity, naming**.
+A **Fred pod** is a program you deploy next to Fred to contribute something to
+it: agents a team can chat with, or documents kept in sync from an outside
+source. Whatever it contributes, every pod does the same three things:
 
-A Knowledge Base pod, a capability pod, an MCP server pod and an agent pod all read a
-`configuration.yaml`, get a machine-to-machine token, and name things under a prefix they
-own. That floor is this distribution.
+- it reads **one `configuration.yaml`**, with secrets in the environment only;
+- it authenticates to Fred **as a workload**, with its own Keycloak client;
+- it **names** what it contributes under a prefix its contributor owns.
 
-| Question | Answer |
-| --- | --- |
-| What do I need to *run* a Fred component? | `fred-pod` |
-| What do I need to *build an agent*? | `fred-core` / `fred-sdk` |
+`fred-pod` is that shared floor. You rarely install it yourself: `fred-sdk`
+brings it in.
 
-## Why it is its own distribution
+## Which pod are you building?
 
-`fred-core` declares 31 runtime dependencies — pandas, pyarrow, google-cloud-storage, minio,
-opensearch-py, sqlalchemy, asyncpg, azure-identity, fastapi, and a client for every LLM
-provider. That is the right list for the agents/LLM platform `fred-core` is. It is the wrong
-list for a pod whose job is one PROPFIND and a few GETs.
+| You want to… | You build | Install | Working example |
+| --- | --- | --- | --- |
+| give teams agents to chat with | an **agent pod**: an HTTP service serving a registry of agents | `fred-runtime[app]` | [`fred-samples/agents`](https://github.com/fred-agent/fred-samples/tree/swift/agents) |
+| keep a team's library in sync with an outside source | a **Knowledge Base pod**: no inbound port; `publish` declares it, `run` serves the runs Fred schedules | `fred-sdk[knowledge-base]` | [`fred-samples/knowledge-bases`](https://github.com/fred-agent/fred-samples/tree/swift/knowledge-bases) |
+| add tools to agents that already run | a **capability package** — not a pod: it is installed into an agent pod | `fred-sdk[agents]` | [`libs/capabilities`](https://github.com/ThalesGroup/fred/tree/swift/libs/capabilities) |
 
-Extras were the obvious alternative and were rejected for one reason: **a boundary the build
-does not enforce erodes.** `fred-core` reached 31 dependencies precisely because nothing
-stopped it. Nothing would stop an `import pandas` landing in `structures.py` next month
-either, and nobody would notice. A separate distribution cannot import what it does not
-depend on — the rule keeps itself.
+The authoring guides are in the
+[`fred-sdk`](https://github.com/ThalesGroup/fred/tree/swift/libs/fred-sdk) and
+[`fred-runtime`](https://github.com/ThalesGroup/fred/tree/swift/libs/fred-runtime)
+READMEs.
 
-It showed its worth immediately: `config_loader.py` has always done `import yaml`, and
-`fred-core` never declared PyYAML. It worked because something else happened to pull it in.
-Here it is declared, because here it had to be.
+## How the packages stack
 
-## The dependency list is the contract
+```
+fred-pod                    configuration, identity, naming
+└── fred-sdk                authoring contracts (base: fred-pod + pydantic + httpx)
+    ├── [knowledge-base]    + the workflow engine          → a Knowledge Base pod
+    └── [agents]            + fred-core, langchain, langgraph
+        └── fred-runtime    execution, MCP, model routing
+            └── [app]       + the FastAPI pod factory      → an agent pod
+```
+
+`fred-core` is the agents platform behind `[agents]`: stores, model providers,
+observability. It depends on `fred-pod` too, and is never needed by a
+Knowledge Base pod.
+
+## What every pod shares
+
+**Configuration.** `configuration.yaml` is found through `$CONFIG_FILE`, and
+the `.env` next to it through `$ENV_FILE`. The environment carries secrets and
+nothing else, so a Kubernetes ConfigMap and a local file differ only in where
+they are mounted.
+
+```python
+from fred_pod import ConfigFiles, load_configuration_with_config_files
+```
+
+**Identity.** `security.m2m` gives the pod's Keycloak `realm_url` and
+`client_id`, and `secret_env_var` names *which environment variable* holds the
+client secret; the value itself never appears in the YAML. `M2MTokenProvider`
+exchanges it for a token, caches it and refreshes it before it expires.
+
+**Naming.** Everything a pod contributes has a dotted name under a prefix its
+contributor owns: `fred.samples.local-folder`, `acme.support.router`. Fred
+claims the prefix for the first client that publishes under it, so no central
+registry is needed. `require_contributed_name` and `prefix_covers` check the
+rule.
+
+## Why a separate package
+
+A Knowledge Base pod whose whole job is a few HTTP calls should not install the
+agents platform, and `fred-core` carries all of it: database drivers, object
+stores, a client for every LLM provider. So the floor every pod needs lives
+here, and its dependency list is the contract:
 
 ```
 pydantic   python-dotenv   pyyaml   httpx
 ```
 
-Four packages. Adding a fifth is a decision someone makes on purpose, in a diff, and that is
-the whole point. If a change to this library needs a heavier import, the change belongs in
-`fred-core`, not here.
+A fifth dependency is a deliberate decision made in a diff. If a change needs
+something heavier, it belongs in `fred-core`.
+
+The module paths mirror `fred_core`'s, and `fred-core` re-exports every name
+that moved here, so existing imports keep working. New code imports from
+`fred_pod`.
 
 ## Layout
 
@@ -50,20 +91,6 @@ fred_pod/
 └── security/
     ├── structure.py                security configuration models, KeycloakUser
     └── backend_to_backend_auth.py  M2M token provider and httpx auth
-```
-
-The paths mirror `fred_core`'s on purpose: a call site migrates by swapping the prefix
-`fred_core.` → `fred_pod.` and nothing else.
-
-## Compatibility
-
-`fred-core` depends on `fred-pod` and re-exports every name it moved, at both the package
-top level and the original submodule paths. Existing code keeps working unchanged; imports
-migrate opportunistically.
-
-```python
-from fred_pod import ConfigFiles, KeycloakUser, M2MTokenProvider
-from fred_pod.common.naming import require_contributed_name
 ```
 
 ## Development
