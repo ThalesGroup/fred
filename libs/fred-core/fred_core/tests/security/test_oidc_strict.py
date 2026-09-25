@@ -23,7 +23,9 @@ resolution.
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from collections.abc import Iterator
 from types import SimpleNamespace
 
@@ -214,6 +216,136 @@ def test_default_claims_keep_keycloak_role_and_name_paths(
     assert user.first_name == "Alice"
     assert user.last_name == "Example"
     assert user.roles == ["viewer"]
+
+
+def test_keycloak_keeps_a_non_uuid_identity_unchanged(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_SECURITY_CONFIG", None)
+
+    user = oidc.decode_jwt(
+        _token(private_key, iss=_REALM, aud=_CLIENT, sub="legacy-subject")
+    )
+
+    assert user.uid == "legacy-subject"
+
+
+def test_configured_keycloak_identity_claim_is_used(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=_REALM,
+            client_id=_CLIENT,
+            claims=UserClaims(uid="employee_id"),
+        ),
+    )
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            sub="unused-subject",
+            employee_id="employee-42",
+        )
+    )
+
+    assert user.uid == "employee-42"
+
+
+def test_oidc_uuid_claim_is_used_unchanged(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    identity = "7eb6ce18-77f9-4d04-bd97-2fcf82109703"
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=_REALM,
+            client_id=_CLIENT,
+            provider="oidc",
+            claims=UserClaims(uid="oid"),
+        ),
+    )
+
+    user = oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT, oid=identity))
+
+    assert user.uid == identity
+
+
+def test_oidc_non_uuid_identity_matches_the_shared_vector(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    vector_path = (
+        Path(__file__).resolve().parents[5] / "validation/fixtures/oidc_uid_vector.json"
+    )
+    vector = json.loads(vector_path.read_text())
+    issuer = vector["issuer"]
+    monkeypatch.setattr(oidc, "KEYCLOAK_URL", issuer)
+    monkeypatch.setattr(oidc, "USER_ISSUER", issuer)
+    monkeypatch.setattr(oidc, "_REALM_ISSUERS", frozenset({issuer}))
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(realm_url=f"{issuer}/", client_id=_CLIENT, provider="oidc"),
+    )
+
+    first = oidc.decode_jwt(
+        _token(private_key, iss=issuer, aud=_CLIENT, sub=vector["value"])
+    )
+    second = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=issuer,
+            aud=_CLIENT,
+            sub=vector["value"],
+            azp="another-caller",
+        )
+    )
+
+    assert first.uid == second.uid == vector["expected_uuid"]
+
+
+def test_blank_oidc_identity_is_rejected(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(realm_url=_REALM, client_id=_CLIENT, provider="oidc"),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT, sub=" "))
+    assert exc.value.status_code == 401
+
+
+def test_missing_configured_identity_claim_is_rejected(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=_REALM,
+            client_id=_CLIENT,
+            provider="oidc",
+            claims=UserClaims(uid="oid"),
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+    assert exc.value.status_code == 401
 
 
 def test_strict_uses_a_separate_api_audience(
