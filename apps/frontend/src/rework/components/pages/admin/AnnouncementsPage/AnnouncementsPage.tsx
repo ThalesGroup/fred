@@ -61,6 +61,10 @@ export default function AnnouncementsPage() {
   const [serverError, setServerError] = useState<string | undefined>();
 
   const enabledCount = announcements.filter((announcement) => announcement.enabled).length;
+  // The empty state carries its own call to action, front and centre. Leaving
+  // the header button beside it offers the same thing twice and splits the
+  // admin's attention between two identical buttons.
+  const isEmpty = !isLoading && announcements.length === 0;
 
   const onSave = async (payload: AnnouncementWriteRequest) => {
     try {
@@ -123,13 +127,15 @@ export default function AnnouncementsPage() {
         title={t("rework.announcements.page.title")}
         subtitle={t("rework.announcements.page.subtitle", { count: enabledCount })}
         actions={
-          <Button color="primary" variant="filled" size="medium" onClick={() => setEditing(null)}>
-            {t("rework.announcements.page.create")}
-          </Button>
+          isEmpty ? undefined : (
+            <Button color="primary" variant="filled" size="medium" onClick={() => setEditing(null)}>
+              {t("rework.announcements.page.create")}
+            </Button>
+          )
         }
       />
 
-      {!isLoading && announcements.length === 0 ? (
+      {isEmpty ? (
         <PageEmptyState
           icon="campaign"
           message={t("rework.announcements.page.empty")}

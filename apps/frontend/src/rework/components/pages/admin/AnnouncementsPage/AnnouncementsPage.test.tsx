@@ -162,6 +162,21 @@ describe("AnnouncementsPage", () => {
     expect(document.body.textContent).not.toContain("rework.announcements.row.disableHint");
   });
 
+  it("offers the create action once, not twice, on an empty page", () => {
+    // The empty state already puts the call to action front and centre; the
+    // header button beside it would be the same button, said twice.
+    const creates = (el: HTMLElement) =>
+      [...el.querySelectorAll("button")].filter((b) => b.textContent?.includes("rework.announcements.page.create"));
+
+    expect(creates(render())).toHaveLength(1);
+
+    act(() => root?.unmount());
+    container?.remove();
+    listMock.mockReturnValue({ data: [announcement()], isLoading: false });
+
+    expect(creates(render())).toHaveLength(1);
+  });
+
   it("toggles through the dedicated enabled endpoint, not a content update", () => {
     listMock.mockReturnValue({ data: [announcement()], isLoading: false });
     const el = render();
