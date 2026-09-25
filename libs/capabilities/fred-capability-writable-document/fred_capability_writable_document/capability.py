@@ -136,8 +136,78 @@ _WRITE_INSTRUCTIONS = (
     "'write_document' tool; never write the deliverable itself in the chat. "
     "The tool opens the document in a side-by-side editor where the user can "
     "review, edit, and export it. In the chat, reply only with a short "
-    "summary of what you put in the document."
+    "summary of what you put in the document. If the finished Markdown already "
+    "exists in the conversation workspace and the open_writable_document tool "
+    "is available, use that tool instead of retyping the file content."
 )
+
+
+async def save_writable_document(
+    *,
+    session_id: str | None,
+    user_id: str,
+    title: str,
+    content_markdown: str,
+    document_id: str | None = None,
+    tool_ref: str = _TOOL_REF,
+) -> tuple[str, ToolInvocationResult]:
+    """Persist and publish one document through the existing editor contract."""
+
+    if not session_id:
+        return (
+            "Cannot save the document: no active session.",
+            ToolInvocationResult(tool_ref=tool_ref, is_error=True),
+        )
+
+    store = get_writable_document_store()
+    doc_id = document_id
+    if doc_id is None:
+        try:
+            existing = await store.list_for_session(session_id)
+        except Exception:
+            logger.exception(
+                "[WRITABLE_DOC][TOOL] failed to list documents for session=%s",
+                session_id,
+            )
+            existing = []
+        match = next(
+            (d for d in existing if (d.title or "").strip() == title.strip()),
+            None,
+        )
+        if match is not None:
+            doc_id = match.document_id
+    if doc_id is None:
+        doc_id = new_document_id()
+
+    stored = await store.upsert(
+        WritableDocumentRecord(
+            session_id=session_id,
+            document_id=doc_id,
+            user_id=user_id,
+            title=title,
+            content_md=content_markdown,
+            updated_by="agent",
+        )
+    )
+    part = WritableDocumentPart(
+        document_id=stored.document_id,
+        title=stored.title,
+        content_md=stored.content_md,
+        updated_at=stored.updated_at or datetime.now(timezone.utc),
+        updated_by="agent",
+    )
+    logger.info(
+        "[WRITABLE_DOC][TOOL] session=%s document_id=%s title=%r len=%d",
+        session_id,
+        doc_id,
+        title[:80],
+        len(content_markdown),
+    )
+    artifact = ToolInvocationResult(
+        tool_ref=tool_ref,
+        ui_parts=(cast(UiPart, part),),
+    )
+    return f"Document '{title}' saved (id={doc_id}).", artifact
 
 
 class _WritableDocumentMiddleware(AgentMiddleware):
@@ -175,68 +245,13 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             previous content, it is not appended).
             """
 
-            if not session_id:
-                # No active session to scope the document to — fail gracefully so
-                # the model gets a usable message instead of a crash.
-                return (
-                    "Cannot save the document: no active session.",
-                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
-                )
-
-            store = get_writable_document_store()
-            doc_id = document_id
-            if doc_id is None:
-                # Deterministic de-dup safety net: if a document with the same title
-                # already exists in this session, revise it instead of creating a
-                # duplicate. Agents reliably reuse the title when revising but sometimes
-                # omit document_id; without this they would spawn a second editor tab.
-                try:
-                    existing = await store.list_for_session(session_id)
-                except Exception:
-                    logger.exception(
-                        "[WRITABLE_DOC][TOOL] failed to list documents for session=%s",
-                        session_id,
-                    )
-                    existing = []
-                match = next(
-                    (d for d in existing if (d.title or "").strip() == title.strip()),
-                    None,
-                )
-                if match is not None:
-                    doc_id = match.document_id
-            if doc_id is None:
-                doc_id = new_document_id()
-
-            stored = await store.upsert(
-                WritableDocumentRecord(
-                    session_id=session_id,
-                    document_id=doc_id,
-                    user_id=user_id,
-                    title=title,
-                    content_md=content_markdown,
-                    updated_by="agent",
-                )
+            return await save_writable_document(
+                session_id=session_id,
+                user_id=user_id,
+                title=title,
+                content_markdown=content_markdown,
+                document_id=document_id,
             )
-
-            part = WritableDocumentPart(
-                document_id=stored.document_id,
-                title=stored.title,
-                content_md=stored.content_md,
-                updated_at=stored.updated_at or datetime.now(timezone.utc),
-                updated_by="agent",
-            )
-            logger.info(
-                "[WRITABLE_DOC][TOOL] session=%s document_id=%s title=%r len=%d",
-                session_id,
-                doc_id,
-                title[:80],
-                len(content_markdown),
-            )
-            artifact = ToolInvocationResult(
-                tool_ref=_TOOL_REF,
-                ui_parts=(cast(UiPart, part),),
-            )
-            return f"Document '{title}' saved (id={doc_id}).", artifact
 
         tools: Sequence[BaseTool] = [write_document]
         self.tools = tools
