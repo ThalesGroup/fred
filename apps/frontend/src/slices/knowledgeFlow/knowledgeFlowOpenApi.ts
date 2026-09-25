@@ -756,7 +756,7 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    getTabularDocumentsSchemas: build.query<GetTabularDocumentsSchemasApiResponse, GetTabularDocumentsSchemasApiArg>({
+    describeTabularDocuments: build.query<DescribeTabularDocumentsApiResponse, DescribeTabularDocumentsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/documents/schemas`,
         params: {
@@ -766,9 +766,6 @@ const injectedRtkApi = api.injectEndpoints({
           team_id: queryArg.teamId,
         },
       }),
-    }),
-    getTabularDocumentMarkdown: build.query<GetTabularDocumentMarkdownApiResponse, GetTabularDocumentMarkdownApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/documents/${queryArg.documentUid}/markdown` }),
     }),
     readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
       query: (queryArg) => ({
@@ -1552,9 +1549,9 @@ export type ListTabularDocumentsApiArg = {
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
 };
-export type GetTabularDocumentsSchemasApiResponse =
-  /** status 200 Successful Response */ TabularDocumentSchemaResponse[];
-export type GetTabularDocumentsSchemasApiArg = {
+export type DescribeTabularDocumentsApiResponse =
+  /** status 200 Successful Response */ TabularDocumentDescriptionResponse[];
+export type DescribeTabularDocumentsApiArg = {
   /** Document UIDs to describe (repeat the parameter for several documents). */
   documentUids: string[];
   /** Optional library tag IDs used to keep documents inside selected libraries. */
@@ -1563,12 +1560,6 @@ export type GetTabularDocumentsSchemasApiArg = {
   ownerFilter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
-};
-export type GetTabularDocumentMarkdownApiResponse =
-  /** status 200 Successful Response */ TabularDocumentMarkdownResponse;
-export type GetTabularDocumentMarkdownApiArg = {
-  /** Document UID of the spreadsheet to read */
-  documentUid: string;
 };
 export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
 export type ReadQueryApiArg = {
@@ -2616,8 +2607,16 @@ export type TabularDocumentListResponse = {
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
-  /** Every distinct non-null value observed for this column, only when its cardinality is low enough (see the ingestion threshold) to be useful as SQL-generation grounding — e.g. the exact stored casing of a status or severity column. None for high-cardinality or non-string columns. */
+  /** For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. */
+  is_categorical?: boolean | null;
+  /** For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. */
+  has_two_values?: boolean | null;
+  /** Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. */
   sample_values?: string[] | null;
+  /** Smallest finite non-null value of an integer or float column. None when unavailable. */
+  min_value?: number | number | null;
+  /** Largest finite non-null value of an integer or float column. None when unavailable. */
+  max_value?: number | number | null;
 };
 export type TabularTableSchema = {
   query_alias: string;
@@ -2627,16 +2626,13 @@ export type TabularTableSchema = {
   generated_at?: string | null;
   columns?: TabularColumnSchema[];
 };
-export type TabularDocumentSchemaResponse = {
+export type TabularDocumentDescriptionResponse = {
   document_uid: string;
   document_name: string;
   kind: "csv" | "spreadsheet";
+  markdown: string | null;
   tables?: TabularTableSchema[];
   source_tag?: string | null;
-};
-export type TabularDocumentMarkdownResponse = {
-  document_uid: string;
-  content: string;
 };
 export type RawSqlResponse = {
   sql_query: string;
@@ -2914,10 +2910,8 @@ export const {
   useCorpusTasksListMutation,
   useListTabularDocumentsQuery,
   useLazyListTabularDocumentsQuery,
-  useGetTabularDocumentsSchemasQuery,
-  useLazyGetTabularDocumentsSchemasQuery,
-  useGetTabularDocumentMarkdownQuery,
-  useLazyGetTabularDocumentMarkdownQuery,
+  useDescribeTabularDocumentsQuery,
+  useLazyDescribeTabularDocumentsQuery,
   useReadQueryMutation,
   useSearchTabularValuesMutation,
   useOsHealthQuery,

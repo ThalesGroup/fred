@@ -274,6 +274,67 @@ def test_parquet_export_mixed_type_column(run_export):
     assert df["Code"].astype(str).tolist() == ["59", "99", "CTRL"]
 
 
+def test_parquet_export_preserves_native_excel_booleans(run_export):
+    r = run_export(
+        [
+            {
+                "name": "Flags",
+                "cells": {
+                    "A1": "Actif",
+                    "B1": "Nom",
+                    "A2": True,
+                    "B2": "a",
+                    "A3": False,
+                    "B3": "b",
+                    "B4": "c",
+                },
+            }
+        ],
+        extract_format="parquet",
+    )
+    entries = json.loads((r.output_dir / "tables.json").read_text(encoding="utf-8"))
+    assert entries[0]["columns"][0] == {"name": "Actif", "dtype": "boolean"}
+    df = _read_stored_parquet(entries[0]["object_key"])
+    assert pd.api.types.is_bool_dtype(df["Actif"])
+    assert bool(df["Actif"].iloc[0])
+    assert not bool(df["Actif"].iloc[1])
+    assert pd.isna(df["Actif"].iloc[2])
+
+
+def test_excel_catalog_marks_only_categorical_string_columns(run_export):
+    cells = {"A1": "Status", "B1": "Reference", "C1": "Row", "D1": "Disponible", "E1": "Score"}
+    for index in range(20):
+        row = index + 2
+        if index < 10:
+            cells[f"A{row}"] = ["RED", "GREEN", "BLUE"][index % 3]
+            cells[f"D{row}"] = ["oui", "non"][index % 2]
+        cells[f"B{row}"] = f"ref-{index}"
+        cells[f"C{row}"] = index
+        cells[f"E{row}"] = index / 4 - 2.5
+
+    r = run_export([{"name": "Flags", "cells": cells}], extract_format="parquet")
+    entries = json.loads((r.output_dir / "tables.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    assert entries[0]["row_count"] == 20
+    columns = {column["name"]: column for column in entries[0]["columns"]}
+    assert columns["Status"]["is_categorical"] is True
+    assert columns["Status"]["has_two_values"] is False
+    assert columns["Status"]["sample_values"] == ["BLUE", "GREEN", "RED"]
+    assert columns["Disponible"]["dtype"] == "string"
+    assert columns["Disponible"]["has_two_values"] is True
+    assert columns["Disponible"]["sample_values"] == ["non", "oui"]
+    assert columns["Reference"]["is_categorical"] is False
+    assert columns["Reference"]["has_two_values"] is False
+    assert "sample_values" not in columns["Reference"]
+    assert "is_categorical" not in columns["Row"]
+    assert "has_two_values" not in columns["Row"]
+    assert columns["Row"]["min_value"] == 0
+    assert columns["Row"]["max_value"] == 19
+    assert columns["Score"]["dtype"] == "float"
+    assert columns["Score"]["min_value"] == -2.5
+    assert columns["Score"]["max_value"] == 2.25
+
+
 def test_parquet_markdown_shows_object_key_not_link(run_export):
     r = run_export(
         [

@@ -30,14 +30,29 @@ TabularDocumentKind = Literal["csv", "spreadsheet"]
 class TabularColumnSchema(BaseModel):
     name: str
     dtype: DTypes
-    sample_values: Optional[list[str]] = Field(
+    is_categorical: Optional[bool] = Field(
         default=None,
         description=(
-            "Every distinct non-null value observed for this column, only when its "
-            "cardinality is low enough (see the ingestion threshold) to be useful as "
-            "SQL-generation grounding — e.g. the exact stored casing of a status or "
-            "severity column. None for high-cardinality or non-string columns."
+            "For string columns, whether the count of distinct non-null values is "
+            "between 1 and max_categories(row_count), with null rows included in "
+            "row_count. None for non-string or older columns without this analysis."
         ),
+    )
+    has_two_values: Optional[bool] = Field(
+        default=None,
+        description=("For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values."),
+    )
+    sample_values: Optional[list[str]] = Field(
+        default=None,
+        description=("Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise."),
+    )
+    min_value: int | float | None = Field(
+        default=None,
+        description="Smallest finite non-null value of an integer or float column. None when unavailable.",
+    )
+    max_value: int | float | None = Field(
+        default=None,
+        description="Largest finite non-null value of an integer or float column. None when unavailable.",
     )
 
 
@@ -71,7 +86,7 @@ class TabularTableSummary(BaseModel):
 
     Why this exists:
     - The document list must stay cheap for LLM context: table identity and
-      size, but no column detail (that is the schemas endpoint's job).
+      size, but no column detail (that is the description endpoint's job).
 
     How to use:
     - Returned inside `TabularDocumentResponse.tables`.
@@ -96,7 +111,8 @@ class TabularDocumentResponse(BaseModel):
 
     How to use:
     - Used internally to assemble the compact `GET /tabular/documents` response.
-    - Follow up with `GET /tabular/documents/schemas` for column-level detail.
+    - Follow up with `GET /tabular/documents/schemas` for the extraction catalog
+      and column-level detail.
     """
 
     document_uid: str
@@ -133,19 +149,19 @@ class TabularTableSchema(TabularTableSummary):
       of a workbook must be visible, not only the first one.
 
     How to use:
-    - Returned inside `TabularDocumentSchemaResponse.tables`.
+    - Returned inside `TabularDocumentDescriptionResponse.tables`.
     """
 
     columns: list[TabularColumnSchema] = Field(default_factory=list)
 
 
-class TabularDocumentSchemaResponse(BaseModel):
+class TabularDocumentDescriptionResponse(BaseModel):
     """
-    Full schema description for one authorized tabular document.
+    Extraction catalog and full schemas for one authorized tabular document.
 
     Why this exists:
-    - One batch call must cover CSV datasets and multi-table Excel workbooks
-      alike, returning every table of each requested document.
+    - One batch call must return the workbook context before its typed tables,
+      while CSV documents expose their typed table without a catalog.
 
     How to use:
     - Returned by `GET /tabular/documents/schemas` (one entry per requested
@@ -155,26 +171,9 @@ class TabularDocumentSchemaResponse(BaseModel):
     document_uid: str
     document_name: str
     kind: TabularDocumentKind
+    markdown: str | None
     tables: list[TabularTableSchema] = Field(default_factory=list)
     source_tag: Optional[str] = None
-
-
-class TabularDocumentMarkdownResponse(BaseModel):
-    """
-    Markdown catalog of one spreadsheet document.
-
-    Why this exists:
-    - The spreadsheet `output.md` is the human/LLM-readable extraction catalog:
-      per sheet it lists each table's title and context, cell ranges, the exact
-      `query_alias`, the name of every identified column, and any residual text
-      left on the sheet.
-
-    How to use:
-    - Returned by `GET /tabular/documents/{document_uid}/markdown`.
-    """
-
-    document_uid: str
-    content: str
 
 
 class TabularQueryRequest(BaseModel):

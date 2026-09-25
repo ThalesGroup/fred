@@ -40,7 +40,10 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     FAST_INGEST_SOURCE_TAG,
     TABULAR_EXTENSION_KEY,
+    TABULAR_MULTI_EXTENSION_KEY,
     document_artifact_prefix,
+    duckdb_dtype_to_literal,
+    max_categories,
     read_tabular_artifact,
 )
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
@@ -422,6 +425,9 @@ async def test_tabular_processor_converts_csv_without_pandas_read_csv(tmp_path, 
     assert artifact.row_count == 2
     assert [column.name for column in artifact.columns] == ["city", "amount"]
     assert [column.dtype for column in artifact.columns] == ["string", "integer"]
+    assert artifact.columns[0].sample_values == ["Lyon", "Paris"]
+    assert artifact.columns[1].min_value == 10
+    assert artifact.columns[1].max_value == 20
     assert processed_metadata.processing.stages[ProcessingStage.PREVIEW_READY] == ProcessingStatus.DONE
     assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
 
@@ -451,9 +457,38 @@ async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(t
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_records_sample_values_for_low_cardinality_string_columns(tmp_path):
+async def test_tabular_processor_records_float_bounds_without_nulls(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "scores.csv"
+    csv_path.write_text("name,score\nfirst,-2.25\nsecond,1.5\nthird,\n", encoding="utf-8")
+    metadata = _metadata(document_uid="doc-scores", file_name="scores.csv")
+    artifact = read_tabular_artifact(TabularProcessor().process(str(csv_path), metadata))
+
+    assert artifact is not None
+    score = next(column for column in artifact.columns if column.name == "score")
+    assert score.dtype == "float"
+    assert score.min_value == -2.25
+    assert score.max_value == 1.5
+
+
+@pytest.mark.parametrize(
+    ("row_count", "expected"),
+    [(0, 2), (10, 2), (11, 2), (20, 3), (30, 4), (100, 10), (100_000, 256)],
+)
+def test_max_categories_uses_sublinear_growth_and_cap(row_count, expected):
+    assert max_categories(row_count) == expected
+
+
+def test_decimal_parquet_schema_is_reported_as_float():
+    assert duckdb_dtype_to_literal("DECIMAL(10,2)") == "float"
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_records_values_for_categorical_string_columns(tmp_path):
     """
-    A low-cardinality string column carries its exact distinct values on the
+    A categorical string column carries its exact distinct values on the
     schema, so a SQL-writing agent sees the real stored casing instead of
     guessing it (e.g. it must not guess 'critical' when the data says
     'CRITICAL').
@@ -472,17 +507,21 @@ async def test_tabular_processor_records_sample_values_for_low_cardinality_strin
 
     assert artifact is not None
     severity_column = next(column for column in artifact.columns if column.name == "severity")
+    assert severity_column.is_categorical is True
+    assert severity_column.has_two_values is True
     assert severity_column.sample_values == ["CRITICAL", "LOW"]
 
     # Non-string columns are never sampled, regardless of cardinality.
     id_column = next(column for column in artifact.columns if column.name == "id")
+    assert id_column.is_categorical is None
+    assert id_column.has_two_values is None
     assert id_column.sample_values is None
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_skips_sample_values_for_high_cardinality_string_columns(tmp_path):
+async def test_tabular_processor_excludes_high_cardinality_string_columns(tmp_path):
     """
-    A string column above the low-cardinality threshold gets no sample_values
+    A string column above the category limit gets no sample_values
     — there is nothing useful to ground an agent's query with once every row
     is (close to) unique, and listing them all would bloat the schema payload.
     """
@@ -500,7 +539,83 @@ async def test_tabular_processor_skips_sample_values_for_high_cardinality_string
 
     assert artifact is not None
     label_column = next(column for column in artifact.columns if column.name == "label")
+    assert label_column.is_categorical is False
+    assert label_column.has_two_values is False
     assert label_column.sample_values is None
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_counts_null_rows_for_category_limit(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    values = ["RED", "GREEN", "BLUE"] * 3 + ["RED"] + [""] * 10
+    csv_path = tmp_path / "nullable-status.csv"
+    rows = "\n".join(f"{index},{value}," for index, value in enumerate(values))
+    csv_path.write_text(f"id,status,blank\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-nullable-status", file_name="nullable-status.csv")
+    artifact = read_tabular_artifact(processor.process(str(csv_path), metadata))
+
+    assert artifact is not None
+    assert artifact.row_count == 20
+    status_column = next(column for column in artifact.columns if column.name == "status")
+    assert status_column.is_categorical is True
+    assert status_column.has_two_values is False
+    assert status_column.sample_values == ["BLUE", "GREEN", "RED"]
+    blank_column = next(column for column in artifact.columns if column.name == "blank")
+    assert blank_column.dtype == "string"
+    assert blank_column.is_categorical is False
+    assert blank_column.has_two_values is False
+    assert blank_column.sample_values is None
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_preserves_duckdb_boolean_columns(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "flags.csv"
+    csv_path.write_text("id,active,available,french\n1,true,yes,oui\n2,false,no,non\n3,,,\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-flags", file_name="flags.csv")
+    artifact = read_tabular_artifact(processor.process(str(csv_path), metadata))
+
+    assert artifact is not None
+    assert artifact.row_count == 3
+    columns = {column.name: column for column in artifact.columns}
+    assert columns["active"].dtype == "boolean"
+    assert columns["available"].dtype == "boolean"
+    assert columns["active"].is_categorical is None
+    assert columns["available"].is_categorical is None
+    assert columns["active"].has_two_values is None
+    assert columns["available"].has_two_values is None
+    assert columns["french"].dtype == "string"
+    assert columns["french"].has_two_values is True
+    assert columns["french"].sample_values == ["non", "oui"]
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_excludes_one_value_above_category_limit(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    rows = "\n".join(f"{index},status-{index % 4}" for index in range(20))
+    csv_path = tmp_path / "four-statuses.csv"
+    csv_path.write_text(f"id,status\n{rows}\n", encoding="utf-8")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-four-statuses", file_name="four-statuses.csv")
+    artifact = read_tabular_artifact(processor.process(str(csv_path), metadata))
+
+    assert artifact is not None
+    assert artifact.row_count == 20
+    status_column = next(column for column in artifact.columns if column.name == "status")
+    assert status_column.is_categorical is False
+    assert status_column.has_two_values is False
+    assert status_column.sample_values is None
 
 
 @pytest.mark.asyncio
@@ -780,9 +895,6 @@ async def test_tabular_service_denial_points_a_wrong_identifier_at_the_listing_t
 
     with pytest.raises(PermissionError, match="list_tabular_documents"):
         await service.describe_documents(_user(), [denied_uid])
-
-    with pytest.raises(PermissionError, match="list_tabular_documents"):
-        await service.get_document_markdown(_user(), denied_uid)
 
     with pytest.raises(PermissionError, match="list_tabular_documents"):
         await service._get_dataset_or_raise(user=_user(), document_uid=denied_uid)
@@ -1397,9 +1509,8 @@ async def test_tabular_service_lists_documents_mixing_csv_and_spreadsheet(tmp_pa
 @pytest.mark.asyncio
 async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_path, metadata_store):
     """
-    Vérifie que l'endpoint schemas est batch et table-complet : toutes les
-    tables d'un classeur sont décrites (fin du « première table gagne »), et
-    les uids interdits/inconnus lèvent 403/404 respectivement.
+    Verify one mixed batch includes CSV types and the complete Excel catalog
+    before every typed table, while denied and missing uids fail closed.
     """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
@@ -1411,7 +1522,10 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
         file_name="sales.csv",
         content="city,amount\nParis,10\nLyon,20\n",
     )
-    await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
+    metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
+    content_store.save_output("doc-excel", output_dir)
+    metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+    await MetadataService().save_document_metadata(_user(), metadata)
 
     service = TabularService()
     schemas = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
@@ -1419,12 +1533,26 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
 
     csv_schema, excel_schema = schemas
     assert csv_schema.kind == "csv"
+    assert csv_schema.markdown is None
     assert [column.name for column in csv_schema.tables[0].columns] == ["city", "amount"]
+    assert csv_schema.tables[0].columns[0].is_categorical is True
+    assert csv_schema.tables[0].columns[0].sample_values == ["Lyon", "Paris"]
+    assert csv_schema.tables[0].columns[1].min_value == 10
+    assert csv_schema.tables[0].columns[1].max_value == 20
 
     assert excel_schema.kind == "spreadsheet"
+    assert excel_schema.markdown is not None
+    assert "# Extraction summary" in excel_schema.markdown
+    assert excel_schema.model_dump_json().index('"markdown"') < excel_schema.model_dump_json().index('"tables"')
     assert len(excel_schema.tables) == 2
     columns_by_sheet = {table.sheet: [column.name for column in table.columns] for table in excel_schema.tables}
     assert columns_by_sheet == {"Ventes": ["city", "amount"], "Cibles": ["city", "target"]}
+    ventes_columns = next(table.columns for table in excel_schema.tables if table.sheet == "Ventes")
+    assert ventes_columns[0].is_categorical is True
+    assert ventes_columns[0].sample_values == ["Lyon", "Paris"]
+    assert ventes_columns[1].min_value == 10
+    assert ventes_columns[1].max_value == 20
+    assert all(table.query_alias in excel_schema.markdown for table in excel_schema.tables)
 
     with pytest.raises(ValueError, match="At least one document uid"):
         await service.describe_documents(_user(), [])
@@ -1439,14 +1567,48 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
 
 
 @pytest.mark.asyncio
-async def test_tabular_service_document_markdown_is_spreadsheet_only(tmp_path, metadata_store):
-    """
-    Vérifie la route markdown : renvoie le catalogue `output.md` d'un classeur
-    (avec les alias SQL exacts), refuse les documents non-spreadsheet (404) et
-    les documents non lisibles (403).
-    """
-    from knowledge_flow_backend.features.tabular.artifacts import build_table_query_alias
+async def test_describe_documents_keeps_older_bounds_unavailable_without_scanning(tmp_path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
 
+    csv_metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount,rate\nParis,10,-1.5\nLyon,20,2.25\n",
+    )
+    for column in csv_metadata.extensions[TABULAR_EXTENSION_KEY]["columns"]:
+        column.pop("min_value", None)
+        column.pop("max_value", None)
+    await MetadataService().save_document_metadata(_user(), csv_metadata)
+
+    excel_metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
+    content_store.save_output("doc-excel", output_dir)
+    excel_metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+    for table in excel_metadata.extensions[TABULAR_MULTI_EXTENSION_KEY]["tables"]:
+        for column in table["columns"]:
+            column.pop("min_value", None)
+            column.pop("max_value", None)
+    await MetadataService().save_document_metadata(_user(), excel_metadata)
+
+    service = TabularService()
+    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: pytest.fail("Description must not read Parquet"))
+    descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
+    csv_columns = {column.name: column for column in descriptions[0].tables[0].columns}
+    assert (csv_columns["amount"].min_value, csv_columns["amount"].max_value) == (None, None)
+    assert (csv_columns["rate"].min_value, csv_columns["rate"].max_value) == (None, None)
+    excel_bounds = {table.sheet: (table.columns[1].min_value, table.columns[1].max_value) for table in descriptions[1].tables}
+    assert excel_bounds == {"Ventes": (None, None), "Cibles": (None, None)}
+    assert descriptions[1].markdown is not None
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_requires_ready_excel_catalog(tmp_path, metadata_store):
+    """
+    A workbook description fails when its catalog is not ready or stored;
+    CSV descriptions never need a markdown artifact.
+    """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
@@ -1459,24 +1621,26 @@ async def test_tabular_service_document_markdown_is_spreadsheet_only(tmp_path, m
     )
     metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
 
-    # Dans le pipeline réel, save_output uploade output.md et la preview passe
-    # à DONE ; on rejoue ces deux étapes pour la lecture du catalogue.
-    content_store.save_output("doc-excel", output_dir)
+    service = TabularService()
+    [csv_description] = await service.describe_documents(_user(), ["doc-sales"])
+    assert csv_description.markdown is None
+
+    with pytest.raises(FileNotFoundError, match="Preview not ready"):
+        await service.describe_documents(_user(), ["doc-excel"])
+
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     await MetadataService().save_document_metadata(_user(), metadata)
+    with pytest.raises(FileNotFoundError, match="output.md"):
+        await service.describe_documents(_user(), ["doc-excel"])
 
-    service = TabularService()
-    content = await service.get_document_markdown(_user(), "doc-excel")
-    assert "# Extraction summary" in content
-    assert build_table_query_alias("doc-excel", "Ventes", 1) in content
-    assert build_table_query_alias("doc-excel", "Cibles", 1) in content
-
-    with pytest.raises(FileNotFoundError, match="not a spreadsheet"):
-        await service.get_document_markdown(_user(), "doc-sales")
+    content_store.save_output("doc-excel", output_dir)
+    [description] = await service.describe_documents(_user(), ["doc-excel"])
+    assert description.markdown is not None
+    assert "# Extraction summary" in description.markdown
 
     service.rebac = _FakeRebac(set())
     with pytest.raises(PermissionError, match="doc-excel"):
-        await service.get_document_markdown(_user(), "doc-excel")
+        await service.describe_documents(_user(), ["doc-excel"])
 
 
 def test_tabular_service_httpfs_install_is_attempted_after_load_failure():

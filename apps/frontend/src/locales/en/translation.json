@@ -1592,7 +1592,8 @@
       "tabular": {
         "catalogForDocument": "Reading the summary of document “{{name}}”.",
         "catalogForWorkbook": "Reading the workbook summary.",
-        "catalogPreview": "Only part of the catalog is shown.",
+        "catalogComplete": "Full summary: {{total}} lines.",
+        "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
         "emptyCatalog": "This catalog is empty.",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
@@ -1603,8 +1604,6 @@
         "matchedColumns": "Matching columns",
         "identifiedDocuments_one": "Here is the identified document:",
         "identifiedDocuments_other": "Here are the {{count}} identified documents:",
-        "moreValues_one": "+{{count}} more value",
-        "moreValues_other": "+{{count}} more values",
         "moreColumns_one": "+{{count}} more column",
         "moreColumns_other": "+{{count}} more columns",
         "noColumns": "No columns described.",
@@ -1615,11 +1614,14 @@
         "partialResult": "partial result",
         "rowsPreview": "preview of {{count}} rows",
         "rowsTruncated": "Partial preview: more rows match in this table.",
-        "samples": "Examples",
-        "showFullCatalog": "Show the full catalog",
+        "categorical": "Category",
+        "showCatalogPreview": "Show first 20 lines",
+        "showFullCatalog": "Show all",
         "showMore_one": "Show {{count}} more item",
         "showMore_other": "Show {{count}} more items",
         "tableNumber": "Table {{number}}",
+        "tablesHeading_one": "Table and columns",
+        "tablesHeading_other": "{{count}} tables and columns",
         "tablesTruncated": "Partial result: other tables or documents may contain this value."
       },
       "toolStatus": {
@@ -1632,6 +1634,7 @@
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
         "schemas": "Reading tabular schemas",
+        "descriptions": "Reading tabular documents",
         "search": "Searching tabular values"
       }
     },

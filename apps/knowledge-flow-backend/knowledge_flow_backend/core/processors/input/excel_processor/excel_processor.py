@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -65,8 +66,12 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     build_table_query_alias,
     build_tabular_table_object_key,
     dataframe_dtype_to_literal,
+    describe_numeric_column,
+    describe_string_column,
+    max_categories,
     utc_now_iso,
 )
+from knowledge_flow_backend.features.tabular.structures import TabularColumnSchema
 
 logger = logging.getLogger(__name__)
 
@@ -423,14 +428,38 @@ class ExcelProcessor(BaseMarkdownProcessor):
     def _table_entry(self, t: DetectedTable, rel_path: str, df: pd.DataFrame) -> dict:
         """Describe one written table for the `tables.json` catalog.
 
-        Columns reuse the platform tabular vocabulary (`dataframe_dtype_to_literal`,
-        i.e. the `TabularColumnSchema` shape `{name, dtype}`). Iteration is done by
+        Columns reuse the platform tabular vocabulary. Iteration is done by
         position so duplicate column labels are all reported.
 
         The object-store key, source revision and SQL alias are absent at this
         point: `_register_tables` fills them in when the export runs in
         ingestion mode (document uid available, Parquet extracts).
         """
+        columns = []
+        category_limit = max_categories(len(df))
+        for name, series in df.items():
+            dtype = dataframe_dtype_to_literal(series.dtype)
+            column = TabularColumnSchema(name=str(name), dtype=dtype)
+            if dtype == "string":
+                values: set[str] = set()
+                for value in series:
+                    if pd.isna(value):
+                        continue
+                    if not isinstance(value, str):
+                        values.clear()
+                        break
+                    values.add(value)
+                    if len(values) > category_limit:
+                        break
+                column = describe_string_column(column, values, len(df))
+            elif dtype in {"integer", "float"}:
+                numeric_values = series.dropna()
+                if dtype == "float":
+                    numeric_values = cast(pd.Series, numeric_values[numeric_values.map(math.isfinite)])
+                if not numeric_values.empty:
+                    column = describe_numeric_column(column, numeric_values.min(), numeric_values.max())
+            columns.append(column.model_dump(exclude_none=True))
+
         return {
             "table_id": t.id,
             "table_index": self._table_index(t),
@@ -441,7 +470,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
             "format": self.extract_format,
             "path": rel_path,
             "row_count": int(len(df)),
-            "columns": [{"name": str(name), "dtype": dataframe_dtype_to_literal(dtype)} for name, dtype in df.dtypes.items()],
+            "columns": columns,
         }
 
     @staticmethod
