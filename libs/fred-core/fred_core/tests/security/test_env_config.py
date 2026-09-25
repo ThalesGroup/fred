@@ -29,6 +29,13 @@ OPTIONAL = (
     "OPENFGA_STORE_NAME",
     "OPENFGA_AUTHORIZATION_MODEL_ID",
     "FRED_DELEGATION",
+    "OIDC_PROVIDER",
+    "OIDC_AUDIENCE",
+    "OIDC_SCOPE",
+    "OIDC_ROLES_CLAIM",
+    "OIDC_UID_CLAIM",
+    "OIDC_M2M_SCOPE",
+    "FRED_USER_DIRECTORY",
 )
 
 
@@ -186,3 +193,57 @@ def test_a_deployment_can_name_its_own_delegation_audience(
         security_configuration_from_env(**OWN).delegation.audience
         == "a-shared-audience"
     )
+
+
+def test_new_identity_settings_are_optional(env: pytest.MonkeyPatch) -> None:
+    baseline = security_configuration_from_env(**OWN)
+
+    env.setenv("OIDC_PROVIDER", "keycloak")
+    env.setenv("OIDC_UID_CLAIM", "sub")
+    env.setenv("FRED_USER_DIRECTORY", "keycloak")
+
+    assert security_configuration_from_env(**OWN) == baseline
+    assert baseline.user.roles_claim is None
+    assert baseline.user.audience is None
+    assert baseline.user.scope is None
+    assert baseline.m2m.scope is None
+
+
+def test_oidc_identity_settings_are_read_from_environment(
+    env: pytest.MonkeyPatch,
+) -> None:
+    env.setenv("OIDC_PROVIDER", "oidc")
+    env.setenv("OIDC_AUDIENCE", "fred-api")
+    env.setenv("OIDC_SCOPE", "api://fred-api/access_as_user")
+    env.setenv("OIDC_ROLES_CLAIM", "resource_access, fred-api, roles")
+    env.setenv("OIDC_UID_CLAIM", "oid")
+    env.setenv("OIDC_M2M_SCOPE", "api://fred-api/.default")
+    env.setenv("FRED_USER_DIRECTORY", "local")
+
+    config = security_configuration_from_env(**OWN)
+
+    assert config.user.provider == "oidc"
+    assert config.user.audience == "fred-api"
+    assert config.user.scope == "api://fred-api/access_as_user"
+    assert config.user.roles_claim == ["resource_access", "fred-api", "roles"]
+    assert config.user.claims.uid == "oid"
+    assert config.m2m.provider == "oidc"
+    assert config.m2m.scope == "api://fred-api/.default"
+    assert config.user_directory == "local"
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OIDC_PROVIDER", "unsupported"),
+        ("FRED_USER_DIRECTORY", "unsupported"),
+        ("OIDC_ROLES_CLAIM", "resource_access,,roles"),
+    ],
+)
+def test_invalid_identity_settings_fail_at_configuration_time(
+    env: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    env.setenv(name, value)
+
+    with pytest.raises(ValueError, match=name):
+        security_configuration_from_env(**OWN)

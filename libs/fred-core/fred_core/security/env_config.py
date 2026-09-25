@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Literal
 
 from pydantic import AnyHttpUrl, AnyUrl
 
@@ -12,6 +13,7 @@ from fred_core.security.structure import (
     M2MSecurity,
     OpenFgaRebacConfig,
     SecurityConfiguration,
+    UserClaims,
     UserSecurity,
 )
 
@@ -65,6 +67,26 @@ def security_configuration_from_env(
             "KEYCLOAK_M2M_AUDIENCE is no longer read: delegating workloads are "
             f"addressed to the audience in {delegation_env}"
         )
+    provider_raw = _optional("OIDC_PROVIDER")
+    if provider_raw not in (None, "keycloak", "oidc"):
+        raise ValueError("OIDC_PROVIDER must be 'keycloak' or 'oidc'")
+    provider: Literal["keycloak", "oidc"] = (
+        "oidc" if provider_raw == "oidc" else "keycloak"
+    )
+    directory_raw = _optional("FRED_USER_DIRECTORY")
+    if directory_raw not in (None, "keycloak", "local"):
+        raise ValueError("FRED_USER_DIRECTORY must be 'keycloak' or 'local'")
+    user_directory: Literal["keycloak", "local"] = (
+        "local" if directory_raw == "local" else "keycloak"
+    )
+    roles_claim_raw = _optional("OIDC_ROLES_CLAIM")
+    roles_claim = (
+        [part.strip() for part in roles_claim_raw.split(",")]
+        if roles_claim_raw
+        else None
+    )
+    if roles_claim is not None and not all(roles_claim):
+        raise ValueError("OIDC_ROLES_CLAIM must be a comma-separated claim path")
     user_realm_url = AnyUrl(_required("KEYCLOAK_REALM_URL"))
     # A browser token carries the address the person signed in at, a workload
     # token the address it was minted at. One value cannot validate both.
@@ -74,15 +96,23 @@ def security_configuration_from_env(
     _ = _required(m2m_secret_env)
     return SecurityConfiguration(
         profile="c3",
+        user_directory=user_directory,
         user=UserSecurity(
             enabled=True,
             realm_url=user_realm_url,
             client_id=_required("KEYCLOAK_USER_AUDIENCE"),
+            provider=provider,
+            audience=_optional("OIDC_AUDIENCE"),
+            scope=_optional("OIDC_SCOPE"),
+            roles_claim=roles_claim,
+            claims=UserClaims(uid=_optional("OIDC_UID_CLAIM") or "sub"),
         ),
         m2m=M2MSecurity(
             enabled=True,
             realm_url=AnyUrl(workload_realm) if workload_realm else user_realm_url,
             client_id=_required("KEYCLOAK_M2M_CLIENT_ID"),
+            provider=provider,
+            scope=_optional("OIDC_M2M_SCOPE"),
             secret_env_var=m2m_secret_env,
         ),
         delegation=_delegation(delegation_env),
