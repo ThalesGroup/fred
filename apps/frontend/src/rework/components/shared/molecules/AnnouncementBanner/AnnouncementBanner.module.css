@@ -96,17 +96,13 @@
   font-size: 1.25rem;
 }
 
-/* Title and description run on one line, sharing a baseline. The gap between
-   them stays tighter than the wide one to the actions: the two texts are one
-   sentence of the same notice, the actions are a different kind of thing
-   (gestalt proximity — a single uniform gap would read as one flat row).
-   The title holds its width; only the description gives way when the strip
-   gets narrow. */
+/* Title and description run on one line, sharing a baseline. The title holds
+   its width; only the description gives way when the strip gets narrow. */
 .text {
   display: flex;
   flex: 1;
   align-items: baseline;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-m);
   min-width: 0;
 }
 
