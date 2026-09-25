@@ -4053,15 +4053,19 @@ configuration and is **removed** — see "Removal" below.
 | `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
 | `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
 | `dismissible`                                        | Whether a user may close the banner.                                                           |
-| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible`. **Never** on an `enabled` toggle. |
+| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled. |
 
 **`content_version` is the dismissal key.** The frontend records a dismissal in
-`localStorage` as `<id>@<content_version>`, so editing an announcement makes it
-reappear for everyone who closed the previous wording, while an admin toggling
-delivery off and on does not. That is why the toggle has its own endpoint
-rather than riding on the content `PUT`. Dismissals are per-browser: there is
-no server-side per-user state, and losing the stored set only makes a banner
-show again.
+`localStorage` as `<id>@<content_version>`, so bumping the version is the only
+lever the server has to bring a closed banner back — it cannot reach a
+browser's storage. It bumps on an edit, and on the off → on transition, because
+putting an announcement back on air is a relaunch and is meant to reach the
+users who closed the previous run. It does not bump when an announcement is
+switched off, nor when `enabled=true` is re-sent for one already live: neither
+changes what is on screen. The toggle keeps its own endpoint so a relaunch
+never has to resubmit content that did not change. Dismissals are per-browser:
+there is no server-side per-user state, and losing the stored set only makes a
+banner show again.
 
 **Endpoints.**
 

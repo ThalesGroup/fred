@@ -18,6 +18,7 @@ import Button from "@shared/atoms/Button/Button";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import AnnouncementBanner from "@shared/molecules/AnnouncementBanner/AnnouncementBanner";
@@ -144,12 +145,20 @@ export default function AnnouncementsPage() {
                 <AnnouncementBanner announcement={announcement} preview />
               </div>
               <div className={styles.controls}>
-                <Switch
-                  size="small"
-                  checked={announcement.enabled}
-                  onChange={(event) => void onToggle(announcement, event.target.checked)}
-                  aria-label={t("rework.announcements.row.enabled")}
-                />
+                <Tooltip
+                  text={
+                    announcement.enabled
+                      ? t("rework.announcements.row.disableHint")
+                      : t("rework.announcements.row.enableHint")
+                  }
+                >
+                  <Switch
+                    size="small"
+                    checked={announcement.enabled}
+                    onChange={(event) => void onToggle(announcement, event.target.checked)}
+                    aria-label={t("rework.announcements.row.enabled")}
+                  />
+                </Tooltip>
                 <IconButton
                   size="small"
                   variant="icon"

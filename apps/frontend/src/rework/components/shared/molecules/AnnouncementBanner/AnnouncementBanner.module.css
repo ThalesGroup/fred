@@ -44,13 +44,22 @@
    both action buttons. No border: the filled container already separates the
    banner from the page, and a rule on top of it only adds noise. */
 .banner {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
   background: var(--banner-container);
   padding: var(--spacing-xs) var(--spacing-m);
   color: var(--banner-on-container);
   font: var(--font-body-medium);
+}
+
+/* The fill spans the whole window; its contents must not. Centring a capped
+   column keeps the announcement readable on a wide screen instead of stranding
+   the actions a metre away from the text they belong to. */
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-inline: auto;
+  width: 100%;
+  max-width: 800px;
 }
 
 .banner[data-severity="warning"] {

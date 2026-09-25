@@ -854,7 +854,7 @@ operations:
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}/enabled
     review_status: approved
-    required_permission: can_manage_platform # Toggles delivery only. Separate from the content PUT precisely so a toggle never bumps content_version — otherwise flicking the switch would resurrect every banner users had already closed.
+    required_permission: can_manage_platform # Toggles delivery only, without resubmitting content. Bumps content_version on the off -> on transition: putting an announcement back on air is a relaunch and must reach the users who closed the previous run.
   - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/platform/announcements/{announcement_id}

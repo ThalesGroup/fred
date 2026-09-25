@@ -3415,6 +3415,8 @@
       },
       "row": {
         "enabled": "Afficher cette annonce aux utilisateurs",
+        "enableHint": "Activer pour tous les utilisateurs",
+        "disableHint": "Désactiver pour tous les utilisateurs",
         "edit": "Modifier cette annonce",
         "delete": "Supprimer cette annonce"
       },

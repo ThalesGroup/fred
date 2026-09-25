@@ -23,7 +23,9 @@ no entry.
 `description_short` and `description_long` SHALL be interpreted as markdown.
 
 An announcement SHALL carry a content version that changes whenever any of its
-text, severity, or flags change.
+text, severity, or `dismissible` flag changes, and whenever a disabled
+announcement is enabled again. Disabling an announcement SHALL NOT change it:
+nothing a reader sees has moved.
 
 #### Scenario: Locale resolution with fallback
 
@@ -83,6 +85,12 @@ and the affected announcement.
 
 - **WHEN** an administrator disables an enabled announcement
 - **THEN** the announcement is retained with its content intact and stops being delivered to users
+- **AND** its content version is unchanged
+
+#### Scenario: Re-enabling relaunches the announcement for everyone
+
+- **WHEN** an administrator enables an announcement that was disabled
+- **THEN** its content version changes, so the banner appears again for users who had dismissed the previous run
 
 ### Requirement: Delivering active announcements
 

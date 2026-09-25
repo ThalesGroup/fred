@@ -3415,6 +3415,8 @@
       },
       "row": {
         "enabled": "Show this announcement to users",
+        "enableHint": "Enable for all users",
+        "disableHint": "Disable for all users",
         "edit": "Edit this announcement",
         "delete": "Delete this announcement"
       },

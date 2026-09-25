@@ -14,11 +14,12 @@
 
 """Platform announcements: authorization, content versioning, validation.
 
-The distinction most of this file exists to pin: `content_version` moves when
-what a reader sees changes, and stays put when an admin merely toggles
-delivery. The frontend keys each user's dismissal on that value, so a version
-that moved on every toggle would resurrect banners people had already closed —
-the precise annoyance the key was introduced to avoid.
+The distinction most of this file exists to pin: `content_version` is the key
+each browser stores a dismissal against, so moving it is the only way the
+server can bring a closed banner back. It moves when the wording changes and
+when a disabled announcement goes back on air — a relaunch is meant to reach
+the users who closed the previous run. It stays put on the transitions that
+are not a relaunch: turning an announcement off, and re-saving one unchanged.
 
 The second theme is the gate: every administrative operation asks for
 `can_manage_platform`, while the delivery route asks for nothing beyond
@@ -149,11 +150,11 @@ async def test_editing_text_bumps_the_content_version(store: AnnouncementStore) 
 
 
 @pytest.mark.asyncio
-async def test_toggling_delivery_leaves_the_content_version_alone(
+async def test_relaunching_bumps_the_version_so_the_banner_comes_back(
     store: AnnouncementStore,
 ) -> None:
-    # The whole point of the key: an admin turning a banner on and off again
-    # must not bring it back for everyone who already dismissed it.
+    # Dismissals live in each browser's storage and the server cannot reach
+    # them; expiring the key they hang on is the only lever it has.
     deps = _deps(store, _platform_admin())
     created = await create_announcement(user=_user(), request=_write(), deps=deps)
 
@@ -163,19 +164,65 @@ async def test_toggling_delivery_leaves_the_content_version_alone(
     disabled = await set_announcement_enabled(
         user=_user(), announcement_id=created.id, enabled=False, deps=deps
     )
+    relaunched = await set_announcement_enabled(
+        user=_user(), announcement_id=created.id, enabled=True, deps=deps
+    )
 
-    assert enabled.enabled is True
-    assert disabled.enabled is False
-    assert enabled.content_version == created.content_version
-    assert disabled.content_version == created.content_version
+    assert (enabled.enabled, disabled.enabled, relaunched.enabled) == (
+        True,
+        False,
+        True,
+    )
+    assert enabled.content_version == created.content_version + 1
+    # Switching it off changes nothing on screen, so it expires no dismissal.
+    assert disabled.content_version == enabled.content_version
+    assert relaunched.content_version == enabled.content_version + 1
 
 
 @pytest.mark.asyncio
-async def test_update_that_only_flips_enabled_does_not_bump_the_version(
+async def test_re_enabling_an_already_live_announcement_does_not_bump(
     store: AnnouncementStore,
 ) -> None:
-    # A full update whose only difference is `enabled` is still a toggle as far
-    # as a reader is concerned — the admin page may well send one.
+    # Only the off → on transition is a relaunch. A client re-sending the state
+    # it already has must not resurrect everyone's dismissed banner.
+    deps = _deps(store, _platform_admin())
+    created = await create_announcement(
+        user=_user(), request=_write(enabled=True), deps=deps
+    )
+
+    again = await set_announcement_enabled(
+        user=_user(), announcement_id=created.id, enabled=True, deps=deps
+    )
+
+    assert again.content_version == created.content_version
+
+
+@pytest.mark.asyncio
+async def test_update_that_only_switches_delivery_off_does_not_bump(
+    store: AnnouncementStore,
+) -> None:
+    # The full-update route carries `enabled` too, so it has to follow the same
+    # rule as the toggle: off is not a relaunch.
+    deps = _deps(store, _platform_admin())
+    created = await create_announcement(
+        user=_user(), request=_write(enabled=True), deps=deps
+    )
+
+    updated = await update_announcement(
+        user=_user(),
+        announcement_id=created.id,
+        request=_write(enabled=False),
+        deps=deps,
+    )
+
+    assert updated.enabled is False
+    assert updated.content_version == created.content_version
+
+
+@pytest.mark.asyncio
+async def test_update_that_puts_it_back_on_air_bumps_the_version(
+    store: AnnouncementStore,
+) -> None:
     deps = _deps(store, _platform_admin())
     created = await create_announcement(user=_user(), request=_write(), deps=deps)
 
@@ -186,8 +233,7 @@ async def test_update_that_only_flips_enabled_does_not_bump_the_version(
         deps=deps,
     )
 
-    assert updated.enabled is True
-    assert updated.content_version == created.content_version
+    assert updated.content_version == created.content_version + 1
 
 
 @pytest.mark.asyncio

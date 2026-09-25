@@ -66,8 +66,8 @@ class AnnouncementStore:
     Same separation of concerns as `PlatformPromptStore`: this store never
     checks authorization, that is `announcements/service.py`'s job, and it never
     decides when `content_version` moves — callers pass the value they want
-    written, so the "bump on content change, not on a toggle" rule lives in one
-    place instead of being split across two layers.
+    written, so the rule for when it moves lives in one place instead of being
+    split across two layers.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -195,10 +195,11 @@ class AnnouncementStore:
         *,
         announcement_id: str,
         enabled: bool,
+        content_version: int,
         updated_by: str | None,
         session: AsyncSession | None = None,
     ) -> StoredAnnouncement | None:
-        """Toggle delivery without touching content or `content_version`."""
+        """Toggle delivery, writing the `content_version` the caller decided."""
         async with use_session(self._sessions, session) as s:
             row = (
                 await s.execute(
@@ -208,6 +209,7 @@ class AnnouncementStore:
             if row is None:
                 return None
             row.enabled = enabled
+            row.content_version = content_version
             row.updated_by = updated_by
             row.updated_at = utcnow()
             await s.flush()

@@ -4327,9 +4327,9 @@ transition is suppressed. The banner is `aria-hidden` as soon as the exit
 starts. `role="status"` + `aria-live="polite"`.
 
 **Dismissal** is per-browser, in `localStorage`, keyed by announcement id plus
-`content_version` — so re-editing an announcement brings it back for everyone
-who closed the previous wording, while an admin toggling delivery does not.
-Storage failures degrade to "never dismissed".
+`content_version` — so re-editing an announcement, or switching a disabled one
+back on, brings it back for everyone who closed the previous run. Switching one
+off does not. Storage failures degrade to "never dismissed".
 
 ### Admin page
 

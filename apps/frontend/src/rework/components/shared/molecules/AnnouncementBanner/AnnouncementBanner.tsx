@@ -82,39 +82,41 @@ function AnnouncementBanner({ announcement, onDismissed, preview = false }: Anno
       >
         <div className={styles.collapseInner}>
           <div className={styles.banner} data-severity={severity} role="status" aria-live="polite">
-            <span className={styles.icon} aria-hidden>
-              <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
-            </span>
-            <div className={styles.text}>
-              {title && <span className={styles.title}>{title}</span>}
-              {short && (
-                <div className={styles.short}>
-                  <MarkdownRenderer text={short} />
-                </div>
-              )}
-            </div>
-            <div className={styles.actions}>
-              {long && (
-                <Button
-                  color="on-surface"
-                  variant="text"
-                  size="small"
-                  className={styles.actionButton}
-                  onClick={() => setDialogOpen(true)}
-                >
-                  {t("rework.announcements.banner.moreInfo")}
-                </Button>
-              )}
-              {announcement.dismissible && (
-                <IconButton
-                  size="small"
-                  variant="icon"
-                  className={styles.actionButton}
-                  icon={{ category: "outlined", type: "close" }}
-                  aria-label={t("rework.announcements.banner.dismiss")}
-                  onClick={dismiss}
-                />
-              )}
+            <div className={styles.inner}>
+              <span className={styles.icon} aria-hidden>
+                <Icon category="outlined" type={SEVERITY_ICONS[severity] ?? "info"} />
+              </span>
+              <div className={styles.text}>
+                {title && <span className={styles.title}>{title}</span>}
+                {short && (
+                  <div className={styles.short}>
+                    <MarkdownRenderer text={short} />
+                  </div>
+                )}
+              </div>
+              <div className={styles.actions}>
+                {long && (
+                  <Button
+                    color="on-surface"
+                    variant="text"
+                    size="small"
+                    className={styles.actionButton}
+                    onClick={() => setDialogOpen(true)}
+                  >
+                    {t("rework.announcements.banner.moreInfo")}
+                  </Button>
+                )}
+                {announcement.dismissible && (
+                  <IconButton
+                    size="small"
+                    variant="icon"
+                    className={styles.actionButton}
+                    icon={{ category: "outlined", type: "close" }}
+                    aria-label={t("rework.announcements.banner.dismiss")}
+                    onClick={dismiss}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>

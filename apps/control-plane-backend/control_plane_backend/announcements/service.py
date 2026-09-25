@@ -67,11 +67,9 @@ def _content_changed(
 ) -> bool:
     """Whether anything a reader actually sees differs from what is stored.
 
-    `enabled` is excluded on purpose: it decides whether the banner is
-    delivered, not what it says. Bumping the version on a toggle would make
-    every banner users had already dismissed come back the next time an admin
-    flicked the switch, which is exactly the annoyance the version key exists
-    to avoid. `dismissible` IS included — it changes the banner's controls.
+    `enabled` is excluded here because it says nothing about the wording; the
+    transition that matters is handled by `_relaunched`. `dismissible` IS
+    included — it changes the banner's controls.
     """
 
     return (
@@ -81,6 +79,19 @@ def _content_changed(
         or stored.description_long != request.description_long
         or stored.dismissible != request.dismissible
     )
+
+
+def _relaunched(stored: StoredAnnouncement, enabled: bool) -> bool:
+    """Whether a disabled announcement is going back on air.
+
+    A relaunch must reach the users who closed the previous run. Their
+    dismissals live in their own browser's storage, keyed by content version,
+    so bumping that version is the only lever the server has. Turning an
+    announcement off never bumps, and neither does re-sending `enabled=True`
+    on one that is already live.
+    """
+
+    return enabled and not stored.enabled
 
 
 async def list_announcements(
@@ -150,9 +161,10 @@ async def update_announcement(
             status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
         )
 
-    content_version = existing.content_version + (
-        1 if _content_changed(existing, request) else 0
+    bumped = _content_changed(existing, request) or _relaunched(
+        existing, request.enabled
     )
+    content_version = existing.content_version + (1 if bumped else 0)
     stored = await store.update(
         announcement_id=announcement_id,
         severity=request.severity,
@@ -188,10 +200,24 @@ async def set_announcement_enabled(
     deps: ProductServiceDependencies,
 ) -> Announcement:
     await _require_manage_platform(deps, user)
-    stored = await deps.get_announcement_store().set_enabled(
-        announcement_id=announcement_id, enabled=enabled, updated_by=user.uid
+    store = deps.get_announcement_store()
+    existing = await store.get(announcement_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
+        )
+
+    content_version = existing.content_version + (
+        1 if _relaunched(existing, enabled) else 0
+    )
+    stored = await store.set_enabled(
+        announcement_id=announcement_id,
+        enabled=enabled,
+        content_version=content_version,
+        updated_by=user.uid,
     )
     if stored is None:
+        # Deleted between the read and the write.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="announcement not found"
         )
@@ -200,6 +226,7 @@ async def set_announcement_enabled(
         actor_uid=user.uid,
         announcement_id=announcement_id,
         enabled=enabled,
+        content_version=content_version,
     )
     return _to_announcement(stored)
 

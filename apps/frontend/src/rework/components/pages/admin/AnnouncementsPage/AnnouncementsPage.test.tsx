@@ -149,6 +149,19 @@ describe("AnnouncementsPage", () => {
     expect(el.querySelector('[aria-label="rework.announcements.banner.dismiss"]')).not.toBeNull();
   });
 
+  it("says which way the switch goes, and that it lands for every user", () => {
+    // The switch carries no visible label, so the hint is the only place that
+    // spells out the reach of the flick — and it has to follow the state.
+    listMock.mockReturnValue({ data: [announcement({ enabled: false })], isLoading: false });
+    const el = render();
+    const trigger = el.querySelector('[aria-label="rework.announcements.row.enabled"]')!.closest("span")!;
+
+    act(() => void trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+
+    expect(document.body.textContent).toContain("rework.announcements.row.enableHint");
+    expect(document.body.textContent).not.toContain("rework.announcements.row.disableHint");
+  });
+
   it("toggles through the dedicated enabled endpoint, not a content update", () => {
     listMock.mockReturnValue({ data: [announcement()], isLoading: false });
     const el = render();

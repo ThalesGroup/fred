@@ -16,9 +16,10 @@
 //
 // Deliberately client-side: the control-plane has no user-preferences store,
 // and the worst outcome of losing this is a banner showing again. The key
-// carries the announcement's `content_version`, so re-editing an announcement
-// makes it reappear for everyone who dismissed the previous wording — which is
-// what an operator fixing a typo or a date actually wants.
+// carries the announcement's `content_version`, which the backend moves on an
+// edit and on a relaunch (a disabled announcement switched back on). Both make
+// the banner reappear for everyone who dismissed the previous run — what an
+// operator fixing a date, or re-running a notice, actually wants.
 
 const STORAGE_KEY = "fred.announcements.dismissed";
 

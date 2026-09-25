@@ -15,10 +15,10 @@
 """Announcement store CRUD.
 
 The distinctions these tests pin: `list_enabled` is the delivery surface and
-must never leak a disabled row, and `set_enabled` is a toggle — it must leave
-`content_version` alone, because that value is what the frontend keys a user's
-dismissal on. A toggle that bumped it would resurrect every banner users had
-already closed.
+must never leak a disabled row, and `set_enabled` writes exactly the
+`content_version` it is handed. The store never decides that value — whether a
+toggle expires the dismissals users have stored against it is the service's
+call, and keeping it out of here is what stops the rule living in two places.
 """
 
 from __future__ import annotations
@@ -146,25 +146,31 @@ async def test_update_unknown_id_returns_none(store: AnnouncementStore) -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_enabled_toggles_without_touching_content_version(
+async def test_set_enabled_writes_the_content_version_it_is_given(
     store: AnnouncementStore,
 ) -> None:
     created = await _make(store, "a1", enabled=False)
 
     toggled = await store.set_enabled(
-        announcement_id="a1", enabled=True, updated_by="admin@example.com"
+        announcement_id="a1",
+        enabled=True,
+        content_version=created.content_version + 1,
+        updated_by="admin@example.com",
     )
 
     assert toggled is not None
     assert toggled.enabled is True
-    assert toggled.content_version == created.content_version
+    assert toggled.content_version == created.content_version + 1
+    # Only delivery and the version move: the wording is untouched.
     assert toggled.title == created.title
 
 
 @pytest.mark.asyncio
 async def test_set_enabled_unknown_id_returns_none(store: AnnouncementStore) -> None:
     assert (
-        await store.set_enabled(announcement_id="nope", enabled=True, updated_by=None)
+        await store.set_enabled(
+            announcement_id="nope", enabled=True, content_version=1, updated_by=None
+        )
         is None
     )
 
