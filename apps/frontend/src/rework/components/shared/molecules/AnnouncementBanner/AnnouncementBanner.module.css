@@ -99,7 +99,7 @@
 }
 
 .title {
-  font: var(--font-title-medium);
+  font: var(--font-label-large);
 }
 
 /* The renderer paints its own reading colour and prose size on its root, both
