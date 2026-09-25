@@ -71,7 +71,9 @@ class _MemoryFilesystem:
 @pytest.mark.asyncio
 async def test_model_write_and_edit_permissions_preserve_deep_internal_file() -> None:
     filesystem = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
-    internal = filesystem.namespace(".deep")
+    internal = filesystem.namespace(
+        ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+    )
     await internal.write_text("artifact.txt", "original")
     backend = _build_conversation_backend(filesystem)
     middleware = FilesystemMiddleware(
@@ -115,7 +117,9 @@ async def test_model_write_and_edit_permissions_preserve_deep_internal_file() ->
 @pytest.mark.asyncio
 async def test_trusted_backend_routes_deep_artifacts_to_persistent_namespace() -> None:
     filesystem = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
-    internal = filesystem.namespace(".deep")
+    internal = filesystem.namespace(
+        ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+    )
     backend = _build_conversation_backend(filesystem)
 
     result = await backend.awrite(
@@ -140,9 +144,9 @@ async def test_root_search_aggregates_workspace_and_internal_mount(
 ) -> None:
     filesystem = ConversationFilesystemService(_MemoryFilesystem(), "conversation-a")
     await filesystem.scratchpad().write_text("notes/shared.md", "shared needle")
-    await filesystem.namespace(".deep").write_text(
-        "large_tool_results/result.md", "internal needle"
-    )
+    await filesystem.namespace(
+        ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+    ).write_text("large_tool_results/result.md", "internal needle")
     backend = _build_conversation_backend(filesystem)
 
     globbed = await backend.aglob("**/*.md", path=root)

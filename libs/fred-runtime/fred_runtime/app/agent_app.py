@@ -144,7 +144,11 @@ from fred_runtime.capabilities.errors import (
 )
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.deep.deep_runtime import DeepAgentRuntime
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
+from fred_runtime.deep.deep_runtime import (
+    DeepAgentRuntime,
+    build_conversation_filesystem,
+)
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import (
@@ -767,11 +771,10 @@ def _build_runtime_services(
     runtime_config = get_runtime_context().config
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
-    conversation_scratchpad = (
-        conversation_filesystem.scratchpad()
-        if conversation_filesystem is not None
-        else None
-    )
+    conversation_port = None
+    if conversation_filesystem is not None:
+        backend, permissions = build_conversation_filesystem(conversation_filesystem)
+        conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
         binding=binding,
@@ -897,7 +900,7 @@ def _build_runtime_services(
             control_plane_url=runtime_config.control_plane_url,
             http_client=runtime_config.control_plane_http_client,
         ),
-        conversation_scratchpad=conversation_scratchpad,
+        conversation_filesystem=conversation_port,
     )
 
 
@@ -4491,8 +4494,8 @@ def _build_agent_router(
                 ),
                 kpi=runtime_config.kpi_writer,
             )
-            await filesystem.namespace("scratchpad").purge()
-            await filesystem.namespace(".deep").purge()
+            await filesystem.purge_namespace("scratchpad")
+            await filesystem.purge_namespace(".deep")
         except ConversationScratchpadInvalidPathError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -25,6 +25,7 @@ from deepagents.backends.protocol import (
     BackendProtocol,
     EditResult,
     FileData,
+    FileDownloadResponse,
     FileInfo,
     GlobResult,
     GrepMatch,
@@ -45,8 +46,8 @@ from fred_sdk.contracts.runtime import (
 )
 
 from fred_runtime.conversation_filesystem import (
+    ConversationFilesystemService,
     ConversationTextFileMetadata,
-    ConversationTextNamespacePort,
 )
 
 _MAX_CONCURRENT_READS = 16
@@ -56,10 +57,19 @@ _ResultT = TypeVar("_ResultT")
 
 
 class ConversationNamespaceBackend(BackendProtocol):
-    """Adapt one already-scoped conversation namespace to Deep's backend API."""
+    """Adapt one safe physical conversation namespace to Deep's backend API."""
 
-    def __init__(self, namespace: ConversationTextNamespacePort) -> None:
-        self._namespace = namespace
+    def __init__(
+        self,
+        conversation: ConversationFilesystemService,
+        *,
+        namespace_id: str,
+        max_bytes: int,
+        max_files: int,
+    ) -> None:
+        self._namespace = conversation.namespace(
+            namespace_id, max_bytes=max_bytes, max_files=max_files
+        )
 
     async def als(self, path: str) -> LsResult:
         try:
@@ -109,17 +119,24 @@ class ConversationNamespaceBackend(BackendProtocol):
     async def awrite(self, file_path: str, content: str) -> WriteResult:
         try:
             relative_path = _relative_path(file_path)
-            if await self._namespace.exists(relative_path):
-                return WriteResult(
-                    error=(
-                        f"Cannot write to {file_path} because it already exists. "
-                        "Read and then make an edit, or write to a new path."
-                    )
-                )
             await self._namespace.write_text(relative_path, content)
             return WriteResult(path=file_path)
         except ConversationScratchpadError as exc:
             return WriteResult(error=_error_message(exc))
+
+    async def adownload_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        async def download(path: str) -> FileDownloadResponse:
+            try:
+                content = await self._namespace.read_bytes(_relative_path(path))
+                return FileDownloadResponse(path=path, content=content)
+            except ConversationScratchpadFileNotFoundError:
+                return FileDownloadResponse(path=path, error="file_not_found")
+            except ConversationScratchpadInvalidPathError:
+                return FileDownloadResponse(path=path, error="invalid_path")
+            except ConversationScratchpadError as exc:
+                return FileDownloadResponse(path=path, error=_error_message(exc))
+
+        return await _bounded_gather(paths, download)
 
     async def aedit(
         self,

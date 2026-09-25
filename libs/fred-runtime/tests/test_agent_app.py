@@ -805,7 +805,11 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
         assert filesystem is not None
         service = ConversationFilesystemService(filesystem, "session-filesystem")
         asyncio.run(service.scratchpad().write_text("notes.md", "scratchpad"))
-        asyncio.run(service.namespace(".deep").write_text("result.md", "deep"))
+        asyncio.run(
+            service.namespace(
+                ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+            ).write_text("result.md", "deep")
+        )
 
         response = client.delete(
             "/pod/v1/agents/sessions/session-filesystem/filesystem"
@@ -814,7 +818,14 @@ def test_delete_session_filesystem_purges_both_runtime_namespaces(
         assert response.status_code == 200
         assert response.json() == {"purged": True}
         assert asyncio.run(service.scratchpad().exists("notes.md")) is False
-        assert asyncio.run(service.namespace(".deep").exists("result.md")) is False
+        assert (
+            asyncio.run(
+                service.namespace(
+                    ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+                ).exists("result.md")
+            )
+            is False
+        )
 
         retry_response = client.delete(
             "/pod/v1/agents/sessions/session-filesystem/filesystem"
@@ -3096,31 +3107,31 @@ async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_i
     first = agent_app_module._build_runtime_services(
         definition,
         _binding(trusted_session_id="trusted-session", request_id="request-one"),
-    ).conversation_scratchpad
+    ).conversation_filesystem
     fresh_same_session = agent_app_module._build_runtime_services(
         definition,
         _binding(trusted_session_id="trusted-session", request_id="request-two"),
-    ).conversation_scratchpad
+    ).conversation_filesystem
     other_session = agent_app_module._build_runtime_services(
         definition,
         _binding(trusted_session_id="other-session", request_id="request-three"),
-    ).conversation_scratchpad
+    ).conversation_filesystem
     request_fallback = agent_app_module._build_runtime_services(
         definition,
         _binding(trusted_session_id=None, request_id="fallback-request"),
-    ).conversation_scratchpad
+    ).conversation_filesystem
     assert first is not None
     assert fresh_same_session is not None
     assert other_session is not None
     assert request_fallback is not None
 
-    await first.write_text("notes.md", "shared")
+    await first.write_text("/notes.md", "shared", origin="system")
 
-    assert await fresh_same_session.read_text("notes.md") == "shared"
+    assert await fresh_same_session.read_text("/notes.md", origin="system") == "shared"
     with pytest.raises(ConversationScratchpadFileNotFoundError):
-        await other_session.read_text("notes.md")
+        await other_session.read_text("/notes.md", origin="system")
 
-    await request_fallback.write_text("fallback.md", "request scoped")
+    await request_fallback.write_text("/fallback.md", "request scoped", origin="system")
     assert storage.files == {
         "conversations/trusted-session/scratchpad/notes.md": b"shared",
         "conversations/fallback-request/scratchpad/fallback.md": b"request scoped",

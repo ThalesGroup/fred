@@ -5790,6 +5790,12 @@ Deep receives one explicit conversation-scoped `CompositeBackend`. Its default b
 root workspace to the conversation scratchpad in the shared runtime object store; `/.deep/` is a
 separate mount with its own quota. The parent and all native children use the same backend, so
 successful writes are visible without child-state merge and across later turns or runtime replicas.
+The runtime composes this backend with its ordered filesystem rules once per conversation and binds
+the same backend to `ConversationFilesystemPort` for capabilities. The port accepts absolute virtual
+paths and an explicit agent or system origin. Agent operations follow first-match permission rules;
+system operations bypass model-facing rules but still obey namespace quotas. Agent reads from
+`/.deep/` are allowed, writes are denied, and an interrupt rule rejects capability access until
+custom-tool approval is integrated. Full-text reads use backend file download to preserve bytes.
 The root workspace is model-readable and writable. `/.deep/` is model-readable but model writes
 are rejected; trusted Deep middleware writes its internal artifacts there. Future special
 filesystems must be mounted explicitly with their own model write restrictions. The six safe

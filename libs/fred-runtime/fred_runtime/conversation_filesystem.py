@@ -21,10 +21,9 @@ import logging
 import string
 import threading
 import weakref
-from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
@@ -35,7 +34,6 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadEditConflictError,
     ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
-    ConversationScratchpadPort,
     ConversationScratchpadQuotaExceededError,
     ConversationScratchpadStorageError,
     ConversationScratchpadUnsupportedContentError,
@@ -43,8 +41,6 @@ from fred_sdk.contracts.runtime import (
 
 if TYPE_CHECKING:
     from fred_core.kpi import BaseKPIWriter
-
-ConversationFilesystemNamespace = Literal["scratchpad", ".deep"]
 
 _SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
 _SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:@+-")
@@ -101,16 +97,37 @@ class ConversationTextFileMetadata:
     size: int
 
 
-class ConversationTextNamespacePort(ConversationScratchpadPort):
+class ConversationTextNamespacePort(Protocol):
     """Runtime-only view that also exposes object-list metadata."""
 
-    @abstractmethod
+    async def read_bytes(self, path: str) -> bytes:
+        raise NotImplementedError
+
+    async def read_text(self, path: str) -> str:
+        raise NotImplementedError
+
+    async def write_text(self, path: str, content: str) -> None:
+        raise NotImplementedError
+
+    async def edit_text(
+        self, path: str, old_text: str, new_text: str, *, replace_all: bool = False
+    ) -> int:
+        raise NotImplementedError
+
+    async def list(self, path: str = "") -> tuple[str, ...]:
+        raise NotImplementedError
+
+    async def exists(self, path: str) -> bool:
+        raise NotImplementedError
+
+    async def delete(self, path: str) -> None:
+        raise NotImplementedError
+
     async def list_metadata(
         self, path: str = ""
     ) -> tuple[ConversationTextFileMetadata, ...]:
         raise NotImplementedError
 
-    @abstractmethod
     async def purge(self) -> None:
         """Remove the complete trusted runtime namespace."""
         raise NotImplementedError
@@ -164,43 +181,48 @@ class ConversationFilesystemService:
         self._quotas = quotas
         self._kpi = kpi
 
-    def scratchpad(self) -> ConversationScratchpadPort:
-        """Return the capability-safe view, with no namespace selector exposed."""
-        return self.namespace("scratchpad")
+    def scratchpad(self) -> ConversationTextNamespacePort:
+        """Return the trusted physical default namespace for runtime maintenance."""
+        return self.namespace(
+            "scratchpad",
+            max_bytes=self._quotas.scratchpad_max_bytes,
+            max_files=self._quotas.scratchpad_max_files,
+        )
 
     def namespace(
-        self, namespace: ConversationFilesystemNamespace
+        self, namespace_id: str, *, max_bytes: int, max_files: int
     ) -> ConversationTextNamespacePort:
-        """Return a trusted runtime view for one code-owned namespace."""
-        if namespace == "scratchpad":
-            quota = _NamespaceQuota(
-                self._quotas.scratchpad_max_bytes,
-                self._quotas.scratchpad_max_files,
-            )
-        else:
-            quota = _NamespaceQuota(
-                self._quotas.deep_max_bytes,
-                self._quotas.deep_max_files,
-            )
+        """Bind an explicit quota to a safe physical namespace."""
         return _ConversationTextNamespace(
             self._filesystem,
             self._session_id,
-            namespace,
-            quota=quota,
+            namespace_id,
+            quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
         )
 
+    @property
+    def quotas(self) -> ConversationFilesystemQuotaSettings:
+        return self._quotas
 
-class _ConversationTextNamespace(ConversationTextNamespacePort):
+    async def purge_namespace(self, namespace_id: str) -> None:
+        await self.namespace(namespace_id, max_bytes=0, max_files=0).purge()
+
+
+class _ConversationTextNamespace:
     def __init__(
         self,
         filesystem: _ConversationFilesystemStorage,
         session_id: str,
-        namespace: ConversationFilesystemNamespace,
+        namespace: str,
         *,
         quota: _NamespaceQuota,
         kpi: BaseKPIWriter | None,
     ) -> None:
+        if not _is_safe_namespace_id(namespace):
+            raise ConversationScratchpadInvalidPathError(
+                "Namespace identifier must be one safe path segment"
+            )
         self._filesystem = filesystem
         self._conversation_id = session_id
         self._namespace = namespace
@@ -214,15 +236,19 @@ class _ConversationTextNamespace(ConversationTextNamespacePort):
         relative_path = _normalize_path(path)
         return await self._read_text(relative_path)
 
-    async def _read_text(self, relative_path: str) -> str:
+    async def read_bytes(self, path: str) -> bytes:
+        relative_path = _normalize_path(path)
         try:
-            content = await self._filesystem.read(self._physical_path(relative_path))
+            return await self._filesystem.read(self._physical_path(relative_path))
         except FileNotFoundError as exc:
             raise ConversationScratchpadFileNotFoundError(
                 "Scratchpad file does not exist"
             ) from exc
         except Exception as exc:
             raise self._storage_error("read", exc) from exc
+
+    async def _read_text(self, relative_path: str) -> str:
+        content = await self.read_bytes(relative_path)
         try:
             return content.decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -471,10 +497,7 @@ def _normalize_path(path: str, *, allow_root: bool = False) -> str:
             "Scratchpad path must be a non-empty relative POSIX path"
         )
     segments = path.split("/")
-    if (
-        any(segment in {"", ".", ".."} for segment in segments)
-        or segments[0] == ".deep"
-    ):
+    if any(segment in {"", ".", ".."} for segment in segments):
         raise ConversationScratchpadInvalidPathError(
             "Scratchpad path contains an unsafe segment"
         )
@@ -500,6 +523,14 @@ def _is_safe_session_id(session_id: str) -> bool:
         and session_id not in {"", ".", ".."}
         and session_id[0] in _SAFE_SESSION_ID_FIRST_CHARACTERS
         and all(character in _SAFE_SESSION_ID_CHARACTERS for character in session_id)
+    )
+
+
+def _is_safe_namespace_id(namespace: str) -> bool:
+    return (
+        isinstance(namespace, str)
+        and namespace not in {"", ".", ".."}
+        and all(character in _SAFE_SESSION_ID_CHARACTERS for character in namespace)
     )
 
 

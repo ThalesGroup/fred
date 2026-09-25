@@ -32,6 +32,7 @@ gated tool of the same name (design.md D3).
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
@@ -781,7 +782,12 @@ async def test_native_children_and_parent_share_live_conversation_backend(
     )
     namespace = SharedNamespace()
     backend = deep_mod.CompositeBackend(
-        default=deep_mod.ConversationNamespaceBackend(cast(Any, namespace)),
+        default=deep_mod.ConversationNamespaceBackend(
+            cast(Any, SimpleNamespace(namespace=lambda *_args, **_kwargs: namespace)),
+            namespace_id="scratchpad",
+            max_bytes=100,
+            max_files=10,
+        ),
         routes={},
         artifacts_root="/.deep",
     )

@@ -601,20 +601,29 @@ class ConversationScratchpadStorageError(ConversationScratchpadError):
     """Raised when the shared storage operation fails."""
 
 
-class ConversationScratchpadPort(ABC):
-    """Text-only files bound privately to one trusted conversation identity.
+class ConversationFilesystemPermissionError(ConversationScratchpadError):
+    """Raised when an agent access is denied by its filesystem policy."""
 
-    Every path is relative to that conversation's scratchpad root. Callers
-    cannot select a bucket, another conversation, or the internal ``.deep``
-    namespace through this contract.
-    """
+
+class ConversationFilesystemInterruptError(ConversationFilesystemPermissionError):
+    """Raised when an agent access needs approval unavailable to this port."""
+
+
+class ConversationFilesystemQuotaError(ConversationScratchpadError):
+    """Raised when the selected physical namespace rejects a write."""
+
+
+class ConversationFilesystemPort(ABC):
+    """Conversation-bound text files at absolute virtual workspace paths."""
 
     @abstractmethod
-    async def read_text(self, path: str) -> str:
+    async def read_text(self, path: str, *, origin: Literal["agent", "system"]) -> str:
         """Read one UTF-8 text file."""
 
     @abstractmethod
-    async def write_text(self, path: str, content: str) -> None:
+    async def write_text(
+        self, path: str, content: str, *, origin: Literal["agent", "system"]
+    ) -> None:
         """Create or fully replace one text file."""
 
     @abstractmethod
@@ -624,21 +633,20 @@ class ConversationScratchpadPort(ABC):
         old_text: str,
         new_text: str,
         *,
+        origin: Literal["agent", "system"],
         replace_all: bool = False,
     ) -> int:
         """Replace expected text in the latest content and return its match count."""
 
     @abstractmethod
-    async def list(self, path: str = "") -> tuple[str, ...]:
-        """List scratchpad-relative descendants in stable path order."""
+    async def list(
+        self, path: str = "/", *, origin: Literal["agent", "system"]
+    ) -> tuple[str, ...]:
+        """List readable absolute file paths in stable order."""
 
     @abstractmethod
-    async def exists(self, path: str) -> bool:
-        """Return whether a scratchpad-relative path exists."""
-
-    @abstractmethod
-    async def delete(self, path: str) -> None:
-        """Delete a scratchpad-relative file or directory if present."""
+    async def exists(self, path: str, *, origin: Literal["agent", "system"]) -> bool:
+        """Return whether a virtual file exists and is readable."""
 
 
 class HistoryStorePort(Protocol):
@@ -1527,9 +1535,9 @@ class RuntimeServices:
     # privately in the adapter. Appended last for the same positional-safety
     # reason noted above.
     team_wiki: TeamWikiPort | None = None
-    # Conversation-bound, text-only scratchpad for trusted runtime and
-    # capability code. Appended last to preserve positional compatibility.
-    conversation_scratchpad: ConversationScratchpadPort | None = None
+    # Conversation-bound virtual workspace for capability text files.
+    # Appended last to preserve positional compatibility.
+    conversation_filesystem: ConversationFilesystemPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

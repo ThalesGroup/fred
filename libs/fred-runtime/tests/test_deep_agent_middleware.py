@@ -85,7 +85,13 @@ def _binding() -> BoundRuntimeContext:
 def _fake_conversation_filesystem() -> Any:
     return SimpleNamespace(
         scratchpad=SimpleNamespace,
-        namespace=lambda _name: SimpleNamespace(),
+        namespace=lambda _name, **_kwargs: SimpleNamespace(),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
     )
 
 
@@ -410,7 +416,15 @@ async def test_deep_build_executor_uses_scratchpad_as_default_without_capability
     deep_namespace = cast(Any, SimpleNamespace())
     conversation_filesystem = SimpleNamespace(
         scratchpad=lambda: scratchpad,
-        namespace=lambda name: deep_namespace if name == ".deep" else scratchpad,
+        namespace=lambda name, **kwargs: (
+            deep_namespace if name == ".deep" else scratchpad
+        ),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
     )
     monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
     monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
@@ -419,7 +433,7 @@ async def test_deep_build_executor_uses_scratchpad_as_default_without_capability
 
     runtime = deep_mod.DeepAgentRuntime(
         definition=_fake_definition(),
-        services=RuntimeServices(conversation_scratchpad=scratchpad),
+        services=RuntimeServices(),
         conversation_filesystem=cast(Any, conversation_filesystem),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())

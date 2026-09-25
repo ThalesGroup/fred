@@ -48,6 +48,7 @@ from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_backend import (
     ConversationNamespaceBackend,
 )
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -235,6 +236,14 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
+        capability_filesystem = self.services.conversation_filesystem
+        if isinstance(capability_filesystem, DeepConversationFilesystemPort):
+            backend = capability_filesystem.backend
+            permissions = capability_filesystem.permissions
+        else:
+            backend, permissions = build_conversation_filesystem(
+                self._conversation_filesystem
+            )
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
@@ -257,7 +266,8 @@ class DeepAgentRuntime(ReActRuntime):
                 capability_block=capability_block,
                 child=True,
             ),
-            backend=_build_conversation_backend(self._conversation_filesystem),
+            backend=backend,
+            permissions=permissions,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -276,6 +286,7 @@ def _create_compiled_deep_agent(
     middleware: Sequence[AgentMiddleware],
     subagent_middleware: Sequence[AgentMiddleware],
     backend: BackendProtocol,
+    permissions: list[FilesystemPermission] | None = None,
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -311,13 +322,9 @@ def _create_compiled_deep_agent(
             subagents=[subagent],
             checkpointer=checkpointer,
             backend=backend,
-            permissions=[
-                FilesystemPermission(
-                    operations=["write"],
-                    paths=["/.deep/**"],
-                    mode="deny",
-                )
-            ],
+            permissions=permissions
+            if permissions is not None
+            else _conversation_permissions(),
         ),
     )
 
@@ -325,19 +332,42 @@ def _create_compiled_deep_agent(
 def _build_conversation_backend(
     conversation_filesystem: ConversationFilesystemService | None,
 ) -> CompositeBackend:
+    return build_conversation_filesystem(conversation_filesystem)[0]
+
+
+def build_conversation_filesystem(
+    conversation_filesystem: ConversationFilesystemService | None,
+) -> tuple[CompositeBackend, list[FilesystemPermission]]:
+    """Compose virtual routes, per-route quotas and agent rules together."""
     if conversation_filesystem is None:
         raise RuntimeError("DeepAgentRuntime requires a conversation filesystem.")
-    return CompositeBackend(
+    quotas = conversation_filesystem.quotas
+    backend = CompositeBackend(
         default=ConversationNamespaceBackend(
-            conversation_filesystem.namespace("scratchpad")
+            conversation_filesystem,
+            namespace_id="scratchpad",
+            max_bytes=quotas.scratchpad_max_bytes,
+            max_files=quotas.scratchpad_max_files,
         ),
         routes={
             "/.deep/": ConversationNamespaceBackend(
-                conversation_filesystem.namespace(".deep")
+                conversation_filesystem,
+                namespace_id=".deep",
+                max_bytes=quotas.deep_max_bytes,
+                max_files=quotas.deep_max_files,
             )
         },
         artifacts_root="/.deep",
     )
+    return backend, _conversation_permissions()
+
+
+def _conversation_permissions() -> list[FilesystemPermission]:
+    return [
+        FilesystemPermission(
+            operations=["write"], paths=["/.deep", "/.deep/**"], mode="deny"
+        )
+    ]
 
 
 def _reject_capability_filesystem_middleware(

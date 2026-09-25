@@ -125,7 +125,6 @@ async def test_scratchpad_bindings_share_one_conversation_but_isolate_another() 
     "path",
     (
         "/absolute.md",
-        ".deep/internal.md",
         "../outside.md",
         "folder/../outside.md",
         "folder/./note.md",
@@ -142,6 +141,14 @@ async def test_scratchpad_rejects_unsafe_paths_before_storage(path: str) -> None
         await scratchpad.write_text(path, "must not be stored")
 
     assert storage.files == {}
+
+
+@pytest.mark.asyncio
+async def test_physical_namespace_allows_safe_deep_named_subdirectory() -> None:
+    storage = _MemoryFilesystem()
+    namespace = ConversationFilesystemService(storage, "conversation-a").scratchpad()
+    await namespace.write_text(".deep/internal.md", "trusted")
+    assert await namespace.read_text(".deep/internal.md") == "trusted"
 
 
 @pytest.mark.asyncio
@@ -413,7 +420,7 @@ async def test_scratchpad_and_deep_namespace_quotas_are_independent() -> None:
         quotas=_quotas(scratchpad_max_bytes=3, deep_max_bytes=4),
     )
     scratchpad = service.scratchpad()
-    deep = service.namespace(".deep")
+    deep = service.namespace(".deep", max_bytes=4, max_files=10000)
 
     await scratchpad.write_text("notes.md", "123")
     await deep.write_text("state.txt", "1234")

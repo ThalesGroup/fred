@@ -17,29 +17,27 @@ from __future__ import annotations
 from inspect import signature
 from typing import get_type_hints
 
-from fred_sdk.contracts.runtime import ConversationScratchpadPort, RuntimeServices
+from fred_sdk.contracts.runtime import ConversationFilesystemPort, RuntimeServices
 
 
-def test_runtime_services_exposes_only_conversation_bound_scratchpad_operations() -> (
-    None
-):
+def test_runtime_services_exposes_only_conversation_bound_virtual_operations() -> None:
     method_names = {
         "read_text",
         "write_text",
         "edit_text",
         "list",
         "exists",
-        "delete",
     }
 
-    assert get_type_hints(RuntimeServices)["conversation_scratchpad"] == (
-        ConversationScratchpadPort | None
+    assert get_type_hints(RuntimeServices)["conversation_filesystem"] == (
+        ConversationFilesystemPort | None
     )
-    assert method_names <= set(ConversationScratchpadPort.__abstractmethods__)
+    assert method_names <= set(ConversationFilesystemPort.__abstractmethods__)
     for method_name in method_names:
         parameters = signature(
-            getattr(ConversationScratchpadPort, method_name)
+            getattr(ConversationFilesystemPort, method_name)
         ).parameters
+        assert "origin" in parameters
         assert "session_id" not in parameters
         assert "namespace" not in parameters
         assert "bucket" not in parameters
