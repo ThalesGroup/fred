@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import re
 import shutil
@@ -58,11 +59,78 @@ class LocalFilesystem(BaseFilesystem):
             PermissionError: If the resolved path escapes the root directory.
         """
         final_path = (self.root / path).resolve()
-        if not str(final_path).startswith(str(self.root)):
+        if not final_path.is_relative_to(self.root):
             raise PermissionError(
                 f"Access outside of filesystem root is forbidden: '{path}'"
             )
         return final_path
+
+    def _resolve_writable_path(self, path: str) -> Path:
+        full = self._resolve_path(path)
+        if not full.parent.exists():
+            raise FileNotFoundError(f"Parent directory does not exist: '{full.parent}'")
+        return full
+
+    def _list_sync(self, prefix: str) -> List[FilesystemResourceInfoResult]:
+        base = self._resolve_path(prefix)
+        results: List[FilesystemResourceInfoResult] = []
+
+        if not base.exists() or not base.is_dir():
+            return results
+
+        for candidate in base.rglob("*"):
+            try:
+                path = candidate.resolve()
+                if not path.is_relative_to(self.root):
+                    continue
+            except Exception:
+                logger.warning("Failed to resolve path during listing: %s", candidate)
+                continue
+
+            is_file = path.is_file()
+            stat = path.stat()
+            results.append(
+                FilesystemResourceInfoResult(
+                    path=str(path.relative_to(self.root)),
+                    size=stat.st_size if is_file else None,
+                    type=(
+                        FilesystemResourceInfo.FILE
+                        if is_file
+                        else FilesystemResourceInfo.DIRECTORY
+                    ),
+                    modified=datetime.fromtimestamp(stat.st_mtime),
+                )
+            )
+
+        results.sort(key=lambda result: result.path)
+        return results
+
+    def _delete_sync(self, path: str) -> None:
+        full = self._resolve_path(path)
+        if full == self.root:
+            raise ValueError("Deleting the filesystem root is forbidden")
+        if full.is_dir():
+            shutil.rmtree(full)
+        else:
+            full.unlink(missing_ok=True)
+
+    def _stat_sync(self, path: str) -> FilesystemResourceInfoResult:
+        full = self._resolve_path(path)
+        if not full.exists():
+            raise FileNotFoundError(f"{path} not found")
+
+        is_file = full.is_file()
+        stat = full.stat()
+        return FilesystemResourceInfoResult(
+            path=str(full.relative_to(self.root)),
+            size=stat.st_size if is_file else None,
+            type=(
+                FilesystemResourceInfo.FILE
+                if is_file
+                else FilesystemResourceInfo.DIRECTORY
+            ),
+            modified=datetime.fromtimestamp(stat.st_mtime),
+        )
 
     async def read(self, path: str) -> bytes:
         """
@@ -74,7 +142,7 @@ class LocalFilesystem(BaseFilesystem):
         Returns:
             bytes: File content.
         """
-        full = self._resolve_path(path)
+        full = await asyncio.to_thread(self._resolve_path, path)
         async with aiofiles.open(full, "rb") as f:
             return await f.read()
 
@@ -89,10 +157,7 @@ class LocalFilesystem(BaseFilesystem):
         Raises:
             FileNotFoundError: If the parent directory does not exist.
         """
-        full = self._resolve_path(path)
-
-        if not full.parent.exists():
-            raise FileNotFoundError(f"Parent directory does not exist: '{full.parent}'")
+        full = await asyncio.to_thread(self._resolve_writable_path, path)
 
         if isinstance(data, str):
             data = data.encode("utf-8")
@@ -110,39 +175,7 @@ class LocalFilesystem(BaseFilesystem):
         Returns:
             List[FilesystemResourceInfoResult]: List of files and directories with metadata.
         """
-        base = self._resolve_path(prefix)
-        results: List[FilesystemResourceInfoResult] = []
-
-        if not base.exists() or not base.is_dir():
-            return results
-
-        for p in base.rglob("*"):
-            try:
-                p = p.resolve()
-                if not str(p).startswith(str(self.root)):
-                    continue
-            except Exception:
-                logger.warning("Failed to resolve path during listing: %s", p)
-                continue
-
-            st = p.stat()
-            typ = (
-                FilesystemResourceInfo.FILE
-                if p.is_file()
-                else FilesystemResourceInfo.DIRECTORY
-            )
-
-            results.append(
-                FilesystemResourceInfoResult(
-                    path=str(p.relative_to(self.root)),
-                    size=st.st_size if p.is_file() else None,
-                    type=typ,
-                    modified=datetime.fromtimestamp(st.st_mtime),
-                )
-            )
-
-        results.sort(key=lambda x: x.path)
-        return results
+        return await asyncio.to_thread(self._list_sync, prefix)
 
     async def delete(self, path: str) -> None:
         """
@@ -151,11 +184,7 @@ class LocalFilesystem(BaseFilesystem):
         Args:
             path (str): Path to delete.
         """
-        full = self._resolve_path(path)
-        if full.is_dir():
-            shutil.rmtree(full, ignore_errors=True)
-        else:
-            full.unlink(missing_ok=True)
+        await asyncio.to_thread(self._delete_sync, path)
 
     async def print_root_dir(self) -> str:
         """
@@ -173,8 +202,8 @@ class LocalFilesystem(BaseFilesystem):
         Args:
             path (str): Directory path to create.
         """
-        full = self._resolve_path(path)
-        full.mkdir(parents=True, exist_ok=True)
+        full = await asyncio.to_thread(self._resolve_path, path)
+        await asyncio.to_thread(full.mkdir, parents=True, exist_ok=True)
 
     async def exists(self, path: str) -> bool:
         """
@@ -186,7 +215,8 @@ class LocalFilesystem(BaseFilesystem):
         Returns:
             bool: True if the path exists, False otherwise.
         """
-        return self._resolve_path(path).exists()
+        full = await asyncio.to_thread(self._resolve_path, path)
+        return await asyncio.to_thread(full.exists)
 
     async def cat(self, path: str) -> str:
         """
@@ -214,25 +244,7 @@ class LocalFilesystem(BaseFilesystem):
         Raises:
             FileNotFoundError: If the path does not exist.
         """
-        full = self._resolve_path(path)
-
-        if not full.exists():
-            raise FileNotFoundError(f"{path} not found")
-
-        typ = (
-            FilesystemResourceInfo.FILE
-            if full.is_file()
-            else FilesystemResourceInfo.DIRECTORY
-        )
-        size = full.stat().st_size if full.is_file() else None
-        modified = datetime.fromtimestamp(full.stat().st_mtime)
-
-        return FilesystemResourceInfoResult(
-            path=str(full.relative_to(self.root)),
-            size=size,
-            type=typ,
-            modified=modified,
-        )
+        return await asyncio.to_thread(self._stat_sync, path)
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
         """

@@ -37,8 +37,9 @@ rather than leaving Deep with a narrower, asymmetric subset of ReAct's approval 
   pause reaches Fred's own event/resume layer, not only the underlying graph library.
 - ReAct's own execution path is unchanged; it remains the comparison baseline for this change's
   acceptance evidence.
-- Deep's internally registered filesystem tools are enabled name by name: a partial Fred filesystem
-  surface cannot expose an unbound built-in such as `execute`.
+- Deep's safe built-in filesystem tools are enabled name by name. The standard runtime-provided
+  conversation backend counts as their binding even when no optional filesystem capability is
+  selected; `execute` remains unavailable.
 
 ## Capabilities
 
@@ -78,9 +79,9 @@ None.
 
 - `WorkspaceService`, `FredWorkspaceBackend`, and M2M binding validation — tracked separately under
   #2328 and #2498, not part of this change.
-- Passing `backend=`/`CompositeBackend` to `create_deep_agent` — Deep's filesystem tools stay on
-  `deepagents`'s own conversation-scoped checkpoint filesystem (see `design.md` D2); no durable,
-  user-visible Workspace exists yet.
+- A public, user-visible Workspace. The follow-on
+  `add-deep-agent-conversation-filesystem` change supplies a runtime-owned `CompositeBackend` for
+  `/scratchpad/` and `/.deep/`; it does not add a public file API or Workspace product surface.
 - The multi-document tender scenario, its rubric, and any deliverable-publication proof — a future
   slice once #2328/#2498 land, not evidence for this change.
 - Advanced planning, sub-agent orchestration, and `GraphRuntime` HITL — out of scope; see `design.md`

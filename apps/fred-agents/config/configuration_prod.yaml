@@ -79,6 +79,11 @@ storage:
   log_store:
     type: opensearch
     index: app-logs-index
+  object_store:
+    type: minio
+    endpoint: "http://localhost:8333"
+    access_key: "admin"
+    secure: false
 
 scheduler:
   enabled: false

@@ -138,6 +138,56 @@ In a production-like setup you will typically manage:
    - Used to harden authentication and authorization in multi-user environments.
    - See `docs/KEYCLOAK.md` for details when enabled.
 
+## 4.1 Fred Runtime object storage
+
+Fred Runtime uses one private object-storage bucket per deployment for all runtime-owned files.
+The runtime, rather than Knowledge Flow, owns this bucket. Feature code owns the paths within it;
+Deep agents currently use `conversations/<session_id>/scratchpad/` and
+`conversations/<session_id>/.deep/`. Do not expose the bucket publicly or make feature paths
+configurable.
+
+Grant the runtime workload identity permission to list the bucket and read, create, replace, and
+delete objects in it. On GCS, use Application Default Credentials with Workload Identity in
+production. On MinIO or another S3-compatible service, inject the access and secret keys from the
+deployment secret mechanism into the rendered runtime configuration; do not commit credentials.
+
+Configure `storage.object_store` in the runtime's `CONFIG_FILE`:
+
+```yaml
+# GCS (preferred on GKE; authentication comes from Workload Identity)
+storage:
+  object_store:
+    type: gcs
+    project_id: my-project # optional when ADC resolves the project
+```
+
+The Fred Helm chart keeps its one-replica development default on local storage and rejects a
+`fred-agents` deployment with more than one replica while that backend is selected. On GKE,
+the `fred-agents` service-account annotation uses Workload Identity, so no service-account key
+is mounted or written to the ConfigMap.
+
+For MinIO/S3-compatible storage, select `type: minio` and provide `endpoint`, `access_key`,
+`secret_key`, and `secure`. The bucket defaults to `fred-runtime` for both GCS and MinIO; set
+`bucket_name` only when a deployment needs a different name. Existing deployments using
+`fred-runtime-conversations` must keep that name explicitly until their objects are migrated.
+Local development may select `type: local` and `root`; local storage is not replica-safe and is
+not a production deployment profile.
+
+The soft namespace limits are code defaults: `/scratchpad/` gets 100 MiB and 1,000 files, while
+`/.deep/` gets 1 GiB and 10,000 files. Override only the limits that a deployment needs under
+`storage.conversation_filesystem` with `scratchpad_max_bytes`, `scratchpad_max_files`,
+`deep_max_bytes`, or `deep_max_files`. Fred defines no separate quota environment variables: an
+environment-driven deployment must render those settings into the selected `CONFIG_FILE`. Keep
+quota values and feature-prefix settings out of the shared chart and checked-in runtime profiles so
+omitted fields continue to use the code defaults.
+
+**Upgrade and rollback.** Existing files embedded in LangGraph checkpoints are not copied into the
+object store and there is no legacy read-through. After rollout, an active Deep conversation may
+fail to resolve an old file reference and should be restarted as a new conversation. A rollback may
+restore the checkpoint backend for new turns, but the bucket credentials and runtime cleanup
+endpoint must remain available until all already-externalized conversation objects have passed
+their recovery window and been purged.
+
 ---
 
 # 5. Production Settings

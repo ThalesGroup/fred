@@ -30,10 +30,13 @@ import logging
 from collections.abc import Collection, Mapping, Sequence
 from typing import cast
 
+from deepagents.backends import CompositeBackend
+from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import ToolApprovalPolicy
-from fred_sdk.contracts.runtime import Executor, TracerPort
+from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
+from fred_sdk.contracts.runtime import Executor, RuntimeServices, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -44,6 +47,8 @@ from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
 )
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -104,6 +109,21 @@ _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "grep",
     "execute",
 )
+_SAFE_FILESYSTEM_TOOL_NAMES: frozenset[str] = frozenset(
+    name for name in _FILESYSTEM_TOOL_NAMES if name != "execute"
+)
+_CONVERSATION_FILESYSTEM_PROMPT = (
+    "# Conversation filesystem\n\n"
+    "- `/` is the shared workspace for collaboration between the "
+    "parent agent and its sub-agents in this conversation.\n"
+    "- It is also the designated future location for files the agent creates "
+    "for users. Do not claim that those files are user-accessible unless a "
+    "delivery mechanism is available.\n"
+    "- Use absolute paths when creating or editing shared files, for example "
+    "`/notes.md`.\n"
+    "- `/.deep/` is reserved for runtime artifacts. Do not write or edit files "
+    "there. Other mounted filesystems may also be read-only."
+)
 
 
 class DeepAgentRuntime(ReActRuntime):
@@ -115,6 +135,21 @@ class DeepAgentRuntime(ReActRuntime):
     - same typed input/output and events as ReAct
     - deep-agent planner/runtime from `deepagents`
     """
+
+    def __init__(
+        self,
+        *,
+        definition: ReActAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+        conversation_filesystem: ConversationFilesystemService | None = None,
+    ) -> None:
+        super().__init__(
+            definition=definition,
+            services=services,
+            capability_block=capability_block,
+        )
+        self._conversation_filesystem = conversation_filesystem
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -143,6 +178,7 @@ class DeepAgentRuntime(ReActRuntime):
                 "DeepAgentRuntime does not support per-turn tool-call limits in this minimal version."
             )
         capability_block = self._capability_block
+        _reject_capability_filesystem_middleware(capability_block)
 
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
@@ -156,7 +192,10 @@ class DeepAgentRuntime(ReActRuntime):
             binding=binding,
         ).build_tools()
         available_tool_names = collect_available_tool_names(
-            (bound_tool.runtime_name for bound_tool in bound_tools),
+            (
+                *(bound_tool.runtime_name for bound_tool in bound_tools),
+                *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
+            ),
             capability_block,
         )
         system_prompt = _render_prompt_template(
@@ -192,6 +231,9 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
+        backend, permissions = build_conversation_filesystem(
+            self._conversation_filesystem
+        )
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
@@ -214,6 +256,8 @@ class DeepAgentRuntime(ReActRuntime):
                 capability_block=capability_block,
                 child=True,
             ),
+            backend=backend,
+            permissions=permissions,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -233,6 +277,8 @@ def _create_compiled_deep_agent(
     checkpointer: Checkpointer,
     middleware: Sequence[AgentMiddleware],
     subagent_middleware: Sequence[AgentMiddleware],
+    backend: BackendProtocol,
+    permissions: list[FilesystemPermission],
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -267,8 +313,61 @@ def _create_compiled_deep_agent(
             middleware=list(middleware),
             subagents=[subagent],
             checkpointer=checkpointer,
+            backend=backend,
+            permissions=permissions,
         ),
     )
+
+
+def build_conversation_filesystem(
+    conversation_filesystem: ConversationFilesystemService | None,
+) -> tuple[CompositeBackend, list[FilesystemPermission]]:
+    """Compose virtual routes, per-route quotas and agent rules together."""
+    if conversation_filesystem is None:
+        raise RuntimeError("DeepAgentRuntime requires a conversation filesystem.")
+    quotas = conversation_filesystem.quotas
+    backend = CompositeBackend(
+        default=ConversationNamespaceBackend(
+            conversation_filesystem,
+            namespace_id="scratchpad",
+            max_bytes=quotas.scratchpad_max_bytes,
+            max_files=quotas.scratchpad_max_files,
+        ),
+        routes={
+            "/.deep/": ConversationNamespaceBackend(
+                conversation_filesystem,
+                namespace_id=".deep",
+                max_bytes=quotas.deep_max_bytes,
+                max_files=quotas.deep_max_files,
+            )
+        },
+        artifacts_root="/.deep",
+    )
+    return backend, _conversation_permissions()
+
+
+def _conversation_permissions() -> list[FilesystemPermission]:
+    return [
+        FilesystemPermission(
+            operations=["write"], paths=["/.deep", "/.deep/**"], mode="deny"
+        )
+    ]
+
+
+def _reject_capability_filesystem_middleware(
+    capability_block: CapabilityAgentBlock | None,
+) -> None:
+    if capability_block is None:
+        return
+    if any(
+        isinstance(middleware, FilesystemMiddleware)
+        for middleware in capability_block.middleware
+    ):
+        raise RuntimeError(
+            "Deep capability middleware must not provide FilesystemMiddleware; "
+            "use the runtime conversation filesystem backend through the standard "
+            "root workspace instead."
+        )
 
 
 def _unavailable_filesystem_tool_names(
@@ -281,14 +380,15 @@ def _unavailable_filesystem_tool_names(
 
 
 def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
-    """Tell the model exactly which Deep filesystem tools remain unavailable."""
+    """Describe Deep's mounted filesystem scope and unavailable operations."""
     unavailable_tool_names = _unavailable_filesystem_tool_names(available_tool_names)
-    if not unavailable_tool_names:
-        return ""
-    return (
-        "The following filesystem tools are disabled in this runtime: "
-        f"{', '.join(unavailable_tool_names)}. Do not call them."
-    )
+    parts = [_CONVERSATION_FILESYSTEM_PROMPT]
+    if unavailable_tool_names:
+        parts.append(
+            "The following filesystem tools are disabled in this runtime: "
+            f"{', '.join(unavailable_tool_names)}. Do not call them."
+        )
+    return "\n\n".join(parts)
 
 
 def _build_deepagent_runtime_middleware(

@@ -40,6 +40,7 @@ from conftest import (
     RecordingTracer as _RecordingTracer,
 )
 from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import StateBackend
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
@@ -1068,6 +1069,8 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             checkpointer=None,
             subagent_middleware=[],
             middleware=[carrier, *middleware],
+            backend=StateBackend(),
+            permissions=[],
         )
     else:
         agent = create_agent(
