@@ -1,22 +1,32 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.testclient import TestClient
 from fred_core.security import oidc
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
 from fred_core.security.oidc import get_current_user_without_gcu
+from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_interceptors import DelegatedAuthorityInterceptor
 from fred_runtime.common.outbound_credentials import static_person_provider
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 
 _NOW = 2_000_000_000
+
+
+class _AgentSettings:
+    id = "test-agent"
+    team_id: str | None = None
+    tuning: AgentTuning | None = None
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 class _FixedDateTime(datetime):
@@ -250,3 +260,87 @@ def test_a_grant_from_a_workload_without_the_role_is_refused(signed_receiver) ->
     assert refused.json()["detail"] == "delegation_not_allowed"
     assert served.status_code == 200
     assert served.json()["subject"] == "runtime-subject"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "status_code", "body", "expected_detail"),
+    [
+        (
+            "read_query",
+            400,
+            '{"detail":"Unknown column amount_typo","internal":"not-for-the-model"}',
+            "Unknown column amount_typo",
+        ),
+        ("another_tool", 400, '{"detail":"not-for-the-model"}', None),
+        ("read_query", 500, '{"detail":"not-for-the-model"}', None),
+        ("read_query", 400, "not-for-the-model", None),
+        ("read_query", 400, '["not-for-the-model"]', None),
+        ("read_query", 400, '{"detail":{"internal":"not-for-the-model"}}', None),
+        ("read_query", 400, '{"detail":""}', None),
+        ("read_query", 400, '{"internal":"not-for-the-model"}', None),
+    ],
+)
+async def test_mounted_sql_error_reaches_runtime_artifact(
+    tool_name: str, status_code: int, body: str, expected_detail: str | None
+) -> None:
+    """Exercise the real mount and LangChain adapter, not a fabricated error envelope."""
+    pytest.importorskip("fastapi_mcp")
+    from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
+    from langchain_mcp_adapters.tools import load_mcp_tools
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    app = FastAPI()
+
+    @app.get("/query", operation_id=tool_name)
+    async def query(sql: str) -> Response:
+        assert sql == "SELECT amount_typo FROM d_sales"
+        return Response(body, status_code=status_code, media_type="application/json")
+
+    def client_factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+        auth: httpx.Auth | None = None,
+    ) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            headers=headers,
+            timeout=timeout,
+            auth=auth,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test.invalid"
+    ) as inner_client:
+        mount = DelegatedFastApiMCP(app, http_client=inner_client)
+        mount.mount_http(app)
+        async with app.router.lifespan_context(app):
+            async with streamablehttp_client(
+                "http://test.invalid/mcp", httpx_client_factory=client_factory
+            ) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    wire_result = await session.call_tool(
+                        tool_name, {"sql": "SELECT amount_typo FROM d_sales"}
+                    )
+                    assert wire_result.isError is True
+                    assert "not-for-the-model" not in wire_result.model_dump_json()
+                    tools = await load_mcp_tools(session)
+                    wrapper = ContextAwareTool(
+                        base_tool=tools[0],
+                        context_provider=lambda: None,
+                        agent_settings_provider=_AgentSettings,
+                    )
+                    content, artifact = await wrapper._arun(
+                        config={}, sql="SELECT amount_typo FROM d_sales"
+                    )
+
+    assert artifact.is_error is True
+    assert "not-for-the-model" not in content
+    assert "not-for-the-model" not in artifact.model_dump_json()
+    if expected_detail is None:
+        assert artifact.blocks == ()
+    else:
+        assert content == f"Error: {expected_detail}"
+        assert [block.text for block in artifact.blocks] == [expected_detail]

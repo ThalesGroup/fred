@@ -71,6 +71,8 @@ The tool-mount bridge verifies the outer bearer and endpoint grant, carries the 
 
 Inner-route authority refusals retain a bounded structured cause in the tool result, including when the outer HTTP response succeeds. The delegated client recognizes that cause before ordinary tool-error conversion. Error text is never used to classify authority; unrelated service failures retain ordinary error handling.
 
+The existing SQL diagnostic exception remains available through the bridge: `read_query` HTTP 400 responses preserve only their already-redacted, non-empty string `detail` in the error envelope recognized by the runtime. Other response fields and malformed bodies remain generic failures, with or without delegation.
+
 ### 5. Service identities and own-credential endpoints
 
 Service-role shortcuts apply only to `is_service_agent(user) and not holds_caller_role(user)`. This applies to team, tag, tabular, ingestion, synchronized-folder, managed execution, per-tool authorization and model-override policies. An asserted person has no bearer roles. Caller-role holders use ordinary endpoint authorization for own-identity operations; under outgoing delegation, agent execution requires a person.

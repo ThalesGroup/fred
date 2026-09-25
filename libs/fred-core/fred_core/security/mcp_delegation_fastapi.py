@@ -80,6 +80,24 @@ class DelegatedFastApiMCP(FastApiMCP):
                 isError=True,
             )
         if response.status_code >= 400:
+            # Preserve the existing curated SQL error envelope, never the full body.
+            if tool_name == "read_query" and response.status_code == 400:
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = None
+                detail = body.get("detail") if isinstance(body, dict) else None
+                if isinstance(detail, str) and detail:
+                    return types.CallToolResult(
+                        content=[
+                            types.TextContent(
+                                type="text",
+                                text="Error calling read_query. Status code: 400. Response: "
+                                + json.dumps({"detail": detail}, ensure_ascii=False),
+                            )
+                        ],
+                        isError=True,
+                    )
             raise RuntimeError("Tool request failed.") from None
         try:
             content = json.dumps(response.json(), indent=2, ensure_ascii=False)

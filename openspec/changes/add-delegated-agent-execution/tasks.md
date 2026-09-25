@@ -33,6 +33,10 @@ These tasks record the executable acceptance still required for ReAct, DeepAgent
 
 Response, run-scope, credential-provider and downstream-error handling share ownership. Update completion evidence only after the combined behavior passes its focused acceptance checks.
 
+- [x] 2.10 Preserve the curated `read_query` HTTP 400 diagnostic through the actual MCP mount and LangChain adapter into the runtime error artifact. Verify other tools/statuses, malformed bodies and extra response fields cannot expose diagnostics, while typed authority refusals remain unchanged.
+
+Task 2.10 verification (2026-09-25): the mounted regression failed before the fix and passed afterward. The receiver-integration, context-aware-tool and delegated-MCP suites passed all 60 tests, with the existing knowledge-flow environment supplying the optional `fastapi_mcp` dependency. The core/runtime module suites passed 2,380 tests (11 skipped); raw type checks reported zero errors in both packages. Root `make code-quality` passed across all modules using installed dependencies (`UV_NO_SYNC=1 UV_OFFLINE=1`, `MAKE='make -o dev -o node_modules'`). Independent review found no actionable issues. This evidence closes only task 2.10.
+
 ## 3. Executable acceptance verification
 
 - [ ] 3.1 Run the native and compatibility streaming matrix through the real application and request-metrics middleware: normal completion, pause, detected disconnect, request cancellation, response-start failure and ASGI 2.4 body-send failure. Assert no leaked record, iterator or child task and no synthetic success on cancellation.

@@ -147,6 +147,26 @@ before ordinary tool-error handling, without parsing or surfacing upstream text.
 - **THEN** the tool protocol preserves that cause and the delegated client stops the run
 - **AND** an unrelated HTTP 503 retains ordinary tool-error behavior
 
+### Requirement: Tool results preserve the curated SQL diagnostic
+
+The tool bridge SHALL preserve a non-empty string `detail` from a `read_query`
+HTTP 400 response in the existing SQL error envelope. Only that already-redacted
+detail SHALL cross the bridge, without other response fields. Other tool errors
+and malformed diagnostic bodies SHALL retain bounded generic failure handling.
+This behavior SHALL apply with and without delegation.
+
+#### Scenario: A SQL query fails through the mounted tool
+
+- **WHEN** `read_query` returns HTTP 400 with an already-redacted string `detail`
+- **THEN** the MCP result is an error and the runtime SQL error artifact contains that detail
+- **AND** unrelated response fields are absent from the tool result
+
+#### Scenario: A response is outside the curated SQL contract
+
+- **WHEN** another tool fails, `read_query` returns a different error status, or its HTTP 400 body has no non-empty string `detail`
+- **THEN** no SQL diagnostic is exposed
+- **AND** authentication and standing refusals retain their typed authority handling
+
 ### Requirement: A model cannot name the person a tool call acts for
 
 Grant parameters SHALL be absent from the tool schemas offered to a model. A
