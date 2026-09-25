@@ -26,10 +26,10 @@
 
 ## 5. Admin page
 
-- [ ] 5.1 Add `AnnouncementsPage` under `rework/components/pages/admin/` listing announcements with their severity, enabled state and enabled count, plus create/edit/delete and the enable toggle; verify page tests cover the list, the toggle and the delete confirmation.
-- [ ] 5.2 Add the announcement editor form with FR/EN tabs for the three text fields, `ProseMdxEditor`'s shared `proseMdxPlugins()` for both descriptions, `ProseToolbarButtons()` for `description_long` and a reduced undo/bold/italic/link toolbar for `description_short`; verify tests cover locale switching and that submitting with an empty short description is refused.
-- [ ] 5.3 Register the `/admin/annonces` route in `common/router.tsx` behind `Protected requires="admin"` and add the `AdminNavbar.tsx` entry with the same `requires`; verify the entry is hidden for a non-admin.
-- [ ] 5.4 Add the `fr` and `en` keys to `locales/*/translation.json`; verify no hardcoded user-facing string remains in the new components.
+- [x] 5.1 Add `AnnouncementsPage` under `rework/components/pages/admin/` listing announcements with their severity, enabled state and enabled count, plus create/edit/delete and the enable toggle; verify page tests cover the list, the toggle and the delete confirmation.
+- [x] 5.2 Add the announcement editor form with FR/EN tabs for the three text fields, `ProseMdxEditor`'s shared `proseMdxPlugins()` for both descriptions, `ProseToolbarButtons()` for `description_long` and a reduced undo/bold/italic/link toolbar for `description_short`; verify tests cover locale switching and that submitting with an empty short description is refused.
+- [x] 5.3 Register the `/admin/annonces` route in `common/router.tsx` behind `Protected requires="admin"` and add the `AdminNavbar.tsx` entry with the same `requires`; verify the entry is hidden for a non-admin.
+- [x] 5.4 Add the `fr` and `en` keys to `locales/*/translation.json`; verify no hardcoded user-facing string remains in the new components.
 
 ## 6. Remove the deploy-time info banner
 

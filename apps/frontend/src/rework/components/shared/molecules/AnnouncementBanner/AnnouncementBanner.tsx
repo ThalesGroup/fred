@@ -84,12 +84,7 @@ export default function AnnouncementBanner({ announcement, onDismissed }: Announ
             </div>
             <div className={styles.actions}>
               {long && (
-                <Button
-                  color="on-surface"
-                  variant="text"
-                  size="small"
-                  onClick={() => setDialogOpen(true)}
-                >
+                <Button color="on-surface" variant="text" size="small" onClick={() => setDialogOpen(true)}>
                   {t("rework.announcements.banner.moreInfo")}
                 </Button>
               )}
