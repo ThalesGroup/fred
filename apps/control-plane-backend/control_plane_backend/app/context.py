@@ -48,6 +48,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
@@ -108,6 +109,7 @@ class ApplicationContext:
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
+        self._announcement_store: AnnouncementStore | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
             None
@@ -387,6 +389,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_prompt_store
+
+    def get_announcement_store(self) -> AnnouncementStore:
+        if self._announcement_store is None:
+            self._announcement_store = AnnouncementStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._announcement_store
 
     def get_knowledge_base_definition_store(self) -> KnowledgeBaseDefinitionStore:
         if self._knowledge_base_definition_store is None:

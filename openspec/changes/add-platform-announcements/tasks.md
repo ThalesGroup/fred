@@ -1,15 +1,15 @@
 ## 1. Control-plane data layer
 
-- [ ] 1.1 Add `control_plane_backend/models/announcement_models.py` with the `announcement` table (id, severity, localized title/description_short/description_long JSON maps, enabled, dismissible, content_version, created_at, updated_at, updated_by) and register it in `models/table_ownership.py`; verify `python -c "import control_plane_backend.models.announcement_models"` succeeds and the table appears in the metadata.
-- [ ] 1.2 Generate the Alembic revision creating the table, parented on the current control-plane head; verify `alembic heads` reports exactly one head and `alembic upgrade head` then `alembic downgrade -1` both run clean against local Postgres.
-- [ ] 1.3 Add `announcements/store.py` with pure CRUD (list, get, create, update, delete, set_enabled) and no authorization checks, following `platform_prompt/store.py`; verify with store unit tests covering create → list → update → delete round-trips.
+- [x] 1.1 Add `control_plane_backend/models/announcement_models.py` with the `announcement` table (id, severity, localized title/description_short/description_long JSON maps, enabled, dismissible, content_version, created_at, updated_at, updated_by) and register it in `models/table_ownership.py`; verify `python -c "import control_plane_backend.models.announcement_models"` succeeds and the table appears in the metadata.
+- [x] 1.2 Generate the Alembic revision creating the table, parented on the current control-plane head; verify `alembic heads` reports exactly one head and `alembic upgrade head` then `alembic downgrade -1` both run clean against local Postgres.
+- [x] 1.3 Add `announcements/store.py` with pure CRUD (list, get, create, update, delete, set_enabled) and no authorization checks, following `platform_prompt/store.py`; verify with store unit tests covering create → list → update → delete round-trips.
 
 ## 2. Control-plane service and API
 
-- [ ] 2.1 Add `announcements/schemas.py`: the `Announcement` response model, create/update request models, the `info | warning | error | success` severity `Literal` reusing the same values as `config.models.UploadWarning`, and validation rejecting an empty `title`/`description_short` for every locale; verify schema unit tests cover the rejection cases in the delta spec.
-- [ ] 2.2 Add `announcements/service.py` gating every mutation on `OrganizationPermission.CAN_MANAGE_PLATFORM` via `rebac.check_user_permission_or_raise`, emitting `emit_audit_log` on create/update/delete/toggle, and bumping `content_version` only when a content-bearing field actually changed; verify tests assert a text edit bumps the version and an `enabled` toggle does not.
-- [ ] 2.3 Add `announcements/api.py` with the admin routes under `/admin/platform/announcements` and the authenticated read route returning enabled announcements only; register the router in `main.py`; verify route tests cover the administrator, non-administrator and unauthenticated cases from the delta spec.
-- [ ] 2.4 Run `make code-quality` and `make test` in `apps/control-plane-backend`; verify both are green.
+- [x] 2.1 Add `announcements/schemas.py`: the `Announcement` response model, create/update request models, the `info | warning | error | success` severity `Literal` reusing the same values as `config.models.UploadWarning`, and validation rejecting an empty `title`/`description_short` for every locale; verify schema unit tests cover the rejection cases in the delta spec.
+- [x] 2.2 Add `announcements/service.py` gating every mutation on `OrganizationPermission.CAN_MANAGE_PLATFORM` via `rebac.check_user_permission_or_raise`, emitting `emit_audit_log` on create/update/delete/toggle, and bumping `content_version` only when a content-bearing field actually changed; verify tests assert a text edit bumps the version and an `enabled` toggle does not.
+- [x] 2.3 Add `announcements/api.py` with the admin routes under `/admin/platform/announcements` and the authenticated read route returning enabled announcements only; register the router in `main.py`; verify route tests cover the administrator, non-administrator and unauthenticated cases from the delta spec.
+- [x] 2.4 Run `make code-quality` and `make test` in `apps/control-plane-backend`; verify both are green.
 
 ## 3. Generated client
 

@@ -830,6 +830,36 @@ operations:
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/announcements/active
+    review_status: approved
+    required_permission: authenticated # Delivery surface for the platform announcement banners. Authentication is the ONLY gate on purpose: an enabled announcement is content the deployment means every user to see, and the response carries nothing but admin-authored banner text. Deliberately NOT on the public pre-auth /frontend/config, where the retired deployer-configured info_banner used to ride — these rows are written at runtime from the admin console, so an unauthenticated visitor must not be able to read them. Returns enabled announcements only; disabled ones never leave the store.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/announcements
+    review_status: approved
+    required_permission: can_manage_platform # Admin listing: every announcement, enabled or not. The catch-all platform gate, checked inline (organization_authz keeps no helper for it by design, so a delegated surface cannot reuse it). Read shares the write gate because the draft of an unpublished announcement is not user-facing content.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/platform/announcements
+    review_status: approved
+    required_permission: can_manage_platform # Creates an announcement. This gate is the only thing between an actor and putting arbitrary markdown at the top of every user's screen. Body validated by AnnouncementWriteRequest (severity Literal, per-locale length caps, at least one non-empty locale for title and description_short) at parsing, before authz runs. Created disabled by default.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/announcements/{announcement_id}
+    review_status: approved
+    required_permission: can_manage_platform # Replaces an announcement's content wholesale. Bumps content_version when a reader-visible field actually changed, which makes the banner reappear for users who had dismissed the previous wording.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/announcements/{announcement_id}/enabled
+    review_status: approved
+    required_permission: can_manage_platform # Toggles delivery only. Separate from the content PUT precisely so a toggle never bumps content_version — otherwise flicking the switch would resurrect every banner users had already closed.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/platform/announcements/{announcement_id}
+    review_status: approved
+    required_permission: can_manage_platform # Removes the announcement permanently. Dismissal state lives in each user's browser keyed by id, so a deleted id simply stops matching anything.
 
   - service: knowledge-flow
     method: GET
