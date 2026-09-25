@@ -22,8 +22,8 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 
 ## 3. Token validation (`libs/fred-core/fred_core/security/oidc.py`)
 
-- [ ] 3.1 `initialize_user_security`: resolve endpoints through `resolve_endpoints`, set `KEYCLOAK_JWKS_URL` from `jwks_uri`, store the issuer and token endpoint in module globals, and call `split_realm_url` for the log line only when `provider == "keycloak"`.
-- [ ] 3.2 Add `get_token_endpoint() -> str` next to `get_keycloak_url()` and export it from `fred_core/__init__.py`.
+- [x] 3.1 `initialize_user_security`: resolve endpoints through `resolve_endpoints`, set `KEYCLOAK_JWKS_URL` from `jwks_uri`, store the issuer and token endpoint in module globals, and call `split_realm_url` for the log line only when `provider == "keycloak"`.
+- [x] 3.2 Add `get_token_endpoint() -> str` next to `get_keycloak_url()` and export it from `fred_core/__init__.py`.
 - [ ] 3.3 `decode_jwt`: the expected audience becomes `[config.audience or KEYCLOAK_CLIENT_ID]` (plus the delegation audience, unchanged), in both the soft check and the strict check.
 - [ ] 3.4 `decode_jwt`: read the username, email, given name and family name through the configured claim names. Read roles through `roles_claim` when set, else `resource_access.<client_id>.roles` (today's path). Add a small `_claim_path(payload, path)` helper.
 - [ ] 3.5 `decode_jwt`: read the identity from `claims.uid`. If the value is not a UUID and `provider == "oidc"`, set `uid = str(uuid5(NAMESPACE_URL, f"{issuer}#{value}"))`. Keycloak behavior is unchanged.

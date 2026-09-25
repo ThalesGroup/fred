@@ -26,6 +26,8 @@ from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
+from fred_pod.security.oidc_endpoints import resolve_endpoints
+
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.security.delegation import (
     AssertedUser,
@@ -77,6 +79,8 @@ KEYCLOAK_ENABLED = False
 KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
+USER_ISSUER = ""
+USER_TOKEN_ENDPOINT = ""
 # Every address the realm is configured under: tokens minted at the machine-to-
 # machine address carry that issuer. Set by apply_security_profile.
 _REALM_ISSUERS: frozenset[str] = frozenset()
@@ -114,6 +118,14 @@ def get_keycloak_url() -> str:
     return KEYCLOAK_URL
 
 
+def get_token_endpoint() -> str:
+    """Return the user provider's resolved token endpoint after startup."""
+    if not USER_TOKEN_ENDPOINT:
+        logger.warning("[AUTH] Token endpoint requested but not initialized.")
+        return ""
+    return USER_TOKEN_ENDPOINT
+
+
 def get_keycloak_client_id() -> str:
     """
     Returns the globally initialized Keycloak Client ID.
@@ -125,36 +137,56 @@ def get_keycloak_client_id() -> str:
     return KEYCLOAK_CLIENT_ID
 
 
-def initialize_user_security(config: UserSecurity):
-    """
-    Initialize the Keycloak authentication settings from the given configuration.
-    """
+def initialize_user_security(config: UserSecurity) -> None:
+    """Initialize user authentication from a Keycloak realm or OIDC issuer."""
     global \
         KEYCLOAK_ENABLED, \
         KEYCLOAK_URL, \
         KEYCLOAK_JWKS_URL, \
         KEYCLOAK_CLIENT_ID, \
+        USER_ISSUER, \
+        USER_TOKEN_ENDPOINT, \
         _JWKS_CLIENT
 
+    realm_url = str(config.realm_url).rstrip("/")
+    endpoints = resolve_endpoints(
+        provider=config.provider,
+        realm_url=realm_url,
+        jwks_url=str(config.jwks_url) if config.jwks_url else None,
+        token_url=str(config.token_url) if config.token_url else None,
+    )
     KEYCLOAK_ENABLED = config.enabled
-    KEYCLOAK_URL = str(config.realm_url).rstrip("/")
+    KEYCLOAK_URL = realm_url
     KEYCLOAK_CLIENT_ID = config.client_id
-    KEYCLOAK_JWKS_URL = f"{KEYCLOAK_URL}/protocol/openid-connect/certs"
+    KEYCLOAK_JWKS_URL = endpoints.jwks_uri
+    USER_ISSUER = endpoints.issuer
+    USER_TOKEN_ENDPOINT = endpoints.token_endpoint
     _JWKS_CLIENT = None  # reset; will lazy-create on first decode
 
-    # derive base + realm for log clarity
-    base, realm = split_realm_url(KEYCLOAK_URL)
-    logger.info(
-        "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
-        KEYCLOAK_ENABLED,
-        base,
-        realm,
-        KEYCLOAK_CLIENT_ID,
-        KEYCLOAK_JWKS_URL,
-        STRICT_ISSUER,
-        STRICT_AUDIENCE,
-        CLOCK_SKEW_SECONDS,
-    )
+    if config.provider == "keycloak":
+        base, realm = split_realm_url(KEYCLOAK_URL)
+        logger.info(
+            "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            KEYCLOAK_ENABLED,
+            base,
+            realm,
+            KEYCLOAK_CLIENT_ID,
+            KEYCLOAK_JWKS_URL,
+            STRICT_ISSUER,
+            STRICT_AUDIENCE,
+            CLOCK_SKEW_SECONDS,
+        )
+    else:
+        logger.info(
+            "[AUTH] OIDC initialized: enabled=%s issuer=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            KEYCLOAK_ENABLED,
+            USER_ISSUER,
+            KEYCLOAK_CLIENT_ID,
+            KEYCLOAK_JWKS_URL,
+            STRICT_ISSUER,
+            STRICT_AUDIENCE,
+            CLOCK_SKEW_SECONDS,
+        )
 
 
 def apply_security_profile(config: SecurityConfiguration) -> None:
