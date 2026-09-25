@@ -6084,3 +6084,30 @@ statements:
   `tracer_echo`, living in the test tree: never packaged, never discovered,
   no migrations. A test fixture is what it always was; shipping it as a real
   entry point is what put a demo table in production databases.
+
+### 8.86 Mistral completed-message tool-call recovery (2026-09-22)
+
+ReAct and Deep parent/child frames may recover a tool call only at the completed
+assistant-message boundary, only for a Mistral-qualified response, and only when
+the reconstructed provider content contains the exact empty typed sentinel
+`{"type":"reference","reference_ids":[]}` between a registered tool name
+and strict JSON arguments. Prose before, between, or after valid calls remains
+assistant content; the calls execute. Non-empty citation references, extra
+reference fields, literal exporter placeholders, duplicate JSON keys, unknown
+tools, schema-invalid arguments and over-cap representations remain assistant
+text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
+which carry reference IDs.
+Native tool calls, including duplicates, are preserved unchanged.
+
+Recovery is bounded, validates every call before allocating call IDs, and marks
+the normalized message so the Mistral-gated streaming bridge withholds the typed
+marker and call syntax from assistant/reasoning SSE. Only the longest suffix
+that remains a prefix of a registered tool name is held while the marker is
+unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+representation is normalized at most once and then follows the normal tool
+route: existing limits run before HITL proposals, approved calls execute through
+tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
+sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
+provider time. Each reconstructed call increments
+`agent.tool_call_text_recovered_total`, with a bounded model-name label for
+Prometheus/Grafana; this counts proposals even if a later gate prevents execution.
