@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { markdownShortcutPlugin, MDXEditor, toolbarPlugin } from "@mdxeditor/editor";
-import "@mdxeditor/editor/style.css";
-import { BoldItalicUnderlineToggles, CreateLink, Separator, UndoRedo } from "@mdxeditor/editor";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
+import TextArea from "@shared/atoms/TextArea/TextArea";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import Switch from "@shared/atoms/Switch/Switch";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
-import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
-import { ApplicationContext } from "../../../../../app/ApplicationContextProvider";
 import type { Announcement, AnnouncementWriteRequest } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AnnouncementEditorDialog.module.css";
 
@@ -59,6 +55,10 @@ function pruned(map: LocaleMap): LocaleMap {
  * than six stacked fields: an admin writes one language at a time, and the
  * switch makes "I have not written the English yet" visible instead of
  * silently shipping a half-translated banner.
+ *
+ * The descriptions are plain textareas. The banner still renders them through
+ * MarkdownRenderer, so emphasis and links typed by hand keep working — what
+ * went is the WYSIWYG toolbar, not the markdown.
  */
 export default function AnnouncementEditorDialog({
   open,
@@ -69,7 +69,6 @@ export default function AnnouncementEditorDialog({
   onCancel,
 }: AnnouncementEditorDialogProps) {
   const { t } = useTranslation();
-  const { darkMode } = useContext(ApplicationContext);
   const [locale, setLocale] = useState<Locale>("fr");
   const [severity, setSeverity] = useState<string>(announcement?.severity ?? "info");
   const [title, setTitle] = useState<LocaleMap>(announcement?.title ?? {});
@@ -108,32 +107,41 @@ export default function AnnouncementEditorDialog({
     >
       <div className={styles.form}>
         <div className={styles.row}>
-          <ButtonGroup
-            variant="radio"
-            size="small"
-            color="primary"
-            aria-label={t("rework.announcements.editor.severityGroup")}
-            items={SEVERITIES.map((value) => ({
-              label: t(`rework.announcements.severity.${value}`),
-            }))}
-            selectedIndex={SEVERITIES.indexOf(severity as (typeof SEVERITIES)[number])}
-            onSelectedIndexChange={(index) => setSeverity(SEVERITIES[index])}
-          />
+          {/* Redefining the pair the atom reads for its selected item, rather
+              than out-specifying it: this group IS the colour picker, so the
+              active segment has to show the banner's own colours. */}
+          <div className={styles.severityGroup} data-severity={severity}>
+            <ButtonGroup
+              variant="radio"
+              size="small"
+              color="primary"
+              aria-label={t("rework.announcements.editor.severityGroup")}
+              items={SEVERITIES.map((value) => ({
+                label: t(`rework.announcements.severity.${value}`),
+              }))}
+              selectedIndex={SEVERITIES.indexOf(severity as (typeof SEVERITIES)[number])}
+              onSelectedIndexChange={(index) => setSeverity(SEVERITIES[index])}
+            />
+          </div>
           <label className={styles.toggle}>
-            <Switch checked={dismissible} onChange={(event) => setDismissible(event.target.checked)} />
+            <Switch
+              size="small"
+              checked={dismissible}
+              onChange={(event) => setDismissible(event.target.checked)}
+            />
             {t("rework.announcements.editor.dismissible")}
           </label>
+          <span className={styles.rowSpacer} />
+          <ButtonGroup
+            variant="tabs"
+            size="small"
+            color="primary"
+            aria-label={t("rework.announcements.editor.localeGroup")}
+            items={LOCALES.map((value) => ({ label: t(`rework.announcements.locale.${value}`) }))}
+            selectedIndex={LOCALES.indexOf(locale)}
+            onSelectedIndexChange={(index) => setLocale(LOCALES[index])}
+          />
         </div>
-
-        <ButtonGroup
-          variant="tabs"
-          size="small"
-          color="primary"
-          aria-label={t("rework.announcements.editor.localeGroup")}
-          items={LOCALES.map((value) => ({ label: t(`rework.announcements.locale.${value}`) }))}
-          selectedIndex={LOCALES.indexOf(locale)}
-          onSelectedIndexChange={(index) => setLocale(LOCALES[index])}
-        />
 
         <TextInput
           label={t("rework.announcements.editor.title")}
@@ -142,58 +150,22 @@ export default function AnnouncementEditorDialog({
           error={missingTitle ? t("rework.announcements.editor.titleRequired") : undefined}
         />
 
-        <div className={styles.field}>
-          <span className={styles.label}>{t("rework.announcements.editor.descriptionShort")}</span>
-          <span className={styles.explanation}>{t("rework.announcements.editor.descriptionShortHint")}</span>
-          <div className={styles.editor}>
-            <MDXEditor
-              // Remount per locale: MDXEditor reads `markdown` only at mount,
-              // so switching language on a live instance would keep showing the
-              // previous language's text while edits landed on the new one.
-              // Same reason for the theme key as WikiEditor.
-              key={`short-${locale}-${darkMode ? "dark" : "light"}`}
-              markdown={short[locale] ?? ""}
-              onChange={(value) => setShort(withLocale(short, locale, value))}
-              className={darkMode ? "dark-theme dark-editor" : undefined}
-              plugins={[
-                ...proseMdxPlugins(),
-                markdownShortcutPlugin(),
-                // A reduced toolbar, not ProseToolbarButtons: headings, lists
-                // and tables cannot render inside a one-line banner strip.
-                toolbarPlugin({
-                  toolbarContents: () => (
-                    <>
-                      <UndoRedo />
-                      <Separator />
-                      <BoldItalicUnderlineToggles />
-                      <Separator />
-                      <CreateLink />
-                    </>
-                  ),
-                }),
-              ]}
-            />
-          </div>
-          {missingShort && <span className={styles.error}>{t("rework.announcements.editor.shortRequired")}</span>}
-        </div>
+        <TextArea
+          label={t("rework.announcements.editor.descriptionShort")}
+          explanation={t("rework.announcements.editor.descriptionShortHint")}
+          error={missingShort ? t("rework.announcements.editor.shortRequired") : undefined}
+          rows={3}
+          value={short[locale] ?? ""}
+          onChange={(event) => setShort(withLocale(short, locale, event.target.value))}
+        />
 
-        <div className={styles.field}>
-          <span className={styles.label}>{t("rework.announcements.editor.descriptionLong")}</span>
-          <span className={styles.explanation}>{t("rework.announcements.editor.descriptionLongHint")}</span>
-          <div className={styles.editor}>
-            <MDXEditor
-              key={`long-${locale}-${darkMode ? "dark" : "light"}`}
-              markdown={long[locale] ?? ""}
-              onChange={(value) => setLong(withLocale(long, locale, value))}
-              className={darkMode ? "dark-theme dark-editor" : undefined}
-              plugins={[
-                ...proseMdxPlugins(),
-                markdownShortcutPlugin(),
-                toolbarPlugin({ toolbarContents: () => <ProseToolbarButtons /> }),
-              ]}
-            />
-          </div>
-        </div>
+        <TextArea
+          label={t("rework.announcements.editor.descriptionLong")}
+          explanation={t("rework.announcements.editor.descriptionLongHint")}
+          rows={8}
+          value={long[locale] ?? ""}
+          onChange={(event) => setLong(withLocale(long, locale, event.target.value))}
+        />
 
         {serverError && <span className={styles.error}>{serverError}</span>}
       </div>

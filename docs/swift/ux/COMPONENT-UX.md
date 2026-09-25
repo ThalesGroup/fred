@@ -4336,18 +4336,24 @@ off does not. Storage failures degrade to "never dismissed".
 **Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
 **Status:** `Functional`
 
-`/admin/annonces`, platform-admin only. One row per announcement with its
-severity icon and accent, title, one-line short description, a live/draft
-switch and edit/delete actions; the header reports how many are live, since
-that is the number an admin loses track of once several stack. Delete goes
-through `ConfirmationDialog` as a critical action.
+`/admin/annonces`, platform-admin only. One row per announcement, rendered
+with the real `AnnouncementBanner` in preview mode — the component itself, not a
+lookalike, so what an admin sees is what users get — with the delivery switch
+and edit/delete actions beside it. In preview the close button still renders
+(an admin must see whether users will get one) but does nothing: collapsing a
+row would leave a hole. The header reports how many are live, since that is the
+number an admin loses track of once several stack. Delete goes through
+`ConfirmationDialog` as a critical action.
 
 The compose/edit dialog carries a FR/EN language switch rather than six
 stacked fields, so an unwritten translation is visible instead of silently
-shipping a half-translated banner. Both descriptions use MDXEditor:
-`description_long` gets the shared `ProseToolbarButtons`, `description_short`
-a reduced undo/bold-italic/link toolbar, because headings, lists and tables
-cannot render inside a banner strip. Composing never publishes — an admin
+shipping a half-translated banner. The switch sits on one line with the
+severity strip and the closable toggle; the strip's active segment takes the
+corresponding banner's own container pair, so picking a severity shows the
+colour it will produce. Both descriptions are plain textareas — the banner
+still renders them through `MarkdownRenderer`, so hand-typed emphasis and links
+work; what a WYSIWYG toolbar bought was not worth its weight for two fields
+that hold a sentence and a paragraph. Composing never publishes — an admin
 enables from the list once the wording is right.
 
 #### Open UX issues

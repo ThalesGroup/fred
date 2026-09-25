@@ -27,9 +27,37 @@
 .row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-m);
+}
+
+.rowSpacer {
+  flex: 1;
+}
+
+/* The severity strip is a colour picker, so its active segment shows the
+   banner's own pair. The atom reads `--secondary-container` / `--on-…` for
+   whichever segment is selected, in every group — redefining that pair on this
+   subtree retargets it without fighting the atom's own specificity, and
+   without changing the rule for any other group. */
+.severityGroup[data-severity="info"] {
+  --secondary-container: var(--info-container);
+  --on-secondary-container: var(--on-info-container);
+}
+
+.severityGroup[data-severity="warning"] {
+  --secondary-container: var(--warning-container);
+  --on-secondary-container: var(--on-warning-container);
+}
+
+.severityGroup[data-severity="error"] {
+  --secondary-container: var(--error-container);
+  --on-secondary-container: var(--on-error-container);
+}
+
+.severityGroup[data-severity="success"] {
+  --secondary-container: var(--success-container);
+  --on-secondary-container: var(--on-success-container);
 }
 
 .toggle {
@@ -39,35 +67,6 @@
   cursor: pointer;
   color: var(--on-surface);
   font: var(--font-body-medium);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-  width: 100%;
-}
-
-.label {
-  color: var(--on-surface);
-  font: var(--font-body-medium-emphasized);
-}
-
-.explanation {
-  color: var(--on-surface-variant);
-  font: var(--font-body-small);
-}
-
-/* The editor keeps a workable minimum height; the long description gets more
-   room because it is the one that holds real prose. */
-.editor {
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-}
-
-.editor :global(.mdxeditor-root-contenteditable) {
-  min-height: 6rem;
 }
 
 .error {

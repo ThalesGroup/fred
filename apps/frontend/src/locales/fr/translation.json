@@ -3430,7 +3430,7 @@
         "shortRequired": "Rédigez une description courte dans au moins une langue.",
         "descriptionLong": "Description longue (facultative)",
         "descriptionLongHint": "Affichée dans la boîte de dialogue « Plus d'info ». Laissez vide et le bandeau n'affichera pas le bouton.",
-        "dismissible": "Les utilisateurs peuvent fermer ce bandeau",
+        "dismissible": "Peut être fermé",
         "severityGroup": "Sévérité de l'annonce",
         "localeGroup": "Langue en cours d'édition"
       },

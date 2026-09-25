@@ -26,6 +26,9 @@
   background-color: var(--scrim);
 }
 
+/* Never taller than the viewport, keeping a 16px breathing gap top and
+   bottom: a form dialog that outgrows the screen would otherwise push its own
+   action bar out of reach, with no way to scroll to it. */
 .dialog {
   display: flex;
   flex-direction: column;
@@ -33,6 +36,7 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container-high);
   width: min(400px, 90vw);
+  max-height: calc(100dvh - var(--spacing-xl));
   color: var(--on-surface);
 }
 
@@ -46,8 +50,13 @@
   font: var(--font-title-medium);
 }
 
+/* The title and the action bar stay put; only the body scrolls. `min-height:
+   0` is what lets a flex child shrink below its content and actually scroll. */
 .content {
+  flex: 1;
   padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .actions {
