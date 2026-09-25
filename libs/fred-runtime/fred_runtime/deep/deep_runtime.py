@@ -329,12 +329,6 @@ def _create_compiled_deep_agent(
     )
 
 
-def _build_conversation_backend(
-    conversation_filesystem: ConversationFilesystemService | None,
-) -> CompositeBackend:
-    return build_conversation_filesystem(conversation_filesystem)[0]
-
-
 def build_conversation_filesystem(
     conversation_filesystem: ConversationFilesystemService | None,
 ) -> tuple[CompositeBackend, list[FilesystemPermission]]:

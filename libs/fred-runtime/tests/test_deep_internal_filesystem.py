@@ -27,9 +27,7 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfoResult,
 )
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.deep.deep_runtime import (
-    _build_conversation_backend,
-)
+from fred_runtime.deep.deep_runtime import build_conversation_filesystem
 from langchain_core.messages import ToolMessage
 
 
@@ -75,7 +73,7 @@ async def test_model_write_and_edit_permissions_preserve_deep_internal_file() ->
         ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
     )
     await internal.write_text("artifact.txt", "original")
-    backend = _build_conversation_backend(filesystem)
+    backend, _ = build_conversation_filesystem(filesystem)
     middleware = FilesystemMiddleware(
         backend=backend,
         _permissions=[
@@ -120,7 +118,7 @@ async def test_trusted_backend_routes_deep_artifacts_to_persistent_namespace() -
     internal = filesystem.namespace(
         ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
     )
-    backend = _build_conversation_backend(filesystem)
+    backend, _ = build_conversation_filesystem(filesystem)
 
     result = await backend.awrite(
         "/.deep/large_tool_results/tool-call", "trusted middleware content"
@@ -147,7 +145,7 @@ async def test_root_search_aggregates_workspace_and_internal_mount(
     await filesystem.namespace(
         ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
     ).write_text("large_tool_results/result.md", "internal needle")
-    backend = _build_conversation_backend(filesystem)
+    backend, _ = build_conversation_filesystem(filesystem)
 
     globbed = await backend.aglob("**/*.md", path=root)
     grepped = await backend.agrep("needle", path=root, glob="*.md")
@@ -167,7 +165,7 @@ async def test_root_search_aggregates_workspace_and_internal_mount(
 @pytest.mark.asyncio
 async def test_unmounted_paths_use_root_workspace() -> None:
     storage = _MemoryFilesystem()
-    backend = _build_conversation_backend(
+    backend, _ = build_conversation_filesystem(
         ConversationFilesystemService(storage, "conversation-a")
     )
 
@@ -186,4 +184,4 @@ async def test_unmounted_paths_use_root_workspace() -> None:
 
 def test_missing_conversation_filesystem_fails_closed() -> None:
     with pytest.raises(RuntimeError, match="requires a conversation filesystem"):
-        _build_conversation_backend(None)
+        build_conversation_filesystem(None)
