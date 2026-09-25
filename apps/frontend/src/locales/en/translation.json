@@ -3401,7 +3401,7 @@
         "subtitle_other": "{{count}} announcements are live for every user.",
         "subtitle_zero": "Nothing is showing to users right now.",
         "create": "New announcement",
-        "empty": "No announcement yet. Create one to show a banner at the top of the app."
+        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
       },
       "severity": {
         "info": "Info",

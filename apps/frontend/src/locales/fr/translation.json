@@ -3401,7 +3401,7 @@
         "subtitle_other": "{{count}} annonces sont affichées à tous les utilisateurs.",
         "subtitle_zero": "Aucune annonce n'est affichée aux utilisateurs actuellement.",
         "create": "Nouvelle annonce",
-        "empty": "Aucune annonce pour l'instant. Créez-en une pour afficher un bandeau en haut de l'application."
+        "empty": "Aucune annonce pour l'instant.\nCréez-en une pour afficher un bandeau en haut de l'application."
       },
       "severity": {
         "info": "Info",

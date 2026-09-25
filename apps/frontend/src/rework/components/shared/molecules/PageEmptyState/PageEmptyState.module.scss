@@ -34,10 +34,17 @@
   text-align: center;
 }
 
+/* Capped at a comfortable reading measure, and honouring newlines so a
+   translation can break its own line where the sentence does. */
+.message {
+  max-width: 50ch;
+  white-space: pre-line;
+}
+
 .icon {
   display: flex;
   justify-content: center;
   align-items: center;
   color: var(--primary);
-  font-size: 4.5rem;
+  font-size: 3rem;
 }
