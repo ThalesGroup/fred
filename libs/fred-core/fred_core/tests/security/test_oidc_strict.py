@@ -144,6 +144,33 @@ def test_strict_accepts_exact_issuer_and_audience(_rsa_keypair):
     assert "token_type" not in user.model_dump()
 
 
+def test_strict_uses_a_separate_api_audience(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_AUDIENCE", "fred-api")
+
+    user = oidc.decode_jwt(_token(private_key, iss=_REALM, aud="fred-api"))
+    assert user.token_audiences == frozenset({"fred-api"})
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+    assert exc.value.status_code == 401
+
+
+def test_soft_audience_diagnostic_uses_the_api_audience(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_AUDIENCE", "fred-api")
+    monkeypatch.setattr(oidc, "STRICT_AUDIENCE", False)
+    caplog.set_level("DEBUG", logger=oidc.__name__)
+
+    oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+
+    assert "audience does not include the configured audience" in caplog.text
+
+
 def test_strict_rejects_wrong_audience(_rsa_keypair):
     priv_pem, _ = _rsa_keypair
     with pytest.raises(HTTPException) as exc:

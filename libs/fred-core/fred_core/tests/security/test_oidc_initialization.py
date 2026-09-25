@@ -34,6 +34,7 @@ def preserve_security_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "KEYCLOAK_URL",
         "KEYCLOAK_JWKS_URL",
         "KEYCLOAK_CLIENT_ID",
+        "USER_AUDIENCE",
         "USER_ISSUER",
         "USER_TOKEN_ENDPOINT",
         "_JWKS_CLIENT",
@@ -53,6 +54,7 @@ def test_keycloak_initialization_keeps_existing_urls(
     assert oidc.KEYCLOAK_URL == REALM
     assert oidc.KEYCLOAK_JWKS_URL == f"{REALM}/protocol/openid-connect/certs"
     assert oidc.USER_ISSUER == REALM
+    assert oidc.USER_AUDIENCE == "app"
     assert get_token_endpoint() == f"{REALM}/protocol/openid-connect/token"
 
 
@@ -74,12 +76,15 @@ def test_oidc_initialization_discovers_endpoints_without_parsing_a_realm(
         oidc, "split_realm_url", lambda url: pytest.fail("OIDC is not a Keycloak realm")
     )
     oidc.initialize_user_security(
-        UserSecurity(realm_url=ISSUER, client_id="app", provider="oidc")
+        UserSecurity(
+            realm_url=ISSUER, client_id="app", provider="oidc", audience="fred-api"
+        )
     )
 
     assert requests == [(f"{ISSUER}/.well-known/openid-configuration", 5.0)]
     assert oidc.KEYCLOAK_JWKS_URL == JWKS
     assert oidc.USER_ISSUER == ISSUER
+    assert oidc.USER_AUDIENCE == "fred-api"
     assert get_token_endpoint() == TOKEN
 
 

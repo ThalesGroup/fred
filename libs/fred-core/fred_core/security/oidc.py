@@ -79,6 +79,7 @@ KEYCLOAK_ENABLED = False
 KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
+USER_AUDIENCE = ""
 USER_ISSUER = ""
 USER_TOKEN_ENDPOINT = ""
 # Every address the realm is configured under: tokens minted at the machine-to-
@@ -144,6 +145,7 @@ def initialize_user_security(config: UserSecurity) -> None:
         KEYCLOAK_URL, \
         KEYCLOAK_JWKS_URL, \
         KEYCLOAK_CLIENT_ID, \
+        USER_AUDIENCE, \
         USER_ISSUER, \
         USER_TOKEN_ENDPOINT, \
         _JWKS_CLIENT
@@ -158,6 +160,7 @@ def initialize_user_security(config: UserSecurity) -> None:
     KEYCLOAK_ENABLED = config.enabled
     KEYCLOAK_URL = realm_url
     KEYCLOAK_CLIENT_ID = config.client_id
+    USER_AUDIENCE = config.audience or config.client_id
     KEYCLOAK_JWKS_URL = endpoints.jwks_uri
     USER_ISSUER = endpoints.issuer
     USER_TOKEN_ENDPOINT = endpoints.token_endpoint
@@ -403,10 +406,14 @@ def decode_jwt(token: str) -> KeycloakUser:
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
         logger.warning("[AUTH] JWT issuer mismatch (soft)")
-    if KEYCLOAK_CLIENT_ID:
+    user_audience = USER_AUDIENCE or KEYCLOAK_CLIENT_ID
+    if user_audience:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
-        if KEYCLOAK_CLIENT_ID not in aud_list:
-            logger.debug("[AUTH] JWT audience does not include the configured client")
+        if user_audience not in aud_list:
+            logger.debug(
+                "[AUTH] JWT audience does not include the configured %s",
+                "client" if user_audience == KEYCLOAK_CLIENT_ID else "audience",
+            )
 
     # JWKS fetch + decode
     try:
@@ -425,16 +432,16 @@ def decode_jwt(token: str) -> KeycloakUser:
         )
 
     # Under the C3 profile, STRICT_AUDIENCE/STRICT_ISSUER are set: PyJWT then
-    # enforces exact audience (== client_id) and exact issuer (a realm address) on the
-    # verified payload, and rejects a confused `alg` (algorithms pinned to RS256).
+    # enforces the configured audience and exact issuer on the verified payload,
+    # and rejects a confused `alg` (algorithms pinned to RS256).
     # In dev (soft) we keep verification of signature + expiry only.
-    verify_aud = bool(STRICT_AUDIENCE and KEYCLOAK_CLIENT_ID)
+    verify_aud = bool(STRICT_AUDIENCE and user_audience)
     delegation = get_delegation_config()
     expected_audience: list[str] | None = None
     if verify_aud:
         # A delegating workload is addressed to the delegation audience, not to
         # this service's login client; the caller role is required for it below.
-        expected_audience = [KEYCLOAK_CLIENT_ID]
+        expected_audience = [user_audience]
         if delegation.accept_delegated_calls:
             expected_audience.append(delegation.audience)
     expected_issuer: list[str] | None = (
@@ -515,7 +522,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     service_account = bears_service_account_markers(payload, client_id)
 
     audiences = _token_audiences(payload.get("aud"))
-    if verify_aud and KEYCLOAK_CLIENT_ID not in audiences:
+    if verify_aud and user_audience not in audiences:
         # Admitted on the delegation audience alone: only a delegating workload may be.
         if (
             delegation.caller_role not in caller_roles

@@ -121,6 +121,7 @@ def _restore_security_profile_globals() -> Iterator[None]:
         oidc.KEYCLOAK_URL,
         oidc.KEYCLOAK_JWKS_URL,
         oidc.KEYCLOAK_CLIENT_ID,
+        oidc.USER_AUDIENCE,
         oidc._JWKS_CLIENT,
         oidc._REALM_ISSUERS,
     )
@@ -133,6 +134,7 @@ def _restore_security_profile_globals() -> Iterator[None]:
         oidc.KEYCLOAK_URL,
         oidc.KEYCLOAK_JWKS_URL,
         oidc.KEYCLOAK_CLIENT_ID,
+        oidc.USER_AUDIENCE,
         oidc._JWKS_CLIENT,
         oidc._REALM_ISSUERS,
     ) = oidc_before
