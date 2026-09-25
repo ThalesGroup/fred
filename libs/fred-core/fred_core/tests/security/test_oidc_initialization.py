@@ -37,6 +37,7 @@ def preserve_security_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "USER_AUDIENCE",
         "USER_ISSUER",
         "USER_TOKEN_ENDPOINT",
+        "USER_SECURITY_CONFIG",
         "_JWKS_CLIENT",
     ):
         monkeypatch.setattr(oidc, name, getattr(oidc, name))
@@ -75,16 +76,20 @@ def test_oidc_initialization_discovers_endpoints_without_parsing_a_realm(
     monkeypatch.setattr(
         oidc, "split_realm_url", lambda url: pytest.fail("OIDC is not a Keycloak realm")
     )
-    oidc.initialize_user_security(
-        UserSecurity(
-            realm_url=ISSUER, client_id="app", provider="oidc", audience="fred-api"
-        )
+    config = UserSecurity(
+        realm_url=ISSUER,
+        client_id="app",
+        provider="oidc",
+        audience="fred-api",
+        roles_claim=["roles"],
     )
+    oidc.initialize_user_security(config)
 
     assert requests == [(f"{ISSUER}/.well-known/openid-configuration", 5.0)]
     assert oidc.KEYCLOAK_JWKS_URL == JWKS
     assert oidc.USER_ISSUER == ISSUER
     assert oidc.USER_AUDIENCE == "fred-api"
+    assert oidc.USER_SECURITY_CONFIG is config
     assert get_token_endpoint() == TOKEN
 
 

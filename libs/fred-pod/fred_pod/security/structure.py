@@ -45,6 +45,8 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
+    first_name: str | None = Field(default=None, exclude=True, repr=False)
+    last_name: str | None = Field(default=None, exclude=True, repr=False)
     client_id: str | None = Field(
         default=None,
         description=(
