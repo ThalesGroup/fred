@@ -16,9 +16,9 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 
 ## 2. Endpoint resolution (`libs/fred-pod`)
 
-- [ ] 2.1 Create `fred_pod/security/oidc_endpoints.py` with `OidcEndpoints(issuer, jwks_uri, token_endpoint)` and `resolve_endpoints(provider, realm_url, jwks_url=None, token_url=None, timeout_seconds=5.0)` as specified in design §2: Keycloak URLs are built exactly as today; `oidc` uses one synchronous discovery request, checks that the issuer matches (trailing slash ignored), lets explicit overrides win, caches in-process and raises `RuntimeError` with a clear message on any failure.
-- [ ] 2.2 Export it from `fred_pod/security/__init__.py`.
-- [ ] 2.3 Tests (mock HTTP, no network): Keycloak URL construction is unchanged; discovery succeeds; issuer mismatch fails; timeout or non-200 response fails; overrides win; the second call hits the cache.
+- [x] 2.1 Create `fred_pod/security/oidc_endpoints.py` with `OidcEndpoints(issuer, jwks_uri, token_endpoint)` and `resolve_endpoints(provider, realm_url, jwks_url=None, token_url=None, timeout_seconds=5.0)` as specified in design §2: Keycloak URLs are built exactly as today; `oidc` uses one synchronous discovery request, checks that the issuer matches (trailing slash ignored), lets explicit overrides win, caches in-process and raises `RuntimeError` with a clear message on any failure.
+- [x] 2.2 Export it from `fred_pod/security/__init__.py`.
+- [x] 2.3 Tests (mock HTTP, no network): Keycloak URL construction is unchanged; discovery succeeds; issuer mismatch fails; timeout or non-200 response fails; overrides win; the second call hits the cache.
 
 ## 3. Token validation (`libs/fred-core/fred_core/security/oidc.py`)
 
