@@ -32,7 +32,12 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.runtime import ConversationScratchpadPort, RuntimeServices
+from fred_sdk.contracts.runtime import (
+    ConversationFilesystemPermissionError,
+    ConversationFilesystemPort,
+    ConversationScratchpadInvalidPathError,
+    RuntimeServices,
+)
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from port_fakes import FakeWritableDocumentStore
 
@@ -47,12 +52,12 @@ def fake_store():
         store_module.clear_store_provider()
 
 
-def _tool(scratchpad: ConversationScratchpadPort | None):
+def _tool(filesystem: ConversationFilesystemPort | None):
     ctx = CapabilityContext(
         identity=CapabilityIdentity(user_id="user-1", session_id="session-1"),
         config=EmptyModel(),
         turn_options=EmptyModel(),
-        services=RuntimeServices(conversation_scratchpad=scratchpad),
+        services=RuntimeServices(conversation_filesystem=filesystem),
     )
     return OpenWritableDocumentCapability().tools(ctx)[0]
 
@@ -64,13 +69,15 @@ async def test_imports_markdown_without_exposing_its_body_to_the_model(fake_stor
     registry.register(OpenWritableDocumentCapability())
     registry.validate({})
 
-    scratchpad = AsyncMock(spec=ConversationScratchpadPort)
-    scratchpad.read_text.return_value = "# Report\n\nComplete result"
-    result, artifact = await _tool(scratchpad).coroutine(
-        path="/results/merged.md", title="Merged report"
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    filesystem.read_text.return_value = "# Report\n\nComplete result"
+    result, artifact = await _tool(filesystem).coroutine(
+        path="/.deep/results/merged.md", title="Merged report"
     )
 
-    scratchpad.read_text.assert_awaited_once_with("results/merged.md")
+    filesystem.read_text.assert_awaited_once_with(
+        "/.deep/results/merged.md", origin="agent"
+    )
     assert "Complete result" not in result
     assert not artifact.is_error
     part = artifact.ui_parts[0]
@@ -83,27 +90,45 @@ async def test_imports_markdown_without_exposing_its_body_to_the_model(fake_stor
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "path", ["report.md", "/../secret.md", "/.deep/notes.md", "/results.csv"]
+    "path", ["report.md", "/results.csv"]
 )
 async def test_rejects_unsupported_paths_before_reading(fake_store, path):
-    scratchpad = AsyncMock(spec=ConversationScratchpadPort)
-    _result, artifact = await _tool(scratchpad).coroutine(path=path, title="Report")
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    _result, artifact = await _tool(filesystem).coroutine(path=path, title="Report")
 
     assert artifact.is_error
-    scratchpad.read_text.assert_not_awaited()
+    filesystem.read_text.assert_not_awaited()
     assert await fake_store.list_for_session("session-1") == []
 
 
 @pytest.mark.asyncio
-async def test_requires_scratchpad_and_limits_editor_import(fake_store):
+@pytest.mark.parametrize(
+    ("path", "error"),
+    [
+        ("/../secret.md", ConversationScratchpadInvalidPathError("Unsafe path")),
+        ("/mounted/private.md", ConversationFilesystemPermissionError("Access denied")),
+    ],
+)
+async def test_respects_filesystem_path_and_permission_checks(fake_store, path, error):
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    filesystem.read_text.side_effect = error
+    _result, artifact = await _tool(filesystem).coroutine(path=path, title="Report")
+
+    filesystem.read_text.assert_awaited_once_with(path, origin="agent")
+    assert artifact.is_error
+    assert await fake_store.list_for_session("session-1") == []
+
+
+@pytest.mark.asyncio
+async def test_requires_filesystem_and_limits_editor_import(fake_store):
     _result, unavailable = await _tool(None).coroutine(
         path="/report.md", title="Report"
     )
     assert unavailable.is_error
 
-    scratchpad = AsyncMock(spec=ConversationScratchpadPort)
-    scratchpad.read_text.return_value = "x" * (1024 * 1024 + 1)
-    _result, oversized = await _tool(scratchpad).coroutine(
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    filesystem.read_text.return_value = "x" * (1024 * 1024 + 1)
+    _result, oversized = await _tool(filesystem).coroutine(
         path="/report.md", title="Report"
     )
     assert oversized.is_error

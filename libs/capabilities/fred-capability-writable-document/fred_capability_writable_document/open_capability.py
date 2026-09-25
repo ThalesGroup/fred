@@ -38,24 +38,12 @@ _TOOL_REF = "open_writable_document"
 _MAX_IMPORT_BYTES = 1024 * 1024
 
 
-def _relative_markdown_path(path: str) -> str:
+def _markdown_path(path: str) -> str:
     if not path.startswith("/"):
         raise ValueError("Use an absolute workspace path, such as /report.md.")
-    relative = path[1:]
-    segments = relative.split("/")
-    if (
-        not relative
-        or any(segment in {"", ".", ".."} for segment in segments)
-        or segments[0] == ".deep"
-        or "\\" in relative
-        or any(ord(character) < 32 for character in relative)
-    ):
-        raise ValueError(
-            "The workspace path is invalid or outside the conversation files."
-        )
-    if PurePosixPath(relative).suffix.lower() != ".md":
+    if PurePosixPath(path).suffix.lower() != ".md":
         raise ValueError("Only Markdown (.md) files can be opened in this editor.")
-    return relative
+    return path
 
 
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
@@ -80,7 +68,7 @@ class OpenWritableDocumentCapability(
     def tools(
         self, ctx: CapabilityContext[EmptyModel, EmptyModel]
     ) -> Sequence[BaseTool]:
-        scratchpad = ctx.services.conversation_scratchpad
+        filesystem = ctx.services.conversation_filesystem
         session_id = ctx.identity.session_id
         user_id = ctx.identity.user_id
 
@@ -100,13 +88,14 @@ class OpenWritableDocumentCapability(
 
             if not session_id:
                 return _error("Cannot open a file without an active conversation.")
-            if scratchpad is None:
+            if filesystem is None:
                 return _error("Conversation files are unavailable on this agent.")
             if not title.strip():
                 return _error("Give the document a non-empty title.")
             try:
-                relative_path = _relative_markdown_path(path)
-                content = await scratchpad.read_text(relative_path)
+                content = await filesystem.read_text(
+                    _markdown_path(path), origin="agent"
+                )
             except (ValueError, ConversationScratchpadError) as exc:
                 return _error(f"Cannot open {path}: {exc}")
             if len(content.encode("utf-8")) > _MAX_IMPORT_BYTES:

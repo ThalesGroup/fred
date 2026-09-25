@@ -18,11 +18,12 @@ router.
 
 The package also registers a separately enabled, temporary
 `open_writable_document` capability for Deep Agent demos. Its sole tool copies
-an existing Markdown file from the current conversation workspace into the
-editor. Enable both capabilities on the demo agent: `writable_document` owns
-the editor and `open_writable_document` adds the import tool. The copied
-document can be edited, but those edits do not update the source workspace
-file. Import is limited to 1 MiB until the large-document editor work lands.
+an existing Markdown file from any readable mount in the current conversation
+workspace into the editor. Enable both capabilities on the demo agent:
+`writable_document` owns the editor and `open_writable_document` adds the import
+tool. The copied document can be edited, but those edits do not update the
+source workspace file. Import is limited to 1 MiB until the large-document
+editor work lands.
 
 ## Registration
 
