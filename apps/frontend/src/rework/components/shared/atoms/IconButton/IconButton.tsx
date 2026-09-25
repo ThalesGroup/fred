@@ -43,6 +43,14 @@ export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
    * reader announces the button without it.
    */
   badgeCount?: number;
+  /**
+   * M3 SMALL badge — a bare dot, no label, for "there is something here" when
+   * there is no count to show (an option left on, unseen activity). Ignored
+   * when `badgeCount` renders a large badge: two badges on one corner is noise.
+   * It is `aria-hidden` like the count badge, so carry the meaning in
+   * `aria-label` or a tooltip.
+   */
+  badgeDot?: boolean;
 }
 
 /** M3 caps the label at three digits; past that the exact number stops mattering. */
@@ -55,6 +63,7 @@ export default function IconButton({
   icon,
   loading = false,
   badgeCount,
+  badgeDot,
   disabled,
   className,
   "aria-busy": callerBusy,
@@ -80,14 +89,19 @@ export default function IconButton({
   // clip its state layer to the circle — a child badge would be cut off. The
   // wrapper only appears when there is a badge, so every other call site keeps
   // rendering a bare <button>.
-  if (badgeCount === undefined || badgeCount < 1) return button;
+  const hasCount = badgeCount !== undefined && badgeCount >= 1;
+  if (!hasCount && !badgeDot) return button;
 
   return (
     <span className={styles.badgeAnchor}>
       {button}
-      <span className={styles.badge} aria-hidden="true">
-        {badgeCount > BADGE_MAX ? `${BADGE_MAX}+` : badgeCount}
-      </span>
+      {hasCount ? (
+        <span className={styles.badge} aria-hidden="true">
+          {badgeCount > BADGE_MAX ? `${BADGE_MAX}+` : badgeCount}
+        </span>
+      ) : (
+        <span className={styles.badgeDot} aria-hidden="true" />
+      )}
     </span>
   );
 }
