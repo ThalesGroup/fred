@@ -25,6 +25,15 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+# Geometry, the role vocabulary and the tokens live one layer down, in the
+# design layer; re-exported here so every existing import keeps working.
+from fred_capability_ppt_filler.builder.design_system import (  # noqa: F401
+    TEXT_ROLES,
+    Box,
+    DesignSystem,
+    ZoneRole,
+)
+
 Intent = Literal[
     "title",
     "section",
@@ -55,38 +64,18 @@ INTENTS: tuple[Intent, ...] = (
     "fixed",
 )
 
-# `keep` is the author's "do not touch": the zone stays in the inventory (so it
-# can be re-enabled) but the renderer never writes it.
-ZoneRole = Literal[
-    "title",
-    "subtitle",
-    "heading",
-    "body",
-    "caption",
-    "number",
-    "label",
-    "image",
-    "keep",
-]
-
-TEXT_ROLES: frozenset[str] = frozenset(
-    {"title", "subtitle", "heading", "body", "caption", "number", "label"}
-)
-
-PatternSource = Literal["layout", "slide"]
+PatternSource = Literal["layout", "slide", "composed"]
 
 ExclusionReason = Literal[
-    "chart", "table", "icon_bank", "no_placeholder", "unsupported_parts", "author"
+    "chart",
+    "table",
+    "icon_bank",
+    "no_placeholder",
+    "unsupported_parts",
+    "author",
+    # Not a failure: a layout with nothing to fill is what composing draws on.
+    "canvas",
 ]
-
-
-class Box(BaseModel):
-    """Per-mille geometry on the slide."""
-
-    x: int
-    y: int
-    w: int
-    h: int
 
 
 class Zone(BaseModel):
@@ -161,6 +150,12 @@ class TemplateInventory(BaseModel):
 
     slide_width: int
     slide_height: int
+    # The tokens composing draws from (design.md D2). Absent on an inventory
+    # saved before this existed; the version bump recomputes it on the next save.
+    design_system: Optional["DesignSystem"] = None
+    # Index of the layout composed slides are drawn on: the emptiest one, which
+    # is precisely the layout that has nothing to fill (design.md task 2.6).
+    canvas_layout: Optional[int] = None
     # Rules the patterns were computed with (`analysis.ANALYSIS_VERSION`);
     # an older inventory is recomputed from the stored template on the next save.
     analysis_version: int = 0

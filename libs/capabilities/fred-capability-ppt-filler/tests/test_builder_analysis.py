@@ -80,7 +80,10 @@ def test_default_layouts_classify_by_placeholder_signature():
     assert intents["Comparison"] == "comparison"
     assert intents["Picture with Caption"] == "image_text"
     blank = _layout(inventory, "Blank")
-    assert not blank.included and blank.exclusion_reason == "no_placeholder"
+    # Still not offered to the agent — there is nothing on it to fill — but its
+    # emptiness is now a role, not a failure: it is what composing draws on.
+    assert not blank.included and blank.exclusion_reason == "canvas"
+    assert inventory.canvas_layout == blank.source_index
 
 
 def test_layout_zones_carry_roles_and_capacity():

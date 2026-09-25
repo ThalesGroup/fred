@@ -60,6 +60,7 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
+from fred_capability_ppt_filler.builder.compose import with_composed_patterns
 from fred_capability_ppt_filler.builder.analysis import (
     ANALYSIS_VERSION,
     analyze_template,
@@ -257,6 +258,16 @@ _BUILD_INSTRUCTIONS = (
 )
 
 
+def _composable(inventory: TemplateInventory) -> TemplateInventory:
+    """The template's own patterns plus the ones its design system can compose.
+
+    The catalogue and the tool's `pattern` enum are built from this. Without
+    it a template that drew only a cover offers nothing else, and every slide
+    lands on the cover — the deck this capability exists to stop (D3, D5).
+    """
+    return inventory.model_copy(update={"patterns": with_composed_patterns(inventory)})
+
+
 class _PptBuilderMiddleware(AgentMiddleware):
     """Carries the build tools and overlays the working rules on the system prompt."""
 
@@ -267,13 +278,17 @@ class _PptBuilderMiddleware(AgentMiddleware):
 
         if config.inventory is None:
             theme_bytes, theme_inventory = default_theme()
-            effective, _ = apply_overrides(theme_inventory, config.overrides)
+            effective, _ = apply_overrides(
+                _composable(theme_inventory), config.overrides
+            )
 
             async def load() -> bytes:
                 return theme_bytes
 
         else:
-            effective, _ = apply_overrides(config.inventory, config.overrides)
+            effective, _ = apply_overrides(
+                _composable(config.inventory), config.overrides
+            )
             template_key = config.template_key
 
             async def load() -> bytes:

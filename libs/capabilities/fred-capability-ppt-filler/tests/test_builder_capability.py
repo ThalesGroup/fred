@@ -34,7 +34,7 @@ from fred_capability_ppt_filler.builder.capability import (
     PptBuilderCapability,
     PptBuilderConfig,
 )
-from fred_capability_ppt_filler.builder.models import PatternOverride
+from fred_capability_ppt_filler.builder.models import PatternOverride, TemplateInventory
 from fred_capability_ppt_filler.builder.theme import default_theme
 from fred_capability_ppt_filler.builder.tools import (
     BUILD_TOOL_NAME,
@@ -180,7 +180,9 @@ async def test_an_older_analysis_is_recomputed_from_the_stored_template():
 
     fresh = analyze_template(TEMPLATE).inventory
     assert fresh is not None and fresh.analysis_version == ANALYSIS_VERSION
-    stale = fresh.model_copy(update={"analysis_version": 0, "patterns": []})
+    stale = fresh.model_copy(
+        update={"analysis_version": 0, "patterns": [], "design_system": None}
+    )
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
 
     stored = await PptBuilderCapability().validate_config(
@@ -191,6 +193,25 @@ async def test_an_older_analysis_is_recomputed_from_the_stored_template():
     assert stored.inventory.analysis_version == ANALYSIS_VERSION
     assert [p.id for p in stored.inventory.patterns] == [p.id for p in fresh.patterns]
     assert assets.store_calls == []  # the template and its thumbnails are untouched
+    # The design system arrives the same way: an inventory saved before it
+    # existed gets one back from the template already stored, no re-upload.
+    assert stale.design_system is None
+    assert stored.inventory.design_system is not None
+    assert stored.inventory.design_system.complete
+
+
+@pytest.mark.asyncio
+async def test_an_inventory_saved_without_a_design_system_still_loads():
+    """Additive: the field is absent from every config stored before it existed."""
+    fresh = analyze_template(TEMPLATE).inventory
+    assert fresh is not None
+    payload = fresh.model_dump()
+    payload.pop("design_system")
+
+    reloaded = TemplateInventory.model_validate(payload)
+
+    assert reloaded.design_system is None
+    assert [p.id for p in reloaded.patterns] == [p.id for p in fresh.patterns]
 
 
 @pytest.mark.asyncio
@@ -543,3 +564,52 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     description = _tools(_ctx(config, assets=assets))[BUILD_TOOL_NAME].description
     assert "ONE call builds the WHOLE deck" in description
     assert "Never split a deck across several calls" in description
+
+
+# -- the catalogue the agent is shown (D3) ------------------------------------
+
+
+def test_the_catalogue_offers_what_the_template_can_compose_not_only_what_it_drew():
+    """The bug this guards: `with_composed_patterns` existed, was tested, and
+    had no caller. The agent then saw only the designer's own slides — on a
+    template holding just a cover, that meant every slide landed on the cover.
+    """
+    from fred_capability_ppt_filler.builder.analysis import analyze_presentation
+    from fred_capability_ppt_filler.builder.capability import _composable
+    from fred_capability_ppt_filler.builder.plan import included_patterns
+    from tests.deck_builders import build_cover_only_template
+
+    inventory = analyze_presentation(build_cover_only_template())
+    offered = included_patterns(inventory)
+
+    assert not any(p.source == "composed" for p in offered)
+    # Nothing in this template can carry a list, a figure or a comparison.
+    assert all(p.intent in ("title", "fixed") for p in offered)
+
+    enriched = included_patterns(_composable(inventory))
+    composed = [p for p in enriched if p.source == "composed"]
+
+    assert composed, "the agent is still offered nothing to compose with"
+    assert {"cards", "steps", "comparison", "statement"} <= {p.intent for p in composed}
+    # The template's own come first: order is what a reader reads as preference.
+    assert enriched[: len(offered)] == offered
+
+
+def test_an_author_can_still_exclude_a_composed_pattern():
+    """Composed patterns join the catalogue BEFORE overrides are applied, so
+    excluding one works exactly as excluding the template's own."""
+    from fred_capability_ppt_filler.builder.analysis import analyze_presentation
+    from fred_capability_ppt_filler.builder.capability import _composable
+    from fred_capability_ppt_filler.builder.models import PatternOverride
+    from fred_capability_ppt_filler.builder.overrides import apply_overrides
+    from fred_capability_ppt_filler.builder.plan import included_patterns
+    from tests.deck_builders import build_cover_only_template
+
+    enriched = _composable(analyze_presentation(build_cover_only_template()))
+    target = next(p for p in enriched.patterns if p.id == "composed:card_row:3")
+
+    effective, _ = apply_overrides(
+        enriched, [PatternOverride(pattern_id=target.id, included=False)]
+    )
+
+    assert target.id not in {p.id for p in included_patterns(effective)}

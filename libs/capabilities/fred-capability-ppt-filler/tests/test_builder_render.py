@@ -356,7 +356,9 @@ def test_intent_names_resolve_and_degrade_with_a_warning():
         len(result.warnings) == 1 and "no 'two_columns' pattern" in result.warnings[0]
     )
     deck = Presentation(io.BytesIO(result.pptx))
-    assert _title(deck.slides[0]) == "T"
+    # Two short bullets are parallel items, so the slide is composed: its title
+    # is a drawn shape, not the layout's title placeholder.
+    assert "T" in _texts(deck.slides[0])
 
     result = render_deck(
         TEMPLATE,
