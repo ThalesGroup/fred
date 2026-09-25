@@ -37,7 +37,7 @@ Otherwise skip it.
 3. Do not transition, close or assign a ticket unless the developer asks — except the
    status moves in "Ticket status" and the PO handoff in the feature workflow below.
 
-## Three things `acli` cannot do — use the helper script
+## Things `acli` cannot do reliably — use the helper script
 
 `scripts/jira.py` (stdlib-only Python, run from the repo root or by absolute path).
 
@@ -90,6 +90,16 @@ The body is **Markdown**, converted to ADF: headings, bold, inline code, links (
 and bare `https://…` URLs), nested lists, quotes, rules and fenced code blocks all survive.
 Jira never auto-links text posted over REST, so a URL is only clickable if the converter
 marks it. Write the analysis to a file and pass `-F`; `-b` is for one-liners.
+
+### 4. Assign by account ID
+
+`acli jira workitem assign` can report success while treating a valid Atlassian account ID
+as an instruction to remove the assignee. Use the REST-backed helper instead:
+
+```bash
+python3 .claude/skills/jira/scripts/jira.py assign PRISM-68 \
+  --account-id 5f74d957ac3a2d006fd7b5ab   # Arnaud BARTHOLOME
+```
 
 ## Workflow — first pass on a ticket
 
@@ -149,12 +159,16 @@ Try to **reproduce** it, and locate the cause in this repo (`git log`, `grep`, r
 
 ### Feature / improvement
 
-The question is not *how* to build it — it is **how big is it**. Estimate the effort, the
-rough delay, and the impact on existing code and contracts. The final internal note is a
-message from the developer to the PO, not an autonomous agent analysis. Keep it short: a
-few lines and a size, not a design.
+Clarify the requested outcome, its impact on existing code and contracts, dependencies,
+risks, and relevant work already in progress. Do not estimate duration, effort, size,
+complexity points, delivery dates, or any other task estimate: the developer may have
+planning information from conversations the agent did not hear. The final internal note is
+a message from the developer to the PO, not an autonomous agent analysis. Keep it short,
+not a design.
 
 1. Draft the proposed PO note as Markdown in the scratchpad. Do not add an agent signature.
+   End it with an `Estimation du développeur` heading followed by empty space; do not seed
+   that section with suggestions or placeholders the developer might mistake for evidence.
 2. Open it in VS Code with `code <file>` and tell the developer to edit it into the message
    they want to send. Stop here until the developer says their edit is finished.
 3. Re-read the file. Review factual claims, sizing, commitments, links, tone, and whether
@@ -171,7 +185,8 @@ few lines and a size, not a design.
 PO handoff:
 
 ```bash
-acli jira workitem assign --key PRISM-68 --assignee 5f74d957ac3a2d006fd7b5ab   # Arnaud BARTHOLOME
+python3 .claude/skills/jira/scripts/jira.py assign PRISM-68 \
+  --account-id 5f74d957ac3a2d006fd7b5ab   # Arnaud BARTHOLOME
 ```
 
 ## Common recipes (plain `acli`)
