@@ -20,7 +20,7 @@ import os
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, Tuple
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Security
@@ -560,21 +560,33 @@ def decode_jwt(token: str) -> KeycloakUser:
     logger.debug("[AUTH] JWT token decoded")
 
     # Build user
-    sub = payload.get("sub")
-    if not isinstance(sub, str):
-        logger.warning("[AUTH] JWT token missing or invalid subject claim")
+    identity = _claim_path(payload, (claims.uid,))
+    if not isinstance(identity, str) or (
+        USER_SECURITY_CONFIG
+        and USER_SECURITY_CONFIG.provider == "oidc"
+        and not identity.strip()
+    ):
+        logger.warning("[AUTH] JWT token missing or invalid identity claim")
         raise HTTPException(
             status_code=401,
             detail="Invalid token claims",
             headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
         )
 
+    uid = identity
+    if USER_SECURITY_CONFIG and USER_SECURITY_CONFIG.provider == "oidc":
+        try:
+            UUID(identity)
+        except ValueError:
+            issuer = USER_ISSUER or str(USER_SECURITY_CONFIG.realm_url).rstrip("/")
+            uid = str(uuid5(NAMESPACE_URL, f"{issuer}#{identity}"))
+
     username_value = _claim_path(payload, (claims.username,))
     email_value = _claim_path(payload, (claims.email,))
     given_name_value = _claim_path(payload, (claims.given_name,))
     family_name_value = _claim_path(payload, (claims.family_name,))
     user = KeycloakUser(
-        uid=sub,
+        uid=uid,
         username=username_value if isinstance(username_value, str) else "",
         roles=client_roles,
         email=email_value if isinstance(email_value, str) else None,
