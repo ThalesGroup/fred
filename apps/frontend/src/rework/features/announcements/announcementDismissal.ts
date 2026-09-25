@@ -22,8 +22,15 @@
 
 const STORAGE_KEY = "fred.announcements.dismissed";
 
-/** `id@version` — a bumped version no longer matches a stored entry. */
-function entryKey(id: string, contentVersion: number): string {
+/**
+ * `id@version` — a bumped version no longer matches a stored entry.
+ *
+ * Exported because in-session dismissal state must key on exactly this: keying
+ * it on the id alone would leave an edited announcement suppressed for the
+ * rest of an already-open tab, which is the one case the version key exists
+ * to cover.
+ */
+export function dismissalKey(id: string, contentVersion: number): string {
   return `${id}@${contentVersion}`;
 }
 
@@ -47,8 +54,23 @@ function readDismissed(): Set<string> {
   }
 }
 
+/**
+ * Snapshot the dismissed set once, then test many announcements against it.
+ *
+ * Callers that filter a list must use this rather than `isDismissed` per item:
+ * every read parses the stored JSON, and `localStorage` is synchronous on the
+ * main thread.
+ */
+export function readDismissedSet(): ReadonlySet<string> {
+  return readDismissed();
+}
+
+export function isDismissedIn(dismissed: ReadonlySet<string>, id: string, contentVersion: number): boolean {
+  return dismissed.has(dismissalKey(id, contentVersion));
+}
+
 export function isDismissed(id: string, contentVersion: number): boolean {
-  return readDismissed().has(entryKey(id, contentVersion));
+  return isDismissedIn(readDismissed(), id, contentVersion);
 }
 
 /**
@@ -59,7 +81,7 @@ export function isDismissed(id: string, contentVersion: number): boolean {
  */
 export function markDismissed(id: string, contentVersion: number): void {
   const kept = [...readDismissed()].filter((entry) => !entry.startsWith(`${id}@`));
-  kept.push(entryKey(id, contentVersion));
+  kept.push(dismissalKey(id, contentVersion));
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(kept));
   } catch {

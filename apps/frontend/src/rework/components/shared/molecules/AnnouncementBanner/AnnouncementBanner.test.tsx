@@ -86,6 +86,25 @@ describe("AnnouncementBanner", () => {
     expect(el.querySelector('[data-severity="error"]')).not.toBeNull();
   });
 
+  it("falls back to any authored locale rather than rendering an empty strip", () => {
+    // The backend requires only one non-empty locale and the editor opens on
+    // the French tab, so a French-only announcement is ordinary. Resolving it
+    // to nothing for an English viewer would paint an accented strip with an
+    // icon, a close button and no words in it.
+    const el = render(
+      <AnnouncementBanner
+        announcement={announcement({
+          title: { fr: "Maintenance prévue" },
+          description_short: { fr: "Fred sera coupé dimanche." },
+        })}
+        onDismissed={() => {}}
+      />,
+    );
+
+    expect(el.textContent).toContain("Maintenance prévue");
+    expect(el.textContent).toContain("Fred sera coupé dimanche.");
+  });
+
   it("falls back to English when the viewer's locale has no entry", () => {
     const el = render(
       <AnnouncementBanner

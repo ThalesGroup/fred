@@ -20,7 +20,7 @@
 // announcement and reports when the user closes it.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -28,7 +28,7 @@ import Button from "@shared/atoms/Button/Button";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { SEVERITY_ICONS, type Severity } from "@shared/utils/severity";
-import { resolveLocalizedText } from "@core/hooks/useLocalizedUploadWarning";
+import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
 import type { Announcement } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AnnouncementBanner.module.css";
 
@@ -43,15 +43,15 @@ interface AnnouncementBannerProps {
   onDismissed: (announcement: Announcement) => void;
 }
 
-export default function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerProps) {
+function AnnouncementBanner({ announcement, onDismissed }: AnnouncementBannerProps) {
   const { t, i18n } = useTranslation();
   const [hiding, setHiding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const severity = announcement.severity as Severity;
-  const title = resolveLocalizedText(announcement.title, i18n.language);
-  const short = resolveLocalizedText(announcement.description_short, i18n.language);
-  const long = resolveLocalizedText(announcement.description_long, i18n.language);
+  const title = resolveAnnouncementText(announcement.title, i18n.language);
+  const short = resolveAnnouncementText(announcement.description_short, i18n.language);
+  const long = resolveAnnouncementText(announcement.description_long, i18n.language);
 
   // Fixed-delay removal rather than a transitionend listener: under
   // prefers-reduced-motion the transition never fires an end event (the
@@ -116,3 +116,8 @@ export default function AnnouncementBanner({ announcement, onDismissed }: Announ
     </>
   );
 }
+
+// Memoized: the stack refetches every 60 s and RTK hands back a fresh array
+// even when the content is identical. Without this, every poll re-runs
+// MarkdownRenderer's remark/rehype pipeline for every visible banner.
+export default memo(AnnouncementBanner);

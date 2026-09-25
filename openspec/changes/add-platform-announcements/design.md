@@ -104,6 +104,16 @@ took care to publish, and "N more" affordances at the top of the viewport are
 their own usability problem. Operators control the count; the admin page makes
 the enabled count visible so it is hard to forget one.
 
+### Fall back past `en` to any authored locale
+
+The shared `resolveLocalizedText` resolves viewer locale → `en` → nothing, which
+is right for deployer-configured text that a deployer writes in full. An
+announcement is not that: the backend requires only one non-empty locale and the
+editor opens on the French tab, so a French-only announcement is ordinary. The
+feature's own `resolveAnnouncementText` adds a final step — any locale the admin
+actually filled in — because a message in the wrong language is information
+while an empty accented strip with a close button is a bug on screen.
+
 ### Reduced editor toolbar for `description_short`
 
 `description_short` sits in a constrained strip. It gets a locally composed
@@ -121,6 +131,17 @@ authenticated subtree. This is the behavioural regression named in the
 proposal: a maintenance notice can no longer reach someone stuck at the login
 or terms screen. Accepted because serving admin-authored DB content on a public
 unauthenticated endpoint is the larger problem.
+
+**Do not express this as a boolean.** The first implementation kept the stack
+above the guards and gated it on `useAuth().isAuthenticated` — which is
+`!!KeyCloakService.GetUserRoles()`, and that function always returns an array
+(`["admin"]` in dev, `[...clientRoles]` otherwise, `[]` being truthy). The flag
+is therefore never false and the gate did nothing; a reviewer caught it, the
+unit test having mocked a state production cannot produce. Being *inside*
+`GcuGuard`/`BootstrapGuard` is the only honest signal, since both render their
+own page instead of their children when they block. To keep the push-down
+layout, `.appContent` became a flex column and the routed subtree moved into a
+`.routedContent` child that takes the remaining height.
 
 ### Gate on `CAN_MANAGE_PLATFORM`
 

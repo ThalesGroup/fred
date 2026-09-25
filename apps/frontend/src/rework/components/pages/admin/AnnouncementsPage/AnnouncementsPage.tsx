@@ -25,7 +25,7 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { SEVERITY_ICONS, type Severity } from "@shared/utils/severity";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
-import { resolveLocalizedText } from "@core/hooks/useLocalizedUploadWarning";
+import { resolveAnnouncementText } from "../../../../features/announcements/announcementText";
 import {
   useAnnouncementsQuery,
   useCreateAnnouncementMutation,
@@ -101,7 +101,7 @@ export default function AnnouncementsPage() {
     showConfirmationDialog({
       title: t("rework.announcements.delete.title"),
       message: t("rework.announcements.delete.message", {
-        title: resolveLocalizedText(announcement.title, i18n.language) ?? announcement.id,
+        title: resolveAnnouncementText(announcement.title, i18n.language) ?? announcement.id,
       }),
       criticalAction: true,
       onConfirm: async () => {
@@ -146,10 +146,10 @@ export default function AnnouncementsPage() {
                 </span>
                 <div className={styles.rowText}>
                   <span className={styles.rowTitle}>
-                    {resolveLocalizedText(announcement.title, i18n.language) ?? announcement.id}
+                    {resolveAnnouncementText(announcement.title, i18n.language) ?? announcement.id}
                   </span>
                   <span className={styles.rowMeta}>
-                    {resolveLocalizedText(announcement.description_short, i18n.language)}
+                    {resolveAnnouncementText(announcement.description_short, i18n.language)}
                   </span>
                 </div>
                 <label className={styles.toggle}>

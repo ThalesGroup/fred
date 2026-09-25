@@ -4287,38 +4287,76 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Global info banner (2026-08-19)
+## Platform announcement banners (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805)
 
-### `InfoBanner`
+### `AnnouncementStack` / `AnnouncementBanner`
 
-**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Location:** `src/rework/features/announcements/` (stack, dismissal) and
+`src/rework/components/shared/molecules/AnnouncementBanner/` (one banner)
 **Status:** `Functional`
 
-Full-width, non-dismissable announcement banner mounted once at
-the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
-on every page — pre-auth ones included — and pushes the app content down
-instead of overlaying it (the app shell is now a `100vh` flex column; routed
-pages size with `height: 100%`, never `100vh` — see
-`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
-`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
-the config block, nothing renders — there is no default banner. Persistent
-by default; the optional `auto_hide_seconds` removes it that many seconds
-after app load with a 300ms eased collapse (opacity + `grid-template-rows`
-1fr→0fr, so the content below slides up instead of jumping; snaps under
-`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
-starts). Background
-color comes from configuration via the `--banner-bg` custom property
-(deliberate token exception, comment in the module CSS); title/message/link
-labels are locale maps resolved with `en` fallback; links open in a new tab,
-separated by a `·`, and only http(s)/relative URLs are rendered.
-`role="status"` + `aria-live="polite"`.
+Full-width banners for the announcements a platform admin authors at
+`/admin/annonces`. The stack is mounted once at the app root
+(`src/app/App.tsx`) as the first flex child of the shell, so banners push the
+app content down instead of overlaying it (the shell is a `100vh` flex column;
+routed pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). It renders nothing, and issues no
+request, until the user is authenticated: unlike the config-driven banner it
+replaces, an announcement never appears on the GCU-acceptance or
+root-bootstrap screens.
+
+Every enabled announcement renders, stacked, ordered by severity (`error`,
+`warning`, `success`, `info`) then oldest-first within a severity. Each banner
+carries its severity icon and left accent rule, the localized title, and the
+short description through `MarkdownRenderer`. Severity drives both colour and
+icon from the shared map in `shared/utils/severity.ts` — the same
+severity → accent tokens Toast and `UploadWarningBanner` use. Nothing about the
+appearance is authorable, which is what retired the previous banner's
+configured background colour.
+
+**Actions.** A "Plus d'info" text button appears only when the announcement has
+a long description for the resolved locale; it opens the central `Dialog`
+molecule with the full markdown and a single "Fermer" button (backdrop
+dismissal works as usual). Closing the dialog is not a dismissal — the banner
+stays. A close `IconButton` appears only when the announcement is
+`dismissible`; it plays a 300 ms eased collapse (opacity +
+`grid-template-rows` 1fr→0fr, so the content below slides up instead of
+jumping; snaps under `prefers-reduced-motion`) and the node is removed on a
+fixed timeout rather than `transitionend`, which never fires when the
+transition is suppressed. The banner is `aria-hidden` as soon as the exit
+starts. `role="status"` + `aria-live="polite"`.
+
+**Dismissal** is per-browser, in `localStorage`, keyed by announcement id plus
+`content_version` — so re-editing an announcement brings it back for everyone
+who closed the previous wording, while an admin toggling delivery does not.
+Storage failures degrade to "never dismissed".
+
+### Admin page
+
+**Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
+**Status:** `Functional`
+
+`/admin/annonces`, platform-admin only. One row per announcement with its
+severity icon and accent, title, one-line short description, a live/draft
+switch and edit/delete actions; the header reports how many are live, since
+that is the number an admin loses track of once several stack. Delete goes
+through `ConfirmationDialog` as a critical action.
+
+The compose/edit dialog carries a FR/EN language switch rather than six
+stacked fields, so an unwritten translation is visible instead of silently
+shipping a half-translated banner. Both descriptions use MDXEditor:
+`description_long` gets the shared `ProseToolbarButtons`, `description_short`
+a reduced undo/bold-italic/link toolbar, because headings, lists and tables
+cannot render inside a banner strip. Composing never publishes — an admin
+enables from the list once the wording is right.
 
 #### Open UX issues
 
-- **Fixed dark text over a configured background.** `--banner-text: #00222c`
-  assumes the configured color stays light (like the documented `#00BBDD`
-  example); a dark configured color would fail contrast. Revisit only if a
-  deployment actually needs a dark banner.
+- **No cap on the stack.** Four enabled announcements take real vertical space
+  at the top of every page. Deliberate for now — silently truncating would hide
+  exactly the announcement someone published — and the enabled count in the
+  admin header is the mitigation. Revisit alongside scheduling, which will
+  bound how long a banner lingers.
 
 ---
 

@@ -39,8 +39,8 @@
 
 ## 7. Verification and close-out
 
-- [ ] 7.1 Run `make code-quality` from the monorepo root and `make test` in both touched projects; verify all green.
-- [ ] 7.2 Run the `fred-performance-reviewer` skill over the read route and the polling hook — a per-tab request every 60 s under concurrent load — and address anything it raises.
-- [ ] 7.3 Run `/code-review` on the full branch diff at default effort or higher and address the findings.
-- [ ] 7.4 Add the dated entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` for the new routes and the removed `/frontend/config` field, and document the banner stack and its dialog in `docs/swift/ux/COMPONENT-UX.md`.
+- [x] 7.1 Run `make code-quality` from the monorepo root and `make test` in both touched projects; verify all green.
+- [x] 7.2 Run the `fred-performance-reviewer` skill over the read route and the polling hook — a per-tab request every 60 s under concurrent load — and address anything it raises.
+- [x] 7.3 Run `/code-review` on the full branch diff at default effort or higher and address the findings.
+- [x] 7.4 Add the dated entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` for the new routes and the removed `/frontend/config` field, and document the banner stack and its dialog in `docs/swift/ux/COMPONENT-UX.md`.
 - [ ] 7.5 Record verification evidence in the change, then `openspec archive add-platform-announcements`; close the GitHub issue.

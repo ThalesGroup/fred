@@ -16,21 +16,21 @@
 // The banners at the top of the authenticated app.
 // Owns what AnnouncementBanner deliberately does not: which announcements are
 // live, in what order, and which ones this browser has already dismissed.
-// Stays the first flex child of `.appShell` (see App.tsx) so banners push the
-// routed content down instead of covering it — but skips the query and renders
-// nothing until the user is authenticated: announcements are admin-authored
-// content served from an authenticated route, never shown on the
-// terms-acceptance or root-bootstrap screens.
+// Mounted inside GcuGuard/BootstrapGuard (see App.tsx), above the routed
+// content in the `.appContent` flex column: banners push the page down instead
+// of covering it, and being inside the guards is what keeps them off the
+// terms-acceptance and root-bootstrap screens. Do not gate this on
+// `useAuth().isAuthenticated` — it is `!!GetUserRoles()`, and that call always
+// returns an array, so it is never false.
 // ---------------------------------------------------------------------------
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import AnnouncementBanner from "@shared/molecules/AnnouncementBanner/AnnouncementBanner";
 import { SEVERITY_RANK, type Severity } from "@shared/utils/severity";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { useAuth } from "../../../security/AuthContext";
 import { useActiveAnnouncementsQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Announcement } from "../../../slices/controlPlane/controlPlaneOpenApi";
-import { isDismissed, markDismissed } from "./announcementDismissal";
+import { dismissalKey, isDismissedIn, markDismissed, readDismissedSet } from "./announcementDismissal";
 import styles from "./AnnouncementStack.module.css";
 
 /** Most severe first; oldest first within one severity. */
@@ -41,28 +41,38 @@ function bySeverityThenAge(a: Announcement, b: Announcement): number {
 }
 
 export default function AnnouncementStack() {
-  const { isAuthenticated } = useAuth();
   // An admin in another session can enable an announcement at any moment, and
   // RTK tag invalidation only reaches the store that issued the mutation —
   // hence the shared cross-session refresh contract rather than a bespoke timer.
-  const { data, refetch } = useActiveAnnouncementsQuery(undefined, crossSessionRefreshOptions(!isAuthenticated));
-  useRefetchOnWindowFocus(refetch, !isAuthenticated);
+  const { data, refetch } = useActiveAnnouncementsQuery(undefined, crossSessionRefreshOptions(false));
+  useRefetchOnWindowFocus(refetch, false);
 
   // Dismissals are mirrored in React state as well as localStorage so the
-  // banner leaves immediately even when storage is unavailable.
-  const [dismissedThisView, setDismissedThisView] = useState<Set<string>>(new Set());
+  // banner leaves immediately even when storage is unavailable. Keyed exactly
+  // like the stored entries — on the id alone, an announcement edited while the
+  // tab stayed open would never come back.
+  const [dismissedThisView, setDismissedThisView] = useState<ReadonlySet<string>>(new Set());
 
   const onDismissed = useCallback((announcement: Announcement) => {
     markDismissed(announcement.id, announcement.content_version);
-    setDismissedThisView((current) => new Set(current).add(announcement.id));
+    setDismissedThisView((current) =>
+      new Set(current).add(dismissalKey(announcement.id, announcement.content_version)),
+    );
   }, []);
 
-  const visible = (isAuthenticated ? (data ?? []) : [])
-    .filter(
-      (announcement) =>
-        !dismissedThisView.has(announcement.id) && !isDismissed(announcement.id, announcement.content_version),
-    )
-    .sort(bySeverityThenAge);
+  // Memoized on the delivered set: a poll that returns identical content still
+  // hands back a fresh array, and re-rendering the banners re-runs the markdown
+  // parser for every description — once a minute, in every open tab, forever.
+  const visible = useMemo(() => {
+    const dismissed = readDismissedSet();
+    return (data ?? [])
+      .filter(
+        (announcement) =>
+          !dismissedThisView.has(dismissalKey(announcement.id, announcement.content_version)) &&
+          !isDismissedIn(dismissed, announcement.id, announcement.content_version),
+      )
+      .sort(bySeverityThenAge);
+  }, [data, dismissedThisView]);
 
   if (visible.length === 0) return null;
 

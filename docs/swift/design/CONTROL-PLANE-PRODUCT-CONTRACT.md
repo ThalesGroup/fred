@@ -179,10 +179,6 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
-  - `info_banner` — **added 2026-08-19** — optional deployer-configured
-    global announcement banner (`platform.frontend.info_banner`), rendered
-    full-width above the app on every page. Omitted/`null` → nothing
-    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -2836,33 +2832,16 @@ surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
 
-## 42. Contract Notes — global info banner (2026-08-19)
+## 42. Contract Notes — global info banner (2026-08-19, removed 2026-09-25)
 
-`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
-(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
-labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
-config `platform.frontend.info_banner`. When set, the frontend renders one
-full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
-at the app root) above the app content on **every** page, resolving texts
-from the active i18next locale with `en` fallback and pushing content down
-instead of overlaying it. Persistent by default; the optional
-`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
-seconds after app load. `null`/omitted → nothing rendered — the shipped
-default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
-commented-out example blocks.
-
-Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
-surfaces only), the banner's whole point is to show on every page — the
-GCU-acceptance and root-bootstrap screens included, which render _before_
-the authenticated `/frontend/bootstrap` can succeed. So it follows the
-`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
-the public surface. It carries only deployer-authored announcement content
-— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
-payload" rule intact. One deliberate scope note: on auth-enabled
-deployments the login page itself is Keycloak-hosted (`login-required`
-redirects away before the SPA renders), so the banner cannot cover the
-login screen — pre-auth here means "before the authenticated bootstrap",
-not "on the IdP's page".
+**Superseded by §55.** `FrontendConfig` carried an optional `info_banner`
+field, sourced from the deployment config `platform.frontend.info_banner`,
+that rendered one full-width non-dismissable banner above the app on every
+page — pre-auth screens included. Runtime, admin-authored announcements
+replaced it: the field, the Pydantic models, the Helm values block and the
+configuration samples are all gone. A deployment that set it recreates the
+banner from the announcements admin page. See §55 for the current contract,
+including the deliberate loss of pre-auth reach.
 
 ## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
 
@@ -4058,6 +4037,63 @@ version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
 
+
+## 55. Contract Notes - platform announcements (2026-09-25, issue #2805)
+
+**What it is.** A platform admin authors announcements at runtime; every
+enabled one renders as a banner at the top of the app for every authenticated
+user. This replaces `platform.frontend.info_banner`, which was deploy-time
+configuration and is **removed** — see "Removal" below.
+
+**Model.** One `platform_announcement` row per announcement.
+
+| Field                                                | Meaning                                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `severity`                                           | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable. |
+| `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
+| `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
+| `dismissible`                                        | Whether a user may close the banner.                                                           |
+| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible`. **Never** on an `enabled` toggle. |
+
+**`content_version` is the dismissal key.** The frontend records a dismissal in
+`localStorage` as `<id>@<content_version>`, so editing an announcement makes it
+reappear for everyone who closed the previous wording, while an admin toggling
+delivery off and on does not. That is why the toggle has its own endpoint
+rather than riding on the content `PUT`. Dismissals are per-browser: there is
+no server-side per-user state, and losing the stored set only makes a banner
+show again.
+
+**Endpoints.**
+
+| Method | Path                                                             | Permission           |
+| ------ | ---------------------------------------------------------------- | -------------------- |
+| GET    | `/announcements/active`                                          | authenticated        |
+| GET    | `/admin/platform/announcements`                                  | `can_manage_platform` |
+| POST   | `/admin/platform/announcements`                                  | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
+| DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+
+`/announcements/active` returns the enabled set and is gated by authentication
+only — an announcement is content every user is meant to see. Every admin
+mutation emits an audit record (`platform.announcement.created` / `.updated` /
+`.toggled` / `.deleted`).
+
+**Delivery.** The frontend polls the active set every 60 s and refetches on
+window focus, through the shared `crossSessionRefresh` contract. Deliberately
+no SSE channel: the control-plane has one today (tasks), and a second
+always-on stream per tab to carry a payload that changes a few times a month is
+the wrong trade.
+
+**Removal — BREAKING.** `platform.frontend.info_banner` is gone: the Pydantic
+models, the `info_banner` field on the public pre-auth
+`GET /frontend/config`, the Helm values block and the configuration samples. A
+deployment that set it loses its banner on upgrade and recreates it from the
+admin page. Announcements are **post-authentication only**, so unlike the old
+banner they do not render on the GCU-acceptance and root-bootstrap screens.
+
+**Not in this slice.** Scheduling (start/end dates) — the planned follow-up; the
+model does not preclude it. No per-team or per-role targeting.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

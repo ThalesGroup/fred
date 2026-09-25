@@ -99,21 +99,25 @@ function FredUiContent() {
       }
     >
       <AuthProvider>
-        {/* The announcement banners sit above the guards structurally so they
-            push the app down instead of covering it — routed pages size with
-            height: 100% against .appContent, never 100vh. The stack renders
-            nothing until the user is authenticated, so the GCU-acceptance and
-            root-bootstrap screens stay bare. */}
+        {/* The announcement banners render INSIDE the guards — that is the
+            only reliable "past GCU and bootstrap" signal: `useAuth()`'s
+            isAuthenticated is `!!GetUserRoles()`, and that call always returns
+            an array, so it is never false. They still push the routed content
+            down instead of covering it: .appContent is a flex column, the
+            banners are its auto-height first child and .routedContent takes the
+            rest, so routed pages keep sizing with height: 100%, never 100vh. */}
         <div className={styles.appShell}>
-          <AnnouncementStack />
           <div className={styles.appContent}>
             <GcuGuard>
               <BootstrapGuard>
-                <ConfirmationDialogProvider>
-                  <ToastProvider>
-                    <RouterProvider router={router} />
-                  </ToastProvider>
-                </ConfirmationDialogProvider>
+                <AnnouncementStack />
+                <div className={styles.routedContent}>
+                  <ConfirmationDialogProvider>
+                    <ToastProvider>
+                      <RouterProvider router={router} />
+                    </ToastProvider>
+                  </ConfirmationDialogProvider>
+                </div>
               </BootstrapGuard>
             </GcuGuard>
           </div>

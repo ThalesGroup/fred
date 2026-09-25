@@ -15,10 +15,13 @@
 // @vitest-environment happy-dom
 
 // What these pin: the stack is the only thing that decides what is on screen.
-// Ordering puts an incident above a week-old notice; an unauthenticated
-// visitor sees nothing at all and the query never fires; and a banner this
-// browser already dismissed never renders, while the same banner re-edited
-// does.
+// Ordering puts an incident above a week-old notice; a banner this browser
+// already dismissed never renders; and an edited announcement comes back — both
+// on a later load and in a tab that stayed open, which needs the in-session
+// state keyed exactly like the stored one.
+//
+// There is deliberately no "unauthenticated" case here: the stack is mounted
+// inside GcuGuard/BootstrapGuard, so reaching it already means both passed.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,13 +29,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Announcement } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 const queryMock = vi.fn();
-const authMock = vi.fn();
 
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useActiveAnnouncementsQuery: (...args: unknown[]) => queryMock(...args),
-}));
-vi.mock("../../../security/AuthContext", () => ({
-  useAuth: () => authMock(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -67,6 +66,7 @@ let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
 function render(): HTMLDivElement {
+  vi.useFakeTimers();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -75,11 +75,11 @@ function render(): HTMLDivElement {
 }
 
 beforeEach(() => {
-  authMock.mockReturnValue({ isAuthenticated: true, roles: [], userId: "u1" });
   queryMock.mockReturnValue({ data: [], refetch: vi.fn() });
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   container?.remove();
   container = null;
@@ -145,23 +145,30 @@ describe("AnnouncementStack", () => {
     expect(render().textContent).toContain("Title");
   });
 
-  it("renders nothing and skips the query for an unauthenticated visitor", () => {
-    authMock.mockReturnValue({ isAuthenticated: false, roles: [], userId: null });
-    queryMock.mockReturnValue({ data: [announcement()], refetch: vi.fn() });
-
-    const el = render();
-
-    expect(el.innerHTML).toBe("");
-    // The pre-auth screens must not fire an authenticated request at all.
-    expect(queryMock).toHaveBeenCalledWith(undefined, expect.objectContaining({ skip: true }));
-  });
-
-  it("subscribes with the shared cross-session refresh contract when authenticated", () => {
+  it("subscribes with the shared cross-session refresh contract", () => {
     render();
 
     expect(queryMock).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ skip: false, pollingInterval: 60_000 }),
     );
+  });
+
+  it("brings a banner back in the SAME tab once its content version moves", () => {
+    // In-session dismissal state is keyed like the stored one. Keyed on the id
+    // alone, an announcement edited while this tab stayed open would remain
+    // suppressed until a reload — the exact case the version key exists for.
+    queryMock.mockReturnValue({ data: [announcement()], refetch: vi.fn() });
+    const el = render();
+    const close = el.querySelector<HTMLButtonElement>('[aria-label="rework.announcements.banner.dismiss"]');
+    act(() => close!.click());
+    act(() => void vi.advanceTimersByTime(400));
+    expect(el.innerHTML).toBe("");
+
+    // The admin edits it; the next poll delivers version 2.
+    queryMock.mockReturnValue({ data: [announcement({ content_version: 2 })], refetch: vi.fn() });
+    act(() => root!.render(<AnnouncementStack />));
+
+    expect(el.textContent).toContain("Title");
   });
 });
