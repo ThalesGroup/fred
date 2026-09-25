@@ -36,7 +36,12 @@ from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPer
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
-from fred_sdk.contracts.runtime import Executor, RuntimeServices, TracerPort
+from fred_sdk.contracts.runtime import (
+    ConversationFilesystemPort,
+    Executor,
+    RuntimeServices,
+    TracerPort,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -48,7 +53,9 @@ from fred_runtime.capabilities.assembly import (
     collect_available_tool_names,
 )
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
     CapabilityHitlBinding,
@@ -143,6 +150,7 @@ class DeepAgentRuntime(ReActRuntime):
         services: RuntimeServices,
         capability_block: CapabilityAgentBlock | None = None,
         conversation_filesystem: ConversationFilesystemService | None = None,
+        subagent_permissions: list[FilesystemPermission] | None = None,
     ) -> None:
         super().__init__(
             definition=definition,
@@ -150,6 +158,9 @@ class DeepAgentRuntime(ReActRuntime):
             capability_block=capability_block,
         )
         self._conversation_filesystem = conversation_filesystem
+        self._subagent_permissions = (
+            tuple(subagent_permissions) if subagent_permissions is not None else None
+        )
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -191,10 +202,12 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
+        filesystem = self.services.conversation_filesystem
         available_tool_names = collect_available_tool_names(
             (
                 *(bound_tool.runtime_name for bound_tool in bound_tools),
                 *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
+                *(("concat_files",) if filesystem is not None else ()),
             ),
             capability_block,
         )
@@ -231,9 +244,22 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
-        backend, permissions = build_conversation_filesystem(
-            self._conversation_filesystem
+        capability_filesystem = self.services.conversation_filesystem
+        if isinstance(capability_filesystem, DeepConversationFilesystemPort):
+            backend = capability_filesystem.backend
+            permissions = capability_filesystem.permissions
+        else:
+            backend, permissions = build_conversation_filesystem(
+                self._conversation_filesystem
+            )
+        # Bind the child's effective policy to both its custom tools and
+        # Deep's built-in filesystem tools.
+        child_permissions = list(
+            self._subagent_permissions
+            if self._subagent_permissions is not None
+            else permissions
         )
+        child_filesystem = DeepConversationFilesystemPort(backend, child_permissions)
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
@@ -246,6 +272,7 @@ class DeepAgentRuntime(ReActRuntime):
                 approval_policy=policy.tool_approval,
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
+                filesystem=filesystem,
             ),
             subagent_middleware=_build_deepagent_runtime_middleware(
                 tracer=self.services.tracer,
@@ -254,10 +281,12 @@ class DeepAgentRuntime(ReActRuntime):
                 approval_policy=policy.tool_approval,
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
+                filesystem=child_filesystem,
                 child=True,
             ),
             backend=backend,
             permissions=permissions,
+            subagent_permissions=child_permissions,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -279,6 +308,7 @@ def _create_compiled_deep_agent(
     subagent_middleware: Sequence[AgentMiddleware],
     backend: BackendProtocol,
     permissions: list[FilesystemPermission],
+    subagent_permissions: list[FilesystemPermission] | None = None,
 ) -> _CompiledReActAgent:
     try:
         from deepagents import create_deep_agent
@@ -293,6 +323,10 @@ def _create_compiled_deep_agent(
         SubAgent,
     )
 
+    parent_permissions = permissions
+    child_permissions = (
+        subagent_permissions if subagent_permissions is not None else parent_permissions
+    )
     # Explicitly replace the library's general-purpose child, which otherwise
     # has neither Fred's composed prompt nor its middleware frame.
     subagent: SubAgent = {
@@ -303,6 +337,7 @@ def _create_compiled_deep_agent(
         ),
         "tools": list(tools),
         "middleware": list(subagent_middleware),
+        "permissions": child_permissions,
     }
     return cast(
         _CompiledReActAgent,
@@ -314,7 +349,7 @@ def _create_compiled_deep_agent(
             subagents=[subagent],
             checkpointer=checkpointer,
             backend=backend,
-            permissions=permissions,
+            permissions=parent_permissions,
         ),
     )
 
@@ -399,6 +434,7 @@ def _build_deepagent_runtime_middleware(
     approval_policy: ToolApprovalPolicy,
     available_tool_names: Collection[str],
     capability_block: CapabilityAgentBlock | None = None,
+    filesystem: ConversationFilesystemPort | None = None,
     child: bool = False,
 ) -> list[AgentMiddleware]:
     """Keep hygiene outermost and guard disabled tools before HITL runs.
@@ -415,6 +451,7 @@ def _build_deepagent_runtime_middleware(
             kpi=kpi,
         ),
         *(capability_block.middleware if capability_block is not None else ()),
+        *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         ToolCallTextRecoveryMiddleware(kpi=kpi),
         TracingKpiMiddleware(

@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
@@ -187,3 +188,124 @@ async def test_compiled_deep_agent_can_use_safe_scratchpad_tools_without_capabil
     assert model.bound_tool_names
     assert all(_SAFE_FILESYSTEM_TOOLS <= names for names in model.bound_tool_names)
     assert all("execute" not in names for names in model.bound_tool_names)
+
+
+@pytest.mark.asyncio
+async def test_native_child_can_concatenate_shared_parts_for_parent(
+    tmp_path: Any,
+) -> None:
+    filesystem = ConversationFilesystemService(
+        LocalFilesystem(str(tmp_path)), "conversation-a"
+    )
+    backend, permissions = build_conversation_filesystem(filesystem)
+    workspace = DeepConversationFilesystemPort(backend, permissions)
+    await workspace.write_text("/part-2.md", "two", origin="system")
+    await workspace.write_text("/epilogue.md", "\nend", origin="system")
+    model = _ScriptedModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "write_file",
+                        {"file_path": "/part-1.md", "content": "one\n"},
+                        "write-first-part",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "task",
+                        {
+                            "description": "merge the parts",
+                            "subagent_type": "general-purpose",
+                        },
+                        "delegate",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "concat_files",
+                        {
+                            "paths": [
+                                "/part-1.md",
+                                "/part-2.md",
+                            ],
+                            "output_path": "/report.md",
+                        },
+                        "merge",
+                    )
+                ],
+            ),
+            AIMessage(content="merged"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        "concat_files",
+                        {
+                            "paths": [
+                                "/report.md",
+                                "/epilogue.md",
+                            ],
+                            "output_path": "/final.md",
+                        },
+                        "finalize",
+                    )
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call("read_file", {"file_path": "/final.md"}, "read-final")
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    def middleware(*, child: bool = False) -> list[Any]:
+        return _build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=_binding(),
+            approval_policy=ToolApprovalPolicy(),
+            available_tool_names=_SAFE_FILESYSTEM_TOOLS | {"concat_files"},
+            filesystem=workspace,
+            child=child,
+        )
+
+    agent = _create_compiled_deep_agent(
+        model=model,
+        tools=[],
+        system_prompt="Use the shared scratchpad.",
+        checkpointer=InMemorySaver(),
+        middleware=middleware(),
+        subagent_middleware=middleware(child=True),
+        backend=backend,
+        permissions=permissions,
+    )
+
+    updates = await _drive(agent)
+
+    assert await workspace.read_text("/report.md", origin="system") == "one\ntwo"
+    assert await workspace.read_text("/final.md", origin="system") == "one\ntwo\nend"
+    messages = [
+        message
+        for update in updates
+        for value in update.values()
+        if isinstance(value, dict)
+        for message in value.get("messages") or []
+        if isinstance(message, ToolMessage)
+    ]
+    assert any(
+        message.tool_call_id == "read-final" and message.status == "success"
+        for message in messages
+    )
+    assert len(model.bound_tool_names) >= 2
+    assert all("concat_files" in names for names in model.bound_tool_names)
