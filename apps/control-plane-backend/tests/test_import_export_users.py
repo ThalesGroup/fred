@@ -112,6 +112,7 @@ from fred_core.tasks.models import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # ── fixtures / fakes ───────────────────────────────────────────────────────
@@ -120,12 +121,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     """One file-backed SQLite async engine carrying the full control-plane schema."""
     import control_plane_backend.models.agent_instance_models  # noqa: F401
+    from fred_core.teams.organization_models import OrganizationRow
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
         await conn.run_sync(CoreBase.metadata.create_all)
         await conn.run_sync(CPBase.metadata.create_all)
+        await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
     return engine
 
 

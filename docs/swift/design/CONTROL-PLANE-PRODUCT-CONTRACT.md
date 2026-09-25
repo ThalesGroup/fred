@@ -3367,7 +3367,7 @@ by this issue.
 ## 48. Contract Notes — platform prompt and platform instructions (2026-08-28, renamed and extended 2026-08-31)
 
 **What it is.** One org-admin-editable text that becomes the **first block** of
-every agent's system prompt on the deployment, ahead of each agent's own
+the team's agent system prompts within its organization, ahead of each agent's own
 template. Runtime side, block ordering and trust boundary:
 `RUNTIME-EXECUTION-CONTRACT.md` §8.70.
 
@@ -3403,7 +3403,8 @@ back; updates overwrite rather than version (same as §40).
 
 **Delivery to the runtime.** `resolve_platform_prompt_text` is called on the
 per-turn `ManagedAgentRuntimeBinding` path and takes **no** `user` argument:
-this is a platform assertion resolved server-side, exactly like
+its organization is resolved from authoritative team metadata, while the field
+name stays compatible with existing pods. Global model selection remains separate in
 `resolve_platform_chat_model_binding`. It reaches the pod on
 `ManagedAgentRuntimeBinding.platform_prompt` → `BoundRuntimeContext.platform_prompt`
 and is readable from no client-forwarded field.
@@ -4067,3 +4068,44 @@ Temporal cancellation. Other task kinds retain their existing behavior. The
 resource document menu no longer offers Stop ingestion. This delivery exposes
 success/failure completion; user cancellation and its cleanup semantics are
 deferred. See [INGESTION.md](INGESTION.md).
+
+
+## Explicit organizations (2026-09-25)
+
+Community `Team` responses include `organization_id`; omitted scope in legacy
+team-registry and prompt APIs means `fred`. Personal spaces retain their existing
+identity and do not gain an organization assignment. Team names remain globally unique.
+
+`/control-plane/v1/organizations` exposes GET/POST; `/{id}` exposes PATCH/DELETE;
+`/{id}/administrators/{user_id}` exposes PUT/DELETE. These routes require the
+platform role on `organization:fred`. Deletion refuses the default organization
+or one containing teams or a saved prompt.
+
+Organization-scoped routes: `/{id}/teams` (GET/POST), `/{id}/candidate-team-admins`
+(GET), `/{id}/prompt` (GET/PUT). Registry management and prompt editing use that
+organization's permissions; they do not confer protected team-content access.
+The legacy `platform_prompt` runtime field carries the team's organization prompt.
+Only `fred` falls back to the pod default; absent prompts in other organizations
+resolve to empty text. Explicit saved empty text suppresses fallback everywhere.
+
+| Authority | Scope |
+| --- | --- |
+| `platform_admin` on `fred` | Organization lifecycle/admin assignment; existing global models, capabilities, Keycloak accounts, analytics, import/export/reset |
+| `organization_admin` | Own team registry, team deletion/admin rescue, organization prompt |
+| `team_manager`, `prompt_editor` | Delegated registry or prompt permission on their organization |
+| Existing team roles | Existing team-content permissions |
+
+No organization UI or team transfer API is added.
+
+Explicit `organization#member` grants support users without teams.
+`PUT /organizations/{id}/members/{user_id}` requires that organization's admin.
+Authenticated bootstrap welcomes an unassigned user into `fred`; preassigned
+users retain their organizations. Existing team-derived membership is materialized
+as explicit membership so leaving a team does not remove the organization.
+Self-joining an open team requires organization membership, including direct-ID calls.
+
+CGU remain global: `app.gcu_version` and the existing per-user accepted version/date
+are unchanged. Acceptance does not reset on organization changes. First acceptance
+only auto-enrolls users into configured default teams within their organizations.
+Team administrators may invite or grant roles only to existing members of their
+team's organization. Admission of an outsider requires organization administration.

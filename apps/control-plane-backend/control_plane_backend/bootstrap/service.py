@@ -163,6 +163,14 @@ async def bootstrap_platform_admin(
             actor_uid=user.uid,
         )
 
+        await deps.rebac.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, user.uid),
+                relation=RelationType.ORGANIZATION_ADMIN,
+                resource=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            ),
+            actor_uid=user.uid,
+        )
         await store.mark_completed(completed_by=user.uid)
 
     logger.info("[BOOTSTRAP] Granted platform_admin to %s via root bootstrap", user.uid)

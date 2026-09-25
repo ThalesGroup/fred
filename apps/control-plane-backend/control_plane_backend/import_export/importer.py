@@ -99,7 +99,9 @@ from fred_core.tasks.models import (
     TaskState,
 )
 from fred_core.tasks.service import TaskService
+from fred_core.teams.organization_models import OrganizationRow
 from fred_core.teams.team_metatada_models import TeamMetadataRow
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.import_export.bundle import KBundle
@@ -1113,10 +1115,30 @@ async def _run_import_body(
                 team_id = row["id"]
                 # Idempotent, consistent with other phases: skip if the team row
                 # already exists so re-importing never clobbers live settings.
-                if await s.get(TeamMetadataRow, team_id) is not None:
+                existing_team = await s.get(TeamMetadataRow, team_id)
+                if existing_team is not None:
                     return False
+                organization_id = row.get("organization_id", "fred")
+                if (
+                    await s.get(OrganizationRow, organization_id, with_for_update=True)
+                    is None
+                ):
+                    s.add(
+                        OrganizationRow(
+                            id=organization_id,
+                            name=row.get(
+                                "organization_name",
+                                "Fred"
+                                if organization_id == "fred"
+                                else organization_id,
+                            ),
+                            admin_migration_completed=True,
+                        )
+                    )
+                    await s.flush()
                 s.add(
                     TeamMetadataRow(
+                        organization_id=organization_id,
                         id=team_id,
                         # AUTHZ-05 review item 9: `name` was added after this
                         # bundle format existed. Fall back to the id so an
@@ -1229,7 +1251,23 @@ async def _run_import_body(
                 "before cutover."
             )
         else:
-            await rebac.ensure_team_organization_relations(team_metadata_ids)
+            async with session_factory() as organization_session:
+                teams = (
+                    await organization_session.scalars(
+                        select(TeamMetadataRow).where(
+                            TeamMetadataRow.id.in_(team_metadata_ids)
+                        )
+                    )
+                ).all()
+                for organization_id in {team.organization_id for team in teams}:
+                    await rebac.ensure_team_organization_relations(
+                        [
+                            team.id
+                            for team in teams
+                            if team.organization_id == organization_id
+                        ],
+                        organization_id=organization_id,
+                    )
 
     # ── Phase 5: users.json declarative provisioning (AUTHZ-07 §40.2) ─────────
     # Outside the atomic transaction above: this phase calls full team/ReBAC

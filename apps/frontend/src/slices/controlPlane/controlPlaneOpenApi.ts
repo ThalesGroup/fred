@@ -104,6 +104,108 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/gcu`, method: "POST" }),
     }),
+    listOrganizationsControlPlaneV1OrganizationsGet: build.query<
+      ListOrganizationsControlPlaneV1OrganizationsGetApiResponse,
+      ListOrganizationsControlPlaneV1OrganizationsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/organizations` }),
+    }),
+    createOrganizationControlPlaneV1OrganizationsPost: build.mutation<
+      CreateOrganizationControlPlaneV1OrganizationsPostApiResponse,
+      CreateOrganizationControlPlaneV1OrganizationsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations`,
+        method: "POST",
+        body: queryArg.organizationInput,
+      }),
+    }),
+    renameOrganizationControlPlaneV1OrganizationsOrganizationIdPatch: build.mutation<
+      RenameOrganizationControlPlaneV1OrganizationsOrganizationIdPatchApiResponse,
+      RenameOrganizationControlPlaneV1OrganizationsOrganizationIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}`,
+        method: "PATCH",
+        body: queryArg.organizationInput,
+      }),
+    }),
+    deleteOrganizationControlPlaneV1OrganizationsOrganizationIdDelete: build.mutation<
+      DeleteOrganizationControlPlaneV1OrganizationsOrganizationIdDeleteApiResponse,
+      DeleteOrganizationControlPlaneV1OrganizationsOrganizationIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}`, method: "DELETE" }),
+    }),
+    grantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPut: build.mutation<
+      GrantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPutApiResponse,
+      GrantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/administrators/${queryArg.userId}`,
+        method: "PUT",
+      }),
+    }),
+    revokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDelete: build.mutation<
+      RevokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDeleteApiResponse,
+      RevokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/administrators/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    organizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGet: build.query<
+      OrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetApiResponse,
+      OrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/teams` }),
+    }),
+    createOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPost: build.mutation<
+      CreateOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPostApiResponse,
+      CreateOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/teams`,
+        method: "POST",
+        body: queryArg.createTeamRequest,
+      }),
+    }),
+    readPromptControlPlaneV1OrganizationsOrganizationIdPromptGet: build.query<
+      ReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetApiResponse,
+      ReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/prompt` }),
+    }),
+    writePromptControlPlaneV1OrganizationsOrganizationIdPromptPut: build.mutation<
+      WritePromptControlPlaneV1OrganizationsOrganizationIdPromptPutApiResponse,
+      WritePromptControlPlaneV1OrganizationsOrganizationIdPromptPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/prompt`,
+        method: "PUT",
+        body: queryArg.setPlatformPromptRequest,
+      }),
+    }),
+    candidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGet: build.query<
+      CandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetApiResponse,
+      CandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/candidate-team-admins`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
+    grantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPut: build.mutation<
+      GrantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPutApiResponse,
+      GrantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/members/${queryArg.userId}`,
+        method: "PUT",
+      }),
+    }),
     listTeamsControlPlaneV1TeamsGet: build.query<
       ListTeamsControlPlaneV1TeamsGetApiResponse,
       ListTeamsControlPlaneV1TeamsGetApiArg
@@ -1546,6 +1648,67 @@ export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Succ
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
 export type ValidateGcuControlPlaneV1GcuPostApiArg = void;
+export type ListOrganizationsControlPlaneV1OrganizationsGetApiResponse =
+  /** status 200 Successful Response */ OrganizationView[];
+export type ListOrganizationsControlPlaneV1OrganizationsGetApiArg = void;
+export type CreateOrganizationControlPlaneV1OrganizationsPostApiResponse =
+  /** status 201 Successful Response */ OrganizationView;
+export type CreateOrganizationControlPlaneV1OrganizationsPostApiArg = {
+  organizationInput: OrganizationInput;
+};
+export type RenameOrganizationControlPlaneV1OrganizationsOrganizationIdPatchApiResponse =
+  /** status 200 Successful Response */ OrganizationView;
+export type RenameOrganizationControlPlaneV1OrganizationsOrganizationIdPatchApiArg = {
+  organizationId: string;
+  organizationInput: OrganizationInput;
+};
+export type DeleteOrganizationControlPlaneV1OrganizationsOrganizationIdDeleteApiResponse = unknown;
+export type DeleteOrganizationControlPlaneV1OrganizationsOrganizationIdDeleteApiArg = {
+  organizationId: string;
+};
+export type GrantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPutApiResponse = unknown;
+export type GrantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPutApiArg = {
+  organizationId: string;
+  userId: string;
+};
+export type RevokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDeleteApiResponse = unknown;
+export type RevokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDeleteApiArg = {
+  organizationId: string;
+  userId: string;
+};
+export type OrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetApiResponse =
+  /** status 200 Successful Response */ Team[];
+export type OrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetApiArg = {
+  organizationId: string;
+};
+export type CreateOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPostApiResponse =
+  /** status 201 Successful Response */ TeamWithPermissions;
+export type CreateOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPostApiArg = {
+  organizationId: string;
+  createTeamRequest: CreateTeamRequest;
+};
+export type ReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type ReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetApiArg = {
+  organizationId: string;
+};
+export type WritePromptControlPlaneV1OrganizationsOrganizationIdPromptPutApiResponse =
+  /** status 200 Successful Response */ PlatformPrompt;
+export type WritePromptControlPlaneV1OrganizationsOrganizationIdPromptPutApiArg = {
+  organizationId: string;
+  setPlatformPromptRequest: SetPlatformPromptRequest;
+};
+export type CandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetApiResponse =
+  /** status 200 Successful Response */ UserSummary[];
+export type CandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetApiArg = {
+  organizationId: string;
+  query: string;
+};
+export type GrantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPutApiResponse = unknown;
+export type GrantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPutApiArg = {
+  organizationId: string;
+  userId: string;
+};
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
 export type CreateTeamControlPlaneV1TeamsPostApiResponse = /** status 201 Successful Response */ TeamWithPermissions;
@@ -2593,6 +2756,7 @@ export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
 export type TeamPermission =
   | "can_read"
+  | "can_join"
   | "can_update_info"
   | "can_update_resources"
   | "can_update_agents"
@@ -2621,6 +2785,7 @@ export type TeamRetentionView = {
   max_idle: RetentionFieldView;
 };
 export type TeamWithPermissions = {
+  organization_id?: string | null;
   id: string;
   name: string;
   member_count?: number | null;
@@ -2641,7 +2806,15 @@ export type UserDetails = {
   personalTeam: TeamWithPermissions;
   currentUser?: UserSummary | null;
 };
+export type OrganizationView = {
+  name: string;
+  id: string;
+};
+export type OrganizationInput = {
+  name: string;
+};
 export type Team = {
+  organization_id?: string | null;
   id: string;
   name: string;
   member_count?: number | null;
@@ -2658,6 +2831,20 @@ export type Team = {
 export type CreateTeamRequest = {
   name: string;
   initial_team_admin_ids: string[];
+};
+export type PlatformPrompt = {
+  /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
+  text: string;
+  /** True when no row has ever been saved, i.e. `text` is the pod's default rather than an admin's own. The admin UI uses this to say 'this is the default, save to adopt it' rather than presenting it as a stored value — and to keep Save enabled on an untouched default, since adopting it verbatim is a real state change. */
+  is_default: boolean;
+  /** True when `is_default` is true AND no runtime pod could be reached to report its default, so `text` is empty for lack of an answer rather than because the default is empty. The UI must say so instead of showing a blank editor that looks like a real default. Always false when a row exists — the stored value needs no pod. */
+  source_unavailable?: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type SetPlatformPromptRequest = {
+  /** Replaces the stored platform prompt wholesale. Saving an empty string is meaningful and supported: it suppresses the block for every agent, and does NOT restore the pod-shipped default. */
+  text: string;
 };
 export type UpdateTeamRequest = {
   name?: string | null;
@@ -3766,20 +3953,6 @@ export type ProposeEditRequest = {
   agent_instance_id?: string | null;
   session_id?: string | null;
 };
-export type PlatformPrompt = {
-  /** The platform prompt text currently in force. When `is_default` is true this is the pod-shipped default (the `platform_prompt` field of the pod's `config/platform_prompt.json`), which is what agents actually receive until an admin saves something; when it is false this is the saved value, and an empty string then means an admin deliberately suppressed the block. */
-  text: string;
-  /** True when no row has ever been saved, i.e. `text` is the pod's default rather than an admin's own. The admin UI uses this to say 'this is the default, save to adopt it' rather than presenting it as a stored value — and to keep Save enabled on an untouched default, since adopting it verbatim is a real state change. */
-  is_default: boolean;
-  /** True when `is_default` is true AND no runtime pod could be reached to report its default, so `text` is empty for lack of an answer rather than because the default is empty. The UI must say so instead of showing a blank editor that looks like a real default. Always false when a row exists — the stored value needs no pod. */
-  source_unavailable?: boolean;
-  updated_by?: string | null;
-  updated_at?: string | null;
-};
-export type SetPlatformPromptRequest = {
-  /** Replaces the stored platform prompt wholesale. Saving an empty string is meaningful and supported: it suppresses the block for every agent, and does NOT restore the pod-shipped default. */
-  text: string;
-};
 export type PlatformInstructions = {
   /** Markdown rendered verbatim as the second block of every agent's system prompt, immediately under the platform prompt. Empty when `source_unavailable` is true. */
   text: string;
@@ -4151,6 +4324,22 @@ export const {
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
+  useListOrganizationsControlPlaneV1OrganizationsGetQuery,
+  useLazyListOrganizationsControlPlaneV1OrganizationsGetQuery,
+  useCreateOrganizationControlPlaneV1OrganizationsPostMutation,
+  useRenameOrganizationControlPlaneV1OrganizationsOrganizationIdPatchMutation,
+  useDeleteOrganizationControlPlaneV1OrganizationsOrganizationIdDeleteMutation,
+  useGrantAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdPutMutation,
+  useRevokeAdminControlPlaneV1OrganizationsOrganizationIdAdministratorsUserIdDeleteMutation,
+  useOrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetQuery,
+  useLazyOrganizationTeamsControlPlaneV1OrganizationsOrganizationIdTeamsGetQuery,
+  useCreateOrganizationTeamControlPlaneV1OrganizationsOrganizationIdTeamsPostMutation,
+  useReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetQuery,
+  useLazyReadPromptControlPlaneV1OrganizationsOrganizationIdPromptGetQuery,
+  useWritePromptControlPlaneV1OrganizationsOrganizationIdPromptPutMutation,
+  useCandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetQuery,
+  useLazyCandidateAdminsControlPlaneV1OrganizationsOrganizationIdCandidateTeamAdminsGetQuery,
+  useGrantMemberControlPlaneV1OrganizationsOrganizationIdMembersUserIdPutMutation,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
   useCreateTeamControlPlaneV1TeamsPostMutation,

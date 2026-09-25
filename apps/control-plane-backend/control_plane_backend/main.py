@@ -176,12 +176,21 @@ async def _reconcile_team_organization_relations(container) -> None:
 
     store = container.get_team_metadata_store()
     async with store.advisory_lock(_TEAM_ORGANIZATION_RECONCILE_LOCK_KEY):
-        team_ids = [str(metadata.id) for metadata in await store.list_all()]
+        teams = await store.list_all()
+        team_ids = [str(metadata.id) for metadata in teams]
         if not team_ids:
             logger.info("[team-org-reconcile] team registry is empty — nothing to do.")
             return
         try:
-            await rebac.ensure_team_organization_relations(team_ids)
+            for organization_id in {team.organization_id for team in teams}:
+                await rebac.ensure_team_organization_relations(
+                    [
+                        str(team.id)
+                        for team in teams
+                        if team.organization_id == organization_id
+                    ],
+                    organization_id=organization_id,
+                )
         except Exception:
             logger.exception(
                 "[team-org-reconcile] failed to reconcile the organization "
@@ -277,6 +286,11 @@ def create_app() -> FastAPI:
         # protection every fred-runtime agent pod gets automatically.
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
+        from control_plane_backend.organizations.service import (
+            reconcile_default_organization,
+        )
+
+        await reconcile_default_organization(container)
         await _reconcile_team_organization_relations(container)
         await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)
@@ -415,6 +429,9 @@ def create_app() -> FastAPI:
         )
 
     router.include_router(users_router)
+    from control_plane_backend.organizations.api import router as organizations_router
+
+    router.include_router(organizations_router)
     router.include_router(teams_router)
     router.include_router(applications_router)
     router.include_router(product_router)

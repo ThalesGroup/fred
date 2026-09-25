@@ -18,12 +18,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fred_core.sql import make_session_factory, use_session
+from fred_core.teams.organization_models import OrganizationRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.platform_prompt_models import (
-    PLATFORM_PROMPT_SINGLETON_ID,
     PlatformPromptRow,
 )
 
@@ -38,31 +38,19 @@ class StoredPlatformPrompt:
 
 
 class PlatformPromptStore:
-    """Pure CRUD over ``platform_prompt`` — at most one row, always keyed
-    `id="default"` (CHECK-enforced).
-
-    Same select-then-write upsert shape and the same separation of concerns as
-    `PlatformModelBindingStore`: this store never checks authorization, that is
-    `platform_prompt/service.py`'s job.
-
-    There is deliberately no `delete`: unlike a `(provider, name)` binding, a
-    text field HAS a natural "off" value, and the empty string is it. Row
-    absence therefore keeps a single, unambiguous meaning — "no admin has ever
-    saved one, use the pod default" — which a delete would otherwise collide
-    with.
-    """
+    """Organization-keyed prompts; an empty string explicitly disables the prompt."""
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
 
     async def get(
-        self, *, session: AsyncSession | None = None
+        self, *, organization_id: str = "fred", session: AsyncSession | None = None
     ) -> StoredPlatformPrompt | None:
         async with use_session(self._sessions, session) as s:
             row = (
                 await s.execute(
                     select(PlatformPromptRow).where(
-                        PlatformPromptRow.id == PLATFORM_PROMPT_SINGLETON_ID
+                        PlatformPromptRow.id == organization_id
                     )
                 )
             ).scalar_one_or_none()
@@ -78,20 +66,26 @@ class PlatformPromptStore:
         self,
         *,
         text: str,
+        organization_id: str = "fred",
         updated_by: str | None,
         session: AsyncSession | None = None,
     ) -> StoredPlatformPrompt:
         async with use_session(self._sessions, session) as s:
+            if (
+                await s.get(OrganizationRow, organization_id, with_for_update=True)
+                is None
+            ):
+                raise ValueError("Organization does not exist")
             existing = (
                 await s.execute(
                     select(PlatformPromptRow).where(
-                        PlatformPromptRow.id == PLATFORM_PROMPT_SINGLETON_ID
+                        PlatformPromptRow.id == organization_id
                     )
                 )
             ).scalar_one_or_none()
             if existing is None:
                 row = PlatformPromptRow(
-                    id=PLATFORM_PROMPT_SINGLETON_ID,
+                    id=organization_id,
                     text=text,
                     updated_by=updated_by,
                 )

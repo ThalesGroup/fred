@@ -379,6 +379,9 @@ async def build_frontend_bootstrap(
     Example:
     - `payload = await build_frontend_bootstrap(user, deps)`
     """
+    from control_plane_backend.organizations.service import ensure_user_organizations
+
+    await ensure_user_organizations(user, deps.team_dependencies.rebac)
     active_team, available_teams, permissions = await asyncio.gather(
         get_team_by_id_from_service(
             user,
@@ -3449,7 +3452,7 @@ async def get_runtime_binding_for_team(
         deps.get_team_capability_settings_store().list_for_team(team_id),
         deps.get_model_reasoning_store().list_enabled_model_ids(),
         resolve_platform_chat_model_binding(deps),
-        resolve_platform_prompt_text(deps),
+        resolve_platform_prompt_text(deps, team_id),
     )
     team_capability_settings = {
         cap_id: settings

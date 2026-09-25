@@ -148,11 +148,15 @@ class _FakeMetadataStore:
     async def get_by_name(self, name, session=None):
         return next((t for t in self.teams.values() if t.name == name), None)
 
-    async def create(self, team_id, name, session=None) -> TeamMetadata:
+    async def create(
+        self, team_id, name, session=None, *, organization_id="fred"
+    ) -> TeamMetadata:
         if self._create_raises is not None:
             raise self._create_raises
         self.created.append((str(team_id), name))
-        metadata = TeamMetadata(id=TeamId(str(team_id)), name=name)
+        metadata = TeamMetadata(
+            id=TeamId(str(team_id)), name=name, organization_id=organization_id
+        )
         self.teams[str(team_id)] = metadata
         return metadata
 
@@ -654,12 +658,16 @@ async def test_list_all_teams_for_registry_checks_permission_before_delegating(
     store = _FakeMetadataStore({})
     captured: list[object] = []
 
-    async def _fake_list_all_teams_unfiltered(user, deps):
+    async def _fake_list_all_teams_unfiltered(
+        user, deps, *, filter_by_can_read, organization_id
+    ):
+        assert filter_by_can_read is False
+        assert organization_id == "fred"
         captured.append((user, deps))
         return []
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service.list_all_teams_unfiltered",
+        "control_plane_backend.teams.service._list_teams",
         _fake_list_all_teams_unfiltered,
     )
 
@@ -685,15 +693,17 @@ async def test_list_all_teams_for_registry_excludes_the_caller_personal_space(
     rebac = _FakeRebac()
     store = _FakeMetadataStore({})
 
-    async def _fake_list_all_teams_unfiltered(user, deps):
+    async def _fake_list_all_teams_unfiltered(
+        user, deps, *, filter_by_can_read, organization_id
+    ):
         return [
             Team(id=TeamId("personal-platform-admin-1"), name="Equipe personnelle"),
-            Team(id=TeamId("fredlab"), name="Fredlab"),
-            Team(id=TeamId("northbridge"), name="Northbridge"),
+            Team(id=TeamId("fredlab"), name="Fredlab", organization_id="fred"),
+            Team(id=TeamId("northbridge"), name="Northbridge", organization_id="fred"),
         ]
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service.list_all_teams_unfiltered",
+        "control_plane_backend.teams.service._list_teams",
         _fake_list_all_teams_unfiltered,
     )
 
@@ -883,14 +893,16 @@ async def test_team_manager_lists_the_whole_registry(
     rebac = _team_manager_rebac()
     store = _FakeMetadataStore({})
 
-    async def _fake_list_all_teams_unfiltered(user, deps):
+    async def _fake_list_all_teams_unfiltered(
+        user, deps, *, filter_by_can_read, organization_id
+    ):
         return [
-            Team(id=TeamId("fredlab"), name="Fredlab"),
-            Team(id=TeamId("northbridge"), name="Northbridge"),
+            Team(id=TeamId("fredlab"), name="Fredlab", organization_id="fred"),
+            Team(id=TeamId("northbridge"), name="Northbridge", organization_id="fred"),
         ]
 
     monkeypatch.setattr(
-        "control_plane_backend.teams.service.list_all_teams_unfiltered",
+        "control_plane_backend.teams.service._list_teams",
         _fake_list_all_teams_unfiltered,
     )
 

@@ -79,6 +79,10 @@ class _FakeRebac:
         self.added_relations: list[Relation] = []
         self.deleted_relations: list[Relation] = []
 
+    async def check_permission_or_raise(self, subject, permission, resource, **kwargs):
+        # Existing role/charter cases operate on previously admitted organization members.
+        assert resource.type == Resource.ORGANIZATION
+
     async def check_user_team_permissions_or_raise(
         self, *, user, team_id, permissions
     ) -> str | None:
@@ -843,3 +847,41 @@ async def test_search_candidate_team_members_strips_surrounding_whitespace() -> 
     await search_candidate_team_members(_user(), TeamId("fredlab"), "  cohen  ", deps)
 
     assert search_calls == ["cohen"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["add", "grant"])
+async def test_team_admin_cannot_admit_user_outside_organization(operation):
+    from control_plane_backend.teams.schemas import AddTeamMemberRequest
+    from control_plane_backend.teams.service import add_team_member
+    from fred_core import AuthorizationError, OrganizationPermission
+
+    class OutsideOrganization(_FakeRebac):
+        async def check_permission_or_raise(
+            self, subject, permission, resource, **kwargs
+        ):
+            assert subject == RebacReference(Resource.USER, "outsider")
+            assert permission == OrganizationPermission.MEMBER
+            assert resource == RebacReference(Resource.ORGANIZATION, "fred")
+            raise AuthorizationError("outsider", "member", Resource.ORGANIZATION)
+
+    rebac = OutsideOrganization()
+    with pytest.raises(AuthorizationError):
+        if operation == "add":
+            await add_team_member(
+                _user(),
+                TeamId("fredlab"),
+                AddTeamMemberRequest(
+                    user_id="outsider", relation=UserTeamRelation.TEAM_MEMBER
+                ),
+                _deps(rebac, "fredlab"),
+            )
+        else:
+            await grant_team_member_role(
+                _user(),
+                TeamId("fredlab"),
+                "outsider",
+                GrantTeamMemberRoleRequest(relation=UserTeamRelation.TEAM_EDITOR),
+                _deps(rebac, "fredlab"),
+            )
+    assert rebac.added_relations == []

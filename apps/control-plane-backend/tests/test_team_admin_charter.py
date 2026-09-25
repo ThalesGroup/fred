@@ -93,6 +93,10 @@ class _FakeRebac:
         for relation in relations:
             self.tuples.discard(self._key(relation))
 
+    async def check_permission_or_raise(self, subject, permission, resource, **kwargs):
+        # Existing role/charter cases operate on previously admitted organization members.
+        assert resource.type == Resource.ORGANIZATION
+
     async def check_user_team_permissions_or_raise(self, **_kwargs: object) -> str:
         return "token"
 
@@ -150,7 +154,7 @@ class _FakeMetadataStore:
         self.listed = 0
 
     async def get_by_team_id(self, team_id):
-        return SimpleNamespace(id=team_id)
+        return SimpleNamespace(id=team_id, organization_id="fred")
 
     async def list_all(self):
         self.listed += 1

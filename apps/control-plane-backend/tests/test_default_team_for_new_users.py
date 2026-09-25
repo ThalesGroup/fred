@@ -65,6 +65,24 @@ async def _sqlite_store(tmp_path: Path) -> tuple[AsyncEngine, PlatformDefaultTea
 
 
 class _FakeRebac:
+    enabled = True
+    organization_ids = {"fred"}
+
+    async def list_relations(self, *, subject, **kwargs):
+        return [
+            Relation(
+                subject=subject,
+                relation=RelationType.MEMBER,
+                resource=RebacReference(Resource.ORGANIZATION, org),
+            )
+            for org in self.organization_ids
+        ]
+
+    async def lookup_resources(self, subject, permission, resource_type, **kwargs):
+        return [
+            RebacReference(Resource.ORGANIZATION, org) for org in self.organization_ids
+        ]
+
     def __init__(
         self,
         *,
@@ -378,3 +396,13 @@ async def test_failed_grant_does_not_record_the_acceptance() -> None:
         await _accept_gcu(rebac, user_store)
 
     assert user_store.recorded == []
+
+
+@pytest.mark.asyncio
+async def test_gcu_acceptance_does_not_join_another_organizations_default_teams():
+    rebac = _FakeRebac()
+    rebac.organization_ids = {"other"}
+    await join_default_teams_for_new_user(
+        "other-user", _team_deps(rebac, _FakeDefaultTeamStore(_BOTH))
+    )
+    assert rebac.added == []

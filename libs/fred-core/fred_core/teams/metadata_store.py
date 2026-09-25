@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_core.common.team_id import TeamId
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.base_sql import advisory_lock_key
+from fred_core.teams.organization_models import OrganizationRow
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ class TeamMetadataPatch(BaseModel):
 
 class TeamMetadata(BaseModel):
     id: TeamId
+    organization_id: str = "fred"
     # The team's identity lives here - no Keycloak group backs it anymore.
     # Set at creation and renameable afterwards by a team_admin through the
     # team PATCH surface; globally unique either way.
@@ -174,6 +176,7 @@ class TeamMetadataStore:
             TeamId(row.id): TeamMetadata(
                 id=TeamId(row.id),
                 name=row.name,
+                organization_id=row.organization_id,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
                 visibility=TeamVisibility(row.visibility),
@@ -200,6 +203,8 @@ class TeamMetadataStore:
         team_id: TeamId,
         name: str,
         session: AsyncSession | None = None,
+        *,
+        organization_id: str = "fred",
     ) -> TeamMetadata:
         """Create one team's metadata row (AUTHZ-05 review item 9).
 
@@ -211,7 +216,16 @@ class TeamMetadataStore:
         overwriting an existing team.
         """
         async with use_session(self._sessions, session) as s:
-            s.add(TeamMetadataRow(id=str(team_id), name=name))
+            if (
+                await s.get(OrganizationRow, organization_id, with_for_update=True)
+                is None
+            ):
+                raise ValueError("Organization does not exist")
+            s.add(
+                TeamMetadataRow(
+                    id=str(team_id), name=name, organization_id=organization_id
+                )
+            )
 
         created = await self.get_by_team_id(team_id, session=session)
         if created is None:
@@ -229,6 +243,7 @@ class TeamMetadataStore:
             TeamMetadata(
                 id=TeamId(row.id),
                 name=row.name,
+                organization_id=row.organization_id,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
                 visibility=TeamVisibility(row.visibility),
@@ -261,6 +276,7 @@ class TeamMetadataStore:
             else TeamMetadata(
                 id=TeamId(row.id),
                 name=row.name,
+                organization_id=row.organization_id,
                 description=row.description,
                 joining_mode=JoiningMode(row.joining_mode),
                 visibility=TeamVisibility(row.visibility),

@@ -69,6 +69,7 @@ from fred_core import (
     JoiningMode,
     KeycloakUser,
     OrganizationPermission,
+    Relation,
     RelationType,
     SessionSchema,
     TeamPermission,
@@ -925,6 +926,8 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
     """
 
     class _FakePlatformAdminRebac:
+        enabled = False
+
         async def has_user_permission(
             self, _user, permission, _resource_id, *, consistency_token=None
         ) -> bool:
@@ -1048,7 +1051,7 @@ async def test_bootstrap_platform_admin_happy_path_through_real_route(
         enabled = True
 
         def __init__(self) -> None:
-            self.added_relations: list[object] = []
+            self.added_relations: list[Relation] = []
 
         async def add_relation(self, relation, **kwargs: object):
             self.added_relations.append(relation)
@@ -1086,7 +1089,10 @@ async def test_bootstrap_platform_admin_happy_path_through_real_route(
     payload = resp.json()
     assert payload["user_id"] == "carol-sub"
     assert payload["username"] == "carol"
-    assert len(fake_rebac.added_relations) == 1
+    assert {relation.relation.value for relation in fake_rebac.added_relations} == {
+        "platform_admin",
+        "organization_admin",
+    }
 
 
 @pytest.mark.asyncio
@@ -7187,6 +7193,15 @@ async def test_f2_team_scoped_resolution_is_tenant_isolated(
     store = _FakeAgentInstanceStore([record])
     app = create_app()
     _patch_store(monkeypatch, store)
+    from control_plane_backend.app.dependencies import (
+        get_application_container_from_app,
+    )
+
+    await (
+        get_application_container_from_app(app)
+        .get_team_metadata_store()
+        .create(TeamId("team-x"), "Team X")
+    )
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
         uid="member-bob", username="member-bob", roles=[]
     )

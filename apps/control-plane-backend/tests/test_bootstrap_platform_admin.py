@@ -160,10 +160,11 @@ async def test_bootstrap_grants_platform_admin_to_the_caller(tmp_path, monkeypat
 
     assert response.user_id == "benjamin-sub"
     assert response.username == "benjamin"
-    assert len(rebac.added_relations) == 1
+    assert len(rebac.added_relations) == 2
     written = rebac.added_relations[0]
     assert written.subject == RebacReference(Resource.USER, "benjamin-sub")
     assert written.relation == RelationType.PLATFORM_ADMIN
+    assert rebac.added_relations[1].relation == RelationType.ORGANIZATION_ADMIN
     assert written.resource == RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
 
 
@@ -377,7 +378,7 @@ async def test_bootstrap_durable_marker_blocks_reuse_even_after_admin_removed(
     await bootstrap_platform_admin(
         _user(), BootstrapPlatformAdminRequest(token="secret-token-9f3a2b1c"), deps
     )
-    assert len(rebac.added_relations) == 1
+    assert len(rebac.added_relations) == 2
 
     # Simulate total platform_admin loss: the relation the endpoint wrote is
     # gone, but the durable marker (a separate system) is untouched.
@@ -409,6 +410,7 @@ async def test_bootstrap_writes_openfga_tuple_before_marker(tmp_path, monkeypatc
     assert store.call_order == [
         "is_completed",
         "is_completed",
+        "add_relation",
         "add_relation",
         "mark_completed",
     ]
@@ -581,4 +583,4 @@ async def test_bootstrap_concurrent_calls_grant_exactly_once(tmp_path, monkeypat
     failures = [r for r in results if isinstance(r, BootstrapAlreadyCompletedError)]
     assert len(successes) == 1
     assert len(failures) == 1
-    assert len(rebac.added_relations) == 1
+    assert len(rebac.added_relations) == 2

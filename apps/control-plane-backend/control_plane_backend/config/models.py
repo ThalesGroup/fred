@@ -371,6 +371,8 @@ class PlatformConfig(BaseModel):
     DB-backed and never stored in this deployment config.
     """
 
+    default_organization_name: str = Field(default="Fred", min_length=1, max_length=180)
+
     frontend: FrontendBootstrapConfig = Field(default_factory=FrontendBootstrapConfig)
     capabilities: CapabilitiesConfig = Field(default_factory=CapabilitiesConfig)
     knowledge_flow_base_url: str = Field(

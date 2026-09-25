@@ -45,13 +45,14 @@ from control_plane_backend.platform_prompt.service import (
 from control_plane_backend.platform_prompt.store import StoredPlatformPrompt
 from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
 from fred_core.security.models import Resource
+from sqlalchemy import insert
 
 
 class _Store:
     def __init__(self, stored: StoredPlatformPrompt | None) -> None:
         self._stored = stored
 
-    async def get(self) -> StoredPlatformPrompt | None:
+    async def get(self, *, organization_id="fred") -> StoredPlatformPrompt | None:
         return self._stored
 
 
@@ -205,13 +206,18 @@ async def test_resaving_identical_text_still_refreshes_updated_at() -> None:
             tables=[PlatformPromptRow.__table__],  # type: ignore[list-item]
         )
 
+    from fred_core.teams.organization_models import OrganizationRow
+
+    async with engine.begin() as conn:
+        await conn.run_sync(OrganizationRow.metadata.tables["organizations"].create)
+        await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
     store = PlatformPromptStore(engine)
     first = await store.set(text="same", updated_by="admin")
     # Backdate the stored row so an unrefreshed timestamp is unmistakable.
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     stale = datetime.now(timezone.utc) - timedelta(days=1)
     async with sessions() as s:
-        row = await s.get(PlatformPromptRow, "default")
+        row = await s.get(PlatformPromptRow, "fred")
         assert row is not None
         row.updated_at = stale
         await s.commit()
@@ -273,7 +279,9 @@ class _WritableStore(_Store):
         super().__init__(stored)
         self.written: list[str] = []
 
-    async def set(self, *, text: str, updated_by: str | None) -> StoredPlatformPrompt:
+    async def set(
+        self, *, text: str, updated_by: str | None, organization_id="fred"
+    ) -> StoredPlatformPrompt:
         self.written.append(text)
         self._stored = StoredPlatformPrompt(
             text=text, updated_by=updated_by, updated_at=None

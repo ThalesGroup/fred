@@ -9,20 +9,20 @@ type organization
     # only — never derived from Keycloak roles or groups. Granted via the
     # config-seeded bootstrap (RFC §24.3) or explicit admin action.
     define platform_admin: [user]
+    define organization_admin: [user]
     define platform_observer: [user] or platform_admin
 
     # Delegated admin-tier roles: each owns one admin surface so appointing a
     # team manager no longer hands over import/export, platform reset and user
-    # administration. All union in platform_admin, so an admin loses nothing.
-    define team_manager: [user] or platform_admin
+    # administration. Organization delegates are independent of platform roles.
+    define team_manager: [user]
     define feature_manager: [user] or platform_admin
-    define prompt_editor: [user] or platform_admin
+    define prompt_editor: [user]
 
-    # Reverse index of team.organization (FGA cannot traverse relations
-    # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
-    # checking with a team subject (capability#can_use) — every team belongs to
-    # the singleton organization, so the edge is derived, not stored state.
+    # Persist the reverse team index for organization membership and discovery.
+    # Capability checks may additionally supply contextual team relations.
     define team: [team]
+    define member: [user] or team_member from team or organization_admin
 
     # Reverse index restricted to PERSONAL spaces (`personal-{uid}` teams).
     # Never persisted: injected as a CONTEXTUAL tuple only when the subject team
@@ -34,7 +34,7 @@ type organization
   # AUTHZ-05 (RFC §28): team creation is a one-shot bootstrap action
   # (`POST /teams`), not a team relation. The creator gains no ongoing
   # relation on the created team from this capability alone.
-  define can_create_team: platform_admin or team_manager
+  define can_create_team: organization_admin or team_manager
 
   # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance
   # capabilities. Distinct from §2.2's central rule: these let platform_admin
@@ -47,9 +47,9 @@ type organization
   # its charter and the team picker is unusable without the roster. The listing
   # is read-only registry metadata (REBAC.md details what it exposes) and
   # carries no authority over any team's agents, prompts or files.
-  define can_list_all_teams: platform_admin or team_manager or feature_manager
-  define can_delete_team: platform_admin
-  define can_rescue_team_admin: platform_admin
+  define can_list_all_teams: organization_admin or team_manager or feature_manager
+  define can_delete_team: organization_admin
+  define can_rescue_team_admin: organization_admin
 
   # AUTHZ-05 review item 8a (RFC Part 6 §29-32): the legacy Keycloak
   # `admin`/`editor`/`viewer` bridge is removed. Admin-tier capabilities
@@ -80,6 +80,8 @@ type organization
   define can_observe_platform: platform_observer
 
   # Platform administration surfaces (global, no resource instance).
+  define can_manage_organizations: platform_admin
+  define can_administer_organization: organization_admin
   define can_administer_users: platform_admin
   define can_manage_platform: platform_admin
 
@@ -87,7 +89,7 @@ type organization
   # import/export, tasks and platform reset: a narrow surface cannot be
   # delegated through it without handing over all of them.
   define can_manage_capabilities: platform_admin or feature_manager
-  define can_edit_platform_prompt: platform_admin or prompt_editor
+  define can_edit_platform_prompt: organization_admin or prompt_editor
 
 
 type team
@@ -123,8 +125,10 @@ type team
 
     # --------------- Permissions (computed relations) ---------------
     # Can read team info (name, description, banner, admins list...)
-    # -> must be at least member or team is public
-    define can_read: team_member or public
+    # Members can read; public discovery stays within the organization.
+    define can_read: team_member or (public and organization_member)
+    define organization_member: member from organization
+    define can_join: organization_member
 
     # Can update team info (description, banner...)
     # -> must be at least team_admin
