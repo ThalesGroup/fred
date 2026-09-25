@@ -48,7 +48,7 @@
   align-items: center;
   gap: var(--spacing-m);
   background: var(--banner-container);
-  padding: var(--spacing-xs) var(--spacing-xl);
+  padding: var(--spacing-m);
   color: var(--banner-on-container);
   font: var(--font-body-medium);
 }
