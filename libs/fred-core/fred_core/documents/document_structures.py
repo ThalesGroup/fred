@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional, Set
 
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
+from fred_core.tasks.models import IngestionProcessingProfile
+
 
 class SourceType(str, Enum):
     PUSH = "push"
@@ -317,6 +319,8 @@ class AccessInfo(BaseModel):
 
 class Processing(BaseModel):
     """Typed processing status per stage (+ optional error messages)."""
+
+    profile: IngestionProcessingProfile | None = None
 
     stages: Dict[ProcessingStage, ProcessingStatus] = Field(default_factory=dict)
     errors: Dict[ProcessingStage, str] = Field(default_factory=dict)

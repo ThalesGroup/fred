@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
@@ -124,6 +124,7 @@ class TaskStore:
         target: TaskTarget | None = None,
         scheduled_for: datetime | None = None,
         session: AsyncSession | None = None,
+        execution_id: str | None = None,
     ) -> None:
         # Persist `target` at creation so GET /tasks resolves it even before any
         # worker emits an event. Without this the inline indicator on the target's
@@ -139,6 +140,7 @@ class TaskStore:
             team_id=team_id,
             target=target.model_dump() if target is not None else None,
             scheduled_for=scheduled_for,
+            execution_id=execution_id,
             created_at=_utcnow(),
             updated_at=_utcnow(),
         )
@@ -149,6 +151,8 @@ class TaskStore:
         self,
         event: TaskEvent,
         session: AsyncSession | None = None,
+        *,
+        only_if_unbound: bool = False,
     ) -> int | None:
         """Atomically append an event; ignore late events for settled ingestion tasks."""
         detail = event.detail.model_dump() if event.detail is not None else None
@@ -172,6 +176,7 @@ class TaskStore:
                 update(self._run)
                 .where(
                     self._run.task_id == event.task_id,
+                    self._run.execution_id.is_(None) if only_if_unbound else true(),
                     or_(
                         self._run.kind != "ingestion",
                         self._run.state.notin_(

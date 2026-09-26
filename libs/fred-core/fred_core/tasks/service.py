@@ -177,8 +177,12 @@ class TaskService:
     async def replay(self, task_id: str, after_seq: int) -> list[TaskEvent]:
         return await self.store.replay_events(task_id, after_seq)
 
-    async def record(self, event: TaskEvent) -> bool:
-        assigned_seq = await self.store.record_event(event)
+    async def record(self, event: TaskEvent, *, only_if_unbound: bool = False) -> bool:
+        assigned_seq = (
+            await self.store.record_event(event, only_if_unbound=True)
+            if only_if_unbound
+            else await self.store.record_event(event)
+        )
         if assigned_seq is None:
             return False
         try:
@@ -219,17 +223,21 @@ class TaskService:
         workflow. Writes only ``execution_id`` → safe against concurrent worker writes."""
         await self.store.set_execution(task_id, execution_id=execution_id)
 
-    async def fail_task(self, task_id: str, message: str) -> bool:
+    async def fail_task(
+        self, task_id: str, message: str, *, only_if_unbound: bool = False
+    ) -> bool:
         """Drive a non-terminal task to ``failed`` with a message (durable + SSE).
 
-        For the submitter to call when work could not be scheduled at all (e.g. the
-        executor was unreachable), so the task never stays pending with no execution
-        behind it. No-op if the task is gone or already terminal.
+        For work definitively rejected before scheduling, never an ambiguous
+        executor timeout. No-op if the task is gone or already terminal.
+        ``only_if_unbound`` atomically excludes any task adopted by a scheduler.
         """
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
             return False
-        return await self.record(self._build_failed_event(run, message))
+        return await self.record(
+            self._build_failed_event(run, message), only_if_unbound=only_if_unbound
+        )
 
     @staticmethod
     def _reconciled_terminal(
@@ -428,6 +436,7 @@ class TaskService:
 async def run_reconcile_sweeper(
     service: TaskService,
     *,
+    before_reconcile: Callable[[], Awaitable[None]] | None = None,
     interval_seconds: float = 120.0,
     grace_seconds: float = 300.0,
     limit: int = 200,
@@ -440,6 +449,14 @@ async def run_reconcile_sweeper(
     """
     while True:
         try:
+            if before_reconcile is not None:
+                try:
+                    await before_reconcile()
+                except Exception:
+                    logger.warning(
+                        "[reconcile-sweeper] pending submission retry deferred",
+                        exc_info=True,
+                    )
             failed = await service.reconcile_stale(
                 grace_seconds=grace_seconds, limit=limit
             )

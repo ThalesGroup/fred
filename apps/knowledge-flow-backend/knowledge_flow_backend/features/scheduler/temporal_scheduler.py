@@ -23,6 +23,8 @@ from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
 from fred_core.scheduler import TemporalClientProvider
 from temporalio.client import Client, WorkflowExecutionStatus
+from temporalio.common import WorkflowIDReusePolicy
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from knowledge_flow_backend.common.structures import SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -76,13 +78,18 @@ class TemporalScheduler(BaseScheduler):
         client: Client = await self._client_provider.get_client()
 
         workflow_run = ProcessPull.run if has_pull else ProcessPush.run
-        workflow_handle = await client.start_workflow(
-            workflow_run,
-            definition,
-            id=handle.workflow_id,
-            task_queue=self._scheduler_config.temporal.task_queue,
-            rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
-        )
+        try:
+            workflow_handle = await client.start_workflow(
+                workflow_run,
+                definition,
+                id=handle.workflow_id,
+                task_queue=self._scheduler_config.temporal.task_queue,
+                id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+                rpc_timeout=_rpc_timeout(min(self._scheduler_config.temporal.rpc_timeout_seconds or 10, 10)),
+            )
+        except WorkflowAlreadyStartedError:
+            # A delivery retry may arrive after the original execution completed.
+            return handle
 
         logger.info("🛠️ started temporal workflow=%s", workflow_handle.id)
 

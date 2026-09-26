@@ -17,15 +17,18 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fred_core import (
+    DocumentPermission,
     KeycloakUser,
     TagPermission,
     get_current_user,
 )
 from fred_core.common import raise_internal_error
+from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
 from fred_core.scheduler import TemporalClientProvider
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
 from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionAlreadyActive
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     ProcessDocumentsRequest,
@@ -60,10 +63,10 @@ class SchedulerController:
             "/process-documents",
             tags=["Processing"],
             response_model=ProcessDocumentsResponse,
-            summary="Submit processing for push/pull files in-process (fire-and-forget)",
+            summary="Submit tracked ingestion for push/pull files",
             description=(
                 "Accepts a list of files (document_uid or external_path) and launches the ingestion pipeline "
-                "in a local background worker thread. Push and pull files must be submitted in separate requests."
+                "through the configured scheduler. Push and pull files must be submitted in separate requests."
             ),
         )
         async def process_documents(
@@ -71,20 +74,34 @@ class SchedulerController:
             background_tasks: BackgroundTasks,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            # AUTHZ-05 §27: team-scoped via the tags carried on each file, mirroring
-            # the same per-tag pattern already used by upload-process-documents
-            # (ingestion_controller.py), instead of the org-level
-            # CAN_PROCESS_CONTENT gate (any global Keycloak `editor` could
-            # otherwise process any team's content). A file with no tags has no
-            # ReBAC object to check against, so — like the empty-scope case in
-            # corpus_manager_controller.py's `_authorize_scope` — it is denied
-            # rather than silently allowed through.
+            if not req.files:
+                raise HTTPException(400, "At least one document is required")
+            for file in req.files:
+                if file.task_id:
+                    raise HTTPException(400, "Task identifiers are assigned by the server")
+                if file.is_push() and file.document_uid:
+                    await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.PROCESS, file.document_uid)
+                    metadata = await self.metadata_service.get_document_metadata(user, file.document_uid)
+                    file.tags = list(metadata.tags.tag_ids)
+                    file.source_tag = metadata.source.source_tag or ""
+                    file.display_name = metadata.document_name
+                    if req.relaunch:
+                        stages = metadata.processing.stages
+                        failed = ProcessingStatus.FAILED in stages.values()
+                        queryable = any(stages.get(stage) == ProcessingStatus.DONE for stage in (ProcessingStage.VECTORIZED, ProcessingStage.SQL_INDEXED))
+                        if ProcessingStatus.IN_PROGRESS in stages.values() or (queryable and not failed):
+                            raise HTTPException(409, "Only never-processed or failed documents can be relaunched")
+                        if metadata.processing.profile is not None:
+                            file.profile = metadata.processing.profile
+                        elif "profile" not in file.model_fields_set:
+                            raise HTTPException(422, "Choose an ingestion profile for this document")
+                elif req.relaunch:
+                    raise HTTPException(400, "Relaunch requires an existing document")
+
+            # Authorize the document's stored tags, never a caller-supplied substitute.
             for file in req.files:
                 if not file.tags:
-                    raise HTTPException(
-                        400,
-                        f"File '{file.display_name or file.document_uid or file.external_path}' cannot be authorized yet: pass at least one tag (files with no tags are not team-checkable).",
-                    )
+                    raise HTTPException(400, "Documents must belong to an authorized folder")
             for file in req.files:
                 for tag_id in file.tags:
                     await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
@@ -109,7 +126,10 @@ class SchedulerController:
                     total_files=len(definition.files),
                     workflow_id=handle.workflow_id,
                     run_id=handle.run_id,
+                    task_ids={file.document_uid or file.to_virtual_metadata().document_uid: file.task_id for file in definition.files if file.task_id},
                 )
+            except IngestionAlreadyActive as e:
+                raise HTTPException(status_code=409, detail=str(e)) from e
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
             except Exception as e:
