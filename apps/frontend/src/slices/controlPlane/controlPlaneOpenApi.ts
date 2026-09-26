@@ -616,18 +616,23 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
           method: "POST",
+          params: {
+            person: queryArg.person,
+            run: queryArg.run,
+            agent: queryArg.agent,
+          },
         }),
       }),
-    postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
-    >({
+    prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
           agent_model_override: queryArg.agentModelOverride,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
         },
       }),
     }),
@@ -710,9 +715,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
-    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
+    publishKnowledgeBaseDefinition: build.mutation<
+      PublishKnowledgeBaseDefinitionApiResponse,
+      PublishKnowledgeBaseDefinitionApiArg
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
@@ -778,15 +783,11 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    getKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGet:
-      build.query<
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse,
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
-        }),
+    getKnowledgeBaseRunContext: build.query<GetKnowledgeBaseRunContextApiResponse, GetKnowledgeBaseRunContextApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
       }),
+    }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -1870,14 +1871,19 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     teamId: string;
     runtimeId: string;
     agentId: string;
+    person?: string | null;
+    run?: string | null;
+    agent?: string | null;
   };
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
-  /** status 200 Successful Response */ ExecutionPreparation;
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
+export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
+export type PrepareAgentExecutionApiArg = {
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
   agentModelOverride?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
 };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
@@ -1927,9 +1933,9 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
+export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+export type PublishKnowledgeBaseDefinitionApiArg = {
   name: string;
   knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
 };
@@ -1963,14 +1969,12 @@ export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInst
 export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
   instanceId: string;
 };
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse =
-  /** status 200 Successful Response */ KnowledgeBaseRunContext;
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg =
-  {
-    definitionId: string;
-    instanceId: string;
-    runId: string;
-  };
+export type GetKnowledgeBaseRunContextApiResponse = /** status 200 Successful Response */ KnowledgeBaseRunContext;
+export type GetKnowledgeBaseRunContextApiArg = {
+  definitionId: string;
+  instanceId: string;
+  runId: string;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -4236,7 +4240,7 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -4247,7 +4251,7 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
-  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
+  usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
@@ -4258,8 +4262,8 @@ export const {
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
-  useGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
-  useLazyGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
+  useGetKnowledgeBaseRunContextQuery,
+  useLazyGetKnowledgeBaseRunContextQuery,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,

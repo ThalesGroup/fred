@@ -13,30 +13,49 @@ app:
   limit_concurrency: null
   # Maximum Unicode code points accepted in one submitted chat message.
   max_chat_input_chars: 5000
-  openai_compat: true
+  openai_compat: false # Direct template execution is forbidden by the c3 profile.
 
 security:
+  profile: c3
   m2m:
     enabled: true
     client_id: "agentic"
-    realm_url: "http://app-keycloak:8080/realms/app"
+    realm_url: "http://localhost:8080/realms/app"
     secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
     enabled: true
-    # RUNTIME-07 rev. 2 (D5c): each agent pod is a Keycloak OAuth2 resource server
-    # and validates the JWT `aud` against this client_id (strict under profile: c3).
-    # For per-agent audience isolation (anti confused-deputy), every pod DEPLOYMENT
-    # overrides this with its OWN Keycloak client (e.g. fred-agent / dt-agent /
-    # rags-agent) via Helm values, and the realm issues user tokens whose audience
-    # includes the target pod's client. The value below is the local-dev default.
+    # Local realm tokens include app; a deployment that selects its own audience
+    # lists the login client in security.delegation.user_clients.
     client_id: "app"
-    realm_url: "http://app-keycloak:8080/realms/app"
+    realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
   rebac:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+  delegation:
+    # Delegation lets a program act for a person. The program (a "workload") signs
+    # in with its own service account: a Keycloak client identity that belongs to
+    # the program, not to anyone. With each call it names the person, run and
+    # agent the call is for. Each backend has one switch per direction.
+    #
+    # act_for_people (outgoing) - this backend's switch. During a person's run it
+    # calls other backends with its own service-account token (security.m2m) and
+    # names the person, run and agent. That service account must hold the role
+    # named by caller_role (default delegation_caller) on the client named by
+    # audience (default fred-delegation). In the Keycloak console: open the
+    # security.m2m client, then Service account roles > Assign role. Every backend
+    # it calls needs accept_delegated_calls.
+    #
+    # accept_delegated_calls (incoming) - believe the person a calling workload
+    # names. Turn it on only if another backend calls this one for a person; it
+    # then needs act_for_people as well.
+    #
+    # Both are off by default. Locally, make delegation turns the right one on
+    # through config/.delegation.local.json after checking a freshly issued token.
+    act_for_people: false
+    accept_delegated_calls: false
 
 ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
@@ -49,6 +68,8 @@ observability:
   # 9000, and leaving it implicit reads as "this app has no metrics".
   kpi:
     prometheus:
+      # Docker Prometheus reaches this host-run exporter through host.docker.internal.
+      address: "0.0.0.0"
       port: 9000
   tracer: langfuse    # null | logging | langfuse
   langfuse:
@@ -79,6 +100,11 @@ storage:
   log_store:
     type: opensearch
     index: app-logs-index
+  object_store:
+    type: minio
+    endpoint: "http://localhost:8333"
+    access_key: "admin"
+    secure: false
 
 scheduler:
   enabled: false

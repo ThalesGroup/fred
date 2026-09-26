@@ -40,14 +40,24 @@ from conftest import (
     RecordingTracer as _RecordingTracer,
 )
 from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import StateBackend
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIEvent
 from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.portable import Span
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.delegation import DelegationConfig
+from fred_core.security.models import (
+    AuthorizationError,
+    Resource,
+    StandingAuthorizationError,
+)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    set_delegation_runtime,
+)
 from fred_runtime.deep.deep_runtime import (
     _build_deepagent_runtime_middleware,
     _create_compiled_deep_agent,
@@ -66,6 +76,8 @@ from fred_runtime.runtime_context import (
     get_runtime_context,
     set_runtime_context,
 )
+from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.run_scope import RunScope
 from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -83,6 +95,18 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool, tool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
+
+
+@pytest.fixture(autouse=True)
+def _delegated_logging_context():
+    set_delegation_runtime(
+        DelegationRuntime(config=DelegationConfig(act_for_people=True))
+    )
+    try:
+        yield
+    finally:
+        set_delegation_runtime(None)
+
 
 # ---------------------------------------------------------------------------
 # Shared fakes/fixtures (mirrors test_context_aware_tool.py's established
@@ -163,6 +187,14 @@ class _AuditEvents:
     def event_names(self) -> list[str]:
         return [r.audit_event for r in self.records]  # type: ignore[attr-defined]
 
+    def payload_text(self) -> str:
+        return repr(
+            [
+                {**record.__dict__, "message": record.getMessage()}
+                for record in self.records
+            ]
+        )
+
 
 def _binding(*, baggage: dict[str, str] | None = None) -> BoundRuntimeContext:
     return BoundRuntimeContext(
@@ -217,23 +249,64 @@ async def test_awrap_tool_call_success_leaves_default_ok_status() -> None:
 
 
 @pytest.mark.asyncio
-async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter_and_reraises() -> (
-    None
-):
+async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter_and_reraises(
+    caplog,
+) -> None:
     store, kpi = _install_recording_kpi_writer()
     middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
-    request = _request(name="fake.failing", tool_obj=None)
+    request = _request(name="identifier-tool-canary", tool_obj=None)
 
     async def handler(req: ToolCallRequest) -> ToolMessage:
-        raise RuntimeError("boom")
+        raise RuntimeError("upstream-error-canary")
 
-    with pytest.raises(RuntimeError):
-        await middleware.awrap_tool_call(request, handler)
+    with caplog.at_level(
+        logging.DEBUG,
+        logger="fred_runtime.react.middleware.tool_observability",
+    ):
+        with pytest.raises(RuntimeError):
+            await middleware.awrap_tool_call(request, handler)
 
     assert _latency_event(store).dims["status"] == "error"
     failed = _failed_events(store)
     assert len(failed) == 1
     assert failed[0].dims["error_code"] == "RuntimeError"
+    emitted = repr(
+        [
+            {**record.__dict__, "message": record.getMessage()}
+            for record in caplog.records
+        ]
+    )
+    assert "identifier-tool-canary" not in emitted
+    assert "upstream-error-canary" not in emitted
+
+
+@pytest.mark.asyncio
+async def test_awrap_tool_call_terminal_stop_logs_only_bounded_reason(caplog) -> None:
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = _request(name="terminal-tool-canary", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        try:
+            raise RuntimeError("terminal-upstream-canary")
+        except RuntimeError as upstream:
+            raise AuthorityLostError() from upstream
+
+    with caplog.at_level(
+        logging.DEBUG,
+        logger="fred_runtime.react.middleware.tool_observability",
+    ):
+        with pytest.raises(AuthorityLostError):
+            await middleware.awrap_tool_call(request, handler)
+
+    emitted = repr(
+        [
+            {**record.__dict__, "message": record.getMessage()}
+            for record in caplog.records
+        ]
+    )
+    assert "reason=authority_lost" in emitted
+    assert "terminal-tool-canary" not in emitted
+    assert "terminal-upstream-canary" not in emitted
 
 
 @pytest.mark.asyncio
@@ -319,7 +392,7 @@ async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
     assert "error_code" not in latency_dims
     assert "exception_type" not in latency_dims
     assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
-    assert audit.records[1].error_code == "tool_error_artifact"  # type: ignore[attr-defined]
+    assert audit.records[1].reason == "tool_error_artifact"  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -444,10 +517,39 @@ async def test_awrap_tool_call_emits_started_and_completed_audit_without_content
     ]
     completed = audit.records[1]
     assert completed.outcome == "succeeded"  # type: ignore[attr-defined]
-    assert completed.tool_name == "fake.search"  # type: ignore[attr-defined]
-    # Privacy: no tool arguments or results anywhere in the audit payload.
-    assert "very-secret-value" not in str(vars(completed))
-    assert "very-secret-result" not in str(vars(completed))
+    assert completed.reason == "tool_completed"  # type: ignore[attr-defined]
+    # Every emitted field is checked: identifiers, arguments and results are
+    # absent from both LogRecord extras and its formatted message.
+    for canary in (
+        "fake.search",
+        "call-1",
+        "request-1",
+        "correlation-1",
+        "session-1",
+        "user-1",
+        "team-1",
+        "very-secret-value",
+        "very-secret-result",
+    ):
+        assert canary not in audit.payload_text()
+
+
+@pytest.mark.asyncio
+async def test_flag_off_preserves_legacy_audit_dimensions() -> None:
+    set_delegation_runtime(None)
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    request = _request(name="legacy.tool", tool_obj=None)
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", name="legacy.tool", tool_call_id="call-1")
+
+    with _AuditEvents() as audit:
+        await middleware.awrap_tool_call(request, handler)
+
+    started, completed = audit.records
+    assert started.tool_name == "legacy.tool"  # type: ignore[attr-defined]
+    assert completed.tool_name == "legacy.tool"  # type: ignore[attr-defined]
+    assert completed.outcome == "succeeded"  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -566,7 +668,6 @@ async def test_native_capability_tool_gets_kpi_and_audit_coverage() -> None:
         "agent.tool.invocation.started",
         "agent.tool.invocation.completed",
     ]
-    assert audit.records[0].source == "capability"  # type: ignore[attr-defined]
     assert audit.records[1].outcome == "succeeded"  # type: ignore[attr-defined]
 
 
@@ -579,15 +680,24 @@ class _FakeRebacEngine:
     """Minimal duck-typed stand-in for `RebacEngine` — only the two members
     `_reverify_team_authorization` actually calls."""
 
-    def __init__(self, *, enabled: bool, deny: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        deny: bool = False,
+        error: Exception | None = None,
+    ) -> None:
         self.enabled = enabled
         self._deny = deny
+        self._error = error
         self.calls: List[tuple[str, str]] = []
 
     async def check_permission_or_raise(
         self, subject: Any, permission: Any, resource: Any, **_: Any
     ) -> None:
         self.calls.append((subject.id, resource.id))
+        if self._error is not None:
+            raise self._error
         if self._deny:
             raise AuthorizationError(
                 subject.id, str(permission), Resource.TEAM, "denied by test double"
@@ -648,7 +758,52 @@ async def test_reverify_team_authorization_blocks_denied_tool_call() -> None:
         "agent.tool.invocation.completed",
     ]
     assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
-    assert audit.records[1].error_code == "AuthorizationError"  # type: ignore[attr-defined]
+    assert audit.records[1].reason == "AuthorizationError"  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    "denial",
+    [
+        AuthorizationError("synthetic-person", "can_use", Resource.TEAM),
+        StandingAuthorizationError(),
+        StandingAuthorizationError(unavailable=True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_delegated_local_recheck_stops_before_tool_execution(denial) -> None:
+    engine = _FakeRebacEngine(enabled=True, error=denial)
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+    called = False
+
+    async def handler(request: ToolCallRequest) -> ToolMessage:
+        nonlocal called
+        called = True
+        return ToolMessage(content="ok", name="fake.search", tool_call_id="call-1")
+
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        with pytest.raises(AuthorityLostError) as stopped:
+            await middleware.awrap_tool_call(
+                _request(name="fake.search", tool_obj=None), handler
+            )
+    assert not called
+    assert stopped.value.__cause__ is None
+
+
+@pytest.mark.asyncio
+async def test_unrelated_local_recheck_outage_keeps_its_error() -> None:
+    engine = _FakeRebacEngine(enabled=True, error=RuntimeError("synthetic outage"))
+    middleware = ToolObservabilityMiddleware(kpi=None, binding=_binding())
+
+    async def handler(request: ToolCallRequest) -> ToolMessage:
+        raise AssertionError("tool must not run")
+
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        with pytest.raises(RuntimeError, match="synthetic outage"):
+            await middleware.awrap_tool_call(
+                _request(name="fake.search", tool_obj=None), handler
+            )
 
 
 @pytest.mark.asyncio
@@ -1068,6 +1223,8 @@ async def test_compiled_runtime_traces_capability_tool(runtime: str) -> None:
             checkpointer=None,
             subagent_middleware=[],
             middleware=[carrier, *middleware],
+            backend=StateBackend(),
+            permissions=[],
         )
     else:
         agent = create_agent(
@@ -1134,3 +1291,40 @@ async def test_command_trace_captures_only_matching_tool_result(capture: bool) -
         else []
     )
     assert span.ended
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("team_id", ["personal-user-1", None])
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_personal_delegated_tool_rechecks_standing(team_id, unavailable):
+    class StandingEngine(_FakeRebacEngine):
+        async def require_user_standing(self, user_id):
+            assert user_id == "user-1"
+            raise StandingAuthorizationError(unavailable=unavailable)
+
+    engine = StandingEngine(enabled=True)
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        with pytest.raises(AuthorityLostError):
+            await ToolObservabilityMiddleware._reverify_team_authorization(
+                user_id="user-1", team_id=team_id, is_service_agent=False
+            )
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_personal_delegated_tool_allows_active_person():
+    checked = []
+
+    class StandingEngine(_FakeRebacEngine):
+        async def require_user_standing(self, user_id):
+            checked.append(user_id)
+
+    engine = StandingEngine(enabled=True)
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        await ToolObservabilityMiddleware._reverify_team_authorization(
+            user_id="user-1", team_id="personal-user-1", is_service_agent=False
+        )
+    assert checked == ["user-1"]
+    assert engine.calls == []

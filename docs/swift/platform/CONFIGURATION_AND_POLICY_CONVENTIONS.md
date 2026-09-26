@@ -23,6 +23,27 @@ No extra conventions should be introduced outside this contract.
 
 All three follow the same startup configuration contract.
 
+## Local Configuration And Production Chart Ownership
+
+`apps/*/config/configuration_prod.yaml` files are developer configuration for
+local Docker Compose use, despite their names. They are not production deployment
+references.
+
+The production reference is `deploy/charts/fred/values.yaml`. Every PR that changes
+configuration must update the chart values and regenerate the affected schemas in
+the same PR, including optional fields and disabled feature switches. Document
+compatibility with omitted fields, required operations, activation prerequisites
+and rollback in an operator migration note. See the
+[delegated execution migration note](../ops/migrations/2808-delegated-execution.md).
+
+DevOps use published chart versions and their values as the signal to reconcile
+customer deployment values before or during an upgrade. Actual customer values
+may live in private, sensitive repositories; developers must supply actionable
+instructions without requiring access to them. Updating local developer YAML
+alone does not fulfil the production configuration contract. Release preparation
+must publish the corresponding chart version; changing values in a PR does not
+itself publish a chart.
+
 ## Startup Configuration Contract (Same In The 3 Backends)
 
 At startup, each backend must do exactly this:

@@ -20,7 +20,12 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.common.fastapi_handlers import register_exception_handlers
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.logs.audit_log import AUDIT_LOGGER_NAME
+from fred_core.security.models import (
+    AuthorizationError,
+    Resource,
+    StandingAuthorizationError,
+)
 
 
 def test_authorization_error_handler_returns_team_specific_detail(
@@ -41,6 +46,7 @@ def test_authorization_error_handler_returns_team_specific_detail(
         response = TestClient(app, raise_server_exceptions=False).get("/teams")
 
     assert response.status_code == 403
+    assert response.headers["X-Fred-Denial-Cause"] == "permission_refused"
     assert response.json() == {
         "detail": "You are not allowed to manage agents in this team. Ask a team admin or editor."
     }
@@ -230,3 +236,216 @@ def test_local_permission_error_handler_still_catches_authorization_error() -> N
 
     response = TestClient(app, raise_server_exceptions=False).get("/query")
     assert response.status_code == 403
+
+
+def test_a_denial_from_an_unconsultable_dependency_is_a_server_side_failure() -> None:
+    """A dependency that could not answer says nothing about the caller. Reported
+    as a client refusal it hides an outage from availability alerting."""
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/unavailable")
+    async def denied() -> None:
+        raise StandingAuthorizationError(unavailable=True)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/unavailable")
+
+    assert response.status_code == 503
+    assert response.headers["X-Fred-Denial-Cause"] == "standing_unavailable"
+
+
+def _app_raising(exc: AuthorizationError) -> FastAPI:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/denied")
+    async def denied() -> None:
+        raise exc
+
+    return app
+
+
+def test_a_standing_refusal_reads_differently_from_a_permission_refusal() -> None:
+    """Told only "not allowed", a person whose account was disabled goes looking
+    for a permission that was never the problem."""
+    standing = TestClient(
+        _app_raising(StandingAuthorizationError()), raise_server_exceptions=False
+    ).get("/denied")
+    permission = TestClient(
+        _app_raising(
+            AuthorizationError(
+                user_id="a-person", action="read:global", resource=Resource.DOCUMENTS
+            )
+        ),
+        raise_server_exceptions=False,
+    ).get("/denied")
+
+    assert standing.status_code == 403 and permission.status_code == 403
+    assert standing.headers["X-Fred-Denial-Cause"] == "standing_refused"
+    assert permission.headers["X-Fred-Denial-Cause"] == "permission_refused"
+    assert standing.json()["detail"] != permission.json()["detail"]
+    assert "standing" in standing.json()["detail"].lower()
+
+
+def test_a_bounded_detail_names_no_person_team_or_resource() -> None:
+    response = TestClient(
+        _app_raising(StandingAuthorizationError()), raise_server_exceptions=False
+    ).get("/denied")
+
+    detail = response.json()["detail"]
+    assert "a-person" not in detail
+    assert "organization" not in detail.lower()
+
+
+def test_an_unavailable_dependency_does_not_claim_the_person_lacks_access() -> None:
+    """The dependency never decided, so asserting a refusal would be a guess."""
+    response = TestClient(
+        _app_raising(StandingAuthorizationError(unavailable=True)),
+        raise_server_exceptions=False,
+    ).get("/denied")
+
+    assert response.status_code == 503
+    assert "not allowed" not in response.json()["detail"].lower()
+
+
+def _denial_record(caplog, exc: AuthorizationError):
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        TestClient(_app_raising(exc), raise_server_exceptions=False).get("/denied")
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "fred_core.common.fastapi_handlers"
+    ]
+    assert len(records) == 1
+    return records[0]
+
+
+def test_the_denial_record_separates_the_three_causes(caplog) -> None:
+    """Undiagnosable otherwise: a disabled account, a missing permission and an
+    unreachable dependency are the same 403 with the same message."""
+    standing = _denial_record(caplog, StandingAuthorizationError())
+    permission = _denial_record(
+        caplog,
+        AuthorizationError(
+            user_id="a-person", action="read:global", resource=Resource.DOCUMENTS
+        ),
+    )
+    unavailable = _denial_record(caplog, StandingAuthorizationError(unavailable=True))
+
+    causes = [
+        getattr(record, "denial_cause", None)
+        for record in (standing, permission, unavailable)
+    ]
+    assert len(set(causes)) == 3, causes
+    assert getattr(standing, "decision_reached") is True
+    assert getattr(unavailable, "decision_reached") is False
+    assert getattr(permission, "action") == "read:global"
+    assert getattr(permission, "resource_type") == Resource.DOCUMENTS.value
+
+
+def test_the_denial_record_carries_no_identifier(caplog) -> None:
+    canaries = ("actor-canary", "subject-canary")
+    record = _denial_record(
+        caplog,
+        AuthorizationError(
+            user_id=canaries[0],
+            action="can_use",
+            resource=Resource.APP,
+            actor_uid=canaries[0],
+            subject_type=Resource.TEAM,
+            subject_id=canaries[1],
+        ),
+    )
+
+    rendered = logging.Formatter().format(record)
+    assert all(canary not in rendered for canary in canaries)
+    # Also absent from the structured fields a JSON formatter would emit.
+    for value in vars(record).values():
+        assert all(canary != value for canary in canaries)
+
+
+class _AuditSink(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def audit():
+    sink = _AuditSink()
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    previous_level = audit_logger.level
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.addHandler(sink)
+    yield sink
+    audit_logger.removeHandler(sink)
+    audit_logger.setLevel(previous_level)
+
+
+def _audit_events(sink: _AuditSink) -> list[object]:
+    return [getattr(record, "audit_event", None) for record in sink.records]
+
+
+def test_a_standing_refusal_reaches_the_audit_surface(audit) -> None:
+    """Standing decides whether a person may act at all, so a refusal on it is
+    the same class of fact as a delegation decision and belongs beside them."""
+    TestClient(
+        _app_raising(StandingAuthorizationError()), raise_server_exceptions=False
+    ).get("/denied")
+
+    assert "authorization.standing.refused" in _audit_events(audit)
+
+
+def test_a_permission_refusal_is_not_audited_as_a_standing_refusal(audit) -> None:
+    TestClient(
+        _app_raising(
+            AuthorizationError(
+                user_id="a-person", action="read", resource=Resource.TAGS
+            )
+        ),
+        raise_server_exceptions=False,
+    ).get("/denied")
+
+    assert "authorization.standing.refused" not in _audit_events(audit)
+
+
+def test_the_standing_audit_event_carries_no_person_identifier(audit) -> None:
+    TestClient(
+        _app_raising(StandingAuthorizationError()), raise_server_exceptions=False
+    ).get("/denied")
+
+    for record in audit.records:
+        rendered = logging.Formatter().format(record)
+        assert "a-person" not in rendered
+        assert getattr(record, "outcome", None) is not None
+        assert getattr(record, "reason", None) is not None
+
+
+def test_a_denial_that_names_no_cause_is_reported_as_decided() -> None:
+    """Defaulting to undecided would turn every ordinary refusal into an outage
+    signal, so a site that says nothing is taken to have decided."""
+    response = TestClient(
+        _app_raising(StandingAuthorizationError()), raise_server_exceptions=False
+    ).get("/denied")
+
+    assert response.status_code == 403
+
+
+def test_every_cause_still_refuses_the_request() -> None:
+    """Reporting changed; the outcome must not. Nothing here may become a grant."""
+    causes = (
+        StandingAuthorizationError(),
+        StandingAuthorizationError(unavailable=True),
+        AuthorizationError(user_id="a-person", action="read", resource=Resource.TAGS),
+    )
+
+    for exc in causes:
+        response = TestClient(_app_raising(exc), raise_server_exceptions=False).get(
+            "/denied"
+        )
+        assert response.status_code >= 400, exc
+        assert "detail" in response.json()

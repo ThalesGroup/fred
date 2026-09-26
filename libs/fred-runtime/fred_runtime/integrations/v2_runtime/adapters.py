@@ -40,15 +40,21 @@ import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
+from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
 
 import httpx
 from fred_core.common import OwnerFilter
+from fred_core.common.fastapi_handlers import (
+    DENIAL_CAUSE_HEADER,
+    STANDING_UNAVAILABLE_CAUSE,
+)
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
@@ -98,6 +104,7 @@ from fred_sdk.contracts.runtime import (
     WikiProposalRef,
     WorkspaceFileNotFound,
     WorkspaceFsPort,
+    unwrap_run_stop_error,
 )
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
@@ -117,6 +124,12 @@ from fred_runtime.common.kf_workspace_client import (
     WorkspaceRetrievalError,
 )
 from fred_runtime.common.mcp_runtime import MCPRuntime
+from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
+    OutboundCredentialProvider,
+    attach_grant,
+    resolve_credential_provider,
+)
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME
@@ -130,6 +143,7 @@ from fred_runtime.runtime_support import (
     get_vector_search_scopes,
     refresh_user_access_token_from_keycloak,
 )
+from fred_runtime.runtime_support.authority import AuthorityLostError
 
 logger = logging.getLogger(__name__)
 
@@ -877,18 +891,29 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._search_client = VectorSearchClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
         self._similarity_port = DocumentSimilarityAdapter(
-            binding=binding, settings=self._settings
+            binding=binding,
+            settings=self._settings,
+            credentials=self._credentials,
         )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
@@ -1347,8 +1372,13 @@ class DocumentSearchAdapter(DocumentSearchPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
@@ -1356,7 +1386,11 @@ class DocumentSearchAdapter(DocumentSearchPort):
         # Hold the binding privately; the shim owns token access + refresh.
         self._binding = binding
         self._search_client = VectorSearchClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
 
     async def search(
@@ -1442,15 +1476,24 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._search_client = VectorSearchClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
 
     async def find_similar(
@@ -1521,12 +1564,21 @@ class AgentConfigAssetsAdapter(AgentAssetPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self._binding = binding
         self._client = KfWorkspaceClient(
-            agent=_WorkspaceAgentShim(binding=binding, settings=settings)
+            agent=_WorkspaceAgentShim(
+                binding=binding,
+                settings=settings,
+                credentials=self._credentials,
+            )
         )
 
     def _config_path(self, key: str) -> str:
@@ -1584,10 +1636,19 @@ class DocumentContentAdapter(DocumentContentPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=settings,
+                credentials=self._credentials,
+            )
         )
 
     async def fetch_raw(self, document_uid: str) -> DocumentRawContent:
@@ -1609,11 +1670,20 @@ class DocumentFolderAdapter(DocumentFolderPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self._client = KfTagClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=settings,
+                credentials=self._credentials,
+            )
         )
 
     async def resolve_folder(self, folder: str) -> str | None:
@@ -1664,6 +1734,10 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     importing the adapter's HTTP stack.
     """
 
+    run_stop = unwrap_run_stop_error(exc)
+    if run_stop is not None:
+        raise run_stop from None
+
     timed_out = isinstance(exc, httpx.TimeoutException)
     status_code = (
         exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
@@ -1694,15 +1768,24 @@ class DocumentTreeAdapter(DocumentTreePort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
 
     async def tree(
@@ -1776,15 +1859,24 @@ class DocumentSummarizeAdapter(DocumentSummarizePort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
 
     async def summarize(
@@ -1883,15 +1975,24 @@ class DocumentMarkdownAdapter(DocumentMarkdownPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
         self._cache: dict[str, str] = {}
 
@@ -1928,15 +2029,24 @@ class DocumentExtractionAdapter(DocumentExtractionPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
+        self._credentials = credentials
         self._settings = settings
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
         self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+            agent=_VectorSearchAgentShim(
+                binding=binding,
+                settings=self._settings,
+                credentials=self._credentials,
+            )
         )
 
     async def extract(
@@ -1969,10 +2079,16 @@ class FredMcpToolProvider(ToolProviderPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._settings = settings
-        self._agent = _McpRuntimeAgentShim(binding=binding, settings=settings)
+        self._agent = _McpRuntimeAgentShim(
+            binding=binding, settings=settings, credentials=credentials
+        )
         self._mcp_runtime: MCPRuntime | None = None
 
     def bind(self, binding: BoundRuntimeContext) -> None:
@@ -2020,10 +2136,17 @@ class FredWorkspaceFs(WorkspaceFsPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._settings = settings
-        self._agent = _WorkspaceAgentShim(binding=binding, settings=settings)
+        self._credentials = credentials
+        self._agent = _WorkspaceAgentShim(
+            binding=binding, settings=settings, credentials=credentials
+        )
         self._workspace_client = KfWorkspaceClient(agent=self._agent)
         self._binding = binding
 
@@ -2062,7 +2185,16 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return str(aid)
 
-    async def _token(self) -> str:
+    async def _token(self) -> str | None:
+        # Under delegation there is no person token to pass down, and asking for
+        # one would be the fallback the once-only rule forbids: the client's own
+        # provider supplies the call's credentials instead.
+        provider = resolve_credential_provider(explicit=self._credentials)
+        if provider.delegated:
+            return None
+        if self._credentials is not None:
+            authorization = (await provider.credentials()).authorization
+            return authorization.removeprefix("Bearer ") if authorization else None
         return await _workspace_access_token(self._binding.runtime_context)
 
     # ---- path relativization (§7.1 security rule) ----
@@ -2225,10 +2357,17 @@ class _VectorSearchAgentShim:
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
+        # The provider object itself, never a credential read off it: the client
+        # asks it per call, so this turn's changes are seen by calls in flight.
+        self.credential_provider = credentials
 
     async def refresh_user_access_token(self) -> str:
         return await _refresh_runtime_context_access_token(self.runtime_context)
@@ -2243,10 +2382,15 @@ class _McpRuntimeAgentShim:
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
+        self.credential_provider = credentials
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
@@ -2265,10 +2409,15 @@ class _WorkspaceAgentShim:
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self.runtime_context = binding.runtime_context
         self.agent_settings = settings
+        self.credential_provider = credentials
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self.runtime_context = binding.runtime_context
@@ -2902,9 +3051,11 @@ class TeamWikiAdapter(TeamWikiPort):
         binding: BoundRuntimeContext,
         control_plane_url: str | None,
         http_client: Any | None,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._control_plane_url = control_plane_url
         self._http_client = http_client
+        self._credentials = credentials
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
@@ -2932,12 +3083,41 @@ class TeamWikiAdapter(TeamWikiPort):
             raise TeamWikiPortError(
                 "The team wiki is unavailable: this pod has no control-plane client."
             )
-        token = await _workspace_access_token(self._binding.runtime_context)
+        provider = resolve_credential_provider(
+            explicit=self._credentials,
+            person_token_getter=partial(
+                _workspace_access_token, self._binding.runtime_context
+            ),
+        )
+        credentials = await provider.credentials()
+        request_kwargs: dict[str, Any] = attach_grant(
+            {"json": json} if json is not None else {}, credentials.parameters
+        )
+        headers = (
+            {"Authorization": credentials.authorization}
+            if credentials.authorization
+            else {}
+        )
+        auth = httpx.USE_CLIENT_DEFAULT
+        if isinstance(provider, DelegatedCredentialProvider):
+            auth = M2MBearerAuth(provider)
         try:
             response = await client.request(
-                method, url, headers={"Authorization": f"Bearer {token}"}, json=json
+                method, url, headers=headers, auth=auth, **request_kwargs
             )
+            if credentials.delegated and (
+                response.status_code in (401, 403)
+                or (
+                    response.status_code == 503
+                    and response.headers.get(DENIAL_CAUSE_HEADER)
+                    == STANDING_UNAVAILABLE_CAUSE
+                )
+            ):
+                # Refused authority ends the run under this same identity.
+                raise AuthorityLostError()
             response.raise_for_status()
+        except AuthorityLostError:
+            raise
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
         return response.json() if response.content else None

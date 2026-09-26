@@ -22,7 +22,7 @@ import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowl
 import {
   TagType,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListTagsQuery,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./DocumentLibraryScopePicker.module.css";
 
@@ -84,7 +84,7 @@ export function DocumentLibraryScopePicker({
   const [documentsByTagId, setDocumentsByTagId] = useState<Record<string, DocumentMetadata[]>>({});
   const [loadingTagIds, setLoadingTagIds] = useState<Record<string, boolean>>({});
 
-  const { data: allTags = [], isLoading } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  const { data: allTags = [], isLoading } = useListTagsQuery({
     type: "document" as TagType,
     limit: 10000,
     offset: 0,

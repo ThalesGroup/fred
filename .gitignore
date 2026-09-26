@@ -240,3 +240,7 @@ apps/knowledge-flow-backend/models/
 
 # Databases and content the offline test suites own
 .pytest-run/
+
+# Generated local delegation identities (never tokens or secrets)
+/apps/*/config/.delegation.local.json
+/apps/*/config/.delegation.local.tmp

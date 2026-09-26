@@ -80,6 +80,71 @@ class CheckpointStrategy(str, Enum):
     DISABLED = "disabled"
 
 
+class RuntimeStopReason(str, Enum):
+    """
+    Machine-readable reason a run was ended by the platform.
+
+    Why this exists: message text alone cannot tell a lost credential from a
+    crash, so a client cannot choose between "sign in again" and "retry".
+    """
+
+    AUTHORITY_LOST = "authority_lost"
+    CANCELLED = "cancelled"
+    DELEGATION_UNAVAILABLE = "delegation_unavailable"
+
+
+class RunStopError(RuntimeError):
+    """Base: a run must end; `reason` is the machine-readable value on the terminal event.
+
+    The exception's own text is platform-owned. Checkpointers and generic handlers
+    stringify exceptions, so an upstream response body must never sit on `args`.
+    """
+
+    reason: str = "cancelled"
+    _SENTENCE = "The run was stopped."
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(self._SENTENCE)
+        self._detail = detail
+
+    @property
+    def detail(self) -> str | None:
+        """Caller-supplied context, never stringified into sinks by the platform."""
+        return self._detail
+
+
+def unwrap_run_stop_error(exc: BaseException) -> RunStopError | None:
+    """Find a run-stopping error anywhere in a raised exception's chain.
+
+    A tool failure becomes text so the transcript keeps a result for every call;
+    a run-stopping one must not, so it is looked for through the wrappers the
+    tool and transport layers add.
+    """
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        if isinstance(current, RunStopError):
+            return current
+
+        for nested in (
+            getattr(current, "__cause__", None),
+            getattr(current, "__context__", None),
+        ):
+            if nested is not None:
+                stack.append(nested)
+        group = getattr(current, "exceptions", None)
+        if isinstance(group, tuple):
+            stack.extend(group)
+
+    return None
+
+
 class RuntimeEventKind(str, Enum):
     STATUS = "status"
     TOOL_CALL = "tool_call"
@@ -387,10 +452,15 @@ class RuntimeErrorEvent(RuntimeEventBase):
     - Treat `execution_error` as a terminal event: no `final` will follow.
     - Display `message` as a technical error detail (not as assistant content).
     - The stream closes after this event is delivered.
+    - `reason` is set only when the platform itself ended the run. It is absent
+      for a crash, so a client that ignores it behaves exactly as before.
+      When it is set, `message` is a platform-owned sentence that never carries
+      upstream error detail.
     """
 
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
     message: str = Field(..., min_length=1)
+    reason: RuntimeStopReason | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[
@@ -563,6 +633,90 @@ class WorkspaceFsPort(ABC):
         (RFC §7.3). The adapter mints a signed, short-TTL URL; raise
         ``WorkspaceFileNotFound`` if the path does not exist.
         """
+
+
+class ConversationScratchpadError(Exception):
+    """Base error for conversation-bound scratchpad operations."""
+
+
+class ConversationScratchpadInvalidPathError(ConversationScratchpadError):
+    """Raised before storage access when a scratchpad-relative path is invalid."""
+
+
+class ConversationScratchpadFileNotFoundError(ConversationScratchpadError):
+    """Raised when a requested scratchpad file does not exist."""
+
+
+class ConversationScratchpadUnsupportedContentError(ConversationScratchpadError):
+    """Raised when a caller supplies content other than UTF-8 text."""
+
+
+class ConversationScratchpadEditConflictError(ConversationScratchpadError):
+    """Raised when an expected-text edit does not match the latest file content."""
+
+
+class ConversationScratchpadQuotaExceededError(ConversationScratchpadError):
+    """Raised before a mutation would exceed a conversation namespace quota."""
+
+    def __init__(self, *, resource: str, limit: int, attempted: int) -> None:
+        self.resource = resource
+        self.limit = limit
+        self.attempted = attempted
+        super().__init__(
+            f"Conversation filesystem {resource} quota exceeded ({attempted} > {limit})"
+        )
+
+
+class ConversationScratchpadStorageError(ConversationScratchpadError):
+    """Raised when the shared storage operation fails."""
+
+
+class ConversationFilesystemPermissionError(ConversationScratchpadError):
+    """Raised when an agent access is denied by its filesystem policy."""
+
+
+class ConversationFilesystemInterruptError(ConversationFilesystemPermissionError):
+    """Raised when an agent access needs approval unavailable to this port."""
+
+
+class ConversationFilesystemQuotaError(ConversationScratchpadError):
+    """Raised when the selected physical namespace rejects a write."""
+
+
+class ConversationFilesystemPort(ABC):
+    """Conversation-bound text files at absolute virtual workspace paths."""
+
+    @abstractmethod
+    async def read_text(self, path: str, *, origin: Literal["agent", "system"]) -> str:
+        """Read one UTF-8 text file."""
+
+    @abstractmethod
+    async def write_text(
+        self, path: str, content: str, *, origin: Literal["agent", "system"]
+    ) -> None:
+        """Create or fully replace one text file."""
+
+    @abstractmethod
+    async def edit_text(
+        self,
+        path: str,
+        old_text: str,
+        new_text: str,
+        *,
+        origin: Literal["agent", "system"],
+        replace_all: bool = False,
+    ) -> int:
+        """Replace expected text in the latest content and return its match count."""
+
+    @abstractmethod
+    async def list(
+        self, path: str = "/", *, origin: Literal["agent", "system"]
+    ) -> tuple[str, ...]:
+        """List readable absolute file paths in stable order."""
+
+    @abstractmethod
+    async def exists(self, path: str, *, origin: Literal["agent", "system"]) -> bool:
+        """Return whether a virtual file exists and is readable."""
 
 
 class HistoryStorePort(Protocol):
@@ -1451,6 +1605,9 @@ class RuntimeServices:
     # privately in the adapter. Appended last for the same positional-safety
     # reason noted above.
     team_wiki: TeamWikiPort | None = None
+    # Conversation-bound virtual workspace for capability text files.
+    # Appended last to preserve positional compatibility.
+    conversation_filesystem: ConversationFilesystemPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

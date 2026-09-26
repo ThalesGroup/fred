@@ -342,29 +342,37 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
   // refresh — noise in precisely the area (#2125) this work exists to make
   // diagnosable, plus one stray timer retained per refresh for the tab's life.
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const refreshStarted = performance.now();
+  let refreshOutcome = "superseded";
   const chain: Promise<boolean> = Promise.race([
-    keycloakInstance.updateToken(effectiveMinValidity).then(() => {
+    keycloakInstance.updateToken(effectiveMinValidity).then((refreshed) => {
       if (authEpoch !== epochAtStart) {
         // Superseded by a logout while this was in flight. Do not resurrect the
         // persisted token and do not clear `sessionInvalidated`.
         return false;
       }
+      refreshOutcome = refreshed ? "refreshed" : "reused";
       sessionInvalidated = false;
       localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
       return true;
     }),
     new Promise<boolean>((resolve) => {
       timeoutHandle = setTimeout(() => {
-        console.warn("[Keycloak] token refresh timed out after", TOKEN_REFRESH_TIMEOUT_MS, "ms");
+        refreshOutcome = "timeout";
         resolve(false);
       }, TOKEN_REFRESH_TIMEOUT_MS);
     }),
   ])
-    .catch((err) => {
-      console.warn("[Keycloak] token refresh failed:", err);
+    .catch(() => {
+      refreshOutcome = "error";
       return false;
     })
     .finally(() => {
+      console.info("[Auth]", {
+        event: "browser_token_refresh",
+        outcome: refreshOutcome,
+        duration_ms: Math.round(performance.now() - refreshStarted),
+      });
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
       // Clear only if this chain still owns the slot, so a settling chain can
       // never null out a newer one installed behind it.

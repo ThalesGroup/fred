@@ -74,6 +74,28 @@ class _NoopTaskService:
         return SimpleNamespace(tasks=[])
 
 
+class _RecordingTaskService:
+    def __init__(self, *, session_id: str) -> None:
+        self._session_id = session_id
+        self.events: list[Any] = []
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(
+            tasks=[
+                SimpleNamespace(
+                    task_id="erasure-task-1",
+                    target=SimpleNamespace(id=self._session_id),
+                )
+            ]
+        )
+
+    async def get_run(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(detail=None)
+
+    async def record(self, event: Any) -> None:
+        self.events.append(event)
+
+
 def _deps(
     *,
     queue_store: _FakeQueueStore,
@@ -159,6 +181,88 @@ async def test_erase_at_expiry_uses_queue_identity_and_marks_done_on_ok() -> Non
         }
     ]
     assert queue.marked == ["s-2"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_window_erases_filesystem_only_when_due_and_records_result(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The due queue reaches the shared erasure path, including filesystem."""
+    from control_plane_backend.models.base import Base as CPBase
+    from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_CHECKPOINT,
+        STORE_CONVERSATION_FILESYSTEM,
+        STORE_HISTORY,
+        ErasureReceipt,
+        StoreErasureResult,
+    )
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.sql import create_async_engine_from_config
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "recovery-window.sqlite3"))
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(CoreBase.metadata.create_all)
+        await connection.run_sync(CPBase.metadata.create_all)
+
+    try:
+        queue = PurgeQueueStore(engine)
+        due_at = datetime(2026, 4, 25, 9, 0, tzinfo=UTC)
+        await queue.enqueue(
+            session_id="session-window",
+            team_id="team-9",
+            user_id="alice",
+            due_at=due_at,
+        )
+        erase_calls: list[dict[str, Any]] = []
+
+        async def _erase(**kwargs: Any) -> ErasureReceipt:
+            erase_calls.append(kwargs)
+            return ErasureReceipt(
+                session_id="session-window",
+                stores=[
+                    StoreErasureResult(store=STORE_CHECKPOINT, ok=True),
+                    StoreErasureResult(store=STORE_CONVERSATION_FILESYSTEM, ok=True),
+                    StoreErasureResult(store=STORE_HISTORY, ok=True),
+                ],
+            )
+
+        task_service = _RecordingTaskService(session_id="session-window")
+        deps = _deps(
+            queue_store=cast(Any, queue),
+            erase_session=_erase,
+            task_service=task_service,
+        )
+
+        monkeypatch.setattr(
+            "control_plane_backend.scheduler.queue_store.utcnow",
+            lambda: datetime(2026, 4, 25, 8, 59, tzinfo=UTC),
+        )
+        before_due = await list_due_conversation_candidates(limit=10, deps=deps)
+        assert before_due.candidates == []
+        assert erase_calls == []
+
+        monkeypatch.setattr(
+            "control_plane_backend.scheduler.queue_store.utcnow",
+            lambda: datetime(2026, 4, 25, 9, 1, tzinfo=UTC),
+        )
+        due = await list_due_conversation_candidates(limit=10, deps=deps)
+        assert len(due.candidates) == 1
+        result = await delete_conversation_and_mark_done(
+            event=due.candidates[0], deps=deps
+        )
+
+        assert result.ok is True
+        assert len(erase_calls) == 1
+        assert erase_calls[0]["authorization"] == "Bearer svc-token"
+        assert task_service.events[-1].detail.stores_ok == 3
+        assert task_service.events[-1].detail.stores_total == 3
+        assert await queue.list_due(limit=10) == []
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

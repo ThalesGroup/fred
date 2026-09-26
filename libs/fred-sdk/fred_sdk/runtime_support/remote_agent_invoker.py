@@ -31,6 +31,10 @@ from dataclasses import dataclass, field
 from typing import AsyncIterator, Callable, Mapping
 
 import httpx
+from fred_pod.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from pydantic import TypeAdapter
 
 from ..contracts.context import AgentInvocationRequest, AgentInvocationResult
@@ -197,6 +201,7 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
         config: RemoteSseAgentInvokerConfig,
         header_provider: Callable[[AgentInvocationRequest], Mapping[str, str]]
         | None = None,
+        token_provider: RefreshableTokenProvider | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         """
@@ -213,6 +218,7 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
 
         self._config = config
         self._header_provider = header_provider
+        self._token_provider = token_provider
         self._client = client
         self._owns_client = client is None
 
@@ -266,6 +272,9 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
                 self._config.endpoint_url,
                 json=payload,
                 headers=headers,
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else httpx.USE_CLIENT_DEFAULT,
                 timeout=timeout,
             ) as response:
                 if response.status_code >= 400:

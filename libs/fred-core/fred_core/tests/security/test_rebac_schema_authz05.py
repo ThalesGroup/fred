@@ -56,6 +56,28 @@ def test_organization_has_target_platform_roles() -> None:
     assert "platform_observer" in organization["relations"]
 
 
+def test_organization_standing_is_everyone_except_the_suspended() -> None:
+    organization = _type_definition("organization")
+    relations = organization["relations"]
+    metadata = organization["metadata"]["relations"]
+
+    assert relations["active"] == {
+        "difference": {
+            "base": {"this": {}},
+            "subtract": {"computedUserset": {"relation": "suspended"}},
+        }
+    }
+    assert metadata["active"]["directly_related_user_types"] == [
+        {"type": "user", "wildcard": {}}
+    ]
+    assert relations["suspended"] == {"this": {}}
+    assert metadata["suspended"]["directly_related_user_types"] == [{"type": "user"}]
+    assert relations["standing_ready"] == {"this": {}}
+    assert metadata["standing_ready"]["directly_related_user_types"] == [
+        {"type": "organization"}
+    ]
+
+
 def test_schema_contains_all_six_target_roles() -> None:
     """The full AUTHZ-05 target vocabulary must exist, exactly as named."""
     organization = _type_definition("organization")

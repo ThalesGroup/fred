@@ -1033,7 +1033,9 @@ class ApplicationContext:
             except Exception as e:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
-            _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
+            # Only the refusal names the variable; secret names stay out of the log.
+            if not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
+                raise ValueError("Missing required environment variable: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
         rebac_cfg = self.configuration.security.rebac
         if rebac_cfg and rebac_cfg.enabled:

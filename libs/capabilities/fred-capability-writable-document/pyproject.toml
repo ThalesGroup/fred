@@ -28,6 +28,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # the fred-agents pod auto-discovers the capability at boot via this entry point.
 [project.entry-points."fred.capabilities"]
 writable_document = "fred_capability_writable_document.capability:WritableDocumentCapability"
+open_writable_document = "fred_capability_writable_document.open_capability:OpenWritableDocumentCapability"
 
 [project.optional-dependencies]
 dev = [

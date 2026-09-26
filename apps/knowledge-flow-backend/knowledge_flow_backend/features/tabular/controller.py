@@ -16,7 +16,7 @@ import logging
 from typing import Annotated, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, StandingAuthorizationError, get_current_user
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.features.tabular.execution import (
@@ -116,6 +116,8 @@ class TabularController:
                 ]
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except Exception as e:
                 logger.exception("Failed to list tabular documents")
                 raise HTTPException(status_code=500, detail=str(e))
@@ -180,6 +182,8 @@ class TabularController:
                 )
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
@@ -230,6 +234,8 @@ class TabularController:
                 return await self.service.query_read(user, request=request)
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
@@ -285,6 +291,8 @@ class TabularController:
                 return await self.service.search_values(user, request=request)
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:

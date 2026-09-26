@@ -12,7 +12,7 @@ servers:
     transport: "inprocess"
     provider: "kf_vector_search"
     enabled: true
-    auth_mode: "user_token"
+    auth_mode: "delegated"
     agent_instructions: |
       ## Grounding contract (enforced by the search tool — non-negotiable)
 
@@ -93,7 +93,7 @@ servers:
     url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
     sse_read_timeout: 2000
     enabled: true
-    auth_mode: "user_token"
+    auth_mode: "delegated"
     agent_instructions: |
       ## Tabular data access (read-only SQL over ingested spreadsheets)
 
@@ -186,7 +186,7 @@ servers:
     url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
     sse_read_timeout: 2000
     enabled: true
-    auth_mode: "user_token"
+    auth_mode: "delegated"
 
 
   - id: "mcp-knowledge-flow-fs"
@@ -197,7 +197,7 @@ servers:
     url: "http://localhost:8111/knowledge-flow/v1/mcp-fs"
     sse_read_timeout: 2000
     enabled: true
-    auth_mode: "user_token"
+    auth_mode: "delegated"
 
   - id: "mcp-atlassian-jira-server"
     name: "mcp.servers.jira.name"
@@ -217,7 +217,7 @@ servers:
     transport: "streamable_http"
     url: "http://localhost:8111/knowledge-flow/v1/mcp-corpus"
     sse_read_timeout: 2000
-    auth_mode: "user_token"
+    auth_mode: "delegated"
     config_fields:
       - key: "chat_options.libraries_selection"
         type: "boolean"
@@ -288,4 +288,4 @@ servers:
     url: "http://localhost:8111/knowledge-flow/v1/mcp-prometheus-ops"
     sse_read_timeout: 2000
     enabled: true
-    auth_mode: "user_token"
+    auth_mode: "delegated"

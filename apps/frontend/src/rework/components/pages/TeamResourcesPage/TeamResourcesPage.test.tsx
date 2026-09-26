@@ -85,8 +85,8 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => probe.kfProbe,
-  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery: (_arg: unknown, options?: { skip?: boolean }) => {
+  useListTagsQuery: () => probe.kfProbe,
+  useGetTagCorpusTypeStatsQuery: (_arg: unknown, options?: { skip?: boolean }) => {
     probe.corpusStatsSkip = options?.skip ?? false;
     return {
       data: { entries: [] },
@@ -96,7 +96,7 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
       refetch: probe.corpusStatsRefetch,
     };
   },
-  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery: (arg: { path: string }, options?: { skip?: boolean }) => {
+  useFilesystemTypeStatsQuery: (arg: { path: string }, options?: { skip?: boolean }) => {
     probe.fsStatsSkip[arg.path] = options?.skip ?? false;
     return { data: { entries: [] }, isLoading: false, isError: false };
   },

@@ -23,9 +23,9 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import {
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery,
-  useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery,
+  useListTagsQuery,
+  useGetTagCorpusTypeStatsQuery,
+  useFilesystemTypeStatsQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
@@ -115,18 +115,12 @@ export default function TeamResourcesPage() {
   // and threw the answer away. "Agents" has no single filesystem root (its table's
   // root is virtual, fanning out per agent instance — see AgentsWorkspace) so it has
   // no stats source yet — RFC §13.5.
-  const corpusStats = useGetCorpusTypeStatsKnowledgeFlowV1TagsStatsGetQuery(
+  const corpusStats = useGetTagCorpusTypeStatsQuery(
     { teamId: fsTeamId },
     { skip: !statsOpen || activeTab !== "resources" },
   );
-  const mineStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery(
-    { path: userRoot },
-    { skip: !statsOpen || activeTab !== "mine" },
-  );
-  const teamStats = useTypeStatsKnowledgeFlowV1FsStatsPathGetQuery(
-    { path: sharedRoot },
-    { skip: !statsOpen || activeTab !== "team" },
-  );
+  const mineStats = useFilesystemTypeStatsQuery({ path: userRoot }, { skip: !statsOpen || activeTab !== "mine" });
+  const teamStats = useFilesystemTypeStatsQuery({ path: sharedRoot }, { skip: !statsOpen || activeTab !== "team" });
   const activeStats =
     activeTab === "resources"
       ? corpusStats
@@ -137,7 +131,7 @@ export default function TeamResourcesPage() {
           : null;
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
-  const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  const { isError, isLoading, isFetching, isUninitialized } = useListTagsQuery({
     type: "document",
     limit: 1,
     offset: 0,

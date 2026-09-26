@@ -49,6 +49,7 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.runtime import (
     DocumentMarkdownResult,
     DocumentScopeRefusedError,
+    unwrap_run_stop_error,
 )
 from pydantic import BaseModel, Field
 
@@ -243,6 +244,9 @@ async def read_document_page(
     except DocumentScopeRefusedError as exc:
         return document_scope_refusal(tool_ref=tool_ref, action=action, exc=exc)
     except Exception as exc:
+        run_stop = unwrap_run_stop_error(exc)
+        if run_stop is not None:
+            raise run_stop from None
         return document_tool_failure(
             tool_ref=tool_ref,
             action=action,
