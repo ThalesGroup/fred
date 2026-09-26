@@ -35,9 +35,10 @@ limits. Do not commit customer secrets or private deployment values.
 
 Optional `after: [other-note-slug]` orders dependent procedures. Cycles or unknown
 identities fail. Optional `covers: [full-commit-SHA]` explicitly acknowledges a
-previous uncovered direct/development contribution after reviewing its actual
-impact; it is not a blanket exemption. First-parent merge contributions need one
-note for the aggregate PR, not one per internal commit. Rebase/direct sequences
+previous uncovered contribution already on the release branch after reviewing its
+actual impact; it is not a blanket exemption. Do not reference internal PR commit
+SHAs: squash and rebase can remove them from the release ancestry. Merge and squash
+contributions need one note for the aggregate PR, not one per internal commit. Rebase/direct sequences
 without per-contribution notes need explicit coverage in a subsequent note.
 
 Published notes are immutable. Add a correction note; never delete or rename

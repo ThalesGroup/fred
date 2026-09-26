@@ -4,8 +4,6 @@ title: Required migration declarations and release guides
 impact: minor
 configuration: none
 configuration_reason: Only development and release tooling changes; deployed application values and schemas are unchanged.
-covers:
-  - 54340e22a0039ce74bf6523a56430449607750c1
 ---
 ## Applicability
 

@@ -50,3 +50,12 @@ now use `uv run --project libs/fred-pod --locked --no-dev`, reusing the existing
 PyYAML declaration and uv.lock without introducing another Python project. All
 22 tests passed in a fresh isolated uv environment; both updated workflows passed
 Actionlint. No dependency versions or application lockfiles changed.
+
+### Squash ancestry review correction
+
+Removed the policy note's `covers` reference to its internal planning commit:
+squash merging removes that SHA from release ancestry. Clarified that coverage
+references acknowledge contributions already on the release branch. Added a real
+Git squash regression reproducing the stale-reference failure, then generating
+and verifying a release guide after removing it. All 23 migration tests and the
+PR declaration check pass. The strict ancestor guard remains unchanged.

@@ -257,6 +257,29 @@ class GitTests(unittest.TestCase):
         self.assertEqual(plan["blockers"], [])
         self.assertIn(f"{NOTES}/feature.md", plan["notes"])
 
+    def test_squash_note_must_not_cover_internal_pr_commits(self):
+        self.git("checkout", "-b", "topic")
+        self.write("feature", "step 1")
+        self.commit("development commit")
+        internal = self.git("rev-parse", "HEAD")
+        self.add_note("feature", "minor", covers=[internal])
+        self.commit("complete PR declaration")
+        self.git("checkout", "swift")
+        self.git("merge", "--squash", "topic")
+        self.commit("squash reviewed PR")
+        with self.assertRaisesRegex(m.Invalid, "Covered commit is not an ancestor"):
+            m.release_plan(self.repo())
+        self.add_note("feature", "minor")
+        self.git("add", ".")
+        self.git("commit", "--amend", "--no-edit")
+        self.add_note("prepare")
+        result = self.run_cli("generate", "--worktree", "--version", "1.3.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.git("add", ".")
+        self.commit("prepare release")
+        result = self.run_cli("verify", "--version", "1.3.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_published_note_is_immutable(self):
         self.git("tag", "code/v1.2.4")
         self.add_note("bootstrap", "minor")
