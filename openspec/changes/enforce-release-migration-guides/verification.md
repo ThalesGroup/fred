@@ -36,7 +36,9 @@ the minimum. No release tags, publication or production changes were performed.
 
 ## Remaining external acceptance
 
-The new CI status must run on the implementation PR. Mandatory GitHub protection
+Draft PR #2811 is open. The new `Migration notes` check passed on GitHub at
+83b623c6737cf936972048058c2653d96bb1436e (run 36214806104). Other initial CI
+checks were still running when this evidence was recorded. Mandatory GitHub protection
 activation must follow merge and an observed successful run; the issue and change
 remain open until effective enforcement is verified. Customer upgrade acceptance
 and the first actual release audit remain separate operator/release tasks.

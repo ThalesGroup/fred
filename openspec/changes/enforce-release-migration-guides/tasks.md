@@ -25,6 +25,6 @@
 ## 5. Verification and rollout
 
 - [x] 5.1 Run offline helper/integration tests and root make code-quality, then obtain independent correctness/CI review; record exact evidence and fix findings before pushing.
-- [ ] 5.2 Push the dedicated implementation branch and open a draft PR linked to issue #2809 with scope, migration declaration, test evidence and pending protection activation; verify its CI status.
+- [x] 5.2 Push the dedicated implementation branch and open a draft PR linked to issue #2809 with scope, migration declaration, test evidence and pending protection activation; verify its CI status.
 - [ ] 5.3 After merge and an observed successful status, add Migration notes to effective GitHub required checks while preserving all other settings; inspect effective protections and report any access/bypass limitation.
 - [ ] 5.4 Reconcile completion evidence, sync/archive this OpenSpec change and close issue #2809 only after implemented behavior and enforcement match the specification; keep release-time customer acceptance outside tooling completion claims.
