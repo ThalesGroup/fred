@@ -181,6 +181,8 @@ async def test_delete_removes_the_row_and_reports_whether_it_did(
 ) -> None:
     await _make(store, "a1")
 
-    assert await store.delete("a1") is True
+    deleted = await store.delete("a1")
+    assert deleted is True
     assert await store.get("a1") is None
-    assert await store.delete("a1") is False
+    deleted_again = await store.delete("a1")
+    assert deleted_again is False
