@@ -44,7 +44,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
+  useListTagsQuery: () => ({
     data: [
       { id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] },
       { id: "tag-sub", name: "Sub", path: "CIR", type: "document", item_ids: [] },
@@ -60,13 +60,13 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [
+  useCreateTagMutation: () => [
     (arg: { tagCreate: { name: string } }) => {
       probe.createTagCalls.push(arg.tagCreate);
       return { unwrap: () => Promise.resolve({ id: `tag-${arg.tagCreate.name.toLowerCase()}` }) };
     },
   ],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),

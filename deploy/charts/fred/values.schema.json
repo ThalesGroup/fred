@@ -921,6 +921,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -938,18 +939,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -961,8 +950,7 @@
                         "client_id"
                       ],
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -990,6 +978,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -3988,6 +4045,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -4005,18 +4063,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -4028,8 +4074,7 @@
                         "client_id"
                       ],
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -4057,6 +4102,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -8641,6 +8755,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -8658,18 +8773,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -8681,8 +8784,7 @@
                         "client_id"
                       ],
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -8710,6 +8812,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -13291,6 +13462,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -13308,18 +13480,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -13327,8 +13487,7 @@
                         }
                       },
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -13352,6 +13511,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -17734,6 +17962,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -17751,18 +17980,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -17770,8 +17987,7 @@
                         }
                       },
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -17795,6 +18011,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -22177,6 +22462,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -22194,18 +22480,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -22213,8 +22487,7 @@
                         }
                       },
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -22238,6 +22511,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -26604,6 +26946,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -26621,18 +26964,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -26644,8 +26975,7 @@
                         "client_id"
                       ],
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -26673,6 +27003,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],
@@ -28758,6 +29157,7 @@
                 "security": {
                   "properties": {
                     "m2m": {
+                      "additionalProperties": false,
                       "description": "Configuration for machine-to-machine authentication.",
                       "properties": {
                         "enabled": {
@@ -28775,18 +29175,6 @@
                           "title": "Client Id",
                           "type": "string"
                         },
-                        "audience": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "title": "Audience"
-                        },
                         "secret_env_var": {
                           "default": "M2M_CLIENT_SECRET",
                           "title": "Secret Env Var",
@@ -28798,8 +29186,7 @@
                         "client_id"
                       ],
                       "title": "M2MSecurity",
-                      "type": "object",
-                      "additionalProperties": false
+                      "type": "object"
                     },
                     "user": {
                       "description": "Configuration for user authentication.",
@@ -28827,6 +29214,75 @@
                       "title": "UserSecurity",
                       "type": "object",
                       "additionalProperties": false
+                    },
+                    "delegation": {
+                      "additionalProperties": false,
+                      "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
+                      "properties": {
+                        "act_for_people": {
+                          "default": false,
+                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "title": "Act For People",
+                          "type": "boolean"
+                        },
+                        "accept_delegated_calls": {
+                          "default": false,
+                          "description": "Incoming: believe the person a calling workload names when that workload's token carries caller_role.",
+                          "title": "Accept Delegated Calls",
+                          "type": "boolean"
+                        },
+                        "audience": {
+                          "default": "fred-delegation",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Audience",
+                          "type": "string"
+                        },
+                        "caller_role": {
+                          "default": "delegation_caller",
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "title": "Caller Role",
+                          "type": "string"
+                        },
+                        "caller_roles_claim": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Path to the list of roles in a verified token, one entry per nested claim name. Defaults to resource_access.<audience>.roles, where Keycloak puts the roles of the audience client.",
+                          "title": "Caller Roles Claim"
+                        },
+                        "service_accounts_only": {
+                          "default": false,
+                          "description": "Trust only a token Keycloak issued to a client's own service account: its preferred_username is service-account-<client> and it carries the client_id claim (clientId before Keycloak 21.1) that only client-credentials tokens get. Keycloak-specific; a person's token then never delegates, whichever client issued it.",
+                          "title": "Service Accounts Only",
+                          "type": "boolean"
+                        },
+                        "user_clients": {
+                          "description": "Clients people sign in through, besides security.user.client_id. A token issued to one never delegates, whatever roles it carries. List the login client where security.user.client_id names this receiver's own audience instead.",
+                          "items": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": "User Clients",
+                          "type": "array"
+                        }
+                      },
+                      "title": "DelegationConfig",
+                      "type": "object"
                     },
                     "authorized_origins": {
                       "default": [],

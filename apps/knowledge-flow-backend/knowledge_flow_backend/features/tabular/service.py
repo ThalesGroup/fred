@@ -29,6 +29,7 @@ import pandas as pd
 from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
@@ -880,7 +881,7 @@ class TabularService:
             # test used everywhere else in this file, so a same-named tagged
             # corpus document stays visible.
             visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
-        elif is_service_agent(user):
+        elif is_service_agent(user) and not holds_caller_role(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the
             # per-user READ lookup above is always empty and would zero out every dataset.

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 import pytest
 from fred_core import AuthorizationError, RebacReference, Resource, TagPermission
 from fred_core.common import OwnerFilter
+from fred_core.security.delegation import DelegationConfig, initialize_delegation, preserved_delegation
 from fred_core.security.structure import KeycloakUser
 
 import knowledge_flow_backend.features.tag.tag_service as tag_service_module
@@ -110,6 +111,26 @@ async def test_service_agent_without_team_fails_closed():
     svc = _svc(_FakeRebac(team_tags={"tag-cir"}))
     result = await svc.resolve_authorized_tag_ids_in_rebac(_user(["service_agent"]), OwnerFilter.TEAM, None)
     assert result == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)],
+    ids=["off", "accepting", "acting-only"],
+)
+async def test_the_team_read_is_kept_for_a_service_identity_only(config):
+    # A workload that speaks for people also holds the service role; it must
+    # never read a team's corpus as itself, whatever the switches.
+    delegation_client = _user(["service_agent"]).model_copy(update={"client_id": "agents", "caller_roles": frozenset({"delegation_caller"})})
+    svc = _svc(_FakeRebac(team_tags={"tag-cir"}, user_readable=set()))
+    with preserved_delegation():
+        initialize_delegation(config)
+        evaluator = await svc.resolve_authorized_tag_ids_in_rebac(_user(["service_agent"]), OwnerFilter.TEAM, "team-1")
+        workload = await svc.resolve_authorized_tag_ids_in_rebac(delegation_client, OwnerFilter.TEAM, "team-1")
+
+    assert evaluator == {"tag-cir"}
+    assert workload == set()
 
 
 @pytest.mark.asyncio

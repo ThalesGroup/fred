@@ -75,6 +75,10 @@ validation-report: ## Run the live cross-app validation suite (requires infra + 
 
 ##@ Setup
 
+.PHONY: delegation
+delegation: ## Prepare local delegation after docker-up, without editing tracked YAML (ARGS=--dry-run or --reset)
+	uv run scripts/populate_local_delegation.py $(ARGS)
+
 .PHONY: setup-env
 setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
 	@set -e; \

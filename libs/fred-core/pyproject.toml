@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "4.1.0"
+version = "4.2.1"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,7 +16,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 dependencies = [
     # The pod floor: configuration, identity, naming. Every name it holds is
     # re-exported from here, so this library's own surface is unchanged.
-    "fred-pod>=4.1.0",
+    "fred-pod>=4.2.1",
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still
     # admits versions vulnerable to the remediated CVEs. Pin the patched floor
@@ -84,6 +84,10 @@ dev = [
 ]
 
 [project.optional-dependencies]
+# Only the tool-mount subclass needs this; services that mount no tools do not.
+mcp = [
+    "fastapi-mcp==0.4.0",
+]
 migration = [
     "alembic>=1.18.4",
 ]

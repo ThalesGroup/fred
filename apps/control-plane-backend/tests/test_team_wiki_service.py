@@ -732,7 +732,7 @@ async def test_a_team_without_the_capability_has_no_wiki(
 
 
 @pytest.mark.asyncio
-async def test_the_gate_runs_on_every_entry_point(
+async def test_the_requirement_runs_on_every_entry_point(
     monkeypatch: pytest.MonkeyPatch, gate: _RecordingGate
 ) -> None:
     """One test over all of them, like the write-permission one above: a route

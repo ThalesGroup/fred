@@ -100,7 +100,9 @@ def build_lifecycle_action_dependencies(
 
     async def _erase_session(**kwargs: Any) -> ErasureReceipt:
         product_deps = build_product_service_dependencies(container)
-        return await ConversationErasureService(product_deps).erase_session(**kwargs)
+        return await ConversationErasureService(
+            product_deps, token_provider=container.get_service_token_provider()
+        ).erase_session(**kwargs)
 
     return LifecycleActionDependencies(
         get_session_store=container.get_session_store,

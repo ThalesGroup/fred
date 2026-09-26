@@ -54,6 +54,7 @@ from fred_runtime.capabilities import (
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -878,6 +879,33 @@ async def test_search_tool_failure_returns_is_error_result() -> None:
     # CAPAB-02: the diagnostic must reach a Graph node too, which keeps only
     # the artifact half of a `content_and_artifact` return.
     assert message.artifact.blocks[0].text == message.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+async def test_search_authority_loss_escapes_instead_of_becoming_an_artifact(
+    wrapped: bool,
+) -> None:
+    stop = AuthorityLostError()
+    error: Exception = stop
+    if wrapped:
+        try:
+            raise stop
+        except AuthorityLostError as exc:
+            try:
+                raise DocumentPortCallError("port wrapper") from exc
+            except DocumentPortCallError as wrapper:
+                error = wrapper
+    port = _FakePort(error=error)
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_full_services(search=port), config={}
+    )
+
+    with pytest.raises(AuthorityLostError):
+        await _invoke_named_tool(
+            cap, ctx, "search_documents_using_vectorization", {"question": "q"}
+        )
 
 
 @pytest.mark.asyncio

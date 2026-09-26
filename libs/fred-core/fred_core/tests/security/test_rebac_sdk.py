@@ -26,6 +26,7 @@ from pydantic import AnyHttpUrl, AnyUrl
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.security import oidc
+from fred_core.security.delegation import DelegationConfig, preserved_delegation
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac import rebac_sdk as rebac_sdk_module
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
@@ -72,6 +73,24 @@ class _FailingInitializationFakeRebacEngine(_ClosingFakeRebacEngine):
         raise RuntimeError("OpenFGA unavailable")
 
 
+class _StandingFakeRebacEngine(_ClosingFakeRebacEngine):
+    def __init__(self, *, model_ok: bool = True, seed_ready: bool = True) -> None:
+        super().__init__()
+        self.model_ok = model_ok
+        self.seed_ready = seed_ready
+        self.model_checks = 0
+        self.seed_checks = 0
+
+    async def validate_standing_model(self) -> None:
+        self.model_checks += 1
+        if not self.model_ok:
+            raise RuntimeError("Standing authorization model is not available.")
+
+    async def is_standing_seed_ready(self) -> bool:
+        self.seed_checks += 1
+        return self.seed_ready
+
+
 @pytest.fixture(autouse=True)
 def _restore_security_profile_globals() -> Iterator[None]:
     oidc_before = (
@@ -82,8 +101,10 @@ def _restore_security_profile_globals() -> Iterator[None]:
         oidc.KEYCLOAK_JWKS_URL,
         oidc.KEYCLOAK_CLIENT_ID,
         oidc._JWKS_CLIENT,
+        oidc._REALM_ISSUERS,
     )
-    yield
+    with preserved_delegation():
+        yield
     (
         oidc.STRICT_ISSUER,
         oidc.STRICT_AUDIENCE,
@@ -92,6 +113,7 @@ def _restore_security_profile_globals() -> Iterator[None]:
         oidc.KEYCLOAK_JWKS_URL,
         oidc.KEYCLOAK_CLIENT_ID,
         oidc._JWKS_CLIENT,
+        oidc._REALM_ISSUERS,
     ) = oidc_before
 
 
@@ -105,6 +127,7 @@ def _security(
     with_rebac: bool = True,
     create_store_if_needed: bool = False,
     sync_schema_on_init: bool = False,
+    delegation: DelegationConfig | None = None,
     timeout_millisec: int | None = 5000,
 ) -> SecurityConfiguration:
     rebac = (
@@ -132,6 +155,7 @@ def _security(
             realm_url=_REALM,
             client_id="first-party-app",
         ),
+        delegation=delegation or DelegationConfig(),
         rebac=rebac,
     )
 
@@ -360,6 +384,95 @@ async def test_factory_rejects_a_disabled_engine(
 
     with pytest.raises(ValueError, match="requires an enabled OpenFGA engine"):
         await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
+
+
+def _install_engine(monkeypatch: pytest.MonkeyPatch, engine: RebacEngine) -> None:
+    def _factory(
+        security: SecurityConfiguration,
+        *,
+        kpi_writer: BaseKPIWriter | None = None,
+    ) -> RebacEngine:
+        return engine
+
+    monkeypatch.setattr(rebac_sdk_module, "_rebac_factory", _factory)
+
+
+_IN_USE = pytest.mark.parametrize(
+    "delegation",
+    [
+        DelegationConfig(act_for_people=True),
+        DelegationConfig(accept_delegated_calls=True),
+    ],
+    ids=["act_for_people", "accept_delegated_calls"],
+)
+
+
+@pytest.mark.asyncio
+@_IN_USE
+async def test_factory_refuses_to_start_under_delegation_until_standing_is_ready(
+    monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
+) -> None:
+    """A backend using delegation refuses to start rather than refusing every
+    person: with no standing marker, every person decision would be a 403."""
+    engine = _StandingFakeRebacEngine(seed_ready=False)
+    _install_engine(monkeypatch, engine)
+
+    with pytest.raises(ValueError, match="Account standing is not ready"):
+        await rebac_sdk_factory(
+            _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
+        )
+
+    assert engine.model_checks == 1
+    assert engine.seed_checks == 1
+
+
+@pytest.mark.asyncio
+@_IN_USE
+async def test_factory_refuses_to_start_under_delegation_when_the_model_lacks_standing(
+    monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
+) -> None:
+    engine = _StandingFakeRebacEngine(model_ok=False)
+    _install_engine(monkeypatch, engine)
+
+    with pytest.raises(RuntimeError, match="Standing authorization model"):
+        await rebac_sdk_factory(
+            _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
+        )
+
+    assert engine.model_checks == 1
+    assert engine.seed_checks == 0
+
+
+@pytest.mark.asyncio
+@_IN_USE
+async def test_factory_admits_a_ready_store_under_delegation(
+    monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
+) -> None:
+    engine = _StandingFakeRebacEngine()
+    _install_engine(monkeypatch, engine)
+
+    sdk = await rebac_sdk_factory(
+        _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
+    )
+
+    assert sdk is not None
+    assert engine.model_checks == 1
+    assert engine.seed_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_factory_skips_the_standing_preflight_without_delegation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An application that enforces no standing has nothing to preflight, and
+    must not be blocked by a store that was never seeded."""
+    engine = _StandingFakeRebacEngine(model_ok=False, seed_ready=False)
+    _install_engine(monkeypatch, engine)
+
+    await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
+
+    assert engine.model_checks == 0
+    assert engine.seed_checks == 0
 
 
 def test_private_implementation_rejects_noop_engine() -> None:

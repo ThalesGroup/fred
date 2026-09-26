@@ -36,7 +36,9 @@ from fred_core.security.structure import KeycloakUser
 class _RecordingRebacEngine(RebacEngine):
     def __init__(self) -> None:
         self.added_relations: list[Relation] = []
-        self.checked_permissions: list[tuple[RebacPermission, str, str | None]] = []
+        self.checked_permissions: list[
+            tuple[RebacPermission | RelationType, str, str | None]
+        ] = []
 
     async def _persist_relation(self, relation: Relation) -> str | None:
         self.added_relations.append(relation)
@@ -51,9 +53,6 @@ class _RecordingRebacEngine(RebacEngine):
     ) -> str | None:
         return None
 
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
     async def list_relations(
         self,
         *,
@@ -64,7 +63,7 @@ class _RecordingRebacEngine(RebacEngine):
     ) -> list[Relation]:
         return []
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -86,10 +85,10 @@ class _RecordingRebacEngine(RebacEngine):
     ) -> list[RebacReference]:
         return []
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -100,7 +99,7 @@ class _RecordingRebacEngine(RebacEngine):
     async def check_user_permission_or_raise(
         self,
         user: KeycloakUser,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource_id: str,
         *,
         consistency_token: str | None = None,
@@ -140,9 +139,6 @@ class _ContextualRelationsSpyEngine(RebacEngine):
     ) -> str | None:
         return None
 
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
     async def list_relations(
         self,
         *,
@@ -153,7 +149,7 @@ class _ContextualRelationsSpyEngine(RebacEngine):
     ) -> list[Relation]:
         return []
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -190,10 +186,10 @@ class _ContextualRelationsSpyEngine(RebacEngine):
         # self-heal (see `_PersonalTeamAwareEngine` for that).
         return True
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -340,9 +336,6 @@ class _PersonalTeamAwareEngine(RebacEngine):
     ) -> str | None:
         return None
 
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
     async def list_relations(
         self,
         *,
@@ -353,7 +346,7 @@ class _PersonalTeamAwareEngine(RebacEngine):
     ) -> list[Relation]:
         return []
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -388,10 +381,10 @@ class _PersonalTeamAwareEngine(RebacEngine):
             for r in self.added_relations
         )
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,
@@ -648,9 +641,6 @@ class _InMemoryCountingRebacEngine(RebacEngine):
     ) -> str | None:
         return None
 
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        return 0
-
     async def list_relations(
         self,
         *,
@@ -671,7 +661,7 @@ class _InMemoryCountingRebacEngine(RebacEngine):
             and rel.subject == subject
         ]
 
-    async def lookup_resources(
+    async def _lookup_resources_raw(
         self,
         subject: RebacReference,
         permission: RebacPermission | RelationType,
@@ -706,10 +696,10 @@ class _InMemoryCountingRebacEngine(RebacEngine):
             for r in self.tuples
         )
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Iterable[Relation] | None = None,

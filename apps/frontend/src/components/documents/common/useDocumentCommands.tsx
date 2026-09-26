@@ -14,7 +14,7 @@
 
 import { useCallback, useState } from "react";
 import {
-  useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
+  useUpdateTagMutation,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   TagWithItemsId,
   DocumentMetadata,
@@ -41,7 +41,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const { t } = useTranslation();
   const { showSuccess, showError, showInfo } = useToast();
 
-  const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
+  const [updateTag] = useUpdateTagMutation();
   const [updateRetrievable] =
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();

@@ -34,6 +34,7 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
@@ -279,6 +280,33 @@ async def test_label_tool_failure_returns_is_error_result() -> None:
     assert message.artifact.is_error is True
     assert "HTTP 503" in message.content
     assert "list documents by label" in message.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+async def test_label_authority_loss_escapes_instead_of_becoming_an_artifact(
+    wrapped: bool,
+) -> None:
+    stop = AuthorityLostError()
+    error: Exception = stop
+    if wrapped:
+        try:
+            raise stop
+        except AuthorityLostError as exc:
+            try:
+                raise DocumentPortCallError("port wrapper") from exc
+            except DocumentPortCallError as wrapper:
+                error = wrapper
+    cap = DocumentLabelSearchCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_services(_FakeTreePort(error=error)),
+        config={},
+    )
+
+    with pytest.raises(AuthorityLostError):
+        await _invoke_named_tool(cap, ctx, "list_documents_by_label", {"label": "DAT"})
 
 
 @pytest.mark.asyncio

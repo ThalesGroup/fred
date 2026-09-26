@@ -45,6 +45,7 @@ from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
     DocumentScopeRefusedError,
     DocumentSearchResult,
+    unwrap_run_stop_error,
 )
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
@@ -223,6 +224,9 @@ class DocumentSimilarityCapability(
                     "out of scope."
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 # Degrade rather than raise: the default ToolNode handler
                 # re-raises, killing the turn with an empty error detail.
                 return document_tool_failure(

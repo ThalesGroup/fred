@@ -331,7 +331,8 @@ class CapabilityRegistry:
         except KeyError:
             raise UnknownCapabilityError(
                 f"Capability '{cap_id}' is not installed on this pod. "
-                f"Installed: {sorted(self._capabilities) or 'none'}."
+                f"Installed: {sorted(self._capabilities) or 'none'}.",
+                capability_id=cap_id,
             ) from None
 
     def ids(self) -> tuple[str, ...]:
