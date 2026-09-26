@@ -110,10 +110,10 @@ class BaseScheduler(ABC):
 
     def _register_workflow(self, user: KeycloakUser, definition: PipelineDefinition) -> WorkflowHandle:
         document_uids = self._extract_document_uids(definition)
-        return self._register_workflow_for_uids(user, document_uids)
+        return self._register_workflow_for_uids(user, document_uids, workflow_id=definition.workflow_id)
 
-    def _register_workflow_for_uids(self, user: KeycloakUser, document_uids: List[str]) -> WorkflowHandle:
-        workflow_id = f"wf-{uuid4()}"
+    def _register_workflow_for_uids(self, user: KeycloakUser, document_uids: List[str], *, workflow_id: str | None = None) -> WorkflowHandle:
+        workflow_id = workflow_id or f"wf-{uuid4()}"
 
         with self._lock:
             self._workflows_by_id[workflow_id] = document_uids

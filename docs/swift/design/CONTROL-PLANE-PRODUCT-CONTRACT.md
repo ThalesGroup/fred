@@ -1876,8 +1876,8 @@ workflow, `202 { task_id }`.
 `mode: incremental` → only docs with 0 vectors. `force: true` → always
 re-embed regardless of mode. `embedding_model` is advisory only (not wired
 into `prepare_revectorize_file`, which always uses
-`IngestionProcessingProfile.medium` — the original ingestion profile isn't
-recorded on `DocumentMetadata`). Migration default scope: all migrated
+`IngestionProcessingProfile.medium`; this repair path does not yet use the
+optional `DocumentMetadata.processing.profile`). Migration default scope: all migrated
 documents (by `source_tag`), `mode: full`.
 
 **Authorization:** a `source_tag`-only scope spans arbitrary teams (it's the
@@ -4158,3 +4158,31 @@ authorized. Direct identity-provider changes do not update platform standing.
 With standing disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+
+
+## Knowledge Flow ingestion admission and relaunch — 2026-09-26
+
+`POST /process-documents` returns `task_ids` keyed by document UID as well as the
+batch workflow ID. Uploads and relaunches create the document tasks, execution
+binding and immutable pending submission in one database transaction. Internal
+source synchronization can supply its existing task, which admission binds once.
+A partial unique index on active document-ingestion tasks rejects concurrent
+admission (HTTP 409). Push-document authorization uses its persisted document and
+folder memberships, not replacement tags supplied by the caller.
+
+Temporal delivery reuses the persisted workflow ID with `REJECT_DUPLICATE`, even
+if the first execution already completed. A timeout leaves the task pending;
+the existing reconciliation loop retries pending deliveries with bounded
+concurrency before reconciling execution outcomes. Only acknowledged deliveries
+are removed. The submission keeps the existing per-profile batch admission and
+common/extraction queue routing. Local memory execution retains its pending
+request until completion, serializes delivery within the process, and holds no
+SQL connection while running the pipeline; it is not a multi-replica scheduler.
+
+With `relaunch: true`, ready or processing documents are refused. The server
+preserves `processing.profile` when known; otherwise the request must explicitly
+choose fast, medium or rich (HTTP 422 if omitted). Queue wait and worker retries
+remain active; absence from a browser's task cache never proves abandonment.
+Raw-file preparation is outside the admission transaction: this does not make
+external content writes atomic with SQL, or recover historical unbound tasks.
+The source synchronization preparation contract is unchanged.

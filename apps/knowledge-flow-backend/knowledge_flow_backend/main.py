@@ -232,7 +232,19 @@ def create_app() -> FastAPI:
         if _task_service is not None:
             from fred_core.tasks.service import run_reconcile_sweeper
 
-            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service))
+            from knowledge_flow_backend.features.metadata.service import MetadataService
+            from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
+
+            retry_submissions = None
+            if configuration.scheduler.enabled:
+                ingestion_scheduler = IngestionTaskService(
+                    scheduler_config=configuration.scheduler,
+                    processing_config=configuration.processing,
+                    metadata_service=MetadataService(),
+                    max_parallelism=configuration.scheduler.temporal.ingestion_workflow_parallelism,
+                )
+                retry_submissions = ingestion_scheduler.delivery().retry_pending
+            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service, before_reconcile=retry_submissions))
 
         try:
             yield

@@ -3008,8 +3008,10 @@ export type AccessInfo = {
   confidential?: boolean;
   acl?: string[];
 };
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type ProcessingStatus = "not_started" | "in_progress" | "done" | "failed";
 export type Processing = {
+  profile?: IngestionProcessingProfile | null;
   stages?: {
     [key: string]: ProcessingStatus;
   };
@@ -3185,7 +3187,6 @@ export type DocumentAccepted = {
   /** The task processing this write; follow it for the outcome. */
   task_id: string;
 };
-export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type BodyWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPost = {
   /** The document's bytes. */
   file: string;
@@ -3748,6 +3749,9 @@ export type ProcessDocumentsResponse = {
   total_files: number;
   workflow_id: string;
   run_id?: string | null;
+  task_ids?: {
+    [key: string]: string;
+  };
 };
 export type FileToProcessWithoutUser = {
   source_tag: string;
@@ -3762,6 +3766,7 @@ export type FileToProcessWithoutUser = {
   hash?: string | null;
 };
 export type ProcessDocumentsRequest = {
+  relaunch?: boolean;
   files: FileToProcessWithoutUser[];
   pipeline_name: string;
 };

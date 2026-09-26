@@ -4909,3 +4909,18 @@ an explicit fallback when no reason was recorded and a copyable document ID.
 Personal Resources loads both failures and successes so an old failure does not
 return after a successful retry. Existing tooltip, copy and task components are
 reused. These changes have static review only; runtime/visual checks are pending.
+
+
+### Ingestion relaunch — 2026-09-26
+
+Resources offers row and bulk relaunch for raw or failed documents, excluding
+active tasks and any document with an in-progress stage. A missing local task
+never makes a processing document relaunchable. Relaunch registers the returned
+per-document tasks in the same Redux/SSE flow as upload; there is no temporary
+90-second status override. Server admission is the final concurrency guard.
+
+Known ingestion profiles are preserved. A dialog asks for an explicit profile
+only for documents whose original profile is unknown; in a mixed selection this
+choice applies only to those documents. Cancel submits nothing. Pending requests
+suppress repeated clicks. Completed relaunches supply a new terminal task outcome
+so an earlier failure does not outlive a successful retry.

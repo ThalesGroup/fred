@@ -1948,8 +1948,8 @@
         "preview": "Aperçu",
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
+        "relaunchIngestion": "Relancer l'ingestion",
         "rename": "Renommer",
-        "reprocess": "Retraiter",
         "searchable": "Exclure de la recherche"
       },
       "confirm": {
@@ -2069,7 +2069,9 @@
         "delete": "Supprimer",
         "download": "Télécharger",
         "excludeFromSearch": "Exclure de la recherche",
-        "includeInSearch": "Inclure à la recherche"
+        "includeInSearch": "Inclure à la recherche",
+        "relaunchIngestion_one": "Relancer l'ingestion de {{count}} ressource",
+        "relaunchIngestion_other": "Relancer l'ingestion de {{count}} ressources"
       },
       "stats": {
         "toggle": "Statistiques",
@@ -2098,11 +2100,14 @@
         "deleteFolderSuccess": "Dossier supprimé",
         "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
-        "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé"
+        "relaunchError": "Impossible de relancer l'ingestion",
+        "relaunchStarted_one": "Ingestion relancée",
+        "relaunchStarted_other": "Ingestion relancée pour {{count}} ressources"
       },
       "pageTitlePersonal": "Vos ressources personnelles",
-      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
+      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel.",
+      "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d’ingestion initial est inconnu. Les autres conservent leur profil initial.",
+      "relaunchProfileLabel": "Profil d’ingestion"
     },
     "save": "Sauvegarder",
     "serviceNotice": {

@@ -42,6 +42,7 @@ from knowledge_flow_backend.features.library_sync.structures import (
     LibrarySynchronizedBy,
     SynchronizationUnavailable,
 )
+from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionAlreadyActive
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,8 @@ class LibrarySyncController:
                 raise HTTPException(status_code=400, detail={"code": exc.code, "message": exc.message})
             except UnknownSourceTagError as exc:
                 raise HTTPException(status_code=400, detail={"code": "unknown_source_tag", "message": str(exc)})
+            except IngestionAlreadyActive as exc:
+                raise HTTPException(status_code=409, detail={"code": "ingestion_active", "message": str(exc)}) from exc
             except SynchronizationUnavailable as exc:
                 raise HTTPException(status_code=503, detail={"code": "scheduling_unavailable", "message": str(exc)})
             except (AuthorizationError, HTTPException, TagAlreadyExistsError, TagNotFoundError):
