@@ -8,7 +8,13 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  migration-guide:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/Validate-release-migration.yml
+
   package-and-push:
+    needs: migration-guide
     runs-on: ubuntu-latest
     #if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
     permissions:
@@ -116,7 +122,9 @@ jobs:
     permissions:
       contents: write
     steps:
-
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -137,5 +145,7 @@ jobs:
             # Install charts
             helm install fred oci://ghcr.io/thalesgroup/fred-helm/fred --version ${{ steps.meta.outputs.version }}
             ```
+          files: docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
+          fail_on_unmatched_files: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.meta.outputs.version, '-') }}
