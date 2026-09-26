@@ -13,6 +13,23 @@ driving its own CI workflow. This skill prepares the release notes, presents the
 Ground truth for the mechanics: `docs/swift/RELEASE-STRATEGY.md`. Read it if anything below
 is ambiguous.
 
+## Guided interaction (Codex and Claude Code)
+
+The integrator may simply ask: "Use $push-release to prepare the next release."
+Run the tools yourself; do not hand them Python commands to execute. Use the root
+Make targets below for preparation. Ask only for missing choices or unresolved
+operational facts after inspecting the checkout and notes; reuse answers already
+given. Propose the minimum eligible version instead of asking the integrator to
+calculate it. Do not guess missing migration procedures to clear a coverage check.
+
+Prepare one reviewable result before the final approval: the proposed version,
+user-facing notes and the complete consolidated DevOps guide. Explain required
+upgrade actions separately from optional activation and user re-ingestion. For an
+all-none release, explicitly say that normal deployment needs no additional action.
+Reconcile duplicate or conflicting instructions in source notes and regenerate;
+do not hand-edit the generated guide or claim automatic generation resolves these
+interactions. Step 5 remains the explicit approval gate before tags or publication.
+
 ## Hard rules
 
 - **Never tag or push without explicit approval.** Step 5 is a mandatory stop. Presenting the
@@ -45,7 +62,7 @@ Once the checkout is suitable:
 
 ```bash
 git fetch origin --tags
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py plan        # ancestry-based baseline and impact
+make release-plan                            # ancestry-based baseline and impact
 ```
 
 Read `docs/swift/ops/MIGRATION-GUIDES.md`. Use the helper's reported baseline;
@@ -151,8 +168,7 @@ customer values. Fred chart values are the production reference; configuration_p
 is local Docker Compose only.
 
 ```bash
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py generate --worktree --version X.Y.Z
-uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --worktree --version X.Y.Z
+make release-guide RELEASE_VERSION=X.Y.Z
 ```
 
 Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep

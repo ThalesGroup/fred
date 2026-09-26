@@ -143,8 +143,10 @@ If you don't have one, write it now — and wonder why you don't have it.
 
 **Production configuration:** <!-- values/schema updates, or a specific reason they are unaffected -->
 
-Use [the migration template](../docs/swift/ops/MIGRATION-NOTE-TEMPLATE.md).
-Document default-off upgrades separately from activation, ordered operations,
-validation and rollback. A conditional operational procedure requires at least
-minor impact. Docs-only PRs still need an explicit none declaration. The
-`Migration notes` check validates structure; reviewers validate correctness.
+Take two minutes: any configuration/permission changes, data to reprocess,
+clients to adapt, or special deployment steps? If none, use `none` and give one
+specific reason in the note. No migration procedure needs inventing.
+
+Follow the [quick start](../docs/swift/ops/MIGRATION-GUIDES.md#for-every-pr-a-two-minute-check)
+and copy the [template](../docs/swift/ops/MIGRATION-NOTE-TEMPLATE.md).
+Even docs-only PRs need a note; optional migration/activation actions count too.

@@ -117,6 +117,32 @@
   font: var(--font-title-medium);
 }
 
+.root.compact {
+  font: var(--font-body-small);
+}
+
+.root.compact > :global(* + *) {
+  margin-top: var(--spacing-xs);
+}
+
+.root.compact > :global(* + h1),
+.root.compact > :global(* + h2),
+.root.compact > :global(* + h3) {
+  margin-top: var(--spacing-s);
+}
+
+.root.compact :global(h1) {
+  font: var(--font-title-small-emphasized);
+}
+
+.root.compact :global(h2),
+.root.compact :global(h3),
+.root.compact :global(h4),
+.root.compact :global(h5),
+.root.compact :global(h6) {
+  font: var(--font-body-medium-emphasized);
+}
+
 /* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */
 
 /* When navigating to #fragment, the target heading lands below the Help

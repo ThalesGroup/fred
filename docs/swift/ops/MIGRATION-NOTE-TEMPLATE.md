@@ -3,33 +3,33 @@ schema: 1
 title: "TODO: describe the shipped change"
 impact: none
 configuration: none
-configuration_reason: "TODO: explain whether production configuration changes"
-no_action_reason: "TODO: explain why ordinary deployment needs no extra operations"
+configuration_reason: "TODO: name what changes and why configuration is unaffected"
+no_action_reason: "TODO: explain specifically why this change needs no extra upgrade action"
 ---
 ## Applicability
 
-TODO: state affected deployments, feature switches and defaults.
+Existing Fred deployments upgrading to this release.
 
 ## Prerequisites
 
-TODO: list dependencies and backups, or explain why none are required.
+No additional prerequisites beyond the normal deployment procedure.
 
 ## Configuration
 
-TODO: specify chart values, omission behavior and private overlay reconciliation.
+No configuration changes are required.
 
 ## Upgrade
 
-TODO: order the operations and restarts; explain if ordinary deployment suffices.
+Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-TODO: give observable success criteria and failure handling.
+TODO: give one observable check for the changed behavior.
 
 ## Rollback
 
-TODO: explain reversibility, data/security limits and recovery order.
+Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-TODO: state untested deployment assumptions and environment-specific work.
+No additional migration limitations identified for this change.

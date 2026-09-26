@@ -233,7 +233,8 @@ in-band (not a frozen platform contract):
 
 - `tabular_v1` (`TabularArtifactV1`, CSV, single table): `dataset_uid`,
   `object_key`, `source_revision` (document `sha256`), `format="parquet"`,
-  `row_count`, `columns` (`TabularColumnSchema{name, dtype}`), `generated_at`,
+  `row_count`, `columns` (`TabularColumnSchema{name, dtype, is_categorical,
+  has_two_values, sample_values, min_value, max_value}`), `generated_at`,
   `file_size_bytes`.
 - `tabular_multi_v1` (`TabularMultiArtifactV1`, spreadsheet): holds
   `tables: list[TabularTableArtifactV1]`, each **extending** `TabularArtifactV1`
@@ -245,6 +246,17 @@ in-band (not a frozen platform contract):
 - `DTypes = Literal["string","integer","float","boolean","datetime","unknown"]`
   — one stable vocabulary independent of pandas or DuckDB internals; both
   producers converge on the same `TabularColumnSchema` shape.
+- For string columns, `is_categorical` is true when 1 to `max_categories(n)`
+  distinct non-null values occur across `n` table rows. Null rows count in `n`;
+  the limit is 2 through 10 rows, then `min(256, int(2 × (n/10)^0.7))`.
+  `sample_values` contains every distinct non-null value when the rule passes.
+  `has_two_values` reports exactly two distinct strings without interpreting
+  their true/false meaning. Non-string columns have no category verdict.
+- For integer and float columns, `min_value` and `max_value` hold the smallest
+  and largest finite non-null values in the table. They remain null when no
+  finite value exists. These bounds and categorical values are calculated at
+  ingestion. Older artifacts without stored bounds keep null values until
+  re-ingestion; describing them does not scan Parquet.
 
 **Object-store layout** — content-addressed, under
 `storage.tabular_store.artifacts_prefix` (default `tabular/datasets`):
@@ -301,10 +313,10 @@ authorization unit, no per-table authorization).
 
 **API surface** (document-centric, INGEST-04): `GET /tabular/documents` (document
 name and UID; Excel table aliases, sheets and titles; no CSV table details),
-`GET /tabular/documents/schemas?document_uids=…` (batch, **all**
-tables of each document with full `columns[]`), `GET
-/tabular/documents/{uid}/markdown` (a spreadsheet's `output.md`, 404 without
-`tabular_multi_v1`), `POST /tabular/query` (read-only SQL). These replaced
+`GET /tabular/documents/schemas?document_uids=…` (batch, a spreadsheet's full
+`output.md` first, then **all** tables of each document with typed `columns[]`;
+CSV returns no markdown catalog), `POST /tabular/query` (read-only SQL). The
+batch route is exposed to agents as `describe_tabular_documents`. These replaced
 earlier dataset-centric routes (`GET /tabular/datasets`,
 `GET /tabular/datasets/{uid}/schema`) which suffered "first-table-wins" for
 multi-table workbooks.
@@ -380,11 +392,9 @@ card — that text never reaches the agent's context or the vector index.
 Excel/XLSX attachments are not covered by the SQL path yet; they keep both
 the text-chunk preview and the "text only" prompt guidance below until a
 follow-up increment generalizes this to `tabular_multi_v1`. That follow-up
-must also extend `_resolve_owned_attachment_dataset` (or add a
-`tabular_multi_v1` sibling) to `TabularService.get_document_markdown` —
-untouched in this increment since it is scoped to spreadsheet documents,
-which no CSV attachment ever produces, so wiring it in now would be dead
-code.
+must extend `_resolve_owned_attachment_datasets` for multi-table attachments
+so `TabularService.describe_documents` can return their catalog and typed
+tables under attachment ownership. This increment remains CSV-only.
 
 **Ingestion.** `fast_ingest` builds a `DocumentMetadata` for the attachment
 directly (`identity.document_uid` = the same uuid used elsewhere for this
@@ -679,7 +689,7 @@ the dataset cannot be queried at all in this session, instead of pointing it
 at tools it doesn't have.
 
 **Known open gap.** The agent isn't guaranteed to call schema-discovery
-(`get_tabular_documents_schemas`) before its first `read_query` on an
+(`describe_tabular_documents`) before its first `read_query` on an
 attachment — live-testing hit exactly this (a guessed SQL alias, `400`,
 self-corrected retry). `list_tabular_documents` can't help here since it
 deliberately never enumerates attachment datasets (see above). Tracked as
