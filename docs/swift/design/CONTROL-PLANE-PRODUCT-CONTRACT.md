@@ -2318,9 +2318,12 @@ automatically and provably erased by an authenticated background worker.
 
 **Erasure fan-out (`ConversationErasureService.erase_session`).** Store order
 is fixed by dependency: attachments/Knowledge-Flow and KPI first
-(independent), then the runtime **checkpoint before transcript** (the runtime
-proves checkpoint ownership via the transcript), then the `session_metadata`
-row **last** — so a retry can always re-resolve and finish. Returns an
+(independent), then the runtime checkpoint, runtime conversation filesystem,
+and runtime transcript in that order (the runtime proves checkpoint and
+filesystem ownership via the transcript), then the `session_metadata` row
+**last** — so a retry can always re-resolve and finish. The filesystem step
+idempotently purges both `scratchpad` and `.deep`; a failure skips transcript
+deletion and preserves metadata for retry. Returns an
 `ErasureReceipt` (per store: count, ok, error); `receipt.ok` is true only when
 every touched store erased cleanly. Idempotent and retry-safe: re-running
 after a partial failure converges to full erasure, no store left orphaned, no
@@ -2350,8 +2353,8 @@ user-shortenable). Retention round-trips through platform export/import
 **Server-initiated erasure is authenticated, never unauthenticated.** The
 expiry worker has no user token, so the control-plane mints a
 client-credentials service token for its own `control-plane` Keycloak service
-account. The runtime checkpoint-delete, runtime history-delete, and
-Knowledge-Flow delete endpoints recognize the org-level
+account. The runtime checkpoint-delete, conversation-filesystem-delete,
+runtime history-delete, and Knowledge-Flow delete endpoints recognize the org-level
 `can_manage_platform` permission and waive the per-user **ownership** check
 for that principal — authentication itself is never waived. This reuses the
 existing platform-admin permission; it forks no second bypass.

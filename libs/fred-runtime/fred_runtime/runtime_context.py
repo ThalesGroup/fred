@@ -18,13 +18,20 @@ Shared runtime context used by fred-runtime adapters.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.runtime import PlatformSqlPort
 from langchain_core.language_models.chat_models import BaseChatModel
+
+if TYPE_CHECKING:
+    from fred_core.filesystem.structures import BaseFilesystem
+
+    from fred_runtime.conversation_filesystem import (
+        ConversationFilesystemQuotaSettings,
+    )
 
 
 class McpConfigurationLike(Protocol):
@@ -179,6 +186,11 @@ class RuntimeConfig:
     # second block on every turn. Both are None when the pod shipped no file.
     default_platform_prompt: str | None = None
     platform_instructions: str | None = None
+    # Pod-lifetime fred-core filesystem shared by all conversation namespaces.
+    # Appended to preserve positional compatibility for external pod authors.
+    filesystem: BaseFilesystem | None = None
+    # Grouped code-default quotas for the two conversation filesystem namespaces.
+    conversation_filesystem_quotas: ConversationFilesystemQuotaSettings | None = None
 
 
 class RuntimeContext:

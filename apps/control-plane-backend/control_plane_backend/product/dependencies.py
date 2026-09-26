@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Awaitable, Callable
 
+import httpx
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.tasks.service import TaskService
@@ -106,6 +107,7 @@ class ProductServiceDependencies:
     get_purge_queue_store: Callable[[], PurgeQueueStore]
     get_task_service: Callable[[], TaskService]
     get_platform_bootstrap_store: Callable[[], PlatformBootstrapStore]
+    get_runtime_http_client: Callable[[], httpx.AsyncClient]
 
 
 def build_product_service_dependencies(
@@ -153,6 +155,7 @@ def build_product_service_dependencies(
         get_purge_queue_store=container.get_purge_queue_store,
         get_task_service=container.get_task_service,
         get_platform_bootstrap_store=container.get_platform_bootstrap_store,
+        get_runtime_http_client=container.get_runtime_http_client,
     )
 
 

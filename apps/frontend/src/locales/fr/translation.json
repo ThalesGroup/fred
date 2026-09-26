@@ -226,6 +226,10 @@
         }
       }
     },
+    "open_writable_document": {
+      "name": "Ouvrir un document de l’espace de travail",
+      "description": "Démo : copier un fichier Markdown de l’espace de travail d’un agent Deep dans l’éditeur de documents. Activez aussi Documents éditables."
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",

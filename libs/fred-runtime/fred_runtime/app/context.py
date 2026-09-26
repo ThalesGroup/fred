@@ -35,6 +35,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from fred_runtime.app.config import AgentPodConfig
 
 if TYPE_CHECKING:
+    from fred_core.filesystem.structures import BaseFilesystem
+
     from fred_runtime.app.platform_sql import PlatformSqlAdapter
 
 logger = logging.getLogger(__name__)
@@ -122,6 +124,7 @@ class PodApplicationContext:
         self._sql_engine: AsyncEngine | None = None
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
+        self._filesystem: BaseFilesystem | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._platform_sql: PlatformSqlAdapter | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
@@ -151,6 +154,14 @@ class PodApplicationContext:
         self._control_plane_http_client = httpx.AsyncClient(
             timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
+        )
+
+    async def initialize_filesystem(self) -> None:
+        """Build the one pod-wide runtime filesystem selected by configuration."""
+        from fred_runtime.app.filesystem_factory import build_runtime_filesystem
+
+        self._filesystem = await build_runtime_filesystem(
+            self.configuration.storage.object_store
         )
 
     async def initialize_sql(self) -> None:
@@ -303,6 +314,13 @@ class PodApplicationContext:
 
     def get_history_store(self) -> HistoryStorePort | None:
         return self._history_store
+
+    def get_filesystem(self) -> BaseFilesystem:
+        if self._filesystem is None:
+            raise RuntimeError(
+                "Runtime filesystem not initialized — call initialize_filesystem() first"
+            )
+        return self._filesystem
 
     def get_platform_sql(self) -> PlatformSqlAdapter | None:
         return self._platform_sql

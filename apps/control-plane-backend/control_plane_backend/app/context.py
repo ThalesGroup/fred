@@ -18,6 +18,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+import httpx
 from fred_core import (
     BaseSessionStore,
     M2MAuthConfig,
@@ -89,6 +90,8 @@ from control_plane_backend.teams.default_team_store import PlatformDefaultTeamSt
 
 logger = logging.getLogger(__name__)
 
+_RUNTIME_HTTP_TIMEOUT_SECONDS = 15.0
+
 
 class ApplicationContext:
     def __init__(self, configuration: Configuration):
@@ -125,6 +128,7 @@ class ApplicationContext:
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
         self._service_token_provider: M2MTokenProvider | None = None
+        self._runtime_http_client: httpx.AsyncClient | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
 
     def _resolve_policy_catalog_path(self) -> Path:
@@ -355,6 +359,19 @@ class ApplicationContext:
         token = await self.get_service_token_provider().get_token()
         return f"Bearer {token}"
 
+    def get_runtime_http_client(self) -> httpx.AsyncClient:
+        """Return the pod-lifetime client for calls to configured runtimes.
+
+        Runtime erasure can issue several ordered requests per conversation.
+        Reuse this client so those calls share one connection pool; application
+        shutdown owns closing it.
+        """
+        if self._runtime_http_client is None:
+            self._runtime_http_client = httpx.AsyncClient(
+                timeout=_RUNTIME_HTTP_TIMEOUT_SECONDS
+            )
+        return self._runtime_http_client
+
     def get_agent_instance_store(self) -> AgentInstanceStore:
         if self._agent_instance_store is None:
             self._agent_instance_store = AgentInstanceStore(
@@ -493,6 +510,11 @@ class ApplicationContext:
         if self._kpi_tasks:
             await asyncio.gather(*self._kpi_tasks, return_exceptions=True)
         self._kpi_tasks = []
+        if self._runtime_http_client is not None:
+            try:
+                await self._runtime_http_client.aclose()
+            finally:
+                self._runtime_http_client = None
         if self._rebac_engine is not None:
             try:
                 await self._rebac_engine.close()
