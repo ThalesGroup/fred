@@ -450,7 +450,6 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
-        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 

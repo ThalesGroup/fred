@@ -40,6 +40,7 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
+from control_plane_backend.announcements.api import router as announcements_router
 from control_plane_backend.app.container import (
     build_application_container,
     initialize_shared_stores,
@@ -441,6 +442,7 @@ def create_app() -> FastAPI:
     router.include_router(routing_policy_router)
     router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)
+    router.include_router(announcements_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())

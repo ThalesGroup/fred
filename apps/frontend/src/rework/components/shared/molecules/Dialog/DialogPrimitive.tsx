@@ -78,6 +78,8 @@ export function DialogPrimitive({
   const originRef = useRef<HTMLSpanElement | null>(null);
   const openingFocus = useRef<HTMLElement | null>(null);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [bodyScrolls, setBodyScrolls] = useState(false);
   const callbacks = useRef({ onCancel, onConfirm, confirmDisabled });
   callbacks.current = { onCancel, onConfirm, confirmDisabled };
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
@@ -157,6 +159,22 @@ export function DialogPrimitive({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  // A body that is all text has nothing focusable inside it, so once it
+  // scrolls a keyboard-only user cannot reach it. Making it a tab stop fixes
+  // that, but only while it actually overflows — an unconditional one would
+  // add a dead stop to every short dialog in the app. Measured after each
+  // render (and on resize) because the body grows and shrinks with its own
+  // content, not only with the window.
+  useEffect(() => {
+    const measure = () => {
+      const node = contentRef.current;
+      setBodyScrolls(!!node && node.scrollHeight > node.clientHeight);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  });
+
   if (!open) return null;
   return (
     <>
@@ -184,7 +202,9 @@ export function DialogPrimitive({
                   {title}
                 </p>
               </div>
-              <div className={styles.content}>{children}</div>
+              <div ref={contentRef} className={styles.content} tabIndex={bodyScrolls ? 0 : undefined}>
+                {children}
+              </div>
               <div className={styles.actions}>
                 {!hideCancel && (
                   <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>

@@ -41,6 +41,13 @@ interface MarkdownRendererProps {
    *  links can target them — long-lived documents (Help Center articles),
    *  not chat messages. */
   headingAnchors?: boolean;
+  /** Render as phrasing content: the wrapper and every paragraph become
+   *  `span`s. For a one- or two-line string sitting inside a line of its own
+   *  layout (an announcement banner's short description), where a `p` would
+   *  be both wrong semantically and a block in the middle of a flex row.
+   *  Block constructs — headings, lists, tables — have nowhere to go in that
+   *  context, so do not author them there. */
+  inline?: boolean;
 }
 
 interface MdastNode {
@@ -180,7 +187,15 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
 ];
 
 export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps>(function MarkdownRenderer(
-  { text, onSourceClick, streaming = false, fullWidth = false, compact = false, headingAnchors = false },
+  {
+    text,
+    onSourceClick,
+    streaming = false,
+    fullWidth = false,
+    compact = false,
+    headingAnchors = false,
+    inline = false,
+  },
   ref,
 ) {
   const { stableMarkdown, pendingFence } = useMemo(
@@ -234,8 +249,13 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
             ),
           }
         : {}),
+      ...(inline
+        ? {
+            p: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+          }
+        : {}),
     }),
-    [onSourceClick, headingAnchors],
+    [onSourceClick, headingAnchors, inline],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {
@@ -273,10 +293,12 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
     );
   }
 
+  const Wrapper = inline ? "span" : "div";
+
   return (
-    <div
-      ref={ref}
-      className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}${compact ? ` ${styles.compact}` : ""}`}
+    <Wrapper
+      ref={ref as React.Ref<HTMLDivElement & HTMLSpanElement>}
+      className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}${compact ? ` ${styles.compact}` : ""}${inline ? ` ${styles.inline}` : ""}`}
       data-copyable-content
     >
       {stableMarkdown ? (
@@ -285,6 +307,6 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
         </ReactMarkdown>
       ) : null}
       {renderPendingFence(pendingFence)}
-    </div>
+    </Wrapper>
   );
 });

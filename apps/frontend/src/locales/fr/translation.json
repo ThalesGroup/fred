@@ -2137,7 +2137,8 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompt global de la plateforme"
+          "platformPrompt": "Prompt global de la plateforme",
+          "announcements": "Annonces"
         },
         "title": "Espace administration"
       },
@@ -3391,6 +3392,63 @@
         "minutes": "minutes",
         "hours": "heures",
         "days": "jours"
+      }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "Plus d'info",
+        "dismiss": "Masquer cette annonce"
+      },
+      "dialog": {
+        "close": "Fermer"
+      },
+      "page": {
+        "title": "Annonces",
+        "subtitle_one": "{{count}} annonce est affichée à tous les utilisateurs.",
+        "subtitle_other": "{{count}} annonces sont affichées à tous les utilisateurs.",
+        "subtitle_zero": "Aucune annonce n'est affichée aux utilisateurs actuellement.",
+        "create": "Nouvelle annonce",
+        "empty": "Aucune annonce pour l'instant.\nCréez-en une pour afficher un bandeau en haut de l'application."
+      },
+      "severity": {
+        "info": "Info",
+        "warning": "Avertissement",
+        "error": "Erreur",
+        "success": "Succès"
+      },
+      "locale": {
+        "fr": "Français",
+        "en": "Anglais"
+      },
+      "row": {
+        "enabled": "Afficher cette annonce aux utilisateurs",
+        "enableHint": "Activer pour tous les utilisateurs",
+        "disableHint": "Désactiver pour tous les utilisateurs",
+        "edit": "Modifier cette annonce",
+        "delete": "Supprimer cette annonce"
+      },
+      "editor": {
+        "createTitle": "Nouvelle annonce",
+        "editTitle": "Modifier l'annonce",
+        "title": "Titre",
+        "titleRequired": "Donnez un titre à l'annonce dans au moins une langue.",
+        "descriptionShort": "Description courte",
+        "descriptionShortHint": "Affichée dans le bandeau. Tenez-vous à une ou deux lignes — gras, italique et liens uniquement.",
+        "shortRequired": "Rédigez une description courte dans au moins une langue.",
+        "descriptionLong": "Description longue (facultative)",
+        "descriptionLongHint": "Affichée dans la boîte de dialogue « Plus d'info ». Laissez vide et le bandeau n'affichera pas le bouton.",
+        "dismissible": "Peut être fermé",
+        "severityGroup": "Sévérité de l'annonce",
+        "localeGroup": "Langue en cours d'édition"
+      },
+      "saved": "Annonce enregistrée.",
+      "saveFailed": "L'annonce n'a pas été enregistrée.",
+      "toggleFailed": "Impossible de changer l'état de l'annonce.",
+      "deleted": "Annonce supprimée.",
+      "deleteFailed": "L'annonce n'a pas été supprimée.",
+      "delete": {
+        "title": "Supprimer cette annonce ?",
+        "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       }
     }
   },

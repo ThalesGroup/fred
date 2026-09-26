@@ -63,7 +63,10 @@ policy applies to the paired Fred code/chart release, not independent npm packag
 Every note has `schema: 1`, a single-line title, impact, `configuration` and
 `configuration_reason`. Configuration is `production`, `local` or `none`. Explain
 the actual change; a generic claim does not replace review. Production changes
-require a substantive chart values update. Existing schema CI checks regenerated
+require a substantive chart values update. Removing an optional setting documented
+only as a commented example is also valid when the generated chart schema removes
+the option and values.yaml is updated. Comments or schema descriptions alone do
+not establish a production change. Existing schema CI checks regenerated
 backend/chart schemas. Local-only changes need an explicit reason why production
 values are unaffected. If the check flags a file under `config/` whose edits only
 change bundled tool instructions, use `local` and name the file and why production

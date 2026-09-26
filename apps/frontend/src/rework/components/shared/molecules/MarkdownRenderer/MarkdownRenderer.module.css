@@ -26,6 +26,14 @@
   overflow-wrap: anywhere;
 }
 
+/* Phrasing-content variant (`inline`) — the wrapper and its paragraphs are
+   spans, so it must not impose a reading measure or a block box on the line
+   it sits in. Its container decides the width. */
+.inline {
+  display: inline;
+  max-width: none;
+}
+
 /* Full-width variant — used by the document preview. Running text sits in a
    centred, comfortable reading column (like the old fixed reading column) while
    wide blocks (tables) break out to the full width. Implemented as a 3-track
