@@ -27,6 +27,7 @@ import logging
 
 import httpx
 import pytest
+from conftest import StaticWorkloadTokens
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
     M2MTokenProvider,
@@ -66,19 +67,16 @@ from pydantic import AnyUrl
 ABSENT_SECRET_ENV = "FRED_TEST_ABSENT_WORKLOAD_SECRET"  # pragma: allowlist secret
 
 
-class FakeWorkloadTokens(M2MTokenProvider):
-    """Stands in for `M2MTokenProvider`.
+class FakeWorkloadTokens(StaticWorkloadTokens):
+    """Provide deterministic token/lease reads and explicit rotation without IAM.
 
-    Models the one method callers use: an async `get_token()` returning the
-    current token string. `rotate()` is how a test expires one token and issues
-    the next, which is what the real provider does on its own when its cached
-    token nears expiry.
+    Call `rotate()` to advance the token returned to a delegated request.
     """
 
     def __init__(self, *tokens: str) -> None:
+        super().__init__()
         self._tokens = list(tokens) or ["workload-token-1"]
         self._index = 0
-        self._generation = 0
         self.calls = 0
 
     def rotate(self) -> None:

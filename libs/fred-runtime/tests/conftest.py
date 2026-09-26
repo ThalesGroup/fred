@@ -20,7 +20,11 @@ from typing import Any
 
 import pytest
 from fred_core.portable.observability import Span, Tracer
-from fred_core.security.backend_to_backend_auth import M2MTokenProvider, TokenLease
+from fred_core.security.backend_to_backend_auth import (
+    M2MAuthConfig,
+    M2MTokenProvider,
+    TokenLease,
+)
 from fred_core.security.delegation import DelegationConfig
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.common.outbound_credentials import (
@@ -34,8 +38,14 @@ from langchain_core.messages import AIMessage
 
 class StaticWorkloadTokens(M2MTokenProvider):
     def __init__(self, token: str = "workload-token") -> None:
+        super().__init__(
+            M2MAuthConfig(
+                keycloak_realm_url="https://iam.invalid/realms/test",
+                client_id="test-workload",
+                secret_env="FRED_TEST_UNUSED_WORKLOAD_SECRET",  # pragma: allowlist secret - env var name only
+            )
+        )
         self.token = token
-        self._generation = 0
 
     async def get_token(self) -> str:
         return self.token
