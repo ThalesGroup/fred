@@ -31,12 +31,14 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
 from control_plane_backend.sessions.erasure_service import (
     STORE_CHECKPOINT,
     STORE_HISTORY,
     ConversationErasureService,
 )
+from fred_core.security.backend_to_backend_auth import TokenLease
 
 
 class _FakeResponse:
@@ -92,7 +94,9 @@ class _FakeAsyncClient:
         self._response = response
         self._seen = seen
 
-    async def delete(self, url: str, headers: dict[str, str] | None = None):
+    async def delete(
+        self, url: str, headers: dict[str, str] | None = None, *, auth=None
+    ):
         self._seen["url"] = url
         self._seen["headers"] = headers
         return self._response
@@ -172,3 +176,45 @@ async def test_erase_runtime_history_handles_empty_body_without_crashing() -> No
     assert result.deleted_count is None
     assert result.error is not None
     assert "not parseable" in result.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("store", ["checkpoint", "history", "filesystem"])
+@pytest.mark.parametrize("refresh_fails", [False, True])
+async def test_shared_runtime_client_refreshes_rejected_token(
+    store: str, refresh_fails: bool
+) -> None:
+    """Pooled deletes keep token renewal and isolate renewal failures per store."""
+    seen: list[str] = []
+
+    class Tokens:
+        async def get_token_lease(self) -> TokenLease:
+            return TokenLease("expired", 1)
+
+        async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+            assert lease.generation == 1
+            if refresh_fails:
+                raise RuntimeError("private IAM detail")
+            return TokenLease("renewed", 2)
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["Authorization"])
+        if len(seen) == 1:
+            return httpx.Response(401)
+        return httpx.Response(200, json={"deleted": 1, "purged": True})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
+        service = ConversationErasureService(
+            cast(Any, SimpleNamespace(get_runtime_http_client=lambda: client)),
+            token_provider=Tokens(),
+        )
+        erase = getattr(service, f"_erase_runtime_{store}")
+        result = await erase("http://runtime/pod/v1", "session-1", "Bearer initial")
+        assert not client.is_closed
+    assert result.ok is not refresh_fails
+    if refresh_fails:
+        assert seen == ["Bearer expired"]
+        assert "authentication failed" in result.error
+        assert "private IAM detail" not in result.error
+    else:
+        assert seen == ["Bearer expired", "Bearer renewed"]

@@ -182,6 +182,15 @@ async def control_plane_sql_engine(
 
 
 @pytest.fixture(autouse=True)
+def _restore_delegation():
+    """Delegation settings are process-wide; a test that installs them must not leak."""
+    from fred_core.security.delegation import preserved_delegation
+
+    with preserved_delegation():
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _clear_module_level_caches() -> None:
     """Reset the #2148/#2181 relation/user-summary caches before every test.
 

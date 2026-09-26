@@ -18,6 +18,7 @@ import json
 import logging
 from typing import Any, Sequence
 
+from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 
@@ -70,6 +71,12 @@ def friendly_mcp_tool_error_handler(e: Exception) -> str:
     Focuses on MCP transport/connectivity failures so users understand that
     the MCP server is down/unreachable instead of seeing a stack trace.
     """
+    run_stop = unwrap_run_stop_error(e)
+    if run_stop is not None:
+        # The run is over. Turning this into a tool result would hand the model a
+        # sentence to reason about and let the turn continue without authority.
+        raise run_stop
+
     # Try to detect common httpx/httpcore connection failures without hard dependency
     httpx = None
     httpcore = None

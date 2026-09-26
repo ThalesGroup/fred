@@ -70,7 +70,7 @@ export default function ManageLabelsModal({ open, onClose, doc, onMutate }: Mana
   // `await`, so the second call sees it immediately.
   const busyRef = useRef(false);
 
-  const { data: vocabulary, refetch: refetchVocabulary } = useListDocumentLabelsQuery();
+  const { data: vocabulary, refetch: refetchVocabulary } = useListDocumentLabelsQuery({});
   const suggestions = vocabulary ?? [];
 
   useEffect(() => {

@@ -53,3 +53,6 @@ rrun-prod: run-prod ## run the app with uvicorn reloader in production mode
 .PHONY: run-prod-uv-workers
 run-prod-uv-workers: UVICORN_OPTIONS = --workers 4
 run-prod-uv-workers: run-prod ## run the app in production mode with multiple uvicorn workers (to simulate a k8s setup with replicas easily)
+
+# Generated local identity policies; never auto-discovered by deployed applications.
+run run-worker: export FRED_LOCAL_DELEGATION_FILE ?= $(wildcard $(ROOT_DIR)/config/.delegation.local.json)

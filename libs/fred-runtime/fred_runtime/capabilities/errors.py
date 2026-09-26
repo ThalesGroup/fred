@@ -24,6 +24,8 @@ Why this module exists:
 
 from __future__ import annotations
 
+from fred_runtime.execution_errors import UserFacingExecutionError, sanitize_identifier
+
 
 class CapabilityError(RuntimeError):
     """Base class for all capability-system errors."""
@@ -83,8 +85,21 @@ class CapabilityTableHygieneError(CapabilityRegistrationError):
     """
 
 
-class UnknownCapabilityError(CapabilityError):
-    """An agent references a capability this pod does not have installed (RFC §3.8)."""
+class UnknownCapabilityError(CapabilityError, UserFacingExecutionError):
+    """An agent references a capability this pod does not have installed (RFC §3.8).
+
+    User-facing on purpose: a turn that quietly drops a selected capability
+    tells the user nothing, so the missing id is named. Only that id — the
+    installed inventory stays in the internal message, which is never surfaced.
+    """
+
+    def __init__(self, internal_message: str, *, capability_id: str) -> None:
+        super().__init__(
+            f"This agent needs the capability "
+            f"'{sanitize_identifier(capability_id)}', which is not installed "
+            "on this pod.",
+            internal_message,
+        )
 
 
 class AssetSlotViolationError(CapabilityError):

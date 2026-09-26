@@ -5,6 +5,20 @@ type user
 
 type organization
   relations
+    # A person Fred has removed. Only the control plane's account lifecycle
+    # writes it, when a person is deleted; bearer authentication and resource
+    # grants never do.
+    define suspended: [user]
+
+    # Account standing: every person unless suspended. Only the control plane's
+    # account lifecycle writes the everyone entry, at startup; bearer
+    # authentication and resource grants never do.
+    define active: [user:*] but not suspended
+
+    # Marker the control plane's account lifecycle writes at startup, after the
+    # everyone entry. Receivers require it before serving delegated calls.
+    define standing_ready: [organization]
+
     # AUTHZ-05 target roles (RFC FRED-AUTHORIZATION-TARGET-MODEL). Stored tuples
     # only — never derived from Keycloak roles or groups. Granted via the
     # config-seeded bootstrap (RFC §24.3) or explicit admin action.

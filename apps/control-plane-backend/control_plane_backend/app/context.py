@@ -171,7 +171,8 @@ class ApplicationContext:
             )
         if self._temporal_client_provider is None:
             self._temporal_client_provider = TemporalClientProvider(
-                self.configuration.scheduler.temporal
+                self.configuration.scheduler.temporal,
+                log_connection_details=False,
             )
         return self._temporal_client_provider
 

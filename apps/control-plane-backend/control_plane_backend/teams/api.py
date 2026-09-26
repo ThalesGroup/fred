@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, File, Path, Query, UploadFile
 from fastapi.responses import JSONResponse
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 
 from control_plane_backend.teams.dependencies import (
@@ -118,13 +118,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: AvatarUploadError,
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-    @app.exception_handler(AuthorizationError)
-    async def authorization_error_handler(
-        _request,
-        exc: AuthorizationError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
     @app.exception_handler(TeamRescueNotOrphanedError)
     async def team_rescue_not_orphaned_handler(

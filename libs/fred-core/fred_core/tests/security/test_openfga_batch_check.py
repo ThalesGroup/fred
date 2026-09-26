@@ -283,12 +283,12 @@ class _ConcurrentFallbackRebacEngine(NoopRebacEngine):
     def __init__(self) -> None:
         self.in_flight = 0
         self.max_in_flight = 0
-        self.checked_permissions: list[RebacPermission] = []
+        self.checked_permissions: list[RebacPermission | RelationType] = []
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Any = None,
@@ -323,10 +323,10 @@ class _RecordingContextualRelationsEngine(NoopRebacEngine):
     def __init__(self) -> None:
         self.seen: list[tuple[Relation, ...]] = []
 
-    async def has_permission(
+    async def _has_permission_raw(
         self,
         subject: RebacReference,
-        permission: RebacPermission,
+        permission: RebacPermission | RelationType,
         resource: RebacReference,
         *,
         contextual_relations: Any = None,

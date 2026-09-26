@@ -14,12 +14,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
+from pathlib import Path
 from typing import Callable, TypeVar
 
 import yaml
 from pydantic import ValidationError
+
+from fred_pod.security.delegation import DelegationConfig
 
 from .config_files import ConfigFiles
 from .structures import PostgresStoreConfig, default_postgres_store_config
@@ -72,6 +77,48 @@ def parse_yaml_mapping_file(config_file: str) -> dict:
     return payload
 
 
+_DELEGATION_SWITCHES = frozenset({"act_for_people", "accept_delegated_calls"})
+
+
+def _load_local_delegation(configuration: object) -> None:
+    """Only local make targets opt in; production YAML remains authoritative."""
+    path = os.getenv("FRED_LOCAL_DELEGATION_FILE")
+    security = getattr(configuration, "security", None)
+    if not path or security is None:
+        return
+    try:
+        payload = json.loads(Path(path).read_text())
+        # The file only switches directions on; every other setting stays the YAML's.
+        switches = payload["delegation"]
+        if (
+            not isinstance(switches, dict)
+            or not switches
+            or not switches.keys() <= _DELEGATION_SWITCHES
+            or any(value is not True for value in switches.values())
+        ):
+            raise ValueError("expected only delegation switches turned on")
+        policy = DelegationConfig.model_validate(
+            {**security.delegation.model_dump(), **switches}
+        )
+        audiences = payload["audiences"]
+        audiences = [audiences] if isinstance(audiences, str) else audiences
+        issuers = {
+            str(security.user.realm_url).rstrip("/"),
+            str(security.m2m.realm_url).rstrip("/"),
+        }
+        if (
+            payload["issuer"].rstrip("/") not in issuers
+            or policy.audience not in audiences
+        ):
+            raise ValueError("issuer/audience differs from the selected configuration")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(
+            f"Invalid local delegation file {path}; rerun scripts/populate_local_delegation.py: {exc}"
+        ) from exc
+    security.delegation = policy
+    logger.info("[CONFIG] Loaded local delegation from: %s", path)
+
+
 def load_configuration_with_config_files(
     config_files: ConfigFiles,
     parser: Callable[[str], TConfig],
@@ -82,6 +129,7 @@ def load_configuration_with_config_files(
     config_file = config_files.resolve_config_file_path()
     try:
         configuration = parser(config_file)
+        _load_local_delegation(configuration)
     except (ValidationError, ValueError) as exc:
         # Render the root cause in red and stop, rather than letting an opaque
         # traceback (or a deferred runtime 401) bury what is wrong.

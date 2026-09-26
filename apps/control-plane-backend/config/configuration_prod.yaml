@@ -30,23 +30,21 @@ scheduler:
 observability:
   kpi:
     prometheus:
+      # Docker Prometheus reaches this host-run exporter through host.docker.internal.
+      address: "0.0.0.0"
       port: 9222
 
 security:
+  profile: c3
   m2m:
     enabled: true
-    realm_url: http://app-keycloak:8080/realms/app
+    realm_url: http://localhost:8080/realms/app
     client_id: control-plane
     secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET # pragma: allowlist secret
   user:
     enabled: true
-    # Must be browser-reachable: this URL is served to the frontend
-    # (/frontend/config -> FrontendConfig.user_auth.realm_url) and used
-    # client-side by keycloak-js for silent token refresh (updateToken()).
-    # "app-keycloak" only resolves inside the docker-compose network, so
-    # every background refresh hangs forever once the initial login token
-    # ages past its validity window. security.m2m.realm_url above is
-    # correctly docker-internal since that one is backend-to-Keycloak only.
+    # Browser and host-run workloads use the same canonical issuer.
+    # Deployments must replace both realm URLs with their public realm URL.
     realm_url: http://localhost:8080/realms/app
     client_id: app
   authorized_origins:
@@ -55,6 +53,25 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+  delegation:
+    # Delegation lets a program act for a person. The program (a "workload") signs
+    # in with its own service account: a Keycloak client identity that belongs to
+    # the program, not to anyone. With each call it names the person, run and
+    # agent the call is for. Each backend has one switch per direction.
+    #
+    # accept_delegated_calls (incoming) - this backend's switch. It believes the
+    # person a calling workload names, but only when that workload's token carries
+    # the role named by caller_role (default delegation_caller) on the client
+    # named by audience (default fred-delegation). The role is granted in Keycloak
+    # to the caller's service account; no list of callers is kept here.
+    #
+    # act_for_people (outgoing) - this backend never calls others for a person;
+    # leave it false.
+    #
+    # Both are off by default. Locally, make delegation turns the right one on
+    # through config/.delegation.local.json after checking a freshly issued token.
+    act_for_people: false
+    accept_delegated_calls: false
 
 storage:
   postgres:

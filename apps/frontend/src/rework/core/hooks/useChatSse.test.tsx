@@ -105,7 +105,7 @@ function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () =
 }
 
 vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation: () => [
+  usePrepareAgentExecutionMutation: () => [
     (args: unknown) => {
       prepareExecutionCalls.push(args);
       return mockMutationResult(prepareExecutionImpl(args));
@@ -1147,5 +1147,61 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await expect(result).resolves.toBe(false);
     expect(prepareExecutionCalls).toHaveLength(0);
     expect(onErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("a user abort of an accepted stream reports no error and never re-requests", async () => {
+    flushPendingWrites = async () => true;
+    const read = deferred<ReadableStreamReadResult<Uint8Array>>();
+    const body = {
+      getReader: () => ({ read: () => read.promise, releaseLock: () => {} }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body,
+    } as Response);
+    mount();
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.abort());
+    read.reject(new DOMException("The operation was aborted.", "AbortError"));
+    await act(async () => sendPromise);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("reports a dropped stream once and never re-requests it", async () => {
+    flushPendingWrites = async () => true;
+    const body = {
+      getReader: () => ({
+        read: () => Promise.reject(new Error("stream dropped")),
+        releaseLock: () => {},
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    // Whatever headers the runtime sends, a dropped stream is never re-requested.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "X-Fred-Run-Id": "run-a" }),
+      body,
+    } as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][1]?.body)).not.toContain("reconnect");
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).toHaveBeenCalledWith(expect.stringContaining("stream dropped"));
+    fetchSpy.mockRestore();
   });
 });

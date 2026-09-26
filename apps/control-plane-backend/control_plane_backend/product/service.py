@@ -32,12 +32,17 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    holds_caller_role,
     is_service_agent,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from fred_core.security.models import Resource
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
@@ -2458,6 +2463,7 @@ async def _delete_knowledge_flow_attachment(
     document_uid: str | None,
     storage_key: str | None,
     session_id: str,
+    token_provider: RefreshableTokenProvider | None = None,
 ) -> None:
     """
     Orchestrate the Knowledge Flow cleanup path for one persisted attachment.
@@ -2493,7 +2499,10 @@ async def _delete_knowledge_flow_attachment(
         params["storage_key"] = storage_key
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            auth=M2MBearerAuth(token_provider) if token_provider is not None else None,
+        ) as client:
             response = await client.delete(
                 url,
                 params=params,
@@ -3148,6 +3157,7 @@ async def prepare_execution(
     deps: ProductServiceDependencies,
     authorization: str | None = None,
     agent_model_override: str | None = None,
+    model_override_authorized: bool = False,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3164,8 +3174,9 @@ async def prepare_execution(
     - `agent_model_override`, when set, replaces this instance's entry in the
       `agent_profile_overrides` snapshot for THIS call only — never persisted,
       never visible via `GET .../routing-policy`. Restricted to the evaluator's
-      service identity (`is_service_agent`); rejected outright for any other
-      caller, and rejected if the profile isn't `can_use`-enabled for the team.
+      service identity (`is_service_agent`, without the delegation caller role);
+      rejected outright for any other caller, and rejected if the profile isn't
+      `can_use`-enabled for the team.
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -3329,7 +3340,10 @@ async def prepare_execution(
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
     if agent_model_override is not None:
-        if not is_service_agent(user):
+        # A delegation client holds the service role too; it never takes this path.
+        if not model_override_authorized and not (
+            is_service_agent(user) and not holds_caller_role(user)
+        ):
             raise ExecutionPreparationError(
                 "agent_model_override is only honored for the evaluator's "
                 "service identity.",

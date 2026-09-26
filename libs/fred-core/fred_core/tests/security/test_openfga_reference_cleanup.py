@@ -35,6 +35,11 @@ from fred_core.security.structure import OpenFgaRebacConfig
 
 _APP = RebacReference(Resource.APP, "acme-forecast")
 _APP_ID = "app:acme-forecast"
+_PERSON = RebacReference(Resource.USER, "person-deleted")
+_PERSON_ID = "user:person-deleted"
+_BAN = (_PERSON_ID, "suspended", "organization:fred")
+_EVERYONE = ("user:*", "active", "organization:fred")
+_MARKER = ("organization:fred", "standing_ready", "organization:fred")
 
 
 class _FakeOpenFgaClient:
@@ -186,6 +191,35 @@ async def test_a_reference_with_no_tuples_writes_nothing() -> None:
 
     assert result is None
     assert client.write_batch_sizes == []
+
+
+@pytest.mark.asyncio
+async def test_person_cleanup_keeps_their_ban() -> None:
+    """Only the account lifecycle changes standing, so the ban outlives the cleanup."""
+    kept = [_BAN, _EVERYONE, ("user:person-kept", "team_member", "team:alpha")]
+    client = _FakeOpenFgaClient(
+        [
+            *kept,
+            (_PERSON_ID, "team_member", "team:alpha"),
+            (_PERSON_ID, "owner", "agent:helper"),
+        ]
+    )
+
+    await _make_engine(client).delete_all_relations_of_reference(_PERSON)
+
+    assert client.store == kept
+
+
+@pytest.mark.asyncio
+async def test_organization_cleanup_keeps_every_standing_tuple() -> None:
+    platform_admin = ("user:person-kept", "platform_admin", "organization:fred")
+    client = _FakeOpenFgaClient([_BAN, _EVERYONE, _MARKER, platform_admin])
+
+    await _make_engine(client).delete_all_relations_of_reference(
+        RebacReference(Resource.ORGANIZATION, "fred")
+    )
+
+    assert client.store == [_BAN, _EVERYONE, _MARKER]
 
 
 def test_cleanup_incomplete_is_exported_from_the_package_root() -> None:

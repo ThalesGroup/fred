@@ -56,7 +56,7 @@ export default function CorpusAuditPage() {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
 
-  const { data, isLoading, isFetching, isError, refetch } = useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery();
+  const { data, isLoading, isFetching, isError, refetch } = useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery({});
   const [fixAnomalies, { isLoading: isFixing }] = useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation();
 
   const [showFixConfirm, setShowFixConfirm] = useState(false);
@@ -75,7 +75,7 @@ export default function CorpusAuditPage() {
   const handleFixConfirmed = async () => {
     setShowFixConfirm(false);
     try {
-      const result = await fixAnomalies().unwrap();
+      const result = await fixAnomalies({}).unwrap();
       const resetCount = result.reset_metadata?.length ?? 0;
       showSuccess({
         summary: t("rework.admin.corpusAudit.fixSuccess", { count: resetCount }),
