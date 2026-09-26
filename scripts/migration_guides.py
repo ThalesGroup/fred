@@ -61,6 +61,30 @@ def require(condition, message):
         raise Invalid(message)
 
 
+def schema_property_paths(
+    schema: object, path: tuple[str, ...] = ()
+) -> set[tuple[str, ...]]:
+    """Collect declared options in the generated, inline chart schema.
+
+    Ignore annotations and combine alternatives so reordering them is not
+    mistaken for removing an option.
+    """
+    if not isinstance(schema, dict):
+        return set()
+    paths = set()
+    for keyword in ("properties", "patternProperties"):
+        for name, child in schema.get(keyword, {}).items():
+            child_path = (*path, keyword, name)
+            paths.add(child_path)
+            paths.update(schema_property_paths(child, child_path))
+    for keyword in ("anyOf", "allOf", "oneOf"):
+        for child in schema.get(keyword, []):
+            paths.update(schema_property_paths(child, path))
+    for keyword in ("items", "additionalProperties"):
+        paths.update(schema_property_paths(schema.get(keyword), (*path, keyword)))
+    return paths
+
+
 def version(value):
     match = VERSION.fullmatch(value)
     require(match is not None, f"Invalid version {value!r}; use X.Y.Z or X.Y.Z-rc.1")
@@ -398,9 +422,19 @@ class Repo:
                 )
                 before = yaml.safe_load(self.read(chart, base))
                 after = yaml.safe_load(self.read(chart))
+                schema = "deploy/charts/fred/values.schema.json"
+                removed_options = set()
+                if (
+                    schema in changed
+                    and schema in self.paths(base)
+                    and schema in self.paths()
+                ):
+                    removed_options = schema_property_paths(
+                        json.loads(self.read(schema, base))
+                    ) - schema_property_paths(json.loads(self.read(schema)))
                 require(
-                    before != after,
-                    "Comment-only values.yaml edits do not establish production configuration changes; declare local if appropriate",
+                    before != after or removed_options,
+                    "Comment-only values.yaml edits require removed options in the generated chart schema to establish production configuration changes; declare local if appropriate",
                 )
         return notes
 

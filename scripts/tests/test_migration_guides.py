@@ -1,6 +1,7 @@
 """Policy regressions against real, temporary Git histories; no network or secrets."""
 
 import importlib.util
+import copy
 import json
 import subprocess
 import sys
@@ -194,6 +195,66 @@ class GitTests(unittest.TestCase):
             configuration_reason="Only the developer Docker Compose sample changes; production schema is unchanged.",
         )
         self.repo(worktree=True).check_pr(self.installed)
+
+    def test_commented_option_removal_requires_chart_schema_evidence(self):
+        chart = "deploy/charts/fred/values.yaml"
+        schema_path = "deploy/charts/fred/values.schema.json"
+        schema = {
+            "properties": {
+                "frontend": {
+                    "anyOf": [
+                        {"type": "null"},
+                        {"properties": {"info_banner": {"type": "string"}}},
+                    ]
+                }
+            }
+        }
+        self.write(chart, "enabled: false\n# info_banner: message\n")
+        self.write(schema_path, json.dumps(schema))
+        self.commit("document optional banner")
+        base = self.git("rev-parse", "HEAD")
+        self.add_note("remove-banner", "minor", configuration="production")
+        removed = copy.deepcopy(schema)
+        removed["properties"]["frontend"]["anyOf"][1]["properties"].clear()
+        self.write(schema_path, json.dumps(removed))
+        with self.assertRaisesRegex(m.Invalid, "values.yaml"):
+            self.repo(worktree=True).check_pr(base)
+        self.write(
+            chart, "enabled: false\n# Announcements are now managed in the UI.\n"
+        )
+        self.repo(worktree=True).check_pr(base)
+        self.commit("remove optional banner")
+        self.repo().check_pr(base)
+
+    def test_cosmetic_chart_schema_changes_do_not_prove_option_removal(self):
+        schema_path = "deploy/charts/fred/values.schema.json"
+        schema = {
+            "description": "Old description",
+            "examples": [{"properties": {"example_only": {}}}],
+            "properties": {
+                "frontend": {
+                    "anyOf": [{"type": "null"}, {"properties": {"info_banner": {}}}]
+                }
+            },
+        }
+        self.write(schema_path, json.dumps(schema))
+        self.commit("add chart schema")
+        base = self.git("rev-parse", "HEAD")
+        self.write("deploy/charts/fred/values.yaml", "enabled: false\n# comment\n")
+        self.add_note("config", "minor", configuration="production")
+        changed = copy.deepcopy(schema)
+        changed["description"] = "New description"
+        changed["examples"] = []
+        reordered = copy.deepcopy(schema)
+        reordered["properties"]["frontend"]["anyOf"].reverse()
+        for candidate in (schema, changed, reordered):
+            with self.subTest(schema=candidate):
+                self.write(schema_path, json.dumps(candidate, indent=2))
+                with self.assertRaisesRegex(m.Invalid, "Comment-only"):
+                    self.repo(worktree=True).check_pr(base)
+        (self.root / schema_path).unlink()
+        with self.assertRaisesRegex(m.Invalid, "Comment-only"):
+            self.repo(worktree=True).check_pr(base)
 
     def test_unrelated_tag_and_missing_history(self):
         self.git("checkout", "-b", "other", self.base)
