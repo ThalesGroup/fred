@@ -37,7 +37,7 @@ const probe = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
   useListTagsQuery: () => ({

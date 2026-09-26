@@ -37,7 +37,7 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
 
 const failedDoc = {
   identity: { document_uid: "uid-failed", title: "Broken", document_name: "Broken.pdf", uploaded_by: null },

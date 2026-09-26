@@ -2105,7 +2105,9 @@
         "relaunchStarted_other": "Ingestion relancée pour {{count}} ressources"
       },
       "pageTitlePersonal": "Vos ressources personnelles",
-      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
+      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel.",
+      "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d’ingestion initial est inconnu. Les autres conservent leur profil initial.",
+      "relaunchProfileLabel": "Profil d’ingestion"
     },
     "save": "Sauvegarder",
     "serviceNotice": {

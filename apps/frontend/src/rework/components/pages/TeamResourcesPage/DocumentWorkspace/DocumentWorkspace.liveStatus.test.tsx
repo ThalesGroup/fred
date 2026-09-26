@@ -37,7 +37,7 @@ vi.mock("react-i18next", () => ({
 }));
 // The component reads the task feed through useSelector(selectActiveTasks) —
 // forward the (mocked) selector's own return value instead of a hardcoded [].
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: (selector: () => unknown) => selector() }));
 
 const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },

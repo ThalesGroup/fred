@@ -37,7 +37,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
 
 const doc = (uid: string, name: string, retrievable: boolean | undefined) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },

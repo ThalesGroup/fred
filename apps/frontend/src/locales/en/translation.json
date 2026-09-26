@@ -2105,7 +2105,9 @@
         "relaunchStarted_other": "Ingestion relaunched for {{count}} resources"
       },
       "pageTitlePersonal": "Your personal resources",
-      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space.",
+      "relaunchProfileHelp": "Choose a profile for documents whose original ingestion profile is unknown. Other documents keep their original profile.",
+      "relaunchProfileLabel": "Ingestion profile"
     },
     "save": "Save",
     "serviceNotice": {

@@ -19,6 +19,9 @@
 // and a mixed selection must relaunch only the ones that qualify.
 
 import { act } from "react";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { taskSlice, taskRegistered, taskEventReceived } from "../../../../features/tasks/taskSlice";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,22 +39,25 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-// Selectors are called for real so the live-task feed below reaches the
-// component — the store itself is what the taskSlice mock stands in for.
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
-
 interface ProcessCall {
-  processDocumentsRequest: { files: { document_uid: string }[] };
+  processDocumentsRequest: { files: { document_uid: string; profile?: string }[]; relaunch?: boolean };
 }
 const processDocuments = vi.hoisted(() =>
-  vi.fn((_request: ProcessCall) => ({ unwrap: async () => ({ workflow_id: "wf-1" }) })),
+  vi.fn((request: ProcessCall) => ({
+    unwrap: async () => ({
+      workflow_id: "wf-1",
+      task_ids: Object.fromEntries(
+        request.processDocumentsRequest.files.map((file) => [file.document_uid, `task-${file.document_uid}`]),
+      ),
+    }),
+  })),
 );
 
 const doc = (uid: string, name: string, stages: Record<string, string>) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
   file: { file_type: "pdf", file_size_bytes: 1024 },
   source: { date_added_to_kb: "2026-07-01T00:00:00Z", source_tag: "push" },
-  processing: { stages },
+  processing: { stages, profile: uid === "uid-raw" ? null : "rich" },
   tags: { tag_ids: ["tag-cir"] },
 });
 
@@ -62,6 +68,13 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({
     data: {
       tasks: [
+        {
+          task_id: "old-orphan",
+          kind: "ingestion",
+          state: "failed",
+          updated_at: "2026-07-01T00:00:00Z",
+          target: { type: "document", id: "uid-orphan" },
+        },
         {
           task_id: "task-2",
           kind: "ingestion",
@@ -86,8 +99,9 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
           doc("uid-failed", "Failed doc", { raw: "failed" }),
           doc("uid-running", "Running doc", { raw: "in_progress" }),
           doc("uid-teammate", "Teammate doc", { raw: "in_progress" }),
+          doc("uid-orphan", "Unconfirmed doc", { raw: "done", preview: "in_progress" }),
         ],
-        total: 5,
+        total: 6,
       }),
     }),
   ],
@@ -99,19 +113,6 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),
   ],
-}));
-// One ingestion genuinely in flight, on "uid-running".
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  selectActiveTasks: () => [
-    {
-      id: "task-1",
-      state: "running",
-      progress: 40,
-      target: { type: "document", id: "uid-running", label: "Running doc" },
-      registeredAt: 0,
-    },
-  ],
-  selectAllTasks: () => [],
 }));
 vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
@@ -150,14 +151,28 @@ const BULK_RELAUNCH_KEY = "rework.resources.bulkActions.relaunchIngestion";
 
 let container: HTMLDivElement;
 let root: Root;
+const createStore = () => configureStore({ reducer: { tasks: taskSlice.reducer } });
+let store: ReturnType<typeof createStore>;
 
 beforeEach(async () => {
   processDocuments.mockClear();
+  store = createStore();
+  store.dispatch(
+    taskRegistered({
+      taskId: "task-1",
+      kind: "ingestion",
+      target: { type: "document", id: "uid-running", label: "Running doc" },
+    }),
+  );
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    root.render(
+      <Provider store={store}>
+        <DocumentWorkspace teamId="team-1" isPersonalTeam={false} />
+      </Provider>,
+    );
   });
 
   // Navigate into "CIR" — its documents only load once it's the current folder.
@@ -216,18 +231,60 @@ describe("DocumentWorkspace row menu — relaunch ingestion", () => {
     expect(openMenuLabels(moreButtons()[4]).some((label) => label.includes(RELAUNCH_KEY))).toBe(false);
   });
 
-  it("relaunches that one document when the entry is chosen", () => {
+  it("does not relaunch processing metadata even with an old failed task and no live task", () => {
+    expect(openMenuLabels(moreButtons()[5]).some((label) => label.includes(RELAUNCH_KEY))).toBe(false);
+  });
+
+  it("cancels unknown-profile selection without submitting", async () => {
+    click(moreButtons()[1]);
+    const entry = [...document.querySelectorAll('[role="presentation"] li')].find((el) =>
+      el.textContent?.includes(RELAUNCH_KEY),
+    );
+    click(entry!);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog).not.toBeNull();
+    const cancel = [...dialog.querySelectorAll("button")].find((button) => button.textContent === "common.cancel");
+    await act(async () => {
+      click(cancel!);
+    });
+    expect(processDocuments).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("registers the returned task and preserves the known profile", async () => {
     const item = [...document.querySelectorAll('[role="presentation"] li, [role="presentation"] button')];
     click(moreButtons()[2]);
     const entry = [...document.querySelectorAll('[role="presentation"] li, [role="presentation"] button')]
       .filter((el) => !item.includes(el))
       .find((el) => el.textContent?.includes(RELAUNCH_KEY));
     if (!entry) throw new Error("relaunch entry not found");
-    click(entry);
+    await act(async () => {
+      click(entry);
+    });
 
     expect(processDocuments).toHaveBeenCalledOnce();
     const files = processDocuments.mock.calls[0][0].processDocumentsRequest.files;
     expect(files.map((file) => file.document_uid)).toEqual(["uid-failed"]);
+    expect(files[0].profile).toBe("rich");
+    expect(store.getState().tasks.byId["task-uid-failed"].state).toBe("pending");
+    expect(openMenuLabels(moreButtons()[2]).some((label) => label.includes(RELAUNCH_KEY))).toBe(false);
+    await act(async () => {
+      store.dispatch(
+        taskEventReceived({
+          kind: "ingestion",
+          task_id: "task-uid-failed",
+          state: "failed",
+          seq: 1,
+          timestamp: new Date().toISOString(),
+          progress: null,
+          step: null,
+          error: "failed",
+          detail: null,
+        }),
+      );
+    });
+    click(moreButtons()[2]);
+    expect(openMenuLabels(moreButtons()[2]).some((label) => label.includes(RELAUNCH_KEY))).toBe(true);
   });
 });
 
@@ -249,13 +306,28 @@ describe("DocumentWorkspace bulk bar — relaunch ingestion", () => {
     expect(button).not.toBeNull();
   });
 
-  it("sends the stuck documents in a single call and leaves the ingested one alone", () => {
+  it("asks for unknown profiles and preserves known profiles in a mixed batch", async () => {
     selectAllRows();
     click(container.querySelector(`button[aria-label="${BULK_RELAUNCH_KEY}:2"]`));
+    expect(processDocuments).not.toHaveBeenCalled();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const confirm = [...dialog.querySelectorAll("button")].find((button) => button.textContent === RELAUNCH_KEY)!;
+    expect(confirm.disabled).toBe(true);
+    click(dialog.querySelector('button[aria-haspopup="listbox"]'));
+    const medium = [...document.querySelectorAll('[role="presentation"] li')].find((node) =>
+      node.textContent?.includes("documentLibrary.profileMedium"),
+    );
+    expect(medium).toBeDefined();
+    click(medium!);
+    await act(async () => {
+      click(confirm);
+    });
 
     expect(processDocuments).toHaveBeenCalledOnce();
     const files = processDocuments.mock.calls[0][0].processDocumentsRequest.files;
     expect(files.map((file) => file.document_uid).sort()).toEqual(["uid-failed", "uid-raw"]);
+    expect(files.find((file) => file.document_uid === "uid-raw")?.profile).toBe("medium");
+    expect(files.find((file) => file.document_uid === "uid-failed")?.profile).toBe("rich");
   });
 
   it("hides the action when every selected document is already ingested", () => {
