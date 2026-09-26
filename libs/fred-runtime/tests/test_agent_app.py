@@ -6425,17 +6425,6 @@ class _FakeHistoryStore:
         return self._owner is not None and user_id == self._owner
 
 
-def _session_request(session_id: str = "s-1") -> RuntimeExecuteRequest:
-    return RuntimeExecuteRequest.model_validate(
-        {
-            "input": "hi",
-            "agent_instance_id": "inst-1",
-            "session_id": session_id,
-            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-        }
-    )
-
-
 def _wire_history(monkeypatch, store: object) -> None:
     monkeypatch.setattr(
         agent_app_module,
@@ -6454,7 +6443,7 @@ async def test_session_ownership_denies_other_users_session(
 
     with pytest.raises(agent_app_module.HTTPException) as exc:
         await agent_app_module._enforce_session_ownership(
-            _session_request(), _ALICE, container
+            "s-1", _ALICE, container, agent_instance_id="inst-1"
         )
 
     assert exc.value.status_code == 403
@@ -6467,7 +6456,7 @@ async def test_session_ownership_allows_owner(monkeypatch, minimal_config) -> No
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), _ALICE, container
+        "s-1", _ALICE, container, agent_instance_id="inst-1"
     )
 
 
@@ -6480,7 +6469,7 @@ async def test_session_ownership_allows_new_session(
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), _ALICE, container
+        "s-1", _ALICE, container, agent_instance_id="inst-1"
     )
 
 
@@ -6493,7 +6482,7 @@ async def test_session_ownership_skipped_when_security_disabled(
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), None, container
+        "s-1", None, container, agent_instance_id="inst-1"
     )
 
 

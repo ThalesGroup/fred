@@ -1,3 +1,9 @@
+**Unreleased**
+
+- **Security Fixes**
+
+  - The OpenAI-compatible chat endpoint now rejects access to another user's session recorded in conversation history, even when both users belong to the same team (#2810).
+
 **v2.2.3** — 2026-09-25
 
 - **Summary**

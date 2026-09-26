@@ -34,7 +34,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import fred_runtime.app.openai_compat_router as openai_compat_router_module
 import httpx
@@ -411,6 +411,103 @@ def test_chat_completions_streams_openai_chunks_and_done(monkeypatch, tmp_path) 
     # The final chunk must have finish_reason="stop"
     final_chunks = [c for c in chunks if c["choices"][0].get("finish_reason") == "stop"]
     assert final_chunks, "Expected a chunk with finish_reason=stop"
+
+
+def test_chat_completions_enforces_private_session_ownership(
+    monkeypatch, tmp_path
+) -> None:
+    """A same-team caller cannot read or mutate another caller's persisted turn."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="Private reply.")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    caller = KeycloakUser(uid="alice", username="alice", roles=[])
+    original_router = openai_compat_router_module.create_openai_compat_router
+
+    def authenticated_router(*args, **kwargs):
+        return original_router(*args, **kwargs, authenticated_user_dep=lambda: caller)
+
+    monkeypatch.setattr(
+        openai_compat_router_module, "create_openai_compat_router", authenticated_router
+    )
+    definition = _HelloAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+    headers = {"X-Fred-Session-Id": "private-session", "X-Fred-Team-Id": "shared-team"}
+    body = {
+        "model": definition.agent_id,
+        "messages": [{"role": "user", "content": "My secret"}],
+    }
+
+    with TestClient(app) as client:
+        context = get_runtime_context()
+        rebac = SimpleNamespace(
+            enabled=True, check_user_team_permission_or_raise=AsyncMock()
+        )
+        history = context.config.history_store
+        assert history is not None
+        first = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": definition.agent_id,
+                "input": "My secret",
+                "session_id": "private-session",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert first.status_code == 200
+        before = asyncio.run(history.get("private-session"))
+        assert before
+        assert asyncio.run(history.session_belongs_to_user("private-session", "alice"))
+
+        context._config = replace(context.config, rebac_engine=rebac)
+        caller = KeycloakUser(uid="bob", username="bob", roles=[])
+        with monkeypatch.context() as denied:
+            admit = Mock(side_effect=AssertionError("must reject before admission"))
+            resolve = AsyncMock(
+                side_effect=AssertionError("must reject before resolution")
+            )
+            iterate = Mock(side_effect=AssertionError("must reject before execution"))
+            denied.setattr(openai_compat_router_module, "_admit_run_credentials", admit)
+            denied.setattr(
+                openai_compat_router_module, "_resolve_agent_instance", resolve
+            )
+            denied.setattr(
+                openai_compat_router_module, "_iterate_runtime_event_payloads", iterate
+            )
+            rejected = client.post("/v1/chat/completions", json=body, headers=headers)
+            assert rejected.status_code == 403
+            admit.assert_not_called()
+            resolve.assert_not_awaited()
+            iterate.assert_not_called()
+        assert rebac.check_user_team_permission_or_raise.await_args.args[0].uid == "bob"
+        assert asyncio.run(history.get("private-session")) == before
+        container = openai_compat_router_module.get_pod_container_from_app(app)
+        events = [
+            e
+            for e in container.audit_events_buffer
+            if e["audit_event"] == "session_owner_mismatch"
+        ]
+        assert len(events) == 1
+        assert events[0].get("user_id") == "bob"
+        assert events[0].get("session_id") == "private-session"
+
+        context._config = replace(context.config, rebac_engine=None)
+        caller = KeycloakUser(uid="alice", username="alice", roles=[])
+        continued = client.post("/v1/chat/completions", json=body, headers=headers)
+        assert continued.status_code == 200
+        chunks = [
+            json.loads(line.removeprefix("data: "))
+            for line in continued.text.splitlines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        ]
+        assert any(c["choices"][0].get("finish_reason") == "stop" for c in chunks)
+        assert not any(c.get("fred", {}).get("node_error") for c in chunks)
+        assert "data: [DONE]" in continued.text
+        assert client.post("/v1/chat/completions", json=body).status_code == 200
 
 
 # ---------------------------------------------------------------------------
