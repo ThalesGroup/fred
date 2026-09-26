@@ -274,6 +274,35 @@ def test_parquet_export_mixed_type_column(run_export):
     assert df["Code"].astype(str).tolist() == ["59", "99", "CTRL"]
 
 
+@pytest.mark.parametrize("coerce_types", [True, False])
+@pytest.mark.parametrize("text_first", [True, False])
+def test_parquet_category_metadata_matches_exported_mixed_values(run_export, coerce_types, text_first):
+    values = [1] * 8 + ["N/A"] * 2
+    if text_first:
+        values.reverse()
+    values.append(None)
+    cells = {"A1": "Code", "B1": "Row"}
+    for row, value in enumerate(values, start=2):
+        cells[f"A{row}"] = value
+        cells[f"B{row}"] = row
+
+    result = run_export([{"name": "Mixed", "cells": cells}], extract_format="parquet", coerce_types=coerce_types)
+    entries = json.loads((result.output_dir / "tables.json").read_text(encoding="utf-8"))
+    assert len(entries) == 1
+    stored = _read_stored_parquet(entries[0]["object_key"])
+    assert stored["Code"].isna().sum() == 1
+    stored_values = sorted(stored["Code"].dropna().unique().tolist())
+    assert stored_values == ["1", "N/A"]
+    column = next(column for column in entries[0]["columns"] if column["name"] == "Code")
+    assert column == {
+        "name": "Code",
+        "dtype": "string",
+        "is_categorical": True,
+        "has_two_values": True,
+        "sample_values": stored_values,
+    }
+
+
 def test_parquet_export_preserves_native_excel_booleans(run_export):
     r = run_export(
         [

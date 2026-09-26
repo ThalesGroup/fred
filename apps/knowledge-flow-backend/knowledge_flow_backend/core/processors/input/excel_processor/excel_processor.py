@@ -412,7 +412,9 @@ class ExcelProcessor(BaseMarkdownProcessor):
                 export[obj_cols] = export[obj_cols].astype("string")
                 export.to_parquet(dest, index=False)
             rel_path = f"{fmt}/{fname}"
-            entries.append(self._table_entry(t, rel_path, df))
+            # Parquet metadata must describe the normalized values actually stored.
+            # CSV keeps the source types before its presentation-only conversion.
+            entries.append(self._table_entry(t, rel_path, export if fmt == "parquet" else df))
             _step("EXPORT", f"{t.id} — {len(df)} row(s) written to {rel_path}")
         return entries
 
