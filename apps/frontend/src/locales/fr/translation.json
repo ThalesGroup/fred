@@ -1596,7 +1596,8 @@
       "tabular": {
         "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
         "catalogForWorkbook": "Lecture du sommaire du classeur.",
-        "catalogPreview": "Le catalogue est affiché en partie.",
+        "catalogComplete": "Sommaire complet : {{total}} lignes.",
+        "catalogPreview": "Sommaire : les {{shown}} premières lignes sur {{total}}.",
         "emptyCatalog": "Ce catalogue est vide.",
         "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
         "kind": {
@@ -1607,8 +1608,6 @@
         "matchedColumns": "Colonnes correspondantes",
         "identifiedDocuments_one": "Voici le document identifié :",
         "identifiedDocuments_other": "Voici les {{count}} documents identifiés :",
-        "moreValues_one": "+{{count}} autre valeur",
-        "moreValues_other": "+{{count}} autres valeurs",
         "moreColumns_one": "+{{count}} autre colonne",
         "moreColumns_other": "+{{count}} autres colonnes",
         "noColumns": "Aucune colonne décrite.",
@@ -1619,11 +1618,14 @@
         "partialResult": "résultat partiel",
         "rowsPreview": "aperçu de {{count}} lignes",
         "rowsTruncated": "Aperçu partiel : d'autres lignes correspondent dans cette table.",
-        "samples": "Exemples",
-        "showFullCatalog": "Afficher le catalogue complet",
+        "categorical": "Catégorie",
+        "showCatalogPreview": "Réduire à 20 lignes",
+        "showFullCatalog": "Tout afficher",
         "showMore_one": "Afficher {{count}} élément supplémentaire",
         "showMore_other": "Afficher {{count}} éléments supplémentaires",
         "tableNumber": "Table {{number}}",
+        "tablesHeading_one": "Table et colonnes",
+        "tablesHeading_other": "{{count}} tables et colonnes",
         "tablesTruncated": "Résultat partiel : d'autres tables ou documents peuvent contenir cette valeur."
       },
       "toolStatus": {
@@ -1636,6 +1638,7 @@
         "documents": "Liste des documents tabulaires",
         "markdown": "Lecture du catalogue du classeur",
         "schemas": "Lecture des schémas tabulaires",
+        "descriptions": "Lecture des documents tabulaires",
         "search": "Recherche d'une valeur tabulaire"
       }
     },
@@ -2137,7 +2140,8 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompt global de la plateforme"
+          "platformPrompt": "Prompt global de la plateforme",
+          "announcements": "Annonces"
         },
         "title": "Espace administration"
       },
@@ -3391,6 +3395,63 @@
         "minutes": "minutes",
         "hours": "heures",
         "days": "jours"
+      }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "Plus d'info",
+        "dismiss": "Masquer cette annonce"
+      },
+      "dialog": {
+        "close": "Fermer"
+      },
+      "page": {
+        "title": "Annonces",
+        "subtitle_one": "{{count}} annonce est affichée à tous les utilisateurs.",
+        "subtitle_other": "{{count}} annonces sont affichées à tous les utilisateurs.",
+        "subtitle_zero": "Aucune annonce n'est affichée aux utilisateurs actuellement.",
+        "create": "Nouvelle annonce",
+        "empty": "Aucune annonce pour l'instant.\nCréez-en une pour afficher un bandeau en haut de l'application."
+      },
+      "severity": {
+        "info": "Info",
+        "warning": "Avertissement",
+        "error": "Erreur",
+        "success": "Succès"
+      },
+      "locale": {
+        "fr": "Français",
+        "en": "Anglais"
+      },
+      "row": {
+        "enabled": "Afficher cette annonce aux utilisateurs",
+        "enableHint": "Activer pour tous les utilisateurs",
+        "disableHint": "Désactiver pour tous les utilisateurs",
+        "edit": "Modifier cette annonce",
+        "delete": "Supprimer cette annonce"
+      },
+      "editor": {
+        "createTitle": "Nouvelle annonce",
+        "editTitle": "Modifier l'annonce",
+        "title": "Titre",
+        "titleRequired": "Donnez un titre à l'annonce dans au moins une langue.",
+        "descriptionShort": "Description courte",
+        "descriptionShortHint": "Affichée dans le bandeau. Tenez-vous à une ou deux lignes — gras, italique et liens uniquement.",
+        "shortRequired": "Rédigez une description courte dans au moins une langue.",
+        "descriptionLong": "Description longue (facultative)",
+        "descriptionLongHint": "Affichée dans la boîte de dialogue « Plus d'info ». Laissez vide et le bandeau n'affichera pas le bouton.",
+        "dismissible": "Peut être fermé",
+        "severityGroup": "Sévérité de l'annonce",
+        "localeGroup": "Langue en cours d'édition"
+      },
+      "saved": "Annonce enregistrée.",
+      "saveFailed": "L'annonce n'a pas été enregistrée.",
+      "toggleFailed": "Impossible de changer l'état de l'annonce.",
+      "deleted": "Annonce supprimée.",
+      "deleteFailed": "L'annonce n'a pas été supprimée.",
+      "delete": {
+        "title": "Supprimer cette annonce ?",
+        "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       }
     }
   },

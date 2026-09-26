@@ -398,9 +398,9 @@ export function findTabularDocumentName(
     const entry = entries[index];
     if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) continue;
     const kind = tabularToolKind(toolName(entry.call));
-    if (kind !== "documents" && kind !== "schemas") continue;
+    if (kind !== "documents" && kind !== "schemas" && kind !== "descriptions") continue;
     const result = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
-    if (result?.kind !== "documents" && result?.kind !== "schemas") continue;
+    if (result?.kind !== "documents" && result?.kind !== "schemas" && result?.kind !== "descriptions") continue;
     const name = result.documents.find((document) => document.document_uid === documentUid)?.document_name;
     if (name) return name;
   }
@@ -1225,8 +1225,10 @@ export function toolDiscriminator(
   if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) return null;
   const tabular = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
   if (tabular?.kind === "documents") return { kind: "documents", count: tabular.documents.length };
-  if (tabular?.kind === "schemas") {
-    return { kind: "tables", count: tabular.documents.reduce((count, document) => count + document.tables.length, 0) };
+  if (tabular?.kind === "schemas" || tabular?.kind === "descriptions") {
+    let count = 0;
+    for (const document of tabular.documents) count += document.tables.length;
+    return { kind: "tables", count };
   }
   if (tabular?.kind === "search") {
     return {

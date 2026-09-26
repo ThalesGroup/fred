@@ -56,6 +56,7 @@ class ResourceController:
             tags=["Resources"],
             response_model=dict,
             summary="Get the JSON schema for the resource creation payload.",
+            operation_id="get_resource_creation_schema",
         )
         async def get_create_res_schema(
             user: KeycloakUser = Depends(get_current_user),
@@ -75,6 +76,7 @@ class ResourceController:
             response_model_exclude_none=True,
             status_code=status.HTTP_201_CREATED,
             summary="Create a resource (prompt/template) and attach it to a library.",
+            operation_id="create_resource",
         )
         async def create_resource(
             library_tag_id: Annotated[str, Query(description="Library tag id to attach this resource to")],
@@ -92,6 +94,7 @@ class ResourceController:
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Update a resource (content/metadata).",
+            operation_id="update_resource",
         )
         async def update_resource(
             resource_id: str,
@@ -109,6 +112,7 @@ class ResourceController:
             response_model=Resource,
             response_model_exclude_none=True,
             summary="Get a resource by id.",
+            operation_id="get_resource",
         )
         async def get_resource(
             resource_id: str,
@@ -125,6 +129,7 @@ class ResourceController:
             response_model=List[Resource],
             response_model_exclude_none=True,
             summary="List all resources for a kind (prompt|template).",
+            operation_id="list_resources_by_kind",
         )
         async def list_resources_by_kind(
             kind: Annotated[ResourceKind, Query(description="prompt | template")],
@@ -139,6 +144,7 @@ class ResourceController:
             "/resources/{resource_id}",
             tags=["Resources"],
             summary="Delete a resource by id.",
+            operation_id="delete_resource",
         )
         async def delete_resource(
             resource_id: str,

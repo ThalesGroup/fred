@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 from fred_core import KeycloakUser
 from fred_core.common import OwnerFilter
+from fred_core.security.delegation import DelegationConfig, initialize_delegation, preserved_delegation
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
@@ -104,6 +105,44 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
             _user(["service_agent"]),
             ["doc-team-a"],
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config",
+    [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)],
+    ids=["off", "accepting", "acting-only"],
+)
+async def test_the_team_datasets_are_kept_for_a_service_identity_only(tmp_path: Path, metadata_store, config):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-team-a",
+        file_name="sales-team-a.csv",
+        content="city,amount\nParis,10\n",
+        tag_ids=["tag-team-a"],
+        tag_names=["Team A"],
+    )
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+    service.tag_service = _FakeTagService(
+        readable_tag_ids=set(),
+        team_scopes={"team-a": {"tag-team-a"}},
+    )
+    # A workload that speaks for people also holds the service role; as itself it reads nothing.
+    delegation_client = _user(["service_agent"]).model_copy(update={"client_id": "agents", "caller_roles": frozenset({"delegation_caller"})})
+
+    with preserved_delegation():
+        initialize_delegation(config)
+        evaluator = await service.list_datasets(_user(["service_agent"]), owner_filter=OwnerFilter.TEAM, team_id="team-a")
+        workload = await service.list_datasets(delegation_client, owner_filter=OwnerFilter.TEAM, team_id="team-a")
+
+    assert [dataset.document_uid for dataset in evaluator] == ["doc-team-a"]
+    assert workload == []
 
 
 @pytest.mark.asyncio

@@ -23,7 +23,11 @@ from typing import ClassVar, Iterable, Sequence
 
 from fred_core.common.team_id import is_personal_team_id, personal_team_id
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.models import (
+    AuthorizationError,
+    Resource,
+    StandingAuthorizationError,
+)
 from fred_core.security.structure import KeycloakUser
 
 ORGANIZATION_ID = "fred"
@@ -58,6 +62,9 @@ class RelationType(str, Enum):
     VIEWER = "viewer"
     PARENT = "parent"
     ORGANIZATION = "organization"
+    ACTIVE = "active"
+    STANDING_READY = "standing_ready"
+    SUSPENDED = "suspended"
     # Reverse index of team.organization (`organization:fred#team@team:<id>`).
     # Never persisted — injected as a contextual tuple for team-subject checks
     # (capability#can_use and app#can_use), since every team belongs to the
@@ -423,6 +430,13 @@ def team_subject_and_context(
     return team_ref, context
 
 
+# Account standing is owned by the control plane's account lifecycle: generic
+# relation writes and deletes refuse these on the organization.
+_STANDING_RELATIONS = frozenset(
+    {RelationType.ACTIVE, RelationType.STANDING_READY, RelationType.SUSPENDED}
+)
+
+
 class RebacDisabledResult:
     """
     Marker object returned when relationship authorization is disabled.
@@ -449,6 +463,11 @@ class RebacEngine(ABC):
         """Tell whether relationship authorization checks are active."""
         return True
 
+    @property
+    def enforces_standing(self) -> bool:
+        """Whether person authorization decisions require current standing."""
+        return False
+
     async def close(self) -> None:
         """Release any held connections or sessions. No-op by default."""
 
@@ -474,6 +493,7 @@ class RebacEngine(ABC):
         - Save `team thales owner tag cir`.
         Returns a backend-specific consistency token when available.
         """
+        self._reject_standing_write(relation)
         self._reject_unsanctioned_personal_team_write(relation)
         token = await self._persist_relation(relation)
         if self.enabled:
@@ -485,6 +505,38 @@ class RebacEngine(ABC):
                 resource=f"{relation.resource.type.value}:{relation.resource.id}",
             )
         return token
+
+    @staticmethod
+    def _reject_standing_write(relation: Relation) -> None:
+        if (
+            relation.resource.type == Resource.ORGANIZATION
+            and relation.resource.id == ORGANIZATION_ID
+            and relation.relation in _STANDING_RELATIONS
+        ):
+            raise ValueError(
+                "Standing relations may only be changed through the account lifecycle"
+            )
+
+    async def validate_standing_model(self) -> None:
+        """Verify that the selected backend model supports standing relations."""
+        if self.enforces_standing:
+            raise RuntimeError("Standing authorization model is not available.")
+
+    async def is_standing_seed_ready(self) -> bool:
+        """Return whether the shared standing-ready marker exists."""
+        return False
+
+    async def mark_standing_seed_ready(self) -> str | None:
+        """Write the standing-ready marker through the lifecycle-only path."""
+        raise RuntimeError("Standing authorization model is not available.")
+
+    async def grant_default_standing(self) -> str | None:
+        """Write the everyone entry that puts every person in good standing."""
+        raise RuntimeError("Standing authorization model is not available.")
+
+    async def remove_user_standing(self, user_id: str) -> str | None:
+        """Write one person's ban through the lifecycle-only path."""
+        raise RuntimeError("Standing authorization model is not available.")
 
     @staticmethod
     def _reject_unsanctioned_personal_team_write(relation: Relation) -> None:
@@ -549,24 +601,13 @@ class RebacEngine(ABC):
     ) -> str | None:
         """Remove every statement touching the given reference.
 
+        Standing relations are kept: only the account lifecycle changes them.
+
         Raises `RebacCleanupIncomplete` when an implementation cannot verify
         completion within its own bound. That reports unverified completion,
         not that statements necessarily remain; progress may be partial and a
         retry is idempotent. This contract does not guarantee exclusion of
         concurrent writers.
-        """
-
-    @abstractmethod
-    async def delete_all_relations_of_type(self, resource_type: Resource) -> int:
-        """Remove every statement touching any reference of the given type.
-
-        Self-healing sweep, deliberately not id-driven: `delete_all_relations_of_reference`
-        only clears what a caller already knows to ask for. If the Postgres row a caller
-        would otherwise enumerate ids from is already gone (a prior partial reset, a manual
-        edit, drift between the two stores), the corresponding tuples never get asked for
-        and become permanent orphans. This reads the live authorization store itself, so a
-        bulk reset converges to zero tuples of that type regardless of any such history.
-        Returns the number deleted.
         """
 
     async def add_relations(
@@ -580,7 +621,9 @@ class RebacEngine(ABC):
         Example:
         - Add owner and viewer links in one call after resource sharing.
         """
-
+        relations = list(relations)
+        for relation in relations:
+            self._reject_standing_write(relation)
         tokens = await asyncio.gather(
             *(
                 self.add_relation(relation, actor_uid=actor_uid)
@@ -869,6 +912,9 @@ class RebacEngine(ABC):
         Example:
         - Remove owner/manager/member links when removing a team member.
         """
+        relations = list(relations)
+        for relation in relations:
+            self._reject_standing_write(relation)
         tokens = await asyncio.gather(
             *(self.delete_relation(relation) for relation in relations),
             return_exceptions=False,
@@ -923,12 +969,23 @@ class RebacEngine(ABC):
         )
 
     async def delete_user_relations(self, user: KeycloakUser) -> str | None:
-        """Delete all statements referencing a user."""
+        """Delete all statements referencing a user, except their ban."""
         return await self.delete_all_relations_of_reference(
             RebacReference(Resource.USER, user.uid)
         )
 
     @abstractmethod
+    async def _lookup_resources_raw(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission | RelationType,
+        resource_type: Resource,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[RebacReference] | RebacDisabledResult:
+        """Backend ListObjects primitive without the standing template."""
+
     async def lookup_resources(
         self,
         subject: RebacReference,
@@ -938,11 +995,20 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
-        """List resources a subject can access for one permission.
+        """List resources a subject can access after checking person standing.
 
         Example:
         - Return all teams a user can read.
         """
+        if self.enforces_standing and subject.type == Resource.USER:
+            await self._require_standing(subject)
+        return await self._lookup_resources_raw(
+            subject,
+            permission,
+            resource_type,
+            contextual_relations=contextual_relations,
+            consistency_token=consistency_token,
+        )
 
     @abstractmethod
     async def lookup_subjects(
@@ -1048,6 +1114,68 @@ class RebacEngine(ABC):
         )
 
     @abstractmethod
+    async def _has_permission_raw(
+        self,
+        subject: RebacReference,
+        permission: RebacPermission | RelationType,
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> bool:
+        """Backend Check primitive without the standing template."""
+
+    async def _has_permissions_with_standing_raw(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> tuple[bool, list[bool]]:
+        """Default standing + permission checks for non-batching test engines."""
+        try:
+            standing = await self._has_permission_raw(
+                subject,
+                RelationType.ACTIVE,
+                RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                consistency_token=self.HIGHER_CONSISTENCY,
+            )
+        except StandingAuthorizationError:
+            raise
+        except Exception:
+            raise StandingAuthorizationError(unavailable=True) from None
+        allowed = await self._has_permissions_raw(
+            subject,
+            permissions,
+            resource,
+            contextual_relations=contextual_relations,
+            consistency_token=consistency_token,
+        )
+        return standing, allowed
+
+    async def _require_standing(self, subject: RebacReference) -> None:
+        try:
+            standing = await self._has_permission_raw(
+                subject,
+                RelationType.ACTIVE,
+                RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                consistency_token=self.HIGHER_CONSISTENCY,
+            )
+        except StandingAuthorizationError:
+            raise
+        except Exception:
+            raise StandingAuthorizationError(unavailable=True) from None
+        if not standing:
+            raise StandingAuthorizationError() from None
+
+    async def require_user_standing(self, user_id: str) -> None:
+        """Require current standing without making an object permission decision."""
+        if not self.enforces_standing:
+            return
+        await self._require_standing(RebacReference(Resource.USER, user_id))
+
     async def has_permission(
         self,
         subject: RebacReference,
@@ -1057,7 +1185,52 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
-        """Return `True` when a subject is authorized for an action."""
+        """Return whether a subject is authorized, enforcing person standing."""
+        if not self.enforces_standing or subject.type != Resource.USER:
+            return await self._has_permission_raw(
+                subject,
+                permission,
+                resource,
+                contextual_relations=contextual_relations,
+                consistency_token=consistency_token,
+            )
+        standing, allowed = await self._has_permissions_with_standing_raw(
+            subject,
+            [permission],
+            resource,
+            contextual_relations=contextual_relations,
+            consistency_token=consistency_token,
+        )
+        if not standing:
+            raise StandingAuthorizationError() from None
+        return allowed[0]
+
+    async def _has_permissions_raw(
+        self,
+        subject: RebacReference,
+        permissions: Sequence[RebacPermission],
+        resource: RebacReference,
+        *,
+        contextual_relations: Iterable[Relation] | None = None,
+        consistency_token: str | None = None,
+    ) -> list[bool]:
+        contextual_relations_seq = (
+            tuple(contextual_relations) if contextual_relations is not None else None
+        )
+        return list(
+            await asyncio.gather(
+                *(
+                    self._has_permission_raw(
+                        subject,
+                        permission,
+                        resource,
+                        contextual_relations=contextual_relations_seq,
+                        consistency_token=consistency_token,
+                    )
+                    for permission in permissions
+                )
+            )
+        )
 
     async def has_permissions(
         self,
@@ -1097,20 +1270,24 @@ class RebacEngine(ABC):
         contextual_relations_seq = (
             tuple(contextual_relations) if contextual_relations is not None else None
         )
-        return list(
-            await asyncio.gather(
-                *(
-                    self.has_permission(
-                        subject,
-                        permission,
-                        resource,
-                        contextual_relations=contextual_relations_seq,
-                        consistency_token=consistency_token,
-                    )
-                    for permission in permissions_list
-                )
+        if not self.enforces_standing or subject.type != Resource.USER:
+            return await self._has_permissions_raw(
+                subject,
+                permissions_list,
+                resource,
+                contextual_relations=contextual_relations_seq,
+                consistency_token=consistency_token,
             )
+        standing, allowed = await self._has_permissions_with_standing_raw(
+            subject,
+            permissions_list,
+            resource,
+            contextual_relations=contextual_relations_seq,
+            consistency_token=consistency_token,
         )
+        if not standing:
+            raise StandingAuthorizationError() from None
+        return allowed
 
     async def _ensure_personal_team_editor(
         self, user: KeycloakUser, resource_type: Resource, resource_id: str

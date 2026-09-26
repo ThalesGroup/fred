@@ -203,6 +203,9 @@ class RagScopeControlParams(BaseModel):
 class ClientAuthMode(str, Enum):
     USER_TOKEN = "user_token"  # nosec B105
     NO_TOKEN = "no_token"  # nosec B105
+    # The workload's own bearer plus the delegation grant, carried outside tool
+    # arguments — the person's token is never forwarded to the server.
+    DELEGATED = "delegated"
 
 
 class TeamScopePolicy(str, Enum):

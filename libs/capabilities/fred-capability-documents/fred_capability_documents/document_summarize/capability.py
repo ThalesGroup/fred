@@ -72,6 +72,7 @@ from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
     DocumentScopeRefusedError,
     DocumentSummaryResult,
+    unwrap_run_stop_error,
 )
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
@@ -290,6 +291,9 @@ class DocumentSummarizeCapability(
                     exc=exc,
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 message, artifact = _document_tool_failure(
                     tool_ref="summarize_document",
                     action="summarize the document",

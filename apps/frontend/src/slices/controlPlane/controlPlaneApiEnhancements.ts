@@ -35,8 +35,30 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
     "ControlPlaneKnowledgeBase",
+    "ControlPlaneAnnouncement",
   ],
   endpoints: {
+    // Platform announcements. Both reads share one LIST tag: an admin mutation
+    // must refresh the admin table AND the banner stack behind it, since the
+    // admin is looking at the same app the banner renders in.
+    getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    createAnnouncementControlPlaneV1AdminPlatformAnnouncementsPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    updateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
     //
@@ -685,6 +707,18 @@ export const {
   useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
     useRestoreWikiRevisionMutation,
   useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
+  // Platform announcements: the admin CRUD, plus the delivery read the banner
+  // stack subscribes to. The stack drives its own refresh through
+  // `crossSessionRefreshOptions` — this app never calls `setupListeners`, so
+  // RTK's own `refetchOnFocus` would be inert.
+  useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery: useActiveAnnouncementsQuery,
+  useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery: useAnnouncementsQuery,
+  useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation: useCreateAnnouncementMutation,
+  useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation: useUpdateAnnouncementMutation,
+  useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation:
+    useSetAnnouncementEnabledMutation,
+  useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
+    useDeleteAnnouncementMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

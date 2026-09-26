@@ -13,14 +13,17 @@
 RFC links in this document preserve decision history only. This design document
 is the current authority for implemented runtime behavior.
 
-> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> `_authorize_execution_or_raise` now recognizes a **service identity** (a caller holding
+> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A;
+> scoped to non-delegated deployments 2026-09-19).** Where the runtime does **not** act
+> for people (`security.delegation.act_for_people`), `_authorize_execution_or_raise` recognizes a **service identity** (a caller holding
 > the `service_agent` app role — the evaluation worker) for managed execution **scoped to
 > the request `team_id`**, **without** consulting OpenFGA and **without** any stored tuple.
 > Legitimacy is anchored upstream at campaign creation. It stays team-scoped and
 > fail-closed: a missing `team_id` still returns 403; the decision is audited as
 > `service_agent_authorized`. Regular users are unchanged (per-request OpenFGA `can_read`).
-> Read-only by design — the worker never mutates a team.
+> Read-only by design — the worker never mutates a team. Where the runtime **does** act
+> for people, that identity is refused and execution is authorized on the person the
+> grant names — see §8.89.
 
 > ✅ **Chat-context prompt injection — 2026-07-06 (PROMPT-08 / issue #1915).** The
 > runtime now folds `runtime_context.context_prompt_text` into the final system
@@ -60,6 +63,11 @@ is the current authority for implemented runtime behavior.
 > the ReBAC check for service-agent callers, mirroring the turn-start decision
 > instead of re-deriving a stricter one. Regular users are unaffected — the
 > least-privilege re-check still runs for every non-service-agent call.
+>
+> Scoped to non-delegated deployments (2026-09-19). A principal asserted through
+> a delegation grant carries no roles, so the stamp is never set for one and the
+> per-tool-call re-check always runs, on the person the grant names. The bypass
+> described above applies only to a caller presenting its own service token.
 
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
@@ -404,8 +412,10 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   relation; see the 2026-07-29 callout above) on
   `runtime_context.team_id`. A canonical personal space
   (`personal-<authenticated uid>`) uses intrinsic ownership by exact identity
-  comparison, and the evaluation worker's `service_agent` identity uses the
-  separately documented team-scoped bypass. Every other case fails closed.
+  comparison. Where the runtime does not act for people, the evaluation worker's
+  `service_agent` identity uses the separately documented team-scoped bypass;
+  where it does, that identity is refused and the check runs on the
+  person the grant names (§8.89). Every other case fails closed.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -424,8 +434,9 @@ comparison, without an OpenFGA request. Another user's `personal-*` identifier
 and the bare `"personal"` alias deny. Other platform operations may still model
 personal teams in ReBAC as documented in
 [`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08);
-that does not change this turn-start fast path. `service_agent` callers are
-unaffected: their team-scoped, OpenFGA-free authorization is checked first.
+that does not change this turn-start fast path. Where the runtime does not act for
+people, `service_agent` callers are unaffected: their team-scoped, OpenFGA-free
+authorization is checked first.
 
 **Architectural constraint (unchanged):**
 
@@ -547,6 +558,11 @@ Key models:
 
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
+
+Session ownership uses the native route's shared gate: with authentication enabled,
+`X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
+and emits `session_owner_mismatch` before credential admission or agent resolution.
+New sessions and security-disabled execution retain their existing behavior.
 
 **Current limitations of the OpenAI compat layer vs the native protocol:**
 
@@ -6099,7 +6115,79 @@ statements:
   no migrations. A test fixture is what it always was; shipping it as a real
   entry point is what put a demo table in production databases.
 
-### 8.86 Mistral completed-message tool-call recovery (2026-09-22)
+### 8.86 ✅ A stopped run is typed: `RuntimeErrorEvent.reason` (2026-09-17)
+
+`RuntimeErrorEvent.reason` identifies `authority_lost`, `cancelled` or
+`delegation_unavailable`; ordinary crashes omit it. Stop messages contain only
+bounded platform text. ReAct and DeepAgent propagate stops through capability
+tools and child agents, cancel descendants and emit one root terminal event.
+External cancellation emits no synthetic completion.
+
+`runtime_support/run_scope.py` owns the shared lifetime and stop state. Closed
+scopes cannot be reused. Delegation adds no run-duration or child-count limits;
+existing per-call timeouts and engine step limits still apply.
+
+Detailed lifecycle, error-confinement and cancellation scenarios are maintained
+in the [delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.87 Managed execution names its team, and a streamed run ends with its response (2026-09-17)
+
+Managed requests require `runtime_context.team_id`; direct template requests
+retain optional team context. Native and OpenAI-compatible streaming responses
+own their execution lifetime. Response termination revokes credential access,
+cancels and joins descendants, closes owned streams and releases the run record.
+
+A human pause ends the response; the answer requires fresh admission. Disconnect
+cleanup begins when the transport detects the loss and cannot undo remote work
+already authorized. Disconnected turns write neither history nor turn KPIs.
+
+### 8.88 Workload identity and person authorization (2026-09-18)
+
+Receivers authenticate workload bearers and authorize the person named by the
+plain `person`, `run`, `agent` grant using current standing and permissions.
+Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capability
+configuration and OpenAI-compatible admission require the directly authenticated
+identity. Native execute, evaluate and stream admissions accept delegated people.
+
+The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
+maintains the endpoint policy inventory and deferred Graph-agent work.
+
+### 8.89 Execution under delegation is authorized on the person a grant names (2026-09-19)
+
+With outgoing delegation enabled, a caller-role holder must name a person to
+admit a run. Asserted people carry no bearer roles and receive no service-role
+shortcuts. Managed execution requires current standing and `CAN_USE_TEAM_AGENTS`
+on the requested team; direct execution checks standing and any supplied team.
+
+Ordinary service identities without the caller role retain their existing
+execution gates and own-bearer calls, including tools configured as `delegated`.
+They create no delegated run record.
+
+### 8.90 Delegation callers are trusted by a role (2026-09-23)
+
+Grant acceptance requires a verified access token with the configured caller
+role, delegation audience and trusted issuer. Login-client tokens are excluded;
+optional service-account validation adds the configured marker checks. Receivers
+keep no per-caller allowlist. Under strict audience validation, admission on the
+delegation audience alone also requires a trusted workload identity.
+
+A complete grant from an untrusted caller is refused when receiving delegation
+is enabled. Without a grant, the caller retains its own identity, subject to the
+execution gate in §8.89. Exact claim, transport and refusal scenarios are in the
+[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.91 One delegation switch per direction (2026-09-24)
+
+`act_for_people` controls outgoing delegation; `accept_delegated_calls` controls
+incoming grants. Both default off. A runtime acting for people requires user
+authentication; a runtime accepting asserted people must also act for people.
+Either switch requires account-standing enforcement and startup readiness.
+
+Service-role shortcuts always exclude caller-role holders, independently of the
+switches. Configuration defaults and rejection scenarios are maintained in the
+[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.92 Mistral completed-message tool-call recovery (2026-09-22)
 
 ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
@@ -6125,3 +6213,12 @@ sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
 provider time. Each reconstructed call increments
 `agent.tool_call_text_recovered_total`, with a bounded model-name label for
 Prometheus/Grafana; this counts proposals even if a later gate prevents execution.
+
+### 8.93 OpenAI-compatible session ownership (2026-09-26)
+
+The OpenAI-compatible route now applies the native session ownership gate before
+credential admission or agent resolution; see §4 for the HTTP 403 and audit
+behavior. This closes #2810 for sessions with history ownership records, without
+changing request or response schemas. Checkpoint-only conversations remain a
+known gap; #2812 tracks the compatibility surface's intended uses and required
+ownership guarantees.

@@ -1596,7 +1596,8 @@
       "tabular": {
         "catalogForDocument": "Reading the summary of document “{{name}}”.",
         "catalogForWorkbook": "Reading the workbook summary.",
-        "catalogPreview": "Only part of the catalog is shown.",
+        "catalogComplete": "Full summary: {{total}} lines.",
+        "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
         "emptyCatalog": "This catalog is empty.",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
@@ -1607,8 +1608,6 @@
         "matchedColumns": "Matching columns",
         "identifiedDocuments_one": "Here is the identified document:",
         "identifiedDocuments_other": "Here are the {{count}} identified documents:",
-        "moreValues_one": "+{{count}} more value",
-        "moreValues_other": "+{{count}} more values",
         "moreColumns_one": "+{{count}} more column",
         "moreColumns_other": "+{{count}} more columns",
         "noColumns": "No columns described.",
@@ -1619,11 +1618,14 @@
         "partialResult": "partial result",
         "rowsPreview": "preview of {{count}} rows",
         "rowsTruncated": "Partial preview: more rows match in this table.",
-        "samples": "Examples",
-        "showFullCatalog": "Show the full catalog",
+        "categorical": "Category",
+        "showCatalogPreview": "Show first 20 lines",
+        "showFullCatalog": "Show all",
         "showMore_one": "Show {{count}} more item",
         "showMore_other": "Show {{count}} more items",
         "tableNumber": "Table {{number}}",
+        "tablesHeading_one": "Table and columns",
+        "tablesHeading_other": "{{count}} tables and columns",
         "tablesTruncated": "Partial result: other tables or documents may contain this value."
       },
       "toolStatus": {
@@ -1636,6 +1638,7 @@
         "documents": "Listing tabular documents",
         "markdown": "Reading the workbook catalog",
         "schemas": "Reading tabular schemas",
+        "descriptions": "Reading tabular documents",
         "search": "Searching tabular values"
       }
     },
@@ -2137,7 +2140,8 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform global prompt"
+          "platformPrompt": "Platform global prompt",
+          "announcements": "Announcements"
         },
         "title": "Administration spaces"
       },
@@ -3391,6 +3395,63 @@
         "minutes": "minutes",
         "hours": "hours",
         "days": "days"
+      }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "More info",
+        "dismiss": "Dismiss this announcement"
+      },
+      "dialog": {
+        "close": "Close"
+      },
+      "page": {
+        "title": "Announcements",
+        "subtitle_one": "{{count}} announcement is live for every user.",
+        "subtitle_other": "{{count}} announcements are live for every user.",
+        "subtitle_zero": "Nothing is showing to users right now.",
+        "create": "New announcement",
+        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+      },
+      "severity": {
+        "info": "Info",
+        "warning": "Warning",
+        "error": "Error",
+        "success": "Success"
+      },
+      "locale": {
+        "fr": "French",
+        "en": "English"
+      },
+      "row": {
+        "enabled": "Show this announcement to users",
+        "enableHint": "Enable for all users",
+        "disableHint": "Disable for all users",
+        "edit": "Edit this announcement",
+        "delete": "Delete this announcement"
+      },
+      "editor": {
+        "createTitle": "New announcement",
+        "editTitle": "Edit announcement",
+        "title": "Title",
+        "titleRequired": "Give the announcement a title in at least one language.",
+        "descriptionShort": "Short description",
+        "descriptionShortHint": "Shown in the banner itself. Keep it to a line or two — bold, italic and links only.",
+        "shortRequired": "Write a short description in at least one language.",
+        "descriptionLong": "Long description (optional)",
+        "descriptionLongHint": "Shown in the More info dialog. Leave empty and the banner shows no More info button.",
+        "dismissible": "Closable",
+        "severityGroup": "Announcement severity",
+        "localeGroup": "Language being edited"
+      },
+      "saved": "Announcement saved.",
+      "saveFailed": "The announcement was not saved.",
+      "toggleFailed": "Could not change the announcement's state.",
+      "deleted": "Announcement deleted.",
+      "deleteFailed": "The announcement was not deleted.",
+      "delete": {
+        "title": "Delete this announcement?",
+        "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       }
     }
   },

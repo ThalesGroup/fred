@@ -41,6 +41,7 @@ from fred_runtime.capabilities import (
     build_capability_context,
 )
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -319,6 +320,35 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
     # land in `blocks`, or a Graph agent (which keeps only the artifact)
     # loses exactly the guidance a model needs to self-correct.
     assert message.artifact.blocks[0].text == message.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+async def test_summarize_authority_loss_escapes_instead_of_becoming_an_artifact(
+    wrapped: bool,
+) -> None:
+    stop = AuthorityLostError()
+    error: Exception = stop
+    if wrapped:
+        try:
+            raise stop
+        except AuthorityLostError as exc:
+            try:
+                raise DocumentPortCallError("port wrapper") from exc
+            except DocumentPortCallError as wrapper:
+                error = wrapper
+    cap = DocumentSummarizeCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_services(summarize=_FakeSummarizePort(error=error)),
+        config={},
+    )
+
+    with pytest.raises(AuthorityLostError):
+        await _invoke_named_tool(
+            cap, ctx, "summarize_document", {"document_uid": "u-42"}
+        )
 
 
 @pytest.mark.asyncio

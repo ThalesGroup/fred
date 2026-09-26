@@ -15,8 +15,8 @@
 import logging
 from typing import Annotated, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
-from fred_core import KeycloakUser, get_current_user
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fred_core import KeycloakUser, StandingAuthorizationError, get_current_user
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.features.tabular.execution import (
@@ -30,10 +30,9 @@ from knowledge_flow_backend.features.tabular.service import (
 )
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
+    TabularDocumentDescriptionResponse,
     TabularDocumentListResponse,
     TabularDocumentListTableResponse,
-    TabularDocumentMarkdownResponse,
-    TabularDocumentSchemaResponse,
     TabularQueryRequest,
     TabularSearchRequest,
     TabularSearchResponse,
@@ -85,8 +84,8 @@ class TabularController:
 
             How to use:
             - Call without parameters to retrieve every readable document.
-            - Follow up with `/tabular/documents/schemas` for column detail and
-              `/tabular/documents/{uid}/markdown` for a spreadsheet's catalog.
+            - Follow up with `/tabular/documents/schemas` for a spreadsheet's
+              catalog and every document's typed tables.
             """
 
             try:
@@ -117,16 +116,18 @@ class TabularController:
                 ]
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except Exception as e:
                 logger.exception("Failed to list tabular documents")
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.get(
             "/tabular/documents/schemas",
-            response_model=List[TabularDocumentSchemaResponse],
+            response_model=List[TabularDocumentDescriptionResponse],
             tags=["Tabular"],
-            summary="Describe the tables of one or several authorized tabular documents",
-            operation_id="get_tabular_documents_schemas",
+            summary="Read the catalog and typed tables of one or several tabular documents",
+            operation_id="describe_tabular_documents",
         )
         async def describe_documents(
             document_uids: Annotated[
@@ -148,15 +149,20 @@ class TabularController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Return the full table schemas for one or several authorized documents.
+            Return the extraction catalog and typed tables of authorized documents.
 
             Why this exists:
             - Schema inspection must expose every table of a multi-table
               workbook and follow the same document-level access rules as
               query execution.
-            - It returns each table's columns as (name, dtype): the reliable
-              way to confirm exact column names and types, and the only catalog
-              available for CSV documents, which have no markdown extraction.
+            - For Excel, the `output.md` catalog comes before the typed tables.
+              Read it to identify relevant sheets and context, then check each
+              selected column's type before constructing SQL filters.
+            - CSV documents have no extraction catalog; their tables still
+              include every column's exact name and type.
+            - Categorical string columns list every distinct value in
+              `sample_values`; integer and float columns include finite
+              `min_value` and `max_value` when available.
             - One batch call keeps agent round trips low when a SQL query
               joins tables from several documents.
 
@@ -176,55 +182,20 @@ class TabularController:
                 )
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
+            except (TabularCapacityExceededError, TabularExecutionTimeoutError):
+                raise
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except TabularDatasetAccessUnsupportedError as e:
                 raise HTTPException(status_code=501, detail=str(e))
             except Exception as e:
                 logger.exception("Failed to describe tabular documents %s", document_uids)
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.get(
-            "/tabular/documents/{document_uid}/markdown",
-            response_model=TabularDocumentMarkdownResponse,
-            tags=["Tabular"],
-            summary="Read the markdown extraction catalog of one spreadsheet document",
-            operation_id="get_tabular_document_markdown",
-        )
-        async def get_document_markdown(
-            document_uid: str = Path(..., description="Document UID of the spreadsheet to read"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            Return the `output.md` extraction catalog of one spreadsheet document.
-
-            Why this exists:
-            - The markdown catalog describes each extracted table of the
-              workbook: its sheet, title and context, cell ranges, the exact
-              `query_alias` to use in SQL, the name of every identified column,
-              and any residual text left on the sheet. Because it lists the real
-              column names alongside their surrounding context, it is the best
-              way to understand what data a workbook actually holds before
-              writing SQL — richer than the column-only schemas endpoint.
-
-            How to use:
-            - Pass a `document_uid` of kind `spreadsheet` from
-              `/tabular/documents`; CSV or other documents return 404.
-            """
-
-            try:
-                content = await self.service.get_document_markdown(user, document_uid)
-                return TabularDocumentMarkdownResponse(document_uid=document_uid, content=content)
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-            except FileNotFoundError as e:
-                raise HTTPException(status_code=404, detail=str(e))
-            except Exception as e:
-                logger.exception("Failed to read tabular document markdown %s", document_uid)
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.post(
@@ -263,6 +234,8 @@ class TabularController:
                 return await self.service.query_read(user, request=request)
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
@@ -318,6 +291,8 @@ class TabularController:
                 return await self.service.search_values(user, request=request)
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except StandingAuthorizationError:
+                raise
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:

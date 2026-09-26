@@ -23,10 +23,12 @@ is the only one not listed as held — so it is written again.
 from __future__ import annotations
 
 import asyncio
+import secrets
 from typing import Any
 
 import httpx
 import pytest
+from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.knowledge_base import documents as documents_module
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import (
@@ -83,6 +85,7 @@ class _Fred:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self._answers: dict[str, list[tuple[int, Any] | BaseException]] = {}
+        self.auth: httpx.Auth | None = None
 
     def answers(
         self, method: str, *answers: tuple[int, Any] | BaseException
@@ -105,16 +108,9 @@ class _Fred:
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fred = self
 
-        class _Tokens:
-            def __init__(self, _config) -> None:
-                pass
-
-            async def get_token(self) -> str:
-                return "a-token"  # pragma: allowlist secret
-
         class _Client:
-            def __init__(self, **_kwargs) -> None:
-                pass
+            def __init__(self, **kwargs) -> None:
+                fred.auth = kwargs.get("auth")
 
             async def post(self, url, **kwargs):
                 return fred._respond("POST", url, kwargs)
@@ -131,9 +127,6 @@ class _Fred:
             async def aclose(self) -> None:
                 return None
 
-        monkeypatch.setattr(
-            "fred_sdk.knowledge_base.documents.M2MTokenProvider", _Tokens
-        )
         monkeypatch.setattr(
             "fred_sdk.knowledge_base.documents.httpx.AsyncClient", _Client
         )
@@ -256,6 +249,48 @@ def test_a_blip_on_the_way_to_fred_does_not_end_the_wait(monkeypatch):
 
     assert outcome.succeeded is True
     assert len(fred.calls) == 4
+
+
+def test_a_token_endpoint_out_of_reach_does_not_end_the_wait(monkeypatch):
+    """The pod's own token is on the way to Fred too, so losing it is a blip."""
+    monkeypatch.setenv("ACME_KB_CLIENT_SECRET", secrets.token_urlsafe())
+    clock = [1_000.0]
+    token_requests = 0
+    polls = 0
+
+    def _network(request: httpx.Request) -> httpx.Response:
+        nonlocal token_requests, polls
+        if request.url.path.endswith("/protocol/openid-connect/token"):
+            token_requests += 1
+            if token_requests == 1:
+                raise httpx.ConnectError("unreachable", request=request)
+            return httpx.Response(
+                200, json={"access_token": secrets.token_urlsafe(), "expires_in": 300}
+            )
+        polls += 1
+        return httpx.Response(200, json=_summary("succeeded"))
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        documents_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(
+            **{**kwargs, "transport": httpx.MockTransport(_network)}
+        ),
+    )
+
+    async def _sleep(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr(documents_module.asyncio, "sleep", _sleep)
+    publisher = DocumentPublisher(
+        _configuration(), library_id=LIBRARY, source_tag="fred"
+    )
+
+    outcome = asyncio.run(publisher.wait(TASK, poll_interval=2))
+
+    assert outcome.succeeded is True
+    assert (token_requests, polls) == (2, 1)
 
 
 @pytest.mark.parametrize("status", [408, 429])
@@ -461,7 +496,4 @@ def test_every_call_carries_the_pod_identity(monkeypatch):
     asyncio.run(_one_of_everything())
 
     assert len(fred.calls) == 4
-    assert all(
-        kwargs["headers"]["Authorization"] == "Bearer a-token"
-        for _, _, kwargs in fred.calls
-    )
+    assert isinstance(fred.auth, M2MBearerAuth)

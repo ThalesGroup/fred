@@ -25,15 +25,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import fred_core.security.oidc as oidc_module
 import httpx
 import pytest
 from conftest import (
     StaticChatModelFactory,
+    StaticWorkloadTokens,
     ToolFriendlyFakeChatModel,
+    install_delegation_runtime,
     migrate_test_config,
 )
 from fastapi.routing import APIRoute
@@ -44,10 +48,17 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.security.delegation import DelegationConfig as CoreDelegationConfig
+from fred_core.security.delegation import (
+    get_delegation_config,
+    initialize_delegation,
+    preserved_delegation,
+)
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
+    RebacDisabledResult,
     TeamPermission,
 )
 from fred_core.security.structure import KeycloakUser
@@ -57,6 +68,7 @@ from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
+from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
@@ -274,6 +286,9 @@ def _build_test_config(
     metrics_backend: str = "logging",
     kpi_process_metrics_interval_sec: int = 0,
     max_chat_input_chars: int = 5_000,
+    user_security_enabled: bool = False,
+    act_for_people: bool = False,
+    accept_delegated_calls: bool = False,
 ) -> AgentPodConfig:
     """
     Build an offline pod config for the authored-tool regression test.
@@ -310,11 +325,15 @@ def _build_test_config(
                     "client_id": "test-m2m",
                 },
                 "user": {
-                    "enabled": False,
+                    "enabled": user_security_enabled,
                     "realm_url": "http://localhost:8080/realms/fred",
                     "client_id": "test-user",
                 },
                 "authorized_origins": [],
+                "delegation": {
+                    "act_for_people": act_for_people,
+                    "accept_delegated_calls": accept_delegated_calls,
+                },
             },
             "ai": {
                 "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
@@ -380,6 +399,178 @@ def test_lifespan_identifies_this_pod_by_slug_in_logs_and_runtime_config(
         assert get_runtime_context().config.service_name == "test-pod"
 
     assert log_setup_calls == ["test-pod"]
+
+
+@pytest.fixture
+def _pod_inbound_security() -> Iterator[None]:
+    """Keycloak validation and grant acceptance are process-wide in the shared
+    library; restore both so a later test sees the offline defaults."""
+    keycloak_enabled = oidc_module.KEYCLOAK_ENABLED
+    acceptance = get_delegation_config()
+    yield
+    oidc_module.KEYCLOAK_ENABLED = keycloak_enabled
+    initialize_delegation(acceptance)
+    set_delegation_runtime(None)
+
+
+_ACCESS_KIND = "Bearer"
+
+
+def _secured_pod(
+    monkeypatch,
+    tmp_path,
+    *,
+    caller_client_id: str,
+    enforces_standing: bool = True,
+    standing_seed_ready: bool = True,
+    accept_delegated_calls: bool = True,
+    **token: object,
+):
+    """A pod whose door is the shared user dependency, with the token decoded
+    locally and grant acceptance switched on the way a receiver has it.
+
+    `accept_delegated_calls` off leaves a pod that only acts for people.
+    `token` overrides what the decoded workload token carries."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(
+        oidc_module,
+        "decode_jwt",
+        lambda bearer: KeycloakUser(
+            uid="workload-caller",
+            username="workload-caller",
+            roles=["service_agent"],
+            client_id=caller_client_id,
+        ).model_copy(update=token),
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "rebac_factory",
+        lambda *args, **kwargs: SimpleNamespace(
+            enforces_standing=enforces_standing,
+            enabled=True,
+            validate_standing_model=AsyncMock(),
+            is_standing_seed_ready=AsyncMock(return_value=standing_seed_ready),
+            require_user_standing=AsyncMock(),
+        ),
+    )
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(
+            tmp_path,
+            user_security_enabled=True,
+            act_for_people=True,
+            accept_delegated_calls=accept_delegated_calls,
+        ),
+    )
+    # Installed after construction, so a run that reached admission would leave
+    # a record to find.
+    delegation = install_delegation_runtime(StaticWorkloadTokens())
+    return app, delegation
+
+
+def test_a_role_holder_whose_token_is_not_addressed_to_delegation_is_refused(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    """The role alone cannot authorize delegation: the token must be addressed to it."""
+    app, delegation = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="caller-1",
+        token_issuer="http://localhost:8080/realms/fred",
+        token_audiences=frozenset({"another-receiver"}),
+        token_type=_ACCESS_KIND,
+        caller_roles=frozenset({"delegation_caller"}),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            params={"person": "alice", "run": "run-1", "agent": "rags.sample.echo"},
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-asserted",
+            },
+            headers={"Authorization": "Bearer workload-bearer"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "delegation_not_allowed"
+    assert len(delegation.records) == 0
+
+
+def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegation(
+    monkeypatch, tmp_path, _pod_inbound_security
+) -> None:
+    """The evaluator names no person: it runs on its own bearer, and a direct
+    target skips the person's standing and team checks, as with delegation off."""
+    app, delegation = _secured_pod(
+        monkeypatch, tmp_path, caller_client_id="caller-1", accept_delegated_calls=False
+    )
+
+    with TestClient(app) as client:
+        engine = get_runtime_context().config.rebac_engine
+        assert engine is not None
+        engine.require_user_standing = AsyncMock(side_effect=AssertionError)
+        engine.check_user_team_permission_or_raise = AsyncMock(
+            side_effect=AssertionError
+        )
+        engine.lookup_resources = AsyncMock(return_value=RebacDisabledResult())
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-service-caller",
+                "runtime_context": {"team_id": "team-1"},
+            },
+            headers={"Authorization": "Bearer workload-bearer"},
+        )
+        admitted = [
+            dict(event)
+            for event in get_pod_container_from_app(app).audit_events_buffer
+            if event["audit_event"] == "delegated_run_admitted"
+        ]
+
+    assert response.status_code == 200
+    assert admitted == []
+    assert len(delegation.records) == 0
+
+
+@pytest.mark.parametrize(
+    "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
+)
+def test_a_role_holder_without_a_person_cannot_execute_under_delegation(
+    monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
+) -> None:
+    """The delegation role names no one: without a grant it is refused, not run as itself."""
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="caller-1",
+        accept_delegated_calls=accept_delegated_calls,
+        roles=[],
+        caller_roles=frozenset({"delegation_caller"}),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-role-holder",
+            },
+            headers={"Authorization": "Bearer workload-bearer"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "delegated_person_required"
 
 
 def test_create_agent_app_lifespan_fails_when_sql_storage_is_unreachable(
@@ -4105,6 +4296,20 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
         assert calls == ["interrupt-a", "interrupt-b"]
 
 
+def _assert_hitl_already_resumed(message: str | None) -> None:
+    """The rejected duplicate reads as itself, and stays traceable to a log line.
+
+    Both halves matter: the sentence tells the user to stop retrying rather
+    than to open a ticket, and the reference is what support correlates — a
+    specific sentence does not exempt the turn from being traceable.
+    """
+
+    assert message is not None
+    sentence, _, reference = message.partition("Contact support with reference ")
+    assert sentence == "This HITL request is already being resumed. "
+    assert len(reference.rstrip(".")) == 32
+
+
 def test_resume_replay_after_success_does_not_execute_again(
     monkeypatch, tmp_path
 ) -> None:
@@ -4169,7 +4374,7 @@ def test_resume_replay_after_success_does_not_execute_again(
 
     assert replay.status_code == 200
     assert replay.json().get("kind") == "execution_error"
-    assert replay.json().get("message") == "This HITL request is already being resumed."
+    _assert_hitl_already_resumed(replay.json().get("message"))
     assert calls == [1]  # unchanged — no second execution
 
 
@@ -4679,9 +4884,7 @@ async def test_cancellation_after_start_leaves_the_claim_stuck_not_released(
 
     assert duplicate.status_code == 200
     assert duplicate.json().get("kind") == "execution_error"
-    assert (
-        duplicate.json().get("message") == "This HITL request is already being resumed."
-    )
+    _assert_hitl_already_resumed(duplicate.json().get("message"))
     assert calls == [1]  # the duplicate never reached the executor
 
     # The claim is still 'started', exactly as it was right after
@@ -4782,6 +4985,38 @@ def test_execute_rejects_checkpoint_id_and_interrupt_id_together(
                 "checkpoint_id": "cp-1",
                 "interrupt_id": "interrupt-a",
                 "resume_payload": {"choice_id": "proceed"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 422
+
+
+def test_execute_rejects_managed_request_without_team_before_resolution(
+    monkeypatch, tmp_path
+) -> None:
+    async def _unexpected_resolution(**kwargs):
+        raise AssertionError("invalid managed request reached instance resolution")
+
+    monkeypatch.setattr(
+        agent_app_module, "_resolve_agent_instance", _unexpected_resolution
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_instance_id": "instance-without-team",
+                "input": "hello",
                 "runtime_context": {"user_id": "alice"},
             },
         )
@@ -5855,12 +6090,9 @@ class _FakeRebacEngine:
         return None
 
 
-def _managed_request(team_id: str | None = "fredlab") -> RuntimeExecuteRequest:
+def _managed_request(team_id: str = "fredlab") -> RuntimeExecuteRequest:
     body: dict[str, object] = {"input": "hi", "agent_instance_id": "inst-1"}
-    ctx: dict[str, object] = {"user_id": "alice"}
-    if team_id is not None:
-        ctx["team_id"] = team_id
-    body["runtime_context"] = ctx
+    body["runtime_context"] = {"user_id": "alice", "team_id": team_id}
     return RuntimeExecuteRequest.model_validate(body)
 
 
@@ -5901,23 +6133,18 @@ async def test_authorize_allows_when_user_holds_team_relation(
 
 
 @pytest.mark.asyncio
-async def test_authorize_denies_with_403_when_openfga_refuses(
-    monkeypatch, minimal_config
-) -> None:
-    """An enabled engine that refuses maps to HTTP 403 and a denial audit event."""
+async def test_authorize_propagates_rebac_denial(monkeypatch, minimal_config) -> None:
+    """Preserve a typed refusal for the route handler."""
     engine = _FakeRebacEngine(enabled=True, deny=True)
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
-    with pytest.raises(agent_app_module.HTTPException) as exc:
+    with pytest.raises(AuthorizationError) as exc:
         await agent_app_module._authorize_execution_or_raise(
             _managed_request(), _ALICE, container
         )
 
-    assert exc.value.status_code == 403
-    with container._audit_events_lock:
-        events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "rebac_denied"
+    assert exc.value.action == TeamPermission.CAN_USE_TEAM_AGENTS.value
 
 
 @pytest.mark.asyncio
@@ -5949,24 +6176,6 @@ async def test_authorize_skips_when_engine_disabled(
         _managed_request(), _ALICE, container
     )
 
-    assert engine.calls == []
-
-
-@pytest.mark.asyncio
-async def test_authorize_denies_managed_without_team(
-    monkeypatch, minimal_config
-) -> None:
-    """Managed execution with ReBAC active but no team scope → 403 (F-D)."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
-    _wire_engine(monkeypatch, engine)
-    container = PodApplicationContext(minimal_config)
-
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id=None), _ALICE, container
-        )
-
-    assert exc.value.status_code == 403
     assert engine.calls == []
 
 
@@ -6033,24 +6242,92 @@ async def test_authorize_allows_service_agent_scoped_to_team(
     assert events[-1].get("team_id") == "fredlab"
 
 
+_DELEGATION_CLIENT = _WORKER.model_copy(
+    update={"client_id": "agents", "caller_roles": frozenset({"delegation_caller"})}
+)
+
+
 @pytest.mark.asyncio
-async def test_authorize_service_agent_still_requires_team(
+async def test_authorize_never_admits_a_delegation_client_as_a_service_identity(
     monkeypatch, minimal_config
 ) -> None:
-    """A service_agent without a team scope fails closed (403) — never global."""
-    engine = _FakeRebacEngine(enabled=True, deny=False)
+    """It holds the service role too; with delegation off it is still decided
+    by OpenFGA, and holding no relation it is refused."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
     _wire_engine(monkeypatch, engine)
+    monkeypatch.setattr(agent_app_module, "get_delegation_runtime", lambda: None)
     container = PodApplicationContext(minimal_config)
 
-    with pytest.raises(agent_app_module.HTTPException) as exc:
-        await agent_app_module._authorize_execution_or_raise(
-            _managed_request(team_id=None), _WORKER, container
+    with preserved_delegation():
+        initialize_delegation(CoreDelegationConfig())
+        with pytest.raises(AuthorizationError):
+            await agent_app_module._authorize_execution_or_raise(
+                _managed_request(), _DELEGATION_CLIENT, container
+            )
+
+    assert engine.calls == [
+        ("svc-worker", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("caller", "stamped"),
+    [(_WORKER, "true"), (_DELEGATION_CLIENT, None)],
+    ids=["service-identity", "delegation-client"],
+)
+async def test_only_a_service_identity_skips_the_per_tool_recheck(
+    monkeypatch, minimal_config, caller: KeycloakUser, stamped: str | None
+) -> None:
+    """The stamp mirrors the admission: with delegation off the delegation
+    client's tool calls are still re-authorized."""
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    resolved: list[dict] = []
+
+    async def _fake_resolve(**kwargs):
+        resolved.append(kwargs)
+        return SimpleNamespace(
+            team_id="fredlab", definition=None, agent_instance_name=None
         )
 
-    assert exc.value.status_code == 403
-    assert engine.calls == []
+    monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
+    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
+    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
+    monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
+    monkeypatch.setattr(
+        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+    )
+    monkeypatch.setattr(agent_app_module, "get_delegation_runtime", lambda: None)
+    request = RuntimeExecuteRequest.model_validate(
+        {
+            "input": "hi",
+            "agent_instance_id": "inst-1",
+            "runtime_context": {"team_id": "fredlab"},
+        }
+    )
+    container = PodApplicationContext(minimal_config)
+    container._kpi_writer = NoOpKPIWriter()
+    container.initialize_control_plane_client()
 
-    assert engine.calls == []
+    with preserved_delegation():
+        initialize_delegation(CoreDelegationConfig())
+        await agent_app_module._authorize_and_resolve(
+            request,
+            authenticated_user=caller,
+            container=container,
+            registry={},
+            access_token="header-jwt",
+        )
+
+    assert resolved[0]["request"].context.get("is_service_agent") == stamped
 
 
 _BOB = KeycloakUser(uid="bob", username="bob", roles=[], email=None)
@@ -6100,19 +6377,14 @@ async def test_authorize_denies_other_users_personal_space_via_rebac_check(
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
-    with pytest.raises(agent_app_module.HTTPException) as exc:
+    with pytest.raises(AuthorizationError):
         await agent_app_module._authorize_execution_or_raise(
             _managed_request(team_id=personal_team_id(_BOB.uid)), _ALICE, container
         )
 
-    assert exc.value.status_code == 403
     assert engine.calls == [
         ("alice", TeamPermission.CAN_USE_TEAM_AGENTS, personal_team_id(_BOB.uid))
     ]
-    with container._audit_events_lock:
-        events = list(container.audit_events_buffer)
-    assert events[-1]["audit_event"] == "rebac_denied"
-    assert events[-1].get("user_id") == "alice"
 
 
 @pytest.mark.asyncio
@@ -6126,12 +6398,11 @@ async def test_authorize_denies_bare_personal_alias(
     _wire_engine(monkeypatch, engine)
     container = PodApplicationContext(minimal_config)
 
-    with pytest.raises(agent_app_module.HTTPException) as exc:
+    with pytest.raises(AuthorizationError):
         await agent_app_module._authorize_execution_or_raise(
             _managed_request(team_id="personal"), _ALICE, container
         )
 
-    assert exc.value.status_code == 403
     assert engine.calls == [("alice", TeamPermission.CAN_USE_TEAM_AGENTS, "personal")]
 
 
@@ -6154,17 +6425,6 @@ class _FakeHistoryStore:
         return self._owner is not None and user_id == self._owner
 
 
-def _session_request(session_id: str = "s-1") -> RuntimeExecuteRequest:
-    return RuntimeExecuteRequest.model_validate(
-        {
-            "input": "hi",
-            "agent_instance_id": "inst-1",
-            "session_id": session_id,
-            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-        }
-    )
-
-
 def _wire_history(monkeypatch, store: object) -> None:
     monkeypatch.setattr(
         agent_app_module,
@@ -6183,7 +6443,7 @@ async def test_session_ownership_denies_other_users_session(
 
     with pytest.raises(agent_app_module.HTTPException) as exc:
         await agent_app_module._enforce_session_ownership(
-            _session_request(), _ALICE, container
+            "s-1", _ALICE, container, agent_instance_id="inst-1"
         )
 
     assert exc.value.status_code == 403
@@ -6196,7 +6456,7 @@ async def test_session_ownership_allows_owner(monkeypatch, minimal_config) -> No
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), _ALICE, container
+        "s-1", _ALICE, container, agent_instance_id="inst-1"
     )
 
 
@@ -6209,7 +6469,7 @@ async def test_session_ownership_allows_new_session(
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), _ALICE, container
+        "s-1", _ALICE, container, agent_instance_id="inst-1"
     )
 
 
@@ -6222,7 +6482,7 @@ async def test_session_ownership_skipped_when_security_disabled(
     container = PodApplicationContext(minimal_config)
 
     await agent_app_module._enforce_session_ownership(
-        _session_request(), None, container
+        "s-1", None, container, agent_instance_id="inst-1"
     )
 
 
@@ -6500,3 +6760,24 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 
     assert len(resolve_calls) == 1
     assert resolve_calls[0]["request_id"] == trace_id
+
+
+@pytest.mark.parametrize(
+    "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
+)
+def test_delegation_refuses_to_start_before_standing_is_ready(
+    monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
+) -> None:
+    """Before default standing is granted the store answers "not active" for
+    everyone, which would refuse every person rather than enforce anything."""
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="caller-1",
+        standing_seed_ready=False,
+        accept_delegated_calls=accept_delegated_calls,
+    )
+
+    with pytest.raises(ValueError, match="not ready"):
+        with TestClient(app):
+            pass

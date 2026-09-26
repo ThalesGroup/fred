@@ -44,7 +44,14 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Mapping,
+    Sequence,
+)
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -52,10 +59,17 @@ from typing import Any, cast
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
+from fred_core.common.fastapi_handlers import (
+    DENIAL_CAUSE_HEADER,
+    STANDING_UNAVAILABLE_CAUSE,
+)
+from fred_core.common.fastapi_handlers import (
+    register_exception_handlers as register_authorization_handlers,
+)
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
@@ -64,7 +78,8 @@ from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
-from fred_core.security.models import AuthorizationError
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
+from fred_core.security.delegation import AssertedUser, holds_caller_role
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -109,10 +124,12 @@ from fred_sdk.contracts.models import (
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
+    AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
     ExecutionConfig,
+    FinalRuntimeEvent,
     HistoryStorePort,
     RuntimeErrorEvent,
     RuntimeEvent,
@@ -124,8 +141,11 @@ from fred_sdk.support.authored_toolsets import (
     build_authored_tool_handlers,
 )
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
+from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
     CapabilityAgentBlock,
@@ -143,14 +163,31 @@ from fred_runtime.capabilities.errors import (
     UnknownCapabilityError,
 )
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
+    OutboundCredentialProvider,
+    PersonCredentialProvider,
+    RunRecord,
+    build_delegation_runtime,
+    delegation_enabled,
+    get_delegation_runtime,
+    set_delegation_runtime,
+    static_person_provider,
+)
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,
     build_conversation_filesystem,
 )
+from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
+from fred_runtime.runtime_support.authority import (
+    AuthorityLostError,
+    DelegationUnavailableError,
+    RunStopError,
+)
 from fred_runtime.runtime_support.checkpoints import (
     checkpoint_namespace,
     load_checkpoint,
@@ -184,7 +221,17 @@ from ..runtime_context import (
     set_runtime_context,
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
-from ..runtime_support import aclose_token_refresh_client
+from ..runtime_support import (
+    RunScope,
+    aclose_token_refresh_client,
+    register_run_child,
+    terminal_stop_event,
+)
+from ..runtime_support.run_scope import (
+    complete_cleanup,
+    reset_owner_execution,
+    set_owner_execution,
+)
 from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
@@ -213,6 +260,12 @@ def _emit_audit_event(
     so every audit-worthy event across the runtime (this one, and tool-call
     invocations in ContextAwareTool) lands identically shaped.
     """
+    delegation = get_delegation_runtime()
+    if delegation is not None and delegation.enabled:
+        fields = {
+            "outcome": "rejected" if level in {"warning", "error"} else "accepted",
+            "reason": name,
+        }
     event = cast(
         AuditEventRecord,
         {
@@ -474,10 +527,16 @@ class _MediaClientAgentAdapter:
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: _PodAgentSettings
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: _PodAgentSettings,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self.runtime_context = binding.runtime_context
         self.agent_settings: AgentSettingsLike = settings
+        # The run's provider, read by the client at call time.
+        self.credential_provider = credentials
 
     async def refresh_user_access_token(self) -> str:
         """
@@ -567,7 +626,12 @@ def _build_agent_settings(
     )
 
 
-def _build_media_fetcher(*, binding: BoundRuntimeContext, settings: _PodAgentSettings):
+def _build_media_fetcher(
+    *,
+    binding: BoundRuntimeContext,
+    settings: _PodAgentSettings,
+    credentials: OutboundCredentialProvider | None = None,
+):
     """
     Build the media-fetcher port exposed to Python-authored tool handlers.
 
@@ -583,7 +647,9 @@ def _build_media_fetcher(*, binding: BoundRuntimeContext, settings: _PodAgentSet
     - `media_fetcher = _build_media_fetcher(binding=binding, settings=settings)`
     """
 
-    adapter = _MediaClientAgentAdapter(binding=binding, settings=settings)
+    adapter = _MediaClientAgentAdapter(
+        binding=binding, settings=settings, credentials=credentials
+    )
     client: KfMarkdownMediaClient | None = None
 
     async def _fetch_media(document_uid: str, file_name: str) -> bytes:
@@ -610,6 +676,19 @@ def _build_media_fetcher(*, binding: BoundRuntimeContext, settings: _PodAgentSet
     return _fetch_media
 
 
+# The reason a child's terminal event carries when the platform stopped it. The
+# parent must end on that same reason, so each one maps back to the error the
+# engines already turn into a terminal event.
+_CHILD_STOP_ERRORS: dict[str, type[RunStopError]] = {
+    error.reason: error
+    for error in (
+        AuthorityLostError,
+        DelegationUnavailableError,
+        RunStopError,
+    )
+}
+
+
 class LocalRegistryAgentInvoker(AgentInvokerPort):
     """
     In-process AgentInvokerPort for pod-local agent execution.
@@ -633,10 +712,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         *,
         platform_chat_model_binding: ModelBinding | None = None,
         platform_prompt: str | None = None,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._registry = registry
         self._access_token = access_token
         self._capability_registry = capability_registry
+        # The parent's provider object, not a credential read off it: a child
+        # asks it per call, so it observes whatever the run's own provider does.
+        self._credentials = credentials
         # TRUSTED — the caller's own `BoundRuntimeContext.platform_chat_model_binding`
         # (see `_build_runtime_services`), carried privately on this invoker so a
         # nested `context.invoke_agent(...)` child inherits the same
@@ -688,6 +771,48 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             invocation_turns=request.prior_turns,
         )
 
+        # Each child names itself on the run it shares with its parent, so a
+        # receiver attributes its calls to this agent and not to the caller.
+        child_credentials = (
+            self._credentials.for_agent(request.agent_id)
+            if self._credentials is not None
+            else None
+        )
+        return await self._start_child(
+            definition, execute_request, request, child_credentials
+        )
+
+    async def _start_child(
+        self,
+        definition: ReActAgentDefinition | GraphAgentDefinition,
+        execute_request: _AgentExecuteRequest,
+        request: AgentInvocationRequest,
+        credentials: OutboundCredentialProvider | None,
+    ) -> AgentInvocationResult:
+        """Run one child as a task of the parent's run rather than inline: a run
+        the platform ends must be able to cancel work already in flight, and
+        `cancel_children()` can only reach a task."""
+
+        child = asyncio.create_task(
+            self._consume_child(definition, execute_request, request, credentials)
+        )
+        register_run_child(cast(asyncio.Task[object], child))
+        try:
+            return await child
+        except asyncio.CancelledError:
+            if not child.done() and not child.cancelling():
+                child.cancel()
+            raise
+
+    async def _consume_child(
+        self,
+        definition: ReActAgentDefinition | GraphAgentDefinition,
+        execute_request: _AgentExecuteRequest,
+        request: AgentInvocationRequest,
+        credentials: OutboundCredentialProvider | None,
+    ) -> AgentInvocationResult:
+        """Run one child turn and reduce its events to the caller's result."""
+
         final_result: AgentInvocationResult | None = None
         content_parts: list[str] = []
         async for payload in _iterate_runtime_event_payloads(
@@ -697,6 +822,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             team_id=request.context.team_id,
             registry=self._registry,
             capability_registry=self._capability_registry,
+            credential_provider=credentials,
             # Private trusted propagation (see __init__): the child inherits
             # the parent turn's platform chat binding, never the request's
             # own `context` — that dict has no field for it at all.
@@ -713,6 +839,12 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 )
                 continue
             if kind == "execution_error":
+                stop_error = _CHILD_STOP_ERRORS.get(str(payload.get("reason") or ""))
+                if stop_error is not None:
+                    # The platform stopped the child, so the parent ends on the
+                    # same reason instead of handing the child's message to its
+                    # model as if it were an answer.
+                    raise stop_error()
                 final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
                     content=str(payload.get("message") or ""),
@@ -738,6 +870,10 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         )
 
 
+async def _current_person_token(context: RuntimeContext) -> str | None:
+    return context.access_token
+
+
 def _build_runtime_services(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     binding: BoundRuntimeContext,
@@ -746,6 +882,7 @@ def _build_runtime_services(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
     capability_registry: CapabilityRegistry | None = None,
+    credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
 ) -> RuntimeServices:
     """
@@ -779,6 +916,7 @@ def _build_runtime_services(
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
     # per-turn binding as the builtin invoker but exposes ONLY the parameterized
@@ -787,28 +925,33 @@ def _build_runtime_services(
     document_search = DocumentSearchAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     # Companion document-access ports: tree listing + on-demand summarization,
     # same private-binding doctrine as the search adapter.
     document_tree = DocumentTreeAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     document_summarize = DocumentSummarizeAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     # Paginated full-markdown read (DOCREAD-01): powers document_verbatim,
     # same private-binding doctrine.
     document_markdown = DocumentMarkdownAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     # Server-side exhaustive extraction (DOCREAD-01 Phase 2): powers
     # document_extract's single-call path.
     document_extraction = DocumentExtractionAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     # Targeted similarity / comparison search: powers document_similarity. Its
     # own adapter rather than a second method on the search one, because its
@@ -816,14 +959,17 @@ def _build_runtime_services(
     document_similarity = DocumentSimilarityAdapter(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     workspace_fs = FredWorkspaceFs(
         binding=binding,
         settings=settings,
+        credentials=credential_provider,
     )
     handlers = (
         build_authored_tool_handlers(
@@ -835,7 +981,11 @@ def _build_runtime_services(
                 chat_model_factory=runtime_config.chat_model_factory,
                 workspace_fs=workspace_fs,
                 fallback_tool_invoker=base_tool_invoker,
-                media_fetcher=_build_media_fetcher(binding=binding, settings=settings),
+                media_fetcher=_build_media_fetcher(
+                    binding=binding,
+                    settings=settings,
+                    credentials=credential_provider,
+                ),
             ),
         )
         if isinstance(definition, ReActAgentDefinition)
@@ -854,6 +1004,10 @@ def _build_runtime_services(
             registry=registry,
             access_token=access_token,
             capability_registry=capability_registry,
+            credentials=credential_provider
+            or PersonCredentialProvider(
+                lambda: _current_person_token(binding.runtime_context)
+            ),
             # Private trusted propagation (LocalRegistryAgentInvoker
             # docstring): carries THIS turn's trusted platform chat binding
             # onto the invoker so a nested context.invoke_agent(...) child
@@ -880,9 +1034,15 @@ def _build_runtime_services(
         # #1903 capability ports: per-instance config assets (template fetch at
         # tool time), image-document raw fetch, and folder listing. Same
         # private-binding doctrine as document_search.
-        agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
-        document_content=DocumentContentAdapter(binding=binding, settings=settings),
-        document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
+        agent_assets=AgentConfigAssetsAdapter(
+            binding=binding, settings=settings, credentials=credential_provider
+        ),
+        document_content=DocumentContentAdapter(
+            binding=binding, settings=settings, credentials=credential_provider
+        ),
+        document_folders=DocumentFolderAdapter(
+            binding=binding, settings=settings, credentials=credential_provider
+        ),
         document_tree=document_tree,
         document_summarize=document_summarize,
         document_markdown=document_markdown,
@@ -899,6 +1059,7 @@ def _build_runtime_services(
             binding=binding,
             control_plane_url=runtime_config.control_plane_url,
             http_client=runtime_config.control_plane_http_client,
+            credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
     )
@@ -1361,6 +1522,10 @@ class _ResolvedExecutionTarget:
     # two fields above and for the same reason. `None` for direct (non-managed)
     # template execution, where the pod default applies instead.
     platform_prompt: str | None = None
+    # What every outbound call of this run asks for its credentials. Built at
+    # admission from the verified token, so nothing later in the turn can
+    # influence who the run acts for.
+    credential_provider: OutboundCredentialProvider | None = None
 
 
 def _active_mcp_server_refs(
@@ -1487,6 +1652,7 @@ async def _resolve_agent_instance(
     http_client: httpx.AsyncClient,
     team_id: str | None = None,
     request_id: str | None = None,
+    credentials: OutboundCredentialProvider | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -1534,6 +1700,7 @@ async def _resolve_agent_instance(
         return _ResolvedExecutionTarget(
             definition=definition,
             effective_agent_id=definition.agent_id,
+            team_id=team_id,
             tuning=_definition_to_agent_tuning(definition),
         )
 
@@ -1561,9 +1728,11 @@ async def _resolve_agent_instance(
         f"{control_plane_url.rstrip('/')}/teams/{team_id}/agent-instances/"
         f"{request.agent_instance_id}/runtime"
     )
+    provider = credentials or static_person_provider(access_token)
+    call_credentials = await provider.credentials()
     headers: dict[str, str] = {}
-    if access_token:
-        headers["Authorization"] = f"Bearer {access_token}"
+    if call_credentials.authorization:
+        headers["Authorization"] = call_credentials.authorization
     if request_id:
         # Correlates this pod-side call with the control-plane request it
         # triggers — both sides stamp the same id as `trace.trace_id` on their
@@ -1571,7 +1740,21 @@ async def _resolve_agent_instance(
         # (TURN-01 evidence gap: no way to join a turn to its binding call
         # besides timestamps).
         headers["X-Request-Id"] = request_id
-    response = await http_client.get(url, headers=headers or None)
+    request_kwargs: dict[str, Any] = {"headers": headers or None}
+    if call_credentials.parameters:
+        request_kwargs["params"] = dict(call_credentials.parameters)
+    if isinstance(provider, DelegatedCredentialProvider):
+        request_kwargs["auth"] = M2MBearerAuth(provider)
+    response = await http_client.get(url, **request_kwargs)
+    if (
+        response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        and response.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Account standing could not be checked. Try again shortly.",
+            headers={DENIAL_CAUSE_HEADER: STANDING_UNAVAILABLE_CAUSE},
+        )
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=404, detail=response.text or "Unknown agent instance."
@@ -1610,7 +1793,9 @@ async def _resolve_agent_instance(
 
 
 def _make_user_dependency(
-    get_current_user_fn: Callable[..., KeycloakUser | Awaitable[KeycloakUser]],
+    get_current_user_fn: Callable[
+        ..., KeycloakUser | AssertedUser | Awaitable[KeycloakUser | AssertedUser]
+    ],
     security_enabled: bool,
 ) -> Callable[..., KeycloakUser | None]:
     """
@@ -1623,13 +1808,21 @@ def _make_user_dependency(
 
     Returns a dependency that:
     - injects KeycloakUser when security_enabled=True
+    - refuses an asserted person: a run is admitted from the person's own
+      verified credential and from nothing else, so a workload speaking for
+      someone is turned away at the door rather than deeper in
     - returns None when security_enabled=False (local dev mode)
     """
     if security_enabled:
 
         def _dep_with_auth(
-            user: KeycloakUser = Depends(get_current_user_fn),
+            user: KeycloakUser | AssertedUser = Depends(get_current_user_fn),
         ) -> KeycloakUser | None:
+            if isinstance(user, AssertedUser):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="requires_own_credential",
+                )
             return user
 
         return _dep_with_auth
@@ -1641,9 +1834,35 @@ def _make_user_dependency(
         return _dep_noop
 
 
+def _declare_grant_parameters(
+    person: str | None = Query(default=None, min_length=1),
+    run: str | None = Query(default=None, min_length=1),
+    agent: str | None = Query(default=None, min_length=1),
+) -> None:
+    """Expose transport fields; the authenticated dependency interprets them."""
+
+
+def _make_execution_dependency(
+    get_current_user_fn: Callable[..., Any], security_enabled: bool
+) -> Callable[..., KeycloakUser | AssertedUser | None]:
+    if security_enabled:
+
+        def _subject(
+            user: KeycloakUser | AssertedUser = Depends(get_current_user_fn),
+        ) -> KeycloakUser | AssertedUser:
+            return user
+
+        return _subject
+
+    def _no_subject() -> None:
+        return None
+
+    return _no_subject
+
+
 async def _authorize_execution_or_raise(
     request: RuntimeExecuteRequest,
-    authenticated_user: KeycloakUser | None,
+    authenticated_user: KeycloakUser | AssertedUser | None,
     container: PodApplicationContext,
 ) -> None:
     """
@@ -1693,6 +1912,10 @@ async def _authorize_execution_or_raise(
         # Security disabled (dev mode) — no identity to authorize.
         return
     profile = getattr(get_runtime_context().config, "security_profile", None)
+    delegation = get_delegation_runtime()
+    delegated = delegation is not None and delegation.enabled
+    if delegated:
+        _refuse_a_workload_without_a_person(authenticated_user)
 
     # Direct template execution (agent_id): no team scope, no managed instance.
     if request.agent_id is not None:
@@ -1711,7 +1934,18 @@ async def _authorize_execution_or_raise(
                     "security profile; use a managed agent instance"
                 ),
             )
-        # dev / non-c3: identity-only (no team to authorize against).
+        # A service identity runs as itself, identity-only, as with delegation off.
+        if delegated and not is_service_agent(authenticated_user):
+            rebac = get_runtime_context().config.rebac_engine
+            if rebac is None or not rebac.enabled:
+                raise HTTPException(status_code=503, detail="standing_unavailable")
+            await rebac.require_user_standing(authenticated_user.uid)
+            if request.effective_team_id():
+                await rebac.check_user_team_permission_or_raise(
+                    authenticated_user,
+                    TeamPermission.CAN_USE_TEAM_AGENTS,
+                    request.effective_team_id(),
+                )
         return
 
     # Managed execution (agent_instance_id).
@@ -1736,7 +1970,11 @@ async def _authorize_execution_or_raise(
                 "(runtime_context.team_id)"
             ),
         )
-    if is_service_agent(authenticated_user):
+    # A delegation client holds the service role too; whatever the switches, it
+    # is authorized by the ReBAC check below like anyone else.
+    if is_service_agent(authenticated_user) and not holds_caller_role(
+        authenticated_user
+    ):
         # Solution A (RFC EVAL-AUTH): a service identity (the evaluation worker) is
         # recognized for execution, scoped to the request team_id, without any stored
         # OpenFGA relation. Legitimacy is anchored upstream at campaign creation. The
@@ -1758,27 +1996,9 @@ async def _authorize_execution_or_raise(
     # already authorizes the owner and denies everyone else — no special-
     # casing needed here (the bare "personal" alias also denies normally,
     # since no tuple is ever provisioned for that literal string).
-    try:
-        await rebac.check_user_team_permission_or_raise(
-            authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
-        )
-    except AuthorizationError as exc:
-        _emit_audit_event(
-            container,
-            "warning",
-            "rebac_denied",
-            user_id=authenticated_user.uid,
-            team_id=team_id,
-            agent_instance_id=request.agent_instance_id,
-            reason=str(exc),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"user {authenticated_user.uid!r} is not authorized for "
-                f"team {team_id!r}"
-            ),
-        ) from exc
+    await rebac.check_user_team_permission_or_raise(
+        authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
+    )
     _emit_audit_event(
         container,
         "info",
@@ -1790,23 +2010,18 @@ async def _authorize_execution_or_raise(
 
 
 async def _enforce_session_ownership(
-    request: RuntimeExecuteRequest,
-    authenticated_user: KeycloakUser | None,
+    session_id: str | None,
+    authenticated_user: KeycloakUser | AssertedUser | None,
     container: PodApplicationContext,
+    *,
+    agent_instance_id: str | None,
 ) -> None:
-    """
-    Private-per-owner session policy (RUNTIME-07 rev. 2, finding F-C).
+    """Reject access to another user's existing session before admitting a run.
 
-    Conversations are private to their owner. When security is enabled and the
-    request targets an EXISTING session, the authenticated user must own it. A
-    brand-new session is allowed (the caller becomes its owner). This blocks a
-    same-team user from continuing or resuming another user's private session by
-    guessing its `session_id` / `checkpoint_id` — the team OpenFGA check alone
-    would not catch an intra-team cross-user access.
+    Both native and OpenAI-compatible routes use this private-per-owner gate.
     """
     if authenticated_user is None:
         return  # security disabled (dev) — no identity to enforce
-    session_id = request.effective_session_id()
     if not session_id:
         return
     history_store = get_runtime_context().config.history_store
@@ -1822,7 +2037,7 @@ async def _enforce_session_ownership(
         "session_owner_mismatch",
         user_id=authenticated_user.uid,
         session_id=session_id,
-        agent_instance_id=request.agent_instance_id,
+        agent_instance_id=agent_instance_id,
     )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -1855,10 +2070,182 @@ async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
     )
 
 
+def _refuse_a_workload_without_a_person(
+    authenticated_user: KeycloakUser | AssertedUser | None,
+) -> None:
+    """Under delegation, a delegation caller that names no person must not run as itself.
+
+    A service identity without the caller role is not a delegation caller: it
+    runs as itself, with its own bearer, exactly as with delegation off.
+    """
+    if authenticated_user is not None and holds_caller_role(authenticated_user):
+        raise HTTPException(status_code=403, detail="delegated_person_required")
+
+
+def _admit_run_credentials(
+    container: PodApplicationContext,
+    authenticated_user: KeycloakUser | AssertedUser | None,
+    *,
+    agent_id: str | None,
+    agent_instance_id: str | None,
+    team_id: str | None,
+) -> OutboundCredentialProvider | None:
+    """Decide, once per run, what its outbound calls will present.
+
+    act_for_people off, nothing: every client keeps reading the person's token live
+    off the context it is bound to, refresh and all. On, the run record is written
+    here from the verified token — the only place the person is named for the
+    rest of the run. Shared by every surface that admits a run.
+    """
+    delegation = get_delegation_runtime()
+    if delegation is None or not delegation.enabled:
+        return None
+    # Every admitting surface, the OpenAI-compatible one included, refuses it here.
+    _refuse_a_workload_without_a_person(authenticated_user)
+    if authenticated_user is not None and is_service_agent(authenticated_user):
+        return None  # its own bearer carries the run; no person to record
+
+    try:
+        delegation.ensure_usable()
+    except DelegationUnavailableError as exc:
+        _emit_audit_event(
+            container,
+            "warning",
+            "delegation_unavailable",
+            outcome="rejected",
+            reason="delegation_unavailable",
+        )
+        # Fail closed: no fallback to the person's bearer, no call made. The
+        # run-stop sentence says nothing an operator can fix, so the refusal
+        # reports the configuration fault the error carries instead.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=getattr(exc, "detail", None) or str(exc),
+        ) from exc
+
+    if authenticated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Delegation requires an authenticated caller.",
+        )
+
+    if isinstance(authenticated_user, AssertedUser) and authenticated_user.agent_id != (
+        agent_instance_id or agent_id
+    ):
+        raise HTTPException(status_code=403, detail="delegation_target_mismatch")
+    record = delegation.records.admit(
+        RunRecord(
+            run_id=(
+                authenticated_user.run_id
+                if isinstance(authenticated_user, AssertedUser)
+                else str(uuid4())
+            ),
+            person_id=authenticated_user.uid,
+            agent_id=(agent_instance_id or agent_id or "unknown_agent"),
+        )
+    )
+    # Both halves of what a delegated call presents — the program that speaks and
+    # the person it speaks for — and neither of the credentials behind them.
+    _emit_audit_event(
+        container,
+        "info",
+        "delegated_run_admitted",
+        outcome="accepted",
+        reason="delegated_run_admitted",
+    )
+    return delegation.provider_for(run_id=record.run_id, agent_id=record.agent_id)
+
+
+def _discard_run_record(credentials: OutboundCredentialProvider | None) -> None:
+    """Release the record of a run that is over, or that never started.
+
+    A person is named for exactly as long as a run needs them: the record goes
+    when the run does, whether it ended or was refused on its way out of
+    admission.
+    """
+    delegation = get_delegation_runtime()
+    run_id = getattr(credentials, "run_id", None)
+    if delegation is not None and isinstance(run_id, str):
+        delegation.records.discard(run_id)
+
+
+def _mark_run_terminal(credentials: OutboundCredentialProvider | None) -> None:
+    """Refuse a run that is ending any further credential, before it unwinds."""
+    delegation = get_delegation_runtime()
+    run_id = getattr(credentials, "run_id", None)
+    if delegation is not None and isinstance(run_id, str):
+        delegation.records.mark_terminal(run_id)
+
+
+def _stream_finisher(
+    stream: AsyncGenerator[str, None],
+    credentials: OutboundCredentialProvider | None,
+) -> BackgroundTask:
+    """End a streamed run when its response ends, however the response ended.
+
+    It runs after the response's own task group, so it covers a stream abandoned
+    at a `yield` in `send` and one that never started. Each step is idempotent, and
+    the record is marked and released synchronously, even on a cancelled close.
+    """
+
+    async def finish() -> None:
+        _mark_run_terminal(credentials)
+        try:
+            # Closing the stream closes the run: its children are cancelled
+            # first, then its own cleanup runs.
+            await complete_cleanup(stream.aclose())
+        finally:
+            _discard_run_record(credentials)
+
+    return BackgroundTask(finish)
+
+
+class _RunStreamingResponse(StreamingResponse):
+    """Runs its `background` however the response ends. Starlette skips it when
+    the response raises or is cancelled, and a run must not outlive its response."""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        finish, self.background = self.background, None
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            if finish is not None:
+                await complete_cleanup(finish())
+
+
+def _admission_credentials(
+    request: RuntimeExecuteRequest,
+    authenticated_user: KeycloakUser | AssertedUser | None,
+    container: PodApplicationContext,
+) -> OutboundCredentialProvider | None:
+    """Admit one execute/stream/evaluate run.
+
+    Under delegation the person's credential is dropped from the request context
+    the moment the record exists: it is spent, and never forwarded again.
+    """
+    credentials = _admit_run_credentials(
+        container,
+        authenticated_user,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+        team_id=request.effective_team_id(),
+    )
+    if credentials is not None and credentials.delegated:
+        base_ctx = request.runtime_context or RuntimeContext()
+        request.runtime_context = base_ctx.model_copy(
+            update={
+                "access_token": None,
+                "refresh_token": None,  # nosec B105
+                "access_token_expires_at": None,  # nosec B105
+            }
+        )
+    return credentials
+
+
 async def _authorize_and_resolve(
     request: RuntimeExecuteRequest,
     *,
-    authenticated_user: KeycloakUser | None,
+    authenticated_user: KeycloakUser | AssertedUser | None,
     container: PodApplicationContext,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
@@ -1894,37 +2281,68 @@ async def _authorize_and_resolve(
     previously_pending_occurrence_ids = await _validate_session_checkpoint_access(
         request
     )
-    await _enforce_session_ownership(request, authenticated_user, container)
+    await _enforce_session_ownership(
+        request.effective_session_id(),
+        authenticated_user,
+        container,
+        agent_instance_id=request.agent_instance_id,
+    )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
-    internal_req = _to_internal_request(request)
-    internal_req.previously_pending_occurrence_ids = previously_pending_occurrence_ids
-    # Stamp the trusted service-agent verdict (never the caller-supplied
-    # context) so per-tool-call re-authorization can mirror the bypass
-    # `_authorize_execution_or_raise` already granted above (RFC EVAL-AUTH,
-    # Solution A) instead of re-running a ReBAC check this identity was
-    # never meant to satisfy. Overwritten unconditionally, both ways, so a
-    # caller can't spoof it via a body-supplied `context.is_service_agent`.
-    ctx = dict(internal_req.context or {})
-    if authenticated_user is not None and is_service_agent(authenticated_user):
-        ctx["is_service_agent"] = "true"
-    else:
-        ctx.pop("is_service_agent", None)
-    internal_req.context = ctx
-    binding_request_id = str(uuid4())
-    async with runtime_stage_timer(
-        container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
-    ):
-        target = await _resolve_agent_instance(
-            request=internal_req,
-            registry=registry,
-            access_token=access_token,
-            control_plane_url=get_runtime_context().config.control_plane_url,
-            http_client=container.get_control_plane_http_client(),
-            team_id=request.effective_team_id(),
-            request_id=binding_request_id,
+    # After authorization, before the context is copied into the internal
+    # request: the record is written only for a run this pod accepted, and the
+    # copy below must not carry a token this run may no longer use.
+    try:
+        credentials = _admission_credentials(request, authenticated_user, container)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="run_already_admitted") from None
+    try:
+        internal_req = _to_internal_request(request)
+        internal_req.previously_pending_occurrence_ids = (
+            previously_pending_occurrence_ids
         )
-    _validate_resolved_team(request, target.team_id, container)
+        # Stamp the trusted service-agent verdict (never the caller-supplied
+        # context) so per-tool-call re-authorization can mirror the bypass
+        # `_authorize_execution_or_raise` already granted above (RFC EVAL-AUTH,
+        # Solution A) instead of re-running a ReBAC check this identity was
+        # never meant to satisfy. Overwritten unconditionally, both ways, so a
+        # caller can't spoof it via a body-supplied `context.is_service_agent`.
+        ctx = dict(internal_req.context or {})
+        if (
+            authenticated_user is not None
+            and is_service_agent(authenticated_user)
+            and not holds_caller_role(authenticated_user)
+        ):
+            ctx["is_service_agent"] = "true"
+        else:
+            ctx.pop("is_service_agent", None)
+        internal_req.context = ctx
+        binding_request_id = str(uuid4())
+        async with runtime_stage_timer(
+            container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
+        ):
+            target = await _resolve_agent_instance(
+                request=internal_req,
+                registry=registry,
+                access_token=access_token,
+                control_plane_url=get_runtime_context().config.control_plane_url,
+                http_client=container.get_control_plane_http_client(),
+                team_id=request.effective_team_id(),
+                request_id=binding_request_id,
+                credentials=credentials or static_person_provider(access_token),
+            )
+        _validate_resolved_team(request, target.team_id, container)
+    except BaseException as exc:
+        # Nothing past admission got as far as starting the run, so the record
+        # it wrote has no owner left to release it.
+        _discard_run_record(credentials)
+        if isinstance(exc, RunStopError):
+            raise HTTPException(
+                status_code=403 if isinstance(exc, AuthorityLostError) else 503,
+                detail=exc.reason,
+            ) from None
+        raise
+    target.credential_provider = credentials
     return internal_req, target
 
 
@@ -2354,10 +2772,13 @@ async def _write_turn_history(
     try:
         base_rank: int = await history_store.next_rank(session_id)
     except Exception:
-        logger.exception(
-            "[fred-runtime][history] Failed to query next_rank session_id=%s",
-            session_id,
-        )
+        if delegation_enabled():
+            logger.error("event=turn_history outcome=failed reason=rank_query_failed")
+        else:
+            logger.exception(
+                "[fred-runtime][history] Failed to query next_rank session_id=%s",
+                session_id,
+            )
         return
 
     exchange_id = exchange_id or str(uuid4())
@@ -2665,10 +3086,13 @@ async def _write_turn_history(
             agent_instance_id=agent_instance_id,
         )
     except Exception:
-        logger.exception(
-            "[fred-runtime][history] Failed to write turn history session_id=%s",
-            session_id,
-        )
+        if delegation_enabled():
+            logger.error("event=turn_history outcome=failed reason=write_failed")
+        else:
+            logger.exception(
+                "[fred-runtime][history] Failed to write turn history session_id=%s",
+                session_id,
+            )
 
 
 def _sse(payload: str) -> str:
@@ -2899,7 +3323,10 @@ def _emit_turn_completed(
         with container._kpi_turns_lock:
             container.kpi_turns_buffer.append(record)
     except Exception:
-        logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
+        if delegation_enabled():
+            logger.error("event=turn_kpi outcome=failed reason=emit_failed")
+        else:
+            logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
 
 
 async def _resolve_exchange_id(
@@ -2950,7 +3377,8 @@ async def _stream(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
-) -> AsyncIterator[str]:
+    credential_provider: OutboundCredentialProvider | None = None,
+) -> AsyncGenerator[str, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
 
@@ -2985,7 +3413,7 @@ async def _stream(
         resolved_team_id = "personal"
 
     collected: list[dict[str, Any]] = []
-    async for payload in _iterate_runtime_event_payloads(
+    payloads = _iterate_runtime_event_payloads(
         definition,
         request,
         access_token=access_token,
@@ -2998,9 +3426,17 @@ async def _stream(
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         platform_chat_model_binding=platform_chat_model_binding,
         platform_prompt=platform_prompt,
-    ):
-        collected.append(payload)
-        yield _sse(json.dumps(payload, ensure_ascii=False))
+        credential_provider=credential_provider,
+        owns_run_record=True,
+    )
+    try:
+        async for payload in payloads:
+            collected.append(payload)
+            yield _sse(json.dumps(payload, ensure_ascii=False))
+    finally:
+        # Closing this stream closes the run's stream with it, so a dropped
+        # response never leaves the run to garbage collection.
+        await payloads.aclose()
 
     _emit_turn_completed(
         container,
@@ -3320,6 +3756,20 @@ def _build_capability_block(
     return build_capability_agent_block(capability_registry, contexts)
 
 
+class HitlResumeAlreadyClaimedError(UserFacingExecutionError):
+    """Another attempt already holds this HITL occurrence's resume claim.
+
+    User-facing on purpose: the answer is to stop retrying rather than to read
+    a bare reference. The sentence is fixed — it names nothing beyond the
+    request itself — and is the same for either arm of the race.
+    """
+
+    def __init__(self, internal_message: str) -> None:
+        super().__init__(
+            "This HITL request is already being resumed.", internal_message
+        )
+
+
 @dataclass(slots=True)
 class _HitlResumeClaim:
     """
@@ -3388,7 +3838,9 @@ async def _claim_hitl_resume_before_invocation(
     `FredSqlCheckpointer.aclaim_hitl_resume`'s docstring for the complete
     set of guaranteed — and explicitly NOT guaranteed — properties.
 
-    Raises `RuntimeError` on any failure to claim. If we still legitimately
+    Raises `HitlResumeAlreadyClaimedError` when another attempt owns the
+    occurrence — either arm of the race, so which side a caller loses never
+    changes what it reads. If we still legitimately
     hold 'claimed' status when `astart_hitl_resume` fails or raises, the
     row is released (fenced, so a no-op if ownership was already lost) so
     an immediate retry does not have to wait out the TTL. There is no
@@ -3421,7 +3873,9 @@ async def _claim_hitl_resume_before_invocation(
         occurrence_id=occurrence_id,
     )
     if claim_token is None:
-        raise RuntimeError("This HITL request is already being resumed.")
+        raise HitlResumeAlreadyClaimedError(
+            "Another attempt holds the resume claim for this occurrence."
+        )
     try:
         started = await checkpointer.astart_hitl_resume(
             thread_id=session_id,
@@ -3457,7 +3911,7 @@ async def _claim_hitl_resume_before_invocation(
             occurrence_id=occurrence_id,
             claim_token=claim_token,
         )
-        raise RuntimeError(
+        raise HitlResumeAlreadyClaimedError(
             "Lost ownership of the HITL resume claim before invocation "
             "(superseded by a later attempt after this one went stale)."
         )
@@ -3485,7 +3939,84 @@ async def _iterate_runtime_event_payloads(
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     platform_chat_model_binding: ModelBinding | None = None,
     platform_prompt: str | None = None,
-) -> AsyncIterator[dict[str, Any]]:
+    credential_provider: OutboundCredentialProvider | None = None,
+    owns_run_record: bool = False,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Own the run's scope and release the run record once.
+
+    owns_run_record: true for the call admission created the record for. That
+    call alone ends the run on the way out: it refuses the run further
+    credentials before its children are cancelled, then releases the record.
+    """
+    iterator = _iterate_runtime_event_payloads_inner(
+        definition,
+        request,
+        access_token,
+        team_id=team_id,
+        registry=registry,
+        exchange_id=exchange_id,
+        tuning=tuning,
+        capability_registry=capability_registry,
+        team_settings=team_settings,
+        reasoning_enabled_model_ids=reasoning_enabled_model_ids,
+        platform_chat_model_binding=platform_chat_model_binding,
+        platform_prompt=platform_prompt,
+        credential_provider=credential_provider,
+        owns_run_record=owns_run_record,
+    )
+    with RunScope.open() as scope:
+        if owns_run_record:
+            scope.set_delegated_credentials(
+                credential_provider is not None and credential_provider.delegated
+            )
+            scope.set_owner_authority_end(
+                lambda: _mark_run_terminal(credential_provider)
+            )
+        try:
+            async for payload in iterator:
+                yield payload
+        except asyncio.CancelledError:
+            if owns_run_record:
+                _mark_run_terminal(credential_provider)
+            scope.cancel_children()
+            raise
+        except GeneratorExit:
+            # Closed at a `yield`: the response is gone, so the run ends as on a
+            # cancel. A child's stream closing never ends the run it shares.
+            if owns_run_record:
+                _mark_run_terminal(credential_provider)
+                scope.cancel_children()
+            raise
+        finally:
+            if owns_run_record:
+                _mark_run_terminal(credential_provider)
+            try:
+                await complete_cleanup(iterator.aclose())
+            finally:
+                if owns_run_record:
+                    try:
+                        await complete_cleanup(scope.cancel_and_wait())
+                    finally:
+                        _discard_run_record(credential_provider)
+
+
+async def _iterate_runtime_event_payloads_inner(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    request: _AgentExecuteRequest,
+    access_token: str | None = None,
+    *,
+    team_id: str | None = None,
+    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
+    exchange_id: str | None = None,
+    tuning: AgentTuning | None = None,
+    capability_registry: CapabilityRegistry | None = None,
+    team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    reasoning_enabled_model_ids: tuple[str, ...] | None = None,
+    platform_chat_model_binding: ModelBinding | None = None,
+    platform_prompt: str | None = None,
+    credential_provider: OutboundCredentialProvider | None = None,
+    owns_run_record: bool = False,
+) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
 
@@ -3505,12 +4036,28 @@ async def _iterate_runtime_event_payloads(
     - the user's JWT forwarded via the Authorization header
     - stored in RuntimeContext so KF tool adapters can use it for outbound calls
     - None in local dev when security is disabled
+    - never stored under delegation: the run's provider is what outbound calls
+      ask, and the person's credential was spent at admission
+
+    credential_provider:
+    - the run's provider, from admission for a turn and derived per agent for a
+      child; handed to every adapter this turn builds
     """
 
     request_id = str(uuid4())
     ctx = request.context or {}
     correlation_id = ctx.get("correlation_id", request_id)
     resolved_team_id = team_id or ctx.get("team_id")
+    delegated_turn = credential_provider is not None and credential_provider.delegated
+    if delegated_turn:
+        # The person's credential was spent at admission. Nothing in this turn
+        # may hold one, so the context carries no token for anything to find.
+        access_token = None
+        ctx = {
+            key: value
+            for key, value in ctx.items()
+            if key not in ("access_token", "refresh_token", "access_token_expires_at")
+        }
     # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
     # computed ONCE per turn, here — never inside model-routing resolution,
     # which runs multiple times per turn and must never itself make a ReBAC
@@ -3666,6 +4213,7 @@ async def _iterate_runtime_event_payloads(
         registry=registry,
         access_token=access_token,
         capability_registry=capability_registry,
+        credential_provider=credential_provider,
         conversation_filesystem=conversation_filesystem,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
@@ -3680,6 +4228,8 @@ async def _iterate_runtime_event_payloads(
     )
 
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
+    error_phase = "capability_setup"
+    owner_token = set_owner_execution(owns_run_record)
     try:
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
@@ -3702,15 +4252,23 @@ async def _iterate_runtime_event_payloads(
         # so a missing capability tool is diagnosable from logs alone, without
         # re-deriving this chain by hand every time (see git history for the
         # investigation that established these fields).
-        logger.debug(
-            "[V2][CAPABILITY] agent=%s registry_is_none=%s selected=%s "
-            "block_is_none=%s middleware_count=%s",
-            definition.agent_id,
-            capability_registry is None,
-            tuning.selected_capability_ids if tuning is not None else None,
-            capability_block is None,
-            len(capability_block.middleware) if capability_block is not None else None,
-        )
+        if delegated_turn:
+            logger.debug(
+                "event=capability_activation outcome=completed reason=assembled"
+            )
+        else:
+            logger.debug(
+                "[V2][CAPABILITY] agent=%s registry_is_none=%s selected=%s "
+                "block_is_none=%s middleware_count=%s",
+                definition.agent_id,
+                capability_registry is None,
+                tuning.selected_capability_ids if tuning is not None else None,
+                capability_block is None,
+                len(capability_block.middleware)
+                if capability_block is not None
+                else None,
+            )
+        error_phase = "runtime_setup"
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
                 definition=definition,
@@ -3799,24 +4357,66 @@ async def _iterate_runtime_event_payloads(
                     occurrence_id=request.occurrence_id,
                 )
 
-            async for event in executor.stream(react_input, execution_config):
-                payload = event.model_dump(mode="json")
-                if not isinstance(payload, dict):
-                    raise RuntimeError(
-                        "RuntimeEvent payload must serialize to a JSON object."
-                    )
-                yield payload
+            error_phase = "execution"
+            event_stream = cast(
+                AsyncGenerator[RuntimeEvent, None],
+                executor.stream(react_input, execution_config),
+            )
+            try:
+                async for event in event_stream:
+                    if owns_run_record and isinstance(
+                        event,
+                        (
+                            FinalRuntimeEvent,
+                            AwaitingHumanRuntimeEvent,
+                            RuntimeErrorEvent,
+                        ),
+                    ):
+                        _mark_run_terminal(credential_provider)
+                    payload = event.model_dump(mode="json")
+                    if not isinstance(payload, dict):
+                        raise RuntimeError(
+                            "RuntimeEvent payload must serialize to a JSON object."
+                        )
+                    yield payload
+            finally:
+                if owns_run_record:
+                    _mark_run_terminal(credential_provider)
+                if owns_run_record:
+                    scope = RunScope.current()
+                    if scope is not None:
+                        scope.end_owner_authority()
+                await complete_cleanup(event_stream.aclose())
 
             if hitl_claim is not None:
                 await hitl_claim.consume()
-    except Exception as exc:
-        logger.exception(
-            "[fred-runtime] agent execution error agent_id=%s", definition.agent_id
+    except RunStopError as stop:
+        if owns_run_record:
+            _mark_run_terminal(credential_provider)
+        # The platform ended this run. The reason is machine-readable and the
+        # message is the bounded sentence the raising site owns.
+        logger.warning(
+            "[fred-runtime] event=run_stopped outcome=stopped reason=%s",
+            stop.reason,
         )
-        yield RuntimeErrorEvent(message=str(exc)).model_dump(mode="json")
+        yield terminal_stop_event(stop).model_dump(mode="json")
+    except Exception as exc:
+        if owns_run_record:
+            _mark_run_terminal(credential_provider)
+        message = report_execution_error(logger, exc, error_phase)
+        yield RuntimeErrorEvent(message=message).model_dump(mode="json")
     finally:
+        if owns_run_record:
+            _mark_run_terminal(credential_provider)
+            scope = RunScope.current()
+            if scope is not None:
+                scope.cancel_children()
+        try:
+            reset_owner_execution(owner_token)
+        except ValueError:
+            set_owner_execution(False)
         if runtime is not None:
-            await runtime.dispose()
+            await complete_cleanup(runtime.dispose())
 
 
 def _terminal_execute_payload(
@@ -3926,6 +4526,7 @@ def _build_agent_router(
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
+    _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
 
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
@@ -4843,12 +5444,16 @@ def _build_agent_router(
 
     @router.post(
         "/execute",
+        operation_id="execute_agent",
+        dependencies=[Depends(_declare_grant_parameters)],
         response_model=RuntimeEvent | _RuntimeErrorPayload,
     )
     async def execute(
         request: RuntimeExecuteRequest,
         http_request: Request,
-        authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> RuntimeEvent | _RuntimeErrorPayload:
         """
@@ -4887,13 +5492,21 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
-        _enforce_turn_options(request, target, _capability_registry_of(http_request))
+        try:
+            _enforce_turn_options(
+                request, target, _capability_registry_of(http_request)
+            )
+        except Exception:
+            _discard_run_record(target.credential_provider)
+            raise
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
                 target.definition,
                 internal_req,
-                access_token=access_token,
+                access_token=None
+                if target.credential_provider and target.credential_provider.delegated
+                else access_token,
                 team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
@@ -4903,6 +5516,8 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
+                credential_provider=target.credential_provider,
+                owns_run_record=True,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -4941,12 +5556,16 @@ def _build_agent_router(
 
     @router.post(
         "/evaluate",
+        operation_id="evaluate_agent",
+        dependencies=[Depends(_declare_grant_parameters)],
         response_model=EvalTrace,
     )
     async def evaluate(
         request: RuntimeExecuteRequest,
         http_request: Request,
-        authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> EvalTrace:
         """
@@ -4977,13 +5596,21 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
-        _enforce_turn_options(request, target, _capability_registry_of(http_request))
+        try:
+            _enforce_turn_options(
+                request, target, _capability_registry_of(http_request)
+            )
+        except Exception:
+            _discard_run_record(target.credential_provider)
+            raise
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
                 target.definition,
                 internal_req,
-                access_token=access_token,
+                access_token=None
+                if target.credential_provider and target.credential_provider.delegated
+                else access_token,
                 team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
@@ -4993,6 +5620,8 @@ def _build_agent_router(
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 platform_prompt=target.platform_prompt,
+                credential_provider=target.credential_provider,
+                owns_run_record=True,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -5037,11 +5666,15 @@ def _build_agent_router(
 
     @router.post(
         "/execute/stream",
+        operation_id="execute_agent_stream",
+        dependencies=[Depends(_declare_grant_parameters)],
     )
     async def execute_stream(
         request: RuntimeExecuteRequest,
         http_request: Request,
-        authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> StreamingResponse:
         """
@@ -5059,6 +5692,8 @@ def _build_agent_router(
           `RuntimeErrorEvent` (kind="execution_error") is emitted instead of `final`,
           and the stream closes immediately after. Clients dispatching on `kind` must
           handle this case; otherwise agent crashes will be silently ignored.
+        - A closed connection ends the run: when the response ends, however it
+          ended, its children are cancelled and a delegated run's record is gone.
 
         TurnPersistedEvent:
         - `TurnPersistedEvent` (kind="turn_persisted") is defined in the contract but
@@ -5087,25 +5722,35 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
-        _enforce_turn_options(request, target, _capability_registry_of(http_request))
-        return StreamingResponse(
-            _stream(
-                target.definition,
-                internal_req,
-                access_token=access_token,
-                team_id=target.team_id,
-                agent_instance_name=target.agent_instance_name,
-                registry=registry,
-                security_enabled=security_enabled,
-                container=container,
-                tuning=target.tuning,
-                capability_registry=_capability_registry_of(http_request),
-                team_settings=target.team_settings,
-                reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
-                platform_chat_model_binding=target.platform_chat_model_binding,
-                platform_prompt=target.platform_prompt,
-            ),
+        try:
+            _enforce_turn_options(
+                request, target, _capability_registry_of(http_request)
+            )
+        except Exception:
+            _discard_run_record(target.credential_provider)
+            raise
+        provider = target.credential_provider
+        stream = _stream(
+            target.definition,
+            internal_req,
+            access_token=None if provider and provider.delegated else access_token,
+            team_id=target.team_id,
+            agent_instance_name=target.agent_instance_name,
+            registry=registry,
+            security_enabled=security_enabled,
+            container=container,
+            tuning=target.tuning,
+            capability_registry=_capability_registry_of(http_request),
+            team_settings=target.team_settings,
+            reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
+            platform_chat_model_binding=target.platform_chat_model_binding,
+            platform_prompt=target.platform_prompt,
+            credential_provider=provider,
+        )
+        return _RunStreamingResponse(
+            stream,
             media_type="text/event-stream",
+            background=_stream_finisher(stream, provider),
         )
 
     return router
@@ -5168,6 +5813,15 @@ def create_agent_app(
         else []
     )
 
+    # Delegation is decided here, at construction: an impossible combination
+    # must stop the pod before it serves one request. `build_delegation_runtime`
+    # raises on act_for_people without user authentication, and on accepting
+    # delegated calls without acting for people.
+    delegation = build_delegation_runtime(
+        security, user_authentication_enabled=security_enabled
+    )
+    set_delegation_runtime(delegation)
+
     # Capability discovery + boot validation (#1973, RFC §4) — at app
     # CONSTRUCTION, not lifespan (#1977): registered chat parts must join the
     # `UiPart` union at model-build time, before routes capture their
@@ -5207,7 +5861,8 @@ def create_agent_app(
                 f"Agent template '{_definition.agent_id}' declares "
                 f"default_mcp_servers id '{_server_ref.id}', which is neither "
                 "an installed capability nor a known MCP catalog entry on "
-                "this pod."
+                "this pod.",
+                capability_id=_server_ref.id,
             )
 
     @asynccontextmanager
@@ -5240,87 +5895,99 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
-        container.initialize_kpi_writer()
-        container.initialize_control_plane_client()
-        bootstrap_observability(
-            config.observability, kpi_writer=container.get_kpi_writer()
-        )
-        attach_pod_container(app, container)
-        if security_enabled and user_security is not None:
-            from fred_core.security.oidc import initialize_user_security
-
-            initialize_user_security(user_security)
-        if security is not None:
-            # Enforce the hardened profile (C3) at startup — fails closed.
-            from fred_core.security.oidc import apply_security_profile
-
-            apply_security_profile(security)
-        # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
-        # every execution against OpenFGA; a disabled/Noop engine (dev) means
-        # identity-only. Safe in all modes — the factory returns a Noop with a
-        # KeycloackDisabled admin client when user/m2m auth is off.
-        rebac_engine = (
-            rebac_factory(security, kpi_writer=container.get_kpi_writer())
-            if security is not None
-            else None
-        )
-        chat_factory = _build_chat_model_factory(config)
-        await container.initialize_filesystem()
-        await container.initialize_sql()
-        container.initialize_platform_sql()
-        container.start_metrics_exporter()
-        await container.start_kpi_tasks()
-        checkpointer = container.get_checkpointer()
-        history_store = container.get_history_store()
-        if (checkpointer is None) != (history_store is None):
-            raise RuntimeError(
-                "Invalid runtime storage state: checkpointer and history store must be configured together."
+        try:
+            container.initialize_kpi_writer()
+            container.initialize_control_plane_client()
+            bootstrap_observability(
+                config.observability, kpi_writer=container.get_kpi_writer()
             )
-        set_runtime_context(
-            FredRuntimeContext(
-                RuntimeConfig(
-                    knowledge_flow_url=config.ai.knowledge_flow_url,
-                    service_name=config.app.runtime_id,
-                    timeouts=config.ai.timeout,
-                    chat_model_factory=chat_factory,
-                    checkpointer=checkpointer,
-                    history_store=history_store,
-                    filesystem=container.get_filesystem(),
-                    conversation_filesystem_quotas=(
-                        config.storage.conversation_filesystem
-                    ),
-                    mcp_configuration=config.get_mcp_configuration(),
-                    models_catalog_path=config.get_models_catalog_path(),
-                    default_platform_prompt=_platform_prompt_file_field(
-                        config, "platform_prompt"
-                    ),
-                    platform_instructions=_platform_prompt_file_field(
-                        config, "platform_instructions"
-                    ),
-                    inprocess_toolkit_factory=build_inprocess_toolkit,
-                    control_plane_url=config.platform.control_plane_url,
-                    control_plane_http_client=container.get_control_plane_http_client(),
-                    rebac_engine=rebac_engine,
-                    security_profile=(
-                        security.profile if security is not None else None
-                    ),
-                    kpi_writer=container.get_kpi_writer(),
-                    platform_sql=container.get_platform_sql(),
+            attach_pod_container(app, container)
+            if security_enabled and user_security is not None:
+                from fred_core.security.oidc import initialize_user_security
+
+                initialize_user_security(user_security)
+            if security is not None:
+                # Enforce the hardened profile (C3) at startup — fails closed.
+                from fred_core.security.oidc import apply_security_profile
+
+                apply_security_profile(security)
+            # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
+            # every execution against OpenFGA; a disabled/Noop engine (dev) means
+            # identity-only. Safe in all modes — the factory returns a Noop with a
+            # KeycloackDisabled admin client when user/m2m auth is off.
+            rebac_engine = (
+                rebac_factory(security, kpi_writer=container.get_kpi_writer())
+                if security is not None
+                else None
+            )
+            # The engine enforces standing in either direction; check its seed here.
+            if security is not None and security.delegation.in_use:
+                if rebac_engine is None:
+                    raise ValueError("Delegation requires a relationship engine.")
+                await rebac_engine.validate_standing_model()
+                if not await rebac_engine.is_standing_seed_ready():
+                    raise ValueError("Account standing is not ready.")
+            chat_factory = _build_chat_model_factory(config)
+            await container.initialize_filesystem()
+            await container.initialize_sql()
+            container.initialize_platform_sql()
+            container.start_metrics_exporter()
+            await container.start_kpi_tasks()
+            checkpointer = container.get_checkpointer()
+            history_store = container.get_history_store()
+            if (checkpointer is None) != (history_store is None):
+                raise RuntimeError(
+                    "Invalid runtime storage state: checkpointer and history store must be configured together."
+                )
+            set_runtime_context(
+                FredRuntimeContext(
+                    RuntimeConfig(
+                        knowledge_flow_url=config.ai.knowledge_flow_url,
+                        service_name=config.app.runtime_id,
+                        timeouts=config.ai.timeout,
+                        chat_model_factory=chat_factory,
+                        checkpointer=checkpointer,
+                        history_store=history_store,
+                        filesystem=container.get_filesystem(),
+                        conversation_filesystem_quotas=(
+                            config.storage.conversation_filesystem
+                        ),
+                        mcp_configuration=config.get_mcp_configuration(),
+                        models_catalog_path=config.get_models_catalog_path(),
+                        default_platform_prompt=_platform_prompt_file_field(
+                            config, "platform_prompt"
+                        ),
+                        platform_instructions=_platform_prompt_file_field(
+                            config, "platform_instructions"
+                        ),
+                        inprocess_toolkit_factory=build_inprocess_toolkit,
+                        control_plane_url=config.platform.control_plane_url,
+                        control_plane_http_client=container.get_control_plane_http_client(),
+                        rebac_engine=rebac_engine,
+                        security_profile=(
+                            security.profile if security is not None else None
+                        ),
+                        kpi_writer=container.get_kpi_writer(),
+                        platform_sql=container.get_platform_sql(),
+                    )
                 )
             )
-        )
-        logger.info(
-            "[fred-runtime] agent pod started — base_url=%s kf=%s security=%s "
-            "checkpointer=%s history=%s metrics=%s agents=%s",
-            base_url or "/",
-            config.ai.knowledge_flow_url,
-            "enabled" if security_enabled else "disabled",
-            "sql" if container.get_checkpointer() is not None else "none",
-            "sql" if container.get_history_store() is not None else "none",
-            "prometheus" if config.observability.kpi.prometheus.enabled else "logging",
-            list(registry.keys()),
-        )
-        try:
+            if delegation.enabled:
+                logger.info("event=runtime_startup outcome=completed reason=ready")
+            else:
+                logger.info(
+                    "[fred-runtime] agent pod started — base_url=%s kf=%s security=%s "
+                    "checkpointer=%s history=%s metrics=%s agents=%s",
+                    base_url or "/",
+                    config.ai.knowledge_flow_url,
+                    "enabled" if security_enabled else "disabled",
+                    "sql" if container.get_checkpointer() is not None else "none",
+                    "sql" if container.get_history_store() is not None else "none",
+                    "prometheus"
+                    if config.observability.kpi.prometheus.enabled
+                    else "logging",
+                    list(registry.keys()),
+                )
             yield
         finally:
             # Shutdown must RUN and must COMPLETE.
@@ -5345,7 +6012,14 @@ def create_agent_app(
                 try:
                     await close()
                 except Exception:
-                    logger.exception("[fred-runtime] shutdown step failed: %s", label)
+                    if delegation.enabled:
+                        logger.error(
+                            "event=runtime_shutdown outcome=failed reason=cleanup_failed"
+                        )
+                    else:
+                        logger.exception(
+                            "[fred-runtime] shutdown step failed: %s", label
+                        )
 
     app = FastAPI(
         title=config.app.name,
@@ -5355,6 +6029,7 @@ def create_agent_app(
         openapi_url=f"{base_url}/openapi.json" if base_url else "/openapi.json",
         lifespan=lifespan,
     )
+    register_authorization_handlers(app)
     app.dependency_overrides[get_config] = _build_config_provider(config)
     app.state.capability_registry = capability_registry
 

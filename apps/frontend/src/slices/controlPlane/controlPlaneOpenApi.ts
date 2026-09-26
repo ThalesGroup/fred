@@ -616,18 +616,23 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
           method: "POST",
+          params: {
+            person: queryArg.person,
+            run: queryArg.run,
+            agent: queryArg.agent,
+          },
         }),
       }),
-    postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
-      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
-    >({
+    prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
           agent_model_override: queryArg.agentModelOverride,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
         },
       }),
     }),
@@ -710,9 +715,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setModelReasoningRequest,
       }),
     }),
-    putKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePut: build.mutation<
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse,
-      PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg
+    publishKnowledgeBaseDefinition: build.mutation<
+      PublishKnowledgeBaseDefinitionApiResponse,
+      PublishKnowledgeBaseDefinitionApiArg
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.name}`,
@@ -778,15 +783,11 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    getKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGet:
-      build.query<
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse,
-        GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
-        }),
+    getKnowledgeBaseRunContext: build.query<GetKnowledgeBaseRunContextApiResponse, GetKnowledgeBaseRunContextApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/definitions/${queryArg.definitionId}/instances/${queryArg.instanceId}/runs/${queryArg.runId}/context`,
       }),
+    }),
     getTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGet: build.query<
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse,
       GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg
@@ -1003,6 +1004,57 @@ const injectedRtkApi = api.injectEndpoints({
       GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
+    }),
+    getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
+      GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
+      GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/announcements/active` }),
+    }),
+    listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: build.query<
+      ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse,
+      ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/announcements` }),
+    }),
+    createAnnouncementControlPlaneV1AdminPlatformAnnouncementsPost: build.mutation<
+      CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse,
+      CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements`,
+        method: "POST",
+        body: queryArg.announcementWriteRequest,
+      }),
+    }),
+    updateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPut: build.mutation<
+      UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiResponse,
+      UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}`,
+        method: "PUT",
+        body: queryArg.announcementWriteRequest,
+      }),
+    }),
+    deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: build.mutation<
+      DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiResponse,
+      DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}`,
+        method: "DELETE",
+      }),
+    }),
+    setAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPut: build.mutation<
+      SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiResponse,
+      SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/announcements/${queryArg.announcementId}/enabled`,
+        method: "PUT",
+        body: queryArg.setAnnouncementEnabledRequest,
+      }),
     }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
@@ -1870,14 +1922,19 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     teamId: string;
     runtimeId: string;
     agentId: string;
+    person?: string | null;
+    run?: string | null;
+    agent?: string | null;
   };
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
-  /** status 200 Successful Response */ ExecutionPreparation;
-export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
+export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
+export type PrepareAgentExecutionApiArg = {
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
   agentModelOverride?: string | null;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
 };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
@@ -1927,9 +1984,9 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
 };
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiResponse =
+export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
-export type PutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutApiArg = {
+export type PublishKnowledgeBaseDefinitionApiArg = {
   name: string;
   knowledgeBasePublicationRequest: KnowledgeBasePublicationRequest;
 };
@@ -1963,14 +2020,12 @@ export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInst
 export type DeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteApiArg = {
   instanceId: string;
 };
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiResponse =
-  /** status 200 Successful Response */ KnowledgeBaseRunContext;
-export type GetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetApiArg =
-  {
-    definitionId: string;
-    instanceId: string;
-    runId: string;
-  };
+export type GetKnowledgeBaseRunContextApiResponse = /** status 200 Successful Response */ KnowledgeBaseRunContext;
+export type GetKnowledgeBaseRunContextApiArg = {
+  definitionId: string;
+  instanceId: string;
+  runId: string;
+};
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiResponse =
   /** status 200 Successful Response */ TeamRoutingPolicy;
 export type GetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetApiArg = {
@@ -2113,6 +2168,33 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
+  /** status 200 Successful Response */ Announcement[];
+export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
+export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiResponse =
+  /** status 200 Successful Response */ Announcement[];
+export type ListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetApiArg = void;
+export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiResponse =
+  /** status 201 Successful Response */ Announcement;
+export type CreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostApiArg = {
+  announcementWriteRequest: AnnouncementWriteRequest;
+};
+export type UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiResponse =
+  /** status 200 Successful Response */ Announcement;
+export type UpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutApiArg = {
+  announcementId: string;
+  announcementWriteRequest: AnnouncementWriteRequest;
+};
+export type DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiResponse = unknown;
+export type DeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteApiArg = {
+  announcementId: string;
+};
+export type SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiResponse =
+  /** status 200 Successful Response */ Announcement;
+export type SetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutApiArg = {
+  announcementId: string;
+  setAnnouncementEnabledRequest: SetAnnouncementEnabledRequest;
+};
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
   body:
@@ -2763,30 +2845,6 @@ export type FrontendUserAuthConfig = {
   realm_url?: string | null;
   client_id?: string | null;
 };
-export type InfoBannerLink = {
-  /** Link target URL. */
-  url: string;
-  /** Locale → label map (e.g. {"en": "...", "fr": "..."}). */
-  labels?: {
-    [key: string]: string;
-  };
-};
-export type InfoBanner = {
-  /** Banner background CSS color. */
-  color?: string;
-  /** Seconds after which the banner hides itself, measured from app load. Omit for a persistent banner — the default. */
-  auto_hide_seconds?: number | null;
-  /** Locale → title map (e.g. {"en": "...", "fr": "..."}). */
-  titles?: {
-    [key: string]: string;
-  };
-  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
-  messages?: {
-    [key: string]: string;
-  };
-  /** Links rendered on the right side of the banner. */
-  links?: InfoBannerLink[];
-};
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
@@ -2794,8 +2852,6 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
-  /** Deployer-configured global announcement banner, from `platform.frontend.info_banner`. `None` when the deployment configures none — the frontend then renders nothing. Deliberately on this public pre-auth surface, not the authenticated `FrontendBootstrap`: the banner shows on every page, including the GCU-acceptance and root-bootstrap screens, which render before `/frontend/bootstrap` can succeed. Carries only deployer-authored announcement content — never anything sensitive. */
-  info_banner?: InfoBanner | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -3786,6 +3842,53 @@ export type PlatformInstructions = {
   /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
   source_unavailable?: boolean;
 };
+export type Announcement = {
+  id: string;
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → title map. The frontend resolves it against the viewer's locale and falls back to 'en'. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map rendered inside the banner itself. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map rendered in the more-info dialog. Empty for every locale means the banner offers no more-info action. */
+  description_long: {
+    [key: string]: string;
+  };
+  /** Whether the announcement is delivered to users right now. */
+  enabled: boolean;
+  /** Whether a user may close the banner. A non-dismissible announcement stays until an admin disables it. */
+  dismissible: boolean;
+  /** Changes only when reader-visible content changes, never on an enabled/disabled toggle. The frontend keys each user's dismissal on it, so a bump makes the banner reappear for everyone who had closed the previous wording. */
+  content_version: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+export type AnnouncementWriteRequest = {
+  severity: "info" | "warning" | "error" | "success";
+  /** Locale → title map. At least one locale must be non-empty. */
+  title: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map shown in the banner. At least one locale must be non-empty. */
+  description_short: {
+    [key: string]: string;
+  };
+  /** Locale → markdown map for the more-info dialog. Optional: leaving it empty is what removes the more-info action from the banner. */
+  description_long?: {
+    [key: string]: string;
+  };
+  /** Create disabled by default so an admin can draft in peace. */
+  enabled?: boolean;
+  dismissible?: boolean;
+};
+export type SetAnnouncementEnabledRequest = {
+  enabled: boolean;
+};
 export type StartTaskResponse = {
   task_id: string;
 };
@@ -4236,7 +4339,7 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -4247,7 +4350,7 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
-  usePutKnowledgeBaseDefinitionControlPlaneV1KnowledgeBasesDefinitionsNamePutMutation,
+  usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery,
@@ -4258,8 +4361,8 @@ export const {
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useLazyGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery,
   useDeleteKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdDeleteMutation,
-  useGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
-  useLazyGetKnowledgeBaseRunContextControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdInstancesInstanceIdRunsRunIdContextGetQuery,
+  useGetKnowledgeBaseRunContextQuery,
+  useLazyGetKnowledgeBaseRunContextQuery,
   useGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useLazyGetTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyGetQuery,
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
@@ -4298,6 +4401,14 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
+  useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
+  useLazyListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,
+  useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation,
+  useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation,
+  useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation,
+  useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

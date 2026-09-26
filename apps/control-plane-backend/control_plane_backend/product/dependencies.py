@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from temporalio.client import Client as TemporalClient
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
@@ -86,6 +87,7 @@ class ProductServiceDependencies:
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
     get_platform_prompt_store: Callable[[], PlatformPromptStore]
+    get_announcement_store: Callable[[], AnnouncementStore]
     get_knowledge_base_definition_store: Callable[[], KnowledgeBaseDefinitionStore]
     get_knowledge_base_instance_store: Callable[[], KnowledgeBaseInstanceStore]
     # Awaited, not held: the connection is a lazy singleton inside the provider,
@@ -134,6 +136,7 @@ def build_product_service_dependencies(
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,
         get_platform_prompt_store=container.get_platform_prompt_store,
+        get_announcement_store=container.get_announcement_store,
         get_knowledge_base_definition_store=container.get_knowledge_base_definition_store,
         get_knowledge_base_instance_store=container.get_knowledge_base_instance_store,
         get_temporal_client=lambda: (

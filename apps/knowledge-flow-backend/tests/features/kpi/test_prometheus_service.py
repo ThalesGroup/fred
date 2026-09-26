@@ -32,6 +32,14 @@ from knowledge_flow_backend.features.kpi.prometheus_structures import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _ignore_ambient_prometheus_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`PrometheusConfig` falls back to these variables, so without this a local
+    environment decides which auth scheme these tests observe."""
+    monkeypatch.delenv("PROMETHEUS_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("PROMETHEUS_PASSWORD", raising=False)
+
+
 @pytest.mark.asyncio
 async def test_instant_query_serializes_body_and_auth_header() -> None:
     captured: dict[str, object] = {}

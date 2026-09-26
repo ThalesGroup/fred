@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type TabularToolKind = "documents" | "markdown" | "schemas" | "search";
+export type TabularToolKind = "documents" | "markdown" | "schemas" | "descriptions" | "search";
 
 export type TabularTable = {
   query_alias: string;
@@ -31,12 +31,18 @@ export type TabularDocument = {
 export type TabularColumn = {
   name: string;
   dtype: string;
+  is_categorical?: boolean | null;
+  has_two_values?: boolean | null;
   sample_values?: string[] | null;
+  min_value?: number | null;
+  max_value?: number | null;
 };
 
 export type TabularSchemaDocument = Omit<TabularDocument, "tables"> & {
   tables: (TabularTable & { columns: TabularColumn[] })[];
 };
+
+export type TabularDescriptionDocument = TabularSchemaDocument & { markdown: string | null };
 
 export type TabularMatch = {
   document_uid: string;
@@ -53,11 +59,12 @@ export type TabularTraceResult =
   | { kind: "documents"; documents: TabularDocument[] }
   | { kind: "markdown"; documentUid: string; content: string }
   | { kind: "schemas"; documents: TabularSchemaDocument[] }
+  | { kind: "descriptions"; documents: TabularDescriptionDocument[] }
   | { kind: "search"; keyword: string; matches: TabularMatch[]; tablesTruncated: boolean };
 
 const MCP_PREFIX = "mcp__knowledge_flow__";
 
-/** Accept the four bare tool names and their Knowledge Flow-prefixed MCP forms. */
+/** Accept current and historical tabular tool names and their MCP forms. */
 export function tabularToolKind(rawName: string): TabularToolKind | null {
   if (rawName.startsWith("mcp__") && !rawName.startsWith(MCP_PREFIX)) return null;
   const name = (rawName.startsWith(MCP_PREFIX) ? rawName.slice(MCP_PREFIX.length) : rawName).replace(/_\d+$/, "");
@@ -68,6 +75,8 @@ export function tabularToolKind(rawName: string): TabularToolKind | null {
       return "markdown";
     case "get_tabular_documents_schemas":
       return "schemas";
+    case "describe_tabular_documents":
+      return "descriptions";
     case "search_tabular_values":
       return "search";
     default:
@@ -125,8 +134,12 @@ function isColumn(value: unknown): value is TabularColumn {
     isObject(value) &&
     typeof value.name === "string" &&
     typeof value.dtype === "string" &&
+    (value.is_categorical == null || typeof value.is_categorical === "boolean") &&
+    (value.has_two_values == null || typeof value.has_two_values === "boolean") &&
     (value.sample_values == null ||
-      (Array.isArray(value.sample_values) && value.sample_values.every((sample) => typeof sample === "string")))
+      (Array.isArray(value.sample_values) && value.sample_values.every((sample) => typeof sample === "string"))) &&
+    (value.min_value == null || (typeof value.min_value === "number" && Number.isFinite(value.min_value))) &&
+    (value.max_value == null || (typeof value.max_value === "number" && Number.isFinite(value.max_value)))
   );
 }
 
@@ -144,6 +157,12 @@ function isSchemaDocument(value: unknown): value is TabularSchemaDocument {
     Array.isArray(value.tables) &&
     value.tables.every(isSchemaTable)
   );
+}
+
+function isDescriptionDocument(value: unknown): value is TabularDescriptionDocument {
+  if (!isSchemaDocument(value)) return false;
+  const markdown = (value as Record<string, unknown>).markdown;
+  return value.kind === "spreadsheet" ? typeof markdown === "string" : markdown === null;
 }
 
 function isMatch(value: unknown): value is TabularMatch {
@@ -186,6 +205,8 @@ export function parseTabularTraceResult(rawName: string, content: string): Tabul
         : null;
     case "schemas":
       return Array.isArray(parsed) && parsed.every(isSchemaDocument) ? { kind, documents: parsed } : null;
+    case "descriptions":
+      return Array.isArray(parsed) && parsed.every(isDescriptionDocument) ? { kind, documents: parsed } : null;
     case "search":
       return isObject(parsed) &&
         typeof parsed.keyword === "string" &&

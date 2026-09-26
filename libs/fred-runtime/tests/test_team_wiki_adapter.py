@@ -56,7 +56,13 @@ class _RecordingClient:
         self.call_count = 0
 
     async def request(
-        self, method: str, url: str, *, headers: dict[str, str], json: Any = None
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: Any = None,
+        auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> _FakeResponse:
         self.call_count += 1
         self.last_call = {
@@ -64,6 +70,7 @@ class _RecordingClient:
             "url": url,
             "headers": headers,
             "json": json,
+            "auth": auth,
         }
         return _FakeResponse(self._response_payload)
 
@@ -82,7 +89,13 @@ class _ScriptedClient:
         self._payloads = list(payloads)
 
     async def request(
-        self, method: str, url: str, *, headers: dict[str, str], json: Any = None
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: Any = None,
+        auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
         item = self._payloads.pop(0)
         if isinstance(item, httpx.Response):
@@ -125,6 +138,28 @@ def _adapter(client: Any) -> TeamWikiAdapter:
         control_plane_url="https://control-plane.internal",
         http_client=client,
     )
+
+
+async def test_person_token_401_is_forwarded_without_service_auth() -> None:
+    binding = _binding()
+    binding.runtime_context.access_token_expires_at = 0
+    binding.runtime_context.refresh_token = "refresh-value"
+    seen: list[str] = []
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["Authorization"])
+        return httpx.Response(401, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(refuse)) as client:
+        adapter = TeamWikiAdapter(
+            binding=binding,
+            control_plane_url="https://control-plane.internal",
+            http_client=client,
+        )
+        with pytest.raises(TeamWikiPortError):
+            await adapter.list_pages()
+
+    assert seen == ["Bearer tok"]
 
 
 async def test_read_page_preserves_the_revision_id_exactly() -> None:

@@ -344,3 +344,6 @@ if you touched the contract surface) — green before you claim done.
 - **Never persist asset blobs in `tuning_json`** — store binaries through a service in
   `validate_config` and keep only their keys (RFC §3.8).
 - **Keep runtime info out of LLM-exposed tool signatures** (RFC §3.5).
+- **Re-raise a run stop** — a tool that turns a failure into text first checks
+  `unwrap_run_stop_error(exc)` from `fred_sdk.contracts.runtime` and re-raises what it
+  finds, so a stopped run ends instead of reaching the model as tool text.

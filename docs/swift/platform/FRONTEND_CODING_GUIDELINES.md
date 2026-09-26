@@ -142,12 +142,13 @@ The M3 pairing rule: every `--foo` background pairs with `--on-foo` text.
 
 ### 2.5 Never size a page or layout against the viewport
 
-Since the global `InfoBanner`, the app shell (`.appShell` in
+Since the platform announcement banners, the app shell (`.appShell` in
 `src/app/App.module.css`) is the **only** element that sizes against the
 viewport (`height: 100vh`). Routed pages and layouts render inside
-`.appContent`, whose height is the viewport minus the banner, so a page
-declaring `height: 100vh` / `min-height: 100vh` / `width: 100vw` overflows
-the shell by the banner height the moment a deployment configures a banner —
+`.routedContent`, whose height is the viewport minus whatever banners are
+live, so a page declaring `height: 100vh` / `min-height: 100vh` /
+`width: 100vw` overflows the shell by the banner height the moment a platform
+admin enables an announcement —
 and the overflow is unreachable (`html` is `overflow: hidden` and scroll is
 reset). Use `height: 100%` / `width: 100%` instead; the failure is invisible
 in dev because the banner ships disabled by default.

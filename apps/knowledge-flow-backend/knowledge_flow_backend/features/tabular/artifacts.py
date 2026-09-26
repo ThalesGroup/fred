@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 from fred_core.documents.document_structures import DocumentMetadata
@@ -262,6 +263,44 @@ def dataframe_dtype_to_literal(dtype: Any) -> DTypes:
     return "unknown"
 
 
+def max_categories(row_count: int, cap: int = 256) -> int:
+    """Maximum distinct string values for a table with ``row_count`` rows.
+
+    Null cells count toward the row total. The allowance starts at two values
+    for up to ten rows, grows sublinearly, and never exceeds ``cap``.
+    """
+    small_table_limit = 10
+    initial_categories = 2
+    growth_exponent = 0.7
+    if row_count <= small_table_limit:
+        return initial_categories
+    return min(cap, int(initial_categories * (row_count / small_table_limit) ** growth_exponent))
+
+
+def describe_string_column(column: TabularColumnSchema, distinct_values: Iterable[str], row_count: int) -> TabularColumnSchema:
+    """Apply the shared category and two-value rules to one string column."""
+    values = set(distinct_values)
+    is_categorical = bool(values) and len(values) <= max_categories(row_count)
+    return column.model_copy(
+        update={
+            "is_categorical": is_categorical,
+            "has_two_values": len(values) == 2,
+            "sample_values": sorted(values) if is_categorical else None,
+        }
+    )
+
+
+def describe_numeric_column(column: TabularColumnSchema, minimum: Any, maximum: Any) -> TabularColumnSchema:
+    """Store finite bounds from DuckDB or pandas on an integer/float column."""
+    if column.dtype not in {"integer", "float"} or minimum is None or maximum is None:
+        return column
+    convert = int if column.dtype == "integer" else float
+    lower, upper = convert(minimum), convert(maximum)
+    if column.dtype == "float" and not (math.isfinite(lower) and math.isfinite(upper)):
+        return column
+    return column.model_copy(update={"min_value": lower, "max_value": upper})
+
+
 def dataframe_schema(df: pd.DataFrame) -> list[TabularColumnSchema]:
     """
     Build the ordered API schema for one DataFrame.
@@ -311,7 +350,7 @@ def duckdb_dtype_to_literal(dtype_name: str | None) -> DTypes:
         "UBIGINT",
     }:
         return "integer"
-    if normalized in {"FLOAT", "DOUBLE", "DECIMAL", "REAL"}:
+    if normalized in {"FLOAT", "DOUBLE", "DECIMAL", "REAL"} or normalized.startswith("DECIMAL("):
         return "float"
     if normalized in {"DATE", "TIMESTAMP", "TIMESTAMP_MS", "TIMESTAMP_NS", "TIMESTAMP_S", "TIMESTAMP WITH TIME ZONE", "TIME"}:
         return "datetime"

@@ -40,8 +40,6 @@ from control_plane_backend.agent_instances.store import (
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
 from control_plane_backend.config.models import (
-    InfoBanner,
-    InfoBannerLink,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
@@ -1112,48 +1110,10 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
     assert "client_id" not in payload["user_auth"]
     # `response_model_exclude_none=True` omits the key entirely when gating is off.
     assert payload.get("gcu_version") is None
-    # No `platform.frontend.info_banner` configured → the key is omitted and
-    # the frontend renders no banner.
+    # Announcements are not on this public pre-auth surface: they are
+    # admin-authored rows served from the authenticated
+    # `/announcements/active`, never from here.
     assert "info_banner" not in payload
-
-
-@pytest.mark.asyncio
-async def test_frontend_config_exposes_configured_info_banner() -> None:
-    """The public pre-auth config carries `platform.frontend.info_banner` so
-    the global banner can render on every page — including the GCU-acceptance
-    and root-bootstrap screens, which render before the authenticated
-    `/frontend/bootstrap` can succeed."""
-    app = create_app()
-    container = get_application_container_from_app(app)
-    container.configuration.platform.frontend.info_banner = InfoBanner(
-        color="#00BBDD",
-        auto_hide_seconds=30,
-        titles={"en": "New version available"},
-        messages={
-            "en": "Access the Fred documentation & blog",
-            "fr": "Accédez à la doc",
-        },
-        links=[
-            InfoBannerLink(
-                url="https://site.fredlab.dev", labels={"en": "Go to the Fred blog"}
-            )
-        ],
-    )
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.get("/control-plane/v1/frontend/config")
-
-    assert resp.status_code == 200
-    banner = resp.json()["info_banner"]
-    assert banner["color"] == "#00BBDD"
-    assert banner["auto_hide_seconds"] == 30
-    assert banner["titles"] == {"en": "New version available"}
-    assert banner["messages"]["fr"] == "Accédez à la doc"
-    assert banner["links"] == [
-        {"url": "https://site.fredlab.dev", "labels": {"en": "Go to the Fred blog"}}
-    ]
 
 
 @pytest.mark.asyncio
@@ -3258,6 +3218,7 @@ def _build_erasure_deps(
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
@@ -3371,7 +3332,9 @@ def _make_runtime_client(
         async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
             return None
 
-        async def delete(self, url: str, *, headers: dict[str, str]) -> httpx.Response:
+        async def delete(
+            self, url: str, *, headers: dict[str, str], auth: httpx.Auth | None = None
+        ) -> httpx.Response:
             self.calls.append((url, headers))
             request = httpx.Request("DELETE", url, headers=headers)
             if "/agents/checkpoints/" in url:
@@ -5049,6 +5012,83 @@ async def test_erase_session_skips_history_when_checkpoint_fails(
     assert runtime_calls
     assert all("/agents/checkpoints/" in url for url, _ in runtime_calls)
     assert not any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_scheduled_erase_records_auth_failure_and_retains_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    class _FailingTokens:
+        async def get_token_lease(self):
+            raise RuntimeError("sensitive-IAM-detail")
+
+        async def refresh_rejected(self, lease):
+            raise AssertionError("No request was sent")
+
+    requests = 0
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return httpx.Response(200, json={"deleted": 1})
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        lambda **kwargs: real_async_client(
+            transport=httpx.MockTransport(endpoint), **kwargs
+        ),
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    service = ConversationErasureService(deps, token_provider=_FailingTokens())
+
+    receipt = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer old-service-token",
+    )
+    by_store = {result.store: result for result in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert by_store["runtime_checkpoint"].error == (
+        "runtime checkpoint delete authentication failed"
+    )
+    assert by_store["runtime_history"].ok is False
+    assert "skipped" in (by_store["runtime_history"].error or "")
+    assert len(session_store._records) == 1
+    assert requests == 0
+
+    history = await service._erase_runtime_history(  # noqa: SLF001 - isolated store result
+        "http://runtime-a.internal", "session-1", "Bearer old-service-token"
+    )
+    assert history.ok is False
+    assert history.error == "runtime history delete authentication failed"
 
 
 @pytest.mark.asyncio

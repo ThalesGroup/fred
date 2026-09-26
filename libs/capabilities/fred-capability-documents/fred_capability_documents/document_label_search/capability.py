@@ -72,7 +72,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import DocumentLabelPageResult
+from fred_sdk.contracts.runtime import DocumentLabelPageResult, unwrap_run_stop_error
 from langchain_core.tools import BaseTool, tool
 
 _KF_SERVICE = "Knowledge Flow"
@@ -214,6 +214,9 @@ class DocumentLabelSearchCapability(
                     limit=effective_limit,
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 return _document_tool_failure(
                     tool_ref="list_documents_by_label",
                     action="list documents by label",
