@@ -15,8 +15,8 @@ migration guide and sufficient paired code/chart version numbers.
 
 ## Prerequisites
 
-Release tooling needs Python 3.12, the pinned migration requirements, full Git
-history and tags. Repository administration is needed to activate the required
+Release tooling needs Python 3.12, uv and full Git history and tags. It reuses
+fred-pod's pyproject.toml and committed uv.lock for its existing PyYAML dependency. Repository administration is needed to activate the required
 PR status after this workflow lands. Existing private customer repositories stay
 under DevOps ownership.
 

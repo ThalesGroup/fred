@@ -45,8 +45,7 @@ Once the checkout is suitable:
 
 ```bash
 git fetch origin --tags
-python -m pip install -r scripts/migration-requirements.txt
-python scripts/migration_guides.py plan        # ancestry-based baseline and impact
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py plan        # ancestry-based baseline and impact
 ```
 
 Read `docs/swift/ops/MIGRATION-GUIDES.md`. Use the helper's reported baseline;
@@ -152,8 +151,8 @@ customer values. Fred chart values are the production reference; configuration_p
 is local Docker Compose only.
 
 ```bash
-python scripts/migration_guides.py generate --worktree --version X.Y.Z
-python scripts/migration_guides.py verify --worktree --version X.Y.Z
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py generate --worktree --version X.Y.Z
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --worktree --version X.Y.Z
 ```
 
 Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep
@@ -182,18 +181,18 @@ Re-read the file before any further edit and keep their changes; never revert th
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 V=X.Y.Z                                          # approved version
 
-python scripts/migration_guides.py verify --worktree --version "$V"
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --worktree --version "$V"
 git add apps/frontend/public/release.md "docs/swift/ops/releases/v$V/migration.md"
 # Stage only the new/updated source notes reviewed above, by explicit path.
 git add docs/swift/ops/migrations/<reviewed-note>.md
 git commit -m "docs: release notes for v$V"
 
-python scripts/migration_guides.py verify --version "$V"
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V"
 
 git tag -a "code/v$V"  -m "Release v$V"
 git tag -a "chart/v$V" -m "Helm Charts Release $V"
 
-python scripts/migration_guides.py verify --version "$V" --require-tags
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --version "$V" --require-tags
 git push origin "$BRANCH" "code/v$V" "chart/v$V"
 ```
 

@@ -417,4 +417,4 @@ k3d-logs-frontend: ## Tail logs for frontend
 
 .PHONY: migration-tests
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
-	uv run --with-requirements scripts/migration-requirements.txt python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v

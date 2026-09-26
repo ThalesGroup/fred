@@ -48,6 +48,9 @@ classification was rejected: it does not travel with git tags or explain steps.
 
 ### 2. One helper for PR checks and release preparation
 
+Reuse the existing fred-pod pyproject.toml and uv.lock (which already declare
+PyYAML) through `uv run --project libs/fred-pod --locked --no-dev`.
+No separate requirements file or Python project is added.
 Add a focused Python helper and offline tests under scripts. Commands cover note
 validation against a PR merge base, release planning, guide generation and
 verification. Reuse the same parser/selection/version logic everywhere. CI fetches

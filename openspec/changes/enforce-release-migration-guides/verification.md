@@ -42,3 +42,11 @@ checks were still running when this evidence was recorded. Mandatory GitHub prot
 activation must follow merge and an observed successful run; the issue and change
 remain open until effective enforcement is verified. Customer upgrade acceptance
 and the first actual release audit remain separate operator/release tasks.
+
+## Dependency-management alignment
+
+The separate migration-requirements.txt was removed. Local commands, Make and CI
+now use `uv run --project libs/fred-pod --locked --no-dev`, reusing the existing
+PyYAML declaration and uv.lock without introducing another Python project. All
+22 tests passed in a fresh isolated uv environment; both updated workflows passed
+Actionlint. No dependency versions or application lockfiles changed.

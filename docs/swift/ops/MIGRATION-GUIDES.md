@@ -47,12 +47,11 @@ instructions. CI checks structure and known risk signals, not operational truth.
 
 ## Local checks
 
-From the repository root, install the helper's pinned dependency in your selected
-Python environment, then run:
+From the repository root, use the existing fred-pod project and committed uv.lock.
+PyYAML is already declared in its pyproject.toml; no separate installation is needed:
 
 ```bash
-python -m pip install -r scripts/migration-requirements.txt
-python scripts/migration_guides.py check-pr --base origin/swift --worktree
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py check-pr --base origin/swift --worktree
 make migration-tests
 ```
 
@@ -65,7 +64,7 @@ Run the shared `push-release` skill (`.agents/skills/push-release` also serves
 Codex). Its version calculation is driven by migration impact:
 
 ```bash
-python scripts/migration_guides.py plan
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py plan
 ```
 
 The helper chooses a stable code tag on this branch's first-parent ancestry, not
@@ -79,8 +78,8 @@ release notes. Resolve the reported coverage blockers. Add a new note for the
 release-preparation contribution itself (normally `none`). For a chosen version:
 
 ```bash
-python scripts/migration_guides.py generate --worktree --version X.Y.Z
-python scripts/migration_guides.py verify --worktree --version X.Y.Z
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py generate --worktree --version X.Y.Z
+uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify --worktree --version X.Y.Z
 ```
 
 The result is `docs/swift/ops/releases/vX.Y.Z/migration.md`. It combines source notes
