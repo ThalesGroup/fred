@@ -1,5 +1,37 @@
 {
   "$defs": {
+    "ConversationFilesystemQuotaConfig": {
+      "description": "Independent soft limits for runtime-owned conversation namespaces.",
+      "properties": {
+        "scratchpad_max_bytes": {
+          "default": 104857600,
+          "minimum": 1,
+          "title": "Scratchpad Max Bytes",
+          "type": "integer"
+        },
+        "scratchpad_max_files": {
+          "default": 1000,
+          "minimum": 1,
+          "title": "Scratchpad Max Files",
+          "type": "integer"
+        },
+        "deep_max_bytes": {
+          "default": 1073741824,
+          "minimum": 1,
+          "title": "Deep Max Bytes",
+          "type": "integer"
+        },
+        "deep_max_files": {
+          "default": 10000,
+          "minimum": 1,
+          "title": "Deep Max Files",
+          "type": "integer"
+        }
+      },
+      "title": "ConversationFilesystemQuotaConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "DelegationConfig": {
       "additionalProperties": false,
       "description": "`security.delegation` block. Off by default, one switch per direction.\n\nA workload may speak for a person when its verified token is addressed to\n`audience` and lists `caller_role` in the claim `caller_roles_claim` names.",
@@ -68,6 +100,37 @@
       },
       "title": "DelegationConfig",
       "type": "object"
+    },
+    "GcsRuntimeFilesystemConfig": {
+      "description": "GCS object storage using Application Default Credentials.",
+      "properties": {
+        "type": {
+          "const": "gcs",
+          "default": "gcs",
+          "title": "Type",
+          "type": "string"
+        },
+        "bucket_name": {
+          "default": "fred-runtime",
+          "title": "Bucket Name",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        }
+      },
+      "title": "GcsRuntimeFilesystemConfig",
+      "type": "object",
+      "additionalProperties": false
     },
     "InMemoryLogStorageConfig": {
       "properties": {
@@ -196,6 +259,25 @@
       "type": "object",
       "additionalProperties": false
     },
+    "LocalRuntimeFilesystemConfig": {
+      "description": "Local-development object storage for Fred Runtime files.",
+      "properties": {
+        "type": {
+          "const": "local",
+          "default": "local",
+          "title": "Type",
+          "type": "string"
+        },
+        "root": {
+          "default": "~/.fred/pod/filesystem",
+          "title": "Root",
+          "type": "string"
+        }
+      },
+      "title": "LocalRuntimeFilesystemConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "M2MSecurity": {
       "additionalProperties": false,
       "description": "Configuration for machine-to-machine authentication.",
@@ -227,6 +309,47 @@
       ],
       "title": "M2MSecurity",
       "type": "object"
+    },
+    "MinioRuntimeFilesystemConfig": {
+      "description": "MinIO or S3-compatible object storage for Fred Runtime files.",
+      "properties": {
+        "type": {
+          "const": "minio",
+          "default": "minio",
+          "title": "Type",
+          "type": "string"
+        },
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "access_key": {
+          "title": "Access Key",
+          "type": "string"
+        },
+        "secret_key": {
+          "default": null,
+          "title": "Secret Key",
+          "type": "string"
+        },
+        "bucket_name": {
+          "default": "fred-runtime",
+          "title": "Bucket Name",
+          "type": "string"
+        },
+        "secure": {
+          "default": false,
+          "title": "Secure",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "endpoint",
+        "access_key"
+      ],
+      "title": "MinioRuntimeFilesystemConfig",
+      "type": "object",
+      "additionalProperties": false
     },
     "OpenFgaRebacConfig": {
       "description": "Configuration for an OpenFGA-backed relationship engine.",
@@ -546,7 +669,7 @@
       "additionalProperties": false
     },
     "PodStorageConfig": {
-      "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence",
+      "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence\n- `object_store`: one bucket/root for all runtime-owned files",
       "properties": {
         "postgres": {
           "$ref": "#/$defs/PostgresStoreConfig"
@@ -591,6 +714,31 @@
           ],
           "default": null,
           "title": "Log Store"
+        },
+        "object_store": {
+          "discriminator": {
+            "mapping": {
+              "gcs": "#/$defs/GcsRuntimeFilesystemConfig",
+              "local": "#/$defs/LocalRuntimeFilesystemConfig",
+              "minio": "#/$defs/MinioRuntimeFilesystemConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LocalRuntimeFilesystemConfig"
+            },
+            {
+              "$ref": "#/$defs/MinioRuntimeFilesystemConfig"
+            },
+            {
+              "$ref": "#/$defs/GcsRuntimeFilesystemConfig"
+            }
+          ],
+          "title": "Object Store"
+        },
+        "conversation_filesystem": {
+          "$ref": "#/$defs/ConversationFilesystemQuotaConfig"
         }
       },
       "title": "PodStorageConfig",

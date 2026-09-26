@@ -145,6 +145,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}`, method: "DELETE" }),
     }),
+    deleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDelete: build.mutation<
+      DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse,
+      DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
+    }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg
@@ -283,6 +289,11 @@ export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = 
   [key: string]: number;
 };
 export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg = {
+  sessionId: string;
+};
+export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse =
+  /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
+export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
   sessionId: string;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
@@ -783,6 +794,9 @@ export type PlatformPromptFileResponse = {
   platform_instructions: string;
   platform_prompt: string;
 };
+export type ConversationFilesystemPurgeResponse = {
+  purged: boolean;
+};
 export type Channel =
   | "final"
   | "plan"
@@ -1119,6 +1133,7 @@ export const {
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
+  useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,

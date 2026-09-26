@@ -103,6 +103,13 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For conversation-scoped text files, use `ctx.services.conversation_filesystem`
+(`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
+`origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the
+calling agent's filesystem rules. Use `origin="system"` only for trusted internal work, such as
+writing an artifact under `/.deep/`. The runtime binds the conversation and routes mounts; the
+capability cannot select a bucket or another conversation. Fail loudly when the optional port is
+absent.
 
 ---
 

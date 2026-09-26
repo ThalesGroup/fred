@@ -69,7 +69,9 @@ from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
-from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
+from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -86,7 +88,10 @@ from fred_sdk.contracts.execution import (
     RuntimeExecuteRequest,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
-from fred_sdk.contracts.runtime import HistoryStorePort
+from fred_sdk.contracts.runtime import (
+    ConversationScratchpadFileNotFoundError,
+    HistoryStorePort,
+)
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
 
@@ -344,7 +349,11 @@ def _build_test_config(
             "storage": {
                 "postgres": {
                     "sqlite_path": str(tmp_path / "runtime.sqlite3"),
-                }
+                },
+                "object_store": {
+                    "type": "local",
+                    "root": str(tmp_path / "filesystem"),
+                },
             },
             "platform": {
                 "control_plane_url": control_plane_url,
@@ -968,6 +977,139 @@ def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -
         )
         assert retry_response.status_code == 200
         assert retry_response.json() == {"deleted": 0}
+
+
+def test_delete_session_filesystem_purges_both_runtime_namespaces(
+    monkeypatch, tmp_path
+) -> None:
+    """The internal session erase endpoint removes both runtime-owned prefixes."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        filesystem = get_runtime_context().config.filesystem
+        assert filesystem is not None
+        service = ConversationFilesystemService(filesystem, "session-filesystem")
+        asyncio.run(service.scratchpad().write_text("notes.md", "scratchpad"))
+        asyncio.run(
+            service.namespace(
+                ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+            ).write_text("result.md", "deep")
+        )
+
+        response = client.delete(
+            "/pod/v1/agents/sessions/session-filesystem/filesystem"
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"purged": True}
+        assert asyncio.run(service.scratchpad().exists("notes.md")) is False
+        assert (
+            asyncio.run(
+                service.namespace(
+                    ".deep", max_bytes=1024 * 1024 * 1024, max_files=10000
+                ).exists("result.md")
+            )
+            is False
+        )
+
+        retry_response = client.delete(
+            "/pod/v1/agents/sessions/session-filesystem/filesystem"
+        )
+        assert retry_response.status_code == 200
+        assert retry_response.json() == {"purged": True}
+
+
+def test_delete_session_filesystem_rejects_a_different_session_owner(
+    monkeypatch, tmp_path
+) -> None:
+    """A caller cannot erase runtime files for a conversation they do not own."""
+    caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
+    monkeypatch.setattr(
+        agent_app_module,
+        "_make_user_dependency",
+        lambda _fn, _enabled: lambda: caller,
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    history_store = AsyncMock()
+    history_store.session_belongs_to_user = AsyncMock(return_value=False)
+
+    with TestClient(app) as client:
+        current = get_runtime_context().config
+        monkeypatch.setattr(
+            agent_app_module,
+            "get_runtime_context",
+            lambda: FredRuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url=current.knowledge_flow_url,
+                    filesystem=current.filesystem,
+                    history_store=history_store,
+                )
+            ),
+        )
+        response = client.delete("/pod/v1/agents/sessions/session-bob/filesystem")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Access denied."}
+    history_store.session_belongs_to_user.assert_awaited_once_with(
+        "session-bob", "alice"
+    )
+
+
+def test_delete_session_filesystem_reports_storage_failures(
+    monkeypatch, tmp_path
+) -> None:
+    """Storage faults stay visible to the lifecycle caller instead of falling back."""
+
+    class _FailingFilesystem:
+        async def list(self, prefix: str = "") -> list[object]:
+            del prefix
+            return []
+
+        async def delete(self, path: str) -> None:
+            del path
+            raise OSError("object storage unavailable")
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        monkeypatch.setattr(
+            agent_app_module,
+            "get_runtime_context",
+            lambda: FredRuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+                    filesystem=cast(Any, _FailingFilesystem()),
+                )
+            ),
+        )
+        response = client.delete(
+            "/pod/v1/agents/sessions/session-filesystem/filesystem"
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Conversation filesystem storage is unavailable."
+    }
 
 
 class _ContextPromptAgent(ReActAgent):
@@ -3101,6 +3243,90 @@ def test_build_runtime_services_wires_the_current_turns_binding_onto_the_invoker
             definition, binding, team_id="fredlab", access_token="token-1"
         )
         assert services_no_registry.agent_invoker is None
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _MemoryFilesystem:
+        def __init__(self) -> None:
+            self.files: dict[str, bytes] = {}
+
+        async def read(self, path: str) -> bytes:
+            try:
+                return self.files[path]
+            except KeyError as exc:
+                raise FileNotFoundError(path) from exc
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            self.files[path] = data.encode() if isinstance(data, str) else data
+
+        async def list(self, prefix: str = "") -> list[Any]:
+            return []
+
+        async def mkdir(self, path: str) -> None:
+            del path
+
+    storage = _MemoryFilesystem()
+    runtime_context = FredRuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://knowledge-flow.invalid",
+            filesystem=cast(Any, storage),
+        )
+    )
+    monkeypatch.setattr(
+        "fred_runtime.runtime_context._RUNTIME_CONTEXT", runtime_context
+    )
+
+    def _binding(
+        *, trusted_session_id: str | None, request_id: str
+    ) -> BoundRuntimeContext:
+        return BoundRuntimeContext(
+            runtime_context=RuntimeContext(session_id=trusted_session_id),
+            portable_context=PortableContext(
+                request_id=request_id,
+                correlation_id=f"correlation-{request_id}",
+                actor="alice",
+                tenant="fredlab",
+                environment=PortableEnvironment.DEV,
+                session_id="portable-shadow",
+            ),
+        )
+
+    definition = _EchoAgent()
+    first = agent_app_module._build_runtime_services(
+        definition,
+        _binding(trusted_session_id="trusted-session", request_id="request-one"),
+    ).conversation_filesystem
+    fresh_same_session = agent_app_module._build_runtime_services(
+        definition,
+        _binding(trusted_session_id="trusted-session", request_id="request-two"),
+    ).conversation_filesystem
+    other_session = agent_app_module._build_runtime_services(
+        definition,
+        _binding(trusted_session_id="other-session", request_id="request-three"),
+    ).conversation_filesystem
+    request_fallback = agent_app_module._build_runtime_services(
+        definition,
+        _binding(trusted_session_id=None, request_id="fallback-request"),
+    ).conversation_filesystem
+    assert first is not None
+    assert fresh_same_session is not None
+    assert other_session is not None
+    assert request_fallback is not None
+
+    await first.write_text("/notes.md", "shared", origin="system")
+
+    assert await fresh_same_session.read_text("/notes.md", origin="system") == "shared"
+    with pytest.raises(ConversationScratchpadFileNotFoundError):
+        await other_session.read_text("/notes.md", origin="system")
+
+    await request_fallback.write_text("/fallback.md", "request scoped", origin="system")
+    assert storage.files == {
+        "conversations/trusted-session/scratchpad/notes.md": b"shared",
+        "conversations/fallback-request/scratchpad/fallback.md": b"request scoped",
+    }
 
 
 def test_local_registry_invoker_propagates_trusted_platform_binding_through_a_real_nested_turn(

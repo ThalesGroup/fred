@@ -23,19 +23,13 @@ Why this module exists:
   already get a blank-slate ReAct one
 - kept intentionally minimal, matching `DeepAgentRuntime`'s own scope: no
   tool approval, no per-turn tool-call limit (both raise `NotImplementedError`
-  at runtime if set), and no filesystem tools by default
+  at runtime if set), and no optional filesystem MCP server by default
 
 Filesystem is deliberately excluded from `default_mcp_servers`:
-- `deepagents.create_deep_agent` always registers `ls`/`read_file`/
-  `write_file`/`edit_file`/`glob`/`grep` tools (its `FilesystemMiddleware` is
-  mandatory), but `DeepAgentRuntime._build_deepagent_runtime_middleware`
-  already guards every one of those names with a `run_limit=0`
-  `ToolCallLimitMiddleware` whenever Fred's own filesystem MCP tools are not
-  bound — so leaving `MCP_SERVER_KNOWLEDGE_FLOW_FS` out here means this agent
-  gets no real or virtual file I/O, by construction, until an operator adds
-  it explicitly. The `/fs` boundary is not yet hardened with a signed agent
-  identity (`AGENT-FILESYSTEM-HARDENING-RFC.md`, FILES-01..06), so this stays
-  out of the default footprint for the first exposed Deep agent.
+- `DeepAgentRuntime` supplies the built-in safe filesystem tools against its
+  conversation-scoped root workspace and `/.deep/` mount; `execute` remains
+  unavailable. The separate Knowledge Flow filesystem capability is neither
+  required nor selected by this template.
 
 How to use it:
 - import `DEEP_ASSISTANT_AGENT` and register it in the pod registry
@@ -62,9 +56,6 @@ If search or data tools are available, use them to ground your answers in \
 real data. If no tools are available, answer from your training knowledge \
 and say so clearly — do not pretend to have access to a document corpus or \
 live data you cannot reach.
-
-You do not have file read/write tools in this configuration — do not claim \
-to save, read, or edit files.
 """
 
 _SYSTEM_PROMPT_FR = """\
@@ -77,9 +68,6 @@ Si des outils de recherche ou d'analyse de données sont disponibles, \
 utilise-les pour ancrer tes réponses dans des données réelles. Si aucun \
 outil n'est disponible, réponds à partir de tes connaissances d'entraînement \
 et indique-le clairement.
-
-Tu n'as pas d'outils de lecture/écriture de fichiers dans cette \
-configuration — ne prétends pas enregistrer, lire ou modifier de fichiers.
 """
 
 

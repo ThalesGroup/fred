@@ -1,3 +1,35 @@
+**v2.2.3** — 2026-09-25
+
+- **Summary**
+
+  Deep agents can now share files across turns and delegated tasks, combine their
+  work, and open finished Markdown in an editable document. Mistral tool use and
+  scrolling on pages with tall tables are more reliable.
+
+- **Features**
+
+  - Deep agents and their delegated tasks share conversation files across turns and runtime replicas (#2775)
+  - Deep agents can combine text or CSV files into one output without copying their contents into chat (#2796)
+  - Deep agents can open a workspace Markdown file in the document editor when both document capabilities are enabled (#2804)
+
+- **Improvements**
+
+  - A new runtime dashboard shows model and tool latency, tool failures and recovered Mistral calls (#2795)
+
+- **Bug Fixes**
+
+  - Mistral agents now execute valid tool calls returned as text instead of showing their call syntax in chat (#2746, #2795)
+  - Tall tables now scroll within the page instead of pushing lower content out of reach (#2794)
+
+- **Deployment note**
+
+  Multi-replica agent deployments must configure a private shared object store;
+  the chart now rejects local storage with multiple replicas. Existing Deep
+  conversations with files stored in checkpoints may need to be restarted,
+  because those files are not migrated. Deployments already using a
+  `fred-runtime-conversations` bucket must set that bucket name explicitly.
+  Single-replica deployments retain the local storage default.
+
 **v2.2.2** — 2026-09-24
 
 - **Summary**

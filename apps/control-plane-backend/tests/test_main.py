@@ -3239,6 +3239,14 @@ def _build_erasure_deps(
     `team_wiki_store` is the WIKI-05 addition; defaults to a fake that rejects
     nothing rather than `None`, since that step now runs unconditionally.
     """
+    runtime_http_client: Any = None
+
+    def _get_runtime_http_client() -> Any:
+        nonlocal runtime_http_client
+        if runtime_http_client is None:
+            runtime_http_client = httpx.AsyncClient(timeout=15.0)
+        return runtime_http_client
+
     return ProductServiceDependencies(
         configuration=configuration,  # type: ignore[arg-type]
         team_dependencies=None,  # type: ignore[arg-type]
@@ -3263,6 +3271,7 @@ def _build_erasure_deps(
         get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
         get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
         get_platform_bootstrap_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_runtime_http_client=_get_runtime_http_client,
     )
 
 
@@ -3338,6 +3347,7 @@ def _make_runtime_client(
     checkpoint_deleted: int = 1,
     history_error: bool = False,
     checkpoint_error: bool = False,
+    filesystem_failure: str | None = None,
 ) -> type:
     """Build a fake httpx.AsyncClient recording runtime DELETEs into `calls`.
 
@@ -3350,6 +3360,10 @@ def _make_runtime_client(
     class _RuntimeClient:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.timeout = kwargs.get("timeout")
+            self.calls = calls
+            self.history_error = history_error
+            self.checkpoint_error = checkpoint_error
+            self.filesystem_failure = filesystem_failure
 
         async def __aenter__(self) -> "_RuntimeClient":
             return self
@@ -3357,16 +3371,30 @@ def _make_runtime_client(
         async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
             return None
 
-        async def delete(self, url: str, *, headers: dict[str, str]) -> httpx.Response:
-            calls.append((url, headers))
+        async def delete(
+            self, url: str, *, headers: dict[str, str], auth: httpx.Auth | None = None
+        ) -> httpx.Response:
+            self.calls.append((url, headers))
             request = httpx.Request("DELETE", url, headers=headers)
             if "/agents/checkpoints/" in url:
-                if checkpoint_error:
+                if self.checkpoint_error:
                     return httpx.Response(502, text="boom", request=request)
                 return httpx.Response(
                     200, json={"deleted": checkpoint_deleted}, request=request
                 )
-            if history_error:
+            if url.endswith("/filesystem"):
+                if self.filesystem_failure == "http":
+                    return httpx.Response(502, text="boom", request=request)
+                if self.filesystem_failure == "network":
+                    raise httpx.ConnectError("runtime unavailable", request=request)
+                if self.filesystem_failure == "malformed":
+                    return httpx.Response(200, text="not-json", request=request)
+                return httpx.Response(
+                    200,
+                    json={"purged": self.filesystem_failure != "false"},
+                    request=request,
+                )
+            if self.history_error:
                 return httpx.Response(502, text="boom", request=request)
             return httpx.Response(
                 200, json={"deleted": history_deleted}, request=request
@@ -3526,11 +3554,10 @@ async def test_erase_session_noop_session_yields_all_zero_ok_receipt(
 
 
 @pytest.mark.asyncio
-async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runtime(
+async def test_erase_session_deletes_checkpoint_filesystem_then_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A2: runtime erasure hits checkpoint BEFORE history, on the resolved
-    base_url, with the caller's Authorization; the receipt gains both entries."""
+    """Runtime erasure preserves ownership until checkpoint and files are gone."""
     from control_plane_backend.config.models import RuntimeCatalogSourceConfig
     from control_plane_backend.sessions.erasure_service import (
         ConversationErasureService,
@@ -3590,9 +3617,10 @@ async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runti
         authorization="Bearer test-token",
     )
 
-    # Ordering: checkpoint DELETE strictly precedes history DELETE.
+    # Ordering: checkpoint and filesystem DELETEs strictly precede history DELETE.
     assert [url for url, _ in runtime_calls] == [
         "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
         "http://runtime-a.internal/agents/sessions/session-1",
     ]
     # base_url resolved from agent_instance_id (runtime-a, not the decoy) and
@@ -3604,6 +3632,7 @@ async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runti
 
     by_store = {r.store: r for r in receipt.stores}
     assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_conversation_filesystem"].ok is True
     assert by_store["runtime_history"].ok is True
     assert by_store["runtime_history"].deleted_count == 7
     assert receipt.ok is True
@@ -3690,12 +3719,95 @@ async def test_erase_session_history_failure_isolated_others_still_erased(
     # the row survives and a re-run can re-resolve the runtime and finish.
     assert by_store["session_metadata"].ok is False
     assert session_store._records != []
-    # Checkpoint was still attempted before the failing history call.
+    # Checkpoint and filesystem were still attempted before failing history.
     assert [url for url, _ in runtime_calls] == [
         "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
         "http://runtime-a.internal/agents/sessions/session-1",
     ]
     assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filesystem_failure", ["false", "malformed", "http", "network"]
+)
+async def test_erase_session_filesystem_failure_retains_history_and_retries(
+    monkeypatch: pytest.MonkeyPatch,
+    filesystem_failure: str,
+) -> None:
+    """A failed filesystem purge is receipted and a later retry converges."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_CONVERSATION_FILESYSTEM,
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    service = ConversationErasureService(deps)
+
+    first_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(first_calls, filesystem_failure=filesystem_failure),
+    )
+    first = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    first_by_store = {result.store: result for result in first.stores}
+    assert first_by_store[STORE_CONVERSATION_FILESYSTEM].ok is False
+    assert first_by_store["runtime_history"].ok is False
+    assert "skipped" in (first_by_store["runtime_history"].error or "")
+    assert first_by_store["session_metadata"].ok is False
+    assert session_store._records != []
+    assert [url for url, _ in first_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
+    ]
+
+    second_calls: list[tuple[str, dict[str, str]]] = []
+    runtime_client = deps.get_runtime_http_client()
+    runtime_client.calls = second_calls  # type: ignore[attr-defined]
+    runtime_client.filesystem_failure = None  # type: ignore[attr-defined]
+    second = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert second.ok is True
+    assert session_store._records == []
+    assert [url for url, _ in second_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
 
 
 @pytest.mark.asyncio
@@ -3761,10 +3873,8 @@ async def test_erase_session_partial_failure_converges_on_retry(
     # Attempt 2 — the runtime is healthy again. Because the row survived, the
     # retry re-resolves the runtime, every store converges, and metadata is
     # finally deleted.
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        _make_runtime_client([]),
-    )
+    runtime_client = deps.get_runtime_http_client()
+    runtime_client.history_error = False  # type: ignore[attr-defined]
     second = await service.erase_session(
         team_id=TeamId("personal"),
         session_id="session-1",
@@ -3934,7 +4044,11 @@ async def test_erase_session_survives_agent_instance_deletion(
 
     # The runtime WAS resolved (from the session's stored source_runtime_id)
     # and its checkpoint/history WERE actually purged — not just skipped.
-    assert len(runtime_calls) == 2
+    assert [url for url, _headers in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
     by_store = {r.store: r for r in receipt.stores}
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
@@ -4328,9 +4442,10 @@ async def test_erase_session_attachment_failure_isolated_others_still_erased(
     assert by_store[STORE_KPI].ok is True
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
-    # The runtime checkpoint+history DELETEs were still issued.
+    # The runtime checkpoint, filesystem, and history DELETEs were still issued.
     assert [url for url, _ in runtime_calls] == [
         "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1/filesystem",
         "http://runtime-a.internal/agents/sessions/session-1",
     ]
     assert receipt.ok is False
@@ -4927,10 +5042,12 @@ async def test_erase_session_skips_history_when_checkpoint_fails(
 
     by_store = {r.store: r for r in receipt.stores}
     assert by_store["runtime_checkpoint"].ok is False
-    # History was recorded as skipped, not attempted.
+    # Filesystem and history were recorded as skipped, not attempted.
+    assert by_store["runtime_conversation_filesystem"].ok is False
+    assert "skipped" in (by_store["runtime_conversation_filesystem"].error or "")
     assert by_store["runtime_history"].ok is False
     assert "skipped" in (by_store["runtime_history"].error or "")
-    # The runtime only ever saw the checkpoint DELETE — history was never called.
+    # The runtime only saw the checkpoint DELETE — later stores were never called.
     assert runtime_calls
     assert all("/agents/checkpoints/" in url for url, _ in runtime_calls)
     assert not any("/agents/sessions/" in url for url, _ in runtime_calls)

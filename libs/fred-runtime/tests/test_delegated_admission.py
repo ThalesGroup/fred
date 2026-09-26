@@ -962,6 +962,9 @@ async def run_one_turn(
         return RuntimeServices()
 
     monkeypatch.setattr(agent_app_module, "_build_runtime_services", _capture_services)
+    monkeypatch.setattr(
+        agent_app_module, "_build_conversation_filesystem", lambda _: None
+    )
 
     request = agent_app_module._AgentExecuteRequest.model_construct(
         agent_id="rags.sample.echo",

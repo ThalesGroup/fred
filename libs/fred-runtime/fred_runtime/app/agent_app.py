@@ -122,6 +122,8 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
+    ConversationScratchpadInvalidPathError,
+    ConversationScratchpadStorageError,
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
@@ -168,7 +170,12 @@ from fred_runtime.common.outbound_credentials import (
     set_delegation_runtime,
     static_person_provider,
 )
-from fred_runtime.deep.deep_runtime import DeepAgentRuntime
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
+from fred_runtime.deep.deep_runtime import (
+    DeepAgentRuntime,
+    build_conversation_filesystem,
+)
 from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -222,7 +229,7 @@ from ..runtime_support.run_scope import (
     set_owner_execution,
 )
 from .chat_input_limit import validate_runtime_request
-from .config import AgentPodConfig
+from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
 from .dependencies import (
@@ -380,6 +387,12 @@ class _CheckpointStorageStats(BaseModel):
     pending_write_count: int
     checkpoint_bytes_approx: int
     blob_bytes_approx: int
+
+
+class _ConversationFilesystemPurgeResponse(BaseModel):
+    """Stable acknowledgement for an idempotent runtime filesystem purge."""
+
+    purged: bool
 
 
 class _RuntimeErrorPayload(BaseModel):
@@ -866,6 +879,7 @@ def _build_runtime_services(
     access_token: str | None = None,
     capability_registry: CapabilityRegistry | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
+    conversation_filesystem: ConversationFilesystemService | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -888,6 +902,12 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    if conversation_filesystem is None:
+        conversation_filesystem = _build_conversation_filesystem(binding)
+    conversation_port = None
+    if conversation_filesystem is not None:
+        backend, permissions = build_conversation_filesystem(conversation_filesystem)
+        conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
     base_tool_invoker = FredKnowledgeSearchToolInvoker(
         binding=binding,
@@ -1037,6 +1057,29 @@ def _build_runtime_services(
             http_client=runtime_config.control_plane_http_client,
             credentials=credential_provider,
         ),
+        conversation_filesystem=conversation_port,
+    )
+
+
+def _build_conversation_filesystem(
+    binding: BoundRuntimeContext,
+) -> ConversationFilesystemService | None:
+    """Build one internal filesystem scope for the whole Deep request."""
+    runtime_config = get_runtime_context().config
+    if runtime_config.filesystem is None:
+        return None
+    trusted_session_id = (
+        binding.runtime_context.session_id or binding.portable_context.request_id
+    )
+    return ConversationFilesystemService(
+        runtime_config.filesystem,
+        trusted_session_id,
+        quotas=(
+            runtime_config.conversation_filesystem_quotas
+            if runtime_config.conversation_filesystem_quotas is not None
+            else ConversationFilesystemQuotaConfig()
+        ),
+        kpi=runtime_config.kpi_writer,
     )
 
 
@@ -4149,6 +4192,7 @@ async def _iterate_runtime_event_payloads_inner(
         platform_prompt=platform_prompt,
     )
 
+    conversation_filesystem = _build_conversation_filesystem(binding)
     services = _build_runtime_services(
         definition,
         binding,
@@ -4157,6 +4201,7 @@ async def _iterate_runtime_event_payloads_inner(
         access_token=access_token,
         capability_registry=capability_registry,
         credential_provider=credential_provider,
+        conversation_filesystem=conversation_filesystem,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -4243,16 +4288,19 @@ async def _iterate_runtime_event_payloads_inner(
             # DeepAgentDefinition is-a ReActAgentDefinition (same typed
             # input/output, same event contract), so it shares this branch's
             # ReActInput plumbing below — only the runtime class differs.
-            runtime_cls = (
-                DeepAgentRuntime
-                if isinstance(definition, DeepAgentDefinition)
-                else ReActRuntime
-            )
-            runtime = runtime_cls(
-                definition=definition,
-                services=services,
-                capability_block=capability_block,
-            )
+            if isinstance(definition, DeepAgentDefinition):
+                runtime = DeepAgentRuntime(
+                    definition=definition,
+                    services=services,
+                    capability_block=capability_block,
+                    conversation_filesystem=conversation_filesystem,
+                )
+            else:
+                runtime = ReActRuntime(
+                    definition=definition,
+                    services=services,
+                    capability_block=capability_block,
+                )
             runtime.bind(binding)
             await runtime.activate()
             executor = await runtime.get_executor()
@@ -4985,6 +5033,68 @@ def _build_agent_router(
             session_id=session_id, user_id=caller_uid
         )
         return {"deleted": count}
+
+    @router.delete(
+        "/sessions/{session_id}/filesystem",
+        response_model=_ConversationFilesystemPurgeResponse,
+    )
+    async def delete_session_filesystem(
+        session_id: str,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> _ConversationFilesystemPurgeResponse:
+        """Idempotently erase the runtime-owned files for one conversation.
+
+        DELETE <base_url>/agents/sessions/{session_id}/filesystem
+
+        This is an internal lifecycle endpoint, not a general file API.  It
+        removes only the code-owned ``scratchpad`` and ``.deep`` namespaces.
+        Ownership follows checkpoint deletion: an owner may erase their own
+        conversation and a platform runtime administrator may erase any
+        conversation; both depend on history as the ownership oracle.
+        """
+        caller_uid = caller.uid if caller is not None else None
+        history_store = _get_history_store_for_owned_access(caller)
+        if (
+            not await _caller_can_manage_platform(caller)
+            and caller_uid is not None
+            and history_store is not None
+            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied.",
+            )
+
+        runtime_config = get_runtime_context().config
+        if runtime_config.filesystem is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No conversation filesystem configured — storage is unavailable.",
+            )
+        try:
+            filesystem = ConversationFilesystemService(
+                runtime_config.filesystem,
+                session_id,
+                quotas=(
+                    runtime_config.conversation_filesystem_quotas
+                    if runtime_config.conversation_filesystem_quotas is not None
+                    else ConversationFilesystemQuotaConfig()
+                ),
+                kpi=runtime_config.kpi_writer,
+            )
+            await filesystem.purge_namespace("scratchpad")
+            await filesystem.purge_namespace(".deep")
+        except ConversationScratchpadInvalidPathError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid session identifier.",
+            ) from exc
+        except ConversationScratchpadStorageError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Conversation filesystem storage is unavailable.",
+            ) from exc
+        return _ConversationFilesystemPurgeResponse(purged=True)
 
     # ------------------------------------------------------------------
     # Checkpoint admin endpoints
@@ -5755,12 +5865,13 @@ def create_agent_app(
         # 4. initialize_control_plane_client — sync, no network until first call
         # 5. bootstrap_observability — global tracer + metrics provider
         # 6. attach_pod_container — container in app.state before any request
-        # 7. initialize_sql    — async, may take time
-        # 8. initialize_platform_sql — dedicated read-only SQL adapter, after
+        # 7. initialize_filesystem — one object-store client for the pod lifetime
+        # 8. initialize_sql    — async, may take time
+        # 9. initialize_platform_sql — dedicated read-only SQL adapter, after
         #    initialize_sql proved the Postgres config (OPSCAP-01-PG)
-        # 9. start_metrics_exporter — prometheus thread, after KPI writer exists
-        # 10. start_kpi_tasks  — asyncio tasks, after SQL engine is known
-        # 11. set_runtime_context — wires all built parts into the global config
+        # 10. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 11. start_kpi_tasks  — asyncio tasks, after SQL engine is known
+        # 12. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.runtime_id,
             log_level=config.app.log_level,
@@ -5804,6 +5915,7 @@ def create_agent_app(
                 if not await rebac_engine.is_standing_seed_ready():
                     raise ValueError("Account standing is not ready.")
             chat_factory = _build_chat_model_factory(config)
+            await container.initialize_filesystem()
             await container.initialize_sql()
             container.initialize_platform_sql()
             container.start_metrics_exporter()
@@ -5823,6 +5935,10 @@ def create_agent_app(
                         chat_model_factory=chat_factory,
                         checkpointer=checkpointer,
                         history_store=history_store,
+                        filesystem=container.get_filesystem(),
+                        conversation_filesystem_quotas=(
+                            config.storage.conversation_filesystem
+                        ),
                         mcp_configuration=config.get_mcp_configuration(),
                         models_catalog_path=config.get_models_catalog_path(),
                         default_platform_prompt=_platform_prompt_file_field(
