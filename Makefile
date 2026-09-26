@@ -415,6 +415,22 @@ k3d-logs-kf: ## Tail logs for knowledge-flow-backend
 k3d-logs-frontend: ## Tail logs for frontend
 	kubectl logs -n $(K3D_NAMESPACE) -l app=frontend -f --tail=100
 
-.PHONY: migration-tests
+##@ Migration notes and release preparation
+
+MIGRATION_BASE ?= origin/swift
+MIGRATION_GUIDES = uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py
+
+.PHONY: migration-check release-plan release-guide migration-tests
+migration-check: ## Check this PR's migration note, including uncommitted edits
+	@$(MIGRATION_GUIDES) check-pr --base "$(MIGRATION_BASE)" --worktree
+
+release-plan: ## Report release impact, minimum version and missing migration notes
+	@$(MIGRATION_GUIDES) plan
+
+release-guide: ## Generate and validate the DevOps guide: make release-guide RELEASE_VERSION=X.Y.Z
+	@test -n "$(RELEASE_VERSION)" || { echo "Usage: make release-guide RELEASE_VERSION=X.Y.Z"; exit 1; }
+	@$(MIGRATION_GUIDES) generate --worktree --version "$(RELEASE_VERSION)"
+	@$(MIGRATION_GUIDES) verify --worktree --version "$(RELEASE_VERSION)"
+
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
