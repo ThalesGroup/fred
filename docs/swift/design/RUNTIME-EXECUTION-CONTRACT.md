@@ -559,6 +559,11 @@ Key models:
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
+Session ownership uses the native route's shared gate: with authentication enabled,
+`X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
+and emits `session_owner_mismatch` before credential admission or agent resolution.
+New sessions and security-disabled execution retain their existing behavior.
+
 **Current limitations of the OpenAI compat layer vs the native protocol:**
 
 - System messages in the request are currently ignored (agent prompt is defined by pod registration)
@@ -6208,3 +6213,12 @@ sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
 provider time. Each reconstructed call increments
 `agent.tool_call_text_recovered_total`, with a bounded model-name label for
 Prometheus/Grafana; this counts proposals even if a later gate prevents execution.
+
+### 8.93 OpenAI-compatible session ownership (2026-09-26)
+
+The OpenAI-compatible route now applies the native session ownership gate before
+credential admission or agent resolution; see §4 for the HTTP 403 and audit
+behavior. This closes #2810 for sessions with history ownership records, without
+changing request or response schemas. Checkpoint-only conversations remain a
+known gap; #2812 tracks the compatibility surface's intended uses and required
+ownership guarantees.

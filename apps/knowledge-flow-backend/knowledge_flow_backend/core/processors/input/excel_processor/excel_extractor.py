@@ -41,7 +41,7 @@ Mapping to the specification
   B1 orientation -> transposed / cross-tab / normal
   B2 to_dataframe-> auto-fill merged cells + pandas conversion (first row = header)
   B3 check_empty -> table state: "empty" / "non-empty"
-  B4 clean       -> column recognition (dates, numeric: strip thousands spaces, text)
+  B4 clean       -> column recognition (booleans, dates, numeric: strip thousands spaces, text)
   B5 validate    -> provenance attached
   Cross-cutting  -> LLM fallback + observability (logs at each step)
 
@@ -1039,7 +1039,7 @@ class ExcelExtractor:
         _step("B3", f"{table.id} — {n_rows_dropped} empty row(s) and {n_cols_dropped} empty column(s) dropped, state: {table.etat}")
 
     def b4_clean_and_coerce(self, table: DetectedTable) -> None:
-        """B4 — column recognition: dates, numeric, text.
+        """B4 — column recognition: booleans, dates, numeric, text.
 
         A numeric column is RECOGNISED but its values are NOT converted: only the
         whitespace grouping thousands is stripped (currency, %, decimal comma are
@@ -1058,14 +1058,21 @@ class ExcelExtractor:
             s = df[col]
             name = str(col)
 
-            # 1) Already dates (openpyxl returns datetimes for date-formatted cells)
+            # 1) Native Excel booleans, including columns with blank cells.
+            values = [v for v in s if _nonempty(v)]
+            if values and all(isinstance(v, (bool, np.bool_)) for v in values):
+                df[col] = pd.Series([v if _nonempty(v) else pd.NA for v in s], index=s.index, dtype="boolean")
+                report.append(f"{name}=bool")
+                continue
+
+            # 2) Already dates (openpyxl returns datetimes for date-formatted cells)
             if any(isinstance(v, (dt.date, dt.datetime)) for v in s if _nonempty(v)):
                 parsed_dt = pd.to_datetime(s, errors="coerce")
                 df[col] = pd.Series([v if pd.notna(v) else None for v in parsed_dt], index=s.index, dtype=object)
                 report.append(f"{name}=date")
                 continue
 
-            # 2) Numeric: column RECOGNISED but values NOT converted — only the
+            # 3) Numeric: column RECOGNISED but values NOT converted — only the
             #    thousands-grouping whitespace is stripped (currency, %, decimal
             #    comma kept). Non-numeric values in the column are left as-is.
             non_null = sum(1 for v in s if _nonempty(v))
@@ -1075,7 +1082,7 @@ class ExcelExtractor:
                 report.append(f"{name}=num")
                 continue
 
-            # 3) Dates stored as text. format="mixed" parses each value on its own
+            # 4) Dates stored as text. format="mixed" parses each value on its own
             #    (formats are heterogeneous) without the "Could not infer format"
             #    warning.
             dt_parsed = pd.to_datetime(s, errors="coerce", dayfirst=True, format="mixed")
@@ -1084,7 +1091,7 @@ class ExcelExtractor:
                 report.append(f"{name}=date(txt)")
                 continue
 
-            # 4) Otherwise: cleaned text (raw data kept, including 0)
+            # 5) Otherwise: cleaned text (raw data kept, including 0)
             df[col] = s.map(lambda v: str(v).strip() if _nonempty(v) else None)
             report.append(f"{name}=str")
 

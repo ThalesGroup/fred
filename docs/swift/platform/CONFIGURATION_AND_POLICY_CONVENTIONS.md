@@ -34,7 +34,9 @@ configuration must update the chart values and regenerate the affected schemas i
 the same PR, including optional fields and disabled feature switches. Document
 compatibility with omitted fields, required operations, activation prerequisites
 and rollback in an operator migration note. See the
-[delegated execution migration note](../ops/migrations/2808-delegated-execution.md).
+[migration workflow and template](../ops/MIGRATION-GUIDES.md).
+The [delegated execution note](../ops/migrations/2808-delegated-execution.md)
+shows a default-off upgrade with conditional activation steps.
 
 DevOps use published chart versions and their values as the signal to reconcile
 customer deployment values before or during an upgrade. Actual customer values

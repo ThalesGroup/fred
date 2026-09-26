@@ -35,6 +35,8 @@ interface MarkdownRendererProps {
   /** Drop the prose reading-width cap so wide content (CSV tables) can fill the
    *  available width. Use in full-page previews, not in the chat transcript. */
   fullWidth?: boolean;
+  /** Compact typography for dense tool catalogs. */
+  compact?: boolean;
   /** Give h2/h3 headings a slug `id` and a hover copy-link button so deep
    *  links can target them — long-lived documents (Help Center articles),
    *  not chat messages. */
@@ -185,7 +187,15 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
 ];
 
 export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps>(function MarkdownRenderer(
-  { text, onSourceClick, streaming = false, fullWidth = false, headingAnchors = false, inline = false },
+  {
+    text,
+    onSourceClick,
+    streaming = false,
+    fullWidth = false,
+    compact = false,
+    headingAnchors = false,
+    inline = false,
+  },
   ref,
 ) {
   const { stableMarkdown, pendingFence } = useMemo(
@@ -288,7 +298,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   return (
     <Wrapper
       ref={ref as React.Ref<HTMLDivElement & HTMLSpanElement>}
-      className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}${inline ? ` ${styles.inline}` : ""}`}
+      className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}${compact ? ` ${styles.compact}` : ""}${inline ? ` ${styles.inline}` : ""}`}
       data-copyable-content
     >
       {stableMarkdown ? (

@@ -21,6 +21,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import styles from "./MarkdownRenderer.module.css";
 
 vi.mock("../CodeBlock/CodeBlock", () => ({
   CodeBlock: ({ code, language, inline }: { code: string; language?: string; inline?: boolean }) => (
@@ -61,6 +62,28 @@ function render(text: string) {
 }
 
 const codeBlocks = () => Array.from(container.querySelectorAll<HTMLElement>("[data-code-block]"));
+
+describe("MarkdownRenderer layout variants", () => {
+  it.each([false, true])("keeps announcement text inline with compact=%s", (compact) => {
+    act(() => root.render(<MarkdownRenderer text="Read **this announcement**" inline compact={compact} />));
+    const wrapper = container.querySelector("[data-copyable-content]");
+    expect(wrapper?.tagName).toBe("SPAN");
+    expect(wrapper?.querySelector("p")).toBeNull();
+    expect(wrapper?.querySelector("strong")?.textContent).toBe("this announcement");
+    expect(wrapper?.classList.contains(styles.inline)).toBe(true);
+    expect(wrapper?.classList.contains(styles.compact)).toBe(compact);
+  });
+
+  it("keeps compact full-width catalogs as block content", () => {
+    act(() => root.render(<MarkdownRenderer text={"## Catalog\n\nTable description"} compact fullWidth />));
+    const wrapper = container.querySelector("[data-copyable-content]");
+    expect(wrapper?.tagName).toBe("DIV");
+    expect(wrapper?.querySelector("h2")?.textContent).toBe("Catalog");
+    expect(wrapper?.querySelector("p")?.textContent).toBe("Table description");
+    expect(wrapper?.classList.contains(styles.compact)).toBe(true);
+    expect(wrapper?.classList.contains(styles.fullWidth)).toBe(true);
+  });
+});
 
 describe("MarkdownRenderer code routing", () => {
   it("renders a fence without a language as a plaintext block", () => {
