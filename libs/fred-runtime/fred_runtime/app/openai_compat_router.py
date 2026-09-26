@@ -67,6 +67,7 @@ from .agent_app import (
     _admit_run_credentials,
     _AgentExecuteRequest,
     _discard_run_record,
+    _enforce_session_ownership,
     _iterate_runtime_event_payloads,
     _resolve_agent_instance,
     _RunStreamingResponse,
@@ -227,6 +228,9 @@ def create_openai_compat_router(
         effective_user_id = authenticated_user.uid if authenticated_user else None
 
         container = get_pod_container_from_app(http_request.app)
+        await _enforce_session_ownership(
+            session_id, authenticated_user, container, agent_instance_id=None
+        )
         # The same admission every other execution surface goes through: under
         # delegation this writes the run record and gives the turn a provider,
         # so no call made for a chat completion carries the person's bearer.
