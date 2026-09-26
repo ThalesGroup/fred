@@ -2010,23 +2010,18 @@ async def _authorize_execution_or_raise(
 
 
 async def _enforce_session_ownership(
-    request: RuntimeExecuteRequest,
+    session_id: str | None,
     authenticated_user: KeycloakUser | AssertedUser | None,
     container: PodApplicationContext,
+    *,
+    agent_instance_id: str | None,
 ) -> None:
-    """
-    Private-per-owner session policy (RUNTIME-07 rev. 2, finding F-C).
+    """Reject access to another user's existing session before admitting a run.
 
-    Conversations are private to their owner. When security is enabled and the
-    request targets an EXISTING session, the authenticated user must own it. A
-    brand-new session is allowed (the caller becomes its owner). This blocks a
-    same-team user from continuing or resuming another user's private session by
-    guessing its `session_id` / `checkpoint_id` — the team OpenFGA check alone
-    would not catch an intra-team cross-user access.
+    Both native and OpenAI-compatible routes use this private-per-owner gate.
     """
     if authenticated_user is None:
         return  # security disabled (dev) — no identity to enforce
-    session_id = request.effective_session_id()
     if not session_id:
         return
     history_store = get_runtime_context().config.history_store
@@ -2042,7 +2037,7 @@ async def _enforce_session_ownership(
         "session_owner_mismatch",
         user_id=authenticated_user.uid,
         session_id=session_id,
-        agent_instance_id=request.agent_instance_id,
+        agent_instance_id=agent_instance_id,
     )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -2286,7 +2281,12 @@ async def _authorize_and_resolve(
     previously_pending_occurrence_ids = await _validate_session_checkpoint_access(
         request
     )
-    await _enforce_session_ownership(request, authenticated_user, container)
+    await _enforce_session_ownership(
+        request.effective_session_id(),
+        authenticated_user,
+        container,
+        agent_instance_id=request.agent_instance_id,
+    )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
     # After authorization, before the context is copied into the internal

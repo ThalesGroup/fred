@@ -559,6 +559,11 @@ Key models:
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
+Session ownership uses the native route's shared gate: with authentication enabled,
+`X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
+and emits `session_owner_mismatch` before credential admission or agent resolution.
+New sessions and security-disabled execution retain their existing behavior.
+
 **Current limitations of the OpenAI compat layer vs the native protocol:**
 
 - System messages in the request are currently ignored (agent prompt is defined by pod registration)
