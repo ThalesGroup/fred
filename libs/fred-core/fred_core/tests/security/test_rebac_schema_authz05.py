@@ -203,5 +203,5 @@ def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> No
 
     for capability in ("can_delete_team", "can_rescue_team_admin"):
         assert organization["relations"][capability] == {
-            "computedUserset": {"relation": "platform_admin"}
-        }, f"{capability} must be platform_admin-only."
+            "computedUserset": {"relation": "organization_admin"}
+        }, f"{capability} must be organization_admin-only."

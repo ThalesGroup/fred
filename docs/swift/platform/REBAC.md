@@ -596,3 +596,30 @@ security:
 > platform or team role is granted exclusively by the declarative platform import
 > (`CONTROL-PLANE-PRODUCT-CONTRACT.md §27`). No field in `security.rebac` configures a
 > platform role anymore.
+
+
+## Organization upgrade (2026-09-25)
+
+Control Plane owns the organization registry and each community team's
+`organization_id`. The stable default is `fred`; optionally set
+`platform.default_organization_name: Acme` in the Control Plane YAML. The configured
+label is reapplied at startup and changes no IDs, memberships or resource links.
+
+Apply the Control Plane Alembic migration before serving requests (`make run`
+applies it locally). It creates `fred`, backfills team assignments and moves the
+saved prompt from key `default` to `fred`, preserving text and explicit emptiness.
+Startup holds the existing database advisory lock while granting each existing
+platform administrator `organization_admin` on `fred`. It records completion only
+after OpenFGA succeeds; interrupted work retries, completed work never restores
+subsequently revoked organization roles. Fresh root bootstrap grants both roles.
+
+The platform role remains stored on `organization:fred`; it is not inherited by
+other organizations. Organization administration does not grant protected team
+content access. Global technical administration remains platform-owned; see
+CONTROL-PLANE-PRODUCT-CONTRACT.md, “Explicit organizations”, for the permission map.
+
+Before rollout, retain matching PostgreSQL and OpenFGA backups. SQL downgrade
+refuses additional organizations. Restoring an old deployment requires restoring
+a matching authorization model/data snapshot as well; SQL downgrade alone does
+not revert OpenFGA. Do not run old and new Control Plane versions concurrently
+during this upgrade.

@@ -231,6 +231,7 @@ async def list_all_teams_for_registry(
     deps: TeamServiceDependencies,
     *,
     include_membership: bool = True,
+    organization_id: str = ORGANIZATION_ID,
 ) -> list[Team]:
     """List every team in the registry (RFC §32, `GET /teams/all`).
 
@@ -253,20 +254,28 @@ async def list_all_teams_for_registry(
     - `teams = await list_all_teams_for_registry(user, deps)`
     """
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_LIST_ALL_TEAMS, ORGANIZATION_ID
+        user, OrganizationPermission.CAN_LIST_ALL_TEAMS, organization_id
     )
     if not include_membership:
-        return await _list_registry_teams_without_membership(deps)
-    teams = await list_all_teams_unfiltered(user, deps)
+        return await _list_registry_teams_without_membership(deps, organization_id)
+    teams = await _list_teams(
+        user, deps, filter_by_can_read=False, organization_id=organization_id
+    )
     # `list_all_teams_unfiltered` mixes in the caller's own personal space
     # (see `_list_teams` below — `stats.py` filters the same way for the same
     # reason). The registry is `team_metadata_store` rows only (RFC §32);
     # a personal space never had a row there, so it isn't "in the registry".
-    return [team for team in teams if not is_personal_team_id(str(team.id))]
+    return [
+        team
+        for team in teams
+        if not is_personal_team_id(str(team.id))
+        and team.organization_id == organization_id
+    ]
 
 
 async def _list_registry_teams_without_membership(
     deps: TeamServiceDependencies,
+    organization_id: str = ORGANIZATION_ID,
 ) -> list[Team]:
     # Registry rows only: no ReBAC read, so the cost no longer grows with the team count.
     content_store = deps.get_content_store()
@@ -283,6 +292,7 @@ async def _list_registry_teams_without_membership(
             default_max_resources_storage_size=default_max_storage,
         ).model_copy(update={"member_count": None})
         for metadata in await deps.get_team_metadata_store().list_all()
+        if metadata.organization_id == organization_id
     ]
 
 
@@ -304,14 +314,13 @@ async def delete_team(
     - `await delete_team(user, TeamId("swiftpost"), deps)`
     """
     rebac = deps.rebac
-    await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_DELETE_TEAM, ORGANIZATION_ID
-    )
-
     store = deps.get_team_metadata_store()
     metadata = await store.get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_DELETE_TEAM, metadata.organization_id
+    )
 
     await rebac.delete_all_relations_of_reference(
         RebacReference(Resource.TEAM, team_id)
@@ -355,14 +364,13 @@ async def rescue_team_admin(
     - `await rescue_team_admin(user, TeamId("swiftpost"), "alice-sub", deps)`
     """
     rebac = deps.rebac
-    await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_RESCUE_TEAM_ADMIN, ORGANIZATION_ID
-    )
-
     store = deps.get_team_metadata_store()
     metadata = await store.get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_RESCUE_TEAM_ADMIN, metadata.organization_id
+    )
 
     async with store.advisory_lock(f"rescue_team_admin:{team_id}"):
         existing_admin_ids = await _get_team_users_by_relation(
@@ -446,9 +454,18 @@ async def join_default_teams_for_new_user(
 
     A user already holding any role on one of them is left untouched there.
     """
+    from control_plane_backend.organizations.service import ensure_user_organizations
+
+    organizations = await ensure_user_organizations(
+        KeycloakUser(uid=user_id, username=user_id, roles=[]), deps.rebac
+    )
     teams = await _resolve_default_teams(deps)
     await asyncio.gather(
-        *(_join_unless_already_in_team(deps.rebac, team.id, user_id) for team in teams)
+        *(
+            _join_unless_already_in_team(deps.rebac, team.id, user_id)
+            for team in teams
+            if team.organization_id in organizations
+        )
     )
 
 
@@ -594,6 +611,7 @@ async def _list_teams(
     deps: TeamServiceDependencies,
     *,
     filter_by_can_read: bool,
+    organization_id: str | None = None,
 ) -> list[Team]:
     personal_limit = deps.configuration.app.personal_max_resources_storage_size
     selectable_teams: dict[str, Team] = {
@@ -606,6 +624,10 @@ async def _list_teams(
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): the registry lives in
     # `team_metadata_store`, not Keycloak root groups.
     all_teams = await deps.get_team_metadata_store().list_all()
+    if organization_id is not None:
+        all_teams = [
+            team for team in all_teams if team.organization_id == organization_id
+        ]
     # TEAM-10: marketplace discoverability is gated by `visibility`, not
     # `joining_mode` (which only ever gates the ability to become a
     # member). Both calls are idempotent, so this also lazily
@@ -730,6 +752,8 @@ async def create_team(
     user: KeycloakUser,
     request: CreateTeamRequest,
     deps: TeamServiceDependencies,
+    *,
+    organization_id: str = ORGANIZATION_ID,
 ) -> TeamWithPermissions:
     """Bootstrap a brand-new team with its first `team_admin`(s) (RFC §28).
 
@@ -755,7 +779,7 @@ async def create_team(
     """
     rebac = deps.rebac
     await rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+        user, OrganizationPermission.CAN_CREATE_TEAM, organization_id
     )
 
     store = deps.get_team_metadata_store()
@@ -776,7 +800,9 @@ async def create_team(
     ]
     team_id = TeamId(uuid4().hex)
     try:
-        metadata = await store.create(team_id, request.name)
+        metadata = await store.create(
+            team_id, request.name, organization_id=organization_id
+        )
     except IntegrityError as exc:
         raise TeamAlreadyExistsError(request.name) from exc
 
@@ -792,7 +818,12 @@ async def create_team(
         # never left registered without it.
         bootstrap_token = await rebac.add_relations(
             [
-                team_organization_relation(team_id),
+                team_organization_relation(team_id, organization_id),
+                Relation(
+                    subject=RebacReference(Resource.TEAM, team_id),
+                    relation=RelationType.TEAM,
+                    resource=RebacReference(Resource.ORGANIZATION, organization_id),
+                ),
                 *(
                     Relation(
                         subject=RebacReference(Resource.USER, admin_user_id),
@@ -973,6 +1004,16 @@ async def join_team(
         raise TeamNotFoundError(team_id)
     if metadata.joining_mode != JoiningMode.OPEN:
         raise TeamNotOpenForJoiningError(team_id, metadata.joining_mode)
+
+    from control_plane_backend.organizations.service import ensure_user_organizations
+
+    await ensure_user_organizations(user, deps.rebac)
+    await deps.rebac.check_user_permission_or_raise(
+        user,
+        TeamPermission.CAN_JOIN,
+        team_id,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+    )
 
     consistency_token = await _add_team_member_relation(
         deps.rebac, team_id, user.uid, UserTeamRelation.TEAM_MEMBER
@@ -1310,12 +1351,18 @@ async def add_team_member(
     permission_to_check = _get_administer_permission_for_team_role_relation(
         request.relation
     )
-    await _validate_team_and_check_permission(
+    metadata, _ = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [permission_to_check],
         deps,
+    )
+    await rebac.check_permission_or_raise(
+        RebacReference(Resource.USER, request.user_id),
+        OrganizationPermission.MEMBER,
+        RebacReference(Resource.ORGANIZATION, metadata.organization_id),
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
     relation = await resolve_granted_team_relation(
         request.user_id, request.relation, deps
@@ -1350,6 +1397,8 @@ async def search_candidate_team_admins(
     user: KeycloakUser,
     query: str,
     deps: TeamServiceDependencies,
+    *,
+    organization_id: str = ORGANIZATION_ID,
 ) -> list[UserSummary]:
     """
     Search Keycloak users eligible to be a brand-new team's first `team_admin`.
@@ -1370,7 +1419,7 @@ async def search_candidate_team_admins(
     - `matches = await search_candidate_team_admins(user, "cohen", deps)`
     """
     await deps.rebac.check_user_permission_or_raise(
-        user, OrganizationPermission.CAN_CREATE_TEAM, ORGANIZATION_ID
+        user, OrganizationPermission.CAN_CREATE_TEAM, organization_id
     )
     return await _search_users_bounded(query, deps)
 
@@ -1581,12 +1630,18 @@ async def grant_team_member_role(
     permission_to_check = _get_administer_permission_for_team_role_relation(
         request.relation
     )
-    await _validate_team_and_check_permission(
+    metadata, _ = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [permission_to_check],
         deps,
+    )
+    await rebac.check_permission_or_raise(
+        RebacReference(Resource.USER, user_id),
+        OrganizationPermission.MEMBER,
+        RebacReference(Resource.ORGANIZATION, metadata.organization_id),
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
     relation = await resolve_granted_team_relation(user_id, request.relation, deps)
     await _add_team_member_relation(rebac, team_id, user_id, relation)
@@ -1905,6 +1960,7 @@ def _build_team_dto(
     return Team(
         id=metadata.id,
         name=metadata.name,
+        organization_id=metadata.organization_id,
         member_count=len(member_ids),
         admins=admins,
         is_member=is_member,

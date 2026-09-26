@@ -123,7 +123,10 @@ def _to_platform_prompt(
 
 
 async def get_platform_prompt(
-    *, user: KeycloakUser, deps: ProductServiceDependencies
+    *,
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+    organization_id: str = "fred",
 ) -> PlatformPrompt:
     """`can_edit_platform_prompt`-gated read of the platform-wide prompt.
 
@@ -132,11 +135,15 @@ async def get_platform_prompt(
     below the admin tier anyway.
     """
 
-    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
-    stored = await deps.get_platform_prompt_store().get()
+    await require_edit_platform_prompt(
+        deps.team_dependencies.rebac, user, organization_id
+    )
+    stored = await deps.get_platform_prompt_store().get(organization_id=organization_id)
     if stored is not None:
         # A saved row answers the question by itself — skip the pod round-trip.
         return _to_platform_prompt(stored)
+    if organization_id != "fred":
+        return PlatformPrompt(text="", is_default=True)
     pod_file = await fetch_pod_platform_prompt_file(deps)
     return _to_platform_prompt(
         stored, pod_default=pod_file.platform_prompt if pod_file else None
@@ -144,7 +151,11 @@ async def get_platform_prompt(
 
 
 async def set_platform_prompt(
-    *, user: KeycloakUser, text: str, deps: ProductServiceDependencies
+    *,
+    user: KeycloakUser,
+    text: str,
+    deps: ProductServiceDependencies,
+    organization_id: str = "fred",
 ) -> PlatformPrompt:
     """`can_edit_platform_prompt`-gated write of the platform-wide prompt.
 
@@ -154,35 +165,33 @@ async def set_platform_prompt(
     delete" shortcut here.
     """
 
-    await require_edit_platform_prompt(deps.team_dependencies.rebac, user)
-    stored = await deps.get_platform_prompt_store().set(text=text, updated_by=user.uid)
+    await require_edit_platform_prompt(
+        deps.team_dependencies.rebac, user, organization_id
+    )
+    stored = await deps.get_platform_prompt_store().set(
+        text=text, updated_by=user.uid, organization_id=organization_id
+    )
     return _to_platform_prompt(stored)
 
 
 async def resolve_platform_prompt_text(
     deps: ProductServiceDependencies,
+    team_id: str | None = None,
 ) -> str | None:
-    """Return the stored platform prompt for a runtime binding, or `None`.
+    """Bind the authoritative team's organization prompt; only fred uses legacy fallback."""
+    organization_id = "fred"
+    if team_id is not None:
+        from fred_core.common import TeamId, is_personal_team_id
 
-    Why this exists:
-    - the runtime needs this on EVERY managed turn, and must not be gated on
-      the caller's authorization: this is a platform assertion, resolved
-      server-side, exactly like `resolve_platform_chat_model_binding`. Passing
-      a user here would be the bug, not the omission.
-
-    `None` means no admin has ever saved one; the pod then falls back to its
-    own `config/platform_prompt.json`. A stored `""` returns `""`, which
-    suppresses the block — the two are deliberately distinguishable.
-
-    Note the asymmetry with `get_platform_prompt` above, which substitutes the
-    default into its response: that one describes the deployment to a human,
-    this one carries an admin decision to the runtime. Substituting here would
-    send the pod a value it already has, and would erase the very distinction
-    the runtime needs to honour a deliberate `""`.
-    """
-
-    stored = await deps.get_platform_prompt_store().get()
-    return None if stored is None else stored.text
+        if team_id != "personal" and not is_personal_team_id(team_id):
+            team = await deps.get_team_metadata_store().get_by_team_id(TeamId(team_id))
+            if team is None:
+                raise ValueError("Cannot resolve organization for an unknown team")
+            organization_id = team.organization_id
+    stored = await deps.get_platform_prompt_store().get(organization_id=organization_id)
+    if stored is not None:
+        return stored.text
+    return None if organization_id == "fred" else ""
 
 
 async def get_platform_instructions(

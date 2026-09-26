@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from conftest import no_knowledge_base_store
@@ -2762,7 +2763,7 @@ class _FakeNoPlatformPromptStore:
     """No platform-prompt row saved — `get_runtime_binding_for_team` must then
     carry `platform_prompt=None`, i.e. "fall back to the pod default"."""
 
-    async def get(self):
+    async def get(self, *, organization_id="fred"):
         return None
 
 
@@ -2806,6 +2807,11 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         get_model_reasoning_store=_FakeReasoningStore,
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_team_metadata_store=lambda: SimpleNamespace(
+            get_by_team_id=AsyncMock(
+                return_value=SimpleNamespace(organization_id="fred")
+            )
+        ),
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
@@ -2836,6 +2842,11 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         ),
         get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_team_metadata_store=lambda: SimpleNamespace(
+            get_by_team_id=AsyncMock(
+                return_value=SimpleNamespace(organization_id="fred")
+            )
+        ),
     )
 
     binding = await service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]

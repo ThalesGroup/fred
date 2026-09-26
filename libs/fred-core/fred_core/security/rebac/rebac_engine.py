@@ -85,6 +85,8 @@ class RelationType(str, Enum):
     # Stored tuples only, granted by config-seeded bootstrap or explicit admin
     # action — never derived from Keycloak roles or groups.
     PLATFORM_ADMIN = "platform_admin"
+    ORGANIZATION_ADMIN = "organization_admin"
+    MEMBER = "member"
     PLATFORM_OBSERVER = "platform_observer"
 
     # Delegated admin-tier roles, one per admin surface. Each unions in
@@ -154,6 +156,7 @@ class TeamPermission(str, Enum):
     """
 
     CAN_READ = "can_read"
+    CAN_JOIN = "can_join"
     CAN_UPDATE_INFO = "can_update_info"
     CAN_UPDATE_RESOURCES = "can_update_resources"
     CAN_UPDATE_AGENTS = "can_update_agents"
@@ -236,6 +239,9 @@ class OrganizationPermission(str, Enum):
 
     # Already-defined organization relations, now exposed to Python callers.
     CAN_CREATE_TEAM = "can_create_team"
+    MEMBER = "member"
+    CAN_MANAGE_ORGANIZATIONS = "can_manage_organizations"
+    CAN_ADMINISTER_ORGANIZATION = "can_administer_organization"
 
     # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance —
     # existence of teams only, never their data.
@@ -382,7 +388,9 @@ class Relation:
     resource: RebacReference
 
 
-def team_organization_relation(team_id: str) -> Relation:
+def team_organization_relation(
+    team_id: str, organization_id: str = ORGANIZATION_ID
+) -> Relation:
     """Canonical shape of the `organization -> team` structural edge (#2065).
 
     A module-level pure function, not a method, so it can be imported and
@@ -393,7 +401,7 @@ def team_organization_relation(team_id: str) -> Relation:
     through this one function, so the tuple's shape has a single owner.
     """
     return Relation(
-        subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+        subject=RebacReference(Resource.ORGANIZATION, organization_id),
         relation=RelationType.ORGANIZATION,
         resource=RebacReference(Resource.TEAM, team_id),
     )
@@ -648,6 +656,8 @@ class RebacEngine(ABC):
     async def ensure_team_organization_relations(
         self,
         team_ids: Iterable[str],
+        *,
+        organization_id: str = ORGANIZATION_ID,
     ) -> str | None:
         """Cold-path repair: back-fill the `organization -> team` structural
         edge for teams that may pre-date it.
@@ -684,7 +694,7 @@ class RebacEngine(ABC):
         if not unique_team_ids:
             return None
 
-        organization = RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID)
+        organization = RebacReference(Resource.ORGANIZATION, organization_id)
         existing_team_ids = await self._teams_with_relation(
             relation=RelationType.ORGANIZATION, subject=organization
         )
@@ -693,11 +703,36 @@ class RebacEngine(ABC):
             if existing_team_ids is None
             else [tid for tid in unique_team_ids if tid not in existing_team_ids]
         )
-        if not target_team_ids:
-            return None
-
-        relations = [team_organization_relation(team_id) for team_id in target_team_ids]
-        return await self.add_relations(relations)
+        relations = [
+            team_organization_relation(team_id, organization_id)
+            for team_id in target_team_ids
+        ]
+        # Persist the reverse relation for organization-wide public-team discovery.
+        community_ids = [
+            team_id for team_id in unique_team_ids if not is_personal_team_id(team_id)
+        ]
+        existing = (
+            await self.list_direct_relations(organization) if community_ids else []
+        )
+        reverse_ids = (
+            set()
+            if isinstance(existing, RebacDisabledResult)
+            else {
+                relation.subject.id
+                for relation in existing
+                if relation.relation == RelationType.TEAM
+            }
+        )
+        relations.extend(
+            Relation(
+                subject=RebacReference(Resource.TEAM, team_id),
+                relation=RelationType.TEAM,
+                resource=organization,
+            )
+            for team_id in community_ids
+            if team_id not in reverse_ids
+        )
+        return await self.add_relations(relations) if relations else None
 
     async def ensure_team_public_relations(
         self,

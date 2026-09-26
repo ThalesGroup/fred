@@ -25,6 +25,7 @@ import type { TeamPermission, UserTeamRelation } from "../../../slices/controlPl
  */
 export type TeamCapabilities = {
   canRead: boolean;
+  canJoin: boolean;
   canUpdateInfo: boolean;
   canUpdateResources: boolean;
   canUpdateAgents: boolean;
@@ -52,6 +53,7 @@ export type TeamCapabilities = {
  */
 const PERMISSION_TO_FLAG: Record<TeamPermission, keyof TeamCapabilities> = {
   can_read: "canRead",
+  can_join: "canJoin",
   can_update_info: "canUpdateInfo",
   can_update_resources: "canUpdateResources",
   can_update_agents: "canUpdateAgents",

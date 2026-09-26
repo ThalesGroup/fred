@@ -25,6 +25,7 @@ control-plane's autogenerate propose creating knowledge-flow's tables.
 from __future__ import annotations
 
 import fred_core.session.stores.session_models  # noqa: F401 — registers session with CoreBase
+import fred_core.teams.organization_models  # noqa: F401
 import fred_core.teams.team_metatada_models  # noqa: F401 — registers teammetadata with CoreBase
 import fred_core.users.user_models  # noqa: F401 — registers users with CoreBase
 
@@ -58,7 +59,9 @@ from control_plane_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).
-SHARED_CORE_TABLES: frozenset[str] = frozenset({"users", "session", "teammetadata"})
+SHARED_CORE_TABLES: frozenset[str] = frozenset(
+    {"users", "session", "teammetadata", "organizations"}
+)
 
 # On control-plane's own Base but migrated by the separate fred-evaluation
 # tree (`alembic_version_evaluation`, its own database) — subtracted

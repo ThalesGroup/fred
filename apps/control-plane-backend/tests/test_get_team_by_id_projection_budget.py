@@ -104,7 +104,9 @@ class _FakeMetadataStore:
     async def get_by_name(self, name: str, session=None) -> TeamMetadata | None:
         return next((t for t in self._teams.values() if t.name == name), None)
 
-    async def create(self, team_id: TeamId, name: str, session=None) -> TeamMetadata:
+    async def create(
+        self, team_id: TeamId, name: str, session=None, *, organization_id="fred"
+    ) -> TeamMetadata:
         metadata = TeamMetadata(
             id=team_id, name=name, visibility=self._create_visibility
         )

@@ -39,9 +39,13 @@ async def require_manage_capabilities(rebac: RebacEngine, user: KeycloakUser) ->
     await _require(rebac, user, OrganizationPermission.CAN_MANAGE_CAPABILITIES)
 
 
-async def require_edit_platform_prompt(rebac: RebacEngine, user: KeycloakUser) -> None:
+async def require_edit_platform_prompt(
+    rebac: RebacEngine, user: KeycloakUser, organization_id: str = ORGANIZATION_ID
+) -> None:
     """Platform-prompt gate: `can_edit_platform_prompt` (`platform_admin or
     prompt_editor`). Not `can_manage_platform` — that catch-all also carries
     import/export, tasks and platform reset."""
 
-    await _require(rebac, user, OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_EDIT_PLATFORM_PROMPT, organization_id
+    )

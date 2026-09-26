@@ -35,6 +35,8 @@ from fred_core.teams.metadata_store import (
     TeamMetadataStore,
     TeamVisibility,
 )
+from fred_core.teams.organization_models import OrganizationRow
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
@@ -43,6 +45,7 @@ async def _make_sqlite_engine(tmp_path: Path) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
     return engine
 
 

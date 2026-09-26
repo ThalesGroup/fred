@@ -38,6 +38,9 @@ class _RecordingRebacEngine(RebacEngine):
         self.added_relations: list[Relation] = []
         self.checked_permissions: list[tuple[RebacPermission, str, str | None]] = []
 
+    async def list_direct_relations(self, resource, **kwargs):
+        return [r for r in self.added_relations if r.resource == resource]
+
     async def _persist_relation(self, relation: Relation) -> str | None:
         self.added_relations.append(relation)
         return str(len(self.added_relations))
@@ -241,11 +244,11 @@ async def test_ensure_team_organization_relations_creates_unique_edges() -> None
     )
 
     assert token is not None
-    assert int(token) == 2
-    assert len(engine.added_relations) == 2
+    assert int(token) == 4
+    assert len(engine.added_relations) == 4
 
     expected_resources = {"team-a", "team-b"}
-    for relation in engine.added_relations:
+    for relation in engine.added_relations[:2]:
         assert relation.subject == RebacReference(Resource.ORGANIZATION, "fred")
         assert relation.relation == RelationType.ORGANIZATION
         assert relation.resource.type == Resource.TEAM
@@ -631,6 +634,11 @@ class _InMemoryCountingRebacEngine(RebacEngine):
         self.list_relations_call_count = 0
         self.list_relations_consistency_tokens: list[str | None] = []
 
+    async def list_direct_relations(self, resource, **kwargs):
+        if self._disabled:
+            return RebacDisabledResult()
+        return [r for r in self.tuples if r.resource == resource]
+
     async def _persist_relation(self, relation: Relation) -> str | None:
         self.added_relations.append(relation)
         if relation not in self.tuples:
@@ -723,14 +731,14 @@ async def test_ensure_team_organization_relations_skips_already_granted_edges() 
     engine = _InMemoryCountingRebacEngine()
 
     await engine.ensure_team_organization_relations(["team-a", "team-b"])
-    assert len(engine.added_relations) == 2
+    assert len(engine.added_relations) == 4
 
     await engine.ensure_team_organization_relations(["team-a", "team-b"])
-    assert len(engine.added_relations) == 2, "steady-state call must write nothing"
+    assert len(engine.added_relations) == 4, "steady-state call must write nothing"
 
     await engine.ensure_team_organization_relations(["team-a", "team-b", "team-c"])
-    assert len(engine.added_relations) == 3, "only the genuinely new team is written"
-    assert engine.added_relations[-1].resource.id == "team-c"
+    assert len(engine.added_relations) == 6, "only the genuinely new team is written"
+    assert engine.added_relations[-1].subject.id == "team-c"
 
 
 @pytest.mark.asyncio
@@ -742,7 +750,7 @@ async def test_ensure_team_organization_relations_writes_everything_when_disable
     await engine.ensure_team_organization_relations(["team-a", "team-b"])
     await engine.ensure_team_organization_relations(["team-a", "team-b"])
 
-    assert len(engine.added_relations) == 4, (
+    assert len(engine.added_relations) == 8, (
         "an engine that can't bulk-list relations must fall back to "
         "unconditional writes, unchanged from before #2065"
     )

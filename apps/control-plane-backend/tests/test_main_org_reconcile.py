@@ -60,7 +60,9 @@ class _FakeRebac:
         self._raises = raises
         self.ensure_calls: list[list[str]] = []
 
-    async def ensure_team_organization_relations(self, team_ids) -> None:
+    async def ensure_team_organization_relations(
+        self, team_ids, *, organization_id="fred"
+    ) -> None:
         ids = list(team_ids)
         self.ensure_calls.append(ids)
         if self._raises is not None:

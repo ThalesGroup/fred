@@ -38,7 +38,7 @@ from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
 from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
@@ -50,7 +50,9 @@ class _FakeRebac:
         self.enabled = enabled
         self.ensured_team_ids: list[str] = []
 
-    async def ensure_team_organization_relations(self, team_ids: Iterable[str]) -> None:
+    async def ensure_team_organization_relations(
+        self, team_ids: Iterable[str], *, organization_id="fred"
+    ) -> None:
         self.ensured_team_ids.extend(team_ids)
 
 
@@ -70,6 +72,9 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     async with engine.begin() as conn:
         await conn.run_sync(CoreBase.metadata.create_all)
         await conn.run_sync(CPBase.metadata.create_all)
+        from fred_core.teams.organization_models import OrganizationRow
+
+        await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
     return engine
 
 

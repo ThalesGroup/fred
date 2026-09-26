@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 import yaml
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 _CONFIG_SOURCE = (
@@ -153,6 +154,9 @@ def _setup_test_schema() -> None:
             await conn.run_sync(CPBase.metadata.drop_all)
             await conn.run_sync(FredCoreBase.metadata.create_all)
             await conn.run_sync(CPBase.metadata.create_all)
+            from fred_core.teams.organization_models import OrganizationRow
+
+            await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
         await engine.dispose()
 
     asyncio.run(_create_all())
@@ -175,6 +179,9 @@ async def control_plane_sql_engine(
         async with engine.begin() as conn:
             await conn.run_sync(FredCoreBase.metadata.create_all)
             await conn.run_sync(CPBase.metadata.create_all)
+            from fred_core.teams.organization_models import OrganizationRow
+
+            await conn.execute(insert(OrganizationRow).values(id="fred", name="Fred"))
         yield engine
     finally:
         await engine.dispose()

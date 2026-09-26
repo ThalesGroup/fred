@@ -23,6 +23,7 @@ import type { TeamPermission } from "../../../slices/controlPlane/controlPlaneOp
 // the compiler enforces the map, this test enforces the *behaviour*.
 const CASES: Array<[TeamPermission, keyof TeamCapabilities]> = [
   ["can_read", "canRead"],
+  ["can_join", "canJoin"],
   ["can_update_info", "canUpdateInfo"],
   ["can_update_resources", "canUpdateResources"],
   ["can_update_agents", "canUpdateAgents"],

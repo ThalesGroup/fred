@@ -45,6 +45,7 @@ from datetime import datetime, timezone
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
+from fred_core.teams.organization_models import OrganizationRow
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -117,6 +118,7 @@ def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
     return {
         "id": row.id,
         "name": row.name,
+        "organization_id": row.organization_id,
         "description": row.description,
         "joining_mode": row.joining_mode,
         "visibility": row.visibility,
@@ -166,10 +168,15 @@ async def run_export(engine: AsyncEngine) -> bytes:
             .scalars()
             .all()
         ]
+        organization_names = {
+            r.id: r.name for r in (await session.scalars(select(OrganizationRow))).all()
+        }
         team_metadata = [
             _team_metadata_to_dict(r)
             for r in (await session.execute(select(TeamMetadataRow))).scalars().all()
         ]
+        for team in team_metadata:
+            team["organization_name"] = organization_names[team["organization_id"]]
         team_routing_policy = [
             _team_routing_policy_to_dict(r)
             for r in (await session.execute(select(TeamRoutingPolicyRow)))

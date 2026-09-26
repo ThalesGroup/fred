@@ -56,7 +56,7 @@ _FOREIGN_TABLES = frozenset(
 
 def test_owned_set_covers_cp_tables_and_nothing_foreign() -> None:
     assert {"cp_task_run", "cp_task_event_log"} <= OWNED_TABLES
-    assert SHARED_CORE_TABLES == {"users", "session", "teammetadata"}
+    assert SHARED_CORE_TABLES == {"users", "session", "teammetadata", "organizations"}
     # Includes the evaluation_* tables: they sit on CP's own Base but are
     # migrated by the separate fred-evaluation tree — deriving ownership from
     # Base.metadata alone would claim them the moment their module is

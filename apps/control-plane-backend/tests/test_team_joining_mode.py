@@ -12,37 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TEAM-09 (FRED-TEAM-CONFIG-RFC.md §5.1.1): self-service team joining.
+"""Self-service joining requires OPEN mode and membership of the team's organization.
 
-`join_team` is the only membership-write path that does not require the
-caller to already hold an administer-permission over the target team — every
-other route (`add_team_member` and friends) is intentionally team-admin-gated.
-That makes its two safety properties load-bearing and worth locking in with
-tests: it must (1) only ever succeed when the stored `joining_mode` is `OPEN`
-(never trusting the client's belief about it), and (2) only ever grant
-`team_member` to the caller themselves, never another user or another role.
-
-#2065 follow-up: `join_team` builds its response directly through
-`_build_team_with_permissions` instead of re-running `get_team_by_id` (a
-second `ensure_team_organization_relations` Read + `CAN_READ` Check cycle) —
-the write that just succeeded already establishes `can_read` (schema.fga:
-`team_member or public`), so re-checking it is a redundant round-trip, not an
-extra safety property. The budget test below locks that in: exactly the
-`team_member` write, the projection's exact `list_direct_relations` Read, and
-its `has_permissions` BatchCheck — zero extra `list_relations`/`has_permission`
-calls — with the write's own consistency token reaching both reads.
+Membership writes target only the caller. The response reuses the write's
+consistency token and avoids a redundant post-write authorization check.
 """
 
 from __future__ import annotations
 
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
 from control_plane_backend.teams.schemas import TeamNotOpenForJoiningError
 from control_plane_backend.teams.service import join_team
 from fred_core import (
+    AuthorizationError,
     JoiningMode,
     KeycloakUser,
     RebacReference,
@@ -55,6 +41,16 @@ from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(autouse=True)
+def organization_onboarding(monkeypatch):
+    """Exercise the join gate separately from organization onboarding persistence."""
+    from control_plane_backend.organizations import service
+
+    onboarding = AsyncMock(return_value={"fred"})
+    monkeypatch.setattr(service, "ensure_user_organizations", onboarding, raising=False)
+    return onboarding
 
 
 class _FakeRebac:
@@ -144,7 +140,9 @@ async def test_join_team_raises_not_found_for_unknown_team() -> None:
 
 
 async def test_join_team_grants_team_member_to_self_only_when_open() -> None:
-    rebac = CountingRebacEngine(org_linked_team_ids={"open-team"})
+    rebac = CountingRebacEngine(
+        org_linked_team_ids={"open-team"}, granted_permissions={TeamPermission.CAN_JOIN}
+    )
     store = _FakeMetadataStore(
         {
             "open-team": TeamMetadata(
@@ -172,15 +170,10 @@ async def test_join_team_grants_team_member_to_self_only_when_open() -> None:
 async def test_join_team_budget_skips_the_redundant_ensure_org_and_check_cycle() -> (
     None
 ):
-    """The old `join_team` delegated to `get_team_by_id`, which re-runs
-    `ensure_team_organization_relations` (a `list_relations` Read) and a
-    `CAN_READ` `has_permission` Check. Neither is needed: the org edge was
-    already established when the team was created/listed, and a fresh
-    `team_member` write already satisfies `can_read` unconditionally. Budget:
-    just the membership write, the projection's one exact
-    `list_direct_relations` Read, and its `has_permissions` BatchCheck — zero
-    `list_relations`/`has_permission` calls."""
-    rebac = CountingRebacEngine(org_linked_team_ids={"open-team"})
+    """One pre-write organization check, no redundant post-write check."""
+    rebac = CountingRebacEngine(
+        org_linked_team_ids={"open-team"}, granted_permissions={TeamPermission.CAN_JOIN}
+    )
     store = _FakeMetadataStore(
         {
             "open-team": TeamMetadata(
@@ -192,7 +185,9 @@ async def test_join_team_budget_skips_the_redundant_ensure_org_and_check_cycle()
     await join_team(_user("alice"), TeamId("open-team"), _deps(rebac, store))
 
     assert rebac.list_relations_calls == []
-    assert rebac.has_permission_calls == []
+    assert rebac.has_permission_calls == [
+        ("alice", TeamPermission.CAN_JOIN, "open-team")
+    ]
     assert len(rebac.list_direct_relations_calls) == 1
     assert len(rebac.has_permissions_calls) == 1
 
@@ -217,3 +212,46 @@ async def test_join_team_propagates_the_write_token_to_the_projection_reads() ->
 
     assert rebac.list_direct_relations_tokens == ["consistency-token"]
     assert rebac.has_permissions_tokens == ["consistency-token"]
+
+
+async def test_cross_organization_join_is_denied_before_membership_write(
+    organization_onboarding,
+):
+    organization_onboarding.return_value = {"a"}
+    rebac = CountingRebacEngine(org_linked_team_ids={"open-b"})
+    store = _FakeMetadataStore(
+        {
+            "open-b": TeamMetadata(
+                id=TeamId("open-b"),
+                name="Open B",
+                organization_id="b",
+                joining_mode=JoiningMode.OPEN,
+            )
+        }
+    )
+    user = _user("alice")
+    with pytest.raises(AuthorizationError):
+        await join_team(user, TeamId("open-b"), _deps(rebac, store))
+    organization_onboarding.assert_awaited_once_with(user, rebac)
+    assert rebac.has_permission_calls == [("alice", TeamPermission.CAN_JOIN, "open-b")]
+    assert rebac.direct_relations == []
+
+
+async def test_private_open_team_accepts_organization_member():
+    from fred_core.teams.metadata_store import TeamVisibility
+
+    rebac = CountingRebacEngine(granted_permissions={TeamPermission.CAN_JOIN})
+    store = _FakeMetadataStore(
+        {
+            "private-open": TeamMetadata(
+                id=TeamId("private-open"),
+                name="Private open",
+                visibility=TeamVisibility.PRIVATE,
+                joining_mode=JoiningMode.OPEN,
+            )
+        }
+    )
+    result = await join_team(
+        _user("alice"), TeamId("private-open"), _deps(rebac, store)
+    )
+    assert result.is_member

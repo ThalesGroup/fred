@@ -152,6 +152,7 @@ class TeamRescueNotOrphanedError(Exception):
 
 
 class Team(BaseModel):
+    organization_id: str | None = None
     id: TeamId
     name: str
     member_count: int | None = None
