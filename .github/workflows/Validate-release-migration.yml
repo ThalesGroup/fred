@@ -1,0 +1,26 @@
+name: Validate release migration
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/migration-requirements.txt
+      - name: Verify guide, version and paired tags before publication
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python scripts/migration_guides.py verify \
+            --version "${RELEASE_TAG#*/v}" --require-tags --tag-attempts 7

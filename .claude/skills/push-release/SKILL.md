@@ -1,8 +1,6 @@
 ---
 name: push-release
-description: Cut a Fred release on the current release branch — write user-facing release notes for every change since the last tag, then (after developer sign-off) tag code/vX.Y.Z + chart/vX.Y.Z and push. Stops for approval before any tag is placed.
-user-invocable: true
-argument-hint: "[tag]"
+description: Cut a Fred release on the current release branch — prepare user-facing notes and the operator migration guide, enforce the operational version minimum, then (after developer sign-off) tag code/vX.Y.Z + chart/vX.Y.Z and push. Stops for approval before any tag is placed.
 ---
 
 # Push Release Skill
@@ -22,25 +20,41 @@ is ambiguous.
 - **The two tags are a pair on one commit.** `code/vX.Y.Z` builds and pushes the Docker images;
   `chart/vX.Y.Z` packages and pushes the Helm chart. A bare `vX.Y.Z` (no prefix) publishes
   **nothing** — never tag that way.
-- **Notes are user-facing.** Write for someone using Fred, not building it. No `ports`,
+- **UI notes are user-facing.** Write for someone using Fred, not building it. No `ports`,
   `adapters`, `vectors`, `map-reduce`, `SSE`, class names, or file paths in the summary/bullets.
   Describe what the user can now *do* or what stopped breaking. Match the voice of the existing
   entries in `apps/frontend/public/release.md`.
 - **Notes are committed, then tagged.** The tag must point at a commit that already contains the
-  new `release.md` entry. Order: edit → commit → tag both → push.
+  new `release.md` entry, source migration notes and generated operator guide. Order: edit → commit → tag both → push.
 - Tags are **annotated** (`git tag -a`), created on `HEAD` of the release branch. No promotion to
   `main` — tags live on the branch they were cut from.
 
 ## Step 1 — establish the branch and the last release
 
 ```bash
-git rev-parse --abbrev-ref HEAD                 # the release branch (swift/eagle/…)
-git tag -l 'code/*' | sort -V | tail -1         # last code tag, e.g. code/v2.1.10
-git status --short                              # working tree should be clean (untracked .claude/worktrees/ is fine)
+git symbolic-ref --short HEAD                  # must be attached to the intended release branch
+git status --short                            # inspect before installation, fetch or edits
 ```
 
-If the working tree has uncommitted **tracked** changes, stop and ask — a release should be cut
-from a known-good tree, not with unrelated edits in flight.
+Stop on detached HEAD, an unintended topic branch or unrelated working-tree edits
+(including untracked migration/release documents). Select the intended release
+branch only after preserving those edits; never create release tags from a topic
+checkout. Reuse explicit branch selection already given by the developer.
+
+Once the checkout is suitable:
+
+```bash
+git fetch origin --tags
+python -m pip install -r scripts/migration-requirements.txt
+python scripts/migration_guides.py plan        # ancestry-based baseline and impact
+```
+
+Read `docs/swift/ops/MIGRATION-GUIDES.md`. Use the helper's reported baseline;
+never choose a repository-wide maximum tag. If coverage is blocked, inspect the
+reported range and add accurate migration declarations before proceeding. A legacy
+audit must describe the reviewed changes; do not invent an acknowledgement just
+to clear the check. No-op declarations remain necessary for internal changes even
+when those changes are omitted from UI notes.
 
 ## Step 2 — collect every change since the last tag
 
@@ -80,12 +94,12 @@ whether a change is user-visible, keep it out of the summary and ask.
 
 ## Step 3 — decide the version
 
-Default: **bump the patch** (`v2.1.10 → v2.1.11`). The whole 2.1.x line has shipped features under
-patch bumps — do not reach for a minor/major bump on your own. If `$ARGUMENTS` gives a version, use
-it. Otherwise propose the next patch and let the developer override at the Step 5 gate.
-
-Bump minor/major **only** when the developer says so, or when there's a genuine breaking change or a
-milestone the developer has called out — never infer it from the commit types alone.
+Use the migration helper's maximum impact and minimum version: none -> patch,
+minor -> minor, major -> major. Optional feature activation requiring operations
+counts as minor even when default-off upgrades need none. Validate a requested
+version through `plan --version X.Y.Z`; do not accept a version below the minimum.
+A deliberately larger version must be explicit at sign-off. For release candidates,
+compare to the preceding stable tag and preserve the eligible core on promotion.
 
 ## Step 4 — write the release notes
 
@@ -128,11 +142,30 @@ Writing guidance, distilled from the existing notes:
   a migration. Say plainly whether existing deployments need to do anything ("additive only, no
   action needed" is a valid and useful note).
 
+### Prepare the operator guide
+
+Add a new migration note for the release-preparation contribution itself (normally
+none with its rationale). Reconcile ordering and conflicting operations across all
+in-range notes. If necessary set `after` dependencies or add a correction note;
+never rewrite a note already published in an earlier release. Do not request private
+customer values. Fred chart values are the production reference; configuration_prod.yaml
+is local Docker Compose only.
+
+```bash
+python scripts/migration_guides.py generate --worktree --version X.Y.Z
+python scripts/migration_guides.py verify --worktree --version X.Y.Z
+```
+
+Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep
+operator steps out of the UI document; fix sources and regenerate if the guide
+needs changes. Resolve all coverage blockers before requesting tag approval.
+
 ## Step 5 — present and STOP for approval (mandatory)
 
 Show the developer the **full new entry** verbatim, plus:
 
-- the branch, the last tag, and the proposed new version,
+- the branch, the ancestry-based baseline, maximum migration impact and proposed version,
+- the generated operator guide, its ordered procedures and remaining deployment limitations,
 - the two tags that will be created (`code/vX.Y.Z`, `chart/vX.Y.Z`) and what each publishes,
 - the commit + push commands you will run.
 
@@ -149,12 +182,18 @@ Re-read the file before any further edit and keep their changes; never revert th
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 V=X.Y.Z                                          # approved version
 
-git add apps/frontend/public/release.md
+python scripts/migration_guides.py verify --worktree --version "$V"
+git add apps/frontend/public/release.md "docs/swift/ops/releases/v$V/migration.md"
+# Stage only the new/updated source notes reviewed above, by explicit path.
+git add docs/swift/ops/migrations/<reviewed-note>.md
 git commit -m "docs: release notes for v$V"
+
+python scripts/migration_guides.py verify --version "$V"
 
 git tag -a "code/v$V"  -m "Release v$V"
 git tag -a "chart/v$V" -m "Helm Charts Release $V"
 
+python scripts/migration_guides.py verify --version "$V" --require-tags
 git push origin "$BRANCH" "code/v$V" "chart/v$V"
 ```
 
@@ -189,3 +228,8 @@ concluding they are missing.
 
 Do **not** touch `deploy/charts/fred/Chart.yaml` — the chart workflow injects `version`/`appVersion`
 at build time; the value committed in the file is not used.
+
+Wait for both full tag-triggered publication workflows to finish successfully,
+including migration validation, before reporting publication complete. Verify
+each GitHub release contains migration.md. A missing/stale
+guide, insufficient version or missing paired tag blocks artifact publication.

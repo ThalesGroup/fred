@@ -133,3 +133,18 @@ If you don't have one, write it now — and wonder why you don't have it.
 **What breaks if this is wrong?**
 
 **How do we roll back?**
+
+
+## 8. Operator migration declaration (required for every PR)
+
+**New note:** <!-- docs/swift/ops/migrations/<unique-slug>.md -->
+
+**Impact:** <!-- none / minor / major; justify the classification in the note -->
+
+**Production configuration:** <!-- values/schema updates, or a specific reason they are unaffected -->
+
+Use [the migration template](../docs/swift/ops/MIGRATION-NOTE-TEMPLATE.md).
+Document default-off upgrades separately from activation, ordered operations,
+validation and rollback. A conditional operational procedure requires at least
+minor impact. Docs-only PRs still need an explicit none declaration. The
+`Migration notes` check validates structure; reviewers validate correctness.

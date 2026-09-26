@@ -37,6 +37,9 @@ when an ordinary upgrade requires no action; substantial incompatibility is majo
 A PR adds at least one new note, rather than merely editing an older note. An
 unreleased note can be corrected, but not used as the sole declaration for a new
 PR. Published notes cannot be deleted or rewritten; corrections ship as new notes.
+Unreleased notes cannot be deleted/renamed either: doing so could silently discard
+an earlier contribution's migration impact. Their content remains editable before
+publication.
 Keep filenames independent of PR numbers so authors can prepare a note before
 opening a PR. PR links can be added once known. All repository content is English.
 
@@ -87,7 +90,8 @@ independent procedures compose safely.
 
 Generation must support a release preparation working tree and verification from
 the tagged commit without dependence on a self-referential commit SHA or current
-time. Verify generated output byte-for-byte at publication. Both GitHub code and
+time. Verify generated output byte-for-byte at publication, reusing the reviewed
+baseline recorded in its header (and revalidating that tag and ancestry). Both GitHub code and
 chart releases attach the same committed guide as `migration.md`; it remains out
 of frontend public assets. Existing UI release notes stay concise and user-facing.
 

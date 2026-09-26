@@ -1,3 +1,10 @@
+---
+schema: 1
+title: Delegated execution and renewable workload credentials
+impact: minor
+configuration: production
+configuration_reason: New optional delegation switches and MCP modes are included in Fred chart values; missing switches default to false.
+---
 # Delegated execution: upgrade and optional activation
 
 PR: [#2808](https://github.com/ThalesGroup/fred/pull/2808)
@@ -8,7 +15,7 @@ upgrade with delegation disabled requires no new mandatory configuration fields.
 This classification is input to release preparation, not a published version.
 Evaluate the complete release range from the last deployed tag separately.
 
-## Configuration ownership
+## Configuration
 
 The production reference is [the Fred chart values](../../../../deploy/charts/fred/values.yaml),
 with its generated `values.schema.json`. DevOps reconcile those values with each
@@ -16,7 +23,7 @@ customer's deployment repository. Customer secrets and private values need not b
 copied into Fred. `apps/*/config/configuration_prod.yaml` is for local developer
 Docker Compose only.
 
-## Upgrade with delegation disabled
+## Applicability
 
 - Missing `security.delegation` defaults to both switches being `false`. Existing
   configurations do not need new fields merely to keep the feature off.
@@ -50,7 +57,7 @@ execution and service-to-service cleanup. Exercise token renewal on a long-runni
 request. Confirm healthy startup and no unexpected 401/403 responses. Keep previous
 chart/image versions and effective values available for rollback.
 
-## Optional activation procedure
+## Upgrade
 
 1. Record previous effective values, image/chart versions, IAM role assignments
    and OpenFGA store/model identifiers. Preserve authorization tuples. Validate
@@ -101,10 +108,24 @@ returning to ordinary service identities. A Helm rollback does not restore IAM,
 OpenFGA tuples/model selection or database state. Retain compatible model/tuples
 unless an explicitly verified recovery procedure requires changing them.
 
-## Verification boundary
+## Limitations
 
 Configuration defaults and chart changes were checked against the implementation.
 Automated authentication/runtime tests and CI cover code behavior; a production
 upgrade, coordinated activation and rollback have not been executed. Customer
 operators must validate their deployment procedure in staging. No private customer
 configuration is needed to understand this note.
+
+## Prerequisites
+
+For default-off upgrades, retain existing IAM configuration. Optional activation
+requires compatible OpenFGA, workload credentials, caller roles and audiences as
+listed in the ordered upgrade procedure. Save the previous effective values and
+model identifiers before starting.
+
+## Validation
+
+Verify ordinary login, document access, agent execution, cleanup and token renewal
+before admitting traffic. For activation also verify a permitted delegated call,
+a suspended-person refusal and readiness of all participants. Validate coordinated
+rollback in staging; automated tests are not evidence of a production rehearsal.

@@ -20,7 +20,7 @@ update-uv-locks: ## Update uv lock state in subprojects except frontend
 	done
 
 .PHONY: code-quality
-code-quality: ## Run code quality checks in all submodules
+code-quality: migration-tests ## Run code quality checks in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality in $$dir ************"; \
@@ -414,3 +414,7 @@ k3d-logs-kf: ## Tail logs for knowledge-flow-backend
 .PHONY: k3d-logs-frontend
 k3d-logs-frontend: ## Tail logs for frontend
 	kubectl logs -n $(K3D_NAMESPACE) -l app=frontend -f --tail=100
+
+.PHONY: migration-tests
+migration-tests: ## Validate release migration tooling offline with synthetic Git histories
+	uv run --with-requirements scripts/migration-requirements.txt python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
