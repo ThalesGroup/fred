@@ -1,41 +1,46 @@
 ---
 title: Welcome
 order: 0
-description: What the platform is, who it is for, and where to start.
+description: What the platform is, what it does not do, and where to start.
 icon: rocket_launch
 ---
 
 # Welcome
 
-Welcome! The platform brings together, in one place, your **AI assistants**
-(agents), your teams' **documents**, and the **conversations** that put them to
-work together. The goal: help you get reliable answers that draw on your own
-content, rather than generalities disconnected from your work.
+The platform brings together in one place **agents** — AI assistants — your
+teams' **documents**, and the **conversations** that make the two work together.
+The point: answers grounded in your own content, with the passages used shown so
+you can check them.
 
-In practice, you work within a **team**. A team gathers people, agents
-configured for a specific purpose, a library of reusable prompts, and a
-document space. You also have a **personal space** to experiment on your own
-before sharing.
+Everything happens inside a **team**. A team gathers people, agents configured
+for a specific purpose, a library of reusable prompts and a document space. You
+also have a **personal space** — a team you are the only member of — to try
+things without sharing anything.
 
-## Who this help center is for
+## What the platform does not do
 
-- **New here?** Read the pages in this section in order: they take you from
-  your first login to your first conversation.
-- **Running a team?** The [Features](/help/en/features) section covers agents,
-  prompts, resources, and team administration.
-- **Solving a specific case?** The [Guides & use cases](/help/en/guides)
-  section offers end-to-end journeys, from need to result.
+Worth stating from the outset:
+
+- **It does not guarantee accuracy.** An agent can be wrong and sound confident
+  about it. Answers that matter are checked against the sources it cites.
+- **It does not let everyone create a team.** Team creation belongs to platform
+  administration — see
+  [Teams and permissions](/help/en/features/teams-and-permissions).
+- **It does not guess your documents.** An agent only sees the documents
+  attached to it.
 
 ## Where to start
 
-1. [First login](/help/en/getting-started/first-steps) — sign in, pick your
-   language, and find your way around.
-2. [Key concepts](/help/en/getting-started/concepts) — the platform's
-   vocabulary and how everything fits together.
-3. [Join or create a team](/help/en/getting-started/join-create-team) — find
-   your team or start one.
-4. [First conversation](/help/en/getting-started/first-conversation) — ask an
-   agent a question and read its answer.
+1. [First steps](/help/en/getting-started/first-steps) — sign in, find your way
+   around, find your team.
+2. [Your first conversation](/help/en/getting-started/first-conversation) — ask a
+   question and read the answer.
 
-> Can't find an answer? Use the **search** at the top of this help center, or
-> check the [FAQ](/help/en/faq).
+After that, depending on what you do: the [features](/help/en/features) if you
+configure agents for your team, the [guides](/help/en/guides) if you have a
+specific goal in mind.
+
+> Each version's changes are published on the
+> [Release notes](/release-notes) page. If the application behaves differently
+> from what this help centre describes, **trust the application** and report the
+> gap to your administrator.

@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 from typing import Annotated, List
 
@@ -16,8 +30,9 @@ from knowledge_flow_backend.features.tabular.service import (
 )
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
+    TabularDocumentListResponse,
+    TabularDocumentListTableResponse,
     TabularDocumentMarkdownResponse,
-    TabularDocumentResponse,
     TabularDocumentSchemaResponse,
     TabularQueryRequest,
     TabularSearchRequest,
@@ -38,9 +53,10 @@ class TabularController:
     def _register_routes(self, router: APIRouter):
         @router.get(
             "/tabular/documents",
-            response_model=List[TabularDocumentResponse],
+            response_model=List[TabularDocumentListResponse],
+            response_model_exclude_none=True,
             tags=["Tabular"],
-            summary="List authorized tabular documents (CSV datasets and Excel workbooks)",
+            summary="List document names and Excel tables",
             operation_id="list_tabular_documents",
         )
         async def list_documents(
@@ -59,28 +75,46 @@ class TabularController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            List every tabular document visible to the current user.
+            List visible tabular document names and their technical identifiers.
 
             Why this exists:
-            - Agents pick sources at document level: one CSV document carries
-              one table, one spreadsheet document carries several.
+            - Excel workbooks include their table aliases, sheets and titles.
+              CSV documents expose only their name and document UID.
             - Team/personal and library scope must be enforced before table
               aliases are exposed.
 
             How to use:
-            - Call without parameters to retrieve every readable document with
-              its queryable tables (`query_alias` per table, no columns).
+            - Call without parameters to retrieve every readable document.
             - Follow up with `/tabular/documents/schemas` for column detail and
               `/tabular/documents/{uid}/markdown` for a spreadsheet's catalog.
             """
 
             try:
-                return await self.service.list_documents(
+                documents = await self.service.list_documents(
                     user,
                     document_library_tags_ids=document_library_tags_ids,
                     owner_filter=owner_filter,
                     team_id=team_id,
                 )
+                return [
+                    TabularDocumentListResponse(
+                        document_uid=document.document_uid,
+                        document_name=document.document_name,
+                        tables=(
+                            [
+                                TabularDocumentListTableResponse(
+                                    query_alias=table.query_alias,
+                                    sheet=table.sheet,
+                                    title=table.title,
+                                )
+                                for table in document.tables
+                            ]
+                            if document.kind == "spreadsheet"
+                            else None
+                        ),
+                    )
+                    for document in documents
+                ]
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:

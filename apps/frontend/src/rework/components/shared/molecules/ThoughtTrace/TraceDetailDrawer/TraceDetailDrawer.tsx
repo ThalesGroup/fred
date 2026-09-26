@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { useToast, type ToastInput } from "@shared/molecules/Toast/ToastProvider";
-import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -30,6 +27,7 @@ import {
   detailTextForEntry,
   entryLabel,
   formatLatencyMs,
+  findTabularDocumentName,
   genericToolPayload,
   isDocumentTreeTool,
   isSummarizeDocumentTool,
@@ -39,19 +37,22 @@ import {
   statusForEntry,
   stripDocumentUids,
   thoughtExtras,
-  toolCopyText,
+  toolCallId,
   toolName,
   toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
+import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/tabularTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
+import { TabularToolDetail } from "./TabularToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
 
 interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
   entry: TraceEntry | null;
+  messages?: ChatMessage[];
   onClose: () => void;
 }
 
@@ -168,7 +169,26 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
 }
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
-function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
+function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  if (tabularToolKind(toolName(entry.call))) {
+    const tabular =
+      entry.result && toolResultOk(entry.result)
+        ? parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result))
+        : null;
+    return tabular ? (
+      <TabularToolDetail
+        key={toolCallId(entry.call)}
+        data={tabular}
+        documentName={
+          tabular.kind === "markdown" && messages
+            ? findTabularDocumentName(messages, tabular.documentUid, toolCallId(entry.call))
+            : null
+        }
+      />
+    ) : (
+      <GenericToolDetail entry={entry} />
+    );
+  }
   const data = entry.result ? parseToolResultContent(entry.result) : null;
   const sqlResult = asSqlQueryResult(data);
   if (sqlResult) return <SqlToolDetail data={sqlResult} />;
@@ -197,38 +217,9 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Single copy affordance for the drawer header — copies the SQL query, the curated
- *  JSON payload, the raw error message, or nothing (RAG sources are browsed, not
- *  copied as text). `toast`, when set, confirms the copy with a success toast. */
-function CopyHeaderAction({ text, toast }: { text: string; toast?: ToastInput }) {
-  const [copied, setCopied] = useState(false);
-  const { showSuccess } = useToast();
-
-  const handleCopy = () => {
-    writeRichClipboard("", text).then((ok) => {
-      if (ok) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        if (toast) showSuccess(toast);
-      }
-    });
-  };
-
-  return (
-    <IconButton
-      variant="icon"
-      size="small"
-      icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
-      aria-label={copied ? "Copied" : "Copy"}
-      onClick={handleCopy}
-    />
-  );
-}
-
-export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
+export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
   const { t } = useTranslation();
   const label = entry ? entryLabel(entry, (key) => t(key)) : "";
-  const copyText = entry ? toolCopyText(entry) : null;
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
     entry?.kind === "combo" ? (!entry.result ? "running" : toolResultOk(entry.result) ? "success" : "failure") : null;
@@ -256,15 +247,6 @@ export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
           </>
         ) : undefined
       }
-      headerActions={
-        copyText ? (
-          <CopyHeaderAction
-            text={copyText}
-            toast={isError ? { summary: t("rework.chatTrace.errorCopied") } : undefined}
-            key={label}
-          />
-        ) : undefined
-      }
       layout="overlay"
       width="720px"
     >
@@ -272,7 +254,7 @@ export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
         (isError ? (
           <ErrorDetail entry={entry} />
         ) : entry.kind === "combo" ? (
-          <ToolDetail entry={entry} />
+          <ToolDetail entry={entry} messages={messages} />
         ) : (
           <TextDetail entry={entry} />
         ))}

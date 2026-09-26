@@ -106,9 +106,10 @@ servers:
       request: skip any step whose information you already have or that is not
       required for the current question.
 
-      1. `list_tabular_documents` — returns every populated tabular document the
-         agent has access to (CSV and Excel), together with the exact SQL aliases
-         of their tables.
+      1. `list_tabular_documents` — returns each accessible CSV or Excel document's
+         name and `document_uid`. Excel entries also list their tables with
+         sheet/title when available and the exact SQL `query_alias`. CSV entries
+         have no table list; use their `document_uid` for schema inspection.
       2. `get_tabular_document_markdown` — for Excel workbooks only (not plain
          CSV documents). Returns the metadata of the workbook, and for each
          sheet: its exact SQL alias, the titles and context of its data ranges,

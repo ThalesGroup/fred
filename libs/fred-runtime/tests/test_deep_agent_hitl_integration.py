@@ -32,12 +32,19 @@ gated tool of the same name (design.md D3).
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import RecordingSpan, RecordingTracer, ToolFriendlyFakeChatModel
+from deepagents.backends import StateBackend
+from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware import subagents as deep_subagents
+from deepagents.middleware.filesystem import FilesystemMiddleware
+from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.react.react_tracing import active_agent_span
@@ -151,6 +158,8 @@ def _compile_deep_agent(
             capability_block=capability_block,
             child=True,
         ),
+        backend=StateBackend(),
+        permissions=[],
     )
 
 
@@ -694,9 +703,11 @@ def _native_agent(
     model: _NativeModel,
     *,
     tools: list[Any],
+    backend: BackendProtocol | None = None,
     capability_hitl: dict[str, CapabilityHitlBinding] | None = None,
     approval_policy: ToolApprovalPolicy | None = None,
     tracer: RecordingTracer | None = None,
+    available_tool_names: set[str] | None = None,
 ) -> Any:
     carrier = ToolCarrierMiddleware(tools, capability_id="scoped-test")
     block = CapabilityAgentBlock(
@@ -712,7 +723,11 @@ def _native_agent(
             kpi=None,
             binding=_binding(),
             approval_policy=approval_policy or ToolApprovalPolicy(),
-            available_tool_names={tool.name for tool in tools},
+            available_tool_names=(
+                available_tool_names
+                if available_tool_names is not None
+                else {tool.name for tool in tools}
+            ),
             capability_block=block,
             child=child,
         )
@@ -724,7 +739,206 @@ def _native_agent(
         checkpointer=InMemorySaver(),
         middleware=frame(),
         subagent_middleware=frame(child=True),
+        backend=backend if backend is not None else StateBackend(),
+        permissions=[],
     )
+
+
+@pytest.mark.asyncio
+async def test_native_children_and_parent_share_live_conversation_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SharedNamespace:
+        content: str | None = None
+
+        async def exists(self, path: str) -> bool:
+            del path
+            return self.content is not None
+
+        async def write_text(self, path: str, content: str) -> None:
+            del path
+            self.content = content
+
+        async def read_text(self, path: str) -> str:
+            del path
+            assert self.content is not None
+            return self.content
+
+    child_backends: list[BackendProtocol] = []
+    original_create_sub_agent = deep_subagents.create_sub_agent
+
+    def capture_child_backend(*args: Any, **kwargs: Any) -> Any:
+        spec = args[0]
+        child_backends.extend(
+            middleware.backend
+            for middleware in spec["middleware"]
+            if isinstance(middleware, FilesystemMiddleware)
+            and isinstance(middleware.backend, BackendProtocol)
+        )
+        return original_create_sub_agent(*args, **kwargs)
+
+    monkeypatch.setattr(deep_subagents, "create_sub_agent", capture_child_backend)
+    model = _NativeModel(
+        responses=[],
+        scripts={"parent": [AIMessage(content="done")]},
+    )
+    namespace = SharedNamespace()
+    backend = deep_mod.CompositeBackend(
+        default=deep_mod.ConversationNamespaceBackend(
+            cast(Any, SimpleNamespace(namespace=lambda *_args, **_kwargs: namespace)),
+            namespace_id="scratchpad",
+            max_bytes=100,
+            max_files=10,
+        ),
+        routes={},
+        artifacts_root="/.deep",
+    )
+    agent = _native_agent(model, tools=[], backend=backend)
+
+    assert agent is not None
+    assert child_backends
+    assert all(child_backend is backend for child_backend in child_backends)
+    child_write = await child_backends[0].awrite("/shared.md", "shared live")
+    parent_read = await backend.aread("/shared.md")
+    sibling_read = await child_backends[0].aread("/shared.md")
+
+    assert child_write.error is None
+    assert parent_read.file_data == {
+        "content": "shared live",
+        "encoding": "utf-8",
+    }
+    assert sibling_read.file_data == parent_read.file_data
+
+
+@pytest.mark.asyncio
+async def test_native_children_parent_and_fresh_graph_share_scratchpad(
+    tmp_path: Any,
+) -> None:
+    safe_filesystem_tools = {
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+    }
+    storage = LocalFilesystem(str(tmp_path))
+    backend, _ = deep_mod.build_conversation_filesystem(
+        ConversationFilesystemService(storage, "conversation-a")
+    )
+    model = _NativeModel(
+        responses=[],
+        scripts={
+            "parent": [
+                _delegation("writer"),
+                _delegation("reader"),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call(
+                            "read_file",
+                            {"file_path": "/shared.md"},
+                            "parent-read",
+                        )
+                    ],
+                ),
+                AIMessage(content="parent done"),
+            ],
+            "writer": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call(
+                            "write_file",
+                            {
+                                "file_path": "/shared.md",
+                                "content": "shared live",
+                            },
+                            "child-write",
+                        )
+                    ],
+                ),
+                AIMessage(content="writer done"),
+            ],
+            "reader": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call(
+                            "read_file",
+                            {"file_path": "/shared.md"},
+                            "sibling-read",
+                        )
+                    ],
+                ),
+                AIMessage(content="reader done"),
+            ],
+        },
+    )
+    agent = _native_agent(
+        model,
+        tools=[],
+        backend=backend,
+        available_tool_names=safe_filesystem_tools,
+    )
+
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage(content="parent")]},
+        {"configurable": {"thread_id": "shared-scratchpad-first"}},
+    )
+
+    tool_results = {
+        message.tool_call_id: message
+        for request in model.requests
+        for message in request
+        if isinstance(message, ToolMessage)
+    }
+    assert result["messages"][-1].content == "parent done"
+    assert tool_results["child-write"].status == "success"
+    assert "shared live" in str(tool_results["sibling-read"].content)
+    assert "shared live" in str(tool_results["parent-read"].content)
+
+    fresh_model = _NativeModel(
+        responses=[],
+        scripts={
+            "fresh parent": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        _tool_call(
+                            "read_file",
+                            {"file_path": "/shared.md"},
+                            "fresh-read",
+                        )
+                    ],
+                ),
+                AIMessage(content="fresh done"),
+            ]
+        },
+    )
+    fresh_backend, _ = deep_mod.build_conversation_filesystem(
+        ConversationFilesystemService(storage, "conversation-a")
+    )
+    fresh_agent = _native_agent(
+        fresh_model,
+        tools=[],
+        backend=fresh_backend,
+        available_tool_names=safe_filesystem_tools,
+    )
+    fresh_result = await fresh_agent.ainvoke(
+        {"messages": [HumanMessage(content="fresh parent")]},
+        {"configurable": {"thread_id": "shared-scratchpad-fresh"}},
+    )
+    fresh_read = next(
+        message
+        for request in fresh_model.requests
+        for message in request
+        if isinstance(message, ToolMessage) and message.tool_call_id == "fresh-read"
+    )
+
+    assert fresh_result["messages"][-1].content == "fresh done"
+    assert fresh_read.status == "success"
+    assert "shared live" in str(fresh_read.content)
 
 
 @pytest.mark.asyncio

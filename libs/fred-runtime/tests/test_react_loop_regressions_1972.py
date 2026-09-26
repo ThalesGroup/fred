@@ -40,6 +40,8 @@ replan") and is expected to fail on the legacy loop.
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
@@ -53,6 +55,8 @@ from fred_runtime.react.react_tool_loop import (
     _V2_MAX_HISTORY_MESSAGES,
     build_tool_loop_compiled_react_agent,
 )
+from fred_runtime.runtime_support.trace_payloads import serialize_model_output
+from fred_runtime.support.thinking import content_to_text
 from fred_runtime.support.tool_loop import ChatTurnTooLargeError
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -70,7 +74,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
@@ -144,10 +148,13 @@ def _compile_agent(
     approval_enabled: bool = True,
     always_require_tools: tuple[str, ...] = (),
     kpi: object | None = None,
+    max_tool_calls_per_turn: int | None = None,
+    tool_call_text_recovery_enabled: bool = True,
 ) -> Any:
+    selected_tools = tools if tools is not None else [update_ticket, get_info]
     return build_tool_loop_compiled_react_agent(
         model=model,
-        tools=tools if tools is not None else [update_ticket, get_info],
+        tools=selected_tools,
         system_prompt="SYS-1972.",
         binding=_binding(language),
         approval_policy=ToolApprovalPolicy(
@@ -156,8 +163,10 @@ def _compile_agent(
         ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
         definition=cast(ReActAgentDefinition, _FakeDefinition()),
-        available_tool_names={"update_ticket", "get_info"},
+        available_tool_names={tool.name for tool in selected_tools},
         kpi=cast(Any, kpi),
+        max_tool_calls_per_turn=max_tool_calls_per_turn,
+        tool_call_text_recovery_enabled=tool_call_text_recovery_enabled,
     )
 
 
@@ -1034,3 +1043,473 @@ async def test_hitl_resume_two_sequential_prompts_get_different_interrupt_ids() 
     interrupt_id_b = _interrupt_id(second)
 
     assert interrupt_id_a != interrupt_id_b
+
+
+# ---------------------------------------------------------------------------
+# Mistral tool-call-as-text controlled replay
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _ToolCallTextIncident:
+    """Redacted evidence plus a reconstructed completed model message."""
+
+    name: str
+    session_id: str
+    history_rank: int
+    trace_id: str
+    observation_id: str
+    reconstructed_content: list[str | dict[Any, Any]]
+    observed_history_projection: str
+    observed_trace_thinking_blocks: int
+    observed_trace_after_thinking: str
+    native_calls: tuple[dict[str, Any], ...]
+
+
+_REPLAY_SESSION_ID = "70c54206-d3e7-481b-9d08-7a9e68d712d0"
+_RECONSTRUCTED_REFERENCE_BLOCK: dict[str, object] = {
+    "type": "reference",
+    "reference_ids": [],
+}
+
+
+def _redacted_thinking_blocks(count: int) -> list[dict[str, object]]:
+    """Represent trace placeholders without claiming to recover private text."""
+
+    return [{"type": "thinking", "thinking": "<redacted>"} for _ in range(count)]
+
+
+_TOOL_CALL_TEXT_INCIDENTS = (
+    _ToolCallTextIncident(
+        name="query_then_catalog",
+        session_id=_REPLAY_SESSION_ID,
+        history_rank=5,
+        trace_id="485242a3a6272c245fc7ec7ba346e1a3",
+        observation_id="73d1e5558f82c3b6",
+        reconstructed_content=[
+            *_redacted_thinking_blocks(37),
+            {"type": "text", "text": "read"},
+            {"type": "text", "text": "_query"},
+            _RECONSTRUCTED_REFERENCE_BLOCK,
+            {
+                "type": "text",
+                "text": (
+                    '{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
+                    '"dataset_uids": ["<redacted_dataset>"]} '
+                    "list_tabular_documents{}"
+                ),
+            },
+        ],
+        observed_history_projection=(
+            "read\n_query\n{'type': 'reference', 'reference_ids': []}\n"
+            '{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
+            '"dataset_uids": ["<redacted_dataset>"]} list_tabular_documents{}'
+        ),
+        observed_trace_thinking_blocks=37,
+        observed_trace_after_thinking=(
+            'read_query[reference]{"sql": "SELECT * FROM <redacted_table> LIMIT 5", '
+            '"dataset_uids": ["<redacted_dataset>"]} list_tabular_documents{}'
+        ),
+        native_calls=(
+            {
+                "name": "read_query",
+                "args": {
+                    "sql": "SELECT * FROM fake_table LIMIT 5",
+                    "dataset_uids": ["fake-dataset"],
+                },
+            },
+            {"name": "list_tabular_documents", "args": {}},
+        ),
+    ),
+    _ToolCallTextIncident(
+        name="two_delegated_tasks",
+        session_id=_REPLAY_SESSION_ID,
+        history_rank=16,
+        trace_id="970ee98fef7b8f7d68de1fa3be653299",
+        observation_id="38a70a22fceabdf4",
+        reconstructed_content=[
+            *_redacted_thinking_blocks(123),
+            {"type": "text", "text": "Plan de découpage en cinq lots.\n\ntask"},
+            _RECONSTRUCTED_REFERENCE_BLOCK,
+            {
+                "type": "text",
+                "text": (
+                    '{"description": "<redacted instructions for rows 1-100>", '
+                    '"subagent_type": "general-purpose"}'
+                    'task{"description": "<redacted instructions for rows 101-200>", '
+                    '"subagent_type": "general-purpose"}'
+                ),
+            },
+        ],
+        observed_history_projection=(
+            "Plan de découpage en cinq lots.\n\ntask\n"
+            "{'type': 'reference', 'reference_ids': []}\n"
+            '{"description": "<redacted instructions for rows 1-100>", '
+            '"subagent_type": "general-purpose"}'
+            'task{"description": "<redacted instructions for rows 101-200>", '
+            '"subagent_type": "general-purpose"}'
+        ),
+        observed_trace_thinking_blocks=123,
+        observed_trace_after_thinking=(
+            'Plan de découpage en cinq lots.\n\ntask[reference]{"description": '
+            '"<redacted instructions for rows 1-100>", "subagent_type": '
+            '"general-purpose"}task{"description": "<redacted instructions for rows '
+            '101-200>", "subagent_type": "general-purpose"}'
+        ),
+        native_calls=(
+            {
+                "name": "task",
+                "args": {
+                    "description": "fake instructions for rows 1-100",
+                    "subagent_type": "general-purpose",
+                },
+            },
+            {
+                "name": "task",
+                "args": {
+                    "description": "fake instructions for rows 101-200",
+                    "subagent_type": "general-purpose",
+                },
+            },
+        ),
+    ),
+    _ToolCallTextIncident(
+        name="list_then_update_todos",
+        session_id=_REPLAY_SESSION_ID,
+        history_rank=33,
+        trace_id="a86c40a4722e466fd0250b80f6b86a03",
+        observation_id="0ca508639fb2e1ed",
+        reconstructed_content=[
+            *_redacted_thinking_blocks(19),
+            {"type": "text", "text": "ls"},
+            _RECONSTRUCTED_REFERENCE_BLOCK,
+            {
+                "type": "text",
+                "text": (
+                    '{"path": "/"}'
+                    'write_todos{"todos": ['
+                    '{"content": "lot 1", "status": "completed"}, '
+                    '{"content": "lot 5", "status": "in_progress"}]}'
+                ),
+            },
+        ],
+        observed_history_projection=(
+            "ls\n{'type': 'reference', 'reference_ids': []}\n"
+            '{"path": "/"}write_todos{"todos": ['
+            '{"content": "lot 1", "status": "completed"}, '
+            '{"content": "lot 5", "status": "in_progress"}]}'
+        ),
+        observed_trace_thinking_blocks=19,
+        observed_trace_after_thinking=(
+            'ls[reference]{"path": "/"}write_todos{"todos": ['
+            '{"content": "lot 1", "status": "completed"}, '
+            '{"content": "lot 5", "status": "in_progress"}]}'
+        ),
+        native_calls=(
+            {"name": "ls", "args": {"path": "/"}},
+            {
+                "name": "write_todos",
+                "args": {
+                    "todos": [
+                        {"content": "lot 1", "status": "completed"},
+                        {"content": "lot 5", "status": "in_progress"},
+                    ]
+                },
+            },
+        ),
+    ),
+)
+
+
+def _replay_tools(recorder: list[dict[str, Any]]) -> list[StructuredTool]:
+    """Build no-I/O fakes for every tool named by the three incidents."""
+
+    def read_query(sql: str, dataset_uids: list[str]) -> str:
+        """Return fake query rows."""
+
+        recorder.append(
+            {"name": "read_query", "args": {"sql": sql, "dataset_uids": dataset_uids}}
+        )
+        return "five fake rows"
+
+    def list_tabular_documents() -> str:
+        """Return a fake tabular catalogue."""
+
+        recorder.append({"name": "list_tabular_documents", "args": {}})
+        return "one fake document"
+
+    def task(description: str, subagent_type: str) -> str:
+        """Record a fake delegated task without starting another agent."""
+
+        recorder.append(
+            {
+                "name": "task",
+                "args": {
+                    "description": description,
+                    "subagent_type": subagent_type,
+                },
+            }
+        )
+        return "fake task completed"
+
+    def ls(path: str) -> str:
+        """Return a fake directory listing."""
+
+        recorder.append({"name": "ls", "args": {"path": path}})
+        return "fake-file.md"
+
+    def write_todos(todos: list[dict[str, str]]) -> str:
+        """Record fake todo updates."""
+
+        recorder.append({"name": "write_todos", "args": {"todos": todos}})
+        return "fake todos updated"
+
+    return [
+        StructuredTool.from_function(read_query),
+        StructuredTool.from_function(list_tabular_documents),
+        StructuredTool.from_function(task),
+        StructuredTool.from_function(ls),
+        StructuredTool.from_function(write_todos),
+    ]
+
+
+def _sorted_invocations(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Make concurrently dispatched native calls deterministic for assertions."""
+
+    return sorted(values, key=lambda value: (str(value["name"]), repr(value["args"])))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "incident", _TOOL_CALL_TEXT_INCIDENTS, ids=lambda incident: incident.name
+)
+async def test_mistral_call_like_content_terminates_without_tool_invocation(
+    incident: _ToolCallTextIncident,
+) -> None:
+    """Replay the current failure at the completed model-message boundary."""
+
+    invocations: list[dict[str, Any]] = []
+    response = AIMessage(
+        content=incident.reconstructed_content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+    model = RecordingModel(script=[response])
+    agent = _compile_agent(
+        model,
+        tools=_replay_tools(invocations),
+        approval_enabled=False,
+        tool_call_text_recovery_enabled=False,
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("continue the analysis")]},
+        f"mistral-incident-{incident.history_rank}",
+    )
+
+    assert response.tool_calls == []
+    assert invocations == []
+    messages = _update_messages(updates)
+    assert not any(isinstance(message, ToolMessage) for message in messages)
+    finals = [message for message in messages if isinstance(message, AIMessage)]
+    assert len(finals) == 1
+    assert finals[0].content == incident.reconstructed_content
+
+    assert content_to_text(response.content) == incident.observed_history_projection
+    assert serialize_model_output([response]) == (
+        "[thinking]" * incident.observed_trace_thinking_blocks
+        + incident.observed_trace_after_thinking
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "incident", _TOOL_CALL_TEXT_INCIDENTS, ids=lambda incident: incident.name
+)
+async def test_mistral_completed_call_text_executes_each_recovered_call_once(
+    incident: _ToolCallTextIncident,
+) -> None:
+    invocations: list[dict[str, Any]] = []
+    store, kpi = _install_recording_kpi_writer()
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content=incident.reconstructed_content,
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(content="recovered calls completed"),
+        ]
+    )
+    agent = _compile_agent(
+        model,
+        tools=_replay_tools(invocations),
+        approval_enabled=False,
+        kpi=kpi,
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("continue the analysis")]},
+        f"mistral-recovered-{incident.history_rank}",
+    )
+
+    assert Counter(call["name"] for call in invocations) == Counter(
+        call["name"] for call in incident.native_calls
+    )
+    messages = _update_messages(updates)
+    proposed_ids = [
+        call["id"]
+        for message in messages
+        if isinstance(message, AIMessage)
+        for call in message.tool_calls
+    ]
+    result_ids = [
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    ]
+    assert Counter(result_ids) == Counter(proposed_ids)
+    assert len(result_ids) == len(incident.native_calls)
+    recovery_events = [
+        event
+        for event in store.events
+        if event.metric and event.metric.name == "agent.tool_call_text_recovered_total"
+    ]
+    assert sum(event.metric.value or 0 for event in recovery_events) == len(
+        incident.native_calls
+    )
+    assert all(
+        event.dims.get("model_name") == "mistral-medium-latest"
+        for event in recovery_events
+    )
+    assert len(
+        [
+            event
+            for event in store.events
+            if event.metric and event.metric.name == "agent.tool_latency_ms"
+        ]
+    ) == len(incident.native_calls)
+
+
+@pytest.mark.asyncio
+async def test_recovered_calls_reach_compiled_hitl_before_execution() -> None:
+    incident = _TOOL_CALL_TEXT_INCIDENTS[1]
+    invocations: list[dict[str, Any]] = []
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content=incident.reconstructed_content,
+                response_metadata={"model_name": "mistral-medium-latest"},
+            )
+        ]
+    )
+    agent = _compile_agent(
+        model,
+        tools=_replay_tools(invocations),
+        always_require_tools=("task",),
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("continue the analysis")]},
+        "mistral-recovered-hitl",
+    )
+
+    values = _raw_interrupt_values(updates)
+    assert len(values) == 1
+    payload = cast(dict[str, Any], values[0])
+    assert [call["tool_name"] for call in payload["pending_calls"]] == [
+        "task",
+        "task",
+    ]
+    assert invocations == []
+    assert not any(
+        isinstance(message, ToolMessage) for message in _update_messages(updates)
+    )
+
+
+@pytest.mark.asyncio
+async def test_recovered_calls_reach_compiled_budget_and_pairing() -> None:
+    incident = _TOOL_CALL_TEXT_INCIDENTS[2]
+    invocations: list[dict[str, Any]] = []
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content=incident.reconstructed_content,
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(content="budget applied"),
+        ]
+    )
+    agent = _compile_agent(
+        model,
+        tools=_replay_tools(invocations),
+        approval_enabled=False,
+        max_tool_calls_per_turn=1,
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("continue the analysis")]},
+        "mistral-recovered-budget",
+    )
+
+    messages = _update_messages(updates)
+    proposed_ids = [
+        call["id"]
+        for message in messages
+        if isinstance(message, AIMessage)
+        for call in message.tool_calls
+    ]
+    result_ids = [
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    ]
+    assert Counter(result_ids) == Counter(proposed_ids)
+    assert len(invocations) <= 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "incident", _TOOL_CALL_TEXT_INCIDENTS, ids=lambda incident: incident.name
+)
+async def test_native_controls_execute_each_observed_fake_tool_call_once(
+    incident: _ToolCallTextIncident,
+) -> None:
+    """Show that native calls take the tool route in the same compiled loop."""
+
+    invocations: list[dict[str, Any]] = []
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    _tool_call(
+                        str(call["name"]),
+                        cast(dict[str, Any], call["args"]),
+                        f"native-{index}",
+                    )
+                    for index, call in enumerate(incident.native_calls, start=1)
+                ],
+            ),
+            AIMessage(content="native calls completed"),
+        ]
+    )
+    agent = _compile_agent(
+        model,
+        tools=_replay_tools(invocations),
+        approval_enabled=False,
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("continue the analysis")]},
+        f"mistral-native-control-{incident.history_rank}",
+    )
+
+    assert _sorted_invocations(invocations) == _sorted_invocations(
+        [dict(call) for call in incident.native_calls]
+    )
+    tool_messages = [
+        message
+        for message in _update_messages(updates)
+        if isinstance(message, ToolMessage)
+    ]
+    assert len(tool_messages) == len(incident.native_calls)

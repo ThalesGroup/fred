@@ -565,6 +565,90 @@ class WorkspaceFsPort(ABC):
         """
 
 
+class ConversationScratchpadError(Exception):
+    """Base error for conversation-bound scratchpad operations."""
+
+
+class ConversationScratchpadInvalidPathError(ConversationScratchpadError):
+    """Raised before storage access when a scratchpad-relative path is invalid."""
+
+
+class ConversationScratchpadFileNotFoundError(ConversationScratchpadError):
+    """Raised when a requested scratchpad file does not exist."""
+
+
+class ConversationScratchpadUnsupportedContentError(ConversationScratchpadError):
+    """Raised when a caller supplies content other than UTF-8 text."""
+
+
+class ConversationScratchpadEditConflictError(ConversationScratchpadError):
+    """Raised when an expected-text edit does not match the latest file content."""
+
+
+class ConversationScratchpadQuotaExceededError(ConversationScratchpadError):
+    """Raised before a mutation would exceed a conversation namespace quota."""
+
+    def __init__(self, *, resource: str, limit: int, attempted: int) -> None:
+        self.resource = resource
+        self.limit = limit
+        self.attempted = attempted
+        super().__init__(
+            f"Conversation filesystem {resource} quota exceeded ({attempted} > {limit})"
+        )
+
+
+class ConversationScratchpadStorageError(ConversationScratchpadError):
+    """Raised when the shared storage operation fails."""
+
+
+class ConversationFilesystemPermissionError(ConversationScratchpadError):
+    """Raised when an agent access is denied by its filesystem policy."""
+
+
+class ConversationFilesystemInterruptError(ConversationFilesystemPermissionError):
+    """Raised when an agent access needs approval unavailable to this port."""
+
+
+class ConversationFilesystemQuotaError(ConversationScratchpadError):
+    """Raised when the selected physical namespace rejects a write."""
+
+
+class ConversationFilesystemPort(ABC):
+    """Conversation-bound text files at absolute virtual workspace paths."""
+
+    @abstractmethod
+    async def read_text(self, path: str, *, origin: Literal["agent", "system"]) -> str:
+        """Read one UTF-8 text file."""
+
+    @abstractmethod
+    async def write_text(
+        self, path: str, content: str, *, origin: Literal["agent", "system"]
+    ) -> None:
+        """Create or fully replace one text file."""
+
+    @abstractmethod
+    async def edit_text(
+        self,
+        path: str,
+        old_text: str,
+        new_text: str,
+        *,
+        origin: Literal["agent", "system"],
+        replace_all: bool = False,
+    ) -> int:
+        """Replace expected text in the latest content and return its match count."""
+
+    @abstractmethod
+    async def list(
+        self, path: str = "/", *, origin: Literal["agent", "system"]
+    ) -> tuple[str, ...]:
+        """List readable absolute file paths in stable order."""
+
+    @abstractmethod
+    async def exists(self, path: str, *, origin: Literal["agent", "system"]) -> bool:
+        """Return whether a virtual file exists and is readable."""
+
+
 class HistoryStorePort(Protocol):
     """
     Port for writing and reading conversation history from a durable store.
@@ -1451,6 +1535,9 @@ class RuntimeServices:
     # privately in the adapter. Appended last for the same positional-safety
     # reason noted above.
     team_wiki: TeamWikiPort | None = None
+    # Conversation-bound virtual workspace for capability text files.
+    # Appended last to preserve positional compatibility.
+    conversation_filesystem: ConversationFilesystemPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

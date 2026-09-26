@@ -1,64 +1,51 @@
 ---
-title: First conversation
-order: 40
-description: Pick an agent, ask a question, attach a document, and read the answer.
+title: Your first conversation
+order: 20
+description: Ask an agent a question, read its answer, check it.
 icon: forum
 ---
 
-# First conversation
+# Your first conversation
 
-No need to be an expert: talking to an agent is as simple as writing a message.
-Here's how a first exchange goes.
+## Pick an agent and ask
 
-## Picking an agent
+From a team, open its **agents** and start a conversation with the one matching
+your need. Its name and description say what it is for; if several look close,
+the one whose description mentions your documents is usually the right one.
 
-Select your team in the navigation panel, then open the **Agents** page. Each
-agent is presented by its name and purpose. Click the one that matches your need
-to start a conversation.
+Phrase the question as you would to a colleague, with the context: what you are
+looking for, to what end, and in what shape you expect the answer. A precise
+request gets a better answer than a broad one.
 
-![TODO: screenshot — a team's agent list](assets/first-conv-agents.png)
+## Reading the answer
 
-## Asking a question
+An answer can carry several things:
 
-Type your question in the input field at the bottom of the conversation, then
-send. A few tips for better answers:
+- **The text**, formatted (headings, lists, tables).
+- **The sources**: when the agent draws on your documents, it points at the
+  passages it used. Click them.
+- **The execution trace**: the steps taken — a document search, a function call,
+  a computation. Useful to understand _how_ the answer was built.
+- **Produced documents**: some agents generate a file, which you download.
 
-- **Be specific**: state the context, the expected format, the level of detail.
-- **One intent at a time**: it's better to chain questions than to ask
-  everything at once.
-- **Reuse a prompt**: if your team has prepared prompts, insert the right one
-  instead of rewriting everything.
+## Checking
 
-## Attaching a document
+An agent runs on a language model: it can be wrong, and word an error
+confidently. For any answer that matters, **open the passages it cites** and
+confirm: the sources exist for that.
 
-You can **attach a file** to a message so the agent takes it into account for
-the duration of the conversation. For lasting, shared use, upload your documents
-to the team's [resources](/help/en/features/resources) instead: the agent can
-then draw on them and show you the passages it uses.
+If the agent cites no source, it consulted no document: the answer comes from
+its general knowledge, not from your content.
 
-## Reading an answer
+## Getting better answers
 
-An agent's answer can contain several elements:
+- **One intention at a time** rather than a catch-all request.
+- **Say the shape you want**: a list, a table, three sentences.
+- **If nothing may be missed, say so**: "list _every_ deadline". The agent then
+  reads the whole document instead of pulling out the passages it judges most
+  relevant.
+- **Reuse your team's prompts** rather than rephrasing every time (see
+  [Prompts](/help/en/features/prompts)).
 
-- **The text** of the answer.
-- **Sources**: when the agent relies on your documents, it points to the
-  passages used — check them to make sure they're relevant.
-- **The trace**: the detail of the steps the agent followed, in order — its
-  own reasoning ("Thinking…") as well as tool actions (a document search, a
-  computation…).
-- **Produced documents**: some agents generate files (a drafted document, a
-  table, a presentation).
-
-![TODO: screenshot — an answer with sources and trace](assets/first-conv-answer.png)
-
-> **Always verify** important answers. An agent can be wrong; the cited sources
-> are there so you can cross-check. See
-> [AI answers](/help/en/faq/ai-answers).
-
-## Finding your conversations
-
-Your sessions are kept and grouped by agent. You can reopen one to continue the
-exchange, or delete one permanently.
-
-To go further, explore the [features](/help/en/features) in detail, or follow a
-[guide](/help/en/guides) suited to your use case.
+Trouble during a conversation? See
+[Common problems](/help/en/troubleshooting/common-problems).

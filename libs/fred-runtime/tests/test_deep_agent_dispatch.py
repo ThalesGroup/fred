@@ -75,8 +75,14 @@ class _RecordingRuntime:
     instances: ClassVar[list[Any]]
 
     def __init__(
-        self, *, definition: object, services: object, capability_block: object
+        self,
+        *,
+        definition: object,
+        services: object,
+        capability_block: object,
+        conversation_filesystem: object = None,
     ) -> None:
+        del services, conversation_filesystem
         self.definition = definition
         self.capability_block = capability_block
         type(self).instances.append(self)
@@ -120,6 +126,11 @@ async def test_dispatch_routes_deep_definition_to_deep_runtime(
         agent_app_module,
         "_build_runtime_services",
         lambda *args, **kwargs: RuntimeServices(),
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_conversation_filesystem",
+        lambda *args, **kwargs: None,
     )
     # Needs a `.middleware` attribute: agent_app.py's debug trace logs
     # `len(capability_block.middleware)` before dispatch even runs.

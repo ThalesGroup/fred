@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
@@ -41,9 +41,9 @@ class DynamicPromptMiddleware(AgentMiddleware):
       middleware appends the per-turn suffix on top of it
     """
 
-    def __init__(self, *, available_tool_names: set[str] | frozenset[str]) -> None:
+    def __init__(self, *, available_tool_names: Collection[str]) -> None:
         super().__init__()
-        self._available_tool_names = available_tool_names
+        self._available_tool_names = frozenset(available_tool_names)
 
     async def awrap_model_call(
         self,

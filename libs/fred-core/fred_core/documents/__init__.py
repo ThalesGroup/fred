@@ -14,8 +14,13 @@
 
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.document_store import (
+    DEFAULT_SORT_FIELD,
+    DEFAULT_SORT_ORDER,
     BaseDocumentMetadataStore,
     DocumentMetadataDeserializationError,
+    DocumentSortField,
+    SortOrder,
+    sort_documents,
 )
 from fred_core.documents.document_structures import (
     AccessInfo,
@@ -60,7 +65,12 @@ __all__ = [
     "Tagging",
     "file_type_bucket",
     # Store
+    "DEFAULT_SORT_FIELD",
+    "DEFAULT_SORT_ORDER",
     "BaseDocumentMetadataStore",
+    "DocumentSortField",
+    "SortOrder",
+    "sort_documents",
     "DocumentLabelRow",
     "DocumentMetadataDeserializationError",
     "DocumentMetadataRow",

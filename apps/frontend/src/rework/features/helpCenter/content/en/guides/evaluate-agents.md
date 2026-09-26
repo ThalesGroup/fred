@@ -1,37 +1,39 @@
 ---
 title: Evaluate an agent
-order: 50
-description: Measure an agent's quality across evaluation campaigns.
+order: 20
+description: Measure an agent's quality instead of forming an impression of it.
 icon: reviews
 ---
 
 # Evaluate an agent
 
-How do you know an agent answers well — and whether it improves when you adjust
-its configuration? **Evaluations** give a measured answer rather than an
-impression.
+How do you know whether an agent answers well — and whether it improves when you
+tune it? By measuring it, rather than relying on an impression formed over a
+few questions.
 
-## Create an evaluation
+> Evaluations need the **Analyst** or **Admin** role in the team.
 
-From the [team settings](/help/en/features/teams), **Evaluations** section,
-create an **evaluation**: give it a name and its cases. This is a reusable,
-versioned definition — creating it does not run anything yet.
+## 1. Create the evaluation
 
-## Run it against an agent
+In the team's **Settings**, under **Evaluations**, create an **evaluation**: a
+name and its cases. It is a reusable, versioned definition — creating it runs
+nothing.
 
-Once the evaluation exists, trigger a **run** against the target agent. The
-run executes each case and measures the agent's answers.
+A good set of cases looks like what your colleagues will actually ask, including
+the questions the agent **should not** be able to answer: that is how invented
+answers are spotted.
 
-## Read the results
+## 2. Run it
 
-Once the run finishes, it shows each case's pass/failed/skipped result. Go
-through them to spot the cases where the agent falls short and understand why.
+Trigger a **run** against the agent. It goes through each case and measures the
+answers.
 
-## Iterate
+## 3. Read and adjust
 
-Use the results to adjust the agent — system prompt, attached prompts,
-document corpus — then trigger another run to check that quality is improving.
-This **measure → adjust → re-measure** cycle is what moves an agent forward.
+Each case comes back passed, failed or skipped. Go through the failures to
+understand _why_: instructions too vague, corpus incomplete, question ambiguous.
+Change one thing at a time, run again, compare.
 
-> Evaluation is especially useful before sharing an agent widely, or after a
-> significant change to its configuration.
+It is this **measure → adjust → measure again** cycle that moves an agent
+forward — and it is particularly worth it before sharing one widely, or after a
+significant change.

@@ -226,6 +226,10 @@
         }
       }
     },
+    "open_writable_document": {
+      "name": "Ouvrir un document de l’espace de travail",
+      "description": "Démo : copier un fichier Markdown de l’espace de travail d’un agent Deep dans l’éditeur de documents. Activez aussi Documents éditables."
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
@@ -1305,7 +1309,7 @@
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
-      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver.",
+      "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
       "tooltip": {
@@ -1566,10 +1570,13 @@
       "awaitingConfirmation": "en attente de confirmation…",
       "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
-      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "documents_one": "{{count}} document",
+      "documents_other": "{{count}} documents",
       "executionTime": "Temps d'exécution : {{duration}}",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
+      "matches_one": "{{count}} correspondance",
+      "matches_other": "{{count}} correspondances",
       "openReasoning": "Ouvrir le raisonnement complet",
       "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
@@ -1580,17 +1587,56 @@
       "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
+      "tables_one": "{{count}} table",
+      "tables_other": "{{count}} tables",
       "summaryReasoning": "Réflexion {{duration}}",
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
       "thinking": "Réflexion en cours…",
+      "tabular": {
+        "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
+        "catalogForWorkbook": "Lecture du sommaire du classeur.",
+        "catalogPreview": "Le catalogue est affiché en partie.",
+        "emptyCatalog": "Ce catalogue est vide.",
+        "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
+        "kind": {
+          "csv": "CSV",
+          "spreadsheet": "Classeur"
+        },
+        "keyword": "Recherche du terme :",
+        "matchedColumns": "Colonnes correspondantes",
+        "identifiedDocuments_one": "Voici le document identifié :",
+        "identifiedDocuments_other": "Voici les {{count}} documents identifiés :",
+        "moreValues_one": "+{{count}} autre valeur",
+        "moreValues_other": "+{{count}} autres valeurs",
+        "moreColumns_one": "+{{count}} autre colonne",
+        "moreColumns_other": "+{{count}} autres colonnes",
+        "noColumns": "Aucune colonne décrite.",
+        "noDocuments": "Aucun document tabulaire accessible.",
+        "noMatches": "Aucune correspondance trouvée dans les tables parcourues.",
+        "noSchemas": "Aucun schéma retourné.",
+        "noTables": "Aucune table décrite.",
+        "partialResult": "résultat partiel",
+        "rowsPreview": "aperçu de {{count}} lignes",
+        "rowsTruncated": "Aperçu partiel : d'autres lignes correspondent dans cette table.",
+        "samples": "Exemples",
+        "showFullCatalog": "Afficher le catalogue complet",
+        "showMore_one": "Afficher {{count}} élément supplémentaire",
+        "showMore_other": "Afficher {{count}} éléments supplémentaires",
+        "tableNumber": "Table {{number}}",
+        "tablesTruncated": "Résultat partiel : d'autres tables ou documents peuvent contenir cette valeur."
+      },
       "toolStatus": {
         "failure": "Échec",
         "running": "En cours",
         "success": "Succès"
       },
       "toolLabels": {
-        "readQuery": "Lecture de la requête"
+        "readQuery": "Lecture de la requête",
+        "documents": "Liste des documents tabulaires",
+        "markdown": "Lecture du catalogue du classeur",
+        "schemas": "Lecture des schémas tabulaires",
+        "search": "Recherche d'une valeur tabulaire"
       }
     },
     "collapse": "Réduire",
@@ -1671,9 +1717,7 @@
         "gettingStarted": "Démarrage",
         "features": "Fonctionnalités",
         "guides": "Guides et cas d'usage",
-        "troubleshooting": "Résolution de problèmes",
-        "faq": "FAQ",
-        "changelog": "Nouveautés"
+        "troubleshooting": "Aide et limites"
       }
     },
     "avatarCrop": {

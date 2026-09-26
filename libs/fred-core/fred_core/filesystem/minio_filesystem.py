@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import re
 from io import BytesIO
@@ -25,6 +26,7 @@ from fred_core.filesystem.structures import (
 )
 from minio import Minio
 from minio.deleteobjects import DeleteObject
+from minio.error import S3Error
 
 logger = logging.getLogger(__name__)
 
@@ -129,16 +131,23 @@ class MinioFilesystem(BaseFilesystem):
             bytes: The full content of the object.
         """
         resolved = self._resolve_path(path)
-        logger.info("[MINIO_READ] bucket=%s path=%s", self.bucket_name, resolved)
-        obj = self.client.get_object(self.bucket_name, resolved)
-        try:
-            return obj.read()
-        finally:
-            # release_conn() — not just close() — returns the urllib3 connection to
-            # the pool. Without it every read leaks a connection; after a few (e.g.
-            # a multi-file zip download) the pool is exhausted and later reads fail.
-            obj.close()
-            obj.release_conn()
+        logger.info("[MINIO_READ] bucket=%s", self.bucket_name)
+
+        def _read() -> bytes:
+            try:
+                obj = self.client.get_object(self.bucket_name, resolved)
+                try:
+                    return obj.read()
+                finally:
+                    # release_conn() returns the connection to urllib3's shared pool.
+                    obj.close()
+                    obj.release_conn()
+            except S3Error as exc:
+                if exc.code == "NoSuchKey":
+                    raise FileNotFoundError(f"Object not found: {path}") from exc
+                raise
+
+        return await asyncio.to_thread(_read)
 
     async def write(self, path: str, data: bytes | str) -> None:
         """
@@ -157,28 +166,31 @@ class MinioFilesystem(BaseFilesystem):
             data_bytes = data
 
         logger.info(
-            "[MINIO_WRITE] bucket=%s path=%s bytes=%d",
+            "[MINIO_WRITE] bucket=%s bytes=%d",
             self.bucket_name,
-            full,
             len(data_bytes),
         )
 
-        parent = "/".join(full.rstrip("/").split("/")[:-1])
-        if parent:
-            # list_objects with recursive=False checks direct children only
-            objs = list(
-                self.client.list_objects(
-                    self.bucket_name, prefix=parent + "/", recursive=False
+        def _write() -> None:
+            parent = "/".join(full.rstrip("/").split("/")[:-1])
+            if parent:
+                objs = list(
+                    self.client.list_objects(
+                        self.bucket_name, prefix=parent + "/", recursive=False
+                    )
                 )
+                if not objs:
+                    raise FileNotFoundError(
+                        f"Parent path '{parent}' does not exist. Cannot write '{full}'."
+                    )
+            self.client.put_object(
+                self.bucket_name,
+                full,
+                data=BytesIO(data_bytes),
+                length=len(data_bytes),
             )
-            if not objs:
-                raise FileNotFoundError(
-                    f"Parent path '{parent}' does not exist. Cannot write '{full}'."
-                )
 
-        self.client.put_object(
-            self.bucket_name, full, data=BytesIO(data_bytes), length=len(data_bytes)
-        )
+        await asyncio.to_thread(_write)
 
     async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
         """
@@ -197,18 +209,20 @@ class MinioFilesystem(BaseFilesystem):
         # prefix with a slash so listings stay inside the directory boundary; an
         # empty prefix (whole-bucket listing) is preserved as-is.
         list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
-        logger.info("[MINIO_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
+        logger.info("[MINIO_LIST] bucket=%s", self.bucket_name)
 
-        all_objects = list(
-            self.client.list_objects(
-                self.bucket_name, prefix=list_prefix, recursive=True
+        all_objects = await asyncio.to_thread(
+            lambda: list(
+                self.client.list_objects(
+                    self.bucket_name, prefix=list_prefix, recursive=True
+                )
             )
         )
         results: List[FilesystemResourceInfoResult] = []
 
         # Files
         for obj in all_objects:
-            if obj.object_name is not None:
+            if obj.object_name is not None and not obj.object_name.endswith("/"):
                 results.append(
                     FilesystemResourceInfoResult(
                         path=obj.object_name,
@@ -253,22 +267,34 @@ class MinioFilesystem(BaseFilesystem):
         """
 
         resolved = self._resolve_path(path)
-        logger.info("[MINIO_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
+        if not resolved.rstrip("/"):
+            raise ValueError("Deleting the filesystem root is forbidden")
+        logger.info("[MINIO_DELETE] bucket=%s", self.bucket_name)
         # Recursive by design: delete everything under the prefix (a folder and its contents),
         # then the object / directory marker itself — so a folder is removed whether empty or full.
         prefix = resolved.rstrip("/") + "/"
-        to_remove = [
-            DeleteObject(obj.object_name)
-            for obj in self.client.list_objects(
-                self.bucket_name, prefix=prefix, recursive=True
-            )
-            if obj.object_name is not None
-        ]
-        if to_remove:
-            for error in self.client.remove_objects(self.bucket_name, to_remove):
-                logger.warning("[MINIO_DELETE] failed to remove an object: %s", error)
-        self.client.remove_object(self.bucket_name, resolved)
-        self.client.remove_object(self.bucket_name, prefix)
+
+        def _delete() -> None:
+            to_remove = [
+                DeleteObject(obj.object_name)
+                for obj in self.client.list_objects(
+                    self.bucket_name, prefix=prefix, recursive=True
+                )
+                if obj.object_name is not None
+            ]
+            if to_remove:
+                errors = list(self.client.remove_objects(self.bucket_name, to_remove))
+                for error in errors:
+                    logger.warning(
+                        "[MINIO_DELETE] object removal failed error_category=%s",
+                        type(error).__name__,
+                    )
+                if errors:
+                    raise RuntimeError("Failed to delete MinIO objects")
+            self.client.remove_object(self.bucket_name, resolved)
+            self.client.remove_object(self.bucket_name, prefix)
+
+        await asyncio.to_thread(_delete)
 
     async def print_root_dir(self) -> str:
         """
@@ -291,12 +317,15 @@ class MinioFilesystem(BaseFilesystem):
 
         # Ensure path ends with a slash
         dir_path = self._resolve_path(path).rstrip("/") + "/"
-        logger.info("[MINIO_MKDIR] bucket=%s path=%s", self.bucket_name, dir_path)
+        logger.info("[MINIO_MKDIR] bucket=%s", self.bucket_name)
 
-        # Put empty object to represent the directory
-        from io import BytesIO
-
-        self.client.put_object(self.bucket_name, dir_path, data=BytesIO(b""), length=0)
+        await asyncio.to_thread(
+            self.client.put_object,
+            self.bucket_name,
+            dir_path,
+            data=BytesIO(b""),
+            length=0,
+        )
 
     async def exists(self, path: str) -> bool:
         """
@@ -311,23 +340,28 @@ class MinioFilesystem(BaseFilesystem):
         """
 
         full = self._resolve_path(path)
-        try:
-            logger.info("[MINIO_EXISTS] stat bucket=%s path=%s", self.bucket_name, full)
-            self.client.stat_object(self.bucket_name, full)
-            return True
-        except Exception:
-            objs = list(
-                self.client.list_objects(
-                    self.bucket_name, prefix=full.rstrip("/") + "/", recursive=False
+
+        def _exists() -> bool:
+            try:
+                logger.info("[MINIO_EXISTS] stat bucket=%s", self.bucket_name)
+                self.client.stat_object(self.bucket_name, full)
+                return True
+            except Exception:
+                objs = list(
+                    self.client.list_objects(
+                        self.bucket_name,
+                        prefix=full.rstrip("/") + "/",
+                        recursive=False,
+                    )
                 )
-            )
-            logger.info(
-                "[MINIO_EXISTS] list bucket=%s prefix=%s count=%d",
-                self.bucket_name,
-                full.rstrip("/") + "/",
-                len(objs),
-            )
-            return len(objs) > 0
+                logger.info(
+                    "[MINIO_EXISTS] list bucket=%s count=%d",
+                    self.bucket_name,
+                    len(objs),
+                )
+                return len(objs) > 0
+
+        return await asyncio.to_thread(_exists)
 
     async def cat(self, path: str) -> str:
         """
@@ -357,29 +391,38 @@ class MinioFilesystem(BaseFilesystem):
             FilesystemResourceInfoResult: Metadata including type, size, and modification date.
         """
         full = self._resolve_path(path)
-        try:
-            logger.info("[MINIO_STAT] file bucket=%s path=%s", self.bucket_name, full)
-            # Try as a file
-            obj = self.client.stat_object(self.bucket_name, full)
-            return FilesystemResourceInfoResult(
-                path=full,
-                size=obj.size,
-                type=FilesystemResourceInfo.FILE,
-                modified=obj.last_modified,
+
+        def _stat() -> FilesystemResourceInfoResult:
+            try:
+                logger.info("[MINIO_STAT] file bucket=%s", self.bucket_name)
+                obj = self.client.stat_object(self.bucket_name, full)
+                if not full.endswith("/"):
+                    return FilesystemResourceInfoResult(
+                        path=full,
+                        size=obj.size,
+                        type=FilesystemResourceInfo.FILE,
+                        modified=obj.last_modified,
+                    )
+            except S3Error as exc:
+                if exc.code not in {"NoSuchKey", "NoSuchObject", "NotFound"}:
+                    raise
+
+            prefix = full.rstrip("/") + "/"
+            children = list(
+                self.client.list_objects(
+                    self.bucket_name, prefix=prefix, recursive=False
+                )
             )
-        except Exception:
-            logger.info(
-                "[MINIO_STAT] treat-as-dir bucket=%s path=%s", self.bucket_name, full
-            )
-            # File not found, treat as directory (even if empty)
-            # cd freprefix = full.rstrip("/") + "/"
-            # objs = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=False))
-            return FilesystemResourceInfoResult(
-                path=full,
-                size=None,
-                type=FilesystemResourceInfo.DIRECTORY,
-                modified=None,
-            )
+            if children:
+                return FilesystemResourceInfoResult(
+                    path=full.rstrip("/"),
+                    size=None,
+                    type=FilesystemResourceInfo.DIRECTORY,
+                    modified=None,
+                )
+            raise FileNotFoundError(f"{path} not found")
+
+        return await asyncio.to_thread(_stat)
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
         """

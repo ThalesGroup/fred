@@ -1,57 +1,50 @@
 ---
-title: Chat
-order: 10
-description: Talk with an agent, attach files, read sources and produced documents.
+title: Conversations
+order: 20
+description: Resume an exchange, attach a file, insert a prompt, collect a document.
 icon: forum
 ---
 
-# Chat
+# Conversations
 
-Chat is the heart of the platform: this is where you ask an agent questions and
-get answers grounded in your content.
+Each exchange with an agent is a **conversation**. It keeps the messages, the
+attachments and the documents produced.
 
-## Conversations
+How to ask a question and read an answer is covered in
+[Your first conversation](/help/en/getting-started/first-conversation); this page
+covers the rest.
 
-Each exchange with an agent is a **conversation** (or session). Your
-conversations are kept in the left-hand list, and a **"Group by agent"**
-toggle lets you switch it to grouped view whenever you want (it's off by
-default). You can:
+## Managing your conversations
 
-- **resume** a conversation to continue where you left off;
-- **start** a new conversation at any time;
-- **delete** a conversation you no longer need, permanently.
+The list on the left keeps your conversations. A **Group by agent** switch
+changes the display (off by default). You can **resume** one, **start** a new
+one, or **delete** one.
 
-![TODO: screenshot — conversation list grouped by agent](assets/chat-list.png)
+A deleted conversation is **hidden immediately**, then permanently erased at the
+end of the retention period the team sets. With no period set, erasure is
+immediate.
 
-## Attachments
+## Attaching a file
 
-You can **attach a file** to a message: the agent takes it into account for the
-duration of the conversation. Handy for a one-off document. For lasting, shared
-use, prefer the team's [resources](/help/en/features/resources), which the
-agent can consult across conversations.
+You can attach a file to a message: the agent takes it into account **for the
+duration of that conversation**, and cannot reach it from another one. For a
+lasting, shared document, use the team's
+[resources](/help/en/features/resources).
 
-## Using a prompt
+Attaching a file assumes the agent has the matching function; without it the
+attachment is ignored.
 
-Instead of retyping a recurring request, you can insert a saved prompt's text
-straight into the composer and edit it before sending. It's a one-shot
-shortcut for that message, not a lasting setting on the conversation (see the
-[prompt library](/help/en/features/prompts)).
+## Inserting a prompt
 
-## Reading an answer
+Rather than retyping a recurring request, insert a saved prompt into the input
+field, then edit it before sending. It is a shortcut for that message, not a
+lasting setting of the conversation.
 
-An answer can mix several elements:
+## Collecting a produced document
 
-- **The text** of the answer, formatted (headings, lists, tables, code).
-- **Sources**: when the agent relies on your documents, it flags the passages
-  used — click them to verify.
-- **The execution trace**: the detail of the steps the agent followed (a
-  document search, a capability call, a computation…). Useful to understand
-  _how_ the answer was built.
-- **Produced documents**: some agents generate files (a drafted document, a
-  table, a presentation) that you can download.
+Some agents produce a file — a written document, a deck, a web page. It appears
+in the conversation, where you download it. A document written during a
+conversation comes as Word or Markdown.
 
-> **Verify** important answers using the cited sources. See
-> [AI answers](/help/en/faq/ai-answers).
-
-Trouble during a conversation? See
-[Chat issues](/help/en/troubleshooting/chat-issues).
+If something goes wrong, see
+[Common problems](/help/en/troubleshooting/common-problems).

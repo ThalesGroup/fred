@@ -39,6 +39,7 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+              - '.github/workflows/Check-pending-requests.yml'
             frontend-packages:
               - 'libs/frontend/**'
               - 'apps/frontend/src/styles/color-ramps.css'
@@ -131,6 +132,12 @@ jobs:
               - 'libs/capabilities/fred-capability-documents/**'
             document-access:
               - 'libs/capabilities/fred-capability-document-access/**'
+            ppt-filler:
+              - 'libs/capabilities/fred-capability-ppt-filler/**'
+            team-wiki:
+              - 'libs/capabilities/fred-capability-team-wiki/**'
+            writable-document:
+              - 'libs/capabilities/fred-capability-writable-document/**'
             # Shared CI and Python tooling: a change runs every matrix entry.
             ci:
               - '.github/workflows/Check-pending-requests.yml'
@@ -180,7 +187,7 @@ jobs:
             {"name": "fred-runtime", "directory": "libs/fred-runtime", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-agents", "directory": "apps/fred-agents", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["fred-agents", "platform-ops", "html-artifact", "documents", "document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+             "triggers": ["fred-agents", "platform-ops", "html-artifact", "documents", "document-access", "ppt-filler", "team-wiki", "writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-platform-ops", "directory": "libs/capabilities/fred-capability-platform-ops", "needs-pandoc": false, "integration-target": "",
              "triggers": ["platform-ops", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-html-artifact", "directory": "libs/capabilities/fred-capability-html-artifact", "needs-pandoc": false, "integration-target": "",
@@ -188,7 +195,13 @@ jobs:
             {"name": "fred-capability-documents", "directory": "libs/capabilities/fred-capability-documents", "needs-pandoc": false, "integration-target": "",
              "triggers": ["documents", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-document-access", "directory": "libs/capabilities/fred-capability-document-access", "needs-pandoc": false, "integration-target": "",
-             "triggers": ["document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
+             "triggers": ["document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-ppt-filler", "directory": "libs/capabilities/fred-capability-ppt-filler", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["ppt-filler", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-team-wiki", "directory": "libs/capabilities/fred-capability-team-wiki", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["team-wiki", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-writable-document", "directory": "libs/capabilities/fred-capability-writable-document", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
           ]
           JSON
 
@@ -229,7 +242,7 @@ jobs:
           - format
           - import-order
           - sast
-          # - detect-secret # todo: baseline not working, fix it and re enable this check
+          - detect-secret
           - type-check
     name: Code Quality - ${{ matrix.module.directory }} - ${{ matrix.check }}
 
@@ -413,6 +426,7 @@ jobs:
         include:
           - check: type-check
           - check: format-check
+          - check: lint
           # - check: knip
           #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}

@@ -18,24 +18,95 @@ repos:
     rev: 1.8.5
     hooks:
       - id: bandit
-        args:
-          [
-            "-r",
-            "-s",
-            "B101,B108",
-            "--",
-            "agentic-backend/agentic_backend",
-            "apps/knowledge-flow-backend/knowledge_flow_backend",
-          ]
         name: sast
+        # Scan the Python files supplied by pre-commit, including libraries.
+        args: ["-s", "B101,B108"]
   - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
-    rev: v1.13.0
+    rev: 1.31.0
     hooks:
+      # Check each affected project as a whole using its existing baseline.
+      # Explicit filenames would override the project's configured include list.
       - id: basedpyright
-        name: type-check-agentic
-        files: ^agentic-backend/
-        args: ["--project", "agentic-backend"]
+        name: type-check-control-plane-backend
+        files: ^apps/control-plane-backend/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "apps/control-plane-backend", "--baseline-file", "apps/control-plane-backend/.baseline/basedpyright-baseline.json"]
       - id: basedpyright
-        name: type-check-knowledge-flow
-        files: ^apps/knowledge-flow-backend/
-        args: ["--project", "apps/knowledge-flow-backend"]
+        name: type-check-fred-agents
+        files: ^apps/fred-agents/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "apps/fred-agents", "--baseline-file", "apps/fred-agents/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-knowledge-flow-backend
+        files: ^apps/knowledge-flow-backend/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "apps/knowledge-flow-backend", "--baseline-file", "apps/knowledge-flow-backend/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-document-access
+        files: ^libs/capabilities/fred-capability-document-access/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-document-access", "--baseline-file", "libs/capabilities/fred-capability-document-access/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-documents
+        files: ^libs/capabilities/fred-capability-documents/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-documents", "--baseline-file", "libs/capabilities/fred-capability-documents/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-html-artifact
+        files: ^libs/capabilities/fred-capability-html-artifact/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-html-artifact", "--baseline-file", "libs/capabilities/fred-capability-html-artifact/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-platform-ops
+        files: ^libs/capabilities/fred-capability-platform-ops/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-platform-ops", "--baseline-file", "libs/capabilities/fred-capability-platform-ops/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-ppt-filler
+        files: ^libs/capabilities/fred-capability-ppt-filler/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-ppt-filler", "--baseline-file", "libs/capabilities/fred-capability-ppt-filler/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-team-wiki
+        files: ^libs/capabilities/fred-capability-team-wiki/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-team-wiki", "--baseline-file", "libs/capabilities/fred-capability-team-wiki/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-capability-writable-document
+        files: ^libs/capabilities/fred-capability-writable-document/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-writable-document", "--baseline-file", "libs/capabilities/fred-capability-writable-document/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-core
+        files: ^libs/fred-core/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/fred-core", "--baseline-file", "libs/fred-core/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-pod
+        files: ^libs/fred-pod/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/fred-pod", "--baseline-file", "libs/fred-pod/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-runtime
+        files: ^libs/fred-runtime/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/fred-runtime", "--baseline-file", "libs/fred-runtime/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-sdk
+        files: ^libs/fred-sdk/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/fred-sdk", "--baseline-file", "libs/fred-sdk/.baseline/basedpyright-baseline.json"]

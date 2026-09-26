@@ -1,55 +1,59 @@
 ---
-title: Première connexion
+title: Premiers pas
 order: 10
-description: Se connecter, choisir sa langue et se repérer dans l'interface.
+description: Se connecter, changer de langue, se repérer, trouver son équipe.
 icon: login
 ---
 
-# Première connexion
-
-Quelques minutes suffisent pour vous connecter et prendre vos repères. On vous
-guide pas à pas.
+# Premiers pas
 
 ## Se connecter
 
-L'accès à la plateforme se fait avec votre compte d'organisation, via la page
-de connexion sécurisée. Saisissez vos identifiants habituels : aucune création
-de mot de passe spécifique n'est nécessaire.
+L'accès se fait avec votre compte d'organisation : vos identifiants habituels,
+aucun mot de passe à créer. Si la connexion échoue ou boucle, rafraîchissez la
+page ou rouvrez l'onglet pour repartir d'une session propre ; si cela persiste,
+il s'agit d'une question de configuration d'accès : adressez-vous à votre
+administrateur.
 
-![TODO: capture — page de connexion](assets/first-steps-login.png)
+## Changer de langue
 
-Si vous n'arrivez pas à vous connecter, consultez
-[Connexion et accès](/help/fr/troubleshooting/login-access).
+L'interface existe en français et en anglais. Ouvrez le **menu profil** (votre
+nom, en bas du panneau de navigation) → **Profil** → **Réglages**. Ce centre
+d'aide suit le même choix, et son sélecteur **FR / EN** en haut à droite permet
+d'en changer ponctuellement.
 
-## Choisir sa langue
+## Se repérer
 
-L'interface est disponible en français et en anglais. Pour changer de langue,
-ouvrez le **menu profil** (votre nom, en bas du panneau de navigation),
-choisissez **Profil**, puis sélectionnez votre langue sur la page
-**Réglages**. Ce centre d'aide suit le même choix — vous pouvez aussi basculer
-sa langue avec le sélecteur **FR / EN** en haut à droite.
+Trois zones :
 
-## Se repérer dans l'interface
-
-Trois zones structurent l'écran :
-
-- **Le panneau de navigation**, à gauche : il donne accès à votre espace
-  personnel, à la marketplace des équipes, à une icône **Centre d'aide** de
-  premier niveau (ouvre ce centre d'aide dans un nouvel onglet), et — une fois
-  une équipe sélectionnée — à ses agents, prompts, ressources et réglages.
-- **La zone de travail**, au centre : c'est là que s'affichent la page ou la
-  conversation en cours.
-- **Le menu profil**, en bas à gauche : votre profil, le contact du support,
-  et la déconnexion.
-
-![TODO: capture — vue d'ensemble de l'interface annotée](assets/first-steps-overview.png)
+- **Le panneau de navigation**, à gauche : votre espace personnel, la
+  marketplace des équipes, ce centre d'aide, et — une fois une équipe
+  sélectionnée — ses agents, ses prompts, ses ressources et ses réglages.
+- **La zone de travail**, au centre : la page ou la conversation en cours.
+- **Le menu profil**, en bas à gauche : votre profil, le support, la
+  déconnexion.
 
 ## Votre espace personnel
 
-Dès la première connexion, vous disposez d'un **espace personnel**. C'est une
-équipe à vous seul : vous pouvez y créer des agents, y déposer des documents et
-y tester des prompts sans que personne d'autre n'y ait accès. C'est l'endroit
-idéal pour prendre vos marques avant de rejoindre une équipe partagée.
+Dès la première connexion vous avez un **espace personnel** : une équipe dont
+vous êtes le seul membre. Vous pouvez y déposer des documents et y essayer des
+agents sans que personne n'y accède — pas même un administrateur de la
+plateforme. C'est l'endroit indiqué pour vous familiariser avec la plateforme.
 
-Prêt à comprendre le vocabulaire ? Passez aux
-[concepts clés](/help/fr/getting-started/concepts).
+## Rejoindre une équipe
+
+La **marketplace des équipes**, dans le panneau de navigation, liste les équipes
+visibles de votre organisation. Chacune affiche son mode d'adhésion :
+
+- **Ouverte** — vous la rejoignez d'un clic sur **Rejoindre**.
+- **Sur invitation** — un administrateur de l'équipe doit vous ajouter.
+
+Une équipe peut aussi être **privée** : elle n'apparaît alors que pour ses
+membres. Si vous cherchez une équipe sans la trouver, demandez à l'un de ses
+membres de vous inviter.
+
+> La création d'une équipe est une action réservée à certains rôles de
+> plateforme, et son auteur n'en devient pas administrateur — voir
+> [Équipes et droits](/help/fr/features/teams-and-permissions).
+
+La suite : [votre première conversation](/help/fr/getting-started/first-conversation).

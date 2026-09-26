@@ -6,13 +6,9 @@ transport, events, observability and SQL checkpointer. Two library facts shape t
 - `create_deep_agent` unconditionally adds its own `TodoListMiddleware` and `FilesystemMiddleware`
   (tool names `ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`/`execute`) to every agent it
   compiles, regardless of what tools Fred passes in.
-- Fred passes no explicit `backend=`, so that built-in filesystem middleware defaults to
-  `deepagents`'s `StateBackend`, which stores file content as part of the LangGraph agent state and
-  is checkpointed by Fred's existing SQL checkpointer after every step. Content therefore survives
-  across turns of the same conversation thread (and is erased when that conversation's checkpoint
-  is erased) but is not a separate, addressable object store and is not visible outside the thread.
-  This design calls it Deep's **conversation-scoped checkpoint filesystem** — not a durable,
-  user-visible Workspace, and not purely ephemeral either.
+- The follow-on `add-deep-agent-conversation-filesystem` change supplies an explicit
+  conversation-scoped `CompositeBackend`. Its runtime-provided safe tools are therefore standard
+  bindings rather than capability-provided tools; `execute` remains unavailable.
 
 See `proposal.md` for why the dispatch and HITL defects mattered.
 
@@ -33,9 +29,8 @@ See `proposal.md` for why the dispatch and HITL defects mattered.
 
 **Non-Goals:**
 
-- Any durable, user-visible file storage for Deep. No `backend=`/`CompositeBackend` is passed to
-  `create_deep_agent` in this change; each built-in filesystem name remains guarded unless that
-  exact name is contributed by the selected tool surface.
+- Any public, user-visible Workspace. The follow-on conversation-filesystem change provides a
+  runtime-owned backend, but no public file API, attachment mount, or Workspace product surface.
 - A new approval mechanism. Operator-policy support on Deep is delivered by removing a rejection and
   reusing `FredHitlMiddleware`'s existing `approval_policy` handling — the same code path Deep
   already threads `approval_policy` through for capability bindings.
@@ -69,16 +64,17 @@ correctly. Removing that guard is a deletion, not new gating logic.
 | Capability `HitlSpec` (no-op / pause+proceed / pause+cancel) | Existing, unchanged | Same gate, same outcomes — proven at both the compiled-graph and Fred-transport levels | Not applicable — own separate HITL lifecycle (`request_human_input`, `_pending_checkpoints`), not touched by this change |
 | Operator `ToolApprovalPolicy` (no-op / pause+proceed / pause+cancel) | Existing, unchanged | Same gate, same outcomes — proven at both the compiled-graph and Fred-transport levels | Not applicable |
 | Resume contract | `AwaitingHumanRuntimeEvent` carrying `HumanInputRequest`, proceed/cancel | Same contract, same event/request types, same `_TransportBackedReActExecutor` code path | Not applicable |
-| Filesystem tools | N/A (no Deep-style built-in filesystem) | Each `deepagents` built-in filesystem name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact name is bound; a partial filesystem surface never enables the remaining built-ins | N/A |
+| Filesystem tools | N/A (no Deep-style built-in filesystem) | The runtime-provided conversation backend binds `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep` without an optional capability; `execute` stays guarded off | N/A |
 
 ### D3 — Filesystem-tool-name overlap is enforced per tool
 
-`deepagents`'s built-in `read_file`/`write_file`/etc. share names with what a real Fred filesystem
-surface exposes. Availability is therefore derived from the exact model-visible names contributed
-by resolved tools and capability tools. The disabled prompt and `ToolCallLimitMiddleware` guards
-cover only the missing names: binding `ls` or `read_file`, for example, cannot expose Deep's
-internally registered `execute`. `FredHitlMiddleware.rewrite_filesystem_tool_arguments` composing
-correctly with a gated tool of the same name remains covered by
+`deepagents`'s built-in `read_file`/`write_file`/etc. share names with Fred tool surfaces. The
+runtime-provided conversation backend is the standard binding for `ls`, `read_file`, `write_file`,
+`edit_file`, `glob`, and `grep`, including when no optional filesystem capability is selected.
+Optional resolved tools still contribute their exact model-visible names, but neither route binds
+`execute`; its disabled prompt and `ToolCallLimitMiddleware` guard remain in place.
+`FredHitlMiddleware.rewrite_filesystem_tool_arguments` composing correctly with a gated tool of the
+same name remains covered by
 `test_deep_hitl_filesystem_tool_name_overlap_does_not_collide`.
 
 ### D4 — The manual NOVA-DOC run is document-access evidence, not filesystem or Workspace evidence

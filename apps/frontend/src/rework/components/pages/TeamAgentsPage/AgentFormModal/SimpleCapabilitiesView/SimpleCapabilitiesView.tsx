@@ -15,7 +15,12 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
-import { applyPackToggle, derivePackChecked, type CapabilitySelectionState } from "../toolPackLogic.ts";
+import {
+  applyPackToggle,
+  derivePackChecked,
+  isPackSelectable,
+  type CapabilitySelectionState,
+} from "../toolPackLogic.ts";
 import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
@@ -58,6 +63,12 @@ export function SimpleCapabilitiesView({
         const isCapabilityBackedSection =
           section.packs.length > 0 && section.packs.every((pack) => pack.kind === "capabilities");
         const showNotSupported = isCapabilityBackedSection && !supportsCapabilities;
+        // A pack the admin has opened nothing for is a dead switch; drop it,
+        // and drop a section left with none rather than print a bare heading.
+        // An agent still carrying a withdrawn capability is not left
+        // unexplained: the form's suspension banner names it.
+        const visiblePacks = section.packs.filter((pack) => isPackSelectable(pack, availableIds));
+        if (!section.emptyState && !showNotSupported && visiblePacks.length === 0) return null;
 
         return (
           <section key={section.id} className={styles.section}>
@@ -68,7 +79,7 @@ export function SimpleCapabilitiesView({
               <p className={styles.emptyState}>{t("rework.teams.formAgent.capabilities.notSupported")}</p>
             ) : (
               <ul className={styles.packList}>
-                {section.packs.map((pack) => (
+                {visiblePacks.map((pack) => (
                   <ToolPackCard
                     key={pack.id}
                     pack={pack}

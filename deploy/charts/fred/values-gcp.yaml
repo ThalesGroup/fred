@@ -33,6 +33,19 @@
 # Replace every <PLACEHOLDER> below for your project.
 
 applications:
+  fred-agents:
+    # Workload Identity supplies GCS Application Default Credentials. The GSA
+    # needs object list/read/create/update/delete access on this private bucket.
+    serviceAccount:
+      annotations:
+        iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+
+    configuration:
+      storage:
+        object_store:
+          type: gcs
+          # bucket_name defaults to fred-runtime; set it for a different bucket.
+
   control-plane-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
     # The GSA needs roles/storage.objectAdmin on the content bucket, and

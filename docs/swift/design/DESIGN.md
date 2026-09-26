@@ -299,9 +299,9 @@ SQL exposure is a projection of that decision — once a document is
 authorized, every one of its tables is mountable (a workbook is one
 authorization unit, no per-table authorization).
 
-**API surface** (document-centric, INGEST-04): `GET /tabular/documents` (one
-row per document, `kind: "csv"|"spreadsheet"`, no columns — light for LLM
-context), `GET /tabular/documents/schemas?document_uids=…` (batch, **all**
+**API surface** (document-centric, INGEST-04): `GET /tabular/documents` (document
+name and UID; Excel table aliases, sheets and titles; no CSV table details),
+`GET /tabular/documents/schemas?document_uids=…` (batch, **all**
 tables of each document with full `columns[]`), `GET
 /tabular/documents/{uid}/markdown` (a spreadsheet's `output.md`, 404 without
 `tabular_multi_v1`), `POST /tabular/query` (read-only SQL). These replaced

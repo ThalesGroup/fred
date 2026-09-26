@@ -414,6 +414,7 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from conftest import ToolFriendlyFakeChatModel
+    from deepagents.backends import StateBackend
     from fred_core.portable import Span, Tracer
     from fred_runtime.capabilities.assembly import CapabilityAgentBlock
     from fred_runtime.deep.deep_runtime import (
@@ -539,6 +540,8 @@ async def test_compiled_parent_retries_only_model_and_traces_each_attempt(
             subagent_middleware=[],
             middleware=middleware,
             checkpointer=InMemorySaver(),
+            backend=StateBackend(),
+            permissions=[],
         )
     result = await agent.ainvoke(
         {"messages": [HumanMessage(content="go")]},

@@ -1,3 +1,19 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @use "src/styles/spectrum-border" as *;
 
 /* ── Enabled / disabled state cascade ─────────────────────────────────────── */
@@ -27,6 +43,7 @@
 
 .agentCard {
   display: flex;
+  position: relative;
   flex-direction: column;
   justify-content: space-between;
   gap: var(--spacing-2xs);
@@ -104,8 +121,10 @@
   white-space: nowrap;
 }
 
-.catalogWarning {
-  margin: 0 var(--spacing-m);
+// A suspension already spells out what broke and how to fix it, so it reads as
+// a warning rather than an error — same banner treatment as a catalog warning.
+.catalogWarning,
+.suspensionWarning {
   border-radius: var(--radius-xs);
   background: var(--warning-container);
   padding: var(--spacing-2xs) var(--spacing-s);
@@ -113,15 +132,21 @@
   font: var(--font-body-small);
 }
 
-// #1975 (RFC §3.9): a platform-forced suspension reads as an error (blocking),
-// not a soft catalog warning — editors see it with the enable toggle locked.
-.suspensionWarning {
+.catalogWarning {
   margin: 0 var(--spacing-m);
-  border-radius: var(--radius-xs);
-  background: var(--error-container);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  color: var(--on-error-container);
-  font: var(--font-body-small);
+}
+
+// Floats over the card's bottom edge instead of joining the column flow, so a
+// suspension leaves the card's geometry identical to every other card. Click
+// through, so the more menu and the footer buttons underneath stay reachable.
+.suspensionWarning {
+  position: absolute;
+  right: var(--spacing-s);
+  bottom: var(--spacing-s);
+  left: var(--spacing-s);
+  z-index: 1;
+  pointer-events: none;
+  text-align: center;
 }
 
 .agentDescription {

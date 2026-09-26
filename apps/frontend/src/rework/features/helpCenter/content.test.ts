@@ -62,9 +62,9 @@ describe("help content corpus", () => {
   });
 
   it("parses frontmatter into meta (title differs from file id)", () => {
-    const page = getHelpPage("fr", "getting-started", "concepts");
+    const page = getHelpPage("fr", "getting-started", "first-steps");
     expect(page).not.toBeNull();
-    expect(page!.meta.title).toBe("Les concepts clés");
+    expect(page!.meta.title).toBe("Premiers pas");
     expect(page!.body).not.toContain("---\ntitle");
   });
 
