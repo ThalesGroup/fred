@@ -59,3 +59,10 @@ Task 2.10 verification (2026-09-25): the mounted regression failed before the fi
 ## 5. Specification validation
 
 - [x] 5.1 Validate the consolidated change with the installed OpenSpec strict validator and check internal links and capability coverage. Evidence: strict validation passed with no issues; all local links and anchors resolve; independent review covered all four capability specifications.
+
+## PR review regressions
+
+- [x] Recheck current standing before delegated personal-team native/local tools; preserve the ordinary service bypass and avoid duplicate organization-team checks.
+- [x] Preserve the bounded standing-unavailable 503 and denial header during managed binding resolution; retain generic handling for unrelated upstream failures.
+
+Review regression evidence (2026-09-26): 88 focused tests passed; the complete runtime suite passed 1,563 tests (11 optional-dependency skips, 16 integration cases deselected). After replacing the binding-test double with HTTPX MockTransport for type compatibility, all 29 outbound credential-path tests passed again. Independent correctness and hot-path review found no actionable issue. Root `make code-quality` passed across all modules. These checks close only the two review regressions above, not the remaining deployment acceptance tasks.

@@ -64,6 +64,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.common.fastapi_handlers import (
+    DENIAL_CAUSE_HEADER,
+    STANDING_UNAVAILABLE_CAUSE,
+)
+from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
 from fred_core.diagnostics import install_gc_diagnostics
@@ -1742,6 +1746,15 @@ async def _resolve_agent_instance(
     if isinstance(provider, DelegatedCredentialProvider):
         request_kwargs["auth"] = M2MBearerAuth(provider)
     response = await http_client.get(url, **request_kwargs)
+    if (
+        response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        and response.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Account standing could not be checked. Try again shortly.",
+            headers={DENIAL_CAUSE_HEADER: STANDING_UNAVAILABLE_CAUSE},
+        )
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=404, detail=response.text or "Unknown agent instance."

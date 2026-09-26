@@ -197,15 +197,14 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             return
         if rebac is None or not rebac.enabled:
             return  # dev/local (identity-only) or Noop engine — mirrors turn start
-        if not team_id or is_personal_team_id(team_id):
-            # Personal spaces aren't injected as a team_id into tool calls
-            # (`ContextAwareTool._inject_context_if_needed`); nothing to recheck.
-            return
-        if not user_id:
-            return
-        if is_service_agent:
+        if not user_id or is_service_agent:
             return
         try:
+            if not team_id or is_personal_team_id(team_id):
+                scope = RunScope.current()
+                if scope is not None and scope.delegated_credentials:
+                    await rebac.require_user_standing(user_id)
+                return
             await rebac.check_permission_or_raise(
                 RebacReference(Resource.USER, user_id),
                 TeamPermission.CAN_USE_TEAM_AGENTS,

@@ -751,3 +751,36 @@ def test_a_failed_tool_call_reports_its_endpoint_without_the_grant():
 
     assert [line for line in logs.lines if "kf.invalid/documents" in line]
     assert not [line for line in logs.lines if "alice" in line or "run-7" in line]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cause", ["standing_unavailable", "other", None])
+async def test_binding_lookup_preserves_only_bounded_standing_unavailable(cause):
+    def endpoint(request):
+        return httpx.Response(
+            503,
+            text=UPSTREAM_MARKER,
+            headers={"X-Fred-Denial-Cause": cause} if cause else {},
+        )
+
+    request = agent_app_module._AgentExecuteRequest.model_construct(
+        agent_id=None, agent_instance_id="instance-1", message="hi"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
+        with pytest.raises(HTTPException) as raised:
+            await agent_app_module._resolve_agent_instance(
+                request=request,
+                registry={},
+                access_token="person-bearer",
+                control_plane_url="http://control-plane.invalid/v1",
+                http_client=client,
+                team_id="team-1",
+                credentials=RecordingProvider(),
+            )
+    if cause == "standing_unavailable":
+        assert raised.value.status_code == 503
+        assert raised.value.headers == {"X-Fred-Denial-Cause": cause}
+        assert UPSTREAM_MARKER not in raised.value.detail
+    else:
+        assert raised.value.status_code == 502
+        assert not raised.value.headers

@@ -1291,3 +1291,40 @@ async def test_command_trace_captures_only_matching_tool_result(capture: bool) -
         else []
     )
     assert span.ended
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("team_id", ["personal-user-1", None])
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_personal_delegated_tool_rechecks_standing(team_id, unavailable):
+    class StandingEngine(_FakeRebacEngine):
+        async def require_user_standing(self, user_id):
+            assert user_id == "user-1"
+            raise StandingAuthorizationError(unavailable=unavailable)
+
+    engine = StandingEngine(enabled=True)
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        with pytest.raises(AuthorityLostError):
+            await ToolObservabilityMiddleware._reverify_team_authorization(
+                user_id="user-1", team_id=team_id, is_service_agent=False
+            )
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_personal_delegated_tool_allows_active_person():
+    checked = []
+
+    class StandingEngine(_FakeRebacEngine):
+        async def require_user_standing(self, user_id):
+            checked.append(user_id)
+
+    engine = StandingEngine(enabled=True)
+    with _with_rebac_engine(engine), RunScope.open() as scope:
+        scope.set_delegated_credentials(True)
+        await ToolObservabilityMiddleware._reverify_team_authorization(
+            user_id="user-1", team_id="personal-user-1", is_service_agent=False
+        )
+    assert checked == ["user-1"]
+    assert engine.calls == []
