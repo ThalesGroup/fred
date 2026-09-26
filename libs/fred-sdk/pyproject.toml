@@ -27,9 +27,9 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
   "fred-core>=4.1.0",
-  "langchain-core>=0.3.0",
-  "langchain>=1.3.14",
-  "langgraph>=1.2.9",
+  "langchain-core>=1.6.5",
+  "langchain>=1.4.2",
+  "langgraph>=1.2.12",
 ]
 # Only a Knowledge Base pod serving runs needs the workflow engine; agentic
 # pods import fred-sdk without it. `worker.py` is imported lazily so `publish`

@@ -224,6 +224,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
                   size="medium"
                   label={t("rework.teamSettings.routing.agentOverrides.agent")}
                   placeholder={t("rework.teamSettings.routing.agentOverrides.agentPlaceholder")}
+                  compact
                   value={row.agentId}
                   options={agentOptions}
                   onChange={(value) => handleRowAgentChange(row.key, value)}
@@ -233,6 +234,7 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
                   size="medium"
                   label={t("rework.teamSettings.routing.agentOverrides.targetProfileId")}
                   placeholder={t("rework.teamSettings.routing.agentOverrides.targetProfilePlaceholder")}
+                  compact
                   value={row.targetProfileId}
                   options={profileOptions}
                   onChange={(value) => handleRowProfileChange(row.key, value)}

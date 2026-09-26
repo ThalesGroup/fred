@@ -471,7 +471,7 @@ Two consequences of that, named rather than glossed:
 
   **This is a contract requirement, not an as-built invariant across every child
   invocation - a real gap exists today.** Some graph-runtime paths do recover
-  `agent_instance_id` from portable baggage (`graph_runtime.py:1925,2193`,
+  `agent_instance_id` from portable baggage (`graph_runtime.py` and `node_context.py`,
   `portable.baggage.get("agent_instance_id")`), which is the mechanism that makes the
   requirement above hold *when the baggage was populated correctly upstream*. It is not:
   `LocalRegistryAgentInvoker.invoke` (`fred_runtime/app/agent_app.py`) constructs the

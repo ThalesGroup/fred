@@ -327,6 +327,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         "http_client": h_client,
         "http_async_client": a_client,
         "timeout": effective_timeout,
+        # Our own clients own the transport; langchain-openai's socket options
+        # would not apply and only trigger a spurious proxy warning (NO_PROXY).
+        "http_socket_options": (),
     }
 
     # --- Provider: OpenAI ---

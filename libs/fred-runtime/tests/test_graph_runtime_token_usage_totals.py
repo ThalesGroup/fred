@@ -28,16 +28,25 @@ an unmeasurable number there would be worse than reporting none.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
-from fred_runtime.graph.graph_runtime import _GraphNodeExecutionContext
+from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.runtime import RuntimeServices, ToolCallRuntimeEvent
+from fred_sdk.contracts.runtime import (
+    RuntimeEvent,
+    RuntimeServices,
+    ToolCallRuntimeEvent,
+)
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
+from pydantic import BaseModel
 
 
 def _binding() -> BoundRuntimeContext:
@@ -56,16 +65,21 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
-def _node_context(runtime_tools: dict) -> _GraphNodeExecutionContext:
-    return _GraphNodeExecutionContext(
+def _node_context(
+    runtime_tools: dict,
+    events: list[RuntimeEvent] | None = None,
+    model: FakeListChatModel | None = None,
+) -> NodeContext:
+    return NodeContext(
         binding=_binding(),
         services=RuntimeServices(),
-        model=None,
+        model=model,
         graph_agent_id="graph-agent",
         node_id="node-1",
         allowed_tool_refs=frozenset(),
         runtime_tools=runtime_tools,
         tuning_values={},
+        sink=events.append if events is not None else (lambda _event: None),
     )
 
 
@@ -111,7 +125,8 @@ def test_graph_tool_call_event_carries_no_token_figure() -> None:
     that is asserted above — but nothing per-step is claimed.
     """
 
-    ctx = _node_context({"noop_probe": _noop_probe})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({"noop_probe": _noop_probe}, events=events)
 
     ctx.record_model_metadata(
         model_name="gpt-4o",
@@ -121,13 +136,54 @@ def test_graph_tool_call_event_carries_no_token_figure() -> None:
 
     asyncio.run(ctx.invoke_runtime_tool("noop_probe", {"x": "y"}))
 
-    (event,) = [e for e in ctx.events if isinstance(e, ToolCallRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolCallRuntimeEvent)]
     assert not hasattr(event, "token_usage")
     # The node still contributes its usage to the turn total.
     assert ctx.last_model_metadata[1] == {
         "input_tokens": 100,
         "output_tokens": 20,
         "total_tokens": 120,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
+    }
+
+
+class _Route(BaseModel):
+    route: str
+
+
+class _StructuredModel(FakeListChatModel):
+    """Answers structured calls the way LangChain's `include_raw=True` does."""
+
+    def with_structured_output(  # type: ignore[override]
+        self, schema: Any, *, include_raw: bool = False, **kwargs: Any
+    ) -> Runnable[Any, Any]:
+        raw = AIMessage(
+            content='{"route": "search"}',
+            usage_metadata={"input_tokens": 40, "output_tokens": 5, "total_tokens": 45},
+        )
+        parsed = _Route(route="search")
+        return RunnableLambda(
+            lambda _messages: (
+                {"raw": raw, "parsed": parsed, "parsing_error": None}
+                if include_raw
+                else parsed
+            )
+        )
+
+
+def test_structured_model_call_counts_toward_the_turn_total() -> None:
+    ctx = _node_context({}, model=_StructuredModel(responses=[""]))
+
+    routed = asyncio.run(
+        ctx.invoke_structured_model(_Route, [HumanMessage(content="where?")])
+    )
+
+    assert routed == _Route(route="search")
+    assert ctx.last_model_metadata[1] == {
+        "input_tokens": 40,
+        "output_tokens": 5,
+        "total_tokens": 45,
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }

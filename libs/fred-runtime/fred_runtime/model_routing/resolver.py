@@ -52,7 +52,7 @@ class ModelRoutingResolver:
 
     When is this called (current integration):
     - ReAct/Deep v2: once per turn, at runtime activation
-    - Graph v2: once per turn, at runtime activation — same call, same timing
+    - Graph: once per turn, at runtime activation — same call, same timing
     """
 
     def __init__(self, policy: ModelRoutingPolicy):

@@ -979,6 +979,71 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     def delete_thread(self, thread_id: str) -> None:  # type: ignore[override]
         raise _sync_checkpointer_error("delete_thread")
 
+    def session_threads(self, column: Any, session_id: str, derived_prefix: str) -> Any:
+        """
+        SQL filter on `column` for a session's thread and every thread derived
+        from it (ids starting with `derived_prefix`, e.g. LangGraph-native
+        graph threads — `graph_thread_prefix`).
+        """
+        escaped = (
+            derived_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        return (column == session_id) | column.like(f"{escaped}%", escape="\\")
+
+    async def session_thread_owners(
+        self, session_id: str, *, derived_prefix: str
+    ) -> dict[str, str | None]:
+        """Recorded owner of each existing thread of a session (`session_threads`)."""
+        await self._ensure_tables()
+        column = self.checkpoints_table.c.thread_id
+        owner = self.thread_owner_table.c
+        async with self.store.begin() as conn:
+            threads = [
+                str(row[0])
+                for row in (
+                    await conn.execute(
+                        select(column)
+                        .where(self.session_threads(column, session_id, derived_prefix))
+                        .distinct()
+                    )
+                ).fetchall()
+            ]
+            if not threads:
+                return {}
+            rows = (
+                await conn.execute(
+                    select(owner.thread_id, owner.user_id).where(
+                        owner.thread_id.in_(threads)
+                    )
+                )
+            ).fetchall()
+        recorded = {str(row[0]): row[1] for row in rows}
+        return {
+            thread: (
+                str(recorded[thread]) if recorded.get(thread) is not None else None
+            )
+            for thread in threads
+        }
+
+    async def adelete_session_threads(
+        self, session_id: str, *, derived_prefix: str
+    ) -> int:
+        """Delete a session's threads (`session_threads`); returns the checkpoint count."""
+        await self._ensure_tables()
+        column = self.checkpoints_table.c.thread_id
+        async with self.store.begin() as conn:
+            rows = (
+                await conn.execute(
+                    select(column)
+                    .where(self.session_threads(column, session_id, derived_prefix))
+                    .distinct()
+                )
+            ).fetchall()
+        deleted = 0
+        for thread_id in {session_id, *(str(row[0]) for row in rows)}:
+            deleted += await self.adelete_thread(thread_id)
+        return deleted
+
     async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
         """
         Delete all checkpoint rows for one thread and return the checkpoint count.

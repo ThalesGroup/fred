@@ -156,7 +156,7 @@ def create_app() -> FastAPI:
         import torch
 
         torch.set_default_device("cpu")
-        logger.warning("%s GPU support is disabled. Running on CPU.", LOG_PREFIX)
+        logger.info("%s GPU support is disabled. Running on CPU.", LOG_PREFIX)
 
     application_context = ApplicationContext(configuration)
     log_setup(
@@ -314,7 +314,7 @@ def create_app() -> FastAPI:
         PrometheusOpsController(router)
         logger.info("%s PrometheusOpsController registered (mcp.prometheus_ops_enabled=true)", LOG_PREFIX)
     else:
-        logger.warning("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
+        logger.info("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.reports_enabled:
         logger.info("%s ReportsController registered (mcp.reports_enabled=true)", LOG_PREFIX)
@@ -411,7 +411,7 @@ def create_app() -> FastAPI:
         mcp_prometheus_ops.mount_http(mount_path=mcp_mount_path)
         logger.info("%s MCP Prometheus Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
     else:
-        logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
+        logger.info("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.tabular_enabled:
         mcp_tabular = _without_response_docs(

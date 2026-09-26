@@ -20,11 +20,11 @@ Why this file exists:
 - Phase 1 (`test_capability_tool_return_convention.py`) proved that a
   `content_and_artifact` capability tool's `ToolInvocationResult` artifact is
   silently dropped when the tool is invoked with a plain args dict — exactly
-  the shape `GraphRuntime.invoke_runtime_tool` / `_GraphNodeExecutionContext`
+  the shape `GraphRuntime.invoke_runtime_tool` / `NodeContext`
   use. Phase 4 closes that gap with `_adapt_capability_tool_for_graph`
   (`graph_runtime.py`).
 - The single most important test here proves the fix against the REAL
-  `invoke_runtime_tool` code path (`_GraphNodeExecutionContext`, the exact
+  `invoke_runtime_tool` code path (`NodeContext`, the exact
   class `GraphNodeContext` is at runtime), not a hand-rolled mock of it.
 - Also covers the capability-vs-MCP tool name collision Phase 2 explicitly
   deferred to Phase 4 (`_adapted_capability_tools`).
@@ -45,8 +45,8 @@ from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.graph.graph_runtime import (
     _adapt_capability_tool_for_graph,
     _adapted_capability_tools,
-    _GraphNodeExecutionContext,
 )
+from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -58,6 +58,7 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
+    RuntimeEvent,
     RuntimeServices,
     RuntimeToolHandle,
     ToolProviderPort,
@@ -115,9 +116,12 @@ def _binding() -> BoundRuntimeContext:
 
 
 def _node_context(
-    runtime_tools, *, services: RuntimeServices | None = None
-) -> _GraphNodeExecutionContext:
-    return _GraphNodeExecutionContext(
+    runtime_tools,
+    *,
+    services: RuntimeServices | None = None,
+    events: list[RuntimeEvent] | None = None,
+) -> NodeContext:
+    return NodeContext(
         binding=_binding(),
         services=services if services is not None else RuntimeServices(),
         model=None,
@@ -126,6 +130,7 @@ def _node_context(
         allowed_tool_refs=frozenset(),
         runtime_tools=runtime_tools,
         tuning_values={},
+        sink=events.append if events is not None else (lambda _event: None),
     )
 
 
@@ -138,7 +143,7 @@ def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     """
     Build a citing capability tool, adapt it with
     `_adapt_capability_tool_for_graph` exactly as `GraphRuntime.build_executor`
-    would, register it on a real `_GraphNodeExecutionContext` (the class
+    would, register it on a real `NodeContext` (the class
     `GraphNodeContext` actually is at runtime), and call
     `invoke_runtime_tool` — its real, unmocked implementation. Without the
     Phase 4 adapter this would return a bare content string with no sources
@@ -343,13 +348,14 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
         return "boom", ToolInvocationResult(tool_ref="failing_probe", is_error=True)
 
     adapted = _adapt_capability_tool_for_graph(_failing_probe)
-    ctx = _node_context({adapted.name: adapted})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({adapted.name: adapted}, events=events)
 
     result = asyncio.run(ctx.invoke_runtime_tool("failing_probe", {"x": "y"}))
 
     assert isinstance(result, dict)
     assert result["is_error"] is True
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.tool_name == "failing_probe"
     assert event.is_error is True
 
@@ -407,12 +413,15 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         del x
         raise RuntimeError("boom")
 
-    ctx = _node_context({"slow_probe": _slow_probe, "raising_probe": _raising_probe})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context(
+        {"slow_probe": _slow_probe, "raising_probe": _raising_probe}, events=events
+    )
 
     asyncio.run(ctx.invoke_runtime_tool("slow_probe", {"x": "y"}))
     (success_event,) = [
         e
-        for e in ctx.events
+        for e in events
         if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "slow_probe"
     ]
     assert success_event.latency_ms is not None
@@ -422,7 +431,7 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         asyncio.run(ctx.invoke_runtime_tool("raising_probe", {"x": "y"}))
     (error_event,) = [
         e
-        for e in ctx.events
+        for e in events
         if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "raising_probe"
     ]
     assert error_event.latency_ms is not None
@@ -445,11 +454,12 @@ def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> N
         return "ok", ToolInvocationResult(tool_ref="sourced_probe", sources=(hit,))
 
     adapted = _adapt_capability_tool_for_graph(_sourced_probe)
-    ctx = _node_context({adapted.name: adapted})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({adapted.name: adapted}, events=events)
 
     asyncio.run(ctx.invoke_runtime_tool("sourced_probe", {"x": "y"}))
 
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.sources[0].uid == "d1"
 
 
@@ -468,12 +478,13 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
         del x
         return {"is_error": "not-a-bool-business-value", "answer": 42}
 
-    ctx = _node_context({"mcp_like_probe": _mcp_like_probe})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({"mcp_like_probe": _mcp_like_probe}, events=events)
 
     result = asyncio.run(ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
 
     assert result == {"is_error": "not-a-bool-business-value", "answer": 42}
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.is_error is False
 
 
@@ -590,10 +601,8 @@ def _min_graph_agent_definition():
 
 
 def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
-    from fred_runtime.graph.graph_runtime import (
-        GraphRuntime,
-        _DeterministicGraphExecutor,
-    )
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
 
     @lc_tool("mcp_probe")
     def _mcp_probe(text: str) -> str:
@@ -609,7 +618,7 @@ def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
     )
 
     executor = asyncio.run(runtime.build_executor(_binding()))
-    assert isinstance(executor, _DeterministicGraphExecutor)
+    assert isinstance(executor, GraphExecutor)
 
     runtime_tools = executor._runtime_tools  # pyright: ignore[reportPrivateUsage]
     assert set(runtime_tools) == {"mcp_probe", "corpus_search"}

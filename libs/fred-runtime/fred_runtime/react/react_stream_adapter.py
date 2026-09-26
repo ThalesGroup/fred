@@ -130,9 +130,6 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
     `interrupt_id` is populated from the wrapping `Interrupt.id`. The payload's
     optional `occurrence_id` is preserved so pauses sharing that id remain
     distinguishable; tool-raised pauses derive it from their `tool_call_id`.
-    This is a DIFFERENT field from `HumanInputRequest.checkpoint_id`, which
-    this function never sets — that field is populated only by the legacy
-    Graph V2 runtime with a real checkpointer-storage id.
 
     How to use:
     - pass one update payload from the compiled agent stream

@@ -299,7 +299,10 @@ export default function Select<T>({
         data-error={error !== undefined}
       >
         <div className={styles["state-layer"]}>
-          <span className={styles["value"]}>{selectedOption ? selectedOption.label : placeholder}</span>
+          {/* One line; the full label stays readable on hover (title), as in DataTable. */}
+          <span className={styles["value"]} title={selectedOption?.label}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
           <span className={styles["icon"]} aria-hidden="true">
             <Icon category={"outlined"} type={"arrow_drop_down"} />
           </span>

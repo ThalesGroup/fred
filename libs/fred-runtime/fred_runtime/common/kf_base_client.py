@@ -111,9 +111,6 @@ class KfBaseClient:
             template_agent_id = getattr(runtime_context, "template_agent_id", None)
             if template_agent_id:
                 dims["template_agent_id"] = str(template_agent_id)
-            checkpoint_id = getattr(runtime_context, "checkpoint_id", None)
-            if checkpoint_id:
-                dims["checkpoint_id"] = str(checkpoint_id)
             trace_id = getattr(runtime_context, "trace_id", None)
             if trace_id:
                 dims["trace_id"] = str(trace_id)

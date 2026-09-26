@@ -103,6 +103,11 @@ button falls back to its own content and a screen reader announces the current
 value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
 over `label`, so pass one or the other.
 
+**Long values (2026-09-25).** The trigger shows the selected label on one line,
+ellipsis-truncated, with the full label in a native `title` (the `DataTable`
+cell convention). The select sets `min-width: 0`, so it shrinks to its grid or
+flex track instead of wrapping or overflowing it.
+
 #### Open UX issues
 
 _(none)_

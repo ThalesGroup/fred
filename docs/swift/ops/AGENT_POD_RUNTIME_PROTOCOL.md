@@ -165,8 +165,9 @@ The primary conversation identifier is:
 Current runtime behavior:
 
 - the pod copies `context.session_id` into `RuntimeContext.session_id`
-- graph execution sets `ExecutionConfig.thread_id = context.session_id`
-- the SQL checkpointer uses that `thread_id` as the durable conversation key
+- a graph agent keeps one LangGraph thread per session and agent,
+  `thread_id = "{session_id}:{agent_namespace}"`, in the SQL checkpointer
+- `:` is therefore reserved: a `session_id` containing it is refused with 422
 
 In practice:
 
@@ -174,35 +175,13 @@ In practice:
 - killing and restarting the pod does not lose that thread, as long as the pod
   still points to the same SQL/SQLite store
 
-### 4.2 Pending HITL checkpoint identity
+### 4.2 Pending HITL pause identity
 
-During a HITL pause, the runtime also creates a checkpoint-specific identifier:
-
-- `checkpoint_id`
-
-This is emitted inside:
-
-- `awaiting_human.request.checkpoint_id`
-
-Purpose:
-
-- identify the exact pending interrupt/checkpoint
-- support stale-resume protection
-
-Current important limitation:
-
-- the runtime emits `checkpoint_id`
-- the current HTTP execute request model does not expose a dedicated
-  `checkpoint_id` input field
-- therefore the HTTP protocol currently resumes by `session_id` plus the latest
-  pending checkpoint for that session, not by an explicit checkpoint id sent by
-  the caller
-
-So today:
-
-- `session_id` is the active resume selector over HTTP
-- `checkpoint_id` is observable in events but not yet fully enforced
-  end-to-end by the HTTP request contract
+During a HITL pause, `awaiting_human.request.interrupt_id` carries LangGraph's
+own `Interrupt.id` for the pending pause. A resume echoes it back as the
+request's top-level `interrupt_id`. The pod rejects a resume whose
+`interrupt_id` matches no pending pause of this session (stale or duplicate
+answer), and claims the matching one atomically before resuming.
 
 ## 5. HITL Resume Payload
 
@@ -210,6 +189,7 @@ When the runtime pauses for human input, the client must call the same execute
 endpoint again with:
 
 - the same `session_id`
+- the pending pause's `interrupt_id`
 - a `resume_payload`
 
 Choice-based HITL resumes now use this shape:
@@ -222,6 +202,7 @@ Choice-based HITL resumes now use this shape:
     "session_id": "dev-session-32f2c7b1",
     "user_id": "alice"
   },
+  "interrupt_id": "5f0c9e0b2d4a...",
   "resume_payload": {
     "choice_id": "confirm"
   }
@@ -309,7 +290,7 @@ Typical HITL pause response:
     ],
     "free_text": false,
     "metadata": {},
-    "checkpoint_id": "1f1372b6-..."
+    "interrupt_id": "5f0c9e0b2d4a..."
   }
 }
 ```
@@ -350,7 +331,7 @@ data: {"kind":"tool_call","sequence":0,"tool_name":"get_account_details","call_i
 
 data: {"kind":"tool_result","sequence":0,"call_id":"call-1","tool_name":"get_account_details","content":"{\"ok\":true,...}","is_error":false,"sources":[],"ui_parts":[]}
 
-data: {"kind":"awaiting_human","sequence":0,"request":{"stage":"transfer_confirmation","title":"Confirm Transfer","question":"Please confirm...","choices":[...],"free_text":false,"metadata":{},"checkpoint_id":"1f1372b6-..."}}
+data: {"kind":"awaiting_human","sequence":0,"request":{"stage":"transfer_confirmation","title":"Confirm Transfer","question":"Please confirm...","choices":[...],"free_text":false,"metadata":{},"interrupt_id":"5f0c9e0b2d4a..."}}
 
 data: {"kind":"final","sequence":0,"content":"Transfer completed.","sources":[],"ui_parts":[],"model_name":null,"token_usage":null,"finish_reason":null}
 
@@ -438,7 +419,7 @@ The runtime currently emits these event kinds:
     ],
     "free_text": false,
     "metadata": {},
-    "checkpoint_id": "1f1372b6-..."
+    "interrupt_id": "5f0c9e0b2d4a..."
   }
 }
 ```
@@ -453,7 +434,7 @@ Fields of `request`:
 | `choices`       | Structured options for a choice-based resume |
 | `free_text`     | Whether raw human text is expected           |
 | `metadata`      | Additional small UI/business metadata        |
-| `checkpoint_id` | Pending HITL checkpoint identifier           |
+| `interrupt_id`  | Pending pause identifier, echoed on resume   |
 
 ### 8.5 `assistant_delta`
 
@@ -505,20 +486,18 @@ GET <base_url>/agents/sessions/{session_id}/messages
 Authorization: Bearer <user-jwt>
 ```
 
-Purpose:
+It returns the session's persisted message history, read from the pod's
+**history store**, not from the checkpointer: checkpoints hold LangGraph's
+internal resume state, history holds the typed messages the UI renders (see
+`RUNTIME-EXECUTION-CONTRACT.md` §6).
 
-- return the persisted message history for a session
-- read directly from the SQL checkpointer
+- Only the authenticated user's rows are returned. An unknown session and a
+  session owned by someone else both return `[]`, by design.
+- A pod configured without a history store returns `503`.
 
-History lookup key:
-
-- `thread_id = {session_id}`
-
-If no checkpoint exists for that session, the route returns:
-
-```json
-[]
-```
+`DELETE <base_url>/agents/sessions/{session_id}` deletes that history, under
+the same ownership rule. It does not touch checkpoints: delete those with
+`DELETE <base_url>/agents/checkpoints/{session_id}`.
 
 ## 10. Managed Agent Instance Resolution
 
@@ -552,13 +531,6 @@ This means:
 
 - pod restart is supported, as long as the same SQL/SQLite store is preserved
 - MCP reconnection after restart is expected and not itself a protocol problem
-
-Current limitation:
-
-- `checkpoint_id` is emitted to clients but is not yet part of the public HTTP
-  execute request contract
-- stale/out-of-order resume protection is therefore not yet fully enforced at
-  the HTTP layer
 
 ## 12. Minimal Reference Examples
 
@@ -599,6 +571,7 @@ Accept: text/event-stream
     "session_id": "dev-session-32f2c7b1",
     "user_id": "alice"
   },
+  "interrupt_id": "5f0c9e0b2d4a...",
   "resume_payload": {
     "choice_id": "confirm"
   }

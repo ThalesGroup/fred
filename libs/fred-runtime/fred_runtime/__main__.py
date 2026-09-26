@@ -77,7 +77,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dump-openapi":
         return _cmd_dump_openapi(args)
     parser.error(f"unknown command: {args.command}")
-    return 2
 
 
 if __name__ == "__main__":

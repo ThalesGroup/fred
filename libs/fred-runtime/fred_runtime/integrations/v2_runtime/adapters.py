@@ -133,7 +133,9 @@ from fred_runtime.runtime_support import (
 
 logger = logging.getLogger(__name__)
 
-_TRACE_MODEL_SPAN_NAMES = frozenset({"v2.graph.model", "v2.react.model"})
+_TRACE_MODEL_SPAN_NAMES = frozenset(
+    {"v2.graph.model", "v2.graph.structured_model", "v2.react.model"}
+)
 _TRACE_AWAIT_HUMAN_SPAN_NAMES = frozenset({"v2.graph.await_human"})
 _TRACE_TOOL_SPAN_NAMES = frozenset(
     {"v2.graph.tool", "v2.graph.runtime_tool", RUNTIME_TOOL_SPAN_NAME, "tool.invoke"}
@@ -543,7 +545,6 @@ class LangfuseTracerAdapter(TracerPort):
             "session_id": portable_context.session_id,
             "fred_session_id": portable_context.session_id,
             "exchange_id": portable_context.baggage.get("exchange_id"),
-            "checkpoint_id": portable_context.baggage.get("checkpoint_id"),
             "correlation_id": portable_context.correlation_id,
             "trace_id": portable_context.trace_id,
             "request_id": portable_context.request_id,

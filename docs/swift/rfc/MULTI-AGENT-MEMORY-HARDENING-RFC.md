@@ -14,7 +14,8 @@ MEMORY-01 phases A-E shipped the core conversational memory contract. A code
 audit confirmed five remaining hardening gaps before the feature should be
 treated as fully closed:
 
-- checkpoint state is session-scoped, not agent-scoped;
+- ReAct checkpoint state is session-scoped, not agent-scoped (Graph is
+  agent-scoped since 2026-09-25);
 - remote agent invocation still uses a legacy request payload;
 - local agent invocation still builds the private execution request directly;
 - TeamAgent history append does not enforce the configured history cap;
@@ -27,10 +28,10 @@ not reopen the shipped SDK memory contract.
 
 ### MEMORY-02 - Agent-Scoped Checkpoint Isolation
 
-Graph execution currently derives the checkpoint key from `ExecutionConfig` or
-runtime `session_id` and writes LangGraph checkpoints with `checkpoint_ns=""`.
-ReAct execution maps `ExecutionConfig.session_id` to LangGraph `thread_id`
-without an agent namespace.
+Graph execution is agent-scoped (RUNTIME-EXECUTION-CONTRACT.md §8.86): one
+thread per session and agent, `thread_id = "{session_id}:{agent scope}"`.
+ReAct execution still maps `ExecutionConfig.session_id` to LangGraph
+`thread_id` without an agent namespace.
 
 Result: two agents sharing one public session may load or overwrite the same
 completed or pending checkpoint state. This is especially risky for TeamAgent
@@ -93,15 +94,14 @@ composition this guard needs to cover.
 Keep `session_id` as the public conversation identity. Add an internal
 agent-scoped checkpoint namespace for LangGraph persistence:
 
-- use `thread_id = session_id`;
-- use `checkpoint_ns = <agent scope>`;
 - derive agent scope from the executing managed `agent_instance_id` when
   available, otherwise from the SDK `agent_id`;
-- use the same derivation in GraphRuntime and ReActRuntime;
-- preserve explicit `checkpoint_id` resume lookup inside the same namespace.
+- use the same derivation in GraphRuntime and ReActRuntime.
 
-This uses existing LangGraph checkpoint semantics and avoids encoding multiple
-concepts into `thread_id`.
+GraphRuntime ships this as `thread_id = "{session_id}:{agent scope}"` with
+`checkpoint_ns = ""`, not as `checkpoint_ns = <agent scope>`: LangGraph resets
+`checkpoint_ns` to `""` on a root run, so a namespace set by the caller does not
+isolate anything. ReAct should use the same thread key.
 
 Acceptance tests:
 

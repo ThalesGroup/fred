@@ -28,6 +28,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
@@ -70,6 +71,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",

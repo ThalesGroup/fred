@@ -864,6 +864,17 @@ applications:
             name: "mistral:latest"
             settings:
               base_url: "http://host.docker.internal:11434"
+        # Optional: the deterministic model served inside the fred-agents pod,
+        # for the Test Assistant's `graph check` conformance run. No server, no
+        # cost, never for real conversations. Uncomment to enable it.
+        # - profile_id: default.chat.fred-test-mock
+        #   capability: chat
+        #   model_display_name: "Fred test mock (in-process)"
+        #   model:
+        #     provider: fred-test-mock
+        #     name: fred-test-mock
+        #     settings:
+        #       chunk_delay_s: 0.03
 
     # ── mcp_catalog.yaml — MCP server endpoints ───────────────────────────────
     # URLs use Kubernetes service names. Override in your values file if needed.

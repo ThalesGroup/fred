@@ -596,7 +596,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
-      payload: { checkpoint_id: "cp-1" },
+      payload: { interrupt_id: "interrupt-1" },
     };
 
     await act(async () => {
@@ -758,7 +758,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
-      payload: { checkpoint_id: "cp-1" },
+      payload: { interrupt_id: "interrupt-1" },
     };
 
     await act(async () => {
@@ -771,18 +771,62 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("sendHitlResume() round-trips interrupt and occurrence identity into the resume request body", async () => {
-    // ReAct V2 resume identity: the id received on the awaiting_human SSE
-    // event (LangGraph's own Interrupt.id) must be echoed back verbatim on
-    // resume — the backend rejects a resume without it. checkpoint_id is
-    // the unrelated legacy Graph V2 field and must round-trip independently.
+  it("sendHitlResume() carries the same prepared routing and composer context as send()", async () => {
+    // A resumed turn used to reach the runtime with only team_id/language, so
+    // it fell back to the pod default model and lost the context prompt and
+    // search scope of the turn it continued.
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "http://runtime.test/execute_stream",
+      chat_controls: [],
+      capability_base_urls: {},
+      context_prompt_text: "session prompt",
+      chat_default_profile_id: "default.chat.team",
+      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
+      reasoning_enabled_model_ids: ["model__x__y"],
+    });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
     mount();
     const pendingHitl: RuntimeAwaitingHumanEvent = {
       type: "awaiting_human",
       session_id: "session-1",
       exchange_id: "exch-1",
-      payload: { interrupt_id: "interrupt-a", occurrence_id: "call-2", checkpoint_id: null },
+      payload: { interrupt_id: "int-1" },
+    };
+
+    await act(async () => {
+      await latest.sendHitlResume(
+        pendingHitl,
+        "proceed",
+        undefined,
+        { selected_document_libraries_ids: ["lib-1"] },
+        { document_access: { library_tag_ids: ["lib-1"], document_uids: [] } },
+      );
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.runtime_context).toMatchObject({
+      context_prompt_text: "session prompt",
+      chat_default_profile_id: "default.chat.team",
+      agent_profile_overrides: { "agent-1": "default.chat.fred-test-mock" },
+      reasoning_enabled_model_ids: ["model__x__y"],
+      selected_document_libraries_ids: ["lib-1"],
+      language: "fr",
+    });
+    expect(body.turn_options).toEqual({ document_access: { library_tag_ids: ["lib-1"], document_uids: [] } });
+    fetchSpy.mockRestore();
+  });
+
+  it("sendHitlResume() round-trips interrupt and occurrence identity into the resume request body", async () => {
+    // Resume identity: the id received on the awaiting_human SSE event
+    // (LangGraph's own Interrupt.id) must be echoed back verbatim on resume —
+    // the backend rejects a resume without it.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+    const pendingHitl: RuntimeAwaitingHumanEvent = {
+      type: "awaiting_human",
+      session_id: "session-1",
+      exchange_id: "exch-1",
+      payload: { interrupt_id: "interrupt-a", occurrence_id: "call-2" },
     };
 
     await act(async () => {
@@ -793,7 +837,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
     expect(body.interrupt_id).toBe("interrupt-a");
     expect(body.occurrence_id).toBe("call-2");
-    expect(body.checkpoint_id).toBeNull();
+    expect(body).not.toHaveProperty("checkpoint_id");
     fetchSpy.mockRestore();
   });
 
@@ -870,7 +914,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     exchange_id: "exch-1",
     payload: {
       interrupt_id: "interrupt-a",
-      checkpoint_id: null,
       pending_calls: [{ tool_call_id: "call-1" }],
     },
   } as RuntimeAwaitingHumanEvent;

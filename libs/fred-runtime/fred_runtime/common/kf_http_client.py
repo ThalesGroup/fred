@@ -23,6 +23,8 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 from fred_core.model.http_clients import TransportTuning, compute_transport_tuning
 
+from fred_runtime.common.background_tasks import spawn
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +108,7 @@ def close_shared_kf_async_client() -> None:
                 )
 
         if loop is not None and loop.is_running() and not loop.is_closed():
-            loop.create_task(_close())
+            spawn(_close())
         else:
             try:
                 asyncio.run(_close())

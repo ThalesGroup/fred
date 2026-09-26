@@ -14,12 +14,8 @@
 """
 Offline unit tests for the HITL resume identity contract (#2216 P1).
 
-`checkpoint_id`, `interrupt_id`, and `occurrence_id` are distinct fields,
-never aliases for each other:
-- `checkpoint_id`: a real checkpointer-storage identifier, populated only
-  by the legacy Graph V2 runtime.
-- `interrupt_id`: LangGraph's own `Interrupt.id`, populated only by the
-  ReAct V2 runtime.
+`interrupt_id` and `occurrence_id` are distinct fields, never aliases:
+- `interrupt_id`: LangGraph's own `Interrupt.id` (ReAct and Graph agents).
 - `occurrence_id`: one pause within an interrupt, derived from a tool call
   when the pause originates there.
 
@@ -28,28 +24,25 @@ These tests pin that independence at the contract level.
 
 from __future__ import annotations
 
+import pytest
 from fred_sdk.contracts.runtime import ExecutionConfig, HumanInputRequest
+from pydantic import ValidationError
 
 
-def test_human_input_request_checkpoint_id_and_interrupt_id_default_to_none() -> None:
+def test_human_input_request_resume_identity_defaults_to_none() -> None:
     request = HumanInputRequest(question="Proceed?")
-    assert request.checkpoint_id is None
     assert request.interrupt_id is None
     assert request.occurrence_id is None
     assert "occurrence_id" not in request.model_dump(mode="json")
 
 
-def test_human_input_request_checkpoint_id_and_interrupt_id_are_independent() -> None:
-    request = HumanInputRequest(
-        question="Proceed?", checkpoint_id="cp-1", interrupt_id="interrupt-a"
-    )
-    assert request.checkpoint_id == "cp-1"
-    assert request.interrupt_id == "interrupt-a"
-    assert request.checkpoint_id != request.interrupt_id
-
-    interrupt_only = request.model_copy(update={"checkpoint_id": None})
-    assert interrupt_only.checkpoint_id is None
-    assert interrupt_only.interrupt_id == "interrupt-a"
+def test_checkpoint_id_is_no_longer_part_of_the_pause_or_the_run() -> None:
+    with pytest.raises(ValidationError, match="checkpoint_id"):
+        HumanInputRequest.model_validate(
+            {"question": "Proceed?", "checkpoint_id": "cp-1"}
+        )
+    with pytest.raises(ValidationError, match="checkpoint_id"):
+        ExecutionConfig.model_validate({"session_id": "s1", "checkpoint_id": "cp-1"})
 
 
 def test_human_input_request_occurrence_id_names_a_pause_within_interrupt() -> None:
@@ -63,15 +56,8 @@ def test_human_input_request_occurrence_id_names_a_pause_within_interrupt() -> N
     assert request.occurrence_id == "tool-call-2"
 
 
-def test_execution_config_checkpoint_id_and_interrupt_id_are_independent() -> None:
-    config = ExecutionConfig(
-        session_id="s1", checkpoint_id="cp-1", interrupt_id="interrupt-a"
-    )
-    assert config.checkpoint_id == "cp-1"
-    assert config.interrupt_id == "interrupt-a"
-
-    resume_only = ExecutionConfig(
+def test_execution_config_carries_the_resumed_interrupt() -> None:
+    resume = ExecutionConfig(
         session_id="s1", interrupt_id="interrupt-a", resume_payload={"choice_id": "ok"}
     )
-    assert resume_only.checkpoint_id is None
-    assert resume_only.interrupt_id == "interrupt-a"
+    assert resume.interrupt_id == "interrupt-a"

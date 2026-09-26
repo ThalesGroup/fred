@@ -47,7 +47,7 @@ sourcing one from it would put spaces and capitals in a Prometheus label.
 
 **What is structurally excluded — by design, enforced in code, not by operator discipline:**
 - User identity (`user_id`), session identity (`session_id`, `exchange_id`).
-- Per-call correlation identifiers (`trace_id`, `correlation_id`, `checkpoint_id`) — these carry
+- Per-call correlation identifiers (`trace_id`, `correlation_id`, `interrupt_id`) — these carry
   no aggregate value for a dashboard and would otherwise let someone with Grafana access pivot
   from an aggregate panel into a specific raw log entry.
 - Team identity (`team_id`) and a specific configured agent instance (`agent_instance_id`) — not

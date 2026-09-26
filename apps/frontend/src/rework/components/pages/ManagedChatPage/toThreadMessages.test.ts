@@ -148,7 +148,6 @@ function hitlRequestMsg(eid: string, overrides: Record<string, unknown> = {}, ra
         ],
         free_text: false,
         interrupt_id: "int-1",
-        checkpoint_id: null,
         pending_calls: [{ tool_call_id: "call-1", tool_name: "extract_from_document", args_preview: "{}" }],
         ...overrides,
       } as never,

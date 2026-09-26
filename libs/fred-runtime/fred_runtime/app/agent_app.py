@@ -40,7 +40,6 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -95,6 +94,7 @@ from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
     RuntimeExecuteRequest,
+    check_session_id,
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
@@ -140,12 +140,17 @@ from fred_runtime.capabilities.errors import (
     TurnOptionsInvalidError,
     UnknownCapabilityError,
 )
+from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.deep.deep_runtime import DeepAgentRuntime
+from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
+from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import (
     checkpoint_namespace,
+    graph_thread_id,
+    graph_thread_prefix,
     load_checkpoint,
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -930,7 +935,6 @@ class _AgentExecuteRequest(BaseModel):
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
     context: dict[str, Any] | None = None
-    checkpoint_id: str | None = Field(default=None, min_length=1)
     interrupt_id: str | None = Field(default=None, min_length=1)
     occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
@@ -1005,7 +1009,6 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         agent_instance_id=r.agent_instance_id,
         message=r.input,
         context=r.to_legacy_context() or None,
-        checkpoint_id=r.checkpoint_id,
         interrupt_id=r.interrupt_id,
         occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
@@ -1758,7 +1761,7 @@ async def _enforce_session_ownership(
     request targets an EXISTING session, the authenticated user must own it. A
     brand-new session is allowed (the caller becomes its owner). This blocks a
     same-team user from continuing or resuming another user's private session by
-    guessing its `session_id` / `checkpoint_id` — the team OpenFGA check alone
+    guessing its `session_id` — the team OpenFGA check alone
     would not catch an intra-team cross-user access.
     """
     if authenticated_user is None:
@@ -1810,6 +1813,16 @@ async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
     return await rebac.has_user_permission(
         caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
     )
+
+
+def _refuse_reserved_session_id(session_id: str) -> None:
+    """422 for a session id that could name another session's graph thread."""
+    try:
+        check_session_id(session_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 async def _authorize_and_resolve(
@@ -1918,10 +1931,9 @@ def _validate_resolved_team(
         )
 
 
-# LangGraph's fixed pending-write channel for an open `interrupt()` (native
-# ReAct V2 `create_agent()` graphs never stamp Fred's hand-rolled `graph_v2`
-# channel-value markers, so this is the only local signal that a checkpoint
-# is actually paused on human input rather than simply done). Hardcoded
+# LangGraph's fixed pending-write channel for an open `interrupt()`: the only
+# local signal that a checkpoint is actually paused on human input rather
+# than simply done. Hardcoded
 # rather than imported from `langgraph.constants.INTERRUPT`: that constant
 # itself is deprecated as of LangGraph 1.0 ("removed in V2.0") in favor of
 # the compiled graph's own `aget_state(...).tasks[].interrupts`, which is not
@@ -1932,7 +1944,7 @@ def _validate_resolved_team(
 _REACT_V2_INTERRUPT_CHANNEL = "__interrupt__"
 
 
-def _pending_react_v2_interrupt_occurrences(
+def _pending_interrupt_occurrences(
     pending_writes: Sequence[tuple[str, str, Any]],
 ) -> frozenset[tuple[str, str | None]]:
     """
@@ -2007,36 +2019,24 @@ def _pending_react_v2_interrupt_occurrences(
     return frozenset(occurrences)
 
 
-def _resume_checkpoint_namespaces(request: RuntimeExecuteRequest) -> tuple[str, ...]:
+def _resume_checkpoint_locations(
+    request: RuntimeExecuteRequest, session_id: str
+) -> tuple[tuple[str, str], ...]:
     """
-    Checkpoint namespaces a resume-capable request may target, best first.
+    `(thread_id, checkpoint_ns)` pairs a resume may target, best first.
 
-    ReAct V2 checkpoints are ALWAYS stored unnamespaced, whatever the runtime
-    configures: LangGraph resets `checkpoint_ns` to `""` for every root-graph
-    run (`pregel/_loop.py::PregelLoop.__init__`, pinned by
-    `test_langgraph_resets_root_checkpoint_namespace`). Only the hand-rolled
-    Graph runtime, which writes through `aput` itself, actually reaches
-    storage under the per-agent namespace.
-
-    This gate runs before the target agent is resolved, so it cannot know
-    which runtime it is talking to — it goes by the request's own resume
-    identifier instead (`checkpoint_id` is Graph V2's, `interrupt_id` is ReAct
-    V2's, mutually exclusive by contract).
+    LangGraph stores every root run at `checkpoint_ns` `""`
+    (`test_langgraph_resets_root_checkpoint_namespace`). A graph agent pauses
+    on its own thread (`graph_thread_id`), which only exists for graph agents;
+    a ReAct agent pauses on the session thread. This gate runs before the
+    target agent is resolved, so it tries the graph thread first.
     """
 
     agent_ns = checkpoint_namespace(
         agent_instance_id=request.agent_instance_id,
         agent_id=request.agent_id or request.agent_instance_id or "",
     )
-    if request.checkpoint_id is not None:
-        # Graph V2, whose executor reads its own namespace and nowhere else.
-        # Probing "" as well would wave a pre-namespacing pause past this gate
-        # only to have it die mid-stream, where a 409 can no longer be sent.
-        return (agent_ns,)
-    # ReAct V2 — always unnamespaced. `agent_ns` stays as a fallback for a
-    # Graph pause that never stamped a checkpoint_id (`graph_runtime.py` only
-    # stamps one when it has it); nothing is ever stored there for ReAct.
-    return ("", agent_ns)
+    return ((graph_thread_id(session_id, agent_ns), ""), (session_id, ""))
 
 
 async def _validate_session_checkpoint_access(
@@ -2076,44 +2076,22 @@ async def _validate_session_checkpoint_access(
     Example:
     - `await _validate_session_checkpoint_access(request)`
 
-    ReAct V2 vs legacy Graph runtime — two distinct identifiers, never
-    aliased (#2216). `RuntimeExecuteRequest`'s own validator already
-    guarantees `checkpoint_id`/`interrupt_id` are never both set on the same
-    request (see its docstring) — that is what lets the primary lookup
-    below double as "the thread's latest checkpoint" for every ReAct V2
-    request without this function needing to special-case it:
-    - the legacy hand-rolled Graph runtime stamps `channel_values` with
-      `runtime_kind: "graph_v2"` / `pending` / `pending_checkpoint_id`
-      (`graph_runtime.py::_store_pending_checkpoint`) and resumes via
-      `request.checkpoint_id`, a real checkpointer-storage id — validated
-      by exact lookup + exact id match, UNCHANGED by #2216.
-    - ReAct V2 (`create_agent()` + native `interrupt()`) never stamps those
-      markers and never populates `checkpoint_id` at all. It resumes via
-      `request.interrupt_id`, LangGraph's own `Interrupt.id` — this
-      function requires it to exactly match one of the ids currently
-      pending on the thread's latest checkpoint
-      (`_pending_react_v2_interrupt_occurrences`) — a stale response for an earlier
-      interrupt must never be accepted for a later one (#2216 P1).
-      `react_message_codec.py` threads the same id into LangGraph's own
-      targeted `Command(resume={id: ...})` form as defense in depth, so the
-      graph itself also refuses to apply a decision to a task whose
-      `Interrupt.id` doesn't match.
+    Resume identity is LangGraph's own `Interrupt.id` (#2216), for ReAct
+    and Graph agents alike: `request.interrupt_id` must exactly match one of
+    the ids pending on the thread's latest checkpoint
+    (`_pending_interrupt_occurrences`), so a stale response for an earlier
+    interrupt is never accepted for a later one. The id is also threaded into
+    LangGraph's targeted `Command(resume={id: ...})` form as defense in depth.
     """
 
-    needs_checkpoint_validation = (
-        request.checkpoint_id is not None
-        or request.interrupt_id is not None
-        or request.resume_payload is not None
-    )
-    if not needs_checkpoint_validation:
+    if request.resume_payload is None:
         return ()
 
     session_id = request.effective_session_id()
     if not session_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required when checkpoint_id, interrupt_id, "
-            "or resume_payload is set.",
+            detail="session_id is required when resume_payload is set.",
         )
 
     checkpointer = get_runtime_context().config.checkpointer
@@ -2121,81 +2099,23 @@ async def _validate_session_checkpoint_access(
         return ()
 
     loaded = None
-    for checkpoint_ns in _resume_checkpoint_namespaces(request):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
         loaded = await load_checkpoint(
-            checkpointer,
-            thread_id=session_id,
-            checkpoint_id=request.checkpoint_id,
-            checkpoint_ns=checkpoint_ns,
+            checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
-        if (
-            loaded is None
-            and request.resume_payload is not None
-            and request.checkpoint_id is not None
-        ):
-            # The exact-id lookup above is the only path the legacy Graph
-            # runtime ever needs (its checkpoint_id is real). Retry against the
-            # thread's latest checkpoint only once that has failed, on a
-            # genuine resume attempt. ReAct V2 never populates checkpoint_id at
-            # all, so its requests already resolve to "latest checkpoint" on
-            # the primary lookup above (checkpoint_id=None) and never reach
-            # this branch — kept for the legacy Graph runtime's own
-            # unknown-checkpoint_id recovery path (a clean "does not match
-            # pending" 409 instead of a blunt "unknown checkpoint" one),
-            # preserving its exact prior behavior.
-            loaded = await load_checkpoint(
-                checkpointer,
-                thread_id=session_id,
-                checkpoint_ns=checkpoint_ns,
-            )
         if loaded is not None:
             break
 
     if loaded is None:
-        detail = (
-            "No pending checkpoint was found for this session."
-            if request.resume_payload is not None
-            else "checkpoint_id is unknown for this session."
-        )
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
-
-    checkpoint, pending_writes = loaded
-    channel_values = checkpoint.get("channel_values", {})
-    if not isinstance(channel_values, dict):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="checkpoint payload is malformed for this session.",
+            detail="No pending checkpoint was found for this session.",
         )
 
-    if request.resume_payload is None:
-        return ()
-
-    if channel_values.get("runtime_kind") == "graph_v2":
-        if channel_values.get("pending") is not True:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="checkpoint is not waiting for resume.",
-            )
-        resolved_checkpoint_id = channel_values.get(
-            "pending_checkpoint_id"
-        ) or checkpoint.get("id")
-        if request.checkpoint_id is not None and (
-            not isinstance(resolved_checkpoint_id, str)
-            or resolved_checkpoint_id != request.checkpoint_id
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="checkpoint_id does not match the pending checkpoint for this session.",
-            )
-        return ()
-
-    # Not the legacy Graph runtime (ReAct V2, or the fallback lookup landed on
-    # some other non-graph_v2 checkpoint kind). #2216 P1: a checkpoint being
-    # merely "paused on some interrupt" is not enough — a stale response for
-    # an EARLIER interrupt on this same thread must never be allowed to
-    # resume a LATER one. `request.interrupt_id` must exactly match one of
-    # the ids currently pending on this checkpoint.
-    pending_occurrences = _pending_react_v2_interrupt_occurrences(pending_writes)
+    _, pending_writes = loaded
+    # #2216 P1: a checkpoint merely "paused on some interrupt" is not enough —
+    # `request.interrupt_id` must exactly match one of the ids pending on it.
+    pending_occurrences = _pending_interrupt_occurrences(pending_writes)
     if not pending_occurrences:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -2488,7 +2408,7 @@ async def _write_turn_history(
 
         elif kind == "awaiting_human":
             # Store the full HITL gate definition — question, all choices, and
-            # the resume identity (interrupt_id/checkpoint_id/pending_calls) —
+            # the resume identity (interrupt_id/pending_calls) —
             # so audit logs and UI replay have the complete structured record
             # AND a reload while the gate is still open can reconstruct a
             # working (not just readable) prompt.
@@ -2524,7 +2444,6 @@ async def _write_turn_history(
                     free_text=bool(req.get("free_text")),
                     interrupt_id=req.get("interrupt_id"),
                     occurrence_id=req.get("occurrence_id"),
-                    checkpoint_id=req.get("checkpoint_id"),
                     pending_calls=[
                         {
                             "tool_call_id": c.get("tool_call_id", ""),
@@ -2977,7 +2896,7 @@ async def _stream(
     if session_id:
         history_store = get_runtime_context().config.history_store
         if history_store is not None:
-            asyncio.create_task(
+            spawn(
                 _write_turn_history(
                     session_id=session_id,
                     user_id=user_id,
@@ -3122,7 +3041,7 @@ def _enforce_turn_options(
         return
     if capability_registry is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "turn_options were supplied but this pod has no capability "
                 "registry to validate them against."
@@ -3139,7 +3058,7 @@ def _enforce_turn_options(
         )
     except TurnOptionsInvalidError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -3486,7 +3405,6 @@ async def _iterate_runtime_event_payloads(
         if request.resume_payload is not None
         else ExecutionGrantAction.EXECUTE.value
     )
-    resolved_checkpoint_id = request.checkpoint_id or ctx.get("checkpoint_id")
     resolved_interrupt_id = request.interrupt_id or ctx.get("interrupt_id")
     resolved_occurrence_id = request.occurrence_id or ctx.get("occurrence_id")
 
@@ -3507,7 +3425,6 @@ async def _iterate_runtime_event_payloads(
             for key, value in {
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
-                "checkpoint_id": resolved_checkpoint_id,
                 "interrupt_id": resolved_interrupt_id,
                 "occurrence_id": resolved_occurrence_id,
                 "execution_action": execution_action,
@@ -3521,7 +3438,6 @@ async def _iterate_runtime_event_payloads(
     runtime_context = RuntimeContext(
         session_id=ctx.get("session_id"),
         exchange_id=exchange_id,
-        checkpoint_id=resolved_checkpoint_id,
         # interrupt_id (#2216) is NOT a RuntimeContext field — no consumer
         # ever read it there; PortableContext.baggage above already carries
         # it for trace/log correlation, the same purpose this would have
@@ -3628,7 +3544,6 @@ async def _iterate_runtime_event_payloads(
     # LangGraph's checkpointer invariant (thread_id required internally) is met.
     execution_config = ExecutionConfig(
         session_id=ctx.get("session_id") or request_id,
-        checkpoint_id=request.checkpoint_id,
         interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
@@ -3687,6 +3602,20 @@ async def _iterate_runtime_event_payloads(
                 graph_input = input_cls.model_validate(
                     {"message": request.message or ""}
                 )
+            # A graph pause is a native interrupt too: its resume takes the
+            # same single-use claim as ReAct, on the agent's own thread.
+            graph_claim: _HitlResumeClaim | None = None
+            if (
+                isinstance(executor, GraphExecutor)
+                and request.resume_payload is not None
+                and request.interrupt_id
+            ):
+                graph_claim = await _claim_hitl_resume_before_invocation(
+                    session_id=executor.thread_id(execution_config),
+                    checkpoint_ns="",
+                    interrupt_id=request.interrupt_id,
+                    occurrence_id=request.occurrence_id,
+                )
             async for event in executor.stream(graph_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):
@@ -3694,6 +3623,8 @@ async def _iterate_runtime_event_payloads(
                         "RuntimeEvent payload must serialize to a JSON object."
                     )
                 yield payload
+            if graph_claim is not None:
+                await graph_claim.consume()
         else:
             # DeepAgentDefinition is-a ReActAgentDefinition (same typed
             # input/output, same event contract), so it shares this branch's
@@ -4180,19 +4111,19 @@ def _build_agent_router(
         raw_config = form.get("config") or "{}"
         if not isinstance(raw_config, str):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Field 'config' must be a JSON object string.",
             )
         try:
             config_payload = json.loads(raw_config)
         except json.JSONDecodeError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Field 'config' is not valid JSON: {exc}",
             ) from exc
         if not isinstance(config_payload, dict):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Field 'config' must be a JSON object.",
             )
 
@@ -4202,7 +4133,7 @@ def _build_agent_router(
             for value in form.getlist(key):
                 if not isinstance(value, StarletteUploadFile):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         detail=f"Form field '{key}' must be a file upload.",
                     )
                 uploads.setdefault(key, []).append(
@@ -4218,7 +4149,7 @@ def _build_agent_router(
             config = capability.ConfigModel.model_validate(config_payload)
         except ValidationError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Invalid configuration for capability '{capability_id}': {exc}"
                 ),
@@ -4227,7 +4158,7 @@ def _build_agent_router(
             enforce_asset_slots(capability.manifest, uploads)
         except AssetSlotViolationError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
 
@@ -4262,7 +4193,7 @@ def _build_agent_router(
             raise
         except (ValidationError, ValueError, CapabilityError) as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Capability '{capability_id}' rejected the configuration: {exc}"
                 ),
@@ -4614,6 +4545,7 @@ def _build_agent_router(
         Returns an empty checkpoints list when the session has no rows.
         Returns 403 when the session does not belong to the authenticated user.
         """
+        _refuse_reserved_session_id(session_id)
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         if (
@@ -4632,6 +4564,8 @@ def _build_agent_router(
         await cp._ensure_tables()
         ct = cp.checkpoints_table
         wt = cp.writes_table
+        # Also the session's LangGraph-native graph threads (graph_thread_id).
+        derived_prefix = graph_thread_prefix(session_id)
 
         async with cp.store.begin() as conn:
             # Subquery: pending write count per checkpoint_id in this session
@@ -4640,7 +4574,7 @@ def _build_agent_router(
                     wt.c.checkpoint_id,
                     func.count(wt.c.idx).label("write_cnt"),
                 )
-                .where(wt.c.thread_id == session_id)
+                .where(cp.session_threads(wt.c.thread_id, session_id, derived_prefix))
                 .group_by(wt.c.checkpoint_id)
                 .subquery("write_agg")
             )
@@ -4658,7 +4592,9 @@ def _build_agent_router(
                         write_sub,
                         write_sub.c.checkpoint_id == ct.c.checkpoint_id,
                     )
-                    .where(ct.c.thread_id == session_id)
+                    .where(
+                        cp.session_threads(ct.c.thread_id, session_id, derived_prefix)
+                    )
                     .order_by(desc(ct.c.created_at), desc(ct.c.checkpoint_id))
                 )
             ).fetchall()
@@ -4715,20 +4651,41 @@ def _build_agent_router(
         Returns {"deleted": n} (n = checkpoint rows removed) on success,
         403 when not owned, 503 when no checkpointer.
         """
+        _refuse_reserved_session_id(session_id)
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
+        cp = _get_checkpointer()
+        # Also the session's LangGraph-native graph threads (graph_thread_id).
+        derived_prefix = graph_thread_prefix(session_id)
         if (
             not await _caller_can_manage_platform(caller)
             and caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
         ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied.",
+            # No history to prove ownership (e.g. an erase retry after history
+            # went first): nothing left is a successful no-op, otherwise every
+            # remaining thread must be recorded as the caller's.
+            owners = (
+                await cp.session_thread_owners(
+                    session_id, derived_prefix=derived_prefix
+                )
+                if isinstance(cp, FredSqlCheckpointer)
+                else None
             )
-        cp = _get_checkpointer()
-        deleted = await cp.adelete_thread(session_id)
+            if owners == {}:
+                return {"deleted": 0}
+            if owners is None or any(owner != caller_uid for owner in owners.values()):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied.",
+                )
+        if isinstance(cp, FredSqlCheckpointer):
+            deleted = await cp.adelete_session_threads(
+                session_id, derived_prefix=derived_prefix
+            )
+        else:
+            deleted = await cp.adelete_thread(session_id)
         return {"deleted": deleted}
 
     @router.post(
@@ -5010,6 +4967,7 @@ def create_agent_app(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     config: AgentPodConfig,
     extra_routers: list[APIRouter] | None = None,
+    model_provider: ModelProvider | None = None,
 ) -> FastAPI:
     """
     Create a ready-to-serve FastAPI app for a Fred agent pod.
@@ -5036,6 +4994,8 @@ def create_agent_app(
     - registry: maps agent_id → ReActAgentDefinition; built at startup, read-only
     - config: AgentPodConfig loaded from `config/configuration.yaml`
     - extra_routers: additional APIRouter instances mounted under `config.app.base_url`
+    - model_provider: builds catalog models; defaults to fred-core. A pod passes
+      its own to serve extra providers (e.g. an in-process test model)
 
     Security (from config.security):
     - when `config.security.user.enabled` is True:
@@ -5154,6 +5114,10 @@ def create_agent_app(
             else None
         )
         chat_factory = _build_chat_model_factory(config)
+        if model_provider is not None and isinstance(
+            chat_factory, RoutedChatModelFactory
+        ):
+            chat_factory = chat_factory.with_provider(model_provider)
         await container.initialize_sql()
         container.initialize_platform_sql()
         container.start_metrics_exporter()

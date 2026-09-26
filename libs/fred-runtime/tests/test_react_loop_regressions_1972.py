@@ -238,7 +238,6 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
     ],
     "free_text": False,
     "metadata": {},
-    "checkpoint_id": None,
     "interrupt_id": None,
     "pending_calls": [
         {
@@ -274,7 +273,6 @@ _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
     ],
     "free_text": False,
     "metadata": {},
-    "checkpoint_id": None,
     "interrupt_id": None,
     "pending_calls": [
         {

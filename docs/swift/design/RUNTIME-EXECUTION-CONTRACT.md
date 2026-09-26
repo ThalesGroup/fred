@@ -371,7 +371,7 @@ Every agent execution is:
   JWT; OpenFGA for regular collaborative teams, with the documented intrinsic
   personal/service-agent cases)
 - scoped to a `session_id` for multi-turn continuity
-- optionally resumable from a `checkpoint_id`
+- resumable from a pending human-input pause (`interrupt_id`)
 - observable through enriched trace/KPI/metrics metadata that preserves the
   same execution identity end-to-end
 
@@ -386,7 +386,7 @@ Every agent execution is:
 | `ActorContext`    | `user_id`, `principal`                                                    | User identity for audit/diagnostics |
 | `TeamContext`     | `team_id`, `team_type`                                                    | Team scope; always mandatory        |
 | `ExecutionTarget` | `agent_instance_id`, `underlying_agent_ref`                               | Managed instance reference          |
-| `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`, `checkpoint_id` | Observability across services       |
+| `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`                  | Observability across services       |
 
 ### 2.2 Authorization — pod-side Keycloak JWT + OpenFGA
 
@@ -448,8 +448,10 @@ Execution paths:
 
 Session/checkpoint semantics:
 
-- `session_id` — primary continuity key; keep stable across turns and HITL resumes
-- `checkpoint_id` — optional; enables precise resume from a graph snapshot
+- `session_id` — primary continuity key; keep stable across turns and HITL resumes.
+  It must not contain `:`, which names graph threads (§8.86); the pod refuses it with 422.
+- `interrupt_id` — the pending pause being answered (LangGraph's own
+  `Interrupt.id`, echoed from `awaiting_human.request.interrupt_id`)
 - `resume_payload` — HITL answer data; when set, `input` is ignored and the
   graph resumes from the checkpointed state
 
@@ -610,6 +612,22 @@ written fire-and-forget after the stream closes; no frame reaches the client.
 `final` is the only reliable end-of-turn signal. The type is kept for future
 use (e.g. a dedicated push channel).
 
+### Token accounting
+
+Every figure is the provider-reported `usage_metadata`. Fred never estimates
+tokens from character or word counts, because no client can reproduce a
+provider's tokenizer.
+
+| Where | Carries |
+| --- | --- |
+| `final.token_usage` | Billed usage of the whole turn: the sum of every model call, since each provider reports per call (§8.41) |
+| `final.context_tokens` | `input_tokens` of the turn's last model call, i.e. the context left at turn end. ReAct only; Graph agents leave it `None` and UIs fall back to `token_usage` (§8.57) |
+| `tool_call` / `tool_result` | No token figure: a tool call costs nothing by itself (§8.57) |
+
+The assistant-final history row persists both fields (`ChatMetadata`), so a
+reloaded conversation shows what the live stream showed. Rows written before
+a field existed are not backfilled.
+
 ### UI rendering parts (`UiPart`)
 
 Carried in `tool_result` and `final` events:
@@ -658,12 +676,11 @@ storage.
 Runtime must validate before resuming:
 
 - `session_id` ownership is enforced by the pod (it must belong to the authenticated caller)
-- `checkpoint_id` (when provided) belongs to the authorized `session_id`
-- `checkpoint_id` is in a resumable state (not already consumed)
-- For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
-- For ReAct V2 HITL resume specifically (#2216, see §8.39): `interrupt_id`
-  (a field distinct from `checkpoint_id` — see §8.39 for why) and the optional
-  `occurrence_id` must exactly match one currently pending occurrence. A
+- For HITL resume: a checkpoint of this session is in a waiting state
+  compatible with `resume_payload`
+- For HITL resume, ReAct and Graph alike (#2216, see §8.39 and §8.86):
+  `interrupt_id` and the optional `occurrence_id` must exactly match one
+  currently pending occurrence. A
   tool-raised pause declares `occurrence_id` from its stable `tool_call_id`;
   legacy and platform-gate pauses omit it and continue to match on
   `interrupt_id` alone. That exact occurrence is then atomically claimed
@@ -678,10 +695,6 @@ Separation of concerns:
 Persistence infrastructure details (connection strings, table names, credentials)
 MUST remain runtime-environment concerns and MUST NOT appear in frontend-facing
 contracts.
-
-Phase 1 deferred: runtime does not yet validate that `checkpoint_id` belongs to
-the authorized `session_id` — this requires control-plane integration and is
-tracked as a Phase 2–3 task.
 
 ---
 
@@ -2474,8 +2487,7 @@ the exchange (`_write_turn_history` → `make_tool_call`,
 is what a page refresh or session reopen reads (`useSessionHistory.ts`), a
 different path from the live SSE stream. Wiring only the live event would
 have made the figure vanish on refresh for a conversation created the same
-day — corrected during implementation, see
-`docs/swift/rfc/TRACE-TOKEN-USAGE-RFC.md` §2.1.
+day — corrected during implementation.
 
 **Out of scope (unchanged by this entry):** conversations whose history was
 already persisted *before* this shipped — no retroactive backfill; the
@@ -3781,7 +3793,6 @@ Required observability identity set:
 - `agent_instance_id`
 - `template_agent_id` when known
 - `session_id`
-- `checkpoint_id` when relevant
 - `trace_id`
 - `correlation_id`
 - runtime identity (`runtime_id` or equivalent service discriminator)
@@ -3791,7 +3802,7 @@ source contract/runtime instrumentation layer first, not in the frontend.
 
 Implemented runtime-side today:
 
-- `checkpoint_id` is propagated through the pod request bridge and enforced for
+- `interrupt_id` is propagated through the pod request bridge and enforced for
   resume-capable runtime requests
 - managed HITL resumes set `execution_action == "resume"` (the `ExecutionGrantAction` enum)
 - runtime span metadata, graph KPI dimensions, KF client KPI dimensions, MCP
@@ -3885,7 +3896,6 @@ contract first. Do not patch the generated TypeScript by hand.
 
 | Item                                                                                               | Phase     |
 | -------------------------------------------------------------------------------------------------- | --------- |
-| `checkpoint_id` authorization against the caller's `session_id` at resume                          | deferred  |
 | Backend completeness gate implementation for observability enrichment and managed-scope validation | Phase 3b  |
 | Frontend SSE transport migration (replace WebSocket)                                               | Phase 4   |
 | Control-plane product/session/admin API migration                                                  | Phase 3   |
@@ -6084,3 +6094,56 @@ statements:
   `tracer_echo`, living in the test tree: never packaged, never discovered,
   no migrations. A test fixture is what it always was; shipping it as a real
   entry point is what put a demo table in production databases.
+
+### 8.86 ⚠️ One graph engine: native LangGraph; `checkpoint_id` and `parallel` are removed (2026-09-25)
+
+Graph agents now compile to a LangGraph `StateGraph` and run through `astream`.
+The hand-rolled executor is gone. The authoring API (`GraphWorkflow`,
+`typed_node`, `GraphNodeContext`) and the `Executor`/`RuntimeEvent` contracts
+are unchanged. This supersedes the Graph-specific parts of §8.39 and of the
+token-usage entry that cites `_GraphNodeExecutionContext` and
+`_DeterministicGraphExecutor`.
+
+- **Code layout** (`fred_runtime/graph/`): `graph_runtime.py` (lifecycle and
+  capability bridge), `graph_executor.py` (compilation, streaming, resume) and
+  `node_context.py` (the `GraphNodeContext` implementation).
+- **Thread identity**: one LangGraph thread per session and agent,
+  `thread_id = f"{session_id}:{agent_namespace}"` with `checkpoint_ns = ""`.
+  Deleting a session's checkpoints removes every `{session_id}:*` thread, and
+  the delete is idempotent (`{"deleted": 0}` once nothing remains).
+  A session id may therefore never contain `:`: a caller choosing `S:N` would
+  otherwise run on, read or purge session `S`'s graph thread for agent `N`,
+  and `S`'s purge would sweep the caller's threads. `RuntimeExecuteRequest`,
+  the `X-Fred-Session-Id` header and the checkpoint routes all refuse it with
+  422 (`fred_sdk.contracts.execution.check_session_id`).
+- **HITL**: a node pause is a LangGraph `interrupt()`. `awaiting_human`
+  carries `interrupt_id`, and a resume answers it with
+  `Command(resume={interrupt_id: payload})`, behind the same pending-occurrence
+  gate and atomic claim as ReAct. A stale or unknown `interrupt_id` is rejected.
+  Every pause of one node shares its `Interrupt.id`, so each also carries
+  `occurrence_id = "{node_id}#{rank}"` (its rank among the node's pauses,
+  stable across replays): without it, answering the first question would
+  consume the claim the second one needs.
+- **Removed from the wire**: `checkpoint_id` is gone from `TraceContext`,
+  `RuntimeExecuteRequest`, `RuntimeContext`, `ExecutionConfig`,
+  `HumanInputRequest` and `HitlRequestPart`. It is also gone from KPI and
+  Langfuse dimensions. `RuntimeExecuteRequest` and `HitlRequestPart` ignore
+  unknown keys, so older clients and stored history rows still parse.
+- **Removed from authoring**: `GraphWorkflow.parallel` and
+  `GraphDefinition.parallel_groups`. The fan-out they declared ran
+  sequentially. Real parallel branches stay a recorded gap
+  (`apps/fred-agents/tests/test_graph_capabilities.py`).
+- **Node errors**: `on_error` routes are applied inside the node wrapper.
+  LangGraph's native `error_handler` still re-raises under `astream` when
+  `stream_mode` includes `custom` (langgraph 1.2.12). A strict xfail tracks this.
+- **Reference agent**: the Test Assistant runs every check through
+  `graph check`, live over the pod's HTTP API, and the same checks run offline
+  in `tests/test_test_assistant_reference.py`.
+
+### 8.87 ⚠️ `ThoughtRecord` and `GraphExecutionOutput.thought_trace` are removed (2026-09-26)
+
+Graph runs filled `thought_trace` with a record of each authored reasoning
+block, but nothing read it: the final event never carried it, and the
+evaluation collector reads the streamed events, not the run's output. The field,
+the `ThoughtRecord` model and its `fred_sdk` export are gone. `thinking()` and
+`emit_thought()` still emit the same `thought_*` events.

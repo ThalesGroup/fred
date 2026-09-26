@@ -83,9 +83,6 @@ def to_temporal_spec(
     Pass nothing and the schedule stays anchored on the epoch, which is what a
     single deployment-wide task wants.
     """
-    if not isinstance(schedule, IntervalSchedule):  # pragma: no cover - one arm today
-        raise TypeError(f"Unsupported schedule: {schedule!r}")
-
     every = schedule.every
     offset = None
     if spread_over:

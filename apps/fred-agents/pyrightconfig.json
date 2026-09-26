@@ -6,6 +6,7 @@
   "reportMissingTypeStubs": false,
   "reportUnreachable": "warning",
   "extraPaths": [
+    "../../libs/fred-pod",
     "../../libs/fred-core",
     "../../libs/fred-sdk",
     "../../libs/fred-runtime",

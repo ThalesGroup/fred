@@ -46,7 +46,7 @@
 
 .rule-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(180px, 1.2fr) auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.2fr) auto;
   align-items: end;
   gap: var(--spacing-s);
 }

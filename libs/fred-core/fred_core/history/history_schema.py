@@ -284,7 +284,7 @@ class HitlRequestPart(BaseModel):
       show exactly what the agent asked and what options were available
     - the UI can reconstruct an interactive choice card from this record when
       replaying history, instead of showing a flat system note
-    - ``interrupt_id``/``checkpoint_id``/``pending_calls`` (added alongside the
+    - ``interrupt_id``/``pending_calls`` (added alongside the
       original fields, 2026-08) are the resume identity + gated tool calls: the
       original fields alone let the UI SHOW a reconstructed card but never
       ANSWER it — a page reload while a gate was still open left the turn
@@ -305,7 +305,6 @@ class HitlRequestPart(BaseModel):
     free_text: bool = False
     interrupt_id: Optional[str] = None
     occurrence_id: Optional[str] = None
-    checkpoint_id: Optional[str] = None
     pending_calls: List[HitlPendingCallRecord] = Field(default_factory=list)
 
 
@@ -573,7 +572,6 @@ def make_hitl_request(
     free_text: bool = False,
     interrupt_id: Optional[str] = None,
     occurrence_id: Optional[str] = None,
-    checkpoint_id: Optional[str] = None,
     pending_calls: Optional[List[Dict[str, str]]] = None,
 ) -> ChatMessage:
     """
@@ -582,7 +580,7 @@ def make_hitl_request(
     Why this exists:
     - the full gate definition (question + all presented options) must survive
       in history for audit and UI replay; a flat text note loses the choices
-    - ``interrupt_id``/``checkpoint_id``/``pending_calls`` are the resume
+    - ``interrupt_id``/``pending_calls`` are the resume
       identity — persisting them (not just the display text) is what lets the
       UI reconstruct a FULLY INTERACTIVE prompt after a page reload while the
       gate is still open, not just a readable-but-dead one
@@ -591,7 +589,7 @@ def make_hitl_request(
     - call when an ``awaiting_human`` runtime event is received
     - pass ``choices`` as the raw list of ``{id, label}`` dicts from the event
       payload; extra keys are ignored
-    - pass ``interrupt_id``/``checkpoint_id``/``pending_calls`` straight from
+    - pass ``interrupt_id``/``pending_calls`` straight from
       the same event's ``request`` (``HumanInputRequest``) — omit only for a
       caller that genuinely has none (e.g. a non-tool-approval gate)
 
@@ -628,7 +626,6 @@ def make_hitl_request(
                 free_text=free_text,
                 interrupt_id=interrupt_id,
                 occurrence_id=occurrence_id,
-                checkpoint_id=checkpoint_id,
                 pending_calls=pending_call_records,
             )
         ],

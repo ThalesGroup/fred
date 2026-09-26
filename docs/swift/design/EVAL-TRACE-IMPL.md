@@ -258,7 +258,6 @@ def evaluate(
     user_id:           str,
     team_id:           str | None = None,
     agent_instance_id: str | None = None,
-    checkpoint_id:     str | None = None,
 ) -> dict[str, Any]:
     runtime_context: dict[str, Any] = {"user_id": user_id}
     if team_id:
@@ -271,8 +270,6 @@ def evaluate(
     }
     if agent_instance_id is not None:
         payload["agent_instance_id"] = agent_instance_id
-    if checkpoint_id is not None:
-        payload["checkpoint_id"] = checkpoint_id
     response = self.http_client.post(
         f"{self.base_url}/agents/evaluate",
         json=payload,

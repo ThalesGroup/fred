@@ -860,7 +860,6 @@ Required observability identity set:
 - `agent_instance_id`
 - `template_agent_id` when known
 - `session_id`
-- `checkpoint_id` when relevant
 - `trace_id`
 - `correlation_id`
 - runtime identity (`runtime_id` or equivalent pod/service discriminator)

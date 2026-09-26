@@ -16,10 +16,15 @@
 
 .trigger {
   all: unset;
+  display: block;
+  min-width: 0;
 }
 
 .select-container {
   --select-outline: transparent;
+  // Lets the select shrink inside a grid/flex parent instead of growing to fit
+  // its value; the value then truncates (see .value).
+  min-width: 0;
   --border-color: var(--outline-retreat);
   --bg-color: var(--surface-container-lowest);
   display: flex;
@@ -46,6 +51,7 @@
 
 .state-layer {
   display: flex;
+  min-width: 0;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-2xs);
@@ -78,6 +84,7 @@
 
 .icon {
   display: flex;
+  flex: none;
   justify-content: center;
   align-items: center;
   font-size: 1.25rem;
@@ -91,7 +98,12 @@
 }
 
 .value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font: var(--font-body-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .select-container[data-compact="false"] .error-message {

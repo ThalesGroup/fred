@@ -13,10 +13,11 @@
 # limitations under the License.
 
 """
-Graph steps for the test assistant — no LLM calls, pure Python routing.
+Graph steps for the test assistant — keyword routing, model optional.
 
 Every step in this file exercises a specific SSE event path so the UI
-can be validated without a real model provider or MCP server.
+can be validated without a real model provider or MCP server. The model-backed
+steps (model, assist) degrade to fixed text when no model is bound.
 
 Scenario routing (handled by dispatch_step):
   "echo"        → dispatch routes "echo"        → echo_step        → finalize
@@ -32,20 +33,31 @@ Scenario routing (handled by dispatch_step):
   "files"       → dispatch routes "files"        → files_step       → finalize
   "geo"         → dispatch routes "geo"          → geo_step         → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
+  "assist"      → assist_route → [assist_search] → assist_draft → assist_review
+                  (HITL) → assist_confirm (HITL) → [assist_commit] → finalize
+  "delegate"    → dispatch routes "delegate"     → delegate_step    → finalize
+  "crash"       → dispatch routes "crash"        → crash_step (raises, no on_error)
+  "graph check" → dispatch routes "graph_check"  → graph_check_step → finalize
   (other)       → dispatch routes "fallback"     → fallback_step    → finalize
 """
 
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
+from fred_core.store import VectorSearchHit
+from fred_runtime.app import load_agent_pod_config
 from fred_sdk import (
+    TOOL_REF_KNOWLEDGE_SEARCH,
     GraphNodeContext,
     GraphNodeResult,
     HumanChoiceOption,
     StepResult,
     TuningValue,
     choice_step,
+    intent_router_step,
+    model_text_step,
     typed_node,
 )
 from fred_sdk import (
@@ -53,10 +65,12 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.context import GeoPart
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
 
 from fred_agents.model_metadata import resolved_model_name
 
-from .graph_state import TestState
+from .conformance import CHECKS, HttpDriver
+from .graph_state import TEST_ASSISTANT_AGENT_ID, TestState
 
 
 def _as_int(val: TuningValue | None, default: int) -> int:
@@ -156,6 +170,10 @@ async def dispatch_step(
       "files"       → files_step
       "geo"         → geo_step
       "document"    → document_step
+      "assist"      → assist_route_step
+      "delegate"    → delegate_step
+      "crash"       → crash_step
+      "graph_check" → graph_check_step
       "fallback"    → fallback_step
     """
     planning = context.tuning_values.get("prompts.planning", "")
@@ -194,6 +212,14 @@ async def dispatch_step(
         scenario = "geo"
     elif text.startswith("document"):
         scenario = "document"
+    elif text.startswith("assist"):
+        scenario = "assist"
+    elif text.startswith("delegate"):
+        scenario = "delegate"
+    elif text.startswith("crash"):
+        scenario = "crash"
+    elif text.startswith("graph check"):
+        scenario = "graph_check"
     else:
         scenario = "fallback"
 
@@ -232,6 +258,8 @@ async def echo_step(
         reply += f"\n\n---\n**Active system prompt:** {system_prompt}"
     if verbose:
         reply += "\n\n_[verbose] scenario: echo_"
+    # Makes cross-turn memory visible: this count grows by one per completed turn.
+    reply += f"\n\n_Turns remembered: {len(state.conversation_history)}_"
 
     return StepResult(
         state_update={
@@ -1618,6 +1646,387 @@ async def document_step(
     )
 
 
+# ── Scenario: assist ──────────────────────────────────────────────────────────
+#
+# The shape of a real business graph agent, in one branch: a structured routing
+# decision, a declared platform tool, a streamed model answer, two HITL gates
+# in successive nodes, and a side effect that must run only once.
+
+_ASSIST_DEFAULT_QUESTION = "What is Fred?"
+_ASSIST_OUTPUT_PATH = "outputs/test_assistant_answer.md"
+
+_ASSIST_ROUTE_PROMPT = """\
+Decide how to answer the user's request:
+- "search": look up the team's documents first, then answer
+- "direct": answer directly without searching
+"""
+
+
+class AssistRoute(BaseModel):
+    """Structured routing decision produced by assist_route_step."""
+
+    intent: Literal["search", "direct"] = Field(
+        description="'search' to consult documents first, 'direct' to answer now."
+    )
+
+
+def _assist_question(state: TestState) -> str:
+    remainder = state.latest_user_text.strip()[len("assist") :].strip()
+    return remainder or _ASSIST_DEFAULT_QUESTION
+
+
+def _hits_from_tool_result(result: object) -> list[dict[str, object]]:
+    """Typed `sources` plus valid `hits` carried in json blocks, as plain dicts."""
+    hits: list[VectorSearchHit] = list(getattr(result, "sources", ()) or ())
+    for block in getattr(result, "blocks", ()) or ():
+        data = getattr(block, "data", None)
+        raw_hits = data.get("hits") if isinstance(data, dict) else None
+        for raw in raw_hits or []:
+            try:
+                hits.append(VectorSearchHit.model_validate(raw))
+            except ValueError:
+                continue
+    return [hit.model_dump(mode="json") for hit in hits]
+
+
+@typed_node(TestState)
+async def assist_route_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Structured routing call. Its JSON must never reach the user as assistant text.
+
+    Routes: "search" → assist_search, "direct" → assist_draft.
+    """
+    question = _assist_question(state)
+    context.emit_status("assist", "Deciding how to answer.")
+    async with context.thinking(
+        "planning", title="Search or answer directly"
+    ) as thought:
+        await thought.write(f"Request: {question!r}")
+        result = await intent_router_step(
+            context,
+            route_model=AssistRoute,
+            system_prompt=_ASSIST_ROUTE_PROMPT,
+            user_prompt=question,
+            fallback_output={"intent": "search"},
+            route_field="intent",
+            state_update_builder=lambda decision: {"assist_intent": decision.intent},
+        )
+        await thought.conclude(f"Route: {result.route_key}.")
+    return result
+
+
+@typed_node(TestState)
+async def assist_search_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """Call the declared `knowledge.search` tool_ref; errors route to assist_draft."""
+    question = _assist_question(state)
+    context.emit_status("assist_search", f"Searching documents for: {question}")
+    result = await context.invoke_tool(
+        TOOL_REF_KNOWLEDGE_SEARCH, {"query": question, "top_k": 3}
+    )
+    hits = _hits_from_tool_result(result)
+    context.emit_thought(
+        "observation",
+        f"{len(hits)} passage(s) retrieved.",
+        title="Search result",
+    )
+    return StepResult(state_update={"assist_hits": hits})
+
+
+@typed_node(TestState)
+async def assist_draft_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """Stream a model answer grounded on the retrieved passages, if any."""
+    question = _assist_question(state)
+    context.emit_status("assist_draft", "Drafting the answer.")
+    passages = "\n".join(
+        f"- {hit.get('title') or hit.get('uid')}: {hit.get('content', '')}"
+        for hit in state.assist_hits[:3]
+    )
+    system_prompt = "Answer concisely."
+    if passages:
+        system_prompt += f" Use these passages when relevant:\n{passages}"
+    draft = await model_text_step(
+        context,
+        system_prompt=system_prompt,
+        user_prompt=question,
+        fallback_text=(
+            f"(No model bound) Draft answer to: {question} "
+            f"— {len(state.assist_hits)} passage(s) available."
+        ),
+    )
+    return StepResult(state_update={"assist_draft": draft})
+
+
+@typed_node(TestState)
+async def assist_review_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """HITL gate #1: approve or discard the draft. Nothing runs before the pause."""
+    choice_id = await choice_step(
+        context,
+        stage="assist_review",
+        title="Review the draft",
+        question=f"Draft answer:\n\n{state.assist_draft}\n\nApprove this draft?",
+        choices=[
+            HumanChoiceOption(id="approve", label="Approve"),
+            HumanChoiceOption(id="discard", label="Discard"),
+        ],
+    )
+    if choice_id != "approve":
+        return StepResult(
+            state_update={
+                "final_text": "Draft discarded. Nothing was published.",
+                "done_reason": "assist_discarded",
+            },
+            route_key="discarded",
+        )
+    return StepResult(route_key="approved")
+
+
+@typed_node(TestState)
+async def assist_confirm_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """HITL gate #2: publish the approved draft as a file, or keep it in the chat."""
+    choice_id = await choice_step(
+        context,
+        stage="assist_confirm",
+        title="Publish the answer",
+        question=f"Publish the approved answer to `{_ASSIST_OUTPUT_PATH}`?",
+        choices=[
+            HumanChoiceOption(id="publish", label="Publish as a file"),
+            HumanChoiceOption(id="keep", label="Keep it in the chat only"),
+        ],
+    )
+    if choice_id != "publish":
+        return StepResult(
+            state_update={
+                "final_text": state.assist_draft,
+                "sources_data": state.assist_hits,
+                "done_reason": "assist_kept",
+            },
+            route_key="keep",
+        )
+    return StepResult(route_key="publish")
+
+
+@typed_node(TestState)
+async def assist_commit_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """The side effect, once, after both gates; then a model call on the resumed
+    turn (it must use the session's model). Degrades without a workspace."""
+    context.emit_status("assist_commit", f"Publishing {_ASSIST_OUTPUT_PATH}.")
+    try:
+        artifact = await context.write(
+            _ASSIST_OUTPUT_PATH,
+            state.assist_draft,
+            content_type="text/markdown; charset=utf-8",
+            title="Test Assistant answer",
+        )
+    except Exception as exc:  # noqa: BLE001 — degrade like files_step
+        return StepResult(
+            state_update={
+                "final_text": (
+                    f"{state.assist_draft}\n\n_Not published: workspace backend "
+                    f"unavailable ({type(exc).__name__})._"
+                ),
+                "sources_data": state.assist_hits,
+                "done_reason": "assist_publish_unavailable",
+            }
+        )
+    note = await model_text_step(
+        context,
+        system_prompt="Confirm the publication in one short sentence.",
+        user_prompt=f"Published: {artifact.file_name}",
+        fallback_text="",
+    )
+    return StepResult(
+        state_update={
+            "final_text": (
+                f"{state.assist_draft}\n\n_Published as `{artifact.file_name}`._"
+                + (f" {note}" if note else "")
+            ),
+            "sources_data": state.assist_hits,
+            "link_parts": [artifact.to_link_part().model_dump(mode="json")],
+            "done_reason": "assist_published",
+        }
+    )
+
+
+# ── Step: delegate ────────────────────────────────────────────────────────────
+
+_DELEGATE_DEFAULT_MESSAGE = "echo hello from the delegate scenario"
+
+
+@typed_node(TestState)
+async def delegate_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Invoke this same agent one level deeper through `invoke_agent`.
+
+    `delegate model hi` makes the sub-agent call the model: its tokens must not
+    leak into this turn's stream. Nested `delegate` is refused to stop recursion.
+    """
+    remainder = state.latest_user_text.strip()[len("delegate") :].strip()
+    message = (
+        remainder
+        if remainder and not remainder.lower().startswith("delegate")
+        else _DELEGATE_DEFAULT_MESSAGE
+    )
+    context.emit_status("delegate", f"Asking {TEST_ASSISTANT_AGENT_ID}: {message}")
+    try:
+        result = await context.invoke_agent(
+            TEST_ASSISTANT_AGENT_ID,
+            message,
+            prior_turns=state.conversation_history,
+        )
+    except RuntimeError as exc:
+        return StepResult(
+            state_update={
+                "final_text": f"**Delegation is unavailable here.**\n\n_Detail: {exc}_",
+                "done_reason": "delegate_unavailable",
+            }
+        )
+    outcome = "failed" if result.is_error else "answered"
+    return StepResult(
+        state_update={
+            "final_text": (
+                f"Delegated to `{TEST_ASSISTANT_AGENT_ID}` ({outcome}):\n\n"
+                f"> {message}\n\n{result.content}"
+            ),
+            "done_reason": f"delegate_{outcome}",
+        }
+    )
+
+
+# ── Step: crash ───────────────────────────────────────────────────────────────
+
+
+@typed_node(TestState)
+async def crash_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """Raise with no on_error route: the whole turn must fail cleanly."""
+    context.emit_status("crash", "About to fail the turn on purpose.")
+    raise RuntimeError(
+        "Deliberate crash from fred.github.test_assistant (no on_error route)."
+    )
+
+
+# ── Step: graph check ─────────────────────────────────────────────────────────
+
+
+@typed_node(TestState)
+async def graph_check_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Run the graph conformance checks live (conformance.py).
+
+    Every check drives this same agent through the pod's own HTTP API with the
+    caller's token — the frontend's exact path, HITL resumes included — on a
+    throwaway session that is purged afterwards (the purge is checked too).
+    """
+    runtime_context = context.binding.runtime_context
+    portable = context.binding.portable_context
+    token = getattr(runtime_context, "access_token", None)
+    instance_id = portable.baggage.get("agent_instance_id")
+    team_id = portable.team_id
+    if not (token and instance_id and team_id):
+        return StepResult(
+            state_update={
+                "final_text": (
+                    "**graph check needs a managed agent instance called from the UI** "
+                    "(user token, team and agent instance id)."
+                ),
+                "done_reason": "graph_check_unavailable",
+            }
+        )
+
+    pod = load_agent_pod_config()
+    control_plane_url = pod.platform.control_plane_url
+    if not control_plane_url:
+        return StepResult(
+            state_update={
+                "final_text": "**graph check needs `platform.control_plane_url`** in the pod configuration.",
+                "done_reason": "graph_check_unavailable",
+            }
+        )
+    driver = HttpDriver(
+        base_url=f"http://127.0.0.1:{pod.app.port}{pod.app.base_url}",
+        control_plane_url=control_plane_url,
+        access_token=token,
+        agent_instance_id=instance_id,
+        team_id=team_id,
+    )
+    context.emit_status("graph_check", "Sweeping sessions left by an earlier run.")
+    swept, sweep_errors = await driver.sweep()
+    results: list[tuple[str, str, list[str]]] = []
+    for check in CHECKS:
+        context.emit_status("graph_check", f"{check.name}: running")
+        try:
+            session = await driver.open_session(check.name)
+        except Exception as exc:  # noqa: BLE001 — reported like a failed check
+            results.append((check.name, check.summary, [f"session setup: {exc}"]))
+            continue
+        try:
+            failures = await check.run(driver, session)
+        except Exception as exc:  # noqa: BLE001 — a crashing check is a finding
+            failures = [f"check crashed: {type(exc).__name__}: {exc}"]
+        if not await driver.await_history(session):
+            failures.append("history: the turn was never persisted")
+        purge_error = await driver.purge(session)
+        if purge_error is not None:
+            failures.append(f"purge: {purge_error}")
+        context.emit_status(
+            "graph_check", f"{check.name}: {'FAIL' if failures else 'OK'}"
+        )
+        results.append((check.name, check.summary, failures))
+
+    passed = sum(1 for _, _, failures in results if not failures)
+    lines = [
+        f"**Graph check: {passed}/{len(results)} passed**",
+        "",
+        f"_Swept {swept} leftover session(s) from an earlier run"
+        + (f"; failed: {'; '.join(sweep_errors)}_" if sweep_errors else "._"),
+        "",
+        "| Check | What it proves | Result |",
+        "|---|---|---|",
+    ]
+    for name, summary, failures in results:
+        verdict = (
+            "✅"
+            if not failures
+            else "❌ "
+            + "<br>".join(failure.replace("|", "\\|") for failure in failures)
+        )
+        lines.append(f"| `{name}` | {summary} | {verdict} |")
+    return StepResult(
+        state_update={
+            "final_text": "\n".join(lines),
+            "done_reason": "graph_check_passed"
+            if passed == len(results)
+            else "graph_check_failed",
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -1636,7 +2045,11 @@ _SCENARIO_TABLE = """\
 | `long` | 30-sentence word-by-word streaming reply |
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
-| `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |"""
+| `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
+| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → two HITL gates → file publish (`assist direct …` skips the search) |
+| `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
+| `crash` | Node error with no `on_error` route → the turn fails cleanly |
+| `graph check` | Runs every graph conformance check live, through this pod's HTTP API (HITL included) |"""
 
 
 @typed_node(TestState)
@@ -1677,14 +2090,15 @@ async def finalize_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> GraphNodeResult:
-    """Terminal step — emit final_text or a generic error message."""
+    """Terminal step — keep final_text, else report the node error, else a default."""
+    # The error text is the fallback, not `final_text`: `_finalize_step` writes
+    # nothing when it is handed a final text, which left errored turns empty.
     return _finalize_step(
-        final_text=state.final_text
-        or (
+        final_text=state.final_text,
+        fallback_text=(
             f"Test scenario encountered a node error: {state.node_error}"
             if state.node_error
-            else None
+            else "Test scenario complete."
         ),
-        fallback_text="Test scenario complete.",
         done_reason=state.done_reason or ("node_error" if state.node_error else None),
     )

@@ -87,6 +87,7 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.models import FieldSpec
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -3021,6 +3022,13 @@ async def test_create_session_leaves_source_runtime_id_none_without_agent_instan
     )
 
     assert session_store._records[0].source_runtime_id is None
+
+
+def test_create_session_refuses_a_session_id_reserved_for_graph_threads() -> None:
+    """Pods name graph threads "{session_id}:{agent}" and refuse ":" in a session
+    id; registering one here would create a session no pod can ever run."""
+    with pytest.raises(ValidationError, match="session_id"):
+        CreateSessionRequest(session_id="session-1:instance-1")
 
 
 def _patch_runtime_erase_ok(monkeypatch: pytest.MonkeyPatch) -> None:

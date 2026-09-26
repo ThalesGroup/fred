@@ -91,7 +91,7 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
  * `hitl_request` row for a still-open gate by the time any refresh could race
  * it. The gap was purely that nothing reconstructed the interactive prompt
  * from it, AND (fixed alongside this) `HitlRequestPart` didn't persist the
- * resume identity (`interrupt_id`/`checkpoint_id`/`pending_calls`) needed to
+ * resume identity (`interrupt_id`/`pending_calls`) needed to
  * actually answer it — only enough to display it read-only.
  *
  * Returns `null` when the last exchange's `hitl_request` (if any) already has
@@ -122,7 +122,6 @@ export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaiting
       stage: part.stage ?? null,
       interrupt_id: part.interrupt_id ?? null,
       occurrence_id: part.occurrence_id ?? null,
-      checkpoint_id: part.checkpoint_id ?? null,
       pending_calls: (part.pending_calls ?? []).map((c) => ({
         tool_call_id: c.tool_call_id ?? "",
         tool_name: c.tool_name ?? "",

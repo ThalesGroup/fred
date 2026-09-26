@@ -412,7 +412,7 @@ class RuntimeContext(BaseModel):
         >>> ctx = RuntimeContext(session_id="s-1", user_id="u-1")
 
     Field groups:
-    - Group A (identity): session_id, user_id, team_id, exchange_id, checkpoint_id,
+    - Group A (identity): session_id, user_id, team_id, exchange_id,
       agent_instance_id, template_agent_id, trace_id, correlation_id, execution_action.
       For managed execution the frontend MUST set team_id (and user_id): the pod
       authorizes the caller against OpenFGA on team_id (RUNTIME-07 rev. 2 — no grant).
@@ -434,7 +434,6 @@ class RuntimeContext(BaseModel):
     # Group A — Identity (managed execution authorizes on team_id via pod-side OpenFGA)
     session_id: Optional[str] = None
     exchange_id: Optional[str] = None
-    checkpoint_id: Optional[str] = None
     user_id: Optional[str] = None
     team_id: Optional[str] = None
     trace_id: Optional[str] = None

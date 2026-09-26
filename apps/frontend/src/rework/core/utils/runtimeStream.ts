@@ -18,6 +18,7 @@
 // Keycloak) so both paths share one frame reader and one context-merge rule and
 // cannot drift apart when runtime event handling changes.
 
+import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { RuntimeContext } from "../../../slices/runtime/runtimeOpenApi";
 
 /**
@@ -139,4 +140,27 @@ export function mergeReasoningActivation(
     ...base,
     ...(reasoningEnabledModelIds != null ? { reasoning_enabled_model_ids: reasoningEnabledModelIds } : {}),
   };
+}
+
+/**
+ * Fold everything prepare-execution resolved for a turn — context prompt,
+ * team model routing, reasoning activation — onto its base runtime context.
+ * Send and HITL resume both use it: a resumed turn must run with the same
+ * model and context as the turn it continues.
+ */
+export function mergePreparation(
+  base: Partial<RuntimeContext>,
+  prep: Pick<
+    ExecutionPreparation,
+    "context_prompt_text" | "chat_default_profile_id" | "agent_profile_overrides" | "reasoning_enabled_model_ids"
+  >,
+): RuntimeContext {
+  return mergeReasoningActivation(
+    mergeRoutingPolicy(
+      mergeContextPromptText(base, prep.context_prompt_text),
+      prep.chat_default_profile_id,
+      prep.agent_profile_overrides,
+    ),
+    prep.reasoning_enabled_model_ids,
+  );
 }

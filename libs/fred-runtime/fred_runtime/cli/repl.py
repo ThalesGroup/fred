@@ -1313,11 +1313,8 @@ def run_interactive_chat(
                 req = hitl.get("request") or {}
                 choices = req.get("choices") or []
                 free_text = req.get("free_text", False)
-                # Exactly one primary resume id is set: checkpoint_id for the
-                # legacy Graph V2 runtime, or interrupt_id for ReAct V2. A
-                # tool pause may additionally carry occurrence_id. Echo every
-                # supplied identifier verbatim on resume.
-                resume_checkpoint_id = req.get("checkpoint_id")
+                # interrupt_id is the pause's resume identity; a tool pause
+                # may additionally carry occurrence_id. Echo both verbatim.
                 resume_interrupt_id = req.get("interrupt_id")
                 resume_occurrence_id = req.get("occurrence_id")
                 if free_text:
@@ -1359,7 +1356,6 @@ def run_interactive_chat(
                     verbose=verbose,
                     stream=(current_mode == "stream"),
                     color_enabled=color_enabled,
-                    checkpoint_id=resume_checkpoint_id,
                     interrupt_id=resume_interrupt_id,
                     occurrence_id=resume_occurrence_id,
                     resume_payload=resume_value,

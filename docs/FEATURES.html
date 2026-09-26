@@ -677,7 +677,7 @@
         <tr>
           <td><code>awaiting_human</code></td>
           <td>HITL pause requested</td>
-          <td><code>checkpoint_id</code>, <code>HumanInputRequest</code> (prompt, options, kind)</td>
+          <td><code>HumanInputRequest</code> (question, choices, <code>interrupt_id</code>)</td>
         </tr>
         <tr>
           <td><code>node_error</code></td>
@@ -741,11 +741,11 @@
       <tbody>
         <tr>
           <td>Pause trigger</td>
-          <td>Agent emits <code>awaiting_human</code> event with <code>checkpoint_id</code> and a <code>HumanInputRequest</code> (prompt, options list, kind)</td>
+          <td>Agent emits an <code>awaiting_human</code> event carrying a <code>HumanInputRequest</code> (question, choices, <code>interrupt_id</code>)</td>
         </tr>
         <tr>
           <td>Resume</td>
-          <td><code>POST /agents/execute/stream</code> with <code>action: "resume"</code> + <code>checkpoint_id</code> + human response payload in <code>ExecutionGrant</code></td>
+          <td><code>POST /agents/execute/stream</code> on the same <code>session_id</code> with the pause's <code>interrupt_id</code> and the answer in <code>resume_payload</code></td>
         </tr>
         <tr>
           <td>Persistence</td>
@@ -895,7 +895,7 @@
         </tr>
         <tr><td>Model routing</td><td>Configurable model profile per agent instance; tunable via <code>prompts.system</code> override field</td></tr>
         <tr><td>KPI per node</td><td>Latency, token counts, and tool timings tracked per graph step</td></tr>
-        <tr><td>Langfuse tracing</td><td>Full trace exported with <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>checkpoint_id</code>, <code>template_agent_id</code></td></tr>
+        <tr><td>Langfuse tracing</td><td>Full trace exported with <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>template_agent_id</code></td></tr>
       </tbody>
     </table>
   </section>
@@ -1237,7 +1237,7 @@
       <tbody>
         <tr>
           <td><strong>Langfuse</strong></td>
-          <td>Full LLM traces with identity context: <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>checkpoint_id</code>, <code>template_agent_id</code></td>
+          <td>Full LLM traces with identity context: <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>template_agent_id</code></td>
           <td>Enabled via <code>LANGFUSE_*</code> env vars; traces per turn, per node</td>
         </tr>
         <tr>

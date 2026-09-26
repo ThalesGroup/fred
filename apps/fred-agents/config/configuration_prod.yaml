@@ -29,8 +29,10 @@ security:
     # overrides this with its OWN Keycloak client (e.g. fred-agent / dt-agent /
     # rags-agent) via Helm values, and the realm issues user tokens whose audience
     # includes the target pod's client. The value below is the local-dev default.
+    # Browser-issued: must match the tokens' `iss` (localhost), as in the
+    # control-plane and knowledge-flow configs; m2m above stays docker-internal.
     client_id: "app"
-    realm_url: "http://app-keycloak:8080/realms/app"
+    realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
   rebac:
@@ -50,7 +52,7 @@ observability:
   kpi:
     prometheus:
       port: 9000
-  tracer: langfuse    # null | logging | langfuse
+  tracer: logging    # null | logging | langfuse (needs LANGFUSE_* keys in .env)
   langfuse:
     host: "http://localhost:3001"
     # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env

@@ -128,14 +128,14 @@ Those two gaps are tracked as MEMORY-03 and MEMORY-04 in the hardening RFC.
 Conversational memory is persisted in runtime checkpoints, not in a separate
 long-term memory store.
 
-As built, graph checkpoint keys are derived from the public `session_id` and
-GraphRuntime writes LangGraph checkpoints with an empty `checkpoint_ns`. ReAct
-execution maps `ExecutionConfig.session_id` to LangGraph `thread_id` without an
-agent-specific namespace.
+As built, GraphRuntime keeps one LangGraph thread per session and agent:
+`thread_id = "{session_id}:{agent scope}"`, where the agent scope comes from the
+managed `agent_instance_id`, or else the SDK `agent_id`. ReAct execution maps
+`ExecutionConfig.session_id` to LangGraph `thread_id` without an agent scope.
 
-This preserves session continuity, but it does not yet isolate checkpoint state
-per agent inside the same session. Agent-scoped checkpoint isolation is tracked
-as MEMORY-02 in the hardening RFC.
+Graph agents sharing a session therefore keep separate state, and ReAct agents
+do not yet. Agent-scoped ReAct checkpoints are tracked as MEMORY-02 in the
+hardening RFC.
 
 ## Non-Goals
 

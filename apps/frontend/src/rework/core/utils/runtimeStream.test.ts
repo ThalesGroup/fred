@@ -13,7 +13,13 @@
 // limitations under the License.
 
 import { describe, it, expect, vi } from "vitest";
-import { mergeContextPromptText, mergeReasoningActivation, mergeRoutingPolicy, parseSseFrames } from "./runtimeStream";
+import {
+  mergeContextPromptText,
+  mergePreparation,
+  mergeReasoningActivation,
+  mergeRoutingPolicy,
+  parseSseFrames,
+} from "./runtimeStream";
 
 // Build a ReadableStream<Uint8Array> from string chunks, mirroring how a fetch
 // body delivers SSE bytes (chunk boundaries do not respect frame boundaries).
@@ -140,5 +146,32 @@ describe("mergeReasoningActivation (REASON-01, MODEL-REASONING-ENABLEMENT-RFC.md
   it("omits the key when the control-plane sent nothing at all", () => {
     expect(mergeReasoningActivation({ search_policy: "hybrid" }, null)).toEqual({ search_policy: "hybrid" });
     expect(mergeReasoningActivation({ search_policy: "hybrid" }, undefined)).toEqual({ search_policy: "hybrid" });
+  });
+});
+
+describe("mergePreparation", () => {
+  it("folds every prepared field and keeps the base context", () => {
+    expect(
+      mergePreparation(
+        { team_id: "t1", selected_document_libraries_ids: ["lib-1"] },
+        {
+          context_prompt_text: "prompt",
+          chat_default_profile_id: "default.chat.team",
+          agent_profile_overrides: { a: "p" },
+          reasoning_enabled_model_ids: ["m"],
+        },
+      ),
+    ).toEqual({
+      team_id: "t1",
+      selected_document_libraries_ids: ["lib-1"],
+      context_prompt_text: "prompt",
+      chat_default_profile_id: "default.chat.team",
+      agent_profile_overrides: { a: "p" },
+      reasoning_enabled_model_ids: ["m"],
+    });
+  });
+
+  it("never writes absent prepared fields over the base context", () => {
+    expect(mergePreparation({ team_id: "t1" }, {})).toEqual({ team_id: "t1" });
   });
 });

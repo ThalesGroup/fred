@@ -233,28 +233,6 @@ class GraphWorkflow:
     }
     ```
     """
-    parallel: Mapping[str, tuple[str, list[str]]] = field(default_factory=dict)
-    """
-    Declare fan-out/fan-in groups.
-
-    Key is the fan-out node id.  Value is a (fan_in_node, [member1, member2, ...]) tuple.
-    All member nodes run concurrently via asyncio.gather.  Their state_update dicts
-    are merged (last-writer-wins per key) before the fan-in node starts.
-
-    Example:
-    ```python
-    parallel={
-        "load_context": ("synthesize", ["fetch_credit", "fetch_address"]),
-    }
-    ```
-    After `load_context` finishes, `fetch_credit` and `fetch_address` run in
-    parallel; once both finish their state updates are merged and `synthesize` runs.
-
-    Constraints:
-    - member nodes must not call ``context.invoke_model()`` (no LLM streaming
-      during parallel execution — use invoke_tool or IO operations instead)
-    - HITL (``context.request_human_input``) is not allowed in member nodes
-    """
 
     def to_graph_definition(self) -> GraphDefinition:
         """
@@ -302,10 +280,6 @@ class GraphWorkflow:
                     ),
                 )
                 for source, route_map in self.routes.items()
-            ),
-            parallel_groups=tuple(
-                (fan_out, fan_in, *members)
-                for fan_out, (fan_in, members) in self.parallel.items()
             ),
         )
 

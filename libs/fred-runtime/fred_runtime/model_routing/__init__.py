@@ -28,7 +28,7 @@ from .contracts import (
     ModelSelectionRequest,
     ModelSelectionSource,
 )
-from .provider import FredCoreModelProvider, RoutedChatModelFactory
+from .provider import FredCoreModelProvider, ModelProvider, RoutedChatModelFactory
 from .resolver import ModelRoutingResolver
 
 __all__ = [
@@ -38,6 +38,7 @@ __all__ = [
     "ModelCatalog",
     "ModelNotUsableError",
     "ModelProfile",
+    "ModelProvider",
     "ModelRoutingPolicy",
     "ModelRoutingResolver",
     "ModelSelection",
