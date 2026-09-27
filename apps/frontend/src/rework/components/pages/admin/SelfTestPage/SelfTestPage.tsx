@@ -112,9 +112,9 @@ function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
       </div>
       <p className={styles.subtitle}>{t("rework.selftest.authz.subtitle")}</p>
 
-      <div className={styles.testProfilePanel}>
-        <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.testProfile.title")}</h3>
-        {realmConfig ? (
+      {realmConfig && (
+        <div className={styles.testProfilePanel}>
+          <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.testProfile.title")}</h3>
           <>
             <div className={styles.testProfileFields}>
               <Select
@@ -143,10 +143,8 @@ function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
             </div>
             <p className={styles.testProfileCaption}>{t("rework.selftest.authz.testProfile.caption")}</p>
           </>
-        ) : (
-          <p className={styles.testProfileCaption}>{t("rework.selftest.authz.testProfile.disabledInsecure")}</p>
-        )}
-      </div>
+        </div>
+      )}
 
       <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
 
