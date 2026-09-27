@@ -1948,8 +1948,8 @@
         "preview": "Preview",
         "process": "Process",
         "refresh": "Refresh this view",
+        "relaunchIngestion": "Relaunch ingestion",
         "rename": "Rename",
-        "reprocess": "Reprocess",
         "searchable": "Exclude from search"
       },
       "confirm": {
@@ -2069,7 +2069,9 @@
         "delete": "Delete",
         "download": "Download",
         "excludeFromSearch": "Exclude from search",
-        "includeInSearch": "Include in search"
+        "includeInSearch": "Include in search",
+        "relaunchIngestion_one": "Relaunch ingestion for {{count}} resource",
+        "relaunchIngestion_other": "Relaunch ingestion for {{count}} resources"
       },
       "stats": {
         "toggle": "Statistics",
@@ -2098,11 +2100,14 @@
         "deleteFolderSuccess": "Folder deleted",
         "downloadEmpty": "The selected folders contain no documents to download",
         "downloadError": "Could not download the selected files",
-        "processError": "Could not start processing",
-        "processStarted": "Processing started"
+        "relaunchError": "Could not relaunch ingestion",
+        "relaunchStarted_one": "Ingestion relaunched",
+        "relaunchStarted_other": "Ingestion relaunched for {{count}} resources"
       },
       "pageTitlePersonal": "Your personal resources",
-      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space."
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space.",
+      "relaunchProfileHelp": "Choose a profile for documents whose original ingestion profile is unknown. Other documents keep their original profile.",
+      "relaunchProfileLabel": "Ingestion profile"
     },
     "save": "Save",
     "serviceNotice": {

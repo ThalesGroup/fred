@@ -802,19 +802,6 @@ class IngestionController:
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
-        # Resolve once (tags are constant for the whole call) so every created
-        # task_run row carries the destination team_id — without it, the task is
-        # created with team_id=NULL and never matches a team-scoped Activity
-        # query (`WHERE team_id = :team_id` never matches NULL), even though it
-        # correctly shows up for a platform admin (no team_id filter at all).
-        # Ambiguous (tags spanning more than one team) or personal-space uploads
-        # deliberately leave it None rather than guess.
-        owning_team_id: str | None = None
-        if scheduler_task_service is not None:
-            team_ids, _ = await self._resolve_tag_owners(tags, user)
-            if len(team_ids) == 1:
-                owning_team_id = next(iter(team_ids))
-
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
             file_status = "error"
@@ -881,25 +868,7 @@ class IngestionController:
                 else:
                     await self.service.save_metadata(user, metadata=metadata)
 
-                    # OPS-04: create a task_run row so SSE events can be tracked
                     file_task_id: Optional[str] = None
-                    try:
-                        task_svc = ApplicationContext.get_instance().get_task_service()
-                        if task_svc is not None:
-                            from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
-
-                            req = StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid]))
-                            # Set the target at creation so the document row's indicator survives a
-                            # reload even when no worker is running to emit the first event.
-                            target = TaskTarget(
-                                type="document",
-                                id=metadata.document_uid,
-                                label=metadata.document_name or metadata.document_uid,
-                            )
-                            resp = await task_svc.start(req, created_by=user.uid, team_id=owning_team_id, target=target)
-                            file_task_id = resp.task_id
-                    except Exception:
-                        logger.warning("OPS-04: could not create task_run for %s — tray tracking disabled", filename, exc_info=True)
 
                     yield (
                         ProcessingProgress(
@@ -951,26 +920,15 @@ class IngestionController:
                 # with the in-memory scheduler.
                 if self._scheduler_backend() == SchedulerBackend.MEMORY:
                     scheduler_background_tasks = None
-                _, handle = await scheduler_task_service.submit_documents(
+                definition, handle = await scheduler_task_service.submit_documents(
                     user=user,
                     pipeline_name="upload_ui_async",
                     files=files_to_schedule,
                     background_tasks=scheduler_background_tasks,
                 )
-                workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                # OPS-04 reconciliation: bind each task to the workflow that backs it,
-                # so a task stuck pending (e.g. worker down past the workflow timeout)
-                # can be reconciled against Temporal's verdict instead of hanging.
-                bind_task_svc = ApplicationContext.get_instance().get_task_service()
-                if bind_task_svc is not None and workflow_id:
-                    for _bf, _bd, _bt, bind_task_id in scheduled_candidates:
-                        if not bind_task_id:
-                            continue
-                        try:
-                            await bind_task_svc.bind_execution(bind_task_id, execution_id=workflow_id)
-                        except Exception:
-                            logger.warning("OPS-04: could not bind task %s to workflow %s", bind_task_id, workflow_id, exc_info=True)
+                task_ids = {file.document_uid: file.task_id for file in definition.files}
+                scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
                 for filename, document_uid, _, task_id in scheduled_candidates:
                     # Canonical progress event carrying task_id, like the preparation
                     # and processing steps — so the UI can correlate every step of the
@@ -1003,16 +961,8 @@ class IngestionController:
                 error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                # The workflow was never created: durably fail each task so it cannot
-                # stay "pending in the tray" with no execution behind it.
-                fail_task_svc = ApplicationContext.get_instance().get_task_service()
-                for filename, _, _, task_id in scheduled_candidates:
+                for filename, _, _, _ in scheduled_candidates:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
-                    if fail_task_svc is not None and task_id:
-                        try:
-                            await fail_task_svc.fail_task(task_id, f"Scheduling failed: {error_message}")
-                        except Exception:
-                            logger.warning("OPS-04: could not fail task %s after submission failure", task_id, exc_info=True)
 
         overall_status = Status.SUCCESS if success == total else Status.FAILED
         done_payload: dict = {"step": "done", "status": overall_status}

@@ -30,7 +30,7 @@ vi.mock("react-i18next", () => ({
 }));
 // Forward the (mocked) selector's own return value — the live task map is the
 // unit under test here.
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: (selector: () => unknown) => selector() }));
 
 const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },

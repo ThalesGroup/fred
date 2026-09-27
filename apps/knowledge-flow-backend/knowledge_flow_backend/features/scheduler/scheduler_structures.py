@@ -163,12 +163,14 @@ class FileToProcess(FileToProcessWithoutUser):
 
 
 class PipelineDefinition(BaseModel):
+    workflow_id: Optional[str] = None
     name: str
     files: List[FileToProcess]
     max_parallelism: int = 1
 
 
 class ProcessDocumentsRequest(BaseModel):
+    relaunch: bool = False
     files: List[FileToProcessWithoutUser]
     pipeline_name: str
 
@@ -179,6 +181,7 @@ class ProcessDocumentsResponse(BaseModel):
     total_files: int
     workflow_id: str
     run_id: Optional[str] = None
+    task_ids: dict[str, str] = Field(default_factory=dict)
 
 
 class ProcessLibraryRequest(BaseModel):

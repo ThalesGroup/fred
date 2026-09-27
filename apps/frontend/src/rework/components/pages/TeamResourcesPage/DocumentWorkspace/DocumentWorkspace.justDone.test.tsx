@@ -35,6 +35,7 @@ vi.mock("react-i18next", () => ({
 // The workspace reads the task store through mocked selectors that ignore
 // state; real selectors reached by other components fall back to [].
 vi.mock("react-redux", () => ({
+  useDispatch: () => vi.fn(),
   useSelector: (sel: () => unknown) => {
     try {
       return sel();

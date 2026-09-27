@@ -82,6 +82,9 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
         logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
+    metadata.processing.profile = file.profile
+    raise_if_document_deleted(await ingestion_service.persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
+
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
     emit_temporal_activity_result_kpis(
         phase="metadata",

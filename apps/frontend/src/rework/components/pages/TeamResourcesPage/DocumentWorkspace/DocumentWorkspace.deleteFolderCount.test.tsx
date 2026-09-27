@@ -40,7 +40,7 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
 
 // Live totals per tag, deliberately disagreeing with the stale `item_ids` below.
 const liveTotals: Record<string, number> = { "tag-documents": 1, "tag-dossier-112": 2, "tag-hr": 0 };

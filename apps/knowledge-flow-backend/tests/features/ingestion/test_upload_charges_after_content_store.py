@@ -83,7 +83,9 @@ class _FakeTaskService:
 
 class _FakeSchedulerTaskService:
     async def submit_documents(self, *, user, pipeline_name, files, background_tasks=None):
-        return None, SimpleNamespace(workflow_id="wf-1")
+        for file in files:
+            file.task_id = "task-1"
+        return SimpleNamespace(files=files), SimpleNamespace(workflow_id="wf-1")
 
 
 def _user() -> KeycloakUser:

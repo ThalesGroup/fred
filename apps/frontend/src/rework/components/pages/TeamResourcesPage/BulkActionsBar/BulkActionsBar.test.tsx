@@ -230,4 +230,55 @@ describe("BulkActionsBar", () => {
     expect(excludeButton.disabled).toBe(true);
     expect(excludeButton.getAttribute("aria-busy")).toBe("true");
   });
+
+  const RELAUNCH_LABEL = 'button[aria-label^="rework.resources.bulkActions.relaunchIngestion"]';
+
+  it("hides the relaunch button when nothing in the selection is stuck (relaunch omitted)", () => {
+    render(<BulkActionsBar selectedCount={2} onDelete={vi.fn()} onClearSelection={vi.fn()} />);
+    expect(container.querySelector(RELAUNCH_LABEL)).toBeNull();
+  });
+
+  it("labels the relaunch button with the relaunchable count, not the selection size", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={5}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        relaunch={{ count: 2, onClick: vi.fn() }}
+      />,
+    );
+
+    const button = container.querySelector(RELAUNCH_LABEL) as HTMLButtonElement;
+    expect(button.getAttribute("aria-label")).toContain('{"count":2}');
+  });
+
+  it("calls relaunch.onClick when the relaunch button is clicked", () => {
+    const onClick = vi.fn();
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        relaunch={{ count: 2, onClick }}
+      />,
+    );
+
+    click(container.querySelector(RELAUNCH_LABEL));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("disables the relaunch button while relaunch.loading is true", () => {
+    render(
+      <BulkActionsBar
+        selectedCount={2}
+        onDelete={vi.fn()}
+        onClearSelection={vi.fn()}
+        relaunch={{ count: 2, onClick: vi.fn(), loading: true }}
+      />,
+    );
+
+    const button = container.querySelector(RELAUNCH_LABEL) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+  });
 });
